@@ -73,7 +73,7 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                 .show(ui, |ui| {
                                     ui.strong("Auto");
                                     ui.strong("Component");
-                                    ui.strong("Alias");
+                                    ui.strong("Prompt");
                                     ui.strong("Answers");
                                     ui.end_row();
 
@@ -85,11 +85,17 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                             .find(|(k, _)| k == &entry_key)
                                             .map(|(_, v)| v.clone());
                                         let mut enabled = existing.as_ref().map(|e| e.enabled).unwrap_or(false);
-                                        let mut alias = existing
+                                        let prompt_preview = existing
                                             .as_ref()
-                                            .map(|e| e.alias.clone())
+                                            .map(|e| e.preview.clone())
                                             .filter(|v| !v.trim().is_empty())
-                                            .unwrap_or_default();
+                                            .or_else(|| {
+                                                existing
+                                                    .as_ref()
+                                                    .map(|e| e.alias.clone())
+                                                    .filter(|v| !v.trim().is_empty())
+                                            })
+                                            .unwrap_or_else(|| item.component_label.clone());
                                         let mut answer = existing
                                             .as_ref()
                                             .map(|e| e.answer.clone())
@@ -99,16 +105,19 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
 
                                         let enabled_changed = ui.checkbox(&mut enabled, "").changed();
 
-                                        ui.label(format!("{}  #{}", item.component_label, item.component_id));
-                                        if alias.trim().is_empty() {
-                                            alias = item.component_label.clone();
-                                        }
-                                        let alias_changed = ui
-                                            .add_sized(
-                                                egui::vec2(380.0, 0.0),
-                                                egui::TextEdit::singleline(&mut alias),
-                                            )
-                                            .changed();
+                                        ui.label(format!("{}  #{}", item.mod_name, item.component_id));
+                                        let prompt_short: String = if prompt_preview.chars().count() > 72 {
+                                            let mut s: String = prompt_preview.chars().take(72).collect();
+                                            s.push_str("...");
+                                            s
+                                        } else {
+                                            prompt_preview.clone()
+                                        };
+                                        ui.add_sized(
+                                            egui::vec2(380.0, 0.0),
+                                            egui::Label::new(prompt_short),
+                                        )
+                                        .on_hover_text(prompt_preview.as_str());
 
                                         let answer_changed = ui
                                             .add_sized(
@@ -116,7 +125,7 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                                 egui::TextEdit::singleline(&mut answer),
                                             )
                                             .changed();
-                                        if answer_changed || alias_changed || enabled_changed {
+                                        if answer_changed || enabled_changed {
                                             prompt_memory::upsert_component_sequence(
                                                 &component_key,
                                                 &item.tp_file,
@@ -125,7 +134,6 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                                 &answer,
                                                 "step3_prompt_setup",
                                             );
-                                            prompt_memory::set_alias(&entry_key, &alias);
                                             prompt_memory::set_enabled(&entry_key, enabled);
                                         }
                                         ui.end_row();
