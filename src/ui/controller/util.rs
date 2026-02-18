@@ -29,13 +29,7 @@ pub fn open_in_shell(target: &str) -> std::io::Result<()> {
     }
     #[cfg(target_os = "windows")]
     {
-        if target.starts_with("http://") || target.starts_with("https://") {
-            std::process::Command::new("cmd")
-                .args(["/C", "start", "", target])
-                .spawn()?;
-        } else {
-            std::process::Command::new("explorer").arg(target).spawn()?;
-        }
+        std::process::Command::new("explorer").arg(target).spawn()?;
         return Ok(());
     }
     #[cfg(target_os = "linux")]
