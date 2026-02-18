@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binary};
+use crate::platform_defaults::{
+    default_mod_installer_binary, default_weidu_binary, resolve_mod_installer_binary,
+    resolve_weidu_binary,
+};
 use crate::settings::model::Step1Settings;
 use crate::ui::state::Step1State;
 
@@ -32,7 +35,7 @@ impl From<Step1Settings> for Step1State {
             mod_installer_binary: if value.mod_installer_binary.trim().is_empty() {
                 default_mod_installer_binary()
             } else {
-                value.mod_installer_binary
+                resolve_mod_installer_binary(&value.mod_installer_binary)
             },
             bgee_game_folder: value.bgee_game_folder,
             bgee_log_folder: value.bgee_log_folder,
@@ -53,7 +56,7 @@ impl From<Step1Settings> for Step1State {
             weidu_binary: if value.weidu_binary.trim().is_empty() {
                 default_weidu_binary()
             } else {
-                value.weidu_binary
+                resolve_weidu_binary(&value.weidu_binary)
             },
             language: if value.language.is_empty() {
                 "en_US".to_string()

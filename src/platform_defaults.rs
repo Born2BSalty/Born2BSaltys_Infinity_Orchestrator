@@ -26,7 +26,7 @@ pub fn resolve_weidu_binary(value: &str) -> String {
     if trimmed.is_empty() {
         default_weidu_binary()
     } else {
-        trimmed.to_string()
+        normalize_binary_for_platform(trimmed)
     }
 }
 
@@ -35,7 +35,24 @@ pub fn resolve_mod_installer_binary(value: &str) -> String {
     if trimmed.is_empty() {
         default_mod_installer_binary()
     } else {
-        trimmed.to_string()
+        normalize_binary_for_platform(trimmed)
+    }
+}
+
+fn normalize_binary_for_platform(value: &str) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        value.to_string()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if !value.contains('/') && !value.contains('\\')
+            && let Some(stripped) = value.strip_suffix(".exe")
+            && !stripped.is_empty()
+        {
+            return stripped.to_string();
+        }
+        value.to_string()
     }
 }
 
