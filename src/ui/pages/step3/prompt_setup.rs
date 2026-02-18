@@ -87,7 +87,7 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                             .find(|(k, _)| k == &entry_key)
                                             .map(|(_, v)| v.clone());
                                         let mut enabled = existing.as_ref().map(|e| e.enabled).unwrap_or(false);
-                                        let mut alias = existing
+                                        let alias = existing
                                             .as_ref()
                                             .map(|e| e.alias.clone())
                                             .unwrap_or_default();
