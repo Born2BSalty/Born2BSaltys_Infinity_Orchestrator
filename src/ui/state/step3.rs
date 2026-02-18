@@ -50,6 +50,11 @@ pub struct Step3State {
     pub jump_to_selected_requested: bool,
     pub compat_modal_open: bool,
     pub compat_modal_filter: String,
+    pub prompt_setup_open: bool,
+    pub prompt_setup_advanced_open: bool,
+    pub prompt_setup_advanced_key: String,
+    pub prompt_setup_advanced_json: String,
+    pub prompt_setup_advanced_status: String,
 }
 
 impl Default for Step3State {
@@ -89,6 +94,11 @@ impl Default for Step3State {
             jump_to_selected_requested: false,
             compat_modal_open: false,
             compat_modal_filter: "all".to_string(),
+            prompt_setup_open: false,
+            prompt_setup_advanced_open: false,
+            prompt_setup_advanced_key: String::new(),
+            prompt_setup_advanced_json: String::new(),
+            prompt_setup_advanced_status: String::new(),
         }
     }
 }

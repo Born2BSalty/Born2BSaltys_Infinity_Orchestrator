@@ -24,7 +24,19 @@ pub fn is_step1_valid(s: &Step1State) -> bool {
             }
         }
         "EET" => {
-            if !has_value(&s.eet_bgee_game_folder) || !has_value(&s.eet_bg2ee_game_folder) {
+            if s.new_pre_eet_dir_enabled {
+                if !has_value(&s.bgee_game_folder) || !has_value(&s.eet_pre_dir) {
+                    return false;
+                }
+            } else if !has_value(&s.eet_bgee_game_folder) {
+                return false;
+            }
+
+            if s.new_eet_dir_enabled {
+                if !has_value(&s.bg2ee_game_folder) || !has_value(&s.eet_new_dir) {
+                    return false;
+                }
+            } else if !has_value(&s.eet_bg2ee_game_folder) {
                 return false;
             }
             if s.have_weidu_logs {

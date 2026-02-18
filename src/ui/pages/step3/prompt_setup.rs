@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use eframe::egui;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::ui::state::WizardState;
@@ -59,6 +60,7 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
 
             let grouped = group_by_mod(items);
 
+            let mut open_advanced: Option<(String, String)> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let entries = prompt_memory::list_entries();
                 for (mod_name, mod_items) in grouped {
@@ -85,6 +87,10 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                             .find(|(k, _)| k == &entry_key)
                                             .map(|(_, v)| v.clone());
                                         let mut enabled = existing.as_ref().map(|e| e.enabled).unwrap_or(false);
+                                        let mut alias = existing
+                                            .as_ref()
+                                            .map(|e| e.alias.clone())
+                                            .unwrap_or_default();
                                         let prompt_preview = existing
                                             .as_ref()
                                             .map(|e| e.preview.clone())
@@ -106,18 +112,28 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                         let enabled_changed = ui.checkbox(&mut enabled, "").changed();
 
                                         ui.label(format!("{}  #{}", item.mod_name, item.component_id));
-                                        let prompt_short: String = if prompt_preview.chars().count() > 72 {
-                                            let mut s: String = prompt_preview.chars().take(72).collect();
-                                            s.push_str("...");
-                                            s
-                                        } else {
-                                            prompt_preview.clone()
-                                        };
-                                        ui.add_sized(
-                                            egui::vec2(380.0, 0.0),
-                                            egui::Label::new(prompt_short),
-                                        )
-                                        .on_hover_text(prompt_preview.as_str());
+                                        ui.horizontal(|ui| {
+                                            let prompt_short: String = if prompt_preview.chars().count() > 68 {
+                                                let mut s: String = prompt_preview.chars().take(68).collect();
+                                                s.push_str("...");
+                                                s
+                                            } else {
+                                                prompt_preview.clone()
+                                            };
+                                            ui.add_sized(
+                                                egui::vec2(338.0, 0.0),
+                                                egui::Label::new(prompt_short),
+                                            )
+                                            .on_hover_text(prompt_preview.as_str());
+                                            if ui.button("...").clicked() {
+                                                let entry = existing
+                                                    .clone()
+                                                    .unwrap_or_else(|| default_advanced_entry(&component_key, &item, &answer, enabled, &alias, &prompt_preview));
+                                                if let Some(json) = advanced_entry_to_json(&entry_key, &entry) {
+                                                    open_advanced = Some((entry_key.clone(), json));
+                                                }
+                                            }
+                                        });
 
                                         let answer_changed = ui
                                             .add_sized(
@@ -143,9 +159,17 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                     ui.add_space(4.0);
                 }
             });
+
+            if let Some((key, json)) = open_advanced {
+                state.step3.prompt_setup_advanced_key = key;
+                state.step3.prompt_setup_advanced_json = json;
+                state.step3.prompt_setup_advanced_status.clear();
+                state.step3.prompt_setup_advanced_open = true;
+            }
         });
 
     state.step3.prompt_setup_open = open;
+    render_advanced_editor(ui, state);
 }
 
 #[derive(Debug, Clone)]
@@ -199,4 +223,135 @@ fn normalize_tp2_filename(tp_file: &str) -> String {
         .unwrap_or(replaced.as_str())
         .trim();
     filename.to_ascii_uppercase()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AdvancedPromptEntry {
+    key: String,
+    alias: String,
+    answer: String,
+    enabled: bool,
+    preview: String,
+    component_key: String,
+    tp2_file: String,
+    component_id: String,
+    component_name: String,
+    prompt_kind: String,
+    source: String,
+    captured_at: u64,
+    last_used_at: u64,
+    hit_count: u64,
+}
+
+fn advanced_entry_to_json(key: &str, entry: &prompt_memory::PromptAnswerEntry) -> Option<String> {
+    let data = AdvancedPromptEntry {
+        key: key.to_string(),
+        alias: entry.alias.clone(),
+        answer: entry.answer.clone(),
+        enabled: entry.enabled,
+        preview: entry.preview.clone(),
+        component_key: entry.component_key.clone(),
+        tp2_file: entry.tp2_file.clone(),
+        component_id: entry.component_id.clone(),
+        component_name: entry.component_name.clone(),
+        prompt_kind: entry.prompt_kind.clone(),
+        source: entry.source.clone(),
+        captured_at: entry.captured_at,
+        last_used_at: entry.last_used_at,
+        hit_count: entry.hit_count,
+    };
+    serde_json::to_string_pretty(&data).ok()
+}
+
+fn default_advanced_entry(
+    component_key: &str,
+    item: &PromptSetupItem,
+    answer: &str,
+    enabled: bool,
+    alias: &str,
+    preview: &str,
+) -> prompt_memory::PromptAnswerEntry {
+    prompt_memory::PromptAnswerEntry {
+        alias: alias.to_string(),
+        answer: answer.to_string(),
+        enabled,
+        preview: preview.to_string(),
+        component_key: component_key.to_string(),
+        tp2_file: normalize_tp2_filename(&item.tp_file),
+        component_id: item.component_id.clone(),
+        component_name: item.component_label.clone(),
+        prompt_kind: String::new(),
+        source: "step3_prompt_setup".to_string(),
+        captured_at: 0,
+        last_used_at: 0,
+        hit_count: 0,
+    }
+}
+
+fn render_advanced_editor(ui: &mut egui::Ui, state: &mut WizardState) {
+    if !state.step3.prompt_setup_advanced_open {
+        return;
+    }
+    let mut open = state.step3.prompt_setup_advanced_open;
+    egui::Window::new("Prompt Entry Advanced Editor")
+        .open(&mut open)
+        .resizable(true)
+        .default_size(egui::vec2(760.0, 520.0))
+        .show(ui.ctx(), |ui| {
+            ui.label("Edit full prompt entry JSON (advanced users).");
+            ui.add_space(6.0);
+            ui.add(
+                egui::TextEdit::multiline(&mut state.step3.prompt_setup_advanced_json)
+                    .desired_rows(22)
+                    .desired_width(f32::INFINITY),
+            );
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if ui.button("Save JSON").clicked() {
+                    match serde_json::from_str::<AdvancedPromptEntry>(
+                        &state.step3.prompt_setup_advanced_json,
+                    ) {
+                        Ok(parsed) => {
+                            let key = parsed.key.trim().to_string();
+                            if key.is_empty() {
+                                state.step3.prompt_setup_advanced_status =
+                                    "Save failed: key is required".to_string();
+                            } else {
+                                prompt_memory::upsert_entry(
+                                    &key,
+                                    prompt_memory::PromptAnswerEntry {
+                                        alias: parsed.alias,
+                                        answer: parsed.answer,
+                                        enabled: parsed.enabled,
+                                        preview: parsed.preview,
+                                        component_key: parsed.component_key,
+                                        tp2_file: parsed.tp2_file,
+                                        component_id: parsed.component_id,
+                                        component_name: parsed.component_name,
+                                        prompt_kind: parsed.prompt_kind,
+                                        source: parsed.source,
+                                        captured_at: parsed.captured_at,
+                                        last_used_at: parsed.last_used_at,
+                                        hit_count: parsed.hit_count,
+                                    },
+                                );
+                                state.step3.prompt_setup_advanced_status =
+                                    "Saved.".to_string();
+                            }
+                        }
+                        Err(err) => {
+                            state.step3.prompt_setup_advanced_status =
+                                format!("Save failed: {err}");
+                        }
+                    }
+                }
+                if ui.button("Close").clicked() {
+                    state.step3.prompt_setup_advanced_open = false;
+                }
+            });
+            if !state.step3.prompt_setup_advanced_status.trim().is_empty() {
+                ui.label(state.step3.prompt_setup_advanced_status.clone());
+            }
+        });
+    state.step3.prompt_setup_advanced_open = open && state.step3.prompt_setup_advanced_open;
 }

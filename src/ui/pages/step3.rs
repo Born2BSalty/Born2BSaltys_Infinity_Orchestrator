@@ -6,6 +6,7 @@ use crate::ui::step3::tabs;
 use crate::ui::state::WizardState;
 mod compat;
 mod list;
+mod prompt_setup;
 mod toolbar;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +30,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step3Action>
 
     if state.step3.compat_modal_open {
         compat::render_modal(ui, state, &mut jump_to_selected_requested);
+    }
+    if state.step3.prompt_setup_open {
+        prompt_setup::render(ui, state);
     }
     state.step3.jump_to_selected_requested = jump_to_selected_requested;
 

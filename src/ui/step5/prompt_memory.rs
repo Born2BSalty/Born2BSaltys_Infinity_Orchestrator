@@ -58,12 +58,42 @@ pub fn get_answer_by_alias(alias_value: &str) -> Option<String> {
     query::get_answer_by_alias(alias_value)
 }
 
+pub fn get_component_sequence(component_key: &str) -> Option<String> {
+    query::get_component_sequence(component_key)
+}
+
+pub fn list_component_sequences() -> std::collections::HashMap<String, Vec<String>> {
+    query::list_component_sequences()
+}
+
 pub fn attach_key_to_alias(alias_value: &str, prompt_key: &str, preview: &str) {
     mutate::attach_key_to_alias(alias_value, prompt_key, preview);
 }
 
 pub fn delete_entry(prompt_key: &str) {
     mutate::delete_entry(prompt_key);
+}
+
+pub fn upsert_entry(prompt_key: &str, entry: PromptAnswerEntry) {
+    mutate::upsert_entry(prompt_key, entry);
+}
+
+pub fn upsert_component_sequence(
+    component_key: &str,
+    tp2_file: &str,
+    component_id: &str,
+    component_name: &str,
+    answer: &str,
+    source: &str,
+) {
+    mutate::upsert_component_sequence(
+        component_key,
+        tp2_file,
+        component_id,
+        component_name,
+        answer,
+        source,
+    );
 }
 
 pub fn export_json(path: &Path) -> std::io::Result<usize> {

@@ -7,13 +7,25 @@ use std::path::Path;
 
 use crate::platform_defaults::compose_weidu_log_path;
 use crate::ui::state::Step1State;
+use crate::ui::step5::prompt_memory;
 
 pub fn load_from_step1(step1: &Step1State) -> HashMap<String, Vec<String>> {
     let mut out: HashMap<String, Vec<String>> = HashMap::new();
     for path in source_log_paths(step1) {
         merge_from_path(&mut out, Path::new(&path));
     }
+    merge_from_prompt_memory(&mut out);
     out
+}
+
+fn merge_from_prompt_memory(dst: &mut HashMap<String, Vec<String>>) {
+    let memory_entries = prompt_memory::list_component_sequences();
+    for (component_key, inputs) in memory_entries {
+        if inputs.is_empty() {
+            continue;
+        }
+        dst.entry(component_key).or_insert(inputs);
+    }
 }
 
 fn source_log_paths(step1: &Step1State) -> Vec<String> {
