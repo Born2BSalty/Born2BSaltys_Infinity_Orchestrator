@@ -60,32 +60,63 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
             let grouped = group_by_mod(items);
 
             egui::ScrollArea::vertical().show(ui, |ui| {
+                let entries = prompt_memory::list_entries();
                 for (mod_name, mod_items) in grouped {
                     egui::CollapsingHeader::new(format!("{mod_name} ({})", mod_items.len()))
                         .id_salt(("step3_prompt_setup_mod", mod_name.as_str()))
-                        .default_open(true)
+                        .default_open(false)
                         .show(ui, |ui| {
                             egui::Grid::new(("step3_prompt_setup_grid", mod_name.as_str()))
                                 .num_columns(4)
                                 .spacing([10.0, 6.0])
                                 .striped(true)
                                 .show(ui, |ui| {
+                                    ui.strong("Auto");
                                     ui.strong("Component");
-                                    ui.strong("Key");
+                                    ui.strong("Alias");
                                     ui.strong("Answers");
-                                    ui.strong("Action");
                                     ui.end_row();
 
                                     for item in mod_items {
                                         let component_key = component_key(&item);
-                                        let mut answer = prompt_memory::get_component_sequence(&component_key)
+                                        let entry_key = component_entry_key(&component_key);
+                                        let existing = entries
+                                            .iter()
+                                            .find(|(k, _)| k == &entry_key)
+                                            .map(|(_, v)| v.clone());
+                                        let mut enabled = existing.as_ref().map(|e| e.enabled).unwrap_or(false);
+                                        let mut alias = existing
+                                            .as_ref()
+                                            .map(|e| e.alias.clone())
+                                            .filter(|v| !v.trim().is_empty())
+                                            .unwrap_or_default();
+                                        let mut answer = existing
+                                            .as_ref()
+                                            .map(|e| e.answer.clone())
+                                            .filter(|v| !v.trim().is_empty())
+                                            .or_else(|| prompt_memory::get_component_sequence(&component_key))
                                             .unwrap_or_default();
 
-                                        ui.label(format!("#{} {}", item.component_id, item.component_label));
-                                        ui.monospace(component_key.as_str());
+                                        let enabled_changed = ui.checkbox(&mut enabled, "").changed();
 
-                                        let response = ui.text_edit_singleline(&mut answer);
-                                        if response.changed() {
+                                        ui.label(format!("{}  #{}", item.component_label, item.component_id));
+                                        if alias.trim().is_empty() {
+                                            alias = item.component_label.clone();
+                                        }
+                                        let alias_changed = ui
+                                            .add_sized(
+                                                egui::vec2(380.0, 0.0),
+                                                egui::TextEdit::singleline(&mut alias),
+                                            )
+                                            .changed();
+
+                                        let answer_changed = ui
+                                            .add_sized(
+                                                egui::vec2(220.0, 0.0),
+                                                egui::TextEdit::singleline(&mut answer),
+                                            )
+                                            .changed();
+                                        if answer_changed || alias_changed || enabled_changed {
                                             prompt_memory::upsert_component_sequence(
                                                 &component_key,
                                                 &item.tp_file,
@@ -94,17 +125,8 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                                 &answer,
                                                 "step3_prompt_setup",
                                             );
-                                        }
-
-                                        if ui.button("Clear").clicked() {
-                                            prompt_memory::upsert_component_sequence(
-                                                &component_key,
-                                                &item.tp_file,
-                                                &item.component_id,
-                                                &item.component_label,
-                                                "",
-                                                "step3_prompt_setup",
-                                            );
+                                            prompt_memory::set_alias(&entry_key, &alias);
+                                            prompt_memory::set_enabled(&entry_key, enabled);
                                         }
                                         ui.end_row();
                                     }
@@ -155,6 +177,10 @@ fn group_by_mod(items: Vec<PromptSetupItem>) -> Vec<(String, Vec<PromptSetupItem
 fn component_key(item: &PromptSetupItem) -> String {
     let filename = normalize_tp2_filename(&item.tp_file);
     format!("{}#{}", filename, item.component_id.trim())
+}
+
+fn component_entry_key(component_key: &str) -> String {
+    format!("ENTRY:COMPONENT:{component_key}")
 }
 
 fn normalize_tp2_filename(tp_file: &str) -> String {
