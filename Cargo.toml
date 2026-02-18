@@ -1,0 +1,33 @@
+[package]
+name = "bio"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+authors = ["Born2BSalty"]
+license = "GPL-3.0-or-later"
+description = "Born2BSalty's Infinity Orchestrator (BIO) - Rust wizard for WeiDU/mod_installer installs"
+
+[[bin]]
+name = "BIO"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.101"
+chrono = "0.4"
+clap = { version = "4.5.58", features = ["derive", "env"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+toml = "0.8"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
+walkdir = "2.5.0"
+wait-timeout = "0.2.1"
+eframe = "0.31.1"
+rfd = "0.15.2"
+egui_term = "0.1.0"
+
+[patch.crates-io]
+egui_term = { path = "third_party/egui_term" }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"

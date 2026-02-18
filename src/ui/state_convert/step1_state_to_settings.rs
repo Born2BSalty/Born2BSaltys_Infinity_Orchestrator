@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 Born2BSalty
+
+use crate::settings::model::Step1Settings;
+use crate::ui::state::Step1State;
+
+impl From<Step1State> for Step1Settings {
+    fn from(value: Step1State) -> Self {
+        Self {
+            game_install: value.game_install,
+            have_weidu_logs: value.have_weidu_logs,
+            rust_log_debug: value.rust_log_debug,
+            rust_log_trace: value.rust_log_trace,
+            custom_scan_depth: value.custom_scan_depth,
+            timeout_per_mod_enabled: value.timeout_per_mod_enabled,
+            auto_answer_initial_delay_enabled: value.auto_answer_initial_delay_enabled,
+            auto_answer_post_send_delay_enabled: value.auto_answer_post_send_delay_enabled,
+            lookback_enabled: value.lookback_enabled,
+            bio_full_debug: value.bio_full_debug,
+            tick_dev_enabled: value.tick_dev_enabled,
+            log_raw_output_dev: value.log_raw_output_dev,
+            weidu_log_mode_enabled: value.weidu_log_mode_enabled,
+            new_pre_eet_dir_enabled: value.new_pre_eet_dir_enabled,
+            new_eet_dir_enabled: value.new_eet_dir_enabled,
+            generate_directory_enabled: value.generate_directory_enabled,
+            weidu_log_autolog: value.weidu_log_autolog,
+            weidu_log_logapp: value.weidu_log_logapp,
+            weidu_log_logextern: value.weidu_log_logextern,
+            weidu_log_log_component: value.weidu_log_log_component,
+            weidu_log_folder: value.weidu_log_folder,
+            mod_installer_binary: value.mod_installer_binary,
+            bgee_game_folder: value.bgee_game_folder,
+            bgee_log_folder: value.bgee_log_folder,
+            bgee_log_file: value.bgee_log_file,
+            bg2ee_game_folder: value.bg2ee_game_folder,
+            bg2ee_log_folder: value.bg2ee_log_folder,
+            bg2ee_log_file: value.bg2ee_log_file,
+            eet_bgee_game_folder: value.eet_bgee_game_folder,
+            eet_bgee_log_folder: value.eet_bgee_log_folder,
+            eet_bg2ee_game_folder: value.eet_bg2ee_game_folder,
+            eet_bg2ee_log_folder: value.eet_bg2ee_log_folder,
+            eet_pre_dir: value.eet_pre_dir,
+            eet_new_dir: value.eet_new_dir,
+            game: value.game,
+            log_file: value.log_file,
+            generate_directory: value.generate_directory,
+            mods_folder: value.mods_folder,
+            weidu_binary: value.weidu_binary,
+            language: value.language,
+            depth: value.depth,
+            skip_installed: value.skip_installed,
+            abort_on_warnings: value.abort_on_warnings,
+            timeout: value.timeout,
+            auto_answer_initial_delay_ms: value.auto_answer_initial_delay_ms,
+            auto_answer_post_send_delay_ms: value.auto_answer_post_send_delay_ms,
+            weidu_log_mode: value.weidu_log_mode,
+            strict_matching: value.strict_matching,
+            download: value.download,
+            overwrite: value.overwrite,
+            check_last_installed: value.check_last_installed,
+            tick: value.tick,
+            lookback: value.lookback,
+            casefold: value.casefold,
+            backup_targets_before_eet_copy: value.backup_targets_before_eet_copy,
+        }
+    }
+}
