@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
+use crate::platform_defaults::app_config_file;
 use crate::settings::model::AppSettings;
 
 #[derive(Debug, Clone)]
@@ -14,9 +15,7 @@ pub struct SettingsStore {
 
 impl SettingsStore {
     pub fn new_default() -> Self {
-        let path = std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("bio_settings.json");
+        let path = app_config_file("bio_settings.json", ".");
         Self { path }
     }
 
@@ -31,6 +30,11 @@ impl SettingsStore {
     pub fn save(&self, settings: &AppSettings) -> Result<()> {
         let raw =
             serde_json::to_string_pretty(settings).context("failed serializing settings json")?;
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!("failed creating settings directory {}", parent.display())
+            })?;
+        }
         std::fs::write(&self.path, raw)
             .with_context(|| format!("failed writing settings file {}", self.path.display()))?;
         Ok(())
