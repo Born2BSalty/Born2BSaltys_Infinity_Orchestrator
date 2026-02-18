@@ -100,6 +100,28 @@ pub(super) fn render_issue_list(
                     let can_jump_related = issue_target_exists(state, issue, false);
                     let can_jump_auto = can_jump_affected || can_jump_related;
 
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new("Targets").strong());
+                        let affected_text = if can_jump_affected {
+                            egui::RichText::new("Affected: found")
+                                .color(egui::Color32::from_rgb(120, 200, 120))
+                        } else {
+                            egui::RichText::new("Affected: missing")
+                                .color(egui::Color32::from_rgb(220, 160, 100))
+                        };
+                        let related_text = if can_jump_related {
+                            egui::RichText::new("Related: found")
+                                .color(egui::Color32::from_rgb(120, 200, 120))
+                        } else {
+                            egui::RichText::new("Related: missing")
+                                .color(egui::Color32::from_rgb(220, 160, 100))
+                        };
+                        ui.label(affected_text);
+                        ui.label(" | ");
+                        ui.label(related_text);
+                    });
+                    ui.add_space(2.0);
+
                     ui.horizontal(|ui| {
                         let mut jump_affected = ui.add_enabled(
                             can_jump_affected,
