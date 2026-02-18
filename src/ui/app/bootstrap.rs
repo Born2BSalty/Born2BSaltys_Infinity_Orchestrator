@@ -16,14 +16,7 @@ pub(super) fn initialize(dev_mode: bool) -> AppBootstrap {
     let settings_store = SettingsStore::new_default();
     let exe_fingerprint = current_exe_fingerprint();
     let loaded = settings_store.load().unwrap_or_default();
-    let loaded_step1 = Step1State::from(loaded.step1);
-    let mut step1 = if loaded.exe_fingerprint == exe_fingerprint {
-        loaded_step1
-    } else {
-        // On new executable builds, start with clean Step 1 state to avoid
-        // carrying stale paths/flags across incompatible builds.
-        Step1State::default()
-    };
+    let mut step1 = Step1State::from(loaded.step1);
     if !dev_mode {
         scrub_dev_settings(&mut step1);
     }
