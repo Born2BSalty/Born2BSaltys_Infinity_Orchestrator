@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset_suffix: windows-x64
+            archive_ext: zip
+          - os: ubuntu-latest
+            asset_suffix: linux-x64
+            archive_ext: tar.gz
+          - os: macos-latest
+            asset_suffix: macos-x64
+            archive_ext: tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/BIO.exe dist/BIO.exe
+          if (Test-Path README.md) { Copy-Item README.md dist/README.md }
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist/LICENSE }
+          if (Test-Path NOTICE) { Copy-Item NOTICE dist/NOTICE }
+          if (Test-Path CREDITS.md) { Copy-Item CREDITS.md dist/CREDITS.md }
+          Compress-Archive -Path dist/* -DestinationPath "BIO-${{ github.ref_name }}-${{ matrix.asset_suffix }}.zip" -Force
+
+      - name: Package (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/release/BIO dist/BIO
+          chmod +x dist/BIO
+          [ -f README.md ] && cp README.md dist/README.md || true
+          [ -f LICENSE ] && cp LICENSE dist/LICENSE || true
+          [ -f NOTICE ] && cp NOTICE dist/NOTICE || true
+          [ -f CREDITS.md ] && cp CREDITS.md dist/CREDITS.md || true
+          tar -czf "BIO-${{ github.ref_name }}-${{ matrix.asset_suffix }}.tar.gz" -C dist .
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BIO-${{ matrix.asset_suffix }}
+          path: |
+            BIO-${{ github.ref_name }}-${{ matrix.asset_suffix }}.${{ matrix.archive_ext }}
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/**/*
+          generate_release_notes: true
