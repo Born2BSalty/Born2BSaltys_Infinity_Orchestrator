@@ -4,8 +4,10 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fs;
 
 use crate::ui::state::WizardState;
+use crate::ui::state::Step2ModState;
 use crate::ui::step5::prompt_memory;
 use crate::ui::step5::scripted_inputs;
 
@@ -25,6 +27,31 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
             ui.add_space(6.0);
 
             let items = active_items(state);
+            if state.step3.prompt_setup_scan_results.is_empty() && !items.is_empty() {
+                state.step3.prompt_setup_scan_results = scan_selected_prompts(state, &items);
+            }
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Rows").strong());
+                for (id, label) in [
+                    ("likely", "Likely prompts"),
+                    ("configured", "Configured only"),
+                    ("all", "All selected"),
+                ] {
+                    let selected = state.step3.prompt_setup_filter.eq_ignore_ascii_case(id);
+                    if ui.selectable_label(selected, label).clicked() {
+                        state.step3.prompt_setup_filter = id.to_string();
+                    }
+                }
+                if ui.button("Rescan TP2 prompts").clicked() {
+                    state.step3.prompt_setup_scan_results = scan_selected_prompts(state, &items);
+                    state.step5.last_status_text = format!(
+                        "Prompt scan detected {} likely prompt component(s).",
+                        state.step3.prompt_setup_scan_results.len()
+                    );
+                }
+            });
+            ui.add_space(6.0);
+
             if ui
                 .button("Import @wlb-inputs from active source logs")
                 .on_hover_text("Imports existing @wlb-inputs lines from current Step 1 log sources into this table.")
@@ -58,11 +85,24 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
             ui.label(format!("Selected components in tab: {}", items.len()));
             ui.add_space(6.0);
 
-            let grouped = group_by_mod(items);
+            let scan_map: BTreeMap<String, String> = state
+                .step3
+                .prompt_setup_scan_results
+                .iter()
+                .cloned()
+                .collect();
 
             let mut open_advanced: Option<(String, String)> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let entries = prompt_memory::list_entries();
+                let filter_mode = state.step3.prompt_setup_filter.clone();
+                let grouped = group_by_mod(
+                    items
+                        .iter()
+                        .filter(|item| row_visible(item, &filter_mode, &entries, &scan_map))
+                        .cloned()
+                        .collect(),
+                );
                 for (mod_name, mod_items) in grouped {
                     egui::CollapsingHeader::new(format!("{mod_name} ({})", mod_items.len()))
                         .id_salt(("step3_prompt_setup_mod", mod_name.as_str()))
@@ -95,6 +135,7 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                             .as_ref()
                                             .map(|e| e.preview.clone())
                                             .filter(|v| !v.trim().is_empty())
+                                            .or_else(|| scan_map.get(&component_key).cloned())
                                             .or_else(|| {
                                                 existing
                                                     .as_ref()
@@ -223,6 +264,139 @@ fn normalize_tp2_filename(tp_file: &str) -> String {
         .unwrap_or(replaced.as_str())
         .trim();
     filename.to_ascii_uppercase()
+}
+
+fn row_visible(
+    item: &PromptSetupItem,
+    filter_mode: &str,
+    entries: &[(String, prompt_memory::PromptAnswerEntry)],
+    scan_map: &BTreeMap<String, String>,
+) -> bool {
+    let component_key = component_key(item);
+    let entry_key = component_entry_key(&component_key);
+    let existing = entries
+        .iter()
+        .find(|(k, _)| k == &entry_key)
+        .map(|(_, v)| v);
+    let configured = existing
+        .map(|e| e.enabled || !e.answer.trim().is_empty())
+        .unwrap_or(false);
+    let likely = scan_map.contains_key(&component_key) || configured;
+    match filter_mode.to_ascii_lowercase().as_str() {
+        "configured" => configured,
+        "all" => true,
+        _ => likely,
+    }
+}
+
+fn scan_selected_prompts(state: &WizardState, items: &[PromptSetupItem]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let index = step2_component_tp2_index(state);
+    for item in items {
+        let key = component_key(item);
+        let Some(tp2_path) = index.get(&key) else {
+            continue;
+        };
+        let Ok(content) = fs::read_to_string(tp2_path) else {
+            continue;
+        };
+        if let Some(preview) = scan_tp2_component_prompt(&content, item.component_id.trim()) {
+            out.push((key, preview));
+        }
+    }
+    out
+}
+
+fn step2_component_tp2_index(state: &WizardState) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    let mods = if state.step3.active_game_tab.eq_ignore_ascii_case("BG2EE") {
+        &state.step2.bg2ee_mods
+    } else {
+        &state.step2.bgee_mods
+    };
+    index_step2_mods(mods, &mut out);
+    out
+}
+
+fn index_step2_mods(mods: &[Step2ModState], out: &mut BTreeMap<String, String>) {
+    for mod_state in mods {
+        let file = normalize_tp2_filename(&mod_state.tp_file);
+        for component in &mod_state.components {
+            let key = format!("{}#{}", file, component.component_id.trim());
+            out.entry(key).or_insert_with(|| mod_state.tp2_path.clone());
+        }
+    }
+}
+
+fn scan_tp2_component_prompt(tp2_content: &str, component_id: &str) -> Option<String> {
+    let block = extract_component_block(tp2_content, component_id)?;
+    for line in block {
+        let upper = line.to_ascii_uppercase();
+        if upper.contains("READLN") {
+            if let Some(text) = extract_inline_prompt_text(line) {
+                return Some(text);
+            }
+            return Some("READLN prompt detected".to_string());
+        }
+    }
+    None
+}
+
+fn extract_component_block<'a>(content: &'a str, component_id: &str) -> Option<Vec<&'a str>> {
+    let mut in_target = false;
+    let mut lines_after_begin = 0usize;
+    let mut out = Vec::new();
+    let designated_token = format!("DESIGNATED {}", component_id);
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        let upper = trimmed.to_ascii_uppercase();
+        if upper.starts_with("BEGIN ") {
+            if in_target {
+                break;
+            }
+            in_target = upper.contains(&designated_token);
+            lines_after_begin = 0;
+            if in_target {
+                out.push(line);
+            }
+            continue;
+        }
+        if in_target {
+            out.push(line);
+            continue;
+        }
+        if lines_after_begin < 8 {
+            lines_after_begin = lines_after_begin.saturating_add(1);
+            if upper.contains(&designated_token) {
+                in_target = true;
+                out.push(line);
+            }
+        }
+    }
+    if out.is_empty() { None } else { Some(out) }
+}
+
+fn extract_inline_prompt_text(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if let Some(start) = trimmed.find('~') {
+        let rest = &trimmed[start + 1..];
+        if let Some(end) = rest.find('~') {
+            let text = rest[..end].trim();
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+    if let Some(start) = trimmed.find('"') {
+        let rest = &trimmed[start + 1..];
+        if let Some(end) = rest.find('"') {
+            let text = rest[..end].trim();
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
