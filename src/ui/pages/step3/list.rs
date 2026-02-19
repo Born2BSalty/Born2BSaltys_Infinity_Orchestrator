@@ -10,6 +10,7 @@ mod drag_ops;
 mod history;
 mod rows;
 mod component_uncheck;
+mod prompt_actions;
 
 pub(super) fn render(
     ui: &mut egui::Ui,
@@ -34,7 +35,7 @@ pub(super) fn render(
                 .show(ui, |ui| {
                     ui.set_min_width(viewport_w);
                     let tab_id = state.step3.active_game_tab.clone();
-                    let pending_unchecks = {
+                    let (pending_unchecks, pending_prompt_actions) = {
                         let (
                             items,
                             selected,
@@ -117,12 +118,17 @@ pub(super) fn render(
                             clone_seq,
                         );
                         visible_rows.clear();
-                        row_outcome.uncheck_requests
+                        (row_outcome.uncheck_requests, row_outcome.prompt_requests)
                     };
                     if !pending_unchecks.is_empty() {
                         component_uncheck::apply_component_unchecks(state, &tab_id, &pending_unchecks);
                     }
+                    if !pending_prompt_actions.is_empty() {
+                        prompt_actions::apply_prompt_actions(state, &pending_prompt_actions);
+                    }
                 });
         });
     });
+
+    prompt_actions::render(ui, state);
 }

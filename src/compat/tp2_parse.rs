@@ -39,8 +39,11 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
 
         let upper = trimmed.to_ascii_uppercase();
 
-        if let Some(comp_id) = parse_begin_component(&upper) {
-            current_component = Some(comp_id);
+        if upper.contains("BEGIN") {
+            // New BEGIN starts a new component scope.
+            // If there is no explicit DESIGNATED on/near this BEGIN, do not carry
+            // previous component id forward, otherwise rules can be mis-attributed.
+            current_component = parse_begin_component(&upper);
             continue;
         }
         if let Some(comp_id) = parse_designated_line(&upper) {
@@ -55,6 +58,8 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
         if let Some(rule) = parse_require_component(&upper, trimmed) {
             rules.push((comp_id, rule));
         } else if let Some(rule) = parse_forbid_component(&upper, trimmed) {
+            rules.push((comp_id, rule));
+        } else if let Some(rule) = parse_require_predicate_game_or_installed_any(&upper, trimmed) {
             rules.push((comp_id, rule));
         } else if let Some(rule) = parse_require_predicate_game_is(&upper, trimmed) {
             rules.push((comp_id, rule));
@@ -182,6 +187,43 @@ fn parse_require_predicate_game_is(upper: &str, raw: &str) -> Option<Tp2Rule> {
         .collect::<Vec<_>>();
     Some(Tp2Rule::RequireGame {
         allowed_games,
+        raw_line: raw.to_string(),
+    })
+}
+
+fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &str) -> Option<Tp2Rule> {
+    if !upper.contains("REQUIRE_PREDICATE")
+        || !upper.contains("GAME_IS")
+        || !upper.contains("MOD_IS_INSTALLED")
+    {
+        return None;
+    }
+    // This rule is meant for OR-style predicates:
+    // REQUIRE_PREDICATE GAME_IS ~iwdee~ || MOD_IS_INSTALLED ...
+    if !(upper.contains("||") || upper.contains(" OR ")) {
+        return None;
+    }
+    // Ignore negated game checks here.
+    let normalized = upper.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.contains("!GAME_IS") || normalized.contains("NOT GAME_IS") {
+        return None;
+    }
+    let idx = upper.find("GAME_IS")?;
+    let after = &raw[idx + "GAME_IS".len()..];
+    let allowed_games = parse_token_group(after)
+        .into_iter()
+        .map(|t| t.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    if allowed_games.is_empty() {
+        return None;
+    }
+    let targets = parse_all_mod_is_installed(upper, raw);
+    if targets.is_empty() {
+        return None;
+    }
+    Some(Tp2Rule::RequireGameOrInstalledAny {
+        allowed_games,
+        targets,
         raw_line: raw.to_string(),
     })
 }

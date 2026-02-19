@@ -145,6 +145,11 @@ pub enum Tp2Rule {
         allowed_games: Vec<String>,
         raw_line: String,
     },
+    RequireGameOrInstalledAny {
+        allowed_games: Vec<String>,
+        targets: Vec<(String, Option<u32>)>,
+        raw_line: String,
+    },
     RequireInstalledMod {
         target_mod: String,
         target_component: Option<u32>,

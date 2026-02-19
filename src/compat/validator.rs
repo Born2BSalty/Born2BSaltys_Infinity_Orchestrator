@@ -160,6 +160,51 @@ impl CompatValidator {
                                 ));
                             }
                         }
+                        Tp2Rule::RequireGameOrInstalledAny {
+                            allowed_games,
+                            targets,
+                            raw_line,
+                        } => {
+                            let current_game = helpers::normalize_game_mode(game_mode);
+                            let game_ok = helpers::game_allowed(&current_game, allowed_games);
+                            let installed_ok = targets.iter().any(|(target_mod, target_component)| {
+                                match target_component {
+                                    Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
+                                    None => selected_set.iter().any(|(m, _)| m == target_mod),
+                                }
+                            });
+                            if !game_ok && !installed_ok {
+                                let related_text = targets
+                                    .iter()
+                                    .map(|(m, c)| match c {
+                                        Some(id) => format!("{m} #{id}"),
+                                        None => format!("{m} (any component)"),
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(" OR ");
+                                let (related_mod, related_component) = targets
+                                    .first()
+                                    .cloned()
+                                    .unwrap_or_else(|| ("unknown".to_string(), None));
+                                issues.push(CompatIssue::new(
+                                    CompatIssueCode::ReqMissing,
+                                    Severity::Error,
+                                    IssueSource::Tp2 {
+                                        file: metadata.tp_file.clone(),
+                                    },
+                                    component.mod_name.clone(),
+                                    Some(component.component_id),
+                                    related_mod,
+                                    related_component,
+                                    format!(
+                                        "Requires GAME_IS {} OR one of: {}",
+                                        allowed_games.join(","),
+                                        related_text
+                                    ),
+                                    Some(raw_line.clone()),
+                                ));
+                            }
+                        }
                         Tp2Rule::RequireInstalledMod {
                             target_mod,
                             target_component,

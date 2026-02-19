@@ -224,9 +224,7 @@ pub(super) fn upsert_component_sequence(
                 entry.component_name, entry.component_id
             ));
         }
-        if entry.preview.trim().is_empty() {
-            entry.preview = format!("Step3 component sequence: {}", entry.component_name);
-        }
+        // Keep preview editable by user (including empty).
         entry.prompt_kind = "component_sequence".to_string();
         entry.source = source.trim().to_string();
         if entry.captured_at == 0 {

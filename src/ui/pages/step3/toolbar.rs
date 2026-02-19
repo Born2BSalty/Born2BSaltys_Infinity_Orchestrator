@@ -45,13 +45,6 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState, action: &mut Op
         {
             state.step3.compat_modal_open = true;
         }
-        if ui
-            .button("Prompt Setup")
-            .on_hover_text("Configure per-component scripted answers before install.")
-            .clicked()
-        {
-            state.step3.prompt_setup_open = true;
-        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let (

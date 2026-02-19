@@ -8,9 +8,30 @@ use crate::ui::step3::{blocks, format, selection};
 
 use super::history;
 
+#[derive(Debug, Clone)]
+pub(super) enum PromptActionRequest {
+    SetWlb {
+        tp_file: String,
+        component_id: String,
+        component_label: String,
+        mod_name: String,
+    },
+    EditJson {
+        tp_file: String,
+        component_id: String,
+        component_label: String,
+        mod_name: String,
+    },
+    Clear {
+        tp_file: String,
+        component_id: String,
+    },
+}
+
 pub(super) struct RowRenderOutcome {
     pub visible_rows: Vec<(usize, egui::Rect)>,
     pub uncheck_requests: Vec<(String, String)>,
+    pub prompt_requests: Vec<PromptActionRequest>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -37,6 +58,7 @@ pub(super) fn render_rows(
 ) -> RowRenderOutcome {
     let mut visible_rows: Vec<(usize, egui::Rect)> = Vec::with_capacity(visible_indices.len());
     let mut uncheck_requests: Vec<(String, String)> = Vec::new();
+    let mut prompt_requests: Vec<PromptActionRequest> = Vec::new();
 
     for &idx in visible_indices {
         let item = &items[idx];
@@ -105,9 +127,36 @@ pub(super) fn render_rows(
         } else {
             let tp_file = items[idx].tp_file.clone();
             let component_id = items[idx].component_id.clone();
+            let component_label = items[idx].component_label.clone();
+            let mod_name = items[idx].mod_name.clone();
             drag_response.context_menu(|ui| {
                 if ui.button("Uncheck In Step 2").clicked() {
                     uncheck_requests.push((tp_file.clone(), component_id.clone()));
+                    ui.close_menu();
+                }
+                if ui.button("Set @wlb-inputs...").clicked() {
+                    prompt_requests.push(PromptActionRequest::SetWlb {
+                        tp_file: tp_file.clone(),
+                        component_id: component_id.clone(),
+                        component_label: component_label.clone(),
+                        mod_name: mod_name.clone(),
+                    });
+                    ui.close_menu();
+                }
+                if ui.button("Edit Prompt JSON...").clicked() {
+                    prompt_requests.push(PromptActionRequest::EditJson {
+                        tp_file: tp_file.clone(),
+                        component_id: component_id.clone(),
+                        component_label: component_label.clone(),
+                        mod_name: mod_name.clone(),
+                    });
+                    ui.close_menu();
+                }
+                if ui.button("Clear Prompt Data").clicked() {
+                    prompt_requests.push(PromptActionRequest::Clear {
+                        tp_file: tp_file.clone(),
+                        component_id: component_id.clone(),
+                    });
                     ui.close_menu();
                 }
             });
@@ -158,5 +207,6 @@ pub(super) fn render_rows(
     RowRenderOutcome {
         visible_rows,
         uncheck_requests,
+        prompt_requests,
     }
 }
