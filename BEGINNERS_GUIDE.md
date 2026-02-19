@@ -1,4 +1,4 @@
-# Born2BSalty's Infinity Orchestrator (BIO)
+# Born2BSalty's Infinity Orchestrator (BIO)    (Work in progress!!)
 ## Beginner's Guide (No Coding Needed)
 
 This guide is for people who only use the released app (`BIO.exe` / app build), not source code.

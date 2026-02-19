@@ -157,15 +157,22 @@ BIO.exe eet --bg1-game-directory "D:\\Games\\BGEE" --bg1-log-file "D:\\Logs\\BG1
 
 ## 6) Important Files and Paths
 
-### Project-local files (working directory)
+### Runtime output files (working directory)
 
-- `bio_settings.json`
-  - persisted app settings (step/path/options state)
 - `diagnostics/`
   - exported diagnostics and saved console logs
   - raw output / BIO debug logs when enabled
+  - copied app-data config snapshots for `bio` and `mod_installer` (when diagnostics are exported in dev mode)
 
 ### App config paths (per-user)
+
+#### App settings
+
+`bio_settings.json` is stored at:
+
+- Windows: `%APPDATA%\bio\bio_settings.json`
+- Linux: `~/.config/bio/bio_settings.json`
+- macOS: `~/Library/Application Support/bio/bio_settings.json`
 
 #### Prompt answers
 
@@ -182,7 +189,7 @@ BIO.exe eet --bg1-game-directory "D:\\Games\\BGEE" --bg1-log-file "D:\\Logs\\BG1
 - Windows: `%APPDATA%\\bio\\step2_compat_rules.toml`
 - Linux: `~/.config/bio/step2_compat_rules.toml`
 - macOS: `~/Library/Application Support/bio/step2_compat_rules.toml`
-- fallback: `config/step2_compat_rules.toml`
+- optional legacy fallback (when app-data path is unavailable): `config/step2_compat_rules.toml`
 
 ---
 
