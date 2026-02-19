@@ -5,6 +5,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::ui::state::WizardState;
 use crate::ui::state::Step2ModState;
@@ -306,10 +307,7 @@ fn scan_selected_prompts(state: &WizardState, items: &[PromptSetupItem]) -> Vec<
         let Some(tp2_path) = index.get(&key) else {
             continue;
         };
-        let Ok(content) = fs::read_to_string(tp2_path) else {
-            continue;
-        };
-        if let Some(preview) = scan_tp2_component_prompt(&content, item.component_id.trim()) {
+        if let Some(preview) = scan_tp2_component_prompt(tp2_path, item.component_id.trim()) {
             out.push((key, preview));
         }
     }
@@ -337,26 +335,125 @@ fn index_step2_mods(mods: &[Step2ModState], out: &mut BTreeMap<String, String>) 
     }
 }
 
-fn scan_tp2_component_prompt(tp2_content: &str, component_id: &str) -> Option<String> {
-    let block = extract_component_block(tp2_content, component_id)?;
-    let mut fallback_print: Option<String> = None;
+fn scan_tp2_component_prompt(tp2_path: &str, component_id: &str) -> Option<String> {
+    let tp2_file = Path::new(tp2_path);
+    let Ok(tp2_content) = fs::read_to_string(tp2_file) else {
+        return None;
+    };
+    let block = extract_component_block(&tp2_content, component_id)?;
+    let mod_root = tp2_file.parent().unwrap_or_else(|| Path::new("."));
+    let mut seen_files: BTreeMap<String, bool> = BTreeMap::new();
+    scan_block_recursive(mod_root, &block, &tp2_content, 0, &mut seen_files)
+}
+
+fn scan_block_recursive(
+    mod_root: &Path,
+    block: &[&str],
+    origin_tp2_content: &str,
+    depth: usize,
+    seen_files: &mut BTreeMap<String, bool>,
+) -> Option<String> {
+    if depth > 6 {
+        return None;
+    }
+
+    if let Some(found) = scan_lines_for_prompt_preview(block) {
+        return Some(found);
+    }
+
     for line in block {
-        let upper = line.to_ascii_uppercase();
-        if upper.contains("READLN") || upper.contains("ACTION_READLN") {
-            if let Some(text) = extract_inline_prompt_text(line) {
-                return Some(text);
+        if let Some(path) = parse_include_path(line, mod_root) {
+            let canon = path.to_string_lossy().to_string();
+            if seen_files.contains_key(&canon) {
+                continue;
             }
-            return Some("READLN prompt detected".to_string());
+            seen_files.insert(canon, true);
+            if let Ok(content) = fs::read_to_string(&path) {
+                let lines: Vec<&str> = content.lines().collect();
+                if let Some(found) =
+                    scan_block_recursive(mod_root, &lines, origin_tp2_content, depth + 1, seen_files)
+                {
+                    return Some(found);
+                }
+            }
         }
-        if upper.contains("ASK_EVERY_COMPONENT") {
-            return Some("ASK_EVERY_COMPONENT prompt detected".to_string());
+
+        if let Some(function_name) = parse_laf_name(line)
+            && let Some(found) =
+                scan_laf_function_for_prompt(mod_root, origin_tp2_content, &function_name, depth + 1, seen_files)
+        {
+            return Some(found);
         }
-        if (upper.contains("[Y]") && upper.contains("[N]")) || upper.contains("PLEASE CHOOSE ONE OF THE FOLLOWING")
+    }
+
+    None
+}
+
+fn scan_laf_function_for_prompt(
+    mod_root: &Path,
+    origin_tp2_content: &str,
+    function_name: &str,
+    depth: usize,
+    seen_files: &mut BTreeMap<String, bool>,
+) -> Option<String> {
+    if depth > 6 {
+        return None;
+    }
+
+    if let Some(body) = extract_function_block(origin_tp2_content, function_name)
+        && let Some(found) = scan_block_recursive(mod_root, &body, origin_tp2_content, depth + 1, seen_files)
+    {
+        return Some(found);
+    }
+
+    for file in collect_mod_script_files(mod_root) {
+        let canon = file.to_string_lossy().to_string();
+        if seen_files.contains_key(&canon) {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let Some(body) = extract_function_block(&content, function_name) else {
+            continue;
+        };
+        seen_files.insert(canon, true);
+        if let Some(found) = scan_block_recursive(mod_root, &body, &content, depth + 1, seen_files) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
+fn scan_lines_for_prompt_preview(lines: &[&str]) -> Option<String> {
+    let mut fallback_print: Option<String> = None;
+    for line in lines {
+        let upper = line.to_ascii_uppercase();
+        if upper.contains("ACTION_READLN")
+            || upper.contains("READLN ")
+            || upper.contains(" ASK_EVERY_COMPONENT")
+            || upper.trim_start().starts_with("ASK_EVERY_COMPONENT")
         {
             if let Some(text) = extract_inline_prompt_text(line) {
                 return Some(text);
             }
-            return Some("Choice prompt detected".to_string());
+            if upper.contains("ASK_EVERY_COMPONENT") {
+                return Some("ASK_EVERY_COMPONENT interactive prompt".to_string());
+            }
+            return Some("READLN prompt detected".to_string());
+        }
+        if upper.contains("PLEASE CHOOSE ONE OF THE FOLLOWING")
+            || upper.contains("PLEASE ENTER NUMBER")
+            || upper.contains("PLEASE SELECT 1 OR 2")
+            || upper.contains("LEAVE BLANK TO PROCEED")
+            || upper.contains("ENTER THE FULL PATH")
+            || (upper.contains("[Y]") && upper.contains("[N]"))
+        {
+            if let Some(text) = extract_inline_prompt_text(line) {
+                return Some(text);
+            }
+            return Some("Choice/path prompt detected".to_string());
         }
         if fallback_print.is_none()
             && (upper.contains("PRINT ") || upper.contains("SAY "))
@@ -368,12 +465,121 @@ fn scan_tp2_component_prompt(tp2_content: &str, component_id: &str) -> Option<St
     fallback_print
 }
 
+fn parse_include_path(line: &str, mod_root: &Path) -> Option<PathBuf> {
+    let upper = line.to_ascii_uppercase();
+    if !upper.contains("INCLUDE") {
+        return None;
+    }
+    let include_idx = upper.find("INCLUDE")?;
+    let after = line[include_idx + "INCLUDE".len()..].trim();
+    let raw = extract_first_quoted(after)?;
+    if raw.starts_with("...") {
+        return None;
+    }
+    let normalized = raw.replace('\\', "/");
+    if normalized.contains("%MOD_FOLDER%") {
+        let replaced = normalized.replace("%MOD_FOLDER%", mod_root.to_string_lossy().as_ref());
+        return Some(PathBuf::from(replaced));
+    }
+    if normalized.starts_with('/') || normalized.contains(':') {
+        return Some(PathBuf::from(normalized));
+    }
+    Some(mod_root.join(normalized))
+}
+
+fn parse_laf_name(line: &str) -> Option<String> {
+    let upper = line.to_ascii_uppercase();
+    let idx = upper.find("LAF ")?;
+    let rest = line[idx + 4..].trim_start();
+    let name: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '#' || *c == '_' || *c == '-')
+        .collect();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn extract_function_block<'a>(content: &'a str, function_name: &str) -> Option<Vec<&'a str>> {
+    let target_upper = function_name.to_ascii_uppercase();
+    let lines: Vec<&str> = content.lines().collect();
+    let mut in_func = false;
+    let mut body = Vec::new();
+    for line in lines {
+        let upper = line.to_ascii_uppercase();
+        if !in_func {
+            if upper.contains("DEFINE_ACTION_FUNCTION") && upper.contains(&target_upper) {
+                in_func = true;
+            }
+            continue;
+        }
+        if upper.trim_start().starts_with("END") {
+            break;
+        }
+        body.push(line);
+    }
+    if body.is_empty() { None } else { Some(body) }
+}
+
+fn collect_mod_script_files(mod_root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    collect_mod_script_files_inner(mod_root, &mut out, 0);
+    out
+}
+
+fn collect_mod_script_files_inner(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
+    if depth > 8 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_mod_script_files_inner(&path, out, depth + 1);
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        if matches!(ext.as_str(), "tp2" | "tph" | "tpa" | "tpp") {
+            out.push(path);
+        }
+    }
+}
+
+fn extract_first_quoted(value: &str) -> Option<String> {
+    let trimmed = value.trim_start();
+    if let Some(rest) = trimmed.strip_prefix('~')
+        && let Some(end) = rest.find('~')
+    {
+        return Some(rest[..end].to_string());
+    }
+    if let Some(rest) = trimmed.strip_prefix('"')
+        && let Some(end) = rest.find('"')
+    {
+        return Some(rest[..end].to_string());
+    }
+    None
+}
+
 fn extract_component_block<'a>(content: &'a str, component_id: &str) -> Option<Vec<&'a str>> {
+    let all_lines: Vec<&str> = content.lines().collect();
+    let comp_is_zero = component_id.trim() == "0";
+    let first_begin_idx = all_lines
+        .iter()
+        .position(|line| line.trim_start().to_ascii_uppercase().starts_with("BEGIN "));
+
     let mut in_target = false;
     let mut lines_after_begin = 0usize;
     let mut out = Vec::new();
     let designated_token = format!("DESIGNATED {}", component_id);
-    for line in content.lines() {
+    for (idx, line) in all_lines.iter().enumerate() {
         let trimmed = line.trim_start();
         let upper = trimmed.to_ascii_uppercase();
         if upper.starts_with("BEGIN ") {
@@ -381,21 +587,25 @@ fn extract_component_block<'a>(content: &'a str, component_id: &str) -> Option<V
                 break;
             }
             in_target = upper.contains(&designated_token);
+            if !in_target && comp_is_zero && first_begin_idx == Some(idx) {
+                // Many mods do not use DESIGNATED for component 0.
+                in_target = true;
+            }
             lines_after_begin = 0;
             if in_target {
-                out.push(line);
+                out.push(*line);
             }
             continue;
         }
         if in_target {
-            out.push(line);
+            out.push(*line);
             continue;
         }
         if lines_after_begin < 8 {
             lines_after_begin = lines_after_begin.saturating_add(1);
             if upper.contains(&designated_token) {
                 in_target = true;
-                out.push(line);
+                out.push(*line);
             }
         }
     }
