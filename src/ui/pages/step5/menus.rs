@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::ui::state::WizardState;
-use crate::ui::step5::diagnostics::export_diagnostics;
+use crate::ui::step5::diagnostics::{DiagnosticsContext, export_diagnostics};
 use crate::ui::step5::log_files::{
     open_console_logs_folder, open_last_log_file, save_console_log,
 };
@@ -74,6 +74,7 @@ pub(super) fn render_diagnostics_menu(
     state: &mut WizardState,
     terminal: Option<&EmbeddedTerminal>,
     dev_mode: bool,
+    exe_fingerprint: &str,
 ) {
     if !dev_mode {
         return;
@@ -107,7 +108,11 @@ pub(super) fn render_diagnostics_menu(
             }
         });
         if ui.button("Export diagnostics").clicked() {
-            match export_diagnostics(state, terminal, dev_mode) {
+            let diag_ctx = DiagnosticsContext {
+                dev_mode,
+                exe_fingerprint: exe_fingerprint.to_string(),
+            };
+            match export_diagnostics(state, terminal, &diag_ctx) {
                 Ok(path) => {
                     state.step5.last_status_text =
                         format!("Diagnostics exported: {}", path.display());

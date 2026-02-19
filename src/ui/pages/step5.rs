@@ -26,6 +26,7 @@ pub fn render(
     mut terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
     dev_mode: bool,
+    exe_fingerprint: &str,
 ) -> Option<Step5Action> {
     if dev_mode {
         // Dev mode always captures full internal diagnostics.
@@ -37,7 +38,14 @@ pub fn render(
 
     top_panels::render(ui, state);
 
-    let action = install_row::render(ui, state, terminal.as_deref_mut(), terminal_error, dev_mode);
+    let action = install_row::render(
+        ui,
+        state,
+        terminal.as_deref_mut(),
+        terminal_error,
+        dev_mode,
+        exe_fingerprint,
+    );
 
     ui.add_space(6.0);
     status_bar::render_console(ui, state, terminal.as_deref_mut(), terminal_error);

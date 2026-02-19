@@ -46,7 +46,10 @@ pub(super) fn advance_after_next(app: &mut WizardApp) {
         if app.state.current_step == 3
             && let Err(err) = app.auto_save_step4_weidu_logs()
         {
-            app.state.step5.last_status_text = format!("Step 4 save failed: {err}");
+            let msg = format!("Step 4 save failed: {err}");
+            app.state.step5.last_status_text = msg.clone();
+            app.state.step4_save_error_text = msg;
+            app.state.step4_save_error_open = true;
             app.save_settings_best_effort();
             return;
         }

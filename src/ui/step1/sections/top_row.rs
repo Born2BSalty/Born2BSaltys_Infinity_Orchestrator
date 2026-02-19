@@ -78,9 +78,6 @@ pub fn top_row(ui: &mut egui::Ui, s: &mut Step1State, dev_mode: bool) {
                         egui::DragValue::new(&mut s.tick).range(50..=5000),
                     );
                 });
-            } else {
-                // Keep normal-mode height visually aligned without showing dev-only controls.
-                ui.add_space(82.0);
             }
         });
 

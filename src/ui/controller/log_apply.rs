@@ -70,7 +70,10 @@ pub fn apply_log_to_mods(
         }
 
         if target_mods.is_empty() {
-            if try_apply_eet_end_fallback(mods, installed, next_order, check_component) {
+            if try_apply_eet_end_fallback(mods, installed, next_order, |component, next| {
+                check_component(component, next);
+                apply_wlb_inputs(component, installed.wlb_inputs.as_deref());
+            }) {
                 matched += 1;
             }
             continue;
@@ -90,6 +93,7 @@ pub fn apply_log_to_mods(
                 }
                 if component.component_id == installed.component {
                     check_component(component, next_order);
+                    apply_wlb_inputs(component, installed.wlb_inputs.as_deref());
                     matched += 1;
                     matched_this_line = true;
                     picked = true;
@@ -106,6 +110,7 @@ pub fn apply_log_to_mods(
                     }
                     if normalize_component_name(component.label.as_str()) == target_name {
                         check_component(component, next_order);
+                        apply_wlb_inputs(component, installed.wlb_inputs.as_deref());
                         matched += 1;
                         matched_this_line = true;
                         break;
@@ -113,7 +118,12 @@ pub fn apply_log_to_mods(
                 }
             }
         }
-        if !matched_this_line && try_apply_eet_end_fallback(mods, installed, next_order, check_component) {
+        if !matched_this_line
+            && try_apply_eet_end_fallback(mods, installed, next_order, |component, next| {
+                check_component(component, next);
+                apply_wlb_inputs(component, installed.wlb_inputs.as_deref());
+            })
+        {
             matched += 1;
         }
     }
@@ -137,6 +147,34 @@ fn check_component(component: &mut crate::ui::state::Step2ComponentState, next_o
     if component.selected_order.is_none() {
         component.selected_order = Some(*next_order);
         *next_order += 1;
+    }
+}
+
+fn apply_wlb_inputs(component: &mut crate::ui::state::Step2ComponentState, wlb_inputs: Option<&str>) {
+    let Some(inputs) = wlb_inputs.map(str::trim).filter(|v| !v.is_empty()) else {
+        return;
+    };
+    let base = strip_wlb_marker(component.raw_line.as_str());
+    component.raw_line = format!("{base} // @wlb-inputs: {inputs}");
+}
+
+fn strip_wlb_marker(raw_line: &str) -> String {
+    let marker = "@wlb-inputs:";
+    let lower = raw_line.to_ascii_lowercase();
+    if let Some(start) = lower.find(marker) {
+        let mut head = raw_line[..start].to_string();
+        while head.ends_with(' ') || head.ends_with('\t') {
+            head.pop();
+        }
+        if head.ends_with("//") {
+            head.truncate(head.len().saturating_sub(2));
+            while head.ends_with(' ') || head.ends_with('\t') {
+                head.pop();
+            }
+        }
+        head
+    } else {
+        raw_line.trim().to_string()
     }
 }
 

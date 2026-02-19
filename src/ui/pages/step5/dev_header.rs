@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::ui::state::WizardState;
 
 pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool) {
-    ui.heading("Step 5: Install");
+    ui.heading("Step 5: Install, Logs, Diagnostics");
     ui.label("Final execution view.");
     if dev_mode {
         let has_rust_log = state.step1.rust_log_debug || state.step1.rust_log_trace;

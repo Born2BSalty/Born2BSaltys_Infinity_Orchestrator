@@ -88,6 +88,7 @@ mod tests {
             component_name: String::new(),
             sub_component: String::new(),
             version: String::new(),
+            wlb_inputs: None,
         };
         let found = index.find_folder(&component);
         assert!(found.is_some(), "folder should be found");

@@ -33,6 +33,7 @@ pub(super) fn render_current_step(app: &mut WizardApp, ctx: &egui::Context) {
                 app.step5_terminal.as_mut(),
                 app.step5_terminal_error.as_deref(),
                 app.dev_mode,
+                app.exe_fingerprint.as_str(),
             ) {
                 handle_step5_action(app, action);
             }

@@ -14,6 +14,7 @@ pub(super) fn render(
     mut terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
     dev_mode: bool,
+    exe_fingerprint: &str,
 ) -> Option<Step5Action> {
     let mut action: Option<Step5Action> = None;
     ui.horizontal(|ui| {
@@ -107,7 +108,7 @@ pub(super) fn render(
         }
 
         menus::render_actions_menu(ui, state, terminal.as_deref_mut());
-        menus::render_diagnostics_menu(ui, state, terminal.as_deref(), dev_mode);
+        menus::render_diagnostics_menu(ui, state, terminal.as_deref(), dev_mode, exe_fingerprint);
         prompt_answers::render_button(ui, state);
 
         ui.add_space(8.0);

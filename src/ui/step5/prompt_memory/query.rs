@@ -67,31 +67,6 @@ pub(super) fn get_answer_by_alias(alias_value: &str) -> Option<String> {
     found
 }
 
-pub(super) fn get_component_sequence(component_key: &str) -> Option<String> {
-    let component_key = component_key.trim();
-    if component_key.is_empty() {
-        return None;
-    }
-    let guard = storage::memory().lock().ok()?;
-    let mut found: Option<String> = None;
-    for entry in guard.values() {
-        if !entry.enabled {
-            continue;
-        }
-        if entry.component_key.eq_ignore_ascii_case(component_key) {
-            let answer = entry.answer.trim();
-            if answer.is_empty() {
-                continue;
-            }
-            if found.is_some() {
-                return None;
-            }
-            found = Some(answer.to_string());
-        }
-    }
-    found
-}
-
 pub(super) fn list_component_sequences() -> HashMap<String, Vec<String>> {
     let mut out = HashMap::new();
     let Ok(guard) = storage::memory().lock() else {

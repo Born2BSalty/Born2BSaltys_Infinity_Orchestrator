@@ -17,7 +17,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step3Action>
     let mut action: Option<Step3Action> = None;
     tabs::normalize_active_tab(state);
 
-    ui.heading("Step 3: Reorder Components");
+    ui.heading("Step 3: Reorder and Resolve");
     ui.label("Arrange components into a valid install order.");
     ui.add_space(8.0);
 

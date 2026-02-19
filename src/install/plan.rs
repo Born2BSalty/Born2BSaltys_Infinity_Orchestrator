@@ -52,6 +52,7 @@ mod tests {
             component_name: component_name.to_string(),
             sub_component: String::new(),
             version: "v1".to_string(),
+            wlb_inputs: None,
         }
     }
 

@@ -184,59 +184,6 @@ pub(super) fn delete_entry(prompt_key: &str) {
     }
 }
 
-pub(super) fn upsert_entry(prompt_key: &str, entry: PromptAnswerEntry) {
-    let key = prompt_key.trim();
-    if key.is_empty() {
-        return;
-    }
-    if let Ok(mut guard) = storage::memory().lock() {
-        guard.insert(key.to_string(), entry);
-        storage::dedupe_in_place(&mut guard);
-        let _ = storage::save_to_disk(&guard);
-    }
-}
-
-pub(super) fn upsert_component_sequence(
-    component_key: &str,
-    tp2_file: &str,
-    component_id: &str,
-    component_name: &str,
-    answer: &str,
-    source: &str,
-) {
-    let component_key = component_key.trim();
-    if component_key.is_empty() {
-        return;
-    }
-    let entry_key = format!("ENTRY:COMPONENT:{component_key}");
-    let now = now_unix_secs();
-    if let Ok(mut guard) = storage::memory().lock() {
-        let mut entry = guard.get(&entry_key).cloned().unwrap_or_default();
-        entry.component_key = component_key.to_string();
-        entry.tp2_file = tp2_file.trim().to_string();
-        entry.component_id = component_id.trim().to_string();
-        entry.component_name = component_name.trim().to_string();
-        entry.answer = answer.trim().to_string();
-        entry.enabled = !entry.answer.is_empty();
-        if entry.alias.trim().is_empty() {
-            entry.alias = alias::suggest_alias_from_preview(&format!(
-                "{} {}",
-                entry.component_name, entry.component_id
-            ));
-        }
-        // Keep preview editable by user (including empty).
-        entry.prompt_kind = "component_sequence".to_string();
-        entry.source = source.trim().to_string();
-        if entry.captured_at == 0 {
-            entry.captured_at = now;
-        }
-        entry.last_used_at = now;
-        guard.insert(entry_key, entry);
-        storage::dedupe_in_place(&mut guard);
-        let _ = storage::save_to_disk(&guard);
-    }
-}
-
 fn now_unix_secs() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()

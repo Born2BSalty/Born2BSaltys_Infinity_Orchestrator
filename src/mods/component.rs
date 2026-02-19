@@ -12,10 +12,12 @@ pub struct Component {
     pub component_name: String,
     pub sub_component: String,
     pub version: String,
+    pub wlb_inputs: Option<String>,
 }
 
 impl Component {
     pub fn parse_weidu_line(line: &str) -> Result<Self> {
+        let wlb_inputs = extract_wlb_inputs(line);
         let mut parts = line.split('~');
         let install_path = parts
             .nth(1)
@@ -54,6 +56,7 @@ impl Component {
             component_name,
             sub_component,
             version,
+            wlb_inputs,
         })
     }
 
@@ -69,6 +72,18 @@ impl Component {
             && self.component_name == other.component_name
             && self.sub_component == other.sub_component
             && self.version == other.version
+    }
+}
+
+fn extract_wlb_inputs(line: &str) -> Option<String> {
+    let marker = "@wlb-inputs:";
+    let lower = line.to_ascii_lowercase();
+    let start = lower.find(marker)?;
+    let tail = line[start + marker.len()..].trim();
+    if tail.is_empty() {
+        None
+    } else {
+        Some(tail.to_string())
     }
 }
 
@@ -111,6 +126,7 @@ mod tests {
             component_name: "X".into(),
             sub_component: "".into(),
             version: "v1".into(),
+            wlb_inputs: None,
         };
         let b = Component {
             component_name: "Y".into(),
@@ -118,5 +134,12 @@ mod tests {
         };
         assert!(a.key_eq(&b));
         assert!(!a.strict_eq(&b));
+    }
+
+    #[test]
+    fn parse_wlb_inputs_marker() {
+        let line = r"~EET\EET.TP2~ #0 #0 // EET core: v14.0 // @wlb-inputs: y,D:\test1";
+        let c = Component::parse_weidu_line(line).expect("parse should succeed");
+        assert_eq!(c.wlb_inputs.as_deref(), Some("y,D:\\test1"));
     }
 }

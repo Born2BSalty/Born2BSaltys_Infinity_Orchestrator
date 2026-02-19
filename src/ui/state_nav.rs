@@ -37,6 +37,8 @@ impl WizardState {
             step1,
             step1_path_check: None,
             step1_clean_confirm_open: false,
+            step4_save_error_open: false,
+            step4_save_error_text: String::new(),
             step2: Step2State::default(),
             step3: Step3State::default(),
             step5: Step5State::default(),
@@ -47,6 +49,9 @@ impl WizardState {
     pub fn reset_workflow_keep_step1(&mut self) {
         self.current_step = 0;
         self.step1_path_check = None;
+        self.step1_clean_confirm_open = false;
+        self.step4_save_error_open = false;
+        self.step4_save_error_text.clear();
         self.step2 = Step2State::default();
         self.step3 = Step3State::default();
         self.step5 = Step5State::default();
@@ -61,6 +66,8 @@ impl Default for WizardState {
             step1: Step1State::default(),
             step1_path_check: None,
             step1_clean_confirm_open: false,
+            step4_save_error_open: false,
+            step4_save_error_text: String::new(),
             step2: Step2State::default(),
             step3: Step3State::default(),
             step5: Step5State::default(),

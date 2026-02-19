@@ -13,7 +13,7 @@ pub(super) fn render_header(
     search_rect: egui::Rect,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(title_rect), |ui| {
-        ui.heading("Step 2: Select");
+        ui.heading("Step2: Scan and Select");
     });
     ui.scope_builder(egui::UiBuilder::new().max_rect(subtitle_rect), |ui| {
         ui.label("Choose components to install.")

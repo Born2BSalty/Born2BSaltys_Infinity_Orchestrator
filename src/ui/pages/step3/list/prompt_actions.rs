@@ -4,27 +4,21 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::ui::state::WizardState;
-use crate::ui::step5::prompt_memory;
+use crate::ui::state::{Step3ItemState, WizardState};
+use crate::ui::step3::access;
 
 use super::rows::PromptActionRequest;
 
+const WLB_MARKER: &str = "@wlb-inputs:";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AdvancedPromptEntry {
-    key: String,
-    alias: String,
-    answer: String,
-    enabled: bool,
-    preview: String,
-    component_key: String,
     tp2_file: String,
     component_id: String,
     component_name: String,
-    prompt_kind: String,
-    source: String,
-    captured_at: u64,
-    last_used_at: u64,
-    hit_count: u64,
+    mod_name: String,
+    answer: String,
+    raw_line: String,
 }
 
 pub(super) fn apply_prompt_actions(state: &mut WizardState, requests: &[PromptActionRequest]) {
@@ -35,52 +29,17 @@ pub(super) fn apply_prompt_actions(state: &mut WizardState, requests: &[PromptAc
                 component_id,
                 component_label,
                 mod_name,
-            } => {
-                let component_key = component_key(tp_file, component_id);
-                state.step3.prompt_edit_key = component_entry_key(&component_key);
-                state.step3.prompt_edit_component_key = component_key.clone();
-                state.step3.prompt_edit_tp2_file = normalize_tp2_filename(tp_file);
-                state.step3.prompt_edit_component_id = component_id.trim().to_string();
-                state.step3.prompt_edit_component_name = component_label.clone();
-                state.step3.prompt_edit_mod_name = mod_name.clone();
-                state.step3.prompt_edit_answer = prompt_memory::get_component_sequence(&component_key)
-                    .unwrap_or_default();
-                state.step3.prompt_edit_status.clear();
-                state.step3.prompt_edit_mode = "wlb".to_string();
-                state.step3.prompt_edit_open = true;
-            }
+            } => open_wlb_editor(state, tp_file, component_id, component_label, mod_name),
             PromptActionRequest::EditJson {
                 tp_file,
                 component_id,
                 component_label,
                 mod_name,
-            } => {
-                let component_key = component_key(tp_file, component_id);
-                let key = component_entry_key(&component_key);
-                let existing = prompt_memory::list_entries()
-                    .into_iter()
-                    .find(|(k, _)| k == &key)
-                    .map(|(_, v)| v)
-                    .unwrap_or_else(|| default_entry(&component_key, tp_file, component_id, component_label));
-                state.step3.prompt_edit_key = key.clone();
-                state.step3.prompt_edit_component_key = component_key;
-                state.step3.prompt_edit_tp2_file = normalize_tp2_filename(tp_file);
-                state.step3.prompt_edit_component_id = component_id.trim().to_string();
-                state.step3.prompt_edit_component_name = component_label.clone();
-                state.step3.prompt_edit_mod_name = mod_name.clone();
-                state.step3.prompt_edit_json = advanced_entry_to_json(&key, &existing).unwrap_or_default();
-                state.step3.prompt_edit_status.clear();
-                state.step3.prompt_edit_mode = "json".to_string();
-                state.step3.prompt_edit_open = true;
-            }
+            } => open_json_editor(state, tp_file, component_id, component_label, mod_name),
             PromptActionRequest::Clear {
                 tp_file,
                 component_id,
-            } => {
-                let key = component_entry_key(&component_key(tp_file, component_id));
-                prompt_memory::delete_entry(&key);
-                state.step5.last_status_text = format!("Prompt data cleared for {key}");
-            }
+            } => clear_prompt_data(state, tp_file, component_id),
         }
     }
 }
@@ -93,6 +52,79 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
         render_json_editor(ui, state);
     } else {
         render_wlb_editor(ui, state);
+    }
+}
+
+fn open_wlb_editor(
+    state: &mut WizardState,
+    tp_file: &str,
+    component_id: &str,
+    component_label: &str,
+    mod_name: &str,
+) {
+    let component_key = component_key(tp_file, component_id);
+    state.step3.prompt_edit_key = component_key.clone();
+    state.step3.prompt_edit_component_key = component_key;
+    state.step3.prompt_edit_tp2_file = normalize_tp2_filename(tp_file);
+    state.step3.prompt_edit_component_id = component_id.trim().to_string();
+    state.step3.prompt_edit_component_name = component_label.to_string();
+    state.step3.prompt_edit_mod_name = mod_name.to_string();
+
+    state.step3.prompt_edit_answer = find_component_mut(state, tp_file, component_id)
+        .and_then(|item| extract_wlb_inputs(&item.raw_line))
+        .unwrap_or_default();
+
+    state.step3.prompt_edit_status.clear();
+    state.step3.prompt_edit_mode = "wlb".to_string();
+    state.step3.prompt_edit_open = true;
+}
+
+fn open_json_editor(
+    state: &mut WizardState,
+    tp_file: &str,
+    component_id: &str,
+    component_label: &str,
+    mod_name: &str,
+) {
+    let component_key = component_key(tp_file, component_id);
+    state.step3.prompt_edit_key = component_key.clone();
+    state.step3.prompt_edit_component_key = component_key;
+    state.step3.prompt_edit_tp2_file = normalize_tp2_filename(tp_file);
+    state.step3.prompt_edit_component_id = component_id.trim().to_string();
+    state.step3.prompt_edit_component_name = component_label.to_string();
+    state.step3.prompt_edit_mod_name = mod_name.to_string();
+
+    let (answer, raw_line) = if let Some(item) = find_component_mut(state, tp_file, component_id) {
+        (
+            extract_wlb_inputs(&item.raw_line).unwrap_or_default(),
+            effective_raw_line(item),
+        )
+    } else {
+        (String::new(), String::new())
+    };
+
+    let entry = AdvancedPromptEntry {
+        tp2_file: normalize_tp2_filename(tp_file),
+        component_id: component_id.trim().to_string(),
+        component_name: component_label.to_string(),
+        mod_name: mod_name.to_string(),
+        answer,
+        raw_line,
+    };
+
+    state.step3.prompt_edit_json = serde_json::to_string_pretty(&entry).unwrap_or_default();
+    state.step3.prompt_edit_status.clear();
+    state.step3.prompt_edit_mode = "json".to_string();
+    state.step3.prompt_edit_open = true;
+}
+
+fn clear_prompt_data(state: &mut WizardState, tp_file: &str, component_id: &str) {
+    if let Some(item) = find_component_mut(state, tp_file, component_id) {
+        item.raw_line = strip_wlb_marker(&effective_raw_line(item));
+        state.step5.last_status_text = format!(
+            "Cleared @wlb-inputs for {} #{}",
+            item.mod_name, item.component_id
+        );
     }
 }
 
@@ -110,10 +142,7 @@ fn render_wlb_editor(ui: &mut egui::Ui, state: &mut WizardState) {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.label("Answer");
-                ui.add(
-                    egui::TextEdit::singleline(&mut state.step3.prompt_edit_answer)
-                        .desired_width(360.0),
-                );
+                ui.add(egui::TextEdit::singleline(&mut state.step3.prompt_edit_answer).desired_width(360.0));
             });
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -123,19 +152,19 @@ fn render_wlb_editor(ui: &mut egui::Ui, state: &mut WizardState) {
                         state.step3.prompt_edit_status =
                             "Answer is empty. Use Clear Prompt Data to remove this entry.".to_string();
                     } else {
-                        prompt_memory::upsert_component_sequence(
-                            &state.step3.prompt_edit_component_key,
-                            &state.step3.prompt_edit_tp2_file,
-                            &state.step3.prompt_edit_component_id,
-                            &state.step3.prompt_edit_component_name,
-                            &answer,
-                            "step3_context_menu",
-                        );
+                        let tp2_file = state.step3.prompt_edit_tp2_file.clone();
+                        let component_id = state.step3.prompt_edit_component_id.clone();
+                        if let Some(item) = find_component_mut(state, &tp2_file, &component_id) {
+                        item.raw_line = set_wlb_inputs(&effective_raw_line(item), &answer);
                         state.step5.last_status_text = format!(
-                            "Saved @wlb-inputs for {} #{}",
-                            state.step3.prompt_edit_mod_name, state.step3.prompt_edit_component_id
+                            "Saved @wlb-inputs on weidu line for {} #{}",
+                            item.mod_name, item.component_id
                         );
-                        state.step3.prompt_edit_open = false;
+                            state.step3.prompt_edit_open = false;
+                        } else {
+                            state.step3.prompt_edit_status =
+                                "Save failed: component not found in current Step 3 tab.".to_string();
+                        }
                     }
                 }
                 if ui.button("Cancel").clicked() {
@@ -171,28 +200,22 @@ fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
                 if ui.button("Save JSON").clicked() {
                     match serde_json::from_str::<AdvancedPromptEntry>(&state.step3.prompt_edit_json) {
                         Ok(parsed) => {
-                            if parsed.key.trim().is_empty() {
-                                state.step3.prompt_edit_status = "Save failed: key is required".to_string();
+                            if let Some(item) =
+                                find_component_mut(state, &parsed.tp2_file, &parsed.component_id)
+                            {
+                                if !parsed.raw_line.trim().is_empty() {
+                                    item.raw_line = parsed.raw_line.trim().to_string();
+                                } else if !parsed.answer.trim().is_empty() {
+                                    item.raw_line =
+                                        set_wlb_inputs(&effective_raw_line(item), parsed.answer.trim());
+                                } else {
+                                    item.raw_line = strip_wlb_marker(&effective_raw_line(item));
+                                }
+                                state.step3.prompt_edit_status = "Saved to weidu line.".to_string();
                             } else {
-                                prompt_memory::upsert_entry(
-                                    parsed.key.trim(),
-                                    prompt_memory::PromptAnswerEntry {
-                                        alias: parsed.alias,
-                                        answer: parsed.answer,
-                                        enabled: parsed.enabled,
-                                        preview: parsed.preview,
-                                        component_key: parsed.component_key,
-                                        tp2_file: parsed.tp2_file,
-                                        component_id: parsed.component_id,
-                                        component_name: parsed.component_name,
-                                        prompt_kind: parsed.prompt_kind,
-                                        source: parsed.source,
-                                        captured_at: parsed.captured_at,
-                                        last_used_at: parsed.last_used_at,
-                                        hit_count: parsed.hit_count,
-                                    },
-                                );
-                                state.step3.prompt_edit_status = "Saved.".to_string();
+                                state.step3.prompt_edit_status =
+                                    "Save failed: component not found in current Step 3 tab."
+                                        .to_string();
                             }
                         }
                         Err(err) => {
@@ -201,19 +224,15 @@ fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
                     }
                 }
                 if ui.button("Delete Entry").clicked() {
-                    match serde_json::from_str::<AdvancedPromptEntry>(&state.step3.prompt_edit_json) {
-                        Ok(parsed) => {
-                            let key = parsed.key.trim().to_string();
-                            if key.is_empty() {
-                                state.step3.prompt_edit_status = "Delete failed: key is required".to_string();
-                            } else {
-                                prompt_memory::delete_entry(&key);
-                                state.step3.prompt_edit_status = "Deleted.".to_string();
-                            }
-                        }
-                        Err(err) => {
-                            state.step3.prompt_edit_status = format!("Delete failed: {err}");
-                        }
+                    let tp2_file = state.step3.prompt_edit_tp2_file.clone();
+                    let component_id = state.step3.prompt_edit_component_id.clone();
+                    if let Some(item) = find_component_mut(state, &tp2_file, &component_id) {
+                        item.raw_line = strip_wlb_marker(&effective_raw_line(item));
+                        state.step3.prompt_edit_status = "Deleted from weidu line.".to_string();
+                    } else {
+                        state.step3.prompt_edit_status =
+                            "Delete failed: component not found in current Step 3 tab."
+                                .to_string();
                     }
                 }
                 if ui.button("Close").clicked() {
@@ -225,6 +244,21 @@ fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
             }
         });
     state.step3.prompt_edit_open = open && state.step3.prompt_edit_open;
+}
+
+fn find_component_mut<'a>(
+    state: &'a mut WizardState,
+    tp_file: &str,
+    component_id: &str,
+) -> Option<&'a mut Step3ItemState> {
+    let tp_norm = normalize_tp2_filename(tp_file);
+    let id_norm = component_id.trim();
+    let (items, _, _, _, _, _, _, _, _, _, _, _, _, _, _) = access::active_list_mut(state);
+    items.iter_mut().find(|i| {
+        !i.is_parent
+            && normalize_tp2_filename(&i.tp_file) == tp_norm
+            && i.component_id.trim() == id_norm
+    })
 }
 
 fn normalize_tp2_filename(tp_file: &str) -> String {
@@ -241,49 +275,58 @@ fn component_key(tp_file: &str, component_id: &str) -> String {
     format!("{}#{}", normalize_tp2_filename(tp_file), component_id.trim())
 }
 
-fn component_entry_key(component_key: &str) -> String {
-    format!("ENTRY:COMPONENT:{component_key}")
+fn default_raw_line(item: &Step3ItemState) -> String {
+    let folder = item.mod_name.replace('/', "\\");
+    format!(
+        "~{}\\{}~ #0 #{} // {}",
+        folder, item.tp_file, item.component_id, item.component_label
+    )
 }
 
-fn default_entry(
-    component_key: &str,
-    tp_file: &str,
-    component_id: &str,
-    component_name: &str,
-) -> prompt_memory::PromptAnswerEntry {
-    prompt_memory::PromptAnswerEntry {
-        alias: String::new(),
-        answer: String::new(),
-        enabled: false,
-        preview: String::new(),
-        component_key: component_key.to_string(),
-        tp2_file: normalize_tp2_filename(tp_file),
-        component_id: component_id.trim().to_string(),
-        component_name: component_name.to_string(),
-        prompt_kind: "component_sequence".to_string(),
-        source: "step3_context_menu".to_string(),
-        captured_at: 0,
-        last_used_at: 0,
-        hit_count: 0,
+fn effective_raw_line(item: &Step3ItemState) -> String {
+    if item.raw_line.trim().is_empty() {
+        default_raw_line(item)
+    } else {
+        item.raw_line.trim().to_string()
     }
 }
 
-fn advanced_entry_to_json(key: &str, entry: &prompt_memory::PromptAnswerEntry) -> Option<String> {
-    let data = AdvancedPromptEntry {
-        key: key.to_string(),
-        alias: entry.alias.clone(),
-        answer: entry.answer.clone(),
-        enabled: entry.enabled,
-        preview: entry.preview.clone(),
-        component_key: entry.component_key.clone(),
-        tp2_file: entry.tp2_file.clone(),
-        component_id: entry.component_id.clone(),
-        component_name: entry.component_name.clone(),
-        prompt_kind: entry.prompt_kind.clone(),
-        source: entry.source.clone(),
-        captured_at: entry.captured_at,
-        last_used_at: entry.last_used_at,
-        hit_count: entry.hit_count,
-    };
-    serde_json::to_string_pretty(&data).ok()
+fn extract_wlb_inputs(raw_line: &str) -> Option<String> {
+    let lower = raw_line.to_ascii_lowercase();
+    let marker = WLB_MARKER;
+    let start = lower.find(marker)?;
+    let value = raw_line[start + marker.len()..].trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn strip_wlb_marker(raw_line: &str) -> String {
+    let lower = raw_line.to_ascii_lowercase();
+    let marker = WLB_MARKER;
+    if let Some(start) = lower.find(marker) {
+        let mut head = raw_line[..start].to_string();
+        while head.ends_with(' ') || head.ends_with('\t') {
+            head.pop();
+        }
+        if head.ends_with("//") {
+            head.truncate(head.len().saturating_sub(2));
+            while head.ends_with(' ') || head.ends_with('\t') {
+                head.pop();
+            }
+        }
+        head
+    } else {
+        raw_line.trim().to_string()
+    }
+}
+
+fn set_wlb_inputs(raw_line: &str, answer: &str) -> String {
+    let base = strip_wlb_marker(raw_line);
+    if answer.trim().is_empty() {
+        return base;
+    }
+    format!("{base} // @wlb-inputs: {}", answer.trim())
 }
