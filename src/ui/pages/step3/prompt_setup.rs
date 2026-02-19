@@ -93,7 +93,16 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                 .collect();
 
             let mut open_advanced: Option<(String, String)> = None;
-            egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.scope(|ui| {
+                let mut scroll = egui::style::ScrollStyle::solid();
+                scroll.bar_width = 12.0;
+                scroll.bar_inner_margin = 0.0;
+                scroll.bar_outer_margin = 2.0;
+                ui.style_mut().spacing.scroll = scroll;
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
                 let entries = prompt_memory::list_entries();
                 let filter_mode = state.step3.prompt_setup_filter.clone();
                 let grouped = group_by_mod(
@@ -109,7 +118,7 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                         .default_open(false)
                         .show(ui, |ui| {
                             egui::Grid::new(("step3_prompt_setup_grid", mod_name.as_str()))
-                                .num_columns(4)
+                                .num_columns(5)
                                 .spacing([10.0, 6.0])
                                 .striped(true)
                                 .show(ui, |ui| {
@@ -117,6 +126,7 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                     ui.strong("Component");
                                     ui.strong("Prompt");
                                     ui.strong("Answers");
+                                    ui.strong("...");
                                     ui.end_row();
 
                                     for item in mod_items {
@@ -153,28 +163,18 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                         let enabled_changed = ui.checkbox(&mut enabled, "").changed();
 
                                         ui.label(format!("{}  #{}", item.mod_name, item.component_id));
-                                        ui.horizontal(|ui| {
-                                            let prompt_short: String = if prompt_preview.chars().count() > 68 {
-                                                let mut s: String = prompt_preview.chars().take(68).collect();
-                                                s.push_str("...");
-                                                s
-                                            } else {
-                                                prompt_preview.clone()
-                                            };
-                                            ui.add_sized(
-                                                egui::vec2(338.0, 0.0),
-                                                egui::Label::new(prompt_short),
-                                            )
-                                            .on_hover_text(prompt_preview.as_str());
-                                            if ui.button("...").clicked() {
-                                                let entry = existing
-                                                    .clone()
-                                                    .unwrap_or_else(|| default_advanced_entry(&component_key, &item, &answer, enabled, &alias, &prompt_preview));
-                                                if let Some(json) = advanced_entry_to_json(&entry_key, &entry) {
-                                                    open_advanced = Some((entry_key.clone(), json));
-                                                }
-                                            }
-                                        });
+                                        let prompt_short: String = if prompt_preview.chars().count() > 68 {
+                                            let mut s: String = prompt_preview.chars().take(68).collect();
+                                            s.push_str("...");
+                                            s
+                                        } else {
+                                            prompt_preview.clone()
+                                        };
+                                        ui.add_sized(
+                                            egui::vec2(338.0, 0.0),
+                                            egui::Label::new(prompt_short),
+                                        )
+                                        .on_hover_text(prompt_preview.as_str());
 
                                         let answer_changed = ui
                                             .add_sized(
@@ -193,12 +193,21 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                                             );
                                             prompt_memory::set_enabled(&entry_key, enabled);
                                         }
+                                        if ui.button("...").clicked() {
+                                            let entry = existing
+                                                .clone()
+                                                .unwrap_or_else(|| default_advanced_entry(&component_key, &item, &answer, enabled, &alias, &prompt_preview));
+                                            if let Some(json) = advanced_entry_to_json(&entry_key, &entry) {
+                                                open_advanced = Some((entry_key.clone(), json));
+                                            }
+                                        }
                                         ui.end_row();
                                     }
                                 });
                         });
                     ui.add_space(4.0);
                 }
+                });
             });
 
             if let Some((key, json)) = open_advanced {
@@ -330,16 +339,33 @@ fn index_step2_mods(mods: &[Step2ModState], out: &mut BTreeMap<String, String>) 
 
 fn scan_tp2_component_prompt(tp2_content: &str, component_id: &str) -> Option<String> {
     let block = extract_component_block(tp2_content, component_id)?;
+    let mut fallback_print: Option<String> = None;
     for line in block {
         let upper = line.to_ascii_uppercase();
-        if upper.contains("READLN") {
+        if upper.contains("READLN") || upper.contains("ACTION_READLN") {
             if let Some(text) = extract_inline_prompt_text(line) {
                 return Some(text);
             }
             return Some("READLN prompt detected".to_string());
         }
+        if upper.contains("ASK_EVERY_COMPONENT") {
+            return Some("ASK_EVERY_COMPONENT prompt detected".to_string());
+        }
+        if (upper.contains("[Y]") && upper.contains("[N]")) || upper.contains("PLEASE CHOOSE ONE OF THE FOLLOWING")
+        {
+            if let Some(text) = extract_inline_prompt_text(line) {
+                return Some(text);
+            }
+            return Some("Choice prompt detected".to_string());
+        }
+        if fallback_print.is_none()
+            && (upper.contains("PRINT ") || upper.contains("SAY "))
+            && let Some(text) = extract_inline_prompt_text(line)
+        {
+            fallback_print = Some(text);
+        }
     }
-    None
+    fallback_print
 }
 
 fn extract_component_block<'a>(content: &'a str, component_id: &str) -> Option<Vec<&'a str>> {
