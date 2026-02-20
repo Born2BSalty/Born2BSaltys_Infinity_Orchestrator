@@ -50,5 +50,17 @@ pub fn build_resume_invocation(step1: &Step1State) -> (String, Vec<String>) {
         args.push(log_file);
     }
     append_common_args(step1, &mut args);
+    if step1.new_pre_eet_dir_enabled || step1.new_eet_dir_enabled || step1.generate_directory_enabled
+    {
+        force_skip_installed_on(&mut args);
+    }
     (installer, args)
+}
+
+fn force_skip_installed_on(args: &mut [String]) {
+    if let Some(idx) = args.iter().position(|a| a == "--skip-installed")
+        && let Some(value) = args.get_mut(idx + 1)
+    {
+        *value = "true".to_string();
+    }
 }
