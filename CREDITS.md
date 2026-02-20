@@ -7,3 +7,4 @@ Special thanks to the following people for testing, feedback, and improvement id
 - **Dark0Dave**
 - **Xgatt**
 - **Madzak**
+- **Albro** — Original concept inspiration for this project; credited for the initial idea that started BIO.
