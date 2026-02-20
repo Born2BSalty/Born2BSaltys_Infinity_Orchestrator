@@ -13,6 +13,7 @@ pub(super) fn should_show_step1_clean_confirm(app: &WizardApp) -> bool {
     };
     app.state.current_step == 0
         && uses_fresh_target
+        && app.state.step1.prepare_target_dirs_before_install
         && !app.state.step1.backup_targets_before_eet_copy
 }
 

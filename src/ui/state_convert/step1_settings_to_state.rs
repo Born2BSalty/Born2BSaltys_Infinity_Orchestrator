@@ -27,6 +27,7 @@ impl From<Step1Settings> for Step1State {
             new_pre_eet_dir_enabled: value.new_pre_eet_dir_enabled,
             new_eet_dir_enabled: value.new_eet_dir_enabled,
             generate_directory_enabled: value.generate_directory_enabled,
+            prepare_target_dirs_before_install: value.prepare_target_dirs_before_install,
             weidu_log_autolog: value.weidu_log_autolog,
             weidu_log_logapp: value.weidu_log_logapp,
             weidu_log_logextern: value.weidu_log_logextern,

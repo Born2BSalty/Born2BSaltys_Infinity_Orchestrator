@@ -16,6 +16,10 @@ pub fn prepare_target_dirs_before_install(step1: &Step1State) -> std::io::Result
     let mut backups = Vec::new();
     let mut cleaned = Vec::new();
 
+    if !step1.prepare_target_dirs_before_install {
+        return Ok(TargetPrepResult { backups, cleaned });
+    }
+
     if step1.new_pre_eet_dir_enabled {
         if step1.backup_targets_before_eet_copy {
             if let Some(path) = backup_target_dir_if_nonempty(&step1.eet_pre_dir)? {

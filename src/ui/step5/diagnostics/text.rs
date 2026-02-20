@@ -144,6 +144,10 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
         "generate_directory_enabled={}\n",
         s.generate_directory_enabled
     ));
+    out.push_str(&format!(
+        "prepare_target_dirs_before_install={}\n",
+        s.prepare_target_dirs_before_install
+    ));
     out.push_str(&format!("weidu_log_autolog={}\n", s.weidu_log_autolog));
     out.push_str(&format!("weidu_log_logapp={}\n", s.weidu_log_logapp));
     out.push_str(&format!("weidu_log_logextern={}\n", s.weidu_log_logextern));

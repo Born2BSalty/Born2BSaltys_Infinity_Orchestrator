@@ -145,13 +145,26 @@ Prompt sequence with blank input\n\
             };
             if show_backup_checkbox {
                 ui.checkbox(
-                    &mut s.backup_targets_before_eet_copy,
-                    "Backup target dirs before -p/-n/-g run",
+                    &mut s.prepare_target_dirs_before_install,
+                    "Prepare target dirs before -p/-n/-g install",
                 )
                 .on_hover_text(
-                    "If target dir has files, move it to a timestamped backup folder and recreate an empty target before copy.",
+                    "BIO prepares target directories before run (backup or clean, based on next option).",
                 );
+                ui.add_enabled_ui(s.prepare_target_dirs_before_install, |ui| {
+                    ui.checkbox(
+                        &mut s.backup_targets_before_eet_copy,
+                        "Backup target dirs before -p/-n/-g run",
+                    )
+                    .on_hover_text(
+                        "If target dir has files, move it to a timestamped backup folder and recreate an empty target before copy.",
+                    );
+                });
+                if !s.prepare_target_dirs_before_install {
+                    s.backup_targets_before_eet_copy = false;
+                }
             } else {
+                s.prepare_target_dirs_before_install = false;
                 s.backup_targets_before_eet_copy = false;
             }
         });
