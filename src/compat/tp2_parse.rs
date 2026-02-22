@@ -30,10 +30,13 @@ pub fn parse_tp2_rules(tp2_path: &Path) -> Tp2Metadata {
 fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
     let mut rules = Vec::new();
     let mut current_component: Option<u32> = None;
+    let lines: Vec<&str> = content.lines().collect();
+    let mut i = 0usize;
 
-    for line in content.lines() {
-        let trimmed = line.trim();
+    while i < lines.len() {
+        let trimmed = lines[i].trim();
         if trimmed.is_empty() || trimmed.starts_with("//") {
+            i += 1;
             continue;
         }
 
@@ -44,34 +47,48 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
             // If there is no explicit DESIGNATED on/near this BEGIN, do not carry
             // previous component id forward, otherwise rules can be mis-attributed.
             current_component = parse_begin_component(&upper);
+            i += 1;
             continue;
         }
         if let Some(comp_id) = parse_designated_line(&upper) {
             current_component = Some(comp_id);
+            i += 1;
             continue;
         }
 
         let Some(comp_id) = current_component else {
+            i += 1;
             continue;
         };
 
-        if let Some(rule) = parse_require_component(&upper, trimmed) {
+        let (raw_expr, consumed_to) = if upper.contains("REQUIRE_PREDICATE") {
+            collect_predicate_expression(&lines, i)
+        } else {
+            (trimmed.to_string(), i)
+        };
+        let upper_expr = raw_expr.to_ascii_uppercase();
+
+        if let Some(rule) = parse_require_component(&upper_expr, &raw_expr) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_forbid_component(&upper, trimmed) {
+        } else if let Some(rule) = parse_forbid_component(&upper_expr, &raw_expr) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_game_or_installed_any(&upper, trimmed) {
+        } else if let Some(rule) =
+            parse_require_predicate_game_or_installed_any(&upper_expr, &raw_expr)
+        {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_game_is(&upper, trimmed) {
+        } else if let Some(rule) = parse_require_predicate_game_is(&upper_expr, &raw_expr) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_forbid_predicate_mod_installed(&upper, trimmed) {
+        } else if let Some(rule) = parse_forbid_predicate_mod_installed(&upper_expr, &raw_expr) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_mod_installed(&upper, trimmed) {
+        } else if let Some(rule) = parse_require_predicate_mod_installed(&upper_expr, &raw_expr) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_action_if_mod_installed(&upper, trimmed) {
+        } else if let Some(rule) = parse_action_if_mod_installed(&upper_expr, &raw_expr) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_action_if_mod_missing(&upper, trimmed) {
+        } else if let Some(rule) = parse_action_if_mod_missing(&upper_expr, &raw_expr) {
             rules.push((comp_id, rule));
         }
+
+        i = consumed_to + 1;
     }
 
     rules
@@ -98,6 +115,65 @@ fn parse_designated_line(upper: &str) -> Option<u32> {
     }
 
     digits.parse().ok()
+}
+
+fn collect_predicate_expression(lines: &[&str], start_idx: usize) -> (String, usize) {
+    let mut expr = lines[start_idx].trim().to_string();
+    let mut paren_balance = paren_delta(&expr);
+    let mut last = start_idx;
+
+    while last + 1 < lines.len() {
+        let next = lines[last + 1].trim();
+        if next.is_empty() {
+            last += 1;
+            continue;
+        }
+
+        let next_upper = next.to_ascii_uppercase();
+        let starts_new_statement = next_upper.starts_with("BEGIN ")
+            || next_upper.starts_with("REQUIRE_")
+            || next_upper.starts_with("FORBID_")
+            || next_upper.starts_with("ACTION_IF")
+            || next_upper.starts_with("LABEL ")
+            || next_upper.starts_with("INCLUDE ")
+            || next_upper.starts_with("COPY ")
+            || next_upper.starts_with("OUTER_")
+            || next_upper.starts_with("END");
+
+        let expr_upper = expr.to_ascii_uppercase();
+        let can_stop = paren_balance <= 0
+            && !expr_upper.ends_with(" OR")
+            && !expr_upper.ends_with(" ||")
+            && !expr_upper.ends_with("AND")
+            && !expr_upper.ends_with("&&");
+
+        if starts_new_statement && can_stop {
+            break;
+        }
+
+        expr.push(' ');
+        expr.push_str(next);
+        paren_balance += paren_delta(next);
+        last += 1;
+
+        let expr_upper = expr.to_ascii_uppercase();
+        let should_stop = paren_balance <= 0
+            && !expr_upper.ends_with(" OR")
+            && !expr_upper.ends_with(" ||")
+            && !expr_upper.ends_with("AND")
+            && !expr_upper.ends_with("&&");
+        if should_stop {
+            break;
+        }
+    }
+
+    (expr, last)
+}
+
+fn paren_delta(input: &str) -> i32 {
+    let open = input.chars().filter(|c| *c == '(').count() as i32;
+    let close = input.chars().filter(|c| *c == ')').count() as i32;
+    open - close
 }
 
 fn parse_require_component(upper: &str, raw: &str) -> Option<Tp2Rule> {
@@ -168,23 +244,10 @@ fn parse_require_predicate_game_is(upper: &str, raw: &str) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("GAME_IS") {
         return None;
     }
-    // Ignore negated predicates (`!GAME_IS ...` or `NOT GAME_IS ...`):
-    // those are "forbid" semantics, not "require allowed games".
-    // Parsing them as RequireGame creates false mismatches.
-    let normalized = upper.split_whitespace().collect::<Vec<_>>().join(" ");
-    if normalized.contains("!GAME_IS") || normalized.contains("NOT GAME_IS") {
+    let allowed_games = parse_positive_game_is_groups(upper, raw);
+    if allowed_games.is_empty() {
         return None;
     }
-    let idx = upper.find("GAME_IS")?;
-    let after = &raw[idx + "GAME_IS".len()..];
-    let tokens = parse_token_group(after);
-    if tokens.is_empty() {
-        return None;
-    }
-    let allowed_games = tokens
-        .into_iter()
-        .map(|t| t.to_ascii_lowercase())
-        .collect::<Vec<_>>();
     Some(Tp2Rule::RequireGame {
         allowed_games,
         raw_line: raw.to_string(),
@@ -203,17 +266,7 @@ fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &str) -> Opti
     if !(upper.contains("||") || upper.contains(" OR ")) {
         return None;
     }
-    // Ignore negated game checks here.
-    let normalized = upper.split_whitespace().collect::<Vec<_>>().join(" ");
-    if normalized.contains("!GAME_IS") || normalized.contains("NOT GAME_IS") {
-        return None;
-    }
-    let idx = upper.find("GAME_IS")?;
-    let after = &raw[idx + "GAME_IS".len()..];
-    let allowed_games = parse_token_group(after)
-        .into_iter()
-        .map(|t| t.to_ascii_lowercase())
-        .collect::<Vec<_>>();
+    let allowed_games = parse_positive_game_is_groups(upper, raw);
     if allowed_games.is_empty() {
         return None;
     }
@@ -361,6 +414,30 @@ fn parse_all_mod_is_installed(upper: &str, raw: &str) -> Vec<(String, Option<u32
     out
 }
 
+fn parse_positive_game_is_groups(upper: &str, raw: &str) -> Vec<String> {
+    let mut allowed_games: Vec<String> = Vec::new();
+    let mut offset = 0usize;
+    while let Some(rel_idx) = upper[offset..].find("GAME_IS") {
+        let idx = offset + rel_idx;
+        if !is_negated_game_is(upper, idx) {
+            let after = &raw[idx + "GAME_IS".len()..];
+            for token in parse_token_group(after) {
+                let normalized = token.to_ascii_lowercase();
+                if !allowed_games.contains(&normalized) {
+                    allowed_games.push(normalized);
+                }
+            }
+        }
+        offset = idx + "GAME_IS".len();
+    }
+    allowed_games
+}
+
+fn is_negated_game_is(upper: &str, idx: usize) -> bool {
+    let before = upper[..idx].trim_end();
+    before.ends_with('!') || before.ends_with("NOT")
+}
+
 fn parse_quoted_or_tilde_token(input: &str) -> Option<(String, &str)> {
     if let Some(rest) = input.strip_prefix('~') {
         let end = rest.find('~')?;
@@ -498,6 +575,38 @@ mod tests {
                 assert_eq!(target_component, Some(35));
             }
             _ => panic!("expected ConditionalOnMissing"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiline_require_predicate_game_is_or_chain() {
+        let content = r#"
+BEGIN @0 DESIGNATED 0
+REQUIRE_PREDICATE (((GAME_IS ~bgee~)  AND (FILE_EXISTS ~eefixpack/files/tph/bgee.tph~)) OR
+                   ((GAME_IS ~bg2ee~) AND (FILE_EXISTS ~eefixpack/files/tph/bg2ee.tph~)) OR
+                   ((GAME_IS ~iwdee~) AND (FILE_EXISTS ~eefixpack/files/tph/iwdee.tph~)) OR
+                   ((GAME_IS ~pstee~) AND (FILE_EXISTS ~eefixpack/files/tph/pstee.tph~))) @4
+"#;
+
+        let rules = extract_rules(content);
+        let (_, rule) = rules
+            .iter()
+            .find(|(comp, rule)| *comp == 0 && matches!(rule, Tp2Rule::RequireGame { .. }))
+            .expect("missing RequireGame rule");
+
+        match rule {
+            Tp2Rule::RequireGame { allowed_games, .. } => {
+                assert_eq!(
+                    allowed_games,
+                    &vec![
+                        "bgee".to_string(),
+                        "bg2ee".to_string(),
+                        "iwdee".to_string(),
+                        "pstee".to_string()
+                    ]
+                );
+            }
+            _ => panic!("expected RequireGame"),
         }
     }
 }
