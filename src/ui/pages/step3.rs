@@ -13,7 +13,12 @@ pub enum Step3Action {
     Revalidate,
 }
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step3Action> {
+pub fn render(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    dev_mode: bool,
+    exe_fingerprint: &str,
+) -> Option<Step3Action> {
     let mut action: Option<Step3Action> = None;
     tabs::normalize_active_tab(state);
 
@@ -21,7 +26,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step3Action>
     ui.label("Arrange components into a valid install order.");
     ui.add_space(8.0);
 
-    toolbar::render(ui, state, &mut action);
+    toolbar::render(ui, state, &mut action, dev_mode, exe_fingerprint);
 
     ui.add_space(6.0);
     let mut jump_to_selected_requested = state.step3.jump_to_selected_requested;

@@ -7,12 +7,35 @@ use crate::ui::layout::SECTION_GAP;
 use crate::ui::state::WizardState;
 use crate::ui::step1::sections::{symmetric_boxes_layout, top_row};
 use crate::ui::step1::validation::sync_weidu_log_mode;
+use crate::ui::step5::diagnostics::{DiagnosticsContext, export_diagnostics};
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool) {
+pub fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool, exe_fingerprint: &str) {
     let before = state.step1.clone();
     sync_weidu_log_mode(&mut state.step1);
 
-    ui.heading("Step 1: Setup");
+    ui.horizontal(|ui| {
+        ui.heading("Step 1: Setup");
+        if dev_mode {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Export diagnostics").clicked() {
+                    let diag_ctx = DiagnosticsContext {
+                        dev_mode,
+                        exe_fingerprint: exe_fingerprint.to_string(),
+                    };
+                    match export_diagnostics(state, None, &diag_ctx) {
+                        Ok(path) => {
+                            state.step5.last_status_text =
+                                format!("Diagnostics exported: {}", path.display());
+                        }
+                        Err(err) => {
+                            state.step5.last_status_text =
+                                format!("Diagnostics export failed: {err}");
+                        }
+                    }
+                }
+            });
+        }
+    });
     ui.label("Choose game mode, paths, and installer options.");
     if let Some((ok, msg)) = state.step1_path_check.clone() {
         ui.add_space(4.0);

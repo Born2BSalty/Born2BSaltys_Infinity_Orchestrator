@@ -5,10 +5,17 @@ use eframe::egui;
 
 use crate::ui::step3::{access, tabs};
 use crate::ui::state::WizardState;
+use crate::ui::step5::diagnostics::{DiagnosticsContext, export_diagnostics};
 
 use super::Step3Action;
 
-pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState, action: &mut Option<Step3Action>) {
+pub(super) fn render(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    action: &mut Option<Step3Action>,
+    dev_mode: bool,
+    exe_fingerprint: &str,
+) {
     ui.horizontal(|ui| {
         let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
         let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
@@ -47,6 +54,34 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState, action: &mut Op
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .button("Revalidate")
+                .on_hover_text("Re-run compatibility check for current selection/order.")
+                .clicked()
+            {
+                *action = Some(Step3Action::Revalidate);
+            }
+            if dev_mode
+                && ui
+                    .button("Export diagnostics")
+                    .on_hover_text("Export diagnostics from current state.")
+                    .clicked()
+            {
+                let diag_ctx = DiagnosticsContext {
+                    dev_mode,
+                    exe_fingerprint: exe_fingerprint.to_string(),
+                };
+                match export_diagnostics(state, None, &diag_ctx) {
+                    Ok(path) => {
+                        state.step5.last_status_text =
+                            format!("Diagnostics exported: {}", path.display());
+                    }
+                    Err(err) => {
+                        state.step5.last_status_text =
+                            format!("Diagnostics export failed: {err}");
+                    }
+                }
+            }
             let (
                 items,
                 _,
@@ -64,14 +99,6 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState, action: &mut Op
                 undo_stack,
                 redo_stack,
             ) = access::active_list_mut(state);
-
-            if ui
-                .button("Revalidate")
-                .on_hover_text("Re-run compatibility check for current selection/order.")
-                .clicked()
-            {
-                *action = Some(Step3Action::Revalidate);
-            }
             if ui
                 .button("Expand All")
                 .on_hover_text("Expand all parent blocks.")

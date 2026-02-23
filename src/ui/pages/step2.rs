@@ -15,6 +15,11 @@ mod list_pane;
 
 pub use action::Step2Action;
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step2Action> {
-    layout::render(ui, state)
+pub fn render(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    dev_mode: bool,
+    exe_fingerprint: &str,
+) -> Option<Step2Action> {
+    layout::render(ui, state, dev_mode, exe_fingerprint)
 }

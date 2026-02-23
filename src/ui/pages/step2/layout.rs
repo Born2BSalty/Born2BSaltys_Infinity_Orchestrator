@@ -9,11 +9,18 @@ use crate::ui::state::WizardState;
 
 use super::{actions_tabs, compat_popup, details_pane, header, list_pane, Step2Action};
 
-pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step2Action> {
+pub(super) fn render(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    dev_mode: bool,
+    exe_fingerprint: &str,
+) -> Option<Step2Action> {
     let mut action = None;
     ui.add(Step2LayoutWidget {
         state,
         action: &mut action,
+        dev_mode,
+        exe_fingerprint,
     });
     action
 }
@@ -21,6 +28,8 @@ pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step2
 struct Step2LayoutWidget<'a> {
     state: &'a mut WizardState,
     action: &'a mut Option<Step2Action>,
+    dev_mode: bool,
+    exe_fingerprint: &'a str,
 }
 
 impl egui::Widget for Step2LayoutWidget<'_> {
@@ -97,7 +106,15 @@ impl egui::Widget for Step2LayoutWidget<'_> {
             self.state.step2.left_pane_ratio = (new_left / split_total_w).clamp(0.1, 0.9);
         }
 
-        header::render_header(ui, self.state, title_rect, subtitle_rect, search_rect);
+        header::render_header(
+            ui,
+            self.state,
+            title_rect,
+            subtitle_rect,
+            search_rect,
+            self.dev_mode,
+            self.exe_fingerprint,
+        );
         actions_tabs::render_controls(ui, self.state, self.action, controls_rect);
         actions_tabs::render_tabs(ui, self.state, self.action, tabs_rect);
         list_pane::render(ui, self.state, self.action, left_rect);

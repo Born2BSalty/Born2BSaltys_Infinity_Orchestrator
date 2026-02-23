@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::ui::state::WizardState;
-use crate::ui::step5::diagnostics::{AppDataCopySummary, DiagnosticsContext};
+use crate::ui::step5::diagnostics::{AppDataCopySummary, DiagnosticsContext, WriteCheckSummary};
 
 pub(super) fn build_base_text(
     state: &WizardState,
@@ -16,6 +16,7 @@ pub(super) fn build_base_text(
     installer_program: &str,
     installer_args: &[String],
     appdata_summary: &AppDataCopySummary,
+    write_check_summary: &WriteCheckSummary,
 ) -> String {
     let mut text = String::new();
     text.push_str("BIO Diagnostics\n");
@@ -27,6 +28,7 @@ pub(super) fn build_base_text(
     append_step2_summary(&mut text, state);
     append_step2_selected_components(&mut text, state);
     append_wlb_inputs_map(&mut text, state);
+    append_write_checks(&mut text, write_check_summary);
     append_appdata_copies(&mut text, appdata_summary);
     text.push_str("\n[Step3 Install Order]\n");
     for line in active_order {
@@ -49,7 +51,65 @@ pub(super) fn build_base_text(
     text.push_str("\n[Console Excerpt]\n");
     text.push_str(console_excerpt);
     text.push('\n');
+    append_runtime_snapshot(&mut text, state, console_excerpt);
+    append_undefined_string_signals(&mut text, console_excerpt);
     text
+}
+
+fn append_runtime_snapshot(out: &mut String, state: &WizardState, console_excerpt: &str) {
+    out.push_str("\n[Startup/Runtime Snapshot]\n");
+    out.push_str("source=state.step5.console_output\n");
+    out.push_str(&format!(
+        "console_buffer_chars={}\n",
+        state.step5.console_output.chars().count()
+    ));
+    out.push_str(&format!(
+        "console_excerpt_chars={}\n",
+        console_excerpt.chars().count()
+    ));
+    out.push_str(&format!(
+        "bio_full_debug_enabled={}\n",
+        state.step1.bio_full_debug
+    ));
+    out.push_str(&format!(
+        "raw_output_log_enabled={}\n",
+        state.step1.log_raw_output_dev
+    ));
+    out.push_str("note=This snapshot contains UI/runtime output captured before or during install.\n");
+}
+
+fn append_write_checks(out: &mut String, summary: &WriteCheckSummary) {
+    out.push_str("[Write/Permission Checks]\n");
+    for line in &summary.lines {
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push('\n');
+}
+
+fn append_undefined_string_signals(out: &mut String, console_excerpt: &str) {
+    out.push_str("\n[Undefined String Signals]\n");
+    let mut hits: Vec<&str> = console_excerpt
+        .lines()
+        .filter(|line| {
+            let lower = line.to_ascii_lowercase();
+            (lower.contains("undefined") && lower.contains("string"))
+                || lower.contains("no translation provided")
+                || lower.contains("cannot resolve string")
+        })
+        .collect();
+    if hits.is_empty() {
+        out.push_str("none_detected\n");
+        return;
+    }
+    if hits.len() > 120 {
+        let keep_from = hits.len().saturating_sub(120);
+        hits = hits.split_off(keep_from);
+    }
+    for line in hits {
+        out.push_str(line);
+        out.push('\n');
+    }
 }
 
 fn append_appdata_copies(out: &mut String, summary: &AppDataCopySummary) {

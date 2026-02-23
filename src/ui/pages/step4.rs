@@ -7,15 +7,43 @@ use crate::ui::step4::format::{format_step4_item, render_weidu_colored_line};
 use crate::ui::step4::source_view::render_source_logs;
 use crate::ui::step4::tabs::draw_tab;
 use crate::ui::state::{Step3ItemState, WizardState};
+use crate::ui::step5::diagnostics::{DiagnosticsContext, export_diagnostics};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step4Action {
     SaveWeiduLog,
 }
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Step4Action> {
+pub fn render(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    dev_mode: bool,
+    exe_fingerprint: &str,
+) -> Option<Step4Action> {
     let mut action = None;
-    ui.heading("Step 4: Review");
+    ui.horizontal(|ui| {
+        ui.heading("Step 4: Review");
+        if dev_mode {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Export diagnostics").clicked() {
+                    let diag_ctx = DiagnosticsContext {
+                        dev_mode,
+                        exe_fingerprint: exe_fingerprint.to_string(),
+                    };
+                    match export_diagnostics(state, None, &diag_ctx) {
+                        Ok(path) => {
+                            state.step5.last_status_text =
+                                format!("Diagnostics exported: {}", path.display());
+                        }
+                        Err(err) => {
+                            state.step5.last_status_text =
+                                format!("Diagnostics export failed: {err}");
+                        }
+                    }
+                }
+            });
+        }
+    });
     if state.step1.have_weidu_logs {
         ui.label("Review the source WeiDU log file(s) that will be used for install.");
         ui.label("Next continues to Step 5 without going through Step 2/3.");

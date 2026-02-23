@@ -9,20 +9,26 @@ use super::super::WizardApp;
 
 pub(super) fn render_current_step(app: &mut WizardApp, ctx: &egui::Context) {
     egui::CentralPanel::default().show(ctx, |ui| match app.state.current_step {
-        0 => step1::render(ui, &mut app.state, app.dev_mode),
+        0 => step1::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str()),
         1 => {
             app.revalidate_compat_step2_checked_order();
-            if let Some(action) = step2::render(ui, &mut app.state) {
+            if let Some(action) =
+                step2::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str())
+            {
                 app.handle_step2_action(action);
             }
         }
         2 => {
-            if let Some(action) = step3::render(ui, &mut app.state) {
+            if let Some(action) =
+                step3::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str())
+            {
                 handle_step3_action(app, action);
             }
         }
         3 => {
-            if let Some(action) = step4::render(ui, &mut app.state) {
+            if let Some(action) =
+                step4::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str())
+            {
                 app.handle_step4_action(ctx, action);
             }
         }

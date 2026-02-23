@@ -104,6 +104,7 @@ pub fn copy_weidu_logs_for_diagnostics(step1: &Step1State) {
         return;
     }
     let ts = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let diag_dir = PathBuf::from("diagnostics");
-    let _ = copy_source_weidu_logs(step1, &diag_dir, format!("original_{ts}").as_str());
+    let run_dir = PathBuf::from("diagnostics").join(format!("run_{ts}"));
+    let source_logs_dir = run_dir.join("source_logs");
+    let _ = copy_source_weidu_logs(step1, &source_logs_dir, "original");
 }
