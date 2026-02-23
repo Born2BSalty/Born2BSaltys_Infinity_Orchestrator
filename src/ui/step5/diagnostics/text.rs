@@ -4,7 +4,9 @@
 use std::path::PathBuf;
 
 use crate::ui::state::WizardState;
-use crate::ui::step5::diagnostics::{AppDataCopySummary, DiagnosticsContext, WriteCheckSummary};
+use crate::ui::step5::diagnostics::{
+    AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary,
+};
 
 pub(super) fn build_base_text(
     state: &WizardState,
@@ -17,6 +19,7 @@ pub(super) fn build_base_text(
     installer_args: &[String],
     appdata_summary: &AppDataCopySummary,
     write_check_summary: &WriteCheckSummary,
+    tp2_layout_summary: &Tp2LayoutSummary,
 ) -> String {
     let mut text = String::new();
     text.push_str("BIO Diagnostics\n");
@@ -28,6 +31,7 @@ pub(super) fn build_base_text(
     append_step2_summary(&mut text, state);
     append_step2_selected_components(&mut text, state);
     append_wlb_inputs_map(&mut text, state);
+    append_tp2_layout_snapshot(&mut text, tp2_layout_summary);
     append_write_checks(&mut text, write_check_summary);
     append_appdata_copies(&mut text, appdata_summary);
     text.push_str("\n[Step3 Install Order]\n");
@@ -54,6 +58,19 @@ pub(super) fn build_base_text(
     append_runtime_snapshot(&mut text, state, console_excerpt);
     append_undefined_string_signals(&mut text, console_excerpt);
     text
+}
+
+fn append_tp2_layout_snapshot(out: &mut String, summary: &Tp2LayoutSummary) {
+    out.push_str("[TP2 Layout Snapshot]\n");
+    if summary.lines.is_empty() {
+        out.push_str("none\n\n");
+        return;
+    }
+    for line in &summary.lines {
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push('\n');
 }
 
 fn append_runtime_snapshot(out: &mut String, state: &WizardState, console_excerpt: &str) {
