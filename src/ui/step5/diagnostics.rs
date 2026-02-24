@@ -3,12 +3,15 @@
 
 mod appdata_copy;
 mod compat_snapshot;
+mod compat_summary;
+mod compat_summary_json;
 mod format;
 mod text;
 mod tp2_layout;
 mod write_checks;
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -54,7 +57,7 @@ pub fn export_diagnostics(
         .unwrap_or(0);
     let root_dir = PathBuf::from("diagnostics");
     fs::create_dir_all(&root_dir)?;
-    let run_stamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let run_stamp = Local::now().format("%Y-%m-%d_%H-%M-%S_%3f").to_string();
     let run_dir = root_dir.join(format!("run_{run_stamp}"));
     fs::create_dir_all(&run_dir)?;
     let out_path = run_dir.join("bio_diag.txt");
@@ -92,6 +95,15 @@ pub fn export_diagnostics(
     }
 
     fs::write(&out_path, text)?;
+    if let Err(err) = compat_summary_json::write_compat_summary_json(&run_dir, &state.compat.issues, ts) {
+        let note = format!(
+            "\n[Diagnostics Notes]\ncompat_summary_json_write=FAILED: {}\n",
+            err
+        );
+        if let Ok(mut f) = fs::OpenOptions::new().append(true).open(&out_path) {
+            let _ = f.write_all(note.as_bytes());
+        }
+    }
     Ok(out_path)
 }
 

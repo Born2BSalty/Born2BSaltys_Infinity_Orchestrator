@@ -305,28 +305,34 @@ impl CompatValidator {
                                     Some(raw_line.clone()),
                                 ));
                             } else {
-                                let any_before = targets.iter().any(|(target_mod, target_component)| {
-                                    if let Some(cid) = target_component {
-                                        order_map
-                                            .get(&(target_mod.clone(), *cid))
-                                            .is_some_and(|order| *order <= component.order)
-                                    } else {
-                                        false
+                                let mut matched_orders: Vec<usize> = Vec::new();
+                                for (target_mod, target_component) in targets {
+                                    match target_component {
+                                        Some(cid) => {
+                                            if selected_set.contains(&(target_mod.clone(), *cid))
+                                                && let Some(order) = order_map.get(&(target_mod.clone(), *cid))
+                                            {
+                                                matched_orders.push(*order);
+                                            }
+                                        }
+                                        None => {
+                                            for ((mod_key, _), order) in &order_map {
+                                                if mod_key == target_mod {
+                                                    matched_orders.push(*order);
+                                                }
+                                            }
+                                        }
                                     }
-                                });
-                                let first_after = targets.iter().find_map(|(target_mod, target_component)| {
-                                    if let Some(cid) = target_component {
-                                        order_map
-                                            .get(&(target_mod.clone(), *cid))
-                                            .filter(|order| **order > component.order)
-                                            .map(|_| (target_mod.clone(), *cid))
-                                    } else {
-                                        None
-                                    }
-                                });
-                                if !any_before
-                                    && let Some((related_mod, related_component)) = first_after
-                                {
+                                }
+                                matched_orders.sort_unstable();
+                                matched_orders.dedup();
+
+                                let any_before = matched_orders.iter().any(|order| *order <= component.order);
+                                if !any_before && !matched_orders.is_empty() {
+                                    let (related_mod, related_component) = targets
+                                        .first()
+                                        .cloned()
+                                        .unwrap_or_else(|| ("unknown".to_string(), None));
                                     issues.push(CompatIssue::new(
                                         CompatIssueCode::OrderWarn,
                                         Severity::Warning,
@@ -337,9 +343,9 @@ impl CompatValidator {
                                         component.mod_name.clone(),
                                         Some(component.component_id),
                                         related_mod.clone(),
-                                        Some(related_component),
+                                        related_component,
                                         format!(
-                                            "Requires one of: {} but selected target {} #{} is ordered after this component",
+                                            "Requires one of: {} but all matching selected targets are ordered after this component",
                                             targets
                                                 .iter()
                                                 .map(|(m, c)| match c {
@@ -347,9 +353,7 @@ impl CompatValidator {
                                                     None => format!("{m} (any component)"),
                                                 })
                                                 .collect::<Vec<_>>()
-                                                .join(" OR "),
-                                            related_mod,
-                                            related_component
+                                                .join(" OR ")
                                         ),
                                         Some(raw_line.clone()),
                                     ));
@@ -501,6 +505,57 @@ impl CompatValidator {
         }
 
         CompatValidationResult { issues }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compat::model::Tp2Rule;
+
+    #[test]
+    fn require_installed_any_with_any_component_emits_order_warn_when_late() {
+        let mut validator = CompatValidator::new();
+        let mut tp2_map = HashMap::new();
+        tp2_map.insert(
+            "moda".to_string(),
+            Tp2Metadata {
+                tp_file: "setup-moda.tp2".to_string(),
+                rules: vec![(
+                    10,
+                    Tp2Rule::RequireInstalledAny {
+                        targets: vec![("modb".to_string(), None)],
+                        raw_line: "REQUIRE_PREDICATE MOD_IS_INSTALLED ~modb/setup-modb.tp2~".to_string(),
+                        line: 12,
+                    },
+                )],
+            },
+        );
+        validator.set_tp2_metadata(tp2_map);
+
+        let selected = vec![
+            SelectedComponent {
+                mod_name: "moda".to_string(),
+                tp_file: "setup-moda.tp2".to_string(),
+                component_id: 10,
+                order: 0,
+            },
+            SelectedComponent {
+                mod_name: "modb".to_string(),
+                tp_file: "setup-modb.tp2".to_string(),
+                component_id: 1,
+                order: 1,
+            },
+        ];
+
+        let result = validator.validate(&selected, "BGEE");
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|i| i.code == CompatIssueCode::OrderWarn),
+            "expected ORDER_WARN for any-component dependency when target mod is after source"
+        );
     }
 }
 
