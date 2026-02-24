@@ -14,6 +14,7 @@ use crate::ui::scan::{ENABLE_TWO_PHASE_PREVIEW, ScannedComponent, Step2ScanEvent
 use crate::ui::state::{Step1State, Step2ModState};
 
 use super::build_states::to_mod_states;
+use super::language::detect_preferred_game_locale;
 use super::scan_group::scan_tp2_group;
 
 pub fn scan_impl(
@@ -40,6 +41,7 @@ pub fn scan_impl(
         5
     };
     let grouped = group_tp2s(&mods_root, scan_depth);
+    let preferred_locale = Arc::new(detect_preferred_game_locale(step1));
     if ENABLE_TWO_PHASE_PREVIEW {
         let preview = build_preview_mods(&grouped);
         let (bgee_mods, bg2ee_mods) = match step1.game_install.as_str() {
@@ -81,6 +83,7 @@ pub fn scan_impl(
             let mods_root = mods_root.clone();
             let cache = Arc::clone(&cache);
             let ctx = Arc::clone(&ctx);
+            let preferred_locale = Arc::clone(&preferred_locale);
             scope.spawn(move || {
                 loop {
                     if cancel.load(Ordering::Relaxed) {
@@ -96,7 +99,15 @@ pub fn scan_impl(
                     };
 
                     let entries =
-                        scan_tp2_group(&weidu, &game_dir, &mods_root, main_tp2, tp2_paths, &cache, &ctx);
+                        scan_tp2_group(
+                            &weidu,
+                            &game_dir,
+                            &mods_root,
+                            tp2_paths,
+                            &cache,
+                            &ctx,
+                            preferred_locale.as_str(),
+                        );
 
                     if let Ok(mut map) = mods_map.lock() {
                         map.entry(label.clone()).or_default().extend(entries);

@@ -91,8 +91,8 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                                     .unwrap_or_default()
                             )
                         });
-                        let mut compat_graph: Option<String> = None;
-                        let mut compat_evidence: Option<String> = None;
+                        let mut compat_graph: Option<String> = component.compat_graph.clone();
+                        let mut compat_evidence: Option<String> = component.compat_evidence.clone();
                         let mut disabled_reason = component.disabled_reason.clone();
                         let mod_key = component_mod_key;
                         let comp_id = key::parse_component_u32(&component.component_id);

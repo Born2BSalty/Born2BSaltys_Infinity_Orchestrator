@@ -5,7 +5,10 @@ use eframe::egui;
 
 use crate::ui::state::{Step2ModState, Step2Selection};
 
-use super::render_helpers::{parent_compat_summary, set_component_checked_state};
+use super::render_helpers::{
+    enforce_meta_mode_after_bulk, enforce_subcomponent_single_select_keep_first,
+    parent_compat_summary, set_component_checked_state,
+};
 
 pub(super) struct ParentRowResult {
     pub selection: Option<Step2Selection>,
@@ -67,6 +70,10 @@ pub(super) fn render_parent_row(
                 component.checked = set_value;
                 set_component_checked_state(component, next_selection_order);
             }
+            if set_value {
+                enforce_subcomponent_single_select_keep_first(mod_state);
+            }
+            enforce_meta_mode_after_bulk(mod_state);
             mod_state.checked = enabled_count > 0
                 && mod_state
                     .components

@@ -5,6 +5,92 @@ use eframe::egui;
 
 use crate::ui::state::{Step2ComponentState, Step2ModState};
 
+pub(super) fn enforce_subcomponent_single_select(mod_state: &mut Step2ModState, changed_idx: usize) {
+    let Some(base_key) = subcomponent_base_key(&mod_state.components[changed_idx].label) else {
+        return;
+    };
+    for (idx, comp) in mod_state.components.iter_mut().enumerate() {
+        if idx == changed_idx {
+            continue;
+        }
+        let Some(other_key) = subcomponent_base_key(&comp.label) else {
+            continue;
+        };
+        if other_key.eq_ignore_ascii_case(&base_key) {
+            comp.checked = false;
+            comp.selected_order = None;
+        }
+    }
+}
+
+pub(super) fn enforce_subcomponent_single_select_keep_first(mod_state: &mut Step2ModState) {
+    let mut seen = std::collections::HashSet::<String>::new();
+    for comp in &mut mod_state.components {
+        if !comp.checked {
+            continue;
+        }
+        let Some(base_key) = subcomponent_base_key(&comp.label) else {
+            continue;
+        };
+        if !seen.insert(base_key) {
+            comp.checked = false;
+            comp.selected_order = None;
+        }
+    }
+}
+
+pub(super) fn enforce_meta_mode_exclusive(mod_state: &mut Step2ModState, changed_idx: usize) {
+    let changed_is_meta = mod_state
+        .components
+        .get(changed_idx)
+        .map(|c| c.is_meta_mode_component)
+        .unwrap_or(false);
+    if changed_is_meta {
+        for (idx, comp) in mod_state.components.iter_mut().enumerate() {
+            if idx != changed_idx && !comp.disabled {
+                comp.checked = false;
+                comp.selected_order = None;
+            }
+        }
+    } else {
+        for comp in &mut mod_state.components {
+            if comp.is_meta_mode_component {
+                comp.checked = false;
+                comp.selected_order = None;
+            }
+        }
+    }
+}
+
+pub(super) fn enforce_meta_mode_after_bulk(mod_state: &mut Step2ModState) {
+    let any_normal_checked = mod_state
+        .components
+        .iter()
+        .any(|c| c.checked && !c.disabled && !c.is_meta_mode_component);
+    if any_normal_checked {
+        for comp in &mut mod_state.components {
+            if comp.is_meta_mode_component {
+                comp.checked = false;
+                comp.selected_order = None;
+            }
+        }
+        return;
+    }
+
+    let mut first_meta_seen = false;
+    for comp in &mut mod_state.components {
+        if !comp.checked || comp.disabled || !comp.is_meta_mode_component {
+            continue;
+        }
+        if !first_meta_seen {
+            first_meta_seen = true;
+        } else {
+            comp.checked = false;
+            comp.selected_order = None;
+        }
+    }
+}
+
 pub(super) fn set_component_checked_state(
     component: &mut Step2ComponentState,
     next_selection_order: &mut usize,
@@ -16,6 +102,16 @@ pub(super) fn set_component_checked_state(
         }
     } else {
         component.selected_order = None;
+    }
+}
+
+fn subcomponent_base_key(label: &str) -> Option<String> {
+    let (base, _choice) = label.split_once("->")?;
+    let base = base.trim();
+    if base.is_empty() {
+        None
+    } else {
+        Some(base.to_ascii_lowercase())
     }
 }
 

@@ -28,12 +28,20 @@ fn clear_dynamic_compat(mods: &mut [Step2ModState]) {
             if !is_dynamic {
                 continue;
             }
+            component.disabled = false;
             component.compat_kind = None;
             component.compat_source = None;
             component.compat_related_mod = None;
             component.compat_related_component = None;
+            component.compat_graph = None;
+            component.compat_evidence = None;
             component.disabled_reason = None;
         }
+        mod_state.checked = mod_state
+            .components
+            .iter()
+            .filter(|c| !c.disabled)
+            .all(|c| c.checked);
     }
 }
 
@@ -66,10 +74,29 @@ fn apply_issue_to_mods(mods: &mut [Step2ModState], issue: &CompatIssueDisplay) {
             component.compat_source = Some(format!("{STEP2_DYNAMIC_SOURCE} | {}", issue.source));
             component.compat_related_mod = Some(issue.related_mod.clone());
             component.compat_related_component = issue.related_component.map(|v| v.to_string());
+            component.compat_graph = Some(format!(
+                "{} #{} {} {} #{}",
+                normalize_mod_key(&issue.affected_mod),
+                issue.affected_component.unwrap_or_default(),
+                issue.code.to_ascii_lowercase(),
+                normalize_mod_key(&issue.related_mod),
+                issue.related_component.unwrap_or_default()
+            ));
+            component.compat_evidence = issue.raw_evidence.clone();
+            if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
+                component.disabled = true;
+                component.checked = false;
+                component.selected_order = None;
+            }
             if !issue.reason.trim().is_empty() {
                 component.disabled_reason = Some(issue.reason.clone());
             }
         }
+        mod_state.checked = mod_state
+            .components
+            .iter()
+            .filter(|c| !c.disabled)
+            .all(|c| c.checked);
     }
 }
 

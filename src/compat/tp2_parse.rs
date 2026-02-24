@@ -68,23 +68,24 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
         };
         let upper_expr = raw_expr.to_ascii_uppercase();
 
-        if let Some(rule) = parse_require_component(&upper_expr, &raw_expr) {
+        let rule_line = i + 1;
+        if let Some(rule) = parse_require_component(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_forbid_component(&upper_expr, &raw_expr) {
+        } else if let Some(rule) = parse_forbid_component(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
         } else if let Some(rule) =
-            parse_require_predicate_game_or_installed_any(&upper_expr, &raw_expr)
+            parse_require_predicate_game_or_installed_any(&upper_expr, &raw_expr, rule_line)
         {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_game_is(&upper_expr, &raw_expr) {
+        } else if let Some(rule) = parse_require_predicate_game_is(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_forbid_predicate_mod_installed(&upper_expr, &raw_expr) {
+        } else if let Some(rule) = parse_forbid_predicate_mod_installed(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_mod_installed(&upper_expr, &raw_expr) {
+        } else if let Some(rule) = parse_require_predicate_mod_installed(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_action_if_mod_installed(&upper_expr, &raw_expr) {
+        } else if let Some(rule) = parse_action_if_mod_installed(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_action_if_mod_missing(&upper_expr, &raw_expr) {
+        } else if let Some(rule) = parse_action_if_mod_missing(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
         }
 
@@ -176,7 +177,7 @@ fn paren_delta(input: &str) -> i32 {
     open - close
 }
 
-fn parse_require_component(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_require_component(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     let idx = upper.find("REQUIRE_COMPONENT")?;
     let after = &raw[idx + "REQUIRE_COMPONENT".len()..];
     let (target_mod, target_component) = parse_mod_component_args(after)?;
@@ -185,10 +186,11 @@ fn parse_require_component(upper: &str, raw: &str) -> Option<Tp2Rule> {
         target_mod,
         target_component,
         raw_line: raw.to_string(),
+        line,
     })
 }
 
-fn parse_forbid_component(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_forbid_component(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     let idx = upper.find("FORBID_COMPONENT")?;
     let after = &raw[idx + "FORBID_COMPONENT".len()..];
     let (target_mod, target_component) = parse_mod_component_args(after)?;
@@ -197,6 +199,7 @@ fn parse_forbid_component(upper: &str, raw: &str) -> Option<Tp2Rule> {
         target_mod,
         target_component,
         raw_line: raw.to_string(),
+        line,
     })
 }
 
@@ -240,7 +243,7 @@ fn parse_mod_component_args(after: &str) -> Option<(String, u32)> {
     Some((normalize_tp2_ref(&mod_name), component_id))
 }
 
-fn parse_require_predicate_game_is(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_require_predicate_game_is(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("GAME_IS") {
         return None;
     }
@@ -251,10 +254,11 @@ fn parse_require_predicate_game_is(upper: &str, raw: &str) -> Option<Tp2Rule> {
     Some(Tp2Rule::RequireGame {
         allowed_games,
         raw_line: raw.to_string(),
+        line,
     })
 }
 
-fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE")
         || !upper.contains("GAME_IS")
         || !upper.contains("MOD_IS_INSTALLED")
@@ -278,24 +282,16 @@ fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &str) -> Opti
         allowed_games,
         targets,
         raw_line: raw.to_string(),
+        line,
     })
 }
 
-fn parse_require_predicate_mod_installed(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_require_predicate_mod_installed(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("MOD_IS_INSTALLED") {
         return None;
     }
-    // Negated predicates are "forbid" semantics, not requirements.
-    if upper.contains("!MOD_IS_INSTALLED")
-        || upper
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .contains("NOT MOD_IS_INSTALLED")
-    {
-        return None;
-    }
-    let targets = parse_all_mod_is_installed(upper, raw);
+    // Only positive MOD_IS_INSTALLED clauses are dependency requirements.
+    let targets = parse_all_mod_is_installed_by_negation(upper, raw, false);
     if targets.is_empty() {
         return None;
     }
@@ -305,72 +301,66 @@ fn parse_require_predicate_mod_installed(upper: &str, raw: &str) -> Option<Tp2Ru
             target_mod,
             target_component,
             raw_line: raw.to_string(),
+            line,
         })
     } else {
         Some(Tp2Rule::RequireInstalledAny {
             targets,
             raw_line: raw.to_string(),
+            line,
         })
     }
 }
 
-fn parse_forbid_predicate_mod_installed(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_forbid_predicate_mod_installed(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("MOD_IS_INSTALLED") {
         return None;
     }
-    let normalized = upper.split_whitespace().collect::<Vec<_>>().join(" ");
-    let is_negated = upper.contains("!MOD_IS_INSTALLED")
-        || normalized.contains("NOT MOD_IS_INSTALLED");
-    if !is_negated {
+    // Negated MOD_IS_INSTALLED clauses are forbid semantics.
+    let targets = parse_all_mod_is_installed_by_negation(upper, raw, true);
+    if targets.is_empty() {
         return None;
     }
-    let idx = upper.find("MOD_IS_INSTALLED")?;
-    let after = &raw[idx + "MOD_IS_INSTALLED".len()..];
-    let (target_mod, target_component) = parse_mod_component_optional(after)?;
+    let (target_mod, target_component) = targets[0].clone();
     Some(Tp2Rule::ForbidInstalledMod {
         target_mod,
         target_component,
         raw_line: raw.to_string(),
+        line,
     })
 }
 
-fn parse_action_if_mod_installed(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_action_if_mod_installed(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     if !upper.contains("ACTION_IF") || !upper.contains("MOD_IS_INSTALLED") {
         return None;
     }
-    let normalized = upper.split_whitespace().collect::<Vec<_>>().join(" ");
-    let is_negated = upper.contains("!MOD_IS_INSTALLED")
-        || normalized.contains("NOT MOD_IS_INSTALLED");
-    if is_negated {
+    let targets = parse_all_mod_is_installed_by_negation(upper, raw, false);
+    if targets.is_empty() {
         return None;
     }
-    let idx = upper.find("MOD_IS_INSTALLED")?;
-    let after = &raw[idx + "MOD_IS_INSTALLED".len()..];
-    let (target_mod, target_component) = parse_mod_component_optional(after)?;
+    let (target_mod, target_component) = targets[0].clone();
     Some(Tp2Rule::ConditionalOnInstalled {
         target_mod,
         target_component,
         raw_line: raw.to_string(),
+        line,
     })
 }
 
-fn parse_action_if_mod_missing(upper: &str, raw: &str) -> Option<Tp2Rule> {
+fn parse_action_if_mod_missing(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     if !upper.contains("ACTION_IF") || !upper.contains("MOD_IS_INSTALLED") {
         return None;
     }
-    let normalized = upper.split_whitespace().collect::<Vec<_>>().join(" ");
-    let is_negated = upper.contains("!MOD_IS_INSTALLED")
-        || normalized.contains("NOT MOD_IS_INSTALLED");
-    if !is_negated {
+    let targets = parse_all_mod_is_installed_by_negation(upper, raw, true);
+    if targets.is_empty() {
         return None;
     }
-    let idx = upper.find("MOD_IS_INSTALLED")?;
-    let after = &raw[idx + "MOD_IS_INSTALLED".len()..];
-    let (target_mod, target_component) = parse_mod_component_optional(after)?;
+    let (target_mod, target_component) = targets[0].clone();
     Some(Tp2Rule::ConditionalOnMissing {
         target_mod,
         target_component,
         raw_line: raw.to_string(),
+        line,
     })
 }
 
@@ -412,6 +402,48 @@ fn parse_all_mod_is_installed(upper: &str, raw: &str) -> Vec<(String, Option<u32
         offset = idx + "MOD_IS_INSTALLED".len();
     }
     out
+}
+
+fn parse_all_mod_is_installed_by_negation(
+    upper: &str,
+    raw: &str,
+    want_negated: bool,
+) -> Vec<(String, Option<u32>)> {
+    let mut out: Vec<(String, Option<u32>)> = Vec::new();
+    let mut offset = 0usize;
+    while let Some(rel_idx) = upper[offset..].find("MOD_IS_INSTALLED") {
+        let idx = offset + rel_idx;
+        if is_negated_mod_is_installed(upper, idx) == want_negated {
+            let after = &raw[idx + "MOD_IS_INSTALLED".len()..];
+            if let Some(target) = parse_mod_component_optional(after)
+                && !out.contains(&target)
+            {
+                out.push(target);
+            }
+        }
+        offset = idx + "MOD_IS_INSTALLED".len();
+    }
+    out
+}
+
+fn is_negated_mod_is_installed(upper: &str, idx: usize) -> bool {
+    let before = upper[..idx].trim_end();
+    if before.ends_with("NOT") || before.ends_with('!') {
+        return true;
+    }
+
+    // Covers wrappers like "!(MOD_IS_INSTALLED ...)" and "! ( MOD_IS_INSTALLED ...)".
+    let bytes = before.as_bytes();
+    let mut j = bytes.len();
+    while j > 0 {
+        let c = bytes[j - 1];
+        if c.is_ascii_whitespace() || c == b'(' {
+            j -= 1;
+            continue;
+        }
+        break;
+    }
+    j > 0 && bytes[j - 1] == b'!'
 }
 
 fn parse_positive_game_is_groups(upper: &str, raw: &str) -> Vec<String> {
@@ -495,7 +527,7 @@ mod tests {
     fn test_parse_require_component() {
         let line = r#"REQUIRE_COMPONENT ~STRATAGEMS/SETUP-STRATAGEMS.TP2~ 1000 @123"#;
         let upper = line.to_ascii_uppercase();
-        let rule = parse_require_component(&upper, line).unwrap();
+        let rule = parse_require_component(&upper, line, 1).unwrap();
         match rule {
             Tp2Rule::Require { target_mod, target_component, .. } => {
                 assert_eq!(target_mod, "stratagems");
@@ -509,7 +541,7 @@ mod tests {
     fn test_parse_forbid_component() {
         let line = r#"FORBID_COMPONENT ~EET/EET.TP2~ 0 @456"#;
         let upper = line.to_ascii_uppercase();
-        let rule = parse_forbid_component(&upper, line).unwrap();
+        let rule = parse_forbid_component(&upper, line, 1).unwrap();
         match rule {
             Tp2Rule::Forbid { target_mod, target_component, .. } => {
                 assert_eq!(target_mod, "eet");
@@ -531,7 +563,7 @@ mod tests {
         let line =
             r#"REQUIRE_PREDICATE NOT MOD_IS_INSTALLED ~1pp/1pp.tp2~ ~113~ @24"#;
         let upper = line.to_ascii_uppercase();
-        let rule = parse_forbid_predicate_mod_installed(&upper, line).unwrap();
+        let rule = parse_forbid_predicate_mod_installed(&upper, line, 1).unwrap();
         match rule {
             Tp2Rule::ForbidInstalledMod {
                 target_mod,
@@ -549,7 +581,7 @@ mod tests {
     fn test_parse_require_predicate_mod_is_installed_or() {
         let line = r#"REQUIRE_PREDICATE (MOD_IS_INSTALLED ~Emily.tp2~ ~0~) OR (MOD_IS_INSTALLED ~SkitiaNPCs.tp2~ ~0~) @24"#;
         let upper = line.to_ascii_uppercase();
-        let rule = parse_require_predicate_mod_installed(&upper, line).unwrap();
+        let rule = parse_require_predicate_mod_installed(&upper, line, 1).unwrap();
         match rule {
             Tp2Rule::RequireInstalledAny { targets, .. } => {
                 assert_eq!(targets.len(), 2);
@@ -564,7 +596,7 @@ mod tests {
     fn test_parse_action_if_not_mod_is_installed() {
         let line = r#"ACTION_IF (NOT MOD_IS_INSTALLED ~HiddenGameplayOptions.tp2~ 35) BEGIN"#;
         let upper = line.to_ascii_uppercase();
-        let rule = parse_action_if_mod_missing(&upper, line).unwrap();
+        let rule = parse_action_if_mod_missing(&upper, line, 1).unwrap();
         match rule {
             Tp2Rule::ConditionalOnMissing {
                 target_mod,
@@ -608,5 +640,14 @@ REQUIRE_PREDICATE (((GAME_IS ~bgee~)  AND (FILE_EXISTS ~eefixpack/files/tph/bgee
             }
             _ => panic!("expected RequireGame"),
         }
+    }
+
+    #[test]
+    fn test_parse_negated_paren_mod_is_installed_as_forbid() {
+        let line = r#"REQUIRE_PREDICATE !(MOD_IS_INSTALLED ~dw_talents/dw_talents.tp2~ 40600) @50016"#;
+        let upper = line.to_ascii_uppercase();
+        let forbid = parse_forbid_predicate_mod_installed(&upper, line, 1).unwrap();
+        assert!(matches!(forbid, Tp2Rule::ForbidInstalledMod { .. }));
+        assert!(parse_require_predicate_mod_installed(&upper, line, 1).is_none());
     }
 }

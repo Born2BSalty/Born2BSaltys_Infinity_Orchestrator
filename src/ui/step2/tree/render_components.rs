@@ -6,7 +6,10 @@ use eframe::egui;
 use crate::ui::state::{Step2ModState, Step2Selection};
 
 use super::format::{colored_component_widget_text, format_component_row_label};
-use super::render_helpers::{compat_colors, set_component_checked_state};
+use super::render_helpers::{
+    compat_colors, enforce_meta_mode_exclusive, enforce_subcomponent_single_select,
+    set_component_checked_state,
+};
 
 pub(super) fn render_component_rows(
     ui: &mut egui::Ui,
@@ -16,10 +19,12 @@ pub(super) fn render_component_rows(
     next_selection_order: &mut usize,
     jump_to_selected_requested: &mut bool,
     mod_state: &mut Step2ModState,
- ) -> (Option<Step2Selection>, Option<(String, String, String)>) {
+) -> (Option<Step2Selection>, Option<(String, String, String)>) {
     let mod_name = mod_state.name.clone();
     let mut new_selection: Option<Step2Selection> = None;
     let mut open_compat_for_component: Option<(String, String, String)> = None;
+    let mut enforce_single_select_for = Vec::<usize>::new();
+    let mut enforce_meta_for = Vec::<usize>::new();
 
     for (component_idx, component) in mod_state.components.iter_mut().enumerate() {
         let label = component.label.as_str();
@@ -52,6 +57,10 @@ pub(super) fn render_component_rows(
                 );
                 if component.checked != was_checked {
                     set_component_checked_state(component, next_selection_order);
+                    if component.checked {
+                        enforce_single_select_for.push(component_idx);
+                        enforce_meta_for.push(component_idx);
+                    }
                 }
                 if component.disabled && component.checked {
                     component.checked = false;
@@ -141,6 +150,12 @@ pub(super) fn render_component_rows(
                 );
             });
         }
+    }
+    for idx in enforce_single_select_for {
+        enforce_subcomponent_single_select(mod_state, idx);
+    }
+    for idx in enforce_meta_for {
+        enforce_meta_mode_exclusive(mod_state, idx);
     }
     (new_selection, open_compat_for_component)
 }

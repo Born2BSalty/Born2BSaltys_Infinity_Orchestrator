@@ -48,14 +48,14 @@ impl Severity {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IssueSource {
-    Tp2 { file: String },
+    Tp2 { file: String, line: usize },
     ExternalRule { file: String, line: usize },
 }
 
 impl IssueSource {
     pub fn description(&self) -> String {
         match self {
-            Self::Tp2 { file } => format!("TP2: {file}"),
+            Self::Tp2 { file, line } => format!("TP2: {file}:{line}"),
             Self::ExternalRule { file, line } => format!("{file}:{line}"),
         }
     }
@@ -135,44 +135,53 @@ pub enum Tp2Rule {
         target_mod: String,
         target_component: u32,
         raw_line: String,
+        line: usize,
     },
     Forbid {
         target_mod: String,
         target_component: u32,
         raw_line: String,
+        line: usize,
     },
     RequireGame {
         allowed_games: Vec<String>,
         raw_line: String,
+        line: usize,
     },
     RequireGameOrInstalledAny {
         allowed_games: Vec<String>,
         targets: Vec<(String, Option<u32>)>,
         raw_line: String,
+        line: usize,
     },
     RequireInstalledMod {
         target_mod: String,
         target_component: Option<u32>,
         raw_line: String,
+        line: usize,
     },
     RequireInstalledAny {
         targets: Vec<(String, Option<u32>)>,
         raw_line: String,
+        line: usize,
     },
     ForbidInstalledMod {
         target_mod: String,
         target_component: Option<u32>,
         raw_line: String,
+        line: usize,
     },
     ConditionalOnInstalled {
         target_mod: String,
         target_component: Option<u32>,
         raw_line: String,
+        line: usize,
     },
     ConditionalOnMissing {
         target_mod: String,
         target_component: Option<u32>,
         raw_line: String,
+        line: usize,
     },
 }
 

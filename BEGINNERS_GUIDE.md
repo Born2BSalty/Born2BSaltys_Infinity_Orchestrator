@@ -1,7 +1,7 @@
 # Born2BSalty's Infinity Orchestrator (BIO)    (Work in progress!!)
 ## Beginner's Guide (No Coding Needed)
 
-This guide is for people who only use the released app (`BIO.exe` / app build), not source code.
+This guide is for people who only use the released app (BIO.exe / app build), not source code.
 
 ## What BIO Does
 
@@ -12,7 +12,22 @@ BIO helps you:
 4. Validate compatibility
 5. Run install with logs and prompt handling
 
----
+## Troubleshooting
+
+Before troubleshooting, run BIO in dev mode so diagnostics can be exported and shared.
+
+- Windows (cmd)
+1. Open the folder where BIO.exe is.
+2. Click the address bar, type cmd, then press Enter.
+3. In the black window, run:
+    BIO.exe -d gui
+
+- Linux/macOS
+1. Open Terminal.
+2. Go to the BIO folder:
+    cd "/path/to/BIO/folder"
+3. Run:
+    ./BIO -d gui
 
 ## First-Time Setup (Quick Start)
 
@@ -21,9 +36,9 @@ BIO helps you:
 ## Where BIO Saves Your Settings
 
 BIO saves your settings in your user app-data location (so they persist between runs):
-- Windows: `%APPDATA%`
-- macOS: `~/Library/Application Support`
-- Linux: `~/.config` (or app-equivalent)
+- Windows: %APPDATA%
+- macOS: ~/Library/Application Support
+- Linux: ~/.config (or app-equivalent)
 
 You do **not** need source folders to use BIO.
 
@@ -31,36 +46,36 @@ You do **not** need source folders to use BIO.
 ## OS Notes
 
 ## Windows
-- Run `BIO.exe`.
-- Use full paths like `D:\Modding\...`.
-- Typical binaries: `weidu.exe` and your installer exe.
+- Run BIO.exe.
+- Use full paths like D:\Modding\....
+- Typical binaries: weidu.exe and your installer exe.
 
 ## macOS
 - Use the macOS BIO build.
-- Make binaries executable first (`chmod +x`).
-- Use full paths like `/Users/<you>/...`.
+- Make binaries executable first (chmod +x).
+- Use full paths like /Users/<you>/....
 
 ## Linux
 - Use the Linux BIO build.
-- Make binaries executable first (`chmod +x`).
-- Use full paths like `/home/<you>/...`.
+- Make binaries executable first (chmod +x).
+- Use full paths like /home/<you>/....
 
 ## Step 1: Setup (How to Use It)
 
 
 
 ## Flags (how to decide)
-- `Skip installed`: 
-- `Abort on warnings`: 
-- `Strict matching`: 
-- `Download missing mods`: 
-- `Overwrite mod folder`: 
+- Skip installed: 
+- Abort on warnings: 
+- Strict matching: 
+- Download missing mods: 
+- Overwrite mod folder: 
 
 
 ## Step 2: Scan and Select (How to Use It)
 
-- `Scan Mods Folder`
-- `Cancel Scan`
+- Scan Mods Folder
+- Cancel Scan
 
 ## Compatibility pills
 You may see:
@@ -90,19 +105,19 @@ Shows selected item info such as:
 - Revalidate
 
 ## Right-click on component row
-- `Uncheck In Step 2`
-- `Set @wlb-inputs...`
-- `Edit Prompt JSON...`
-- `Clear Prompt Data`
+- Uncheck In Step 2
+- Set @wlb-inputs...
+- Edit Prompt JSON...
+- Clear Prompt Data
 
-`Set @wlb-inputs...`
+Set @wlb-inputs...
 - Set comma-separated scripted answers for that component.
-- Example: `126,,a,129,,a,,y`
+- Example: 126,,a,129,,a,,y
 
-`Edit Prompt JSON...`
+Edit Prompt JSON...
 - Advanced manual entry editor.
 
-`Clear Prompt Data`
+Clear Prompt Data
 - Removes saved prompt entry for that component.
 
 
@@ -155,12 +170,12 @@ That gives enough data to troubleshoot quickly.
 ## Auto-Answer Basics
 
 BIO can auto-answer using:
-1. Component sequence (`@wlb-inputs`)
+1. Component sequence (@wlb-inputs)
 2. Saved prompt memory entries
 
 If auto-answer fails when questions are to long:
 - Increase delay settings
-- Verify component has valid `@wlb-inputs`
+- Verify component has valid @wlb-inputs
 - Confirm component is actually in current run
 
 ## EET Path Questions (Most Common Support Issue)
@@ -176,7 +191,7 @@ Typical case example:
 - Prompt asks for BG:EE+SoD path → enter your BGEE game install directory.
     BGEE Game Folder: D:\SteamLibrary\steamapps\common\Baldur's Gate Enhanced Edition
 
-If your install uses flags/modes that trigger extra EET pre-checks (for example combinations like `-n`/`-p` in your installer flow), then your path choice on EET question changes!
+If your install uses flags/modes that trigger extra EET pre-checks (for example combinations like -n/-p in your installer flow), then your path choice on EET question changes!
     Source BGEE Folder (-p): = then BGEE Game Folder:
         Pre-EET Directory: = empty folder on your desired location to install the BGEE game
     Source BG2EE Folder (-n): = then BG2EE Game Folder:

@@ -57,6 +57,7 @@ impl CompatValidator {
                             target_mod,
                             target_component,
                             raw_line,
+                            line,
                         } => {
                             let target_key = (target_mod.clone(), *target_component);
                             let current_key = (
@@ -74,6 +75,7 @@ impl CompatValidator {
                                     Severity::Error,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -92,6 +94,7 @@ impl CompatValidator {
                                     Severity::Warning,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -108,6 +111,7 @@ impl CompatValidator {
                             target_mod,
                             target_component,
                             raw_line,
+                            line,
                         } => {
                             let affected_mod_key = helpers::normalize_mod_key(&component.tp_file);
                             let related_mod_key = helpers::normalize_mod_key(target_mod);
@@ -123,6 +127,7 @@ impl CompatValidator {
                                     Severity::Error,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -138,6 +143,7 @@ impl CompatValidator {
                         Tp2Rule::RequireGame {
                             allowed_games,
                             raw_line,
+                            line,
                         } => {
                             let current_game = helpers::normalize_game_mode(game_mode);
                             if !helpers::game_allowed(&current_game, allowed_games) {
@@ -146,6 +152,7 @@ impl CompatValidator {
                                     Severity::Error,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -164,6 +171,7 @@ impl CompatValidator {
                             allowed_games,
                             targets,
                             raw_line,
+                            line,
                         } => {
                             let current_game = helpers::normalize_game_mode(game_mode);
                             let game_ok = helpers::game_allowed(&current_game, allowed_games);
@@ -191,6 +199,7 @@ impl CompatValidator {
                                     Severity::Error,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -209,6 +218,7 @@ impl CompatValidator {
                             target_mod,
                             target_component,
                             raw_line,
+                            line,
                         } => {
                             let hit = match target_component {
                                 Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
@@ -224,6 +234,7 @@ impl CompatValidator {
                                     Severity::Error,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -232,9 +243,36 @@ impl CompatValidator {
                                     format!("Requires installed component: {related_text}"),
                                     Some(raw_line.clone()),
                                 ));
+                            } else if let Some(cid) = target_component {
+                                let target_key = (target_mod.clone(), *cid);
+                                if let Some(target_order) = order_map.get(&target_key)
+                                    && *target_order > component.order
+                                {
+                                    issues.push(CompatIssue::new(
+                                        CompatIssueCode::OrderWarn,
+                                        Severity::Warning,
+                                        IssueSource::Tp2 {
+                                            file: metadata.tp_file.clone(),
+                                            line: *line,
+                                        },
+                                        component.mod_name.clone(),
+                                        Some(component.component_id),
+                                        target_mod.clone(),
+                                        Some(*cid),
+                                        format!(
+                                            "Requires installed component: {} #{} but it is ordered after this component",
+                                            target_mod, cid
+                                        ),
+                                        Some(raw_line.clone()),
+                                    ));
+                                }
                             }
                         }
-                        Tp2Rule::RequireInstalledAny { targets, raw_line } => {
+                        Tp2Rule::RequireInstalledAny {
+                            targets,
+                            raw_line,
+                            line,
+                        } => {
                             let hit = targets.iter().any(|(target_mod, target_component)| match target_component {
                                 Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
                                 None => selected_set.iter().any(|(m, _)| m == target_mod),
@@ -257,6 +295,7 @@ impl CompatValidator {
                                     Severity::Error,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -265,12 +304,63 @@ impl CompatValidator {
                                     format!("Requires one of: {related_text}"),
                                     Some(raw_line.clone()),
                                 ));
+                            } else {
+                                let any_before = targets.iter().any(|(target_mod, target_component)| {
+                                    if let Some(cid) = target_component {
+                                        order_map
+                                            .get(&(target_mod.clone(), *cid))
+                                            .is_some_and(|order| *order <= component.order)
+                                    } else {
+                                        false
+                                    }
+                                });
+                                let first_after = targets.iter().find_map(|(target_mod, target_component)| {
+                                    if let Some(cid) = target_component {
+                                        order_map
+                                            .get(&(target_mod.clone(), *cid))
+                                            .filter(|order| **order > component.order)
+                                            .map(|_| (target_mod.clone(), *cid))
+                                    } else {
+                                        None
+                                    }
+                                });
+                                if !any_before
+                                    && let Some((related_mod, related_component)) = first_after
+                                {
+                                    issues.push(CompatIssue::new(
+                                        CompatIssueCode::OrderWarn,
+                                        Severity::Warning,
+                                        IssueSource::Tp2 {
+                                            file: metadata.tp_file.clone(),
+                                            line: *line,
+                                        },
+                                        component.mod_name.clone(),
+                                        Some(component.component_id),
+                                        related_mod.clone(),
+                                        Some(related_component),
+                                        format!(
+                                            "Requires one of: {} but selected target {} #{} is ordered after this component",
+                                            targets
+                                                .iter()
+                                                .map(|(m, c)| match c {
+                                                    Some(id) => format!("{m} #{id}"),
+                                                    None => format!("{m} (any component)"),
+                                                })
+                                                .collect::<Vec<_>>()
+                                                .join(" OR "),
+                                            related_mod,
+                                            related_component
+                                        ),
+                                        Some(raw_line.clone()),
+                                    ));
+                                }
                             }
                         }
                         Tp2Rule::ForbidInstalledMod {
                             target_mod,
                             target_component,
                             raw_line,
+                            line,
                         } => {
                             let hit = match target_component {
                                 Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
@@ -286,6 +376,7 @@ impl CompatValidator {
                                     Severity::Error,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -302,6 +393,7 @@ impl CompatValidator {
                             target_mod,
                             target_component,
                             raw_line,
+                            line,
                         } => {
                             let hit = match target_component {
                                 Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
@@ -313,6 +405,7 @@ impl CompatValidator {
                                     Severity::Warning,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),
@@ -337,6 +430,7 @@ impl CompatValidator {
                             target_mod,
                             target_component,
                             raw_line,
+                            line,
                         } => {
                             let hit = match target_component {
                                 Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
@@ -348,6 +442,7 @@ impl CompatValidator {
                                     Severity::Warning,
                                     IssueSource::Tp2 {
                                         file: metadata.tp_file.clone(),
+                                        line: *line,
                                     },
                                     component.mod_name.clone(),
                                     Some(component.component_id),

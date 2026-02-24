@@ -30,6 +30,7 @@ pub(super) fn build_base_text(
     append_effective_installer_args(&mut text, installer_program, installer_args);
     append_step2_summary(&mut text, state);
     append_step2_selected_components(&mut text, state);
+    append_step2_scan_undefined_signals(&mut text, state);
     append_wlb_inputs_map(&mut text, state);
     append_tp2_layout_snapshot(&mut text, tp2_layout_summary);
     append_write_checks(&mut text, write_check_summary);
@@ -331,6 +332,50 @@ fn append_step2_selected_components(out: &mut String, state: &WizardState) {
         out.push_str("none\n");
     }
     out.push('\n');
+}
+
+fn append_step2_scan_undefined_signals(out: &mut String, state: &WizardState) {
+    out.push_str("[Step2 Scan Undefined Signals]\n");
+    let mut listed = 0usize;
+    for (tab, mods) in [("BGEE", &state.step2.bgee_mods), ("BG2EE", &state.step2.bg2ee_mods)] {
+        for mod_state in mods {
+            for component in &mod_state.components {
+                let label_hit = looks_like_scan_undefined(&component.label);
+                let raw_hit = looks_like_scan_undefined(&component.raw_line);
+                if !(label_hit || raw_hit) {
+                    continue;
+                }
+                listed = listed.saturating_add(1);
+                out.push_str(&format!(
+                    "{tab} | {} | tp2={} | #{} | label={} | raw={}\n",
+                    mod_state.name,
+                    mod_state.tp2_path,
+                    component.component_id,
+                    component.label,
+                    component.raw_line
+                ));
+            }
+        }
+    }
+    if listed == 0 {
+        out.push_str("none\n");
+    } else if listed > 200 {
+        out.push_str("note=high count; consider narrowing scan set\n");
+    }
+    out.push('\n');
+}
+
+fn looks_like_scan_undefined(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let lower = t.to_ascii_lowercase();
+    lower.contains("undefined")
+        || lower.contains("invalid")
+        || lower.contains("no translation provided")
+        || lower.contains("cannot resolve string")
+        || (t.contains('@') && t.chars().any(|c| c.is_ascii_digit()))
 }
 
 fn append_wlb_inputs_map(out: &mut String, state: &WizardState) {

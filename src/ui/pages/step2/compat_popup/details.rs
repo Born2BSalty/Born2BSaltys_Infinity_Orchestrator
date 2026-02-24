@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::ui::step2::details::selected_details;
-use crate::ui::state::WizardState;
+use crate::ui::state::{CompatIssueDisplay, WizardState};
 
 use super::issue_text;
 use super::selection;
@@ -24,7 +24,8 @@ pub(super) fn render_details(ui: &mut egui::Ui, state: &WizardState) {
         return;
     }
 
-    let issue = selection::current_issue_for_selection(state);
+    let issue = selection::current_issue_for_selection(state)
+        .or_else(|| synth_issue_from_details(&details));
     let kind = details.compat_kind.as_deref().unwrap_or("unknown");
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Kind").strong());
@@ -100,4 +101,41 @@ pub(super) fn render_details(ui: &mut egui::Ui, state: &WizardState) {
                 ui.monospace(evidence);
             });
     }
+}
+
+fn synth_issue_from_details(details: &crate::ui::step2::details::Step2Details) -> Option<CompatIssueDisplay> {
+    let kind = details.compat_kind.as_deref()?.to_ascii_lowercase();
+    let code = if kind == "game_mismatch" {
+        "GAME_MISMATCH"
+    } else if kind == "missing_dep" {
+        "REQ_MISSING"
+    } else if kind == "conflict" || kind == "not_compatible" {
+        "FORBID_HIT"
+    } else if kind == "conditional" {
+        "CONDITIONAL"
+    } else {
+        "RULE_HIT"
+    };
+    let is_blocking = !matches!(code, "CONDITIONAL" | "ORDER_WARN");
+    let related = details
+        .compat_related_target
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+    Some(CompatIssueDisplay {
+        issue_id: "synthetic".to_string(),
+        code: code.to_string(),
+        severity: if is_blocking {
+            "Error".to_string()
+        } else {
+            "Warning".to_string()
+        },
+        is_blocking,
+        affected_mod: details.tp_file.clone().unwrap_or_else(|| "unknown".to_string()),
+        affected_component: details.component_id.as_deref().and_then(|v| v.parse::<u32>().ok()),
+        related_mod: related,
+        related_component: None,
+        reason: details.disabled_reason.clone().unwrap_or_default(),
+        source: details.compat_source.clone().unwrap_or_default(),
+        raw_evidence: details.compat_evidence.clone(),
+    })
 }

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::ui::state::{CompatIssueDisplay, Step2ComponentState, Step2ModState, WizardState};
+use std::collections::BTreeMap;
 
 use super::format::{format_target, issue_graph};
 
@@ -67,6 +68,8 @@ fn append_step3_compat_snapshot(issues: &[CompatIssueDisplay], out: &mut String)
         out.push_str("  no issues\n");
         return;
     }
+    append_step3_compact_summary(issues, out);
+    out.push_str("  -- Full Issue List --\n");
     for issue in issues {
         let sev = if issue.is_blocking { "ERROR" } else { "WARN" };
         let affected = format_target(&issue.affected_mod, issue.affected_component);
@@ -84,5 +87,58 @@ fn append_step3_compat_snapshot(issues: &[CompatIssueDisplay], out: &mut String)
         {
             out.push_str(&format!("    rule_detail: {raw}\n"));
         }
+    }
+}
+
+fn append_step3_compact_summary(issues: &[CompatIssueDisplay], out: &mut String) {
+    let mut code_counts = BTreeMap::<String, usize>::new();
+    for issue in issues {
+        *code_counts.entry(issue.code.clone()).or_default() += 1;
+    }
+    let errors = issues.iter().filter(|i| i.is_blocking).count();
+    let warnings = issues.len().saturating_sub(errors);
+    out.push_str(&format!(
+        "  summary: total={} errors={} warnings={}\n",
+        issues.len(),
+        errors,
+        warnings
+    ));
+    out.push_str("  by_code:\n");
+    for (code, count) in code_counts {
+        out.push_str(&format!("    - {}: {}\n", code, count));
+    }
+
+    let mut conflict_groups = BTreeMap::<String, usize>::new();
+    let mut missing_groups = BTreeMap::<String, usize>::new();
+    let mut order_groups = BTreeMap::<String, usize>::new();
+    for issue in issues {
+        let key = format!(
+            "{} -> {}",
+            format_target(&issue.affected_mod, None),
+            format_target(&issue.related_mod, issue.related_component)
+        );
+        match issue.code.to_ascii_uppercase().as_str() {
+            "FORBID_HIT" => *conflict_groups.entry(key).or_default() += 1,
+            "REQ_MISSING" => *missing_groups.entry(key).or_default() += 1,
+            "ORDER_WARN" => *order_groups.entry(key).or_default() += 1,
+            _ => {}
+        }
+    }
+
+    append_top_groups(out, "top_conflict_groups", &conflict_groups);
+    append_top_groups(out, "top_missing_dep_groups", &missing_groups);
+    append_top_groups(out, "top_order_warn_groups", &order_groups);
+}
+
+fn append_top_groups(out: &mut String, title: &str, groups: &BTreeMap<String, usize>) {
+    out.push_str(&format!("  {}:\n", title));
+    if groups.is_empty() {
+        out.push_str("    - none\n");
+        return;
+    }
+    let mut pairs: Vec<(&String, &usize)> = groups.iter().collect();
+    pairs.sort_by(|a, b| b.1.cmp(a.1).then_with(|| a.0.cmp(b.0)));
+    for (idx, (name, count)) in pairs.into_iter().take(12).enumerate() {
+        out.push_str(&format!("    {}. {} ({})\n", idx + 1, name, count));
     }
 }

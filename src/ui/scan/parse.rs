@@ -92,15 +92,6 @@ pub fn parse_component_line(line: &str) -> Option<ScannedComponent> {
     }
 }
 
-pub fn is_valid_component_label(label: &str) -> bool {
-    let trimmed = label.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-    let upper = trimmed.to_ascii_uppercase();
-    !upper.contains("UNDEFINED STRING")
-}
-
 pub fn normalize_tp_file(value: &str) -> String {
     let file = Path::new(value)
         .file_name()

@@ -34,10 +34,26 @@ pub fn select_visible(mods: &mut [Step2ModState], filter: &str, next_selection_o
                 *next_selection_order += 1;
             }
         }
+        enforce_meta_mode_after_bulk(mod_state);
         mod_state.checked = mod_state
             .components
             .iter()
             .filter(|c| !c.disabled)
             .all(|c| c.checked);
+    }
+}
+
+fn enforce_meta_mode_after_bulk(mod_state: &mut Step2ModState) {
+    let any_normal_checked = mod_state
+        .components
+        .iter()
+        .any(|c| c.checked && !c.disabled && !c.is_meta_mode_component);
+    if any_normal_checked {
+        for comp in &mut mod_state.components {
+            if comp.is_meta_mode_component {
+                comp.checked = false;
+                comp.selected_order = None;
+            }
+        }
     }
 }
