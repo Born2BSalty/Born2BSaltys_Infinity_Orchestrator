@@ -230,15 +230,9 @@ BIO.exe eet --bg1-game-directory "D:\Games\BGEE" --bg1-log-file "D:\Logs\BG1\wei
 \Games\BG2EE" --bg2-log-file "D:\Logs\BG2\weidu.log"
 
 
-## Media (Recommended)
+## Media
 
-Add these to make README easier for new users:
-- Screenshot: Step 1 Setup
-- Screenshot: Step 2 Scan and Select
-- Screenshot: Step 3 Reorder and Resolve
-- Screenshot: Step 5 Install and Diagnostics
-- Optional short video: first run from launch to install start
-
+Video will be uploaded later!
 
 ## License and Ownership
 
