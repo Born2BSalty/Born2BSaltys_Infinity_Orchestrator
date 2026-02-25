@@ -31,15 +31,16 @@ pub(super) fn build_compat_summary(issues: &[CompatIssueDisplay]) -> CompatSumma
     let mut order_groups = BTreeMap::<String, usize>::new();
 
     for issue in issues {
-        *by_code.entry(issue.code.clone()).or_default() += 1;
+        let code = issue.code.to_ascii_uppercase();
+        *by_code.entry(code.clone()).or_default() += 1;
 
-        let key = match issue.code.to_ascii_uppercase().as_str() {
+        let key = match code.as_str() {
             "REQ_MISSING" => missing_group_key(issue),
             "FORBID_HIT" => conflict_or_order_group_key(issue),
             "ORDER_WARN" => conflict_or_order_group_key(issue),
             _ => continue,
         };
-        match issue.code.to_ascii_uppercase().as_str() {
+        match code.as_str() {
             "FORBID_HIT" => *conflict_groups.entry(key).or_default() += 1,
             "REQ_MISSING" => *missing_groups.entry(key).or_default() += 1,
             "ORDER_WARN" => *order_groups.entry(key).or_default() += 1,
@@ -71,9 +72,13 @@ fn conflict_or_order_group_key(issue: &CompatIssueDisplay) -> String {
 }
 
 fn missing_group_key(issue: &CompatIssueDisplay) -> String {
-    // issue_graph() preserves OR dependencies ("requires one of: A | B"),
-    // which avoids collapsing REQ_MISSING groups to only the first related target.
-    issue_graph(issue)
+    let affected_mod = format_target(&issue.affected_mod, None);
+    let graph = issue_graph(issue);
+    let requirement = graph
+        .split_once(" requires ")
+        .map(|(_, rhs)| rhs.to_string())
+        .unwrap_or_else(|| graph);
+    format!("{affected_mod} requires {requirement}")
 }
 
 fn sorted_group_entries(groups: &BTreeMap<String, usize>) -> Vec<GroupCount> {
@@ -122,7 +127,26 @@ mod tests {
         assert!(
             summary.missing_dep_groups[0]
                 .group
+                .contains("ArtisansKitpack_npc requires")
+        );
+        assert!(
+            summary.missing_dep_groups[0]
+                .group
                 .contains("requires one of: emily #0 | skitianpcs #0")
         );
+    }
+
+    #[test]
+    fn by_code_keys_are_normalized_to_uppercase() {
+        let issues = vec![
+            issue("forbid_hit", "a", "b", "x", true),
+            issue("FORBID_HIT", "a", "b", "x", true),
+            issue("Order_Warn", "a", "b", "x", false),
+        ];
+        let summary = build_compat_summary(&issues);
+        assert_eq!(summary.by_code.get("FORBID_HIT"), Some(&2));
+        assert_eq!(summary.by_code.get("ORDER_WARN"), Some(&1));
+        assert!(summary.by_code.get("forbid_hit").is_none());
+        assert!(summary.by_code.get("Order_Warn").is_none());
     }
 }

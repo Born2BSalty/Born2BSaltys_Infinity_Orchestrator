@@ -129,6 +129,11 @@ Prompt sequence with blank input\n\
                 .on_hover_text("Use existing weidu.log files as input source (skip scan/select/order).");
             ui.checkbox(&mut s.weidu_log_mode_enabled, "Enable WeiDU Logging Options (-u)")
                 .on_hover_text("Enable/disable WeiDU logging flags (autolog/logapp/log-extern/log component).");
+            ui.checkbox(
+                &mut s.prompt_required_sound_enabled,
+                "Sound cue when prompt input is required",
+            )
+            .on_hover_text("Play a bell once when installer is waiting for input.");
 
             ui.horizontal(|ui| {
                 ui.checkbox(&mut s.lookback_enabled, "Prompt context lookback")

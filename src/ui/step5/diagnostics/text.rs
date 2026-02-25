@@ -205,6 +205,10 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
         "auto_answer_post_send_delay_enabled={}\n",
         s.auto_answer_post_send_delay_enabled
     ));
+    out.push_str(&format!(
+        "prompt_required_sound_enabled={}\n",
+        s.prompt_required_sound_enabled
+    ));
     out.push_str(&format!("lookback_enabled={}\n", s.lookback_enabled));
     out.push_str(&format!("bio_full_debug={}\n", s.bio_full_debug));
     out.push_str(&format!("tick_dev_enabled={}\n", s.tick_dev_enabled));

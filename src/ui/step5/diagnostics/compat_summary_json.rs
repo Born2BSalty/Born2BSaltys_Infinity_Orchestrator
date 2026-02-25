@@ -11,6 +11,8 @@ use crate::ui::state::CompatIssueDisplay;
 
 use super::compat_summary::build_compat_summary;
 
+const TOP_GROUP_LIMIT: usize = 12;
+
 pub(super) fn write_compat_summary_json(
     run_dir: &Path,
     issues: &[CompatIssueDisplay],
@@ -20,25 +22,29 @@ pub(super) fn write_compat_summary_json(
 
     let out_path = run_dir.join("compat_summary.json");
     let payload = json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "totals": {
             "issues": summary.total_issues,
             "errors": summary.total_errors,
             "warnings": summary.total_warnings
         },
         "by_code": summary.by_code,
-        "top_conflict_groups": sorted_group_entries(&summary.conflict_groups),
-        "top_missing_dep_groups": sorted_group_entries(&summary.missing_dep_groups),
-        "top_order_warn_groups": sorted_group_entries(&summary.order_warn_groups),
+        "top_conflict_groups": sorted_group_entries(&summary.conflict_groups, TOP_GROUP_LIMIT),
+        "top_missing_dep_groups": sorted_group_entries(&summary.missing_dep_groups, TOP_GROUP_LIMIT),
+        "top_order_warn_groups": sorted_group_entries(&summary.order_warn_groups, TOP_GROUP_LIMIT),
         "generated_at_unix": timestamp_unix_secs
     });
     fs::write(&out_path, serde_json::to_string_pretty(&payload)?)?;
     Ok(out_path)
 }
 
-fn sorted_group_entries(groups: &[super::compat_summary::GroupCount]) -> Vec<serde_json::Value> {
+fn sorted_group_entries(
+    groups: &[super::compat_summary::GroupCount],
+    limit: usize,
+) -> Vec<serde_json::Value> {
     groups
         .into_iter()
+        .take(limit)
         .map(|entry| json!({ "group": &entry.group, "count": entry.count }))
         .collect()
 }
@@ -76,12 +82,50 @@ mod tests {
         let raw = std::fs::read_to_string(&path).expect("read json");
         let v: serde_json::Value = serde_json::from_str(&raw).expect("parse json");
 
-        assert_eq!(v["schema_version"], 1);
+        assert_eq!(v["schema_version"], 2);
         assert_eq!(v["totals"]["issues"], 1);
         assert!(v.get("by_code").is_some());
         assert!(v.get("top_conflict_groups").is_some());
         assert!(v.get("top_missing_dep_groups").is_some());
         assert!(v.get("top_order_warn_groups").is_some());
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir_all(run_dir);
+    }
+
+    #[test]
+    fn top_groups_are_capped_to_limit() {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let run_dir = std::env::temp_dir().join(format!("bio_diag_test_limit_{ts}"));
+        std::fs::create_dir_all(&run_dir).expect("create temp diagnostics dir");
+
+        let mut issues = Vec::new();
+        for n in 0..20 {
+            issues.push(CompatIssueDisplay {
+                issue_id: format!("id-{n}"),
+                code: "FORBID_HIT".to_string(),
+                severity: "Error".to_string(),
+                is_blocking: true,
+                affected_mod: format!("a{n}"),
+                affected_component: Some(1),
+                related_mod: format!("b{n}"),
+                related_component: Some(2),
+                reason: "conflict".to_string(),
+                source: "TP2".to_string(),
+                raw_evidence: None,
+            });
+        }
+
+        let path = write_compat_summary_json(&run_dir, &issues, 123).expect("write json");
+        let raw = std::fs::read_to_string(&path).expect("read json");
+        let v: serde_json::Value = serde_json::from_str(&raw).expect("parse json");
+        let groups = v["top_conflict_groups"]
+            .as_array()
+            .expect("top_conflict_groups should be array");
+        assert_eq!(groups.len(), TOP_GROUP_LIMIT);
 
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_dir_all(run_dir);

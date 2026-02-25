@@ -117,6 +117,7 @@ pub(super) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
             state.step5.prompt_ready_signature = None;
             state.step5.prompt_ready_seen_count = 0;
             state.step5.prompt_ready_first_seen_unix_ms = None;
+            state.step5.prompt_required_sound_latched = false;
             state.step5.restart_program = program;
             state.step5.restart_args = args;
         }

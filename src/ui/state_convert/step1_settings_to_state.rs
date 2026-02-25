@@ -19,6 +19,7 @@ impl From<Step1Settings> for Step1State {
             timeout_per_mod_enabled: value.timeout_per_mod_enabled,
             auto_answer_initial_delay_enabled: value.auto_answer_initial_delay_enabled,
             auto_answer_post_send_delay_enabled: value.auto_answer_post_send_delay_enabled,
+            prompt_required_sound_enabled: value.prompt_required_sound_enabled,
             lookback_enabled: value.lookback_enabled,
             bio_full_debug: value.bio_full_debug,
             tick_dev_enabled: value.tick_dev_enabled,

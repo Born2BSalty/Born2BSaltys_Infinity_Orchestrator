@@ -42,6 +42,7 @@ pub struct Step5State {
     pub prompt_ready_signature: Option<String>,
     pub prompt_ready_seen_count: u8,
     pub prompt_ready_first_seen_unix_ms: Option<u64>,
+    pub prompt_required_sound_latched: bool,
     pub prompt_answers_window_open: bool,
 }
 
@@ -87,6 +88,7 @@ impl Default for Step5State {
             prompt_ready_signature: None,
             prompt_ready_seen_count: 0,
             prompt_ready_first_seen_unix_ms: None,
+            prompt_required_sound_latched: false,
             prompt_answers_window_open: false,
         }
     }

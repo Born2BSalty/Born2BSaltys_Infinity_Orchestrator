@@ -101,6 +101,7 @@ fn process_exit_event(
     step5.prompt_ready_signature = None;
     step5.prompt_ready_seen_count = 0;
     step5.prompt_ready_first_seen_unix_ms = None;
+    step5.prompt_required_sound_latched = false;
     if let Some(run_id) = step5.active_run_id.take() {
         let suffix = match finished_exit {
             Some(code) => format!(" (exit {code})"),

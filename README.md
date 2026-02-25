@@ -1,334 +1,247 @@
 # Born2BSalty's Infinity Orchestrator (BIO)
 
-Born2BSalty's Infinity Orchestrator (BIO) is a Rust desktop wizard for building and running WeiDU-based installs for Infinity Engine Enhanced Edition setups:
+BIO is a desktop wizard for WeiDU-based Infinity Engine EE installs.
 
-- `BGEE`
-- `BG2EE`
-- `EET`
+Supported targets:
+- BGEE
+- BG2EE
+- EET
 
-It scans TP2 components, lets you select/reorder install sets, validates compatibility, and runs `mod_installer` with live console control.
+BIO scans TP2 components, lets you select and reorder installs, validates compatibility, and runs mod_installer with live
+console control.
 
----
 
-## 1) What It Does
+## Quick Start (Normal Users)
 
-### Main workflow (GUI)
+1. Download the BIO release zip and extract it.
+2. Launch BIO.exe.
+3. In Step 1, set:
+- your game mode (BGEE, BG2EE, or EET)
+- your Mods Folder
+- your weidu binary
+- your mod_installer binary
+- required game/log paths for your selected mode
+4. Go to Step 2, click Scan Mods Folder, select components.
+5. Go to Step 3, reorder if needed, click Revalidate.
+6. Go to Step 4, review/save.
+7. Go to Step 5, run install.
 
-The GUI is a 5-step wizard:
+If you are helping debug issues, run BIO in dev mode:
+- Windows cmd: BIO.exe -d gui
+- Linux/macOS: ./BIO -d gui
 
-1. **Step 1: Setup**
-- Configure game mode, folders, tools, and install flags.
-- Configure path checks and optional target prep behavior.
 
-2. **Step 2: Scan + Select**
-- Scan mods folder for TP2 components.
-- Select components for BGEE/BG2EE tabs.
-- Apply WeiDU log selection.
-- View compatibility pills and details.
+## Wizard Overview
+![Step 1 Setup](docs/images/step1-setup.png)
+![Step 2 Scan and Select](docs/images/step2-scan-select.png)
+![Step 3 Reorder and Resolve](docs/images/step3-reorder-resolve.png)
+![Step 4 Review](docs/images/step4-review.png)
+![Step 5 Install and Diagnostics](docs/images/step5-install-diagnostics.png)
 
-3. **Step 3: Order + Validate**
+### Step 1: Setup
+- Configure game mode, folders, binaries, and install flags.
+- Configure optional behavior (scan depth, timeout, prompt settings, target prep).
+- If Next is disabled, Step 1 validation found a required missing/invalid path.
+
+### Step 2: Scan and Select
+- Scan Mods Folder for TP2 components.
+- Select components for install.
+- Apply existing WeiDU log selections (if enabled).
+- Review compatibility pills/details.
+
+### Step 3: Reorder and Resolve
 - Reorder selected components.
-- Run compatibility validation on ordered set.
-- Inspect compatibility modal.
+- Validate dependency/conflict/order/game-target rules against the chosen set.
+- Resolve blockers before install.
 
-4. **Step 4: Preview/Save**
-- Review generated install order / log lines.
-- Save/export effective `weidu.log` style output.
+### Step 4: Preview and Save
+- Review final install order.
+- Save/export effective WeiDU-log style output.
 
-5. **Step 5: Install + Console**
-- Run install.
-- Live console, prompt input bar, auto-answer support.
-- Cancel/force-cancel controls.
-- Diagnostics/export actions.
+### Step 5: Install, Logs, Diagnostics
+- Start install with live console.
+- Manual prompt input + auto-answer support.
+- Cancel/force cancel controls.
+- Export diagnostics bundle.
 
----
 
-## 2) Key Features
+## Core Features
 
-### Scan and selection
+### Scan and Selection
+- Fast TP2 component scan.
+- Search/filter and bulk selection.
+- EET-friendly BGEE/BG2EE bucket workflow.
+- Import selection from existing WeiDU logs.
 
-- Fast TP2 component scan from mods directory.
-- BGEE/BG2EE tabbed selection for EET workflows.
-- Search/filter, bulk select/clear, expand/collapse support.
-- Apply selection from existing `weidu.log` sources.
+### Compatibility Validation
+- TP2-driven checks:
+- dependency rules
+- forbid/conflict rules
+- game target predicates
+- conditional patterns
+- Step 2/Step 3 issue views with rule details.
+- Optional rule overrides via step2_compat_rules.toml.
 
-### Compatibility checks
+### Install + Console
+- Embedded process console.
+- Views: General, Important only, Installed only.
+- Prompt detection and response flow.
+- Optional auto-answer from:
+- inline @wlb-inputs
+- saved prompt answer memory
+- Optional sound cue when manual input is needed.
 
-- TP2-driven checks (require/forbid/game predicates/conditional patterns).
-- Optional UI compatibility overrides via `step2_compat_rules.toml`.
-- Step 2 conflict pills and detailed compatibility popup.
-- Step 3 compatibility modal for ordered-set validation.
+### Diagnostics
+- Export run diagnostics to diagnostics/run_<timestamp>/.
+- Includes:
+- bio_diag.txt
+- compat_summary.json
+- source WeiDU logs snapshot
+- appdata snapshots (bio + mod_installer config)
+- TP2 layout snapshot and validation summary
 
-### Installer run + terminal
 
-- Embedded terminal output from child process.
-- `General`, `Important only`, and `Installed only` views.
-- Prompt detection and input handling.
-- Optional auto-answer using:
-  - inline `@wlb-inputs` tags in log lines
-  - saved Prompt Answers JSON fallback
-- Graceful/force cancel controls.
+## Requirements
 
-### Diagnostics and logging
+- Runtime target: Windows/Linux/macOS.
+- For building from source: Rust stable + cargo.
+- External tools configured in Step 1:
+- mod_installer (.exe on Windows)
+- weidu (.exe on Windows)
 
-- Export diagnostics bundle to local `diagnostics/`.
-- Console save/open actions.
-- Optional raw output + BIO debug logs (dev-oriented).
 
----
+## Build and Run (Source Users)
 
-## 3) Requirements
-
-- Cross-platform runtime target (Windows/Linux/macOS), with platform-compatible binaries.
-- Rust toolchain for building (`cargo`, stable).
-- External tools you provide in Step 1:
-  - `mod_installer` (`.exe` on Windows)
-  - `weidu` (`.exe` on Windows)
-
----
-
-## 4) Build and Run
-
-From project root:
-
-```bash
+Build:
 cargo build --release
-```
 
-Run GUI (default):
-
-```bash
+Run GUI:
 ./target/release/BIO.exe
-```
 
-Linux/macOS binary name:
-
-```bash
+Linux/macOS binary:
 ./target/release/BIO
-```
 
-Or explicit:
-
-```bash
-./target/release/BIO.exe gui
-```
-
-Dev mode GUI:
-
-```bash
+Dev mode:
 ./target/release/BIO.exe -d gui
-```
 
----
 
-## 5) CLI Commands (Non-GUI)
+## @wlb-inputs Prompt Auto-Input
 
-Binary supports subcommands:
+Append scripted answers on a WeiDU log line:
 
-- `gui`
-- `normal`
-- `eet`
-- `scan components`
-- `scan languages`
-
-Examples:
-
-```bash
-BIO.exe scan components --game-directory "D:\\Games\\BG2EE" --mod-directories "D:\\Modding\\Mods Folder"
-```
-
-```bash
-BIO scan components --game-directory "/games/BG2EE" --mod-directories "/mods"
-```
-
-```bash
-BIO.exe scan languages --mod-directories "D:\\Modding\\Mods Folder"
-```
-
-```bash
-BIO.exe normal --log-file "D:\\Logs\\BG2\\weidu.log" --game-directory "D:\\Games\\BG2EE"
-```
-
-```bash
-BIO.exe eet --bg1-game-directory "D:\\Games\\BGEE" --bg1-log-file "D:\\Logs\\BG1\\weidu.log" --bg2-game-directory "D:\\Games\\BG2EE" --bg2-log-file "D:\\Logs\\BG2\\weidu.log"
-```
-
----
-
-## 6) Important Files and Paths
-
-### Runtime output files (working directory)
-
-- `diagnostics/`
-  - exported diagnostics and saved console logs
-  - raw output / BIO debug logs when enabled
-  - copied app-data config snapshots for `bio` and `mod_installer` (when diagnostics are exported in dev mode)
-
-### App config paths (per-user)
-
-#### App settings
-
-`bio_settings.json` is stored at:
-
-- Windows: `%APPDATA%\bio\bio_settings.json`
-- Linux: `~/.config/bio/bio_settings.json`
-- macOS: `~/Library/Application Support/bio/bio_settings.json`
-
-#### Prompt answers
-
-`prompt_answers.json` is stored at:
-
-- Windows: `%APPDATA%\\bio\\prompt_answers.json`
-- Linux: `~/.config/bio/prompt_answers.json`
-- macOS: `~/Library/Application Support/bio/prompt_answers.json`
-
-#### Step 2 compatibility rules
-
-`step2_compat_rules.toml` is stored at:
-
-- Windows: `%APPDATA%\\bio\\step2_compat_rules.toml`
-- Linux: `~/.config/bio/step2_compat_rules.toml`
-- macOS: `~/Library/Application Support/bio/step2_compat_rules.toml`
-- optional legacy fallback (when app-data path is unavailable): `config/step2_compat_rules.toml`
-
----
-
-## 7) `@wlb-inputs` (Prompt Auto-Input)
-
-You can append scripted answers to a WeiDU log line:
-
-```text
 // @wlb-inputs: y,1,,n
-```
 
 Rules:
-
 - answers are consumed left-to-right
-- `,,` means blank answer (press Enter)
-- keep exact marker with colon: `@wlb-inputs:`
+- ,, means blank answer (press Enter)
+- keep marker exact: @wlb-inputs:
 
 Examples:
 
-```text
-~EET\EET.TP2~ #0 #0 // EET core (resource importation): v14.0 // @wlb-inputs: y
-```
+~EET\EET.TP2~ #0 #0 // EET core: v14.0 // @wlb-inputs: y
+~EET\EET.TP2~ #0 #0 // EET core: v14.0 // @wlb-inputs: D:\My Games\BG2
+~VIENXAY\VIENXAY.TP2~ #0 #0 // Vienxay: 1.67 // @wlb-inputs: 1,2
 
-```text
-~EET\EET.TP2~ #0 #0 // EET core (resource importation): v14.0 // @wlb-inputs: D:\My Games\BG2
-```
 
-```text
-~VIENXAY\VIENXAY.TP2~ #0 #0 // Vienxay NPC for BG1EE: 1.67 // @wlb-inputs: 1,2
-```
+## Step 1 Flags (Practical)
 
-```text
-~SOMEMOD\SETUP-SOMEMOD.TP2~ #0 #10 // Confirm install: v1.0 // @wlb-inputs: y,n,a,c
-```
+- -s Skip installed
+- -c Check last installed
+- -a Abort on warnings
+- -x Strict matching
+- --download Download missing mods
+- -o Overwrite mod folder
 
-```text
-~ANOTHERMOD\SETUP-ANOTHERMOD.TP2~ #0 #0 // Optional prompt: v2.0 // @wlb-inputs: 1,,y
-```
+Directory clone modes:
+- -p Clone BGEE -> Pre-EET target
+- -n Clone BG2EE -> EET target
+- -g Clone source game -> target directory
 
----
 
-## 8) Step 1 Flags (Practical Summary)
+## Compatibility Semantics
 
-- `-s` Skip installed
-- `-c` Check last installed
-- `-a` Abort on warnings
-- `-x` Strict matching
-- `--download` Download missing mods
-- `-o` Overwrite mod folder
+Issue classes:
+- Missing dependency (REQ_MISSING)
+- Conflict (FORBID_HIT)
+- Game mismatch (GAME_MISMATCH)
+- Conditional patch (CONDITIONAL)
+- Order warning (ORDER_WARN)
 
-Directory cloning modes:
+For EET:
+- BGEE/BG2EE tabs are selection buckets/phases.
+- Rules are validated in EET context where applicable.
 
-- `-p` Clone BGEE -> Pre-EET target (source unchanged)
-- `-n` Clone BG2EE -> EET target (source unchanged)
-- `-g` Clone source game -> target directory (source unchanged)
 
----
+## Diagnostics for Support
 
-## 9) Compatibility Semantics
+When reporting a problem:
 
-BIO shows different issue classes:
+1. Reproduce the issue.
+2. Export diagnostics from Step 5.
+3. Send:
+- the full diagnostics/run_<timestamp>/ folder
+- a short note:
+- what you expected
+- what happened instead
+- which component failed
 
-- **Missing dependency** (`REQ_MISSING`)
-- **Conflict** (`FORBID_HIT`, conflict-like rules)
-- **Game mismatch** (`GAME_MISMATCH`)
-- **Conditional patch** (`CONDITIONAL`)
-- **Order warning** (`ORDER_WARN`)
 
-For EET mode:
+## Important Paths
 
-- tabs are selection buckets (BGEE phase / BG2EE phase)
-- game-mode checks are validated in EET context where applicable
+### Runtime output (working directory)
+- diagnostics/
+Contains run bundles, console snapshots, and debug artifacts (when enabled).
 
----
+### App settings (per-user)
 
-## 10) Diagnostics Workflow (Support-Friendly)
+bio_settings.json:
+- Windows: %APPDATA%\bio\bio_settings.json
+- Linux: ~/.config/bio/bio_settings.json
+- macOS: ~/Library/Application Support/bio/bio_settings.json
 
-When reporting an issue:
+prompt_answers.json:
+- Windows: %APPDATA%\bio\prompt_answers.json
+- Linux: ~/.config/bio/prompt_answers.json
+- macOS: ~/Library/Application Support/bio/prompt_answers.json
 
-1. Reproduce in Step 5.
-2. Enable diagnostic logging options if needed.
-3. Export diagnostics from Step 5 menu.
-4. Share:
-- `diagnostics/bio_diag_<ts>.txt`
-- related `diagnostics/console_<ts>.log`
-- raw/debug logs (if enabled)
+step2_compat_rules.toml:
+- Windows: %APPDATA%\bio\step2_compat_rules.toml
+- Linux: ~/.config/bio/step2_compat_rules.toml
+- macOS: ~/Library/Application Support/bio/step2_compat_rules.toml
+- legacy fallback: config/step2_compat_rules.toml
 
----
 
-## 11) Troubleshooting
+## CLI (Non-GUI)
 
-### A) Auto-input does not send
+Supported subcommands:
+- gui
+- normal
+- eet
+- scan components
+- scan languages
 
-Check:
+Examples:
 
-- `=== Loaded N @wlb-inputs token(s) ===` appears in Step 5 console.
-- Prompt actually reached `User Input required`.
-- Marker syntax is exact: `// @wlb-inputs:`
-- Answers align with real prompt sequence.
+BIO.exe scan components --game-directory "D:\Games\BG2EE" --mod-directories "D:\Modding\Mods Folder"
+BIO scan components --game-directory "/games/BG2EE" --mod-directories "/mods"
+BIO.exe scan languages --mod-directories "D:\Modding\Mods Folder"
+BIO.exe normal --log-file "D:\Logs\BG2\weidu.log" --game-directory "D:\Games\BG2EE"
+BIO.exe eet --bg1-game-directory "D:\Games\BGEE" --bg1-log-file "D:\Logs\BG1\weidu.log" --bg2-game-directory "D:
+\Games\BG2EE" --bg2-log-file "D:\Logs\BG2\weidu.log"
 
-If still failing, export diagnostics and include the exact prompt block.
 
-### B) Step 2 shows unexpected conflict/mismatch
+## Media (Recommended)
 
-- Click pill -> inspect `Reason`, `Source`, `Rule detail`.
-- Check `step2_compat_rules.toml` for custom overrides.
-- Revalidate after selection/order changes.
+Add these to make README easier for new users:
+- Screenshot: Step 1 Setup
+- Screenshot: Step 2 Scan and Select
+- Screenshot: Step 3 Reorder and Resolve
+- Screenshot: Step 5 Install and Diagnostics
+- Optional short video: first run from launch to install start
 
-### C) Force cancel freezes or is slow
 
-- current implementation is non-blocking for tree-kill call, but process teardown timing still depends on child process behavior.
+## License and Ownership
 
-### D) Parsing/selection from WeiDU log seems wrong
-
-- confirm source log path in Step 1 / Step 4.
-- ensure saved log is the one actually used at install time.
-
----
-
-## 12) Development Notes
-
-- Project is structured by focused modules under `src/ui/...`.
-- GUI uses `eframe/egui`.
-- Compatibility and TP2 parsing in `src/compat`.
-- Terminal/process handling in `src/ui/terminal`.
-
-Recommended dev loop:
-
-```bash
-cargo build --release
-# run exe, reproduce, export diagnostics, patch, repeat
-```
-
----
-
-## 13) License / Ownership
-
-- License: GNU GPL v3.0 or later (`LICENSE`).
-- Creator/Maintainer: `Born2BSalty`.
-- Project ownership notice is documented in `NOTICE`.
-
-If you fork or redistribute this project, keep attribution and license terms intact.
+- License: GNU GPL v3.0 or later (LICENSE)
+- Maintainer/Owner: Born2BSalty
+- Ownership/attribution details: NOTICE
