@@ -1,7 +1,6 @@
 /target
 /backup/
 /TODO.md
-/HANDOFF.md
 .DS_Store
 Thumbs.db
 *.log

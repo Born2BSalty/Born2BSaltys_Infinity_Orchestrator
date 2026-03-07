@@ -6,14 +6,24 @@
 use anyhow::Result;
 use clap::Parser;
 
+#[path = "core/app/mod.rs"]
 mod app;
+#[path = "core/cli/mod.rs"]
 mod cli;
+#[path = "core/compat/mod.rs"]
 mod compat;
+#[path = "core/config/mod.rs"]
 mod config;
+#[path = "core/install/mod.rs"]
 mod install;
+#[path = "core/logging/mod.rs"]
 mod logging;
+#[path = "core/mods/mod.rs"]
 mod mods;
+#[path = "core/platform_defaults.rs"]
 mod platform_defaults;
+#[path = "core/parser/mod.rs"]
+mod parser;
 mod settings;
 mod ui;
 

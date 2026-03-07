@@ -25,6 +25,7 @@ wait-timeout = "0.2.1"
 eframe = "0.31.1"
 rfd = "0.15.2"
 egui_term = "0.1.0"
+lapdu_parser_rust = { package = "lapdu-parser-rust", path = "vendor/lapdu-parser-rust-master" }
 
 [patch.crates-io]
 egui_term = { path = "third_party/egui_term" }

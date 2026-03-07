@@ -1,0 +1,35 @@
+lexer grammar TP2InlineFile;
+
+fragment
+INLINE_FILE_START_FRAGMENT
+:
+	'<<<<<<<<'
+;
+
+fragment
+INLINE_FILE_END_FRAGMENT
+:
+	'>>>>>>>>'
+;
+
+INLINE_FILE_HEADER
+:
+	INLINE_FILE_START_FRAGMENT -> pushMode ( INLINE_FILE_MODE ) , more
+;
+
+mode INLINE_FILE_MODE;
+
+INLINE_FILE_INCOMPLETE_BODY
+:
+	. -> more
+;
+
+INLINE_FILE
+:
+	INLINE_FILE_END_FRAGMENT -> popMode
+;
+
+INLINE_FILE_UNTERMINATED
+:
+	EOF -> popMode
+;

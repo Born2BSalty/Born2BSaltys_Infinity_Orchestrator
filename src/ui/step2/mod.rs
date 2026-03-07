@@ -1,9 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-pub mod actions;
-pub mod compat;
-pub mod details;
-pub mod filter;
-pub mod tabs;
-pub mod tree;
+pub mod action_step2;
+pub mod compat_issue_text_step2;
+pub mod compat_popup_step2;
+pub mod content_step2;
+pub mod details_pane_step2;
+pub mod details_paths_step2;
+pub mod details_selection_step2;
+pub mod format_step2;
+pub mod frame_step2;
+pub mod list_pane_step2;
+pub mod page_step2;
+pub mod prompt_eval_expr_engine_step2;
+pub mod prompt_eval_expr_step2;
+pub mod prompt_eval_expr_tokens_step2;
+pub mod prompt_eval_step2;
+pub mod prompt_eval_vars_step2;
+pub mod service_compat_defaults_step2;
+pub mod service_compat_loader_step2;
+pub mod service_compat_report_step2;
+pub mod service_compat_rules_step2;
+pub mod service_details_step2;
+pub mod service_step2;
+pub mod service_selection_step2;
+pub mod state_step2;
+pub mod tree_components_step2;
+pub mod tree_parent_step2;
+pub mod tree_step2;

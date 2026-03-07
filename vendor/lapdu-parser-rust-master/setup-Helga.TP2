@@ -1,0 +1,502 @@
+BACKUP ~Helga\backup~
+AUTHOR ~Skitia~
+VERSION ~1.56~
+
+ALWAYS
+  INCLUDE ~%MOD_FOLDER%/Lib/qd_multiclass.tpa~
+  INCLUDE ~%MOD_FOLDER%/lib/functions.tph~
+  INCLUDE ~%MOD_FOLDER%/lib/fl#add_kit_ee.tpa~
+END
+
+AUTO_TRA ~Helga/Tra/%s~ 
+LANGUAGE 
+  ~English~ 
+  ~english~
+  ~%MOD_FOLDER%/Tra/English/Setup-Helga.tra~
+
+BEGIN @1 
+
+ACTION_IF GAME_IS ~BGEE~ THEN BEGIN
+OUTER_SPRINT "bg1_eet_symbol" AR
+INCLUDE ~%MOD_FOLDER%\Lib\liam_bgee_vars.tpa~
+END
+
+ACTION_IF GAME_IS ~EET~ THEN BEGIN
+OUTER_SPRINT "bg1_eet_symbol" BG
+INCLUDE ~EET/other/cpmvars/eet_cpmvars.tpa~
+END
+
+ADD_KIT ~X3cleric~
+	~X3cleric 1 1 1 1 1 1 1 1~
+ // appended column-wise to WEAPPROF.2da
+//11                                T   S           F   Q             S S
+//10                                W   C           L   U             W I
+//9                         B L S   O   I   W       A   A             O N
+//8                         A O H   H   M   A       I   R C   S       R G
+//7         L S           M S N O   A   I   R     H L   T R L H     2 D L 2                 E E E E E E E E E E E
+//6         _ _       S   I T G R   N K T D H     A M   E O O O     H A E W E E E E E E E E X X X X X X X X X X X
+//5         S S   S B P   S A S T   D A A A A   S L O   R S N R   S A N W E X X X X X X X X T T T T T T T T T T T
+//4         W W   P L I   S R W S   E T R G M C P B R M S S G T D L N D E A T T T T T T T T R R R R R R R R R R R
+//3         O O B E U K A I D O W A D A W G M L E E N A T B B B A I D S A P R R R R R R R R A A A A A A A A A A A
+//2         R R O A N E X L S R O X S N A E E U A R I C A O O O R N E H P O A A A A A A A A 1 1 1 1 1 1 1 1 1 1 2
+//1         D D W R T D E E W D R E W A K R R B R D N E F W W W T G D I O N 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0
+ ~X3cleric	0 0 0 0 1 1 0 1 0 0 0 0 0 0 0 0 1 1 0 0 1 1 1 0 0 0 0 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0~
+
+ 	~X3cleric 8 3 12 9 9 7~
+	~X3cleric 0 0 0 0 0 0~
+	~X3cleric 0 0 0 0 0 0~
+    ~X3cleric 0 0 0 0 17 0~
+	~X3cleric 0 0 0 1 0 0 1 1 0~
+	~X3cleric 0 0 0 0 0 0~
+	~Helga/Kit/X3helcl.2da~
+	~K_C_D~ /*Set this to ~~ Before releasing.*/
+	~0x00080000 3~
+	~CL0~
+	~* * * * * * * * * * minhp1 * * * * * * * *  killsw1~
+	SAY @4
+	SAY @4
+	SAY @5 
+
+LAF fl#add_kit_ee
+/*	INT_VAR
+		biography = 29492
+		briefdesc = RESOLVE_STR_REF (~A Priest of Haela Brightaxe.~)
+		fallen = 0
+		fallen_notice = RESOLVE_STR_REF (~Haela Brightaxe has turned away from you.~)*/
+	STR_VAR
+		kit_name = ~X3cleric~
+//		backstab = ~1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1~
+		clswpbon = ~1 0 3~
+		numwslot = ~2~
+//		thiefskl = ~0 0~
+//		traplimt = 0
+//		clascolr = ~38 70 70 28 83~
+//		clasiskl = ~0 0 0 0 0 0 0~
+//		thiefscl = ~0 0 0 0 0 0 0 0~
+		hpclass = ~HPPRS~
+		clsrcreq = ~0 0 0 1 0 0 0~
+		clasthac = ~0~
+//		sneakatt = ~1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1~
+//		crippstr = ~0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0~
+END
+
+ADD_KIT ~X3HFC~
+	~X3HFC 1 1 1 1 1 1 1 1~
+ // appended column-wise to WEAPPROF.2da
+//11                                T   S           F   Q             S S
+//10                                W   C           L   U             W I
+//9                         B L S   O   I   W       A   A             O N
+//8                         A O H   H   M   A       I   R C   S       R G
+//7         L S           M S N O   A   I   R     H L   T R L H     2 D L 2                 E E E E E E E E E E E
+//6         _ _       S   I T G R   N K T D H     A M   E O O O     H A E W E E E E E E E E X X X X X X X X X X X
+//5         S S   S B P   S A S T   D A A A A   S L O   R S N R   S A N W E X X X X X X X X T T T T T T T T T T T
+//4         W W   P L I   S R W S   E T R G M C P B R M S S G T D L N D E A T T T T T T T T R R R R R R R R R R R
+//3         O O B E U K A I D O W A D A W G M L E E N A T B B B A I D S A P R R R R R R R R A A A A A A A A A A A
+//2         R R O A N E X L S R O X S N A E E U A R I C A O O O R N E H P O A A A A A A A A 1 1 1 1 1 1 1 1 1 1 2
+//1         D D W R T D E E W D R E W A K R R B R D N E F W W W T G D I O N 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0
+ ~X3HFC	0 0 0 0 2 2 0 2 0 0 0 0 0 0 0 0 2 2 0 0 2 2 2 0 0 0 0 2 2 2 2 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0~
+
+ 	~X3HFC 8 3 12 9 9 7~
+	~X3HFC 0 0 0 0 0 0~
+	~X3HFC 0 0 0 0 0 0~
+    ~X3HFC 0 0 0 0 17 0~
+	~X3HFC 0 0 0 1 0 0 1 1 0~
+	~X3HFC 0 0 0 0 0 0~
+	~Helga/Kit/X3helcl.2da~
+	 ~K_FC_D~ //Set this to ~K_C_D~ and not ~~ if you want to play it.
+
+ // usability flags, added to the end of the KITLIST.2da entry
+ ~0x00080000 8~
+
+ // HLA table to use; see LUABBR.2da
+ ~FC0~ // Will need to have a custom one that incorporates both Shadowdancer and Mage abilities. 
+
+ // list of starting equipment for PCs starting in ToB. Appended column-wise to 25STWEAP.2da
+ ~* * * * * * * * * * * * * * * * * * *  *~
+ // Lower, mixed, and help kit names and descriptions, added to KITLIST.2da
+	SAY @996
+	SAY @996
+	SAY @997
+
+LAF fl#add_kit_ee
+  STR_VAR
+		kit_name = X3HFC
+		clswpbon = ~1 1 3~
+		hpclass = ~HPFC~
+		clsrcreq = ~0 0 0 1 0 0 0~
+END
+LAF qd_multiclass
+	STR_VAR
+		kit_name = X3HFC
+		kit_clab = X3helcl
+		base_class = ~P~
+		mc_dir = ~%MOD_FOLDER%/Kit~
+END
+
+COPY	"Helga/Kit/X3HBolt.spl" override
+SAY NAME1 @6
+SAY NAME2 @6
+SAY 0x50  @7
+COPY	"Helga/Kit/X3HurlS.spl" override
+	SAY NAME1 @8
+	SAY NAME2 @8
+	SAY 0x50 @9 
+
+COPY	"%MOD_FOLDER%/Kit/x3HSW.bam" override
+COPY	"Helga/Kit/x3HBlade.itm" override
+SAY NAME1 @6
+SAY NAME2 @6
+SAY DESC  @10
+
+COPY	"Helga/Kit/x3HBlad2.itm" override
+SAY NAME1 @6
+SAY NAME2 @6
+SAY DESC  @11
+
+COPY	"Helga/Kit/x3HBlad3.itm" override
+SAY NAME1 @6
+SAY NAME2 @6
+SAY DESC  @12
+
+COPY	"Helga/Kit/x3HBlad4.itm" override
+SAY NAME1 @6
+SAY NAME2 @6
+SAY DESC  @13
+
+COPY	"Helga/Kit/x3HBlad5.itm" override
+SAY NAME1 @6
+SAY NAME2 @6
+SAY DESC  @14
+
+ACTION_IF FILE_EXISTS_IN_GAME ~neera.dlg~ THEN BEGIN
+    APPEND ~interdia.2da~ ~BAELOTH BBAELOTH~
+    UNLESS ~BAELOTH~
+   ACTION_IF NOT (FILE_EXISTS_IN_GAME ~BBAELOTH.dlg~) THEN BEGIN
+   COMPILE ~Helga/Dialogue/BBAELOTHFix.d~
+  END
+END
+
+// Adds custom IsValidForPartyDialogue state used throughout
+APPEND ~STATE.IDS~ // adds custom IsValidForPartyDialogue state
+  ~0x80101FEF CD_STATE_NOTVALID~
+  UNLESS ~CD_STATE_NOTVALID~
+
+//AUDIO
+
+LAF HANDLE_AUDIO END
+	  
+// Helga NPC
+COPY ~%MOD_FOLDER%/cre/X3Helga.cre~ ~override/X3Helga.cre~
+  SAY NAME1 @15
+  SAY NAME2 @15
+  WRITE_ASCII 0x248 ~X3Helga~ #8  //override script
+  WRITE_ASCII 0x280 ~X3Helga~ #32  //DV
+  WRITE_ASCII 0x2cc ~X3Helga~ #8   //pre-joining dialogue file
+  WRITE_ASCII 0X34 ~HelgaM~ #8   //small portrait
+  WRITE_ASCII 0x3c ~HelgaL~ #8   //medium portrait
+  SAY BIO @16
+  SAY MORALE @17 //
+  SAY HAPPY @18 //
+  SAY UNHAPPY_ANNOYED @19
+  SAY UNHAPPY_SERIOUS @20
+  SAY UNHAPPY_BREAKING_POINT @21
+  SAY LEADER @22  //
+  SAY TIRED @23  //
+  SAY BORED @24 //
+  SAY BATTLE_CRY1 @25 //
+  SAY BATTLE_CRY2 @26 // 
+  SAY BATTLE_CRY3 @27 //
+  SAY BATTLE_CRY4 @28 //
+  SAY BATTLE_CRY5 @29 //
+  SAY DAMAGE @30 //
+  SAY DYING @31 //
+  SAY HURT @32 //
+  SAY AREA_FOREST @33 
+  SAY AREA_CITY @34
+  SAY AREA_DUNGEON @35
+  SAY AREA_DAY @36
+  SAY AREA_NIGHT @37
+  SAY SELECT_COMMON1 @38 //
+  SAY SELECT_COMMON2 @39 //
+  SAY SELECT_COMMON3 @40
+  SAY SELECT_COMMON4 @38 //
+  SAY SELECT_COMMON5 @39
+  SAY SELECT_COMMON6 @40
+  SAY SELECT_ACTION1 @41
+  SAY SELECT_ACTION2 @42
+  SAY SELECT_ACTION3 @43
+  SAY SELECT_ACTION4 @44
+  SAY SELECT_ACTION5 @45
+  SAY SELECT_ACTION6 @46
+  SAY SELECT_ACTION7 @47
+  SAY CRITICAL_HIT ~~[X3HeCrit] //
+  SAY CRITICAL_MISS @49 //
+  SAY TARGET_IMMUNE @50 // 
+  SAY INVENTORY_FULL @51 //
+  SAY SPELL_DISRUPTED @52 // 
+  SAY SET_A_TRAP ~~ []
+  SAY HIDDEN_IN_SHADOWS ~~ []
+  SAY PICKED_POCKET ~~ []	  
+  WRITE_SHORT 0x246 (IDS_OF_SYMBOL (~kit~ ~X3cleric~))
+  
+APPEND ~pdialog.2da~ ~X3Helga X3HelgaP X3HelgaJ X3HelgaD~
+  UNLESS ~X3Helga~
+
+APPEND ~interdia.2da~ ~X3Helga X3HelgaB~
+  UNLESS ~X3Helga~    
+  
+/// Journal /// 
+  
+ADD_JOURNAL TITLE (@1000) @1001 @1002 @1003 @1004 USING ~Helga/Tra/English/setup-Helga.tra~
+ADD_JOURNAL TITLE (@1010) @1011 USING ~Helga/Tra/English/setup-Helga.tra~
+
+
+/// Dialogue 
+
+COMPILE EVALUATE_BUFFER ~Helga/dialogue/X3Helga.d~
+COMPILE EVALUATE_BUFFER ~Helga/dialogue/X3HelgaP.d~ 
+COMPILE EVALUATE_BUFFER ~Helga/dialogue/X3HelgaJ.d~ 
+COMPILE EVALUATE_BUFFER ~Helga/dialogue/X3HelgaB.d~
+COMPILE EVALUATE_BUFFER ~Helga/dialogue/X3HogreL.d~ 
+
+      EXTEND_TOP ~%bg1_eet_symbol%2800.bcs~ ~Helga/Scripts/AR2800.baf~
+        EVALUATE_BUFFER   
+      EXTEND_TOP ~%bg1_eet_symbol%4600.bcs~ ~Helga/Scripts/AR4600.baf~
+        EVALUATE_BUFFER   
+COMPILE EVALUATE_BUFFER ~Helga/Scripts/X3Helga.baf~		
+COMPILE EVALUATE_BUFFER ~Helga/Scripts/X3HelgaD.baf~	
+COMPILE EVALUATE_BUFFER ~Helga/Scripts/X3HogreL.baf~	
+COMPILE EVALUATE_BUFFER ~Helga/Scripts/X3Hogre2.baf~
+COMPILE EVALUATE_BUFFER ~Helga/Scripts/X3HogreC.baf~	
+
+  COPY ~%MOD_FOLDER%/cre/X3Hogre.cre~ ~override/X3Hogre.cre~
+  WRITE_ASCII 0x248 ~X3Hogre~ #8  //override script
+  WRITE_ASCII 0x280 ~X3Hogre~ #32  //DV
+  WRITE_ASCII 0x2cc ~X3Hogre~ #8   //pre-joining dialogue file
+    COPY ~%MOD_FOLDER%/cre/X3HogreD.cre~ ~override/X3HogreD.cre~
+	  WRITE_ASCII 0x280 ~X3HogreD~ #32  //DV
+  COPY ~%MOD_FOLDER%/cre/X3HogreL.cre~ ~override/X3HogreL.cre~
+  SAY NAME1 @54
+  SAY NAME2 @54  
+  WRITE_ASCII 0x248 ~X3HogreL~ #8  //override script
+  WRITE_ASCII 0x280 ~X3HogreL~ #32  //DV
+  WRITE_ASCII 0x2cc ~X3HogreL~ #8   //pre-joining dialogue file  
+  COPY ~%MOD_FOLDER%/cre/X3HogreC.cre~ ~override/X3HogreC.cre~
+  SAY NAME1 @55
+  SAY NAME2 @55  
+  WRITE_ASCII 0x248 ~X3HogreC~ #8  //override script
+  WRITE_ASCII 0x280 ~X3HogreC~ #32  //DV
+  WRITE_ASCII 0x2cc ~X3HogreC~ #8   //pre-joining dialogue file  
+  COPY ~%MOD_FOLDER%/cre/X3Hogre2.cre~ ~override/X3Hogre2.cre~
+  WRITE_ASCII 0x248 ~X3Hogre2~ #8  //override script
+  WRITE_ASCII 0x280 ~X3Hogre2~ #32  //DV
+  WRITE_ASCII 0x2cc ~X3Hogre2~ #8   //pre-joining dialogue file
+
+  ACTION_IF FILE_EXISTS_IN_GAME ~bdcaelar.cre~ THEN BEGIN
+INCLUDE ~Helga/Lib/Helga_sod.tpa~ 
+END  
+
+////////////////////////////////////////////////
+
+ACTION_IF FILE_EXISTS_IN_GAME ~x3milyB.dlg~
+THEN BEGIN
+  PRINT @56
+COMPILE ~Helga/Dialogue/Crossmod/Emily.d~
+END 
+
+ACTION_IF FILE_EXISTS_IN_GAME ~x3KaleB.dlg~
+THEN BEGIN
+  PRINT @57
+COMPILE ~Helga/Dialogue/Crossmod/Kale.d~
+END 
+
+ACTION_IF FILE_EXISTS_IN_GAME ~x3VienB.dlg~
+THEN BEGIN
+  PRINT @58
+COMPILE ~Helga/Dialogue/Crossmod/Vienxay.d~
+END 
+
+ACTION_IF FILE_EXISTS_IN_GAME ~x3RecB.dlg~
+THEN BEGIN
+  PRINT @59
+COMPILE ~Helga/Dialogue/Crossmod/Recorder.d~
+END 
+
+ACTION_IF FILE_EXISTS_IN_GAME ~BC0Aura.dlg~
+THEN BEGIN
+  PRINT @60
+COMPILE ~Helga/Dialogue/Crossmod/Aura.d~
+END 
+
+PRINT @61
+
+PRINT @62
+
+OUTER_SPRINT ~portrait~ @63
+OUTER_WHILE (!(IS_AN_INT ~portrait~) OR (~portrait~ > 0x2) OR (~portrait~ < 0x1)) BEGIN
+  ACTION_READLN ~portrait~
+END
+      ACTION_IF ("portrait" = 1) THEN BEGIN
+		COPY ~%MOD_FOLDER%/Portraits/HelgaL.bmp~ ~override/HelgaL.bmp~
+		COPY ~%MOD_FOLDER%/Portraits/HelgaM.bmp~ ~override/HelgaM.bmp~
+		COPY ~%MOD_FOLDER%/Portraits/HelgaS.bmp~ ~override/HelgaS.bmp~
+      PRINT @64
+	  END
+      ACTION_IF ("portrait" = 2) THEN BEGIN
+		COPY ~%MOD_FOLDER%/Portraits/AHelgaL.bmp~ ~override/HelgaL.bmp~
+		COPY ~%MOD_FOLDER%/Portraits/AHelgaM.bmp~ ~override/HelgaM.bmp~
+		COPY ~%MOD_FOLDER%/Portraits/AHelgaS.bmp~ ~override/HelgaS.bmp~
+      PRINT @65
+	  END
+		
+PRINT @66
+
+PRINT @67
+
+OUTER_SPRINT ~music~ @63
+OUTER_WHILE (!(IS_AN_INT ~music~) OR (~music~ > 0x2) OR (~music~ < 0x1)) BEGIN
+  PRINT @68
+  ACTION_READLN ~music~
+END
+      ACTION_IF ("music" = 1) THEN BEGIN
+	COPY_EXISTING ~sw1h01.itm~ ~override/bg1npcmusic.g3~
+
+	MKDIR ~music/blank~
+	COPY ~Helga/Music/blank.mus~ ~music~
+		~Helga/Music/blank.acm~ ~music/blank/blanka.acm~
+
+	COPY_EXISTING ~songlist.2da~ ~override~
+  		SET_2DA_ENTRY 0 0 2 ~2DA_V1.0~
+  		SET_2DA_ENTRY 0 1 2 ~~
+  		SET_2DA_ENTRY 0 0 2 ~IDOBEK Name~
+  		SET_2DA_ENTRY 1 2 3 ~Blank.mus~
+		SET_2DA_ENTRY 1 1 3 ~BLANK~
+  		SET_2DA_ENTRY 0 0 3 ~~
+  		REPLACE_TEXTUALLY CASE_INSENSITIVE ~2DA_V1.0~ ~2DA V1.0~
+
+LAF HANDLE_AUDIO
+  STR_VAR
+    audio_path = ~Helga/music~
+    oggdec_path = ~Helga/music~
+    sox_path = ~Helga/music~
+END
+
+PRINT @69
+END 
+
+ACTION_IF ("music" = 2) THEN BEGIN
+PRINT @70
+END 
+
+
+BEGIN @998
+SUBCOMPONENT @999
+
+COPY ~%MOD_FOLDER%/Cre/X3HFC1.cre~ ~override/X3Helga.cre~
+  SAY NAME1 @15
+  SAY NAME2 @15
+  WRITE_ASCII 0x248 ~X3Helga~ #8  //override script
+  WRITE_ASCII 0x280 ~X3Helga~ #32  //DV
+  WRITE_ASCII 0x2cc ~X3Helga~ #8   //pre-joining dialogue file
+  WRITE_ASCII 0X34 ~HelgaM~ #8   //small portrait
+  WRITE_ASCII 0x3c ~HelgaL~ #8   //medium portrait
+  SAY BIO @16
+  SAY MORALE @17 //
+  SAY HAPPY @18 //
+  SAY UNHAPPY_ANNOYED @19
+  SAY UNHAPPY_SERIOUS @20
+  SAY UNHAPPY_BREAKING_POINT @21
+  SAY LEADER @22  //
+  SAY TIRED @23  //
+  SAY BORED @24 //
+  SAY BATTLE_CRY1 @25 //
+  SAY BATTLE_CRY2 @26 // 
+  SAY BATTLE_CRY3 @27 //
+  SAY BATTLE_CRY4 @28 //
+  SAY BATTLE_CRY5 @29 //
+  SAY DAMAGE @30 //
+  SAY DYING @31 //
+  SAY HURT @32 //
+  SAY AREA_FOREST @33 
+  SAY AREA_CITY @34
+  SAY AREA_DUNGEON @35
+  SAY AREA_DAY @36
+  SAY AREA_NIGHT @37
+  SAY SELECT_COMMON1 @38 //
+  SAY SELECT_COMMON2 @39 //
+  SAY SELECT_COMMON3 @40
+  SAY SELECT_COMMON4 @38 //
+  SAY SELECT_COMMON5 @39
+  SAY SELECT_COMMON6 @40
+  SAY SELECT_ACTION1 @41
+  SAY SELECT_ACTION2 @42
+  SAY SELECT_ACTION3 @43
+  SAY SELECT_ACTION4 @44
+  SAY SELECT_ACTION5 @45
+  SAY SELECT_ACTION6 @46
+  SAY SELECT_ACTION7 @47
+  SAY CRITICAL_HIT ~~[X3HeCrit] //
+  SAY CRITICAL_MISS @49 //
+  SAY TARGET_IMMUNE @50 // 
+  SAY INVENTORY_FULL @51 //
+  SAY SPELL_DISRUPTED @52 // 
+  SAY SET_A_TRAP ~~ []
+  SAY HIDDEN_IN_SHADOWS ~~ []
+  SAY PICKED_POCKET ~~ []	  
+  WRITE_SHORT 0x246 (IDS_OF_SYMBOL (~kit~ ~X3HFC~))
+  
+ // Character SoD
+ 
+ COPY ~%MOD_FOLDER%/Cre/X3HFC2.cre~ ~override/X32Helga.cre~
+ SAY NAME1 @15
+  SAY NAME2 @15
+  WRITE_ASCII 0x248 ~X3Helga~ #8  //override script
+  WRITE_ASCII 0x280 ~X3Helga~ #32  //DV
+  WRITE_ASCII 0x2cc ~X3Helga~ #8   //pre-joining dialogue file
+  WRITE_ASCII 0X34 ~HelgaM~ #8   //small portrait
+  WRITE_ASCII 0x3c ~HelgaL~ #8   //medium portrait
+  SAY BIO @16
+  SAY MORALE @17 //
+  SAY HAPPY @18 //
+  SAY UNHAPPY_ANNOYED @19
+  SAY UNHAPPY_SERIOUS @20
+  SAY UNHAPPY_BREAKING_POINT @21
+  SAY LEADER @22  //
+  SAY TIRED @23  //
+  SAY BORED @24 //
+  SAY BATTLE_CRY1 @25 //
+  SAY BATTLE_CRY2 @26 // 
+  SAY BATTLE_CRY3 @27 //
+  SAY BATTLE_CRY4 @28 //
+  SAY BATTLE_CRY5 @29 //
+  SAY DAMAGE @30 //
+  SAY DYING @31 //
+  SAY HURT @32 //
+  SAY AREA_FOREST @33 
+  SAY AREA_CITY @34
+  SAY AREA_DUNGEON @35
+  SAY AREA_DAY @36
+  SAY AREA_NIGHT @37
+  SAY SELECT_COMMON1 @38 //
+  SAY SELECT_COMMON2 @39 //
+  SAY SELECT_COMMON3 @40
+  SAY SELECT_COMMON4 @38 //
+  SAY SELECT_COMMON5 @39
+  SAY SELECT_COMMON6 @40
+  SAY SELECT_ACTION1 @41
+  SAY SELECT_ACTION2 @42
+  SAY SELECT_ACTION3 @43
+  SAY SELECT_ACTION4 @44
+  SAY SELECT_ACTION5 @45
+  SAY SELECT_ACTION6 @46
+  SAY SELECT_ACTION7 @47
+  SAY CRITICAL_HIT ~~[X3HeCrit] //
+  SAY CRITICAL_MISS @49 //
+  SAY TARGET_IMMUNE @50 // 
+  SAY INVENTORY_FULL @51 //
+  SAY SPELL_DISRUPTED @52 // 
+  SAY SET_A_TRAP ~~ []
+  SAY HIDDEN_IN_SHADOWS ~~ []
+  SAY PICKED_POCKET ~~ []	  
+  WRITE_SHORT 0x246 (IDS_OF_SYMBOL (~kit~ ~X3HFC~))
+  
