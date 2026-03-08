@@ -1,4 +1,4 @@
-## Unreleased
+## Beta 7
 - Dev-mode diagnostics now show which BIO build wrote the scan cache, so it is easier to spot reports coming from old cached scans.
 - Dev-mode diagnostics now export the full raw Lapdu parser JSON for each scanned TP2 under parser_raw/.
 - Dev-mode diagnostics now split copied WeiDU logs into source_logs and saved_logs, so it is clearer which logs BIO used as input and which ones came from Step 4 save.
