@@ -84,6 +84,15 @@ pub(super) fn build_prompt_summary_index(
         parser_warning_count: output.warnings.len(),
         parser_error_count: output.errors.len(),
         parser_diagnostic_preview: diagnostic_preview(output),
+        parser_raw_json: None,
+        parser_tra_language_requested: None,
+        parser_tra_language_used: None,
+        parser_flow_node_count: 0,
+        parser_flow_event_ref_count: 0,
+        parser_event_with_parent_count: 0,
+        parser_event_with_path_count: 0,
+        parser_option_component_binding_count: 0,
+        parser_flow_preview: Vec::new(),
     }
 }
 

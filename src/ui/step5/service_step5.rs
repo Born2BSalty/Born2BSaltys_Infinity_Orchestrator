@@ -143,6 +143,10 @@ pub fn copy_source_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) 
     crate::ui::step5::log_files::copy_source_weidu_logs(step1, out_dir, suffix)
 }
 
+pub fn copy_saved_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) -> Vec<PathBuf> {
+    crate::ui::step5::log_files::copy_saved_weidu_logs(step1, out_dir, suffix)
+}
+
 pub fn source_log_infos(step1: &Step1State) -> Vec<crate::ui::step5::log_files::SourceLogInfo> {
     crate::ui::step5::log_files::source_log_infos(step1)
 }
@@ -219,6 +223,8 @@ pub fn copy_weidu_logs_for_diagnostics(step1: &Step1State, run_id: &str) {
     let run_dir = crate::ui::step5::service_diagnostics_run_step5::run_dir_from_id(run_id);
     let source_logs_dir = run_dir.join("source_logs");
     let _ = copy_source_weidu_logs(step1, &source_logs_dir, "original");
+    let saved_logs_dir = run_dir.join("saved_logs");
+    let _ = copy_saved_weidu_logs(step1, &saved_logs_dir, "original");
 }
 
 mod step5_command {

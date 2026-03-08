@@ -262,6 +262,21 @@ pub fn copy_source_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) 
     copied
 }
 
+pub fn copy_saved_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) -> Vec<PathBuf> {
+    let mut copied = Vec::new();
+    let _ = fs::create_dir_all(out_dir);
+    for (tag, source) in resolve_saved_logs(step1) {
+        if !source.is_file() {
+            continue;
+        }
+        let dest = out_dir.join(format!("weidu_{tag}_{suffix}.log"));
+        if fs::copy(&source, &dest).is_ok() {
+            copied.push(dest);
+        }
+    }
+    copied
+}
+
 pub fn source_log_infos(step1: &Step1State) -> Vec<SourceLogInfo> {
     resolve_source_logs(step1)
         .into_iter()
@@ -290,29 +305,48 @@ fn resolve_source_logs(step1: &Step1State) -> Vec<(&'static str, PathBuf)> {
 }
 
 fn resolve_bgee_log_path(step1: &Step1State) -> PathBuf {
-    if step1.have_weidu_logs && !step1.bgee_log_file.trim().is_empty() {
+    if !step1.bgee_log_file.trim().is_empty() {
         PathBuf::from(step1.bgee_log_file.trim())
     } else {
-        let folder = if step1.game_install == "EET" {
-            step1.eet_bgee_log_folder.trim()
-        } else {
-            step1.bgee_log_folder.trim()
-        };
-        PathBuf::from(folder).join("weidu.log")
+        resolve_saved_bgee_log_path(step1)
     }
 }
 
 fn resolve_bg2_log_path(step1: &Step1State) -> PathBuf {
-    if step1.have_weidu_logs && !step1.bg2ee_log_file.trim().is_empty() {
+    if !step1.bg2ee_log_file.trim().is_empty() {
         PathBuf::from(step1.bg2ee_log_file.trim())
     } else {
-        let folder = if step1.game_install == "EET" {
-            step1.eet_bg2ee_log_folder.trim()
-        } else {
-            step1.bg2ee_log_folder.trim()
-        };
-        PathBuf::from(folder).join("weidu.log")
+        resolve_saved_bg2_log_path(step1)
     }
+}
+
+fn resolve_saved_logs(step1: &Step1State) -> Vec<(&'static str, PathBuf)> {
+    match step1.game_install.as_str() {
+        "EET" => vec![
+            ("bgee", resolve_saved_bgee_log_path(step1)),
+            ("bg2ee", resolve_saved_bg2_log_path(step1)),
+        ],
+        "BG2EE" => vec![("bg2ee", resolve_saved_bg2_log_path(step1))],
+        _ => vec![("bgee", resolve_saved_bgee_log_path(step1))],
+    }
+}
+
+fn resolve_saved_bgee_log_path(step1: &Step1State) -> PathBuf {
+    let folder = if step1.game_install == "EET" {
+        step1.eet_bgee_log_folder.trim()
+    } else {
+        step1.bgee_log_folder.trim()
+    };
+    PathBuf::from(folder).join("weidu.log")
+}
+
+fn resolve_saved_bg2_log_path(step1: &Step1State) -> PathBuf {
+    let folder = if step1.game_install == "EET" {
+        step1.eet_bg2ee_log_folder.trim()
+    } else {
+        step1.bg2ee_log_folder.trim()
+    };
+    PathBuf::from(folder).join("weidu.log")
 }
 }
 
@@ -322,5 +356,5 @@ pub use log_open::{open_console_logs_folder, open_last_log_file, save_console_lo
 pub use path_validators::{
     validate_resume_paths, validate_runtime_prep_paths, verify_targets_prepared,
 };
-pub use source_logs::{SourceLogInfo, copy_source_weidu_logs, source_log_infos};
+pub use source_logs::{SourceLogInfo, copy_saved_weidu_logs, copy_source_weidu_logs, source_log_infos};
 pub use target_prep::{TargetPrepResult, prepare_target_dirs_before_install};

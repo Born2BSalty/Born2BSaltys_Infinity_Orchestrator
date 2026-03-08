@@ -11,6 +11,8 @@ pub fn build_step3_items(mods: &[crate::ui::state::Step2ModState]) -> Vec<Step3I
         component_id: String,
         component_label: String,
         raw_line: String,
+        prompt_summary: Option<String>,
+        prompt_events: Vec<crate::parser::PromptSummaryEvent>,
         selected_order: usize,
     }
 
@@ -23,6 +25,8 @@ pub fn build_step3_items(mods: &[crate::ui::state::Step2ModState]) -> Vec<Step3I
                 component_id: component.component_id.clone(),
                 component_label: component.label.clone(),
                 raw_line: component.raw_line.clone(),
+                prompt_summary: component.prompt_summary.clone(),
+                prompt_events: component.prompt_events.clone(),
                 selected_order: component.selected_order.unwrap_or(usize::MAX),
             });
         }
@@ -49,6 +53,8 @@ pub fn build_step3_items(mods: &[crate::ui::state::Step2ModState]) -> Vec<Step3I
                 mod_name: component.mod_name.clone(),
                 component_label: component.mod_name.clone(),
                 raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
                 selected_order: component.selected_order,
                 block_id: block_id.clone(),
                 is_parent: true,
@@ -63,6 +69,8 @@ pub fn build_step3_items(mods: &[crate::ui::state::Step2ModState]) -> Vec<Step3I
             mod_name: component.mod_name,
             component_label: component.component_label,
             raw_line: component.raw_line,
+            prompt_summary: component.prompt_summary,
+            prompt_events: component.prompt_events,
             selected_order: component.selected_order,
             block_id: current_block_id.clone(),
             is_parent: false,

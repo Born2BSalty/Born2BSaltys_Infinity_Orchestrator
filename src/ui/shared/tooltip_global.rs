@@ -10,10 +10,10 @@ pub const SHOW_PARSED_PROMPTS: &str = "Show parsed prompts.";
 pub const STEP1_GAME_INSTALL: &str = "Select target mode: BGEE, BG2EE, or EET.";
 pub const STEP1_CUSTOM_SCAN_DEPTH: &str =
     "Maximum folder depth under Mods Folder to search for TP2 files.";
-pub const STEP1_TIMEOUT_PER_MOD: &str = "What it does: Sets how long BIO waits for each mod install before timing out.\n\
-How to use it: Enable this and set a number of seconds.\n\
-Default when off: 3600 seconds (1 hour).\n\
-Example: 7200 = 2 hours.";
+pub const STEP1_TIMEOUT_PER_MOD: &str = "What it does: Sets the timeout for the whole install run from start to finish.\n\
+Example: If your whole mod list needs 5 hours, set this to 18000 seconds.\n\
+How to use it: Enable this and enter the number of seconds to allow.\n\
+Default when off: 3600 seconds (1 hour).";
 pub const STEP1_AUTO_ANSWER_INITIAL_DELAY: &str =
     "Base wait before first auto-answer on a prompt. Increase this for large prompt lists so answers are not sent too early.";
 pub const STEP1_AUTO_ANSWER_POST_SEND_DELAY: &str =

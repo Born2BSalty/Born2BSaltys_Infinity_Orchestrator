@@ -19,6 +19,15 @@ pub struct PromptSummaryIndex {
     pub parser_warning_count: usize,
     pub parser_error_count: usize,
     pub parser_diagnostic_preview: Option<String>,
+    pub parser_raw_json: Option<String>,
+    pub parser_tra_language_requested: Option<String>,
+    pub parser_tra_language_used: Option<String>,
+    pub parser_flow_node_count: usize,
+    pub parser_flow_event_ref_count: usize,
+    pub parser_event_with_parent_count: usize,
+    pub parser_event_with_path_count: usize,
+    pub parser_option_component_binding_count: usize,
+    pub parser_flow_preview: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

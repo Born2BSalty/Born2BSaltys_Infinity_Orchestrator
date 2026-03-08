@@ -30,7 +30,6 @@ pub(super) fn remember_answer_with_context(
     if let Ok(mut guard) = storage::memory().lock() {
         let mut entry = guard.get(prompt_key).cloned().unwrap_or_default();
         entry.answer = answer.to_string();
-        entry.enabled = true;
         if entry.captured_at == 0 {
             entry.captured_at = now;
         }

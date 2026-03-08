@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use chrono::Local;
 
 use crate::ui::state::Step5State;
 
 pub fn begin_new_run(step5: &mut Step5State) -> String {
+    prune_old_diagnostics();
     let run_id = make_run_id();
     step5.diagnostics_run_id = Some(run_id.clone());
     run_id
@@ -22,6 +24,28 @@ pub fn current_or_new_run_id(step5: &Step5State) -> String {
 
 pub fn run_dir_from_id(run_id: &str) -> PathBuf {
     PathBuf::from("diagnostics").join(format!("run_{run_id}"))
+}
+
+fn prune_old_diagnostics() {
+    let diagnostics_dir = Path::new("diagnostics");
+    let entries = match fs::read_dir(diagnostics_dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() && name.starts_with("run_") {
+            let _ = fs::remove_dir_all(&path);
+            continue;
+        }
+        if path.is_file()
+            && (name.starts_with("raw_output_") || name.starts_with("bio_full_debug_"))
+        {
+            let _ = fs::remove_file(&path);
+        }
+    }
 }
 
 fn make_run_id() -> String {

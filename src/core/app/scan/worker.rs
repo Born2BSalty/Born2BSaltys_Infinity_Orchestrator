@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex, mpsc::Sender};
 use std::thread;
 
 use crate::platform_defaults::resolve_weidu_binary;
+use crate::ui::controller::util::current_exe_fingerprint;
 use crate::ui::scan::cache::{cache_context, load_scan_cache, save_scan_cache};
 use crate::ui::scan::discovery::{build_preview_mods, group_tp2s, resolve_scan_game_dir};
 use crate::ui::scan::{ENABLE_TWO_PHASE_PREVIEW, ScannedComponent, Step2ScanEvent};
@@ -67,7 +68,9 @@ pub fn scan_impl(
     let grouped = Arc::new(grouped);
     let mods_map = Arc::new(Mutex::new(BTreeMap::<String, Vec<ScannedComponent>>::new()));
     let tp2_map = Arc::new(Mutex::new(BTreeMap::<String, String>::new()));
-    let cache = Arc::new(Mutex::new(load_scan_cache()));
+    let loaded_cache = load_scan_cache();
+    let cache_meta = loaded_cache.meta.clone();
+    let cache = Arc::new(Mutex::new(loaded_cache.cache));
     let ctx = Arc::new(cache_context(&weidu, &game_dir, &mods_root));
     let next_index = Arc::new(AtomicUsize::new(0));
     let progress_count = Arc::new(AtomicUsize::new(0));
@@ -172,6 +175,7 @@ pub fn scan_impl(
     tp2_reports.sort_by(|a, b| a.tp2_path.cmp(&b.tp2_path));
     let tp2_cache_hits = tp2_reports.iter().filter(|r| r.used_cache).count();
     let total_tp2 = tp2_reports.len();
+    let current_exe_fingerprint = current_exe_fingerprint();
     let report = Step2ScanReport {
         game_dir: game_dir.display().to_string(),
         mods_root: mods_root.display().to_string(),
@@ -187,6 +191,35 @@ pub fn scan_impl(
         total_tp2,
         tp2_cache_hits,
         tp2_cache_misses: total_tp2.saturating_sub(tp2_cache_hits),
+        scan_cache_path: cache_meta.path,
+        scan_cache_source: cache_meta.source,
+        scan_cache_file_exists: cache_meta.file_exists,
+        scan_cache_file_mtime_secs: cache_meta.file_mtime_secs,
+        scan_cache_file_version: cache_meta.file_version,
+        scan_cache_writer_app_version: cache_meta.file_writer_app_version.clone(),
+        scan_cache_writer_exe_fingerprint: cache_meta.file_writer_exe_fingerprint.clone(),
+        scan_cache_entry_count: cache_meta.file_entry_count,
+        scan_cache_version_matches_current_schema: cache_meta.version_matches_current_schema,
+        scan_cache_writer_matches_current_app_version: if tp2_cache_hits == 0 {
+            None
+        } else {
+            Some(
+                cache_meta
+                    .file_writer_app_version
+                    .as_deref()
+                    .is_some_and(|v| v == env!("CARGO_PKG_VERSION")),
+            )
+        },
+        scan_cache_writer_matches_current_exe: if tp2_cache_hits == 0 {
+            None
+        } else {
+            Some(
+                cache_meta
+                    .file_writer_exe_fingerprint
+                    .as_deref()
+                    .is_some_and(|v| v == current_exe_fingerprint),
+            )
+        },
         tp2_reports,
     };
     Ok((bgee_mods, bg2ee_mods, report))

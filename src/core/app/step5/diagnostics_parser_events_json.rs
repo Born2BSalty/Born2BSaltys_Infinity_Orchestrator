@@ -58,12 +58,23 @@ pub(super) fn write_parser_events_json(
                 "parser_event_count": tp2_run.parser_event_count,
                 "parser_warning_count": tp2_run.parser_warning_count,
                 "parser_error_count": tp2_run.parser_error_count,
-                "parser_diagnostic_preview": tp2_run.parser_diagnostic_preview
+                "parser_diagnostic_preview": tp2_run.parser_diagnostic_preview,
+                "parser_tra_language_requested": tp2_run.parser_tra_language_requested,
+                "parser_tra_language_used": tp2_run.parser_tra_language_used,
+                "parser_flow_node_count": tp2_run.parser_flow_node_count,
+                "parser_flow_event_ref_count": tp2_run.parser_flow_event_ref_count,
+                "parser_event_with_parent_count": tp2_run.parser_event_with_parent_count,
+                "parser_event_with_path_count": tp2_run.parser_event_with_path_count,
+                "parser_option_component_binding_count": tp2_run.parser_option_component_binding_count,
+                "parser_flow_preview": tp2_run.parser_flow_preview.iter().map(|(id, label)| json!({
+                    "id": id,
+                    "label": label
+                })).collect::<Vec<_>>()
             },
             "mapped_prompts_in_ui": &mapped_prompts,
             "parser": {
                 "status": "not_rerun_in_diagnostics",
-                "note": "Raw parser event replay is intentionally skipped during diagnostics export to keep UI responsive. Use parser counts/diagnostics above plus prompt_calls.json for issue triage."
+                "note": "Raw parser replay is intentionally skipped during diagnostics export to keep UI responsive. When available, the original Lapdu parser JSON is exported separately under parser_raw/. Use that plus prompt_calls.json for issue triage."
             }
         }));
     }

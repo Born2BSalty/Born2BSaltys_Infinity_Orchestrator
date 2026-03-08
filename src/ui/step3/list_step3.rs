@@ -32,7 +32,8 @@ pub(crate) fn render(
                 .show(ui, |ui| {
                     ui.set_min_width(viewport_w);
                     let tab_id = state.step3.active_game_tab.clone();
-                    let (pending_unchecks, pending_prompt_actions) = {
+                    let prompt_eval = crate::ui::step2::state_step2::build_prompt_eval_context(state);
+                    let (pending_unchecks, pending_prompt_actions, open_prompt_popup) = {
                         let (
                             items,
                             selected,
@@ -57,6 +58,7 @@ pub(crate) fn render(
                         let visible_indices = blocks::visible_indices(items, collapsed_blocks);
                         let row_outcome = rows::render_rows(
                             ui,
+                            &prompt_eval,
                             &tab_id,
                             &visible_indices,
                             jump_to_selected_requested,
@@ -115,8 +117,13 @@ pub(crate) fn render(
                             clone_seq,
                         );
                         visible_rows.clear();
-                        (row_outcome.uncheck_requests, row_outcome.prompt_requests)
+                        (row_outcome.uncheck_requests, row_outcome.prompt_requests, row_outcome.open_prompt_popup)
                     };
+                    if let Some((title, text)) = open_prompt_popup {
+                        state.step2.prompt_popup_title = title;
+                        state.step2.prompt_popup_text = text;
+                        state.step2.prompt_popup_open = true;
+                    }
                     if !pending_unchecks.is_empty() {
                         crate::ui::step3::service_step3::component_uncheck::apply_component_unchecks(state, &tab_id, &pending_unchecks);
                     }
@@ -136,6 +143,7 @@ use eframe::egui;
 use crate::ui::state::Step3ItemState;
 use crate::ui::step3::blocks;
 use crate::ui::step3::content_step3;
+use crate::ui::step3::prompt_popup_step3;
 use crate::ui::step3::service_step3;
 
 #[derive(Debug, Clone)]
@@ -162,6 +170,7 @@ pub(super) struct RowRenderOutcome {
     pub visible_rows: Vec<(usize, egui::Rect)>,
     pub uncheck_requests: Vec<(String, String)>,
     pub prompt_requests: Vec<PromptActionRequest>,
+    pub open_prompt_popup: Option<(String, String)>,
 }
 
 const STEP3_HISTORY_LIMIT: usize = 100;
@@ -180,6 +189,7 @@ fn push_undo_snapshot(
 
 pub(super) fn render_rows(
     ui: &mut egui::Ui,
+    prompt_eval: &crate::ui::step2::state_step2::PromptEvalContext,
     tab_id: &str,
     visible_indices: &[usize],
     jump_to_selected_requested: &mut bool,
@@ -202,9 +212,11 @@ pub(super) fn render_rows(
     let mut visible_rows: Vec<(usize, egui::Rect)> = Vec::with_capacity(visible_indices.len());
     let mut uncheck_requests: Vec<(String, String)> = Vec::new();
     let mut prompt_requests: Vec<PromptActionRequest> = Vec::new();
+    let mut open_prompt_popup: Option<(String, String)> = None;
 
     for &idx in visible_indices {
         let item = &items[idx];
+        let mut row_prompt_popup: Option<(String, String)> = None;
         let label_response = if item.is_parent {
             let child_count = blocks::count_children_in_block(items, idx);
             let collapsed = collapsed_blocks.contains(&item.block_id);
@@ -255,15 +267,41 @@ pub(super) fn render_rows(
             let resp = row_response.expect("row response should exist");
             resp.on_hover_text(crate::ui::shared::tooltip_global::STEP3_DRAG_PARENT)
         } else {
+            let prompt_summary = prompt_popup_step3::evaluate_step3_item_prompt_summary(item, prompt_eval);
             ui.horizontal(|ui| {
                 ui.add_space(25.0);
                 let text = content_step3::format_step3_item(item);
                 let row_text = content_step3::weidu_colored_widget_text(ui, &text);
-                ui.selectable_label(selected.contains(&idx), row_text)
+                let resp = ui.selectable_label(selected.contains(&idx), row_text);
+                if !prompt_summary.trim().is_empty() {
+                    ui.add_space(6.0);
+                    let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
+                        .color(crate::ui::shared::theme_global::prompt_text())
+                        .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
+                    let prompt_response = ui
+                        .add(
+                            egui::Button::new(prompt_text)
+                                .fill(crate::ui::shared::theme_global::prompt_fill())
+                                .stroke(egui::Stroke::new(
+                                    crate::ui::shared::layout_tokens_global::BORDER_THIN,
+                                    crate::ui::shared::theme_global::prompt_stroke(),
+                                ))
+                                .corner_radius(egui::CornerRadius::same(7))
+                                .min_size(egui::vec2(0.0, 18.0)),
+                        )
+                        .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
+                    if prompt_response.clicked() {
+                        row_prompt_popup = Some(prompt_popup_step3::format_step3_prompt_popup(item, &prompt_summary));
+                    }
+                }
+                resp
             })
             .inner
             .on_hover_text(crate::ui::shared::tooltip_global::STEP3_DRAG_ROW)
         };
+        if row_prompt_popup.is_some() {
+            open_prompt_popup = row_prompt_popup;
+        }
         let drag_id = ui.make_persistent_id(("step3_drag_row", tab_id, idx));
         let drag_response = ui.interact(label_response.rect, drag_id, egui::Sense::click_and_drag());
         if items[idx].is_parent {
@@ -358,6 +396,7 @@ pub(super) fn render_rows(
         visible_rows,
         uncheck_requests,
         prompt_requests,
+        open_prompt_popup,
     }
 }
 }

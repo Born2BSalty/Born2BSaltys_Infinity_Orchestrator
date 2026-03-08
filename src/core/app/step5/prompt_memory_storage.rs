@@ -117,7 +117,7 @@ pub(super) fn parse_content(content: &str) -> Option<HashMap<String, PromptAnswe
                 PromptAnswerEntry {
                     alias: String::new(),
                     answer: v,
-                    enabled: true,
+                    enabled: false,
                     preview: String::new(),
                     component_key: String::new(),
                     tp2_file: String::new(),

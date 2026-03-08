@@ -10,7 +10,9 @@ use anyhow::Result;
 use crate::ui::state::WizardState;
 use crate::ui::step4::service_step4::build_weidu_export_lines;
 use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, run_dir_from_id};
-use crate::ui::step5::service_step5::{build_install_invocation, copy_source_weidu_logs};
+use crate::ui::step5::service_step5::{
+    build_install_invocation, copy_saved_weidu_logs, copy_source_weidu_logs,
+};
 use crate::ui::terminal::EmbeddedTerminal;
 
 #[path = "diagnostics_appdata_copy.rs"]
@@ -35,6 +37,8 @@ mod scan_context_json;
 mod prompt_calls_json;
 #[path = "diagnostics_parser_events_json.rs"]
 mod parser_events_json;
+#[path = "diagnostics_parser_raw_json.rs"]
+mod parser_raw_json;
 #[path = "diagnostics_text.rs"]
 mod text;
 #[path = "diagnostics_tp2_layout.rs"]
@@ -64,6 +68,8 @@ pub fn export_diagnostics(
 
     let source_logs_dir = run_dir.join("source_logs");
     let copied_source_logs = copy_source_weidu_logs(&state.step1, &source_logs_dir, "source");
+    let saved_logs_dir = run_dir.join("saved_logs");
+    let copied_saved_logs = copy_saved_weidu_logs(&state.step1, &saved_logs_dir, "saved");
     let appdata_summary = appdata_copy::copy_appdata_configs(&run_dir);
     let write_check_summary = write_checks::run_write_checks(state, ts);
     let tp2_layout_summary = tp2_layout::build_tp2_layout_summary(state);
@@ -81,6 +87,7 @@ pub fn export_diagnostics(
         state,
         &run_id,
         &copied_source_logs,
+        &copied_saved_logs,
         &active_order,
         &console_excerpt,
         ts,
@@ -98,6 +105,7 @@ pub fn export_diagnostics(
     fs::write(&out_path, text)?;
     let mut written_paths = vec![out_path.clone()];
     written_paths.extend(copied_source_logs.iter().cloned());
+    written_paths.extend(copied_saved_logs.iter().cloned());
     written_paths.extend(appdata_summary.copied.iter().cloned());
 
     match quick_triage::write_quick_triage_txt(&run_dir, state, ts) {
@@ -115,6 +123,10 @@ pub fn export_diagnostics(
     match parser_events_json::write_parser_events_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
         Err(err) => append_diag_note(&out_path, &format!("parser_events_json_write=FAILED: {err}")),
+    }
+    match parser_raw_json::write_parser_raw_json(&run_dir, state, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(&out_path, &format!("parser_raw_json_write=FAILED: {err}")),
     }
     match undefined_summary_json::write_undefined_summary_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),

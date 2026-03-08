@@ -172,6 +172,15 @@ fn apply_parser_probe_meta(
     probe.parser_warning_count = prompt_index.parser_warning_count;
     probe.parser_error_count = prompt_index.parser_error_count;
     probe.parser_diagnostic_preview = prompt_index.parser_diagnostic_preview.clone();
+    probe.parser_raw_json = prompt_index.parser_raw_json.clone();
+    probe.parser_tra_language_requested = prompt_index.parser_tra_language_requested.clone();
+    probe.parser_tra_language_used = prompt_index.parser_tra_language_used.clone();
+    probe.parser_flow_node_count = prompt_index.parser_flow_node_count;
+    probe.parser_flow_event_ref_count = prompt_index.parser_flow_event_ref_count;
+    probe.parser_event_with_parent_count = prompt_index.parser_event_with_parent_count;
+    probe.parser_event_with_path_count = prompt_index.parser_event_with_path_count;
+    probe.parser_option_component_binding_count = prompt_index.parser_option_component_binding_count;
+    probe.parser_flow_preview = prompt_index.parser_flow_preview.clone();
 }
 
 fn preferred_scan_work_dir<'a>(tp2: &'a Path, mods_root: &'a Path) -> &'a Path {

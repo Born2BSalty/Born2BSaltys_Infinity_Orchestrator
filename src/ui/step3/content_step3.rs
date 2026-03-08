@@ -102,6 +102,11 @@ pub fn render_toolbar(
             ui.label(typo::monospace("BG2EE"));
         }
 
+        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
+        ui.label(
+            crate::ui::shared::typography_global::weak("Right-click a row for more actions"),
+        );
+
         if state.compat.error_count > 0
             && ui
                 .button(
@@ -266,6 +271,7 @@ pub fn render(
     if state.step3.compat_modal_open {
         render_compat_modal(ui, state, &mut jump_to_selected_requested);
     }
+    crate::ui::step2::content_step2::render_prompt_popup(ui, state);
     state.step3.jump_to_selected_requested = jump_to_selected_requested;
 
     action

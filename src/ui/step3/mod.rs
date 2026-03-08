@@ -9,6 +9,7 @@ pub mod content_step3;
 pub mod frame_step3;
 pub mod list_step3;
 pub mod page_step3;
+pub mod prompt_popup_step3;
 pub mod service_component_uncheck_step3;
 pub mod service_drag_ops_step3;
 pub mod service_prompt_actions_step3;

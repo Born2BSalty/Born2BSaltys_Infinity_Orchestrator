@@ -9,7 +9,13 @@ pub struct ParserOutput {
     #[serde(default)]
     pub source_file: String,
     #[serde(default)]
+    pub tra_language_requested: String,
+    #[serde(default)]
+    pub tra_language_used: String,
+    #[serde(default)]
     pub events: Vec<ParserEvent>,
+    #[serde(default)]
+    pub flow: Vec<ParserFlowNode>,
     #[serde(default)]
     pub warnings: Vec<ParserDiagnostic>,
     #[serde(default)]
@@ -23,6 +29,10 @@ pub struct ParserEvent {
     pub interactive: Option<bool>,
     #[serde(default)]
     pub node_id: String,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub path_id: String,
     #[serde(default)]
     pub text: String,
     #[serde(default)]
@@ -49,6 +59,20 @@ pub struct ParserOption {
     pub label: String,
     #[serde(default)]
     pub value: String,
+    #[serde(default)]
+    pub component_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ParserFlowNode {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub event_ids: Vec<String>,
+    #[serde(default)]
+    pub children: Vec<ParserFlowNode>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

@@ -67,6 +67,17 @@ pub struct Step2ScanReport {
     pub total_tp2: usize,
     pub tp2_cache_hits: usize,
     pub tp2_cache_misses: usize,
+    pub scan_cache_path: String,
+    pub scan_cache_source: String,
+    pub scan_cache_file_exists: bool,
+    pub scan_cache_file_mtime_secs: Option<u64>,
+    pub scan_cache_file_version: Option<u32>,
+    pub scan_cache_writer_app_version: Option<String>,
+    pub scan_cache_writer_exe_fingerprint: Option<String>,
+    pub scan_cache_entry_count: usize,
+    pub scan_cache_version_matches_current_schema: bool,
+    pub scan_cache_writer_matches_current_app_version: Option<bool>,
+    pub scan_cache_writer_matches_current_exe: Option<bool>,
     pub tp2_reports: Vec<Step2Tp2ProbeReport>,
 }
 
@@ -86,6 +97,15 @@ pub struct Step2Tp2ProbeReport {
     pub parser_warning_count: usize,
     pub parser_error_count: usize,
     pub parser_diagnostic_preview: Option<String>,
+    pub parser_raw_json: Option<String>,
+    pub parser_tra_language_requested: Option<String>,
+    pub parser_tra_language_used: Option<String>,
+    pub parser_flow_node_count: usize,
+    pub parser_flow_event_ref_count: usize,
+    pub parser_event_with_parent_count: usize,
+    pub parser_event_with_path_count: usize,
+    pub parser_option_component_binding_count: usize,
+    pub parser_flow_preview: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

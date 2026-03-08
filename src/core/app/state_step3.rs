@@ -8,6 +8,8 @@ pub struct Step3ItemState {
     pub mod_name: String,
     pub component_label: String,
     pub raw_line: String,
+    pub prompt_summary: Option<String>,
+    pub prompt_events: Vec<crate::parser::PromptSummaryEvent>,
     pub selected_order: usize,
     pub block_id: String,
     pub is_parent: bool,

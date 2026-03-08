@@ -15,6 +15,7 @@ pub(super) fn build_base_text(
     state: &WizardState,
     diagnostics_run_id: &str,
     copied_source_logs: &[PathBuf],
+    copied_saved_logs: &[PathBuf],
     active_order: &[String],
     console_excerpt: &str,
     timestamp_unix_secs: u64,
@@ -52,6 +53,15 @@ pub(super) fn build_base_text(
         text.push_str("none\n");
     } else {
         for p in copied_source_logs {
+            text.push_str(&p.display().to_string());
+            text.push('\n');
+        }
+    }
+    text.push_str("\n[Copied Saved WeiDU Logs]\n");
+    if copied_saved_logs.is_empty() {
+        text.push_str("none\n");
+    } else {
+        for p in copied_saved_logs {
             text.push_str(&p.display().to_string());
             text.push('\n');
         }

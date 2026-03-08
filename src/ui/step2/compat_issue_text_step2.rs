@@ -60,13 +60,21 @@ pub(crate) mod compat_popup_issue_text_explain {
         if is_duplicate_selection_issue(issue) {
             return issue.reason.clone();
         }
+        let explicit_reason = fallback.trim();
+        if !explicit_reason.is_empty() && !explicit_reason.eq_ignore_ascii_case("unknown") {
+            return explicit_reason.to_string();
+        }
         if issue.code.eq_ignore_ascii_case("FORBID_HIT")
             || issue.code.eq_ignore_ascii_case("RULE_HIT")
         {
-            return format!(
-                "Conflicts with {} (currently selected).",
-                format_issue_target(&issue.related_mod, issue.related_component)
-            );
+            return if issue.related_mod.eq_ignore_ascii_case("unknown") {
+                "Conflicts with another selected component. Exact target unknown.".to_string()
+            } else {
+                format!(
+                    "Conflicts with {} (currently selected).",
+                    format_issue_target(&issue.related_mod, issue.related_component)
+                )
+            };
         }
         if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
             return format!(

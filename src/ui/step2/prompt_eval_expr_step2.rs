@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::step2::prompt_eval_expr_engine_step2::Parser;
+use crate::ui::step2::prompt_eval_expr_engine_step2::{EvalState, Parser};
 use crate::ui::step2::prompt_eval_expr_tokens_step2::tokenize;
 use crate::ui::step2::prompt_eval_vars_step2::PromptVarContext;
 use crate::ui::step2::state_step2::PromptEvalContext;
@@ -11,17 +11,29 @@ pub(crate) fn evaluate_condition_clause(
     prompt_eval: &PromptEvalContext,
     prompt_vars: Option<&PromptVarContext>,
 ) -> bool {
+    evaluate_condition_clause_state(condition_text, prompt_eval, prompt_vars).is_not_false()
+}
+
+pub(crate) fn evaluate_condition_clause_state(
+    condition_text: &str,
+    prompt_eval: &PromptEvalContext,
+    prompt_vars: Option<&PromptVarContext>,
+) -> EvalState {
     let normalized = normalize_condition_text(condition_text);
     if normalized.is_empty() {
-        return true;
+        return EvalState::True;
     }
     let tokens = tokenize(&normalized);
     if tokens.is_empty() {
-        return true;
+        return EvalState::True;
     }
     let mut parser = Parser::new(tokens, prompt_eval, prompt_vars);
     let value = parser.parse_expression();
-    value && parser.is_at_end()
+    if parser.is_at_end() {
+        value
+    } else {
+        EvalState::Unknown
+    }
 }
 
 fn normalize_condition_text(input: &str) -> String {
@@ -70,7 +82,8 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::evaluate_condition_clause;
+    use super::{evaluate_condition_clause, evaluate_condition_clause_state};
+    use crate::ui::step2::prompt_eval_expr_engine_step2::EvalState;
     use crate::ui::step2::state_step2::PromptEvalContext;
 
     fn test_context() -> PromptEvalContext {
@@ -135,5 +148,18 @@ mod tests {
         assert!(evaluate_condition_clause("FILE_EXISTS_IN_GAME ~override/test.itm~", &ctx, None));
         assert!(!evaluate_condition_clause("!FILE_EXISTS_IN_GAME ~override/test.itm~", &ctx, None));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unresolved_variable_conditions_stay_unknown() {
+        let ctx = test_context();
+        assert_eq!(
+            evaluate_condition_clause_state(
+                "ACTION_IF (num_selected > 0) BEGIN",
+                &ctx,
+                None,
+            ),
+            EvalState::Unknown
+        );
     }
 }

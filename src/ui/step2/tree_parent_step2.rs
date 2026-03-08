@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::ui::state::{Step2ComponentState, Step2ModState, Step2Selection};
-use crate::ui::step2::prompt_eval_step2::{evaluate_component_prompt_summary, event_applies};
+use crate::ui::step2::prompt_eval_step2::{evaluate_component_prompt_summary, event_applies, normalize_prompt_blocks};
 use crate::ui::step2::state_step2::PromptEvalContext;
 use crate::ui::step2::tree_step2::step2_tree::render_helpers::{
     enforce_meta_mode_after_bulk, enforce_subcomponent_single_select_keep_first,
@@ -258,18 +258,124 @@ fn format_prompt_event_blocks(
     events: &[crate::parser::PromptSummaryEvent],
     prompt_eval: Option<&PromptEvalContext>,
 ) -> String {
-    let mut lines = Vec::<String>::new();
+    let mut blocks = Vec::<PromptDisplayBlock>::new();
     for event in events {
         if prompt_eval.is_some_and(|ctx| !event_applies(event, ctx)) {
             continue;
         }
-        let line = event.summary_line.trim();
-        if line.is_empty() {
+        let block = PromptDisplayBlock::from_summary_line(event.summary_line.trim());
+        if block.is_empty() {
             continue;
         }
-        if !lines.iter().any(|existing| existing == line) {
-            lines.push(line.to_string());
+        if !blocks.iter().any(|existing| existing == &block) {
+            blocks.push(block);
         }
     }
-    lines.join("\n\n")
+    normalize_prompt_event_blocks(blocks)
+        .into_iter()
+        .map(|block| block.to_text())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PromptDisplayBlock {
+    body: String,
+    options: Vec<String>,
+}
+
+impl PromptDisplayBlock {
+    fn from_summary_line(line: &str) -> Self {
+        let mut body_lines = Vec::<String>::new();
+        let mut options = Vec::<String>::new();
+        for raw in line.lines() {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if trimmed.starts_with('-') {
+                options.push(trimmed.to_string());
+            } else {
+                body_lines.push(trimmed.to_string());
+            }
+        }
+        Self {
+            body: body_lines.join("\n").trim().to_string(),
+            options,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.body.trim().is_empty() && self.options.is_empty()
+    }
+
+    fn first_line(&self) -> &str {
+        self.body.lines().next().map(str::trim).unwrap_or("")
+    }
+
+    fn to_text(&self) -> String {
+        if self.options.is_empty() {
+            return self.body.clone();
+        }
+        format!("{}\n{}", self.body, self.options.join("\n"))
+            .trim()
+            .to_string()
+    }
+}
+
+fn normalize_prompt_event_blocks(blocks: Vec<PromptDisplayBlock>) -> Vec<PromptDisplayBlock> {
+    let mut merged = Vec::<PromptDisplayBlock>::new();
+    let mut idx = 0usize;
+    while idx < blocks.len() {
+        let current = blocks[idx].clone();
+        if idx + 1 < blocks.len() {
+            let next = blocks[idx + 1].clone();
+            if should_merge_preface_block(&current, &next) {
+                merged.push(PromptDisplayBlock {
+                    body: format!("{}\n\n{}", current.body.trim(), next.body.trim())
+                        .trim()
+                        .to_string(),
+                    options: next.options,
+                });
+                idx += 2;
+                continue;
+            }
+        }
+        merged.push(current);
+        idx += 1;
+    }
+
+    let lines = merged.iter().map(PromptDisplayBlock::to_text).collect::<Vec<_>>();
+    let normalized = normalize_prompt_blocks(lines);
+    normalized
+        .into_iter()
+        .map(|line| PromptDisplayBlock::from_summary_line(&line))
+        .filter(|block| !block.is_empty())
+        .collect()
+}
+
+fn should_merge_preface_block(current: &PromptDisplayBlock, next: &PromptDisplayBlock) -> bool {
+    is_informational_preface_block(current)
+        && is_real_question_block(next)
+        && current.options == next.options
+}
+
+fn is_informational_preface_block(block: &PromptDisplayBlock) -> bool {
+    let first = block.first_line().to_ascii_lowercase();
+    !first.is_empty()
+        && !is_real_question_line(block.first_line())
+        && !first.starts_with("please enter")
+        && !first.starts_with("choose ")
+        && !first.starts_with("select ")
+        && !first.starts_with("accept ")
+        && !first.starts_with("do you wish")
+}
+
+fn is_real_question_block(block: &PromptDisplayBlock) -> bool {
+    is_real_question_line(block.first_line())
+}
+
+fn is_real_question_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.contains('?') || trimmed.ends_with(':')
 }
