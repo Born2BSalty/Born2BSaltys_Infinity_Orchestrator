@@ -1,23 +1,24 @@
 mod generated;
 
 use antlr4rust::common_token_stream::CommonTokenStream;
-use antlr4rust::Parser;
 use antlr4rust::tree::{ParseTree, ParseTreeVisitorCompat};
 use antlr4rust::InputStream;
+use antlr4rust::Parser;
+use generated::lapducombinedlexer::LapduCombinedLexer;
+use generated::lapducombinedparser::{
+    ActionMatchActionContext, ActionMatchActionContextAttrs, ActionReadlnActionContext,
+    AnyMatchBranchContextAttrs, ComponentRuleContext, ComponentRuleContextAttrs,
+    LapduCombinedParser, LapduCombinedParserContextType, MatchBranchRuleContextAll,
+    QuickMenuComponentRuleContextAttrs, QuickMenuContext, QuickMenuContextAttrs,
+    QuickMenuDirectiveRuleContextAttrs, QuickMenuEntryRuleContextAttrs,
+    QuickMenuParamsRuleContextAttrs, SpecificMatchBranchContextAttrs,
+};
+use generated::lapducombinedparservisitor::LapduCombinedParserVisitorCompat;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use generated::lapducombinedlexer::LapduCombinedLexer;
-use generated::lapducombinedparser::{
-    ActionMatchActionContext, ActionMatchActionContextAttrs, ActionReadlnActionContext,
-    AnyMatchBranchContextAttrs, ComponentRuleContext, ComponentRuleContextAttrs, LapduCombinedParser,
-    LapduCombinedParserContextType, MatchBranchRuleContextAll, QuickMenuContext, QuickMenuContextAttrs,
-    QuickMenuComponentRuleContextAttrs, QuickMenuDirectiveRuleContextAttrs,
-    QuickMenuEntryRuleContextAttrs, QuickMenuParamsRuleContextAttrs, SpecificMatchBranchContextAttrs,
-};
-use generated::lapducombinedparservisitor::LapduCombinedParserVisitorCompat;
-use serde::Serialize;
 
 #[derive(Debug)]
 struct ComponentReadlnInfo {
@@ -156,7 +157,10 @@ impl<'input> LapduCombinedParserVisitorCompat<'input> for ComponentReadlnCollect
         self.current_component = previous;
     }
 
-    fn visit_actionReadlnAction(&mut self, ctx: &ActionReadlnActionContext<'input>) -> Self::Return {
+    fn visit_actionReadlnAction(
+        &mut self,
+        ctx: &ActionReadlnActionContext<'input>,
+    ) -> Self::Return {
         if let Some(component_index) = self.current_component {
             self.components[component_index]
                 .action_readln_instances
@@ -198,7 +202,9 @@ impl<'input> LapduCombinedParserVisitorCompat<'input> for ComponentReadlnCollect
                     .into_iter()
                     .filter_map(|component| component.numberRule().map(|number| number.get_text()))
                     .collect::<Vec<_>>();
-                quick_menu.entries.push(QuickMenuEntryInfo { title, components });
+                quick_menu
+                    .entries
+                    .push(QuickMenuEntryInfo { title, components });
             }
         }
 
@@ -314,7 +320,10 @@ pub fn run() -> Result<(), String> {
     Ok(())
 }
 
-pub fn parse_path_to_json(root_path: &Path, preferred_lang: Option<&str>) -> Result<String, String> {
+pub fn parse_path_to_json(
+    root_path: &Path,
+    preferred_lang: Option<&str>,
+) -> Result<String, String> {
     let root_display = root_path.to_string_lossy().to_string();
     let mod_root = root_path
         .parent()
@@ -675,9 +684,7 @@ fn append_events_from_visitor(
             line,
             branch_path,
             condition: condition_meta.raw.clone(),
-            condition_id: condition_meta
-                .line
-                .map(|ln| format!("{source_file}:{ln}")),
+            condition_id: condition_meta.line.map(|ln| format!("{source_file}:{ln}")),
             game_allow: condition_meta.allow,
             game_deny: condition_meta.deny,
         });
@@ -738,9 +745,7 @@ fn append_events_from_visitor(
             line,
             branch_path,
             condition: condition_meta.raw.clone(),
-            condition_id: condition_meta
-                .line
-                .map(|ln| format!("{source_file}:{ln}")),
+            condition_id: condition_meta.line.map(|ln| format!("{source_file}:{ln}")),
             game_allow: condition_meta.allow,
             game_deny: condition_meta.deny,
         });
@@ -784,7 +789,11 @@ fn append_events_from_visitor(
                 component.name.trim().to_ascii_lowercase(),
                 var_name.trim().to_ascii_lowercase(),
                 final_text.trim().to_ascii_lowercase(),
-                condition_meta.raw.as_deref().unwrap_or("").to_ascii_lowercase(),
+                condition_meta
+                    .raw
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_ascii_lowercase(),
                 options_key
             );
             if !seen_readln_keys.insert(dedupe_key) {
@@ -808,9 +817,7 @@ fn append_events_from_visitor(
                 line,
                 branch_path,
                 condition: condition_meta.raw.clone(),
-                condition_id: condition_meta
-                    .line
-                    .map(|ln| format!("{source_file}:{ln}")),
+                condition_id: condition_meta.line.map(|ln| format!("{source_file}:{ln}")),
                 game_allow: condition_meta.allow,
                 game_deny: condition_meta.deny,
             });
@@ -839,7 +846,8 @@ fn append_events_from_visitor(
         } else {
             friendly_text
         };
-        let inferred_components = infer_component_hints_from_include_context(include_component_hints);
+        let inferred_components =
+            infer_component_hints_from_include_context(include_component_hints);
 
         let options_key = options
             .iter()
@@ -863,7 +871,11 @@ fn append_events_from_visitor(
                 bind_target.as_deref().unwrap_or("global"),
                 var_name.trim().to_ascii_lowercase(),
                 final_text.trim().to_ascii_lowercase(),
-                condition_meta.raw.as_deref().unwrap_or("").to_ascii_lowercase(),
+                condition_meta
+                    .raw
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_ascii_lowercase(),
                 options_key
             );
             if !seen_readln_keys.insert(dedupe_key) {
@@ -892,16 +904,17 @@ fn append_events_from_visitor(
                 line,
                 branch_path,
                 condition: condition_meta.raw.clone(),
-                condition_id: condition_meta
-                    .line
-                    .map(|ln| format!("{source_file}:{ln}")),
+                condition_id: condition_meta.line.map(|ln| format!("{source_file}:{ln}")),
                 game_allow: condition_meta.allow.clone(),
                 game_deny: condition_meta.deny.clone(),
             });
         }
     }
 
-    for (idx, prompt) in extract_subcomponent_prompts(&source_lines, &tra_map).into_iter().enumerate() {
+    for (idx, prompt) in extract_subcomponent_prompts(&source_lines, &tra_map)
+        .into_iter()
+        .enumerate()
+    {
         let condition_meta = prompt
             .line
             .map(|v| infer_game_condition_for_line(&source_lines, v as usize - 1))
@@ -912,10 +925,7 @@ fn append_events_from_visitor(
             .unwrap_or_default();
         let dedupe_key = format!(
             "{}|{}|{}|{}",
-            prompt
-                .text
-                .trim()
-                .to_ascii_lowercase(),
+            prompt.text.trim().to_ascii_lowercase(),
             prompt
                 .options
                 .iter()
@@ -949,9 +959,7 @@ fn append_events_from_visitor(
             line: prompt.line,
             branch_path,
             condition: condition_meta.raw.clone(),
-            condition_id: condition_meta
-                .line
-                .map(|ln| format!("{source_file}:{ln}")),
+            condition_id: condition_meta.line.map(|ln| format!("{source_file}:{ln}")),
             game_allow: condition_meta.allow,
             game_deny: condition_meta.deny,
         });
@@ -1341,16 +1349,16 @@ fn derive_keyword_prompt(
     (question, Some((idx + 1) as u32))
 }
 
-fn find_keyword_line_index(
-    source_lines: &[&str],
-    keyword: &str,
-    start: usize,
-) -> Option<usize> {
+fn find_keyword_line_index(source_lines: &[&str], keyword: &str, start: usize) -> Option<usize> {
     source_lines
         .iter()
         .enumerate()
         .skip(start)
-        .find(|(_, line)| strip_inline_comment(line).to_ascii_uppercase().contains(keyword))
+        .find(|(_, line)| {
+            strip_inline_comment(line)
+                .to_ascii_uppercase()
+                .contains(keyword)
+        })
         .map(|(idx, _)| idx)
 }
 
@@ -1389,7 +1397,12 @@ fn derive_match_prompt(
     }
 
     dedupe_prompt_options(&mut options);
-    (question, options, Some((action_idx + 1) as u32), options_from_prints)
+    (
+        question,
+        options,
+        Some((action_idx + 1) as u32),
+        options_from_prints,
+    )
 }
 
 fn find_action_match_line_index(
@@ -1562,7 +1575,10 @@ fn extract_include_raw_path(line: &str) -> Option<String> {
 }
 
 fn resolve_include_path(raw: &str, current_file: &Path, mod_root: &Path) -> Option<PathBuf> {
-    let mod_name = mod_root.file_name().and_then(OsStr::to_str).unwrap_or_default();
+    let mod_name = mod_root
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or_default();
     let mut value = raw.replace('\\', "/");
     value = value.replace("%MOD_FOLDER%", mod_name);
     value = value.replace("%mod_folder%", mod_name);
@@ -1573,10 +1589,7 @@ fn resolve_include_path(raw: &str, current_file: &Path, mod_root: &Path) -> Opti
     }
 
     let current_dir = current_file.parent().unwrap_or(Path::new("."));
-    let mut candidates: Vec<PathBuf> = vec![
-        mod_root.join(&include),
-        current_dir.join(&include),
-    ];
+    let mut candidates: Vec<PathBuf> = vec![mod_root.join(&include), current_dir.join(&include)];
 
     if let Some(parent_of_parent) = current_dir.parent() {
         candidates.push(parent_of_parent.join(&include));
@@ -1626,14 +1639,11 @@ fn derive_readln_prompt(
     };
     *search_from_line = action_idx.saturating_add(1);
 
-    let anchor = find_outer_sprint_for_var(source_lines, var_name, action_idx).unwrap_or(action_idx);
+    let anchor =
+        find_outer_sprint_for_var(source_lines, var_name, action_idx).unwrap_or(action_idx);
     let start = anchor.saturating_sub(20);
-    let print_context = collect_previous_print_texts_in_range(
-        source_lines,
-        tra_map,
-        start,
-        action_idx,
-    );
+    let print_context =
+        collect_previous_print_texts_in_range(source_lines, tra_map, start, action_idx);
     let (mut options, options_idx) = select_options_from_prints(&print_context);
     let mut question = select_question_text(&print_context, options_idx);
     if let Some(q) = question.clone() {
@@ -1658,16 +1668,26 @@ fn derive_readln_prompt(
         options = infer_yes_no_options(source_lines, action_idx, var_name, question.as_deref());
     }
 
-    (question.unwrap_or_default(), options, Some((action_idx + 1) as u32))
+    (
+        question.unwrap_or_default(),
+        options,
+        Some((action_idx + 1) as u32),
+    )
 }
 
-fn find_outer_sprint_for_var(source_lines: &[&str], var_name: &str, before_idx: usize) -> Option<usize> {
+fn find_outer_sprint_for_var(
+    source_lines: &[&str],
+    var_name: &str,
+    before_idx: usize,
+) -> Option<usize> {
     if var_name.trim().is_empty() {
         return None;
     }
     let needle = var_name.to_ascii_lowercase();
     for i in (0..before_idx).rev() {
-        let code = strip_inline_comment(source_lines[i]).trim().to_ascii_lowercase();
+        let code = strip_inline_comment(source_lines[i])
+            .trim()
+            .to_ascii_lowercase();
         if code.starts_with("outer_sprint") && code.contains(&needle) {
             return Some(i);
         }
@@ -1721,7 +1741,8 @@ fn collect_previous_print_texts_in_range(
             i += 1;
             continue;
         }
-        if let Some((text, consumed)) = parse_print_text_block(source_lines, i, action_idx, tra_map) {
+        if let Some((text, consumed)) = parse_print_text_block(source_lines, i, action_idx, tra_map)
+        {
             if !text.trim().is_empty() {
                 out.push(text);
             }
@@ -1794,14 +1815,20 @@ fn parse_print_text_block(
     if rest.starts_with('@') {
         let atom = parse_print_atom(line)?;
         let resolved = resolve_atom_text(&atom, tra_map);
-        let text = fallback_comment_if_placeholder(&sanitize_wrapped_text(&resolved), inline_comment.as_deref());
+        let text = fallback_comment_if_placeholder(
+            &sanitize_wrapped_text(&resolved),
+            inline_comment.as_deref(),
+        );
         return Some((text, 1));
     }
 
     let Some(delim) = rest.chars().next().filter(|c| *c == '~' || *c == '"') else {
         let atom = parse_print_atom(line)?;
         let resolved = resolve_atom_text(&atom, tra_map);
-        let text = fallback_comment_if_placeholder(&sanitize_wrapped_text(&resolved), inline_comment.as_deref());
+        let text = fallback_comment_if_placeholder(
+            &sanitize_wrapped_text(&resolved),
+            inline_comment.as_deref(),
+        );
         return Some((text, 1));
     };
 
@@ -1820,7 +1847,9 @@ fn parse_print_text_block(
             break;
         }
         text.push('\n');
-        current = strip_inline_comment(source_lines[next_idx]).trim().to_string();
+        current = strip_inline_comment(source_lines[next_idx])
+            .trim()
+            .to_string();
         consumed += 1;
     }
 
@@ -1900,7 +1929,8 @@ fn resolve_placeholder_question(
     let Some(var_name) = extract_percent_placeholder(question) else {
         return question.to_string();
     };
-    let Some(raw_assigned) = find_latest_outer_assignment(source_lines, action_idx, &var_name) else {
+    let Some(raw_assigned) = find_latest_outer_assignment(source_lines, action_idx, &var_name)
+    else {
         return question.to_string();
     };
     let resolved = resolve_atom_text(&raw_assigned, tra_map);
@@ -1922,7 +1952,11 @@ fn extract_percent_placeholder(text: &str) -> Option<String> {
     Some(inner.to_ascii_lowercase())
 }
 
-fn find_latest_outer_assignment(source_lines: &[&str], before_idx: usize, var_name: &str) -> Option<String> {
+fn find_latest_outer_assignment(
+    source_lines: &[&str],
+    before_idx: usize,
+    var_name: &str,
+) -> Option<String> {
     for i in (0..before_idx).rev() {
         let line = strip_inline_comment(source_lines[i]).trim();
         if let Some((lhs, rhs)) = parse_outer_assignment(line) {
@@ -1941,7 +1975,12 @@ fn find_latest_outer_assignment(source_lines: &[&str], before_idx: usize, var_na
 
 fn parse_outer_assignment(line: &str) -> Option<(String, String)> {
     let upper = line.to_ascii_uppercase();
-    for cmd in ["OUTER_SPRINT", "OUTER_TEXT_SPRINT", "OUTER_SNPRINT", "OUTER_SET"] {
+    for cmd in [
+        "OUTER_SPRINT",
+        "OUTER_TEXT_SPRINT",
+        "OUTER_SNPRINT",
+        "OUTER_SET",
+    ] {
         if !upper.starts_with(cmd) {
             continue;
         }
@@ -2056,7 +2095,10 @@ fn is_question_candidate(t: &str) -> bool {
     if lower.contains("please select") {
         return false;
     }
-    if lower.starts_with("portrait:") || lower.starts_with("installed ") || lower.starts_with("did not install") {
+    if lower.starts_with("portrait:")
+        || lower.starts_with("installed ")
+        || lower.starts_with("did not install")
+    {
         return false;
     }
     !t.trim().is_empty()
@@ -2197,9 +2239,7 @@ fn infer_yes_no_options(
     var_name: &str,
     question: Option<&str>,
 ) -> Vec<PromptOption> {
-    let from_text = question
-        .map(looks_like_yes_no_prompt)
-        .unwrap_or(false);
+    let from_text = question.map(looks_like_yes_no_prompt).unwrap_or(false);
     let from_conditions = var_name_supports_yes_no(source_lines, action_idx, var_name);
     if !(from_text || from_conditions) {
         return Vec::new();
@@ -2328,7 +2368,11 @@ fn dedupe_prompt_options(options: &mut Vec<PromptOption>) {
         if value.is_empty() || label.is_empty() {
             return false;
         }
-        let key = format!("{}::{}", value.to_ascii_lowercase(), label.to_ascii_lowercase());
+        let key = format!(
+            "{}::{}",
+            value.to_ascii_lowercase(),
+            label.to_ascii_lowercase()
+        );
         seen.insert(key)
     });
 }
@@ -2411,7 +2455,9 @@ fn load_tra_map_for_source(source_file: &str, preferred_lang: Option<&str>) -> T
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("tra"))
+                if p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.eq_ignore_ascii_case("tra"))
                     != Some(true)
                 {
                     continue;
@@ -2497,11 +2543,14 @@ fn load_all_tra_from_dir(dir: &Path) -> Result<HashMap<String, String>, String> 
         return Ok(HashMap::new());
     }
     let mut map = HashMap::new();
-    let entries = std::fs::read_dir(dir)
-        .map_err(|e| format!("failed to read '{}': {e}", dir.display()))?;
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("failed to read '{}': {e}", dir.display()))?;
     for entry in entries.flatten() {
         let p = entry.path();
-        if p.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("tra")) != Some(true)
+        if p.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("tra"))
+            != Some(true)
         {
             continue;
         }
