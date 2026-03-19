@@ -8,6 +8,7 @@
 - Step 2 component ordering now follows TP2 BEGIN file order instead of --list-components order
 - Diagnostics now keep `raw_output_*` and `bio_full_debug_*` inside the current `run_*` folder, so exporting diagnostics preserves the active run and only old runs are pruned.
 - Save Console Log now also writes `console_*` into the current `run_*` folder instead of the top-level diagnostics folder.
+- Test PR rules.
 
 ## Beta 7
 - Dev-mode diagnostics now show which BIO build wrote the scan cache, so it is easier to spot reports coming from old cached scans.
