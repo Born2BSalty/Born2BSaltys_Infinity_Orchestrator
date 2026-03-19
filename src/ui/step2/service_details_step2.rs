@@ -51,128 +51,128 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
             component_id,
             component_key,
             ..
-        } => mods
-            .iter()
-            .find(|m| &m.tp_file == tp_file)
-            .and_then(|mod_state| {
-                mod_state
-                    .components
-                    .iter()
-                    .find(|c| {
-                        &c.component_id == component_id
-                            && (component_key.is_empty() || c.raw_line == *component_key)
-                    })
-                    .map(|component| {
-                        let component_tp2 = parse_component_tp2_from_raw(&component.raw_line)
-                            .unwrap_or_else(|| mod_state.tp_file.clone());
-                        let component_mod_key =
+        } => {
+            mods.iter()
+                .find(|m| &m.tp_file == tp_file)
+                .and_then(|mod_state| {
+                    mod_state
+                        .components
+                        .iter()
+                        .find(|c| {
+                            &c.component_id == component_id
+                                && (component_key.is_empty() || c.raw_line == *component_key)
+                        })
+                        .map(|component| {
+                            let component_tp2 = parse_component_tp2_from_raw(&component.raw_line)
+                                .unwrap_or_else(|| mod_state.tp_file.clone());
+                            let component_mod_key =
                             crate::ui::step2::service_selection_step2::selection_normalize_mod_key(
                                 &component_tp2,
                             );
-                        let component_mod_name = details_display_name_from_tp2(&component_tp2);
-                        let mut compat_kind = component.compat_kind.clone();
-                        let mut compat_role: Option<String> = None;
-                        let mut compat_code: Option<String> = None;
-                        let mut compat_source = component.compat_source.clone();
-                        let mut compat_related_target =
-                            component.compat_related_mod.as_deref().map(|m| {
-                                format!(
-                                    "{}{}",
-                                    m,
-                                    component
-                                        .compat_related_component
-                                        .as_deref()
-                                        .map(|c| format!(" #{c}"))
-                                        .unwrap_or_default()
-                                )
-                            });
-                        let mut compat_graph: Option<String> = component.compat_graph.clone();
-                        let mut compat_evidence: Option<String> = component.compat_evidence.clone();
-                        let mut disabled_reason = component.disabled_reason.clone();
-                        let mod_key = component_mod_key;
-                        let comp_id = details_parse_component_u32(&component.component_id);
-
-                        if let Some(issue) =
-                            state.compat.issues.iter().find(|issue| {
-                                details_issue_matches_affected(issue, &mod_key, comp_id)
-                            })
-                        {
-                            compat_role = Some("Affected".to_string());
-                            compat_code = Some(issue.code.clone());
-                            if compat_kind.is_none() {
-                                compat_kind = Some(details_issue_to_compat_kind(issue));
-                            }
-                            if compat_source.is_none() {
-                                compat_source = Some(issue.source.clone());
-                            }
-                            if compat_related_target.is_none() {
-                                compat_related_target = Some(details_issue_related_target(issue));
-                            }
-                            if disabled_reason.is_none() && !issue.reason.trim().is_empty() {
-                                disabled_reason = Some(issue.reason.clone());
-                            }
-                            compat_graph = Some(details_issue_graph(issue));
-                            compat_evidence = issue.raw_evidence.clone();
-                        } else if let Some(issue) =
-                            state.compat.issues.iter().find(|issue| {
-                                details_issue_matches_related(issue, &mod_key, comp_id)
-                            })
-                        {
-                            compat_role = Some("Related target".to_string());
-                            compat_code = Some(issue.code.clone());
-                            if compat_kind.is_none() {
-                                compat_kind = Some(details_issue_to_compat_kind(issue));
-                            }
-                            if compat_source.is_none() {
-                                compat_source = Some(issue.source.clone());
-                            }
-                            if compat_related_target.is_none() {
-                                compat_related_target = Some(details_issue_related_target(issue));
-                            }
-                            if disabled_reason.is_none() && !issue.reason.trim().is_empty() {
-                                disabled_reason = Some(format!(
-                                    "Conflicts with {}",
-                                    details_format_target(
-                                        &issue.affected_mod,
-                                        issue.affected_component
+                            let component_mod_name = details_display_name_from_tp2(&component_tp2);
+                            let mut compat_kind = component.compat_kind.clone();
+                            let mut compat_role: Option<String> = None;
+                            let mut compat_code: Option<String> = None;
+                            let mut compat_source = component.compat_source.clone();
+                            let mut compat_related_target =
+                                component.compat_related_mod.as_deref().map(|m| {
+                                    format!(
+                                        "{}{}",
+                                        m,
+                                        component
+                                            .compat_related_component
+                                            .as_deref()
+                                            .map(|c| format!(" #{c}"))
+                                            .unwrap_or_default()
                                     )
-                                ));
-                            }
-                            compat_graph = Some(details_issue_graph(issue));
-                            compat_evidence = issue.raw_evidence.clone();
-                        }
+                                });
+                            let mut compat_graph: Option<String> = component.compat_graph.clone();
+                            let mut compat_evidence: Option<String> =
+                                component.compat_evidence.clone();
+                            let mut disabled_reason = component.disabled_reason.clone();
+                            let mod_key = component_mod_key;
+                            let comp_id = details_parse_component_u32(&component.component_id);
 
-                        Step2Details {
-                            mod_name: Some(component_mod_name),
-                            component_label: Some(component.label.clone()),
-                            component_id: Some(component.component_id.clone()),
-                            component_lang: crate::ui::step2::service_step2::parse_lang(
-                                &component.raw_line,
-                            ),
-                            component_version: crate::ui::step2::service_step2::parse_version(
-                                &component.raw_line,
-                            ),
-                            selected_order: component.selected_order,
-                            is_checked: Some(component.checked),
-                            is_disabled: Some(component.disabled),
-                            compat_kind,
-                            compat_role,
-                            compat_code,
-                            disabled_reason,
-                            compat_source,
-                            compat_related_target,
-                            compat_graph,
-                            compat_evidence,
-                            raw_line: Some(component.raw_line.clone()),
-                            tp_file: Some(component_tp2),
-                            tp2_path: (!mod_state.tp2_path.is_empty())
-                                .then_some(mod_state.tp2_path.clone()),
-                            readme_path: mod_state.readme_path.clone(),
-                            web_url: mod_state.web_url.clone(),
-                        }
-                    })
-            })
-            .unwrap_or_default(),
+                            if let Some(issue) = state.compat.issues.iter().find(|issue| {
+                                details_issue_matches_affected(issue, &mod_key, comp_id)
+                            }) {
+                                compat_role = Some("Affected".to_string());
+                                compat_code = Some(issue.code.clone());
+                                if compat_kind.is_none() {
+                                    compat_kind = Some(details_issue_to_compat_kind(issue));
+                                }
+                                if compat_source.is_none() {
+                                    compat_source = Some(issue.source.clone());
+                                }
+                                if compat_related_target.is_none() {
+                                    compat_related_target =
+                                        Some(details_issue_related_target(issue));
+                                }
+                                if disabled_reason.is_none() && !issue.reason.trim().is_empty() {
+                                    disabled_reason = Some(issue.reason.clone());
+                                }
+                                compat_graph = Some(details_issue_graph(issue));
+                                compat_evidence = issue.raw_evidence.clone();
+                            } else if let Some(issue) = state.compat.issues.iter().find(|issue| {
+                                details_issue_matches_related(issue, &mod_key, comp_id)
+                            }) {
+                                compat_role = Some("Related target".to_string());
+                                compat_code = Some(issue.code.clone());
+                                if compat_kind.is_none() {
+                                    compat_kind = Some(details_issue_to_compat_kind(issue));
+                                }
+                                if compat_source.is_none() {
+                                    compat_source = Some(issue.source.clone());
+                                }
+                                if compat_related_target.is_none() {
+                                    compat_related_target =
+                                        Some(details_issue_related_target(issue));
+                                }
+                                if disabled_reason.is_none() && !issue.reason.trim().is_empty() {
+                                    disabled_reason = Some(format!(
+                                        "Conflicts with {}",
+                                        details_format_target(
+                                            &issue.affected_mod,
+                                            issue.affected_component
+                                        )
+                                    ));
+                                }
+                                compat_graph = Some(details_issue_graph(issue));
+                                compat_evidence = issue.raw_evidence.clone();
+                            }
+
+                            Step2Details {
+                                mod_name: Some(component_mod_name),
+                                component_label: Some(component.label.clone()),
+                                component_id: Some(component.component_id.clone()),
+                                component_lang: crate::ui::step2::service_step2::parse_lang(
+                                    &component.raw_line,
+                                ),
+                                component_version: crate::ui::step2::service_step2::parse_version(
+                                    &component.raw_line,
+                                ),
+                                selected_order: component.selected_order,
+                                is_checked: Some(component.checked),
+                                is_disabled: Some(component.disabled),
+                                compat_kind,
+                                compat_role,
+                                compat_code,
+                                disabled_reason,
+                                compat_source,
+                                compat_related_target,
+                                compat_graph,
+                                compat_evidence,
+                                raw_line: Some(component.raw_line.clone()),
+                                tp_file: Some(component_tp2),
+                                tp2_path: (!mod_state.tp2_path.is_empty())
+                                    .then_some(mod_state.tp2_path.clone()),
+                                readme_path: mod_state.readme_path.clone(),
+                                web_url: mod_state.web_url.clone(),
+                            }
+                        })
+                })
+                .unwrap_or_default()
+        }
     }
 }
 
