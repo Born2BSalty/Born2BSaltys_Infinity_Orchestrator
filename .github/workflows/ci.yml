@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  check:
-    name: Rust check (${{ matrix.os }})
+  build-and-test:
+    name: Rust build/test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -27,5 +27,33 @@ jobs:
           workspaces: |
             . -> target
 
-      - name: Cargo check
-        run: cargo check --all-targets --locked
+      - name: Cargo build
+        run: cargo build --all-targets --locked
+
+      - name: Cargo test
+        run: cargo test --locked
+
+  style-checks:
+    name: Rust fmt/clippy (ubuntu-latest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Cargo fmt
+        run: cargo fmt --all --check
+
+      - name: Cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
