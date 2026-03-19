@@ -9,7 +9,7 @@ use chrono::Local;
 use crate::ui::state::Step5State;
 
 pub fn begin_new_run(step5: &mut Step5State) -> String {
-    prune_old_diagnostics();
+    prune_old_diagnostics(None);
     let run_id = make_run_id();
     step5.diagnostics_run_id = Some(run_id.clone());
     run_id
@@ -26,7 +26,7 @@ pub fn run_dir_from_id(run_id: &str) -> PathBuf {
     PathBuf::from("diagnostics").join(format!("run_{run_id}"))
 }
 
-fn prune_old_diagnostics() {
+pub fn prune_old_diagnostics(keep_run_id: Option<&str>) {
     let diagnostics_dir = Path::new("diagnostics");
     let entries = match fs::read_dir(diagnostics_dir) {
         Ok(entries) => entries,
@@ -37,13 +37,11 @@ fn prune_old_diagnostics() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if path.is_dir() && name.starts_with("run_") {
+            let keep_name = keep_run_id.map(|id| format!("run_{id}"));
+            if keep_name.as_deref() == Some(name.as_ref()) {
+                continue;
+            }
             let _ = fs::remove_dir_all(&path);
-            continue;
-        }
-        if path.is_file()
-            && (name.starts_with("raw_output_") || name.starts_with("bio_full_debug_"))
-        {
-            let _ = fs::remove_file(&path);
         }
     }
 }

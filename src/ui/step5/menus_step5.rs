@@ -29,7 +29,7 @@ pub(crate) fn render_actions_menu(
             .clicked()
         {
             if let Some(term) = terminal.as_ref() {
-                match save_console_log(&term.console_text()) {
+                match save_console_log(state, &term.console_text()) {
                     Ok(path) => {
                         state.step5.last_status_text =
                             format!("Saved console log: {}", path.display());

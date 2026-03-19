@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use super::super::model::Tp2Rule;
+use super::super::model::{PathRequirementKind, Tp2Rule};
 
 pub(super) fn parse_require_component(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
     let idx = upper.find("REQUIRE_COMPONENT")?;
@@ -67,6 +67,44 @@ pub(super) fn parse_mod_component_args(after: &str) -> Option<(String, u32)> {
     let component_id: u32 = digits.parse().ok()?;
 
     Some((normalize_tp2_ref(&mod_name), component_id))
+}
+
+pub(super) fn parse_require_predicate_path_exists(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+    if !upper.contains("REQUIRE_PREDICATE")
+        || upper.contains("FILE_EXISTS_IN_GAME")
+        || upper.contains("GAME_IS")
+        || upper.contains("MOD_IS_INSTALLED")
+        || upper.contains(" OR ")
+        || upper.contains("||")
+        || upper.contains(" AND ")
+        || upper.contains("&&")
+    {
+        return None;
+    }
+
+    let (kind, keyword) = if upper.contains("DIRECTORY_EXISTS") {
+        (PathRequirementKind::Directory, "DIRECTORY_EXISTS")
+    } else if upper.contains("FILE_EXISTS") {
+        (PathRequirementKind::File, "FILE_EXISTS")
+    } else {
+        return None;
+    };
+
+    let idx = upper.find(keyword)?;
+    let after = &raw[idx + keyword.len()..];
+    let (path, rest) = parse_quoted_or_tilde_token(after.trim_start())?;
+    let message = parse_quoted_or_tilde_token(rest.trim_start())
+        .map(|(value, _)| value)
+        .filter(|value| !value.trim().is_empty());
+
+    Some(Tp2Rule::RequirePath {
+        kind,
+        path,
+        must_exist: !is_negated_keyword(upper, idx),
+        message,
+        raw_line: raw.to_string(),
+        line,
+    })
 }
 
 pub(super) fn parse_require_predicate_game_is(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
@@ -292,8 +330,27 @@ pub(super) fn parse_positive_game_is_groups(upper: &str, raw: &str) -> Vec<Strin
 }
 
 pub(super) fn is_negated_game_is(upper: &str, idx: usize) -> bool {
+    is_negated_keyword(upper, idx)
+}
+
+pub(super) fn is_negated_keyword(upper: &str, idx: usize) -> bool {
     let before = upper[..idx].trim_end();
-    before.ends_with('!') || before.ends_with("NOT")
+    if before.ends_with('!') || before.ends_with("NOT") {
+        return true;
+    }
+
+    let bytes = before.as_bytes();
+    let mut j = bytes.len();
+    while j > 0 {
+        let c = bytes[j - 1];
+        if c.is_ascii_whitespace() || c == b'(' {
+            j -= 1;
+            continue;
+        }
+        break;
+    }
+    let prefix = before[..j].trim_end();
+    prefix.ends_with('!') || prefix.ends_with("NOT")
 }
 
 pub(super) fn parse_quoted_or_tilde_token(input: &str) -> Option<(String, &str)> {

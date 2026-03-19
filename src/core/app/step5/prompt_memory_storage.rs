@@ -33,6 +33,14 @@ pub(super) fn save_to_disk(map: &HashMap<String, PromptAnswerEntry>) -> std::io:
     fs::write(path, raw)
 }
 
+pub(super) fn delete_disk_file() {
+    match fs::remove_file(prompt_memory_path()) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => {}
+    }
+}
+
 pub(super) fn serialize_map(map: &HashMap<String, PromptAnswerEntry>) -> std::io::Result<String> {
     let mut entries = Vec::with_capacity(map.len());
     let mut sorted = BTreeMap::new();

@@ -105,10 +105,11 @@ pub fn display_name_from_group_key(group_key: &str) -> String {
 fn mod_group_key(mod_root: &Path, tp2_path: &Path) -> String {
     if let Some(parent) = tp2_path.parent()
         && let Ok(rel_parent) = parent.strip_prefix(mod_root)
+        && let Some(first) = rel_parent.iter().next()
     {
-        let rel = rel_parent.to_string_lossy().replace('\\', "/");
-        if !rel.trim().is_empty() {
-            return rel;
+        let first = first.to_string_lossy().trim().to_string();
+        if !first.is_empty() {
+            return first;
         }
     }
     tp2_path

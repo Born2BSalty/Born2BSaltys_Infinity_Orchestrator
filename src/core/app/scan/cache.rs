@@ -104,6 +104,15 @@ pub fn save_scan_cache(cache: &ScanCache) {
     }
 }
 
+pub fn clear_scan_cache_files() {
+    let primary = scan_cache_path();
+    let legacy = PathBuf::from(SCAN_CACHE_FILE);
+    remove_cache_file(&primary);
+    if legacy != primary {
+        remove_cache_file(&legacy);
+    }
+}
+
 fn cache_key(path: &Path) -> String {
     normalize_context_path(path)
 }
@@ -155,6 +164,14 @@ pub fn cache_put(
 
 fn scan_cache_path() -> PathBuf {
     app_config_file(SCAN_CACHE_FILE, ".")
+}
+
+fn remove_cache_file(path: &Path) {
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => {}
+    }
 }
 
 fn try_load_cache(path: &Path, source: &str) -> Option<LoadedScanCache> {

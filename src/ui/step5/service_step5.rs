@@ -151,8 +151,8 @@ pub fn source_log_infos(step1: &Step1State) -> Vec<crate::ui::step5::log_files::
     crate::ui::step5::log_files::source_log_infos(step1)
 }
 
-pub fn save_console_log(console_text: &str) -> anyhow::Result<PathBuf> {
-    Ok(crate::ui::step5::log_files::save_console_log(console_text)?)
+pub fn save_console_log(state: &WizardState, console_text: &str) -> anyhow::Result<PathBuf> {
+    Ok(crate::ui::step5::log_files::save_console_log(&state.step5, console_text)?)
 }
 
 pub fn open_console_logs_folder() -> anyhow::Result<()> {

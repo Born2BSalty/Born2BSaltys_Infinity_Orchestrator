@@ -122,6 +122,12 @@ fn compute_issue_id(
     format!("{:016x}", hasher.finish())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathRequirementKind {
+    Directory,
+    File,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tp2Rule {
     Require {
@@ -155,6 +161,14 @@ pub enum Tp2Rule {
     },
     RequireInstalledAny {
         targets: Vec<(String, Option<u32>)>,
+        raw_line: String,
+        line: usize,
+    },
+    RequirePath {
+        kind: PathRequirementKind,
+        path: String,
+        must_exist: bool,
+        message: Option<String>,
         raw_line: String,
         line: usize,
     },

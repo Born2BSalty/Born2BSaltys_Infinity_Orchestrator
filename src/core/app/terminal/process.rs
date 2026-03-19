@@ -3,6 +3,8 @@
 
 mod config {
 use std::path::PathBuf;
+
+use crate::ui::step5::service_diagnostics_run_step5::run_dir_from_id;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::state::Step1State;
@@ -10,7 +12,7 @@ use crate::ui::state::Step1State;
 use super::super::EmbeddedTerminal;
 
 impl EmbeddedTerminal {
-    pub fn configure_from_step1(&mut self, step1: &Step1State) {
+    pub fn configure_from_step1(&mut self, step1: &Step1State, run_id: Option<&str>) {
         self.child_env.clear();
         let rust_log = if step1.rust_log_trace {
             Some("trace")
@@ -27,12 +29,15 @@ impl EmbeddedTerminal {
             self.child_env
                 .push(("BIO_FULL_DEBUG".to_string(), "1".to_string()));
         }
+        let diagnostics_dir = run_id
+            .map(run_dir_from_id)
+            .unwrap_or_else(|| PathBuf::from("diagnostics"));
         self.raw_log_path = if step1.log_raw_output_dev {
             let ts = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            Some(PathBuf::from("diagnostics").join(format!("raw_output_{ts}.log")))
+            Some(diagnostics_dir.join(format!("raw_output_{ts}.log")))
         } else {
             None
         };
@@ -41,7 +46,7 @@ impl EmbeddedTerminal {
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            Some(PathBuf::from("diagnostics").join(format!("bio_full_debug_{ts}.log")))
+            Some(diagnostics_dir.join(format!("bio_full_debug_{ts}.log")))
         } else {
             None
         };

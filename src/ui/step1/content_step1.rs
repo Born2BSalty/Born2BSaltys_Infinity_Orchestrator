@@ -171,14 +171,8 @@ Prompt sequence with blank input\n\
 
 pub fn render_flags_content(ui: &mut egui::Ui, s: &mut Step1State) {
     section_title(ui, "Flags");
-    let skip_installed_enabled = !s.prepare_target_dirs_before_install;
-    if !skip_installed_enabled {
-        s.skip_installed = false;
-    }
-    ui.add_enabled_ui(skip_installed_enabled, |ui| {
-        ui.checkbox(&mut s.skip_installed, "-s Skip installed")
-            .on_hover_text(tt::STEP1_SKIP_INSTALLED);
-    });
+    ui.checkbox(&mut s.skip_installed, "-s Skip installed")
+        .on_hover_text(tt::STEP1_SKIP_INSTALLED);
     ui.checkbox(&mut s.check_last_installed, "-c Check last installed")
         .on_hover_text(tt::STEP1_CHECK_LAST_INSTALLED);
     if s.game_install == "EET" {

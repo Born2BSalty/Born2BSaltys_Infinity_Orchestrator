@@ -25,6 +25,6 @@ mod diagnostics;
 #[path = "../../core/app/step5/log_files.rs"]
 mod log_files;
 #[path = "../../core/app/step5/prompt_memory.rs"]
-mod prompt_memory;
+pub(crate) mod prompt_memory;
 #[path = "../../core/app/step5/scripted_inputs.rs"]
 mod scripted_inputs;

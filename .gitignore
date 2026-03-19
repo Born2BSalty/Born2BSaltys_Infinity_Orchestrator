@@ -7,4 +7,5 @@ Thumbs.db
 .vscode/
 .idea/
 /diagnostics/
+/vendor/lapdu-parser-rust-master/tests/
 Push\ Github.bat 

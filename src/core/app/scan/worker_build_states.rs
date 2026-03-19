@@ -26,7 +26,15 @@ pub(super) fn to_mod_states(
                 .file_name()
                 .map(|v| v.to_string_lossy().to_string())
                 .unwrap_or_else(|| display_name.clone());
-            let deduped_components = dedup_components(comps);
+            let tp2_text = if tp2_path.trim().is_empty() {
+                None
+            } else {
+                fs::read_to_string(&tp2_path).ok()
+            };
+            let mut deduped_components = dedup_components(comps);
+            if let Some(tp2_text) = tp2_text.as_deref() {
+                reorder_components_by_tp2_order(&mut deduped_components, tp2_text);
+            }
             let mod_prompt_summary = deduped_components
                 .iter()
                 .filter_map(|c| c.mod_prompt_summary.as_deref())
@@ -39,7 +47,8 @@ pub(super) fn to_mod_states(
                     (!c.mod_prompt_events.is_empty()).then_some(c.mod_prompt_events.clone())
                 })
                 .unwrap_or_default();
-            let meta_mode_component_ids = detect_meta_mode_component_ids(&tp2_path, mods_root);
+            let meta_mode_component_ids =
+                detect_meta_mode_component_ids(&tp2_path, mods_root, tp2_text.as_deref());
             Step2ModState {
                 tp_file,
                 tp2_path,
@@ -97,10 +106,11 @@ pub(super) fn to_mod_states(
 fn detect_meta_mode_component_ids(
     tp2_path: &str,
     mods_root: &Path,
+    tp2_text: Option<&str>,
 ) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::<String>::new();
     let tp2 = Path::new(tp2_path);
-    let Ok(tp2_text) = fs::read_to_string(tp2) else {
+    let Some(tp2_text) = tp2_text else {
         return out;
     };
 
@@ -137,6 +147,57 @@ fn detect_meta_mode_component_ids(
     if out.is_empty() && candidates.len() == 1 {
         out.insert(candidates[0].id.clone());
     }
+    out
+}
+
+fn reorder_components_by_tp2_order(components: &mut [ScannedComponent], tp2_text: &str) {
+    let order = parse_tp2_component_order(tp2_text);
+    if order.is_empty() {
+        return;
+    }
+
+    components.sort_by_key(|component| {
+        order
+            .get(component.component_id.trim())
+            .copied()
+            .unwrap_or(usize::MAX)
+    });
+}
+
+fn parse_tp2_component_order(tp2_text: &str) -> HashMap<String, usize> {
+    let mut out = HashMap::<String, usize>::new();
+    let lines: Vec<&str> = tp2_text.lines().collect();
+    let mut i = 0usize;
+    let mut begin_index = 0usize;
+
+    while i < lines.len() {
+        let line = lines[i];
+        if !line.trim_start().to_ascii_uppercase().starts_with("BEGIN ") {
+            i += 1;
+            continue;
+        }
+
+        let mut j = i + 1;
+        while j < lines.len() {
+            let next = lines[j].trim_start().to_ascii_uppercase();
+            if next.starts_with("BEGIN ") {
+                break;
+            }
+            j += 1;
+        }
+
+        let block = &lines[i..j];
+        for bl in block {
+            if let Some(id) = parse_designated_id(&bl.to_ascii_uppercase()) {
+                out.entry(id).or_insert(begin_index);
+                break;
+            }
+        }
+
+        begin_index += 1;
+        i = j;
+    }
+
     out
 }
 

@@ -183,6 +183,13 @@ pub(super) fn delete_entry(prompt_key: &str) {
     }
 }
 
+pub(super) fn clear_all() {
+    if let Ok(mut guard) = storage::memory().lock() {
+        guard.clear();
+    }
+    storage::delete_disk_file();
+}
+
 fn now_unix_secs() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()

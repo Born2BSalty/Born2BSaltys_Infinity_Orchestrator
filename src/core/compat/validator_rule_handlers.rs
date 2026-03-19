@@ -112,6 +112,7 @@ pub(super) fn apply_rule(
             selected_set,
             order_map,
         ),
+        Tp2Rule::RequirePath { .. } => {},
         Tp2Rule::ForbidInstalledMod {
             target_mod,
             target_component,

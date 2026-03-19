@@ -12,8 +12,10 @@ use crate::ui::state::WizardState;
 
 mod actions {
 use crate::ui::app::WizardApp;
+use crate::ui::step5::prompt_memory;
 
 use super::super::logic;
+use crate::ui::scan::cache;
 
 pub(super) fn handle_reset(app: &mut WizardApp) {
     super::super::super::step2_scan::cancel_step2_scan(app);
@@ -23,6 +25,8 @@ pub(super) fn handle_reset(app: &mut WizardApp) {
     if let Some(term) = app.step5_terminal.as_mut() {
         term.shutdown();
     }
+    cache::clear_scan_cache_files();
+    prompt_memory::clear_all();
     app.state.reset_workflow_keep_step1();
     app.last_step2_sync_signature = None;
     app.save_settings_best_effort();
@@ -66,7 +70,7 @@ pub(super) fn render_reset_button(ui: &mut egui::Ui, app: &mut WizardApp) {
                 egui::vec2(NAV_BUTTON_WIDTH + 24.0, NAV_BUTTON_HEIGHT),
                 egui::Button::new("Reset Wizard State"),
             )
-            .on_hover_text("Clear scan/selection/order/install state and return to Step 1.")
+            .on_hover_text("Clear scan/selection/order/install state, delete scan cache and prompt answers, and return to Step 1.")
             .clicked()
     {
         actions::handle_reset(app);

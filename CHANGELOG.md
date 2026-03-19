@@ -1,3 +1,14 @@
+## Beta 8
+- Initial Beta 8 notes.
+- Step 1 no longer disables `-s Skip installed` when target-dir preparation is enabled.
+- Fixed TP2 game validation so `REQUIRE_PREDICATE NOT (GAME_IS ~...~)` is no longer misread as a positive game restriction.
+- Reset Wizard State on Step 2 now also deletes `bio_scan_cache.json` and `prompt_answers.json`.
+- Step 2 now greys out simple `DIRECTORY_EXISTS` components like BGGO, but no longer pre-disables `FILE_EXISTS` cases such as generated install-time files.
+- Step 2 no longer treats classic-engine `GAME_IS` targets like `BGT` and `ToB` as automatically valid for `EET`.
+- Step 2 component ordering now follows TP2 BEGIN file order instead of --list-components order
+- Diagnostics now keep `raw_output_*` and `bio_full_debug_*` inside the current `run_*` folder, so exporting diagnostics preserves the active run and only old runs are pruned.
+- Save Console Log now also writes `console_*` into the current `run_*` folder instead of the top-level diagnostics folder.
+
 ## Beta 7
 - Dev-mode diagnostics now show which BIO build wrote the scan cache, so it is easier to spot reports coming from old cached scans.
 - Dev-mode diagnostics now export the full raw Lapdu parser JSON for each scanned TP2 under parser_raw/.

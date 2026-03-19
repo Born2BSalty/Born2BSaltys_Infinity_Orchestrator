@@ -186,9 +186,9 @@ fn normalize_tp2_stem(value: &str) -> String {
 mod compat_apply {
 use crate::ui::state::{Step1State, Step2ModState};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::compat::model::Tp2Rule;
+use crate::compat::model::{PathRequirementKind, Tp2Rule};
 use crate::compat::tp2_parse::parse_tp2_rules;
 use super::compat_matcher::{match_rule, rule_disables_component};
 
@@ -198,33 +198,8 @@ pub fn apply_step2_compat_rules(
     bg2ee_mods: &mut [Step2ModState],
 ) {
     let rules = crate::ui::step2::service_compat_loader_step2::load_rules();
-    if rules.is_empty() {
-        clear_all_disables(bgee_mods);
-        clear_all_disables(bg2ee_mods);
-        return;
-    }
     apply_for_tab(step1, "BGEE", bgee_mods, &rules);
     apply_for_tab(step1, "BG2EE", bg2ee_mods, &rules);
-}
-
-fn clear_all_disables(mods: &mut [Step2ModState]) {
-    for mod_state in mods {
-        for component in &mut mod_state.components {
-            component.disabled = false;
-            component.compat_kind = None;
-            component.compat_source = None;
-            component.compat_related_mod = None;
-            component.compat_related_component = None;
-            component.compat_graph = None;
-            component.compat_evidence = None;
-            component.disabled_reason = None;
-        }
-        mod_state.checked = mod_state
-            .components
-            .iter()
-            .filter(|c| !c.disabled)
-            .all(|c| c.checked);
-    }
 }
 
 fn apply_for_tab(
@@ -286,6 +261,34 @@ fn apply_for_tab(
 
             if let Some(meta) = metadata
                 && let Some(component_id) = component.component_id.trim().parse::<u32>().ok()
+                && let Some(rule) = find_require_path_rule(meta, component_id)
+                && let Some(game_dir) = effective_target_game_dir(step1, tab)
+                && !path_requirement_satisfied(rule, &game_dir)
+            {
+                component.compat_kind = Some("path_requirement".to_string());
+                component.compat_source =
+                    Some(format!("step2_tp2_path_validator | TP2: {}", meta.tp_file));
+                component.compat_related_mod = Some(path_requirement_summary(rule));
+                component.compat_related_component = None;
+                component.compat_graph = Some(format!(
+                    "{} #{} requires {}",
+                    normalize_mod_key(&mod_state.tp_file),
+                    component_id,
+                    path_requirement_summary(rule)
+                ));
+                component.compat_evidence = Some(path_requirement_raw_line(rule).to_string());
+                component.disabled = true;
+                component.checked = false;
+                component.selected_order = None;
+                component.disabled_reason = Some(
+                    path_requirement_message(rule)
+                        .unwrap_or_else(|| path_requirement_fallback_message(rule)),
+                );
+                continue;
+            }
+
+            if let Some(meta) = metadata
+                && let Some(component_id) = component.component_id.trim().parse::<u32>().ok()
                 && let Some((allowed_games, rule_evidence)) =
                     find_require_game_allowed_games(meta, component_id)
                 && !game_allowed(&current_game, allowed_games)
@@ -316,6 +319,140 @@ fn apply_for_tab(
             .iter()
             .filter(|c| !c.disabled)
             .all(|c| c.checked);
+    }
+}
+
+fn find_require_path_rule(
+    meta: &crate::compat::model::Tp2Metadata,
+    component_id: u32,
+) -> Option<&Tp2Rule> {
+    meta.rules.iter().find_map(|(cid, rule)| {
+        (*cid == component_id && matches!(rule, Tp2Rule::RequirePath { .. })).then_some(rule)
+    })
+}
+
+fn effective_target_game_dir(step1: &Step1State, tab: &str) -> Option<String> {
+    let path = match tab {
+        "BGEE" => {
+            if step1.game_install.eq_ignore_ascii_case("EET") {
+                if step1.new_pre_eet_dir_enabled && !step1.eet_pre_dir.trim().is_empty() {
+                    Some(step1.eet_pre_dir.clone())
+                } else {
+                    Some(step1.eet_bgee_game_folder.clone())
+                }
+            } else if step1.generate_directory_enabled && !step1.generate_directory.trim().is_empty() {
+                Some(step1.generate_directory.clone())
+            } else {
+                Some(step1.bgee_game_folder.clone())
+            }
+        }
+        _ => {
+            if step1.game_install.eq_ignore_ascii_case("EET") {
+                if step1.new_eet_dir_enabled && !step1.eet_new_dir.trim().is_empty() {
+                    Some(step1.eet_new_dir.clone())
+                } else {
+                    Some(step1.eet_bg2ee_game_folder.clone())
+                }
+            } else if step1.generate_directory_enabled && !step1.generate_directory.trim().is_empty() {
+                Some(step1.generate_directory.clone())
+            } else {
+                Some(step1.bg2ee_game_folder.clone())
+            }
+        }
+    }?;
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn path_requirement_satisfied(rule: &Tp2Rule, game_dir: &str) -> bool {
+    let Tp2Rule::RequirePath {
+        kind,
+        path,
+        must_exist,
+        ..
+    } = rule else {
+        return true;
+    };
+
+    if !matches!(kind, PathRequirementKind::Directory) {
+        return true;
+    }
+
+    if path.contains('%') {
+        return true;
+    }
+
+    let resolved = resolve_requirement_path(game_dir, path);
+    let exists = match kind {
+        PathRequirementKind::Directory => resolved.is_dir(),
+        PathRequirementKind::File => resolved.is_file(),
+    };
+
+    if *must_exist { exists } else { !exists }
+}
+
+fn resolve_requirement_path(game_dir: &str, path: &str) -> PathBuf {
+    let normalized = path.replace('\\', "/");
+    let candidate = Path::new(&normalized);
+    if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        Path::new(game_dir).join(candidate)
+    }
+}
+
+fn path_requirement_summary(rule: &Tp2Rule) -> String {
+    let Tp2Rule::RequirePath {
+        kind,
+        path,
+        must_exist,
+        ..
+    } = rule else {
+        return String::new();
+    };
+    let kind_label = match kind {
+        PathRequirementKind::Directory => "directory",
+        PathRequirementKind::File => "file",
+    };
+    let state = if *must_exist { "exists" } else { "missing" };
+    format!("{kind_label} {path} must be {state}")
+}
+
+fn path_requirement_message(rule: &Tp2Rule) -> Option<String> {
+    match rule {
+        Tp2Rule::RequirePath { message, .. } => message.clone(),
+        _ => None,
+    }
+}
+
+fn path_requirement_fallback_message(rule: &Tp2Rule) -> String {
+    let Tp2Rule::RequirePath {
+        kind,
+        path,
+        must_exist,
+        ..
+    } = rule else {
+        return "This component is not installable in the current setup.".to_string();
+    };
+    let kind_label = match kind {
+        PathRequirementKind::Directory => "directory",
+        PathRequirementKind::File => "file",
+    };
+    if *must_exist {
+        format!("This component requires {kind_label} '{path}' to exist in the target game directory.")
+    } else {
+        format!("This component requires {kind_label} '{path}' to be absent from the target game directory.")
+    }
+}
+
+fn path_requirement_raw_line(rule: &Tp2Rule) -> &str {
+    match rule {
+        Tp2Rule::RequirePath { raw_line, .. } => raw_line,
+        _ => "",
     }
 }
 
@@ -374,8 +511,6 @@ fn game_allowed(current_game: &str, allowed_games: &[String]) -> bool {
             g.eq_ignore_ascii_case("bgee")
                 || g.eq_ignore_ascii_case("bg2ee")
                 || g.eq_ignore_ascii_case("eet")
-                || g.eq_ignore_ascii_case("bgt")
-                || g.eq_ignore_ascii_case("tob")
         });
     }
     false

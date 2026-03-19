@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::controller::util::open_in_shell;
-use crate::ui::state::Step1State;
+use crate::ui::state::{Step1State, Step5State};
+use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, run_dir_from_id};
 
 pub fn open_last_log_file(step1: &Step1State) -> std::io::Result<()> {
     let Some(path) = newest_log_file(step1) else {
@@ -16,12 +17,13 @@ pub fn open_last_log_file(step1: &Step1State) -> std::io::Result<()> {
     open_in_shell(path.to_string_lossy().as_ref())
 }
 
-pub fn save_console_log(content: &str) -> std::io::Result<PathBuf> {
+pub fn save_console_log(step5: &Step5State, content: &str) -> std::io::Result<PathBuf> {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let out_dir = PathBuf::from("diagnostics");
+    let run_id = current_or_new_run_id(step5);
+    let out_dir = run_dir_from_id(&run_id);
     fs::create_dir_all(&out_dir)?;
     let out_path = out_dir.join(format!("console_{ts}.log"));
     fs::write(&out_path, content)?;

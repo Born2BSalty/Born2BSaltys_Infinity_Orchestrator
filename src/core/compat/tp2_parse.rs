@@ -73,6 +73,8 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
             rules.push((comp_id, rule));
         } else if let Some(rule) = parse_forbid_component(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
+        } else if let Some(rule) = parse_require_predicate_path_exists(&upper_expr, &raw_expr, rule_line) {
+            rules.push((comp_id, rule));
         } else if let Some(rule) =
             parse_require_predicate_game_or_installed_any(&upper_expr, &raw_expr, rule_line)
         {
@@ -135,6 +137,7 @@ fn collect_predicate_expression(lines: &[&str], start_idx: usize) -> (String, us
             || next_upper.starts_with("REQUIRE_")
             || next_upper.starts_with("FORBID_")
             || next_upper.starts_with("ACTION_IF")
+            || next_upper.starts_with("SUBCOMPONENT ")
             || next_upper.starts_with("LABEL ")
             || next_upper.starts_with("INCLUDE ")
             || next_upper.starts_with("COPY ")
@@ -312,4 +315,37 @@ REQUIRE_PREDICATE (((GAME_IS ~bgee~)  AND (FILE_EXISTS ~eefixpack/files/tph/bgee
         assert!(matches!(forbid, Tp2Rule::ForbidInstalledMod { .. }));
         assert!(parse_require_predicate_mod_installed(&upper, line, 1).is_none());
     }
+
+    #[test]
+    fn test_parse_negated_paren_game_is_not_as_require_game() {
+        let line = r#"REQUIRE_PREDICATE NOT (GAME_IS ~pst~) @2"#;
+        let upper = line.to_ascii_uppercase();
+        assert!(parse_require_predicate_game_is(&upper, line, 1).is_none());
+    }
+
+    #[test]
+    fn test_parse_require_predicate_directory_exists() {
+        let line = r#"REQUIRE_PREDICATE DIRECTORY_EXISTS ~BGGO-Android~ ~Windows files are automatically used by core component: ...~"#;
+        let upper = line.to_ascii_uppercase();
+        let rule = parse_require_predicate_path_exists(&upper, line, 1).unwrap();
+        match rule {
+            Tp2Rule::RequirePath {
+                kind,
+                path,
+                must_exist,
+                message,
+                ..
+            } => {
+                assert!(matches!(kind, crate::compat::model::PathRequirementKind::Directory));
+                assert_eq!(path, "BGGO-Android");
+                assert!(must_exist);
+                assert_eq!(
+                    message.as_deref(),
+                    Some("Windows files are automatically used by core component: ...")
+                );
+            }
+            _ => panic!("expected RequirePath"),
+        }
+    }
+
 }

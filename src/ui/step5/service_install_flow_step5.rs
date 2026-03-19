@@ -29,7 +29,6 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
     state.step5.resolved_bg2_game_dir.clear();
     state.step5.resolved_game_dir.clear();
 
-    term.configure_from_step1(&state.step1);
     let scripted = load_scripted_inputs(&state.step1);
     let scripted_count = term.set_scripted_inputs(scripted);
     if scripted_count > 0 {
@@ -102,6 +101,7 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
     }
 
     let run_id = begin_diagnostics_run(state);
+    term.configure_from_step1(&state.step1, Some(&run_id));
     copy_weidu_logs_for_diagnostics(&state.step1, &run_id);
 
     match term.start_process(program.as_str(), &args) {

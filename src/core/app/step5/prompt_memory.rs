@@ -76,6 +76,10 @@ pub fn delete_entry(prompt_key: &str) {
     mutate::delete_entry(prompt_key);
 }
 
+pub fn clear_all() {
+    mutate::clear_all();
+}
+
 pub fn export_json(path: &Path) -> std::io::Result<usize> {
     io_ops::export_json(path)
 }

@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use crate::ui::state::WizardState;
 use crate::ui::step4::service_step4::build_weidu_export_lines;
-use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, run_dir_from_id};
+use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, prune_old_diagnostics, run_dir_from_id};
 use crate::ui::step5::service_step5::{
     build_install_invocation, copy_saved_weidu_logs, copy_source_weidu_logs,
 };
@@ -59,9 +59,10 @@ pub fn export_diagnostics(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    let run_id = current_or_new_run_id(&state.step5);
+    prune_old_diagnostics(Some(&run_id));
     let root_dir = PathBuf::from("diagnostics");
     fs::create_dir_all(&root_dir)?;
-    let run_id = current_or_new_run_id(&state.step5);
     let run_dir = run_dir_from_id(&run_id);
     fs::create_dir_all(&run_dir)?;
     let out_path = run_dir.join("bio_diag.txt");
