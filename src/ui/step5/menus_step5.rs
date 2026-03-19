@@ -59,9 +59,7 @@ pub(crate) fn render_actions_menu(
             }
             ui.close_menu();
         }
-        if state.step5.last_install_failed
-            && ui.button("Open last log file").clicked()
-        {
+        if state.step5.last_install_failed && ui.button("Open last log file").clicked() {
             let _ = open_last_log_file(&state.step1);
             ui.close_menu();
         }

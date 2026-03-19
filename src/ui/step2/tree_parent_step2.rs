@@ -4,7 +4,9 @@
 use eframe::egui;
 
 use crate::ui::state::{Step2ComponentState, Step2ModState, Step2Selection};
-use crate::ui::step2::prompt_eval_step2::{evaluate_component_prompt_summary, event_applies, normalize_prompt_blocks};
+use crate::ui::step2::prompt_eval_step2::{
+    evaluate_component_prompt_summary, event_applies, normalize_prompt_blocks,
+};
 use crate::ui::step2::state_step2::PromptEvalContext;
 use crate::ui::step2::tree_step2::step2_tree::render_helpers::{
     enforce_meta_mode_after_bulk, enforce_subcomponent_single_select_keep_first,
@@ -234,7 +236,9 @@ fn build_mod_prompt_popup_text(
         if summary.is_empty() {
             continue;
         }
-        sections.push(format_component_prompt_popup_text_with_body(component, &summary));
+        sections.push(format_component_prompt_popup_text_with_body(
+            component, &summary,
+        ));
     }
     if !sections.is_empty() {
         return Some(sections.join("\n\n----------------\n\n"));
@@ -345,7 +349,10 @@ fn normalize_prompt_event_blocks(blocks: Vec<PromptDisplayBlock>) -> Vec<PromptD
         idx += 1;
     }
 
-    let lines = merged.iter().map(PromptDisplayBlock::to_text).collect::<Vec<_>>();
+    let lines = merged
+        .iter()
+        .map(PromptDisplayBlock::to_text)
+        .collect::<Vec<_>>();
     let normalized = normalize_prompt_blocks(lines);
     normalized
         .into_iter()

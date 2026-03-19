@@ -45,8 +45,8 @@ pub(super) fn candidate_language_ids(
     work_dir: &Path,
     preferred_locale: &str,
 ) -> Vec<String> {
-    let mut langs = weidu_scan::list_languages_for_game(weidu, tp2, game_dir, work_dir)
-        .unwrap_or_default();
+    let mut langs =
+        weidu_scan::list_languages_for_game(weidu, tp2, game_dir, work_dir).unwrap_or_default();
     if langs.is_empty() {
         langs = weidu_scan::list_languages(weidu, tp2).unwrap_or_default();
     }

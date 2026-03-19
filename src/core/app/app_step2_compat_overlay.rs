@@ -57,7 +57,9 @@ fn apply_issue_to_mods(mods: &mut [Step2ModState], issue: &CompatIssueDisplay) {
             {
                 continue;
             }
-            if component.compat_kind.is_some() && component.compat_source.as_deref() != Some(STEP2_DYNAMIC_SOURCE) {
+            if component.compat_kind.is_some()
+                && component.compat_source.as_deref() != Some(STEP2_DYNAMIC_SOURCE)
+            {
                 continue;
             }
             component.compat_kind = Some(if issue.code.eq_ignore_ascii_case("REQ_MISSING") {

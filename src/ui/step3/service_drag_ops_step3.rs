@@ -108,11 +108,17 @@ pub(crate) fn update_drag_target_from_pointer(
             .count()
             .max(1);
         if n > 0 && k > 0 {
-            let list_top_y = visible_rows.first().map(|(_, r)| r.top()).unwrap_or(pointer.y);
+            let list_top_y = visible_rows
+                .first()
+                .map(|(_, r)| r.top())
+                .unwrap_or(pointer.y);
             let row_h = if *drag_row_h > 0.0 {
                 *drag_row_h
             } else {
-                (visible_rows.first().map(|(_, r)| r.height()).unwrap_or(20.0)
+                (visible_rows
+                    .first()
+                    .map(|(_, r)| r.height())
+                    .unwrap_or(20.0)
                     + ui.spacing().item_spacing.y.max(0.0))
                 .max(1.0)
             };
@@ -169,7 +175,8 @@ pub(crate) fn apply_live_reorder(
         }
     }
     let mut insert_at = target_slot;
-    insert_at = drag::visible_slot_to_insert_at(items, &block, visible_rows, insert_at, remaining.len());
+    insert_at =
+        drag::visible_slot_to_insert_at(items, &block, visible_rows, insert_at, remaining.len());
     if block.first().is_some_and(|first| items[*first].is_parent) {
         insert_at = drag::snap_to_parent_boundary(&remaining, insert_at);
     } else {

@@ -53,18 +53,22 @@ fn event_applies_with_vars(
     prompt_vars: Option<&crate::ui::step2::prompt_eval_vars_step2::PromptVarContext>,
 ) -> bool {
     if !event.game_deny.is_empty()
-        && event
-            .game_deny
-            .iter()
-            .any(|g| prompt_eval.active_games.iter().any(|active| g.eq_ignore_ascii_case(active)))
+        && event.game_deny.iter().any(|g| {
+            prompt_eval
+                .active_games
+                .iter()
+                .any(|active| g.eq_ignore_ascii_case(active))
+        })
     {
         return false;
     }
     if !event.game_allow.is_empty()
-        && !event
-            .game_allow
-            .iter()
-            .any(|g| prompt_eval.active_games.iter().any(|active| g.eq_ignore_ascii_case(active)))
+        && !event.game_allow.iter().any(|g| {
+            prompt_eval
+                .active_games
+                .iter()
+                .any(|active| g.eq_ignore_ascii_case(active))
+        })
     {
         return false;
     }
@@ -106,7 +110,9 @@ pub(crate) fn normalize_prompt_blocks(lines: Vec<String>) -> Vec<String> {
         idx += 1;
     }
 
-    let has_yes_no_question = merged.iter().any(|l| is_yes_no_prompt(l) && is_question_prompt(l));
+    let has_yes_no_question = merged
+        .iter()
+        .any(|l| is_yes_no_prompt(l) && is_question_prompt(l));
     merged.retain(|line| !is_validation_retry_block(line));
 
     if !has_yes_no_question {
@@ -129,7 +135,6 @@ fn is_yes_no_prompt(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     lower.contains("\n- y =") && lower.contains("\n- n =")
 }
-
 
 fn should_merge_prompt_preface(current: &str, next: &str) -> bool {
     is_informational_preface(current)
@@ -199,4 +204,3 @@ fn is_validation_retry_block(block: &str) -> bool {
         || lower.contains("invalid");
     mentions_retry && mentions_validation
 }
-

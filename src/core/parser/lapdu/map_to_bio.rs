@@ -228,10 +228,7 @@ fn extract_component_id_from_node_id(node_id: &str) -> Option<String> {
 }
 
 fn diagnostic_preview(output: &ParserOutput) -> Option<String> {
-    let first = output
-        .errors
-        .first()
-        .or_else(|| output.warnings.first())?;
+    let first = output.errors.first().or_else(|| output.warnings.first())?;
     let code = first.code.trim();
     let msg = first.message.trim();
     if code.is_empty() && msg.is_empty() {

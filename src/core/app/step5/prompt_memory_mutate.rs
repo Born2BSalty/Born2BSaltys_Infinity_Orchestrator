@@ -80,21 +80,23 @@ pub(super) fn ensure_prompt_entry(prompt_key: &str, preview: &str) {
             let _ = storage::save_to_disk(&guard);
             return;
         }
-        guard.entry(prompt_key.to_string()).or_insert_with(|| PromptAnswerEntry {
-            alias: alias::suggest_alias_from_preview(preview),
-            answer: String::new(),
-            enabled: false,
-            preview: preview.to_string(),
-            component_key: String::new(),
-            tp2_file: String::new(),
-            component_id: String::new(),
-            component_name: String::new(),
-            prompt_kind: String::new(),
-            source: String::new(),
-            captured_at: 0,
-            last_used_at: 0,
-            hit_count: 0,
-        });
+        guard
+            .entry(prompt_key.to_string())
+            .or_insert_with(|| PromptAnswerEntry {
+                alias: alias::suggest_alias_from_preview(preview),
+                answer: String::new(),
+                enabled: false,
+                preview: preview.to_string(),
+                component_key: String::new(),
+                tp2_file: String::new(),
+                component_id: String::new(),
+                component_name: String::new(),
+                prompt_kind: String::new(),
+                source: String::new(),
+                captured_at: 0,
+                last_used_at: 0,
+                hit_count: 0,
+            });
         storage::dedupe_in_place(&mut guard);
         let _ = storage::save_to_disk(&guard);
     }

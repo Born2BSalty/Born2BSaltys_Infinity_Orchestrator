@@ -81,7 +81,13 @@ fn parser_raw_file_name(tp2_path: &str) -> String {
         .and_then(|s| s.to_str())
         .unwrap_or("parser")
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>();
     let mut hasher = DefaultHasher::new();
     tp2_path.hash(&mut hasher);

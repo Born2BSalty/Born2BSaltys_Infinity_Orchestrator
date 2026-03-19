@@ -5,10 +5,10 @@ use std::collections::HashMap;
 
 #[path = "validator_helpers.rs"]
 mod validator_helpers;
-#[path = "validator_rule_handlers_any.rs"]
-mod validator_rule_handlers_any;
 #[path = "validator_rule_handlers.rs"]
 mod validator_rule_handlers;
+#[path = "validator_rule_handlers_any.rs"]
+mod validator_rule_handlers_any;
 #[path = "validator_rule_handlers_misc.rs"]
 mod validator_rule_handlers_misc;
 #[path = "validator_rules.rs"]
@@ -39,7 +39,11 @@ impl CompatValidator {
         self.tp2_metadata = metadata;
     }
 
-    pub fn validate(&self, selected: &[SelectedComponent], game_mode: &str) -> CompatValidationResult {
+    pub fn validate(
+        &self,
+        selected: &[SelectedComponent],
+        game_mode: &str,
+    ) -> CompatValidationResult {
         let selected_set = validator_helpers::build_selected_set(selected);
         let order_map = validator_helpers::build_order_map(selected);
 

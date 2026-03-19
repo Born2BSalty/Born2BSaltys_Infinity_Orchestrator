@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use super::PromptSummaryIndex;
 use self::model::ParserFlowNode;
+use super::PromptSummaryIndex;
 
 mod map_to_bio;
 mod model;
@@ -79,7 +79,10 @@ fn non_empty(value: &str) -> Option<String> {
 }
 
 fn count_flow_nodes(nodes: &[ParserFlowNode]) -> usize {
-    nodes.iter().map(|node| 1 + count_flow_nodes(&node.children)).sum()
+    nodes
+        .iter()
+        .map(|node| 1 + count_flow_nodes(&node.children))
+        .sum()
 }
 
 fn count_flow_event_refs(nodes: &[ParserFlowNode]) -> usize {

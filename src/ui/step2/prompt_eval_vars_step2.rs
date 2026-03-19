@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::ui::state::Step2ComponentState;
-use crate::ui::step2::state_step2::{normalize_tp2_stem, PromptEvalContext};
+use crate::ui::step2::state_step2::{PromptEvalContext, normalize_tp2_stem};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PromptVarContext {
@@ -47,7 +47,11 @@ pub(crate) fn lookup_var<'a>(
     vars?.vars.get(&normalize_var_name(name))
 }
 
-fn apply_component_block_assignments(tp2_path: &Path, component_id: &str, ctx: &mut PromptVarContext) {
+fn apply_component_block_assignments(
+    tp2_path: &Path,
+    component_id: &str,
+    ctx: &mut PromptVarContext,
+) {
     let Ok(text) = fs::read_to_string(tp2_path) else {
         return;
     };
@@ -65,7 +69,11 @@ fn apply_component_block_assignments(tp2_path: &Path, component_id: &str, ctx: &
     }
 }
 
-fn apply_source_file_assignments(source_file: &str, prompt_eval: &PromptEvalContext, ctx: &mut PromptVarContext) {
+fn apply_source_file_assignments(
+    source_file: &str,
+    prompt_eval: &PromptEvalContext,
+    ctx: &mut PromptVarContext,
+) {
     let path = PathBuf::from(source_file);
     let Ok(text) = fs::read_to_string(&path) else {
         return;
@@ -93,7 +101,10 @@ fn apply_mod_compat_prompt_value(
     if !lines.iter().any(|line| line.contains("prompt = 1")) {
         return;
     }
-    let Some(table_rel) = lines.iter().find_map(|line| extract_copy_table_path(line, "mod_compat.2da")) else {
+    let Some(table_rel) = lines
+        .iter()
+        .find_map(|line| extract_copy_table_path(line, "mod_compat.2da"))
+    else {
         return;
     };
     let Some(table_path) = resolve_table_path(source_file, &table_rel) else {
@@ -111,12 +122,16 @@ fn apply_mod_compat_prompt_value(
         }
         let mod_key = normalize_tp2_stem(cols[0]);
         let component_id = cols[1].trim().to_string();
-        if prompt_eval.checked_components.contains(&(mod_key, component_id)) {
+        if prompt_eval
+            .checked_components
+            .contains(&(mod_key, component_id))
+        {
             prompt = true;
             break;
         }
     }
-    ctx.vars.insert("prompt".to_string(), PromptVarValue::Int(i64::from(prompt)));
+    ctx.vars
+        .insert("prompt".to_string(), PromptVarValue::Int(i64::from(prompt)));
 }
 
 fn extract_tp2_path_from_raw_line(raw_line: &str) -> Option<PathBuf> {
@@ -182,7 +197,9 @@ fn extract_copy_table_path(line: &str, needle: &str) -> Option<String> {
         }
         idx += 1;
     }
-    quoted.into_iter().find(|path| path.to_ascii_lowercase().contains(needle))
+    quoted
+        .into_iter()
+        .find(|path| path.to_ascii_lowercase().contains(needle))
 }
 
 fn resolve_table_path(source_file: &Path, table_rel: &str) -> Option<PathBuf> {

@@ -37,8 +37,13 @@ pub(super) fn apply_weidu_log_selection(app: &mut WizardApp, bgee: bool) {
     let mut next_order = app.state.step2.next_selection_order;
     let matched = match (app.state.step1.game_install.as_str(), bgee) {
         ("EET", true) => {
-            let picked_bgee =
-                apply_log_to_mods(&mut app.state.step2.bgee_mods, &log, None, true, &mut next_order);
+            let picked_bgee = apply_log_to_mods(
+                &mut app.state.step2.bgee_mods,
+                &log,
+                None,
+                true,
+                &mut next_order,
+            );
             let allow = HashSet::from([normalize_path_key(r"EET\EET.TP2")]);
             let picked_eet_core = apply_log_to_mods(
                 &mut app.state.step2.bg2ee_mods,
@@ -49,8 +54,20 @@ pub(super) fn apply_weidu_log_selection(app: &mut WizardApp, bgee: bool) {
             );
             picked_bgee + picked_eet_core
         }
-        (_, true) => apply_log_to_mods(&mut app.state.step2.bgee_mods, &log, None, true, &mut next_order),
-        _ => apply_log_to_mods(&mut app.state.step2.bg2ee_mods, &log, None, true, &mut next_order),
+        (_, true) => apply_log_to_mods(
+            &mut app.state.step2.bgee_mods,
+            &log,
+            None,
+            true,
+            &mut next_order,
+        ),
+        _ => apply_log_to_mods(
+            &mut app.state.step2.bg2ee_mods,
+            &log,
+            None,
+            true,
+            &mut next_order,
+        ),
     };
     app.state.step2.next_selection_order = next_order;
     let label = if bgee { "BGEE" } else { "BG2EE" };

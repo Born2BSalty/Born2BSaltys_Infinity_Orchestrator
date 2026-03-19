@@ -17,7 +17,11 @@ pub(crate) fn send_scripted(
     let Some(scripted) = term.take_next_scripted_input_for_current() else {
         return false;
     };
-    let ctx = crate::ui::step5::service_step5::auto_answer::prompt_context(term, prompt_kind.to_string(), "bio_inputs");
+    let ctx = crate::ui::step5::service_step5::auto_answer::prompt_context(
+        term,
+        prompt_kind.to_string(),
+        "bio_inputs",
+    );
     prompt_memory::remember_answer_with_context(prompt_key, &scripted, preview_line, &ctx);
     term.send_line(&scripted);
     term.echo_sent(&scripted);

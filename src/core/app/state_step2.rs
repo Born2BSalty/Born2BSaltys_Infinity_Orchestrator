@@ -110,7 +110,10 @@ pub struct Step2Tp2ProbeReport {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step2Selection {
-    Mod { game_tab: String, tp_file: String },
+    Mod {
+        game_tab: String,
+        tp_file: String,
+    },
     Component {
         game_tab: String,
         tp_file: String,

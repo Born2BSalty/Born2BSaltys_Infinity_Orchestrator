@@ -3,9 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
 use crate::config::options::ScanConfig;
 use crate::install::weidu_scan;
+use anyhow::{Result, anyhow};
 use tracing::info;
 use walkdir::WalkDir;
 
@@ -30,7 +30,10 @@ pub fn run(config: &ScanConfig) -> Result<()> {
         let needle = filter_by_selected_language.to_ascii_lowercase();
         for tp2 in tp2_files {
             scanned_tp2 += 1;
-            info!("scan languages progress: {scanned_tp2}/{total_tp2} {:?}", tp2);
+            info!(
+                "scan languages progress: {scanned_tp2}/{total_tp2} {:?}",
+                tp2
+            );
             let langs = weidu_scan::list_languages(&options.weidu_binary, &tp2)?;
             let filtered = langs
                 .into_iter()

@@ -5,7 +5,6 @@ use eframe::egui;
 
 use crate::ui::state::WizardState;
 
-
 pub use crate::ui::step2::action_step2::Step2Action;
 
 pub fn render(

@@ -35,7 +35,10 @@ pub(super) fn sync_step3_from_step2(app: &mut WizardApp) {
     app.revalidate_compat();
 }
 
-fn reconcile_step3_items(current: &[Step3ItemState], fresh: Vec<Step3ItemState>) -> Vec<Step3ItemState> {
+fn reconcile_step3_items(
+    current: &[Step3ItemState],
+    fresh: Vec<Step3ItemState>,
+) -> Vec<Step3ItemState> {
     let mut fresh_by_key = HashMap::<String, Step3ItemState>::new();
     let mut fresh_order = Vec::<String>::new();
     for item in fresh.into_iter().filter(|item| !item.is_parent) {

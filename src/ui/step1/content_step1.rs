@@ -126,8 +126,11 @@ Prompt sequence with blank input\n\
     }
     ui.checkbox(&mut s.have_weidu_logs, "Have WeiDU Logs?")
         .on_hover_text(tt::STEP1_HAVE_WEIDU_LOGS);
-    ui.checkbox(&mut s.weidu_log_mode_enabled, "Enable WeiDU Logging Options (-u)")
-        .on_hover_text(tt::STEP1_WEIDU_LOG_MODE);
+    ui.checkbox(
+        &mut s.weidu_log_mode_enabled,
+        "Enable WeiDU Logging Options (-u)",
+    )
+    .on_hover_text(tt::STEP1_WEIDU_LOG_MODE);
     ui.checkbox(
         &mut s.prompt_required_sound_enabled,
         "Sound cue when prompt input is required",
@@ -176,8 +179,11 @@ pub fn render_flags_content(ui: &mut egui::Ui, s: &mut Step1State) {
     ui.checkbox(&mut s.check_last_installed, "-c Check last installed")
         .on_hover_text(tt::STEP1_CHECK_LAST_INSTALLED);
     if s.game_install == "EET" {
-        ui.checkbox(&mut s.new_pre_eet_dir_enabled, "-p Clone BGEE -> Pre-EET target")
-            .on_hover_text(tt::STEP1_CLONE_BGEE_PRE_EET);
+        ui.checkbox(
+            &mut s.new_pre_eet_dir_enabled,
+            "-p Clone BGEE -> Pre-EET target",
+        )
+        .on_hover_text(tt::STEP1_CLONE_BGEE_PRE_EET);
     } else {
         s.new_pre_eet_dir_enabled = false;
     }

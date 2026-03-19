@@ -5,7 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::mods::log_file::LogFile;
 use crate::ui::controller::log_apply_keys::{
-    find_mods_by_tp2_filename, find_unique_mod_by_tp2_stem, log_lookup_keys, mod_lookup_keys_for_mod,
+    find_mods_by_tp2_filename, find_unique_mod_by_tp2_stem, log_lookup_keys,
+    mod_lookup_keys_for_mod,
 };
 use crate::ui::controller::log_apply_match::{
     installed_component_display_name, is_allowed_tp2, normalize_component_name,
@@ -79,7 +80,8 @@ pub fn apply_log_to_mods(
             continue;
         }
 
-        let target_name = normalize_component_name(installed_component_display_name(installed).as_str());
+        let target_name =
+            normalize_component_name(installed_component_display_name(installed).as_str());
         let mut matched_this_line = false;
         for mod_idx in target_mods {
             let mod_state = &mut mods[mod_idx];
@@ -103,7 +105,8 @@ pub fn apply_log_to_mods(
 
             if !picked && !target_name.is_empty() {
                 for component in &mut mod_state.components {
-                    if let Some(child_tp2) = parse_component_tp2_from_raw(component.raw_line.as_str())
+                    if let Some(child_tp2) =
+                        parse_component_tp2_from_raw(component.raw_line.as_str())
                         && !tp2_compatible(child_tp2.as_str(), target_tp2_norm.as_str())
                     {
                         continue;
@@ -150,7 +153,10 @@ fn check_component(component: &mut crate::ui::state::Step2ComponentState, next_o
     }
 }
 
-fn apply_wlb_inputs(component: &mut crate::ui::state::Step2ComponentState, wlb_inputs: Option<&str>) {
+fn apply_wlb_inputs(
+    component: &mut crate::ui::state::Step2ComponentState,
+    wlb_inputs: Option<&str>,
+) {
     let Some(inputs) = wlb_inputs.map(str::trim).filter(|v| !v.is_empty()) else {
         return;
     };

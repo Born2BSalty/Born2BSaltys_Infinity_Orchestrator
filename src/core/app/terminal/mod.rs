@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::process::{Child, ChildStdin};
 use std::sync::mpsc::Receiver;
-use std::{collections::{HashMap, VecDeque}};
 
 use anyhow::Result;
 use eframe::egui;

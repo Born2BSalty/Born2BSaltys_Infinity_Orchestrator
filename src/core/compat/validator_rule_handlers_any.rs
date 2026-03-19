@@ -16,10 +16,12 @@ pub(super) fn handle_require_installed_any(
     selected_set: &HashSet<(String, u32)>,
     order_map: &HashMap<(String, u32), usize>,
 ) {
-    let hit = targets.iter().any(|(target_mod, target_component)| match target_component {
-        Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
-        None => selected_set.iter().any(|(m, _)| m == target_mod),
-    });
+    let hit = targets
+        .iter()
+        .any(|(target_mod, target_component)| match target_component {
+            Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
+            None => selected_set.iter().any(|(m, _)| m == target_mod),
+        });
 
     if !hit {
         let related_text = targets

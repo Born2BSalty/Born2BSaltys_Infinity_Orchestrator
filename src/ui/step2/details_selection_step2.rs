@@ -13,7 +13,9 @@ pub(crate) fn render_selection_grid(
     row_h: f32,
     value_chars: usize,
 ) {
-    ui.label(crate::ui::shared::typography_global::small_strong("Selection"));
+    ui.label(crate::ui::shared::typography_global::small_strong(
+        "Selection",
+    ));
     egui::Grid::new("step2_details_selection_grid")
         .num_columns(3)
         .spacing([8.0, 4.0])
@@ -288,9 +290,9 @@ fn render_origin_row(
         .unwrap_or("step2_compat_rules.toml");
     ui.add_sized(
         [value_w, row_h],
-        egui::Label::new(crate::ui::shared::typography_global::monospace(ellipsize_end(
-            origin, value_chars,
-        ))),
+        egui::Label::new(crate::ui::shared::typography_global::monospace(
+            ellipsize_end(origin, value_chars),
+        )),
     )
     .on_hover_text(origin);
     if ui
@@ -321,9 +323,9 @@ fn render_optional_monospace_row(
     );
     ui.add_sized(
         [value_w, row_h],
-        egui::Label::new(crate::ui::shared::typography_global::monospace(ellipsize_end(
-            raw, value_chars,
-        ))),
+        egui::Label::new(crate::ui::shared::typography_global::monospace(
+            ellipsize_end(raw, value_chars),
+        )),
     )
     .on_hover_text(raw);
     if ui

@@ -31,9 +31,5 @@ fn parse_or_targets_from_reason(reason: &str) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    if parts.len() > 1 {
-        Some(parts)
-    } else {
-        None
-    }
+    if parts.len() > 1 { Some(parts) } else { None }
 }

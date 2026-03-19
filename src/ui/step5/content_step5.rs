@@ -6,10 +6,10 @@ use eframe::egui;
 use crate::ui::shared::layout_tokens_global::STEP5_SECTION_GAP;
 use crate::ui::state::WizardState;
 use crate::ui::step5::action_step5::Step5Action;
-use crate::ui::step5::service_step5::apply_dev_defaults;
-use crate::ui::step5::state_step5::install_in_progress;
 use crate::ui::step5::menus_step5 as menus;
 use crate::ui::step5::prompt_answers_step5 as prompt_answers;
+use crate::ui::step5::service_step5::apply_dev_defaults;
+use crate::ui::step5::state_step5::install_in_progress;
 use crate::ui::step5::status_bar_step5 as status_bar;
 use crate::ui::step5::top_panels_step5 as top_panels;
 use crate::ui::terminal::EmbeddedTerminal;
@@ -53,153 +53,151 @@ pub fn section_gap(ui: &mut egui::Ui, size: f32) {
 }
 
 mod cancel_flow {
-use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-use eframe::egui;
+    use eframe::egui;
 
-use crate::ui::state::WizardState;
-use crate::ui::terminal::EmbeddedTerminal;
+    use crate::ui::state::WizardState;
+    use crate::ui::terminal::EmbeddedTerminal;
 
-pub(super) fn render_cancel_confirm(
-    ui: &mut egui::Ui,
-    state: &mut WizardState,
-    mut terminal: Option<&mut EmbeddedTerminal>,
-) {
-    if !state.step5.cancel_confirm_open {
-        return;
+    pub(super) fn render_cancel_confirm(
+        ui: &mut egui::Ui,
+        state: &mut WizardState,
+        mut terminal: Option<&mut EmbeddedTerminal>,
+    ) {
+        if !state.step5.cancel_confirm_open {
+            return;
+        }
+
+        egui::Window::new("Confirm Cancel")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .show(ui.ctx(), |ui| {
+                ui.label("Cancel active install?");
+                ui.checkbox(
+                    &mut state.step5.cancel_force_checked,
+                    "Force cancel (emergency)",
+                )
+                .on_hover_text(crate::ui::shared::tooltip_global::STEP5_FORCE_CANCEL);
+                if state.step5.cancel_force_checked {
+                    ui.label(
+                        crate::ui::shared::typography_global::plain(
+                            "Warning: force cancel can leave installation in a broken state.",
+                        )
+                        .color(crate::ui::shared::theme_global::warning()),
+                    );
+                } else {
+                    ui.label(crate::ui::shared::typography_global::weak(
+                        "Safe cancel: wait for current component boundary, then stop.",
+                    ));
+                }
+                ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
+                ui.horizontal(|ui| {
+                    if ui.button("Yes, cancel").clicked() {
+                        state.step5.cancel_requested = true;
+                        if state.step5.cancel_force_checked {
+                            if let Some(term) = terminal.as_mut() {
+                                term.force_terminate();
+                                term.focus();
+                            }
+                            state.step5.last_status_text = "Force cancel requested".to_string();
+                            state.step5.cancel_pending = false;
+                            state.step5.cancel_pending_started_unix_secs = None;
+                            state.step5.cancel_pending_output_len = None;
+                            state.step5.cancel_pending_boundary_count = None;
+                            state.step5.cancel_signal_sent_unix_secs = None;
+                            state.step5.cancel_attempt_count = 0;
+                            state.step5.cancel_was_graceful = false;
+                            state.step5.last_cancel_mode = "force".to_string();
+                            state.step5.resume_available = false;
+                            state.step5.resume_targets = crate::ui::state::ResumeTargets::default();
+                        } else {
+                            state.step5.cancel_pending = true;
+                            state.step5.cancel_pending_started_unix_secs = Some(now_unix_secs());
+                            state.step5.cancel_pending_output_len =
+                                terminal.as_deref().map(|t| t.console_text().len());
+                            state.step5.cancel_pending_boundary_count =
+                                terminal.as_deref().map(|t| t.boundary_event_count());
+                            state.step5.cancel_signal_sent_unix_secs = None;
+                            state.step5.cancel_attempt_count = 0;
+                            state.step5.last_status_text =
+                                "Cancel pending (waiting for component boundary)".to_string();
+                        }
+                        state.step5.cancel_confirm_open = false;
+                        state.step5.cancel_force_checked = false;
+                    }
+                    if ui.button("No").clicked() {
+                        state.step5.cancel_confirm_open = false;
+                        state.step5.cancel_force_checked = false;
+                        state.step5.cancel_requested = false;
+                    }
+                });
+            });
     }
 
-    egui::Window::new("Confirm Cancel")
-        .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-        .show(ui.ctx(), |ui| {
-            ui.label("Cancel active install?");
-            ui.checkbox(
-                &mut state.step5.cancel_force_checked,
-                "Force cancel (emergency)",
-            )
-            .on_hover_text(crate::ui::shared::tooltip_global::STEP5_FORCE_CANCEL);
-            if state.step5.cancel_force_checked {
-                ui.label(
-                    crate::ui::shared::typography_global::plain(
-                        "Warning: force cancel can leave installation in a broken state.",
-                    )
-                    .color(crate::ui::shared::theme_global::warning()),
-                );
-            } else {
-                ui.label(crate::ui::shared::typography_global::weak(
-                    "Safe cancel: wait for current component boundary, then stop.",
-                ));
-            }
-            ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
-            ui.horizontal(|ui| {
-                if ui.button("Yes, cancel").clicked() {
-                    state.step5.cancel_requested = true;
-                    if state.step5.cancel_force_checked {
-                        if let Some(term) = terminal.as_mut() {
-                            term.force_terminate();
-                            term.focus();
-                        }
-                        state.step5.last_status_text = "Force cancel requested".to_string();
-                        state.step5.cancel_pending = false;
-                        state.step5.cancel_pending_started_unix_secs = None;
-                        state.step5.cancel_pending_output_len = None;
-                        state.step5.cancel_pending_boundary_count = None;
-                        state.step5.cancel_signal_sent_unix_secs = None;
-                        state.step5.cancel_attempt_count = 0;
-                        state.step5.cancel_was_graceful = false;
-                        state.step5.last_cancel_mode = "force".to_string();
-                        state.step5.resume_available = false;
-                        state.step5.resume_targets = crate::ui::state::ResumeTargets::default();
-                    } else {
-                        state.step5.cancel_pending = true;
-                        state.step5.cancel_pending_started_unix_secs = Some(now_unix_secs());
-                        state.step5.cancel_pending_output_len =
-                            terminal.as_deref().map(|t| t.console_text().len());
-                        state.step5.cancel_pending_boundary_count =
-                            terminal.as_deref().map(|t| t.boundary_event_count());
-                        state.step5.cancel_signal_sent_unix_secs = None;
-                        state.step5.cancel_attempt_count = 0;
-                        state.step5.last_status_text =
-                            "Cancel pending (waiting for component boundary)".to_string();
-                    }
-                    state.step5.cancel_confirm_open = false;
-                    state.step5.cancel_force_checked = false;
-                }
-                if ui.button("No").clicked() {
-                    state.step5.cancel_confirm_open = false;
-                    state.step5.cancel_force_checked = false;
-                    state.step5.cancel_requested = false;
-                }
-            });
-        });
-}
-
-fn now_unix_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+    fn now_unix_secs() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
 }
 
 mod dev_header {
-use eframe::egui;
+    use eframe::egui;
 
-use crate::ui::state::WizardState;
+    use crate::ui::state::WizardState;
 
-pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool) {
-    ui.heading("Step 5: Install, Logs, Diagnostics");
-    ui.label("Final execution view.");
-    if dev_mode {
-        let has_rust_log = state.step1.rust_log_debug || state.step1.rust_log_trace;
-        let level = if state.step1.rust_log_trace {
-            "TRACE"
-        } else if state.step1.rust_log_debug {
-            "DEBUG"
-        } else {
-            "OFF"
-        };
-        let color = if has_rust_log {
-            crate::ui::shared::theme_global::success()
-        } else {
-            crate::ui::shared::theme_global::accent_path()
-        };
-        let msg = if has_rust_log {
-            format!("Dev Mode: RUST_LOG={level} selected.")
-        } else {
-            "Dev Mode: open Diagnostics and choose RUST_LOG=DEBUG or TRACE before Install."
-                .to_string()
-        };
-        ui.label(crate::ui::shared::typography_global::strong(msg).color(color));
+    pub(super) fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool) {
+        ui.heading("Step 5: Install, Logs, Diagnostics");
+        ui.label("Final execution view.");
+        if dev_mode {
+            let has_rust_log = state.step1.rust_log_debug || state.step1.rust_log_trace;
+            let level = if state.step1.rust_log_trace {
+                "TRACE"
+            } else if state.step1.rust_log_debug {
+                "DEBUG"
+            } else {
+                "OFF"
+            };
+            let color = if has_rust_log {
+                crate::ui::shared::theme_global::success()
+            } else {
+                crate::ui::shared::theme_global::accent_path()
+            };
+            let msg = if has_rust_log {
+                format!("Dev Mode: RUST_LOG={level} selected.")
+            } else {
+                "Dev Mode: open Diagnostics and choose RUST_LOG=DEBUG or TRACE before Install."
+                    .to_string()
+            };
+            ui.label(crate::ui::shared::typography_global::strong(msg).color(color));
+        }
+        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_LG);
     }
-    ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_LG);
 }
-}
-
-
 
 mod install_row {
-use eframe::egui;
+    use eframe::egui;
 
-use crate::ui::state::WizardState;
-use crate::ui::terminal::EmbeddedTerminal;
+    use crate::ui::state::WizardState;
+    use crate::ui::terminal::EmbeddedTerminal;
 
-use crate::ui::step5::action_step5::Step5Action;
+    use crate::ui::step5::action_step5::Step5Action;
 
-use super::{cancel_flow, menus, prompt_answers};
+    use super::{cancel_flow, menus, prompt_answers};
 
-pub(super) fn render(
-    ui: &mut egui::Ui,
-    state: &mut WizardState,
-    mut terminal: Option<&mut EmbeddedTerminal>,
-    terminal_error: Option<&str>,
-    dev_mode: bool,
-    exe_fingerprint: &str,
-) -> Option<Step5Action> {
-    let mut action: Option<Step5Action> = None;
-    ui.horizontal(|ui| {
+    pub(super) fn render(
+        ui: &mut egui::Ui,
+        state: &mut WizardState,
+        mut terminal: Option<&mut EmbeddedTerminal>,
+        terminal_error: Option<&str>,
+        dev_mode: bool,
+        exe_fingerprint: &str,
+    ) -> Option<Step5Action> {
+        let mut action: Option<Step5Action> = None;
+        ui.horizontal(|ui| {
         let can_install = terminal.is_some() && terminal_error.is_none();
         let diagnostics_ready = menus::diagnostics_ready_for_dev(state);
         let install_allowed = can_install && (!dev_mode || diagnostics_ready);
@@ -320,7 +318,7 @@ pub(super) fn render(
         ui.checkbox(&mut state.step5.auto_scroll, "Auto-scroll")
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_AUTO_SCROLL);
     });
-    cancel_flow::render_cancel_confirm(ui, state, terminal.as_deref_mut());
-    action
-}
+        cancel_flow::render_cancel_confirm(ui, state, terminal.as_deref_mut());
+        action
+    }
 }

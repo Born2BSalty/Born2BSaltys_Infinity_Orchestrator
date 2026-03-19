@@ -4,8 +4,8 @@
 use std::collections::{HashMap, HashSet};
 
 use super::super::model::{CompatIssue, CompatIssueCode, IssueSource, Severity, Tp2Metadata};
-use super::validator_helpers as helpers;
 use super::SelectedComponent;
+use super::validator_helpers as helpers;
 
 pub(super) fn handle_require_game_or_installed_any(
     issues: &mut Vec<CompatIssue>,
@@ -20,12 +20,13 @@ pub(super) fn handle_require_game_or_installed_any(
 ) {
     let current_game = helpers::normalize_game_mode(game_mode);
     let game_ok = helpers::game_allowed(&current_game, allowed_games);
-    let installed_ok = targets
-        .iter()
-        .any(|(target_mod, target_component)| match target_component {
-            Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
-            None => selected_set.iter().any(|(m, _)| m == target_mod),
-        });
+    let installed_ok =
+        targets
+            .iter()
+            .any(|(target_mod, target_component)| match target_component {
+                Some(cid) => selected_set.contains(&(target_mod.clone(), *cid)),
+                None => selected_set.iter().any(|(m, _)| m == target_mod),
+            });
     if game_ok || installed_ok {
         return;
     }
@@ -184,9 +185,15 @@ pub(super) fn handle_conditional(
 
     let description = if when_installed {
         if let Some(cid) = target_component {
-            format!("Conditional patch path active because {} #{} is selected", target_mod, cid)
+            format!(
+                "Conditional patch path active because {} #{} is selected",
+                target_mod, cid
+            )
         } else {
-            format!("Conditional patch path active because {} is selected", target_mod)
+            format!(
+                "Conditional patch path active because {} is selected",
+                target_mod
+            )
         }
     } else if let Some(cid) = target_component {
         format!(

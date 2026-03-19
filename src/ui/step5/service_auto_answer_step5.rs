@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::step5::prompt_memory;
 use crate::ui::state::WizardState;
+use crate::ui::step5::prompt_memory;
 use crate::ui::terminal::EmbeddedTerminal;
 
 pub(crate) fn try_auto_answer_prompt(
@@ -10,7 +10,8 @@ pub(crate) fn try_auto_answer_prompt(
     terminal: Option<&mut EmbeddedTerminal>,
     waiting_for_input: bool,
 ) {
-    if state.step5.cancel_requested || state.step5.cancel_pending || state.step5.cancel_confirm_open {
+    if state.step5.cancel_requested || state.step5.cancel_pending || state.step5.cancel_confirm_open
+    {
         reset_auto_answer_state(state);
         return;
     }
@@ -42,7 +43,11 @@ pub(crate) fn try_auto_answer_prompt(
         format!("{}|{}", prompt_key, prompt_kind)
     };
     let now_ms = now_unix_millis();
-    crate::ui::step5::service_step5::readiness::update_prompt_readiness(state, &prompt_signature, now_ms);
+    crate::ui::step5::service_step5::readiness::update_prompt_readiness(
+        state,
+        &prompt_signature,
+        now_ms,
+    );
     let headers_ready = term.prompt_headers_ready();
     let scripted_debounce_ms = initial_delay_base_ms(state);
     let fallback_debounce_ms = adaptive_prompt_debounce_ms(
@@ -51,9 +56,17 @@ pub(crate) fn try_auto_answer_prompt(
         line_count,
         char_count,
     );
-    let ready_for_scripted = crate::ui::step5::service_step5::readiness::ready_for_scripted(state, now_ms, scripted_debounce_ms);
-    let ready_for_fallback =
-        crate::ui::step5::service_step5::readiness::ready_for_fallback(state, now_ms, headers_ready, fallback_debounce_ms);
+    let ready_for_scripted = crate::ui::step5::service_step5::readiness::ready_for_scripted(
+        state,
+        now_ms,
+        scripted_debounce_ms,
+    );
+    let ready_for_fallback = crate::ui::step5::service_step5::readiness::ready_for_fallback(
+        state,
+        now_ms,
+        headers_ready,
+        fallback_debounce_ms,
+    );
     if has_scripted_candidate {
         if !ready_for_scripted {
             return;
@@ -64,7 +77,11 @@ pub(crate) fn try_auto_answer_prompt(
     let prompt_cycle = prompt_cycle_count(term);
     let prompt_cycle_signature = format!("{prompt_key}|{prompt_cycle}");
     let post_send_delay_ms = post_send_delay_ms(state);
-    let settle_active = crate::ui::step5::service_step5::readiness::settle_active(state, now_ms, post_send_delay_ms);
+    let settle_active = crate::ui::step5::service_step5::readiness::settle_active(
+        state,
+        now_ms,
+        post_send_delay_ms,
+    );
     if settle_active {
         return;
     }
@@ -81,13 +98,14 @@ pub(crate) fn try_auto_answer_prompt(
     {
         return;
     }
-    let allow_json_fallback = crate::ui::step5::service_step5::scripted::allow_json_fallback_after_scripted(
-        state,
-        term,
-        &prompt_key,
-        now_ms,
-        post_send_delay_ms,
-    );
+    let allow_json_fallback =
+        crate::ui::step5::service_step5::scripted::allow_json_fallback_after_scripted(
+            state,
+            term,
+            &prompt_key,
+            now_ms,
+            post_send_delay_ms,
+        );
     if !allow_json_fallback {
         return;
     }
@@ -174,7 +192,10 @@ pub(super) fn initial_delay_base_ms(state: &WizardState) -> u64 {
 
 pub(super) fn post_send_delay_ms(state: &WizardState) -> u64 {
     if state.step1.auto_answer_post_send_delay_enabled {
-        state.step1.auto_answer_post_send_delay_ms.clamp(500, 15_000) as u64
+        state
+            .step1
+            .auto_answer_post_send_delay_ms
+            .clamp(500, 15_000) as u64
     } else {
         5000
     }

@@ -3,11 +3,11 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
 use crate::config::options::EetConfig;
 use crate::install::plan::InstallPlan;
 use crate::install::runner;
 use crate::mods::log_file::LogFile;
+use anyhow::{Result, bail};
 use tracing::info;
 
 pub fn run(config: &EetConfig) -> Result<()> {
@@ -66,7 +66,10 @@ fn build_plan(
             installed_log_path.display()
         );
     }
-    info!("{label} install plan contains {} component(s)", plan.components.len());
+    info!(
+        "{label} install plan contains {} component(s)",
+        plan.components.len()
+    );
     Ok(plan)
 }
 

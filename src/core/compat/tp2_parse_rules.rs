@@ -63,13 +63,20 @@ pub(super) fn parse_mod_component_args(after: &str) -> Option<(String, u32)> {
         .trim_start_matches(['=', ',', ':'])
         .trim_start()
         .trim_start_matches('#');
-    let digits: String = comp_str.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = comp_str
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
     let component_id: u32 = digits.parse().ok()?;
 
     Some((normalize_tp2_ref(&mod_name), component_id))
 }
 
-pub(super) fn parse_require_predicate_path_exists(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+pub(super) fn parse_require_predicate_path_exists(
+    upper: &str,
+    raw: &str,
+    line: usize,
+) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE")
         || upper.contains("FILE_EXISTS_IN_GAME")
         || upper.contains("GAME_IS")
@@ -107,7 +114,11 @@ pub(super) fn parse_require_predicate_path_exists(upper: &str, raw: &str, line: 
     })
 }
 
-pub(super) fn parse_require_predicate_game_is(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+pub(super) fn parse_require_predicate_game_is(
+    upper: &str,
+    raw: &str,
+    line: usize,
+) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("GAME_IS") {
         return None;
     }
@@ -122,7 +133,11 @@ pub(super) fn parse_require_predicate_game_is(upper: &str, raw: &str, line: usiz
     })
 }
 
-pub(super) fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+pub(super) fn parse_require_predicate_game_or_installed_any(
+    upper: &str,
+    raw: &str,
+    line: usize,
+) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE")
         || !upper.contains("GAME_IS")
         || !upper.contains("MOD_IS_INSTALLED")
@@ -150,7 +165,11 @@ pub(super) fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &s
     })
 }
 
-pub(super) fn parse_require_predicate_mod_installed(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+pub(super) fn parse_require_predicate_mod_installed(
+    upper: &str,
+    raw: &str,
+    line: usize,
+) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("MOD_IS_INSTALLED") {
         return None;
     }
@@ -176,7 +195,11 @@ pub(super) fn parse_require_predicate_mod_installed(upper: &str, raw: &str, line
     }
 }
 
-pub(super) fn parse_forbid_predicate_mod_installed(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+pub(super) fn parse_forbid_predicate_mod_installed(
+    upper: &str,
+    raw: &str,
+    line: usize,
+) -> Option<Tp2Rule> {
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("MOD_IS_INSTALLED") {
         return None;
     }
@@ -194,7 +217,11 @@ pub(super) fn parse_forbid_predicate_mod_installed(upper: &str, raw: &str, line:
     })
 }
 
-pub(super) fn parse_action_if_mod_installed(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+pub(super) fn parse_action_if_mod_installed(
+    upper: &str,
+    raw: &str,
+    line: usize,
+) -> Option<Tp2Rule> {
     if !upper.contains("ACTION_IF") || !upper.contains("MOD_IS_INSTALLED") {
         return None;
     }
@@ -244,7 +271,10 @@ pub(super) fn parse_mod_component_optional(after: &str) -> Option<(String, Optio
     let digits: String = if let Some((token, _)) = parse_quoted_or_tilde_token(comp_str) {
         token.chars().take_while(|c| c.is_ascii_digit()).collect()
     } else {
-        comp_str.chars().take_while(|c| c.is_ascii_digit()).collect()
+        comp_str
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect()
     };
     if !digits.is_empty() {
         comp = digits.parse().ok();

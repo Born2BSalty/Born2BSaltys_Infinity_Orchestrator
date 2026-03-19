@@ -13,13 +13,17 @@ pub fn normalize_component_name(value: &str) -> String {
     let mut s = value.replace('\u{2013}', "-").replace('\u{2014}', "-");
     if let Some((head, tail)) = s.rsplit_once(':') {
         let t = tail.trim();
-        let looks_like_version =
-            t.starts_with('v') || t.starts_with('V') || t.chars().next().is_some_and(|c| c.is_ascii_digit());
+        let looks_like_version = t.starts_with('v')
+            || t.starts_with('V')
+            || t.chars().next().is_some_and(|c| c.is_ascii_digit());
         if looks_like_version {
             s = head.to_string();
         }
     }
-    s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase()
+    s.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
 }
 
 pub fn parse_component_tp2_from_raw(raw: &str) -> Option<String> {
@@ -59,7 +63,8 @@ pub fn is_eet_end_line(installed: &Component) -> bool {
     if installed.component != "0" {
         return false;
     }
-    let target_name = normalize_component_name(installed_component_display_name(installed).as_str());
+    let target_name =
+        normalize_component_name(installed_component_display_name(installed).as_str());
     let expected_name =
         normalize_component_name("EET end (last mod in install order) -> Standard installation");
     target_name == expected_name
@@ -78,7 +83,9 @@ pub fn try_apply_eet_end_fallback(
         normalize_component_name("EET end (last mod in install order) -> Standard installation");
 
     let eet_keys: HashSet<String> = tp2_lookup_keys(r"EET\EET.TP2").into_iter().collect();
-    let eet_end_keys: HashSet<String> = tp2_lookup_keys(r"EET_END\EET_END.TP2").into_iter().collect();
+    let eet_end_keys: HashSet<String> = tp2_lookup_keys(r"EET_END\EET_END.TP2")
+        .into_iter()
+        .collect();
     let mut name_only_candidate: Option<(usize, usize)> = None;
     for (mod_idx, mod_state) in mods.iter_mut().enumerate() {
         let mod_keys: HashSet<String> = mod_lookup_keys_for_mod(mod_state).into_iter().collect();

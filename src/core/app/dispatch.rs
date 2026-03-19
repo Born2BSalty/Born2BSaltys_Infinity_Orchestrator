@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use anyhow::Result;
 use crate::config::options::AppCommandConfig;
+use anyhow::Result;
 use tracing::info;
 
 use super::{eet, normal, scan_components, scan_languages};

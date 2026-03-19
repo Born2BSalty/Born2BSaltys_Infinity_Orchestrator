@@ -49,7 +49,8 @@ impl EmbeddedTerminal {
         let shown = if line.is_empty() { "<blank>" } else { line };
         let sent_line = format!("\n[sent] {shown}\n");
         self.append_output(&sent_line);
-        self.important_buffer.push_str(sent_line.trim_start_matches('\n'));
+        self.important_buffer
+            .push_str(sent_line.trim_start_matches('\n'));
         self.prompt_capture_active = false;
         self.prompt_capture_lines = 0;
         self.prompt_capture_after_send = true;

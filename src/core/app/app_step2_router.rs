@@ -22,14 +22,17 @@ pub(super) fn handle_step2_action(app: &mut WizardApp, action: Step2Action) {
                 app.state.compat.error_count, app.state.compat.warning_count
             );
         }
-        Step2Action::ExportCompatReport => match export_compat_report(&app.state.step2, &app.state.compat) {
-            Ok(path) => {
-                app.state.step2.scan_status = format!("Compat report exported: {}", path.display());
+        Step2Action::ExportCompatReport => {
+            match export_compat_report(&app.state.step2, &app.state.compat) {
+                Ok(path) => {
+                    app.state.step2.scan_status =
+                        format!("Compat report exported: {}", path.display());
+                }
+                Err(err) => {
+                    app.state.step2.scan_status = format!("Compat export failed: {err}");
+                }
             }
-            Err(err) => {
-                app.state.step2.scan_status = format!("Compat export failed: {err}");
-            }
-        },
+        }
         Step2Action::OpenSelectedReadme(path)
         | Step2Action::OpenSelectedTp2(path)
         | Step2Action::OpenSelectedWeb(path) => {

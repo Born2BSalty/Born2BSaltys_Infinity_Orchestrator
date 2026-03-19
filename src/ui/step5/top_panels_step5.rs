@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use eframe::egui;
 use chrono::{DateTime, Local};
+use eframe::egui;
 
 use crate::ui::state::WizardState;
 use crate::ui::step5::service_step5::{
@@ -21,7 +21,9 @@ pub(crate) fn render(ui: &mut egui::Ui, state: &WizardState) {
             ui.set_min_height(top_h);
             ui.set_max_height(top_h);
             ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::section_title("Command"));
+                ui.label(crate::ui::shared::typography_global::section_title(
+                    "Command",
+                ));
                 if ui.button("Copy Command").clicked() {
                     ui.ctx().copy_text(build_install_command(&state.step1));
                 }
@@ -44,16 +46,18 @@ pub(crate) fn render(ui: &mut egui::Ui, state: &WizardState) {
             ui.set_width(ui.available_width());
             ui.set_min_height(top_h);
             ui.set_max_height(top_h);
-            ui.label(crate::ui::shared::typography_global::section_title("Summary"));
+            ui.label(crate::ui::shared::typography_global::section_title(
+                "Summary",
+            ));
             ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
             egui::ScrollArea::vertical()
                 .id_salt("step5_summary_scroll")
                 .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    egui::Grid::new("step5_summary_grid")
+                        .num_columns(2)
+                        .spacing([12.0, 6.0])
                         .show(ui, |ui| {
-                            egui::Grid::new("step5_summary_grid")
-                                .num_columns(2)
-                                .spacing([12.0, 6.0])
-                                .show(ui, |ui| {
                             ui.label("Game Install:");
                             ui.monospace(&state.step1.game_install);
                             ui.end_row();

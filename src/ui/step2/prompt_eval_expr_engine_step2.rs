@@ -4,8 +4,8 @@
 use std::path::Path;
 
 use crate::ui::step2::prompt_eval_expr_tokens_step2::Token;
-use crate::ui::step2::prompt_eval_vars_step2::{lookup_var, PromptVarContext, PromptVarValue};
-use crate::ui::step2::state_step2::{normalize_tp2_stem, PromptEvalContext};
+use crate::ui::step2::prompt_eval_vars_step2::{PromptVarContext, PromptVarValue, lookup_var};
+use crate::ui::step2::state_step2::{PromptEvalContext, normalize_tp2_stem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EvalState {
@@ -16,11 +16,7 @@ pub(crate) enum EvalState {
 
 impl EvalState {
     pub(crate) fn from_bool(value: bool) -> Self {
-        if value {
-            Self::True
-        } else {
-            Self::False
-        }
+        if value { Self::True } else { Self::False }
     }
 
     pub(crate) fn is_not_false(self) -> bool {
@@ -125,7 +121,9 @@ impl<'a> Parser<'a> {
             };
             return lhs.eq_value(&rhs);
         }
-        if self.consume_if_ident("STRING_EQUAL_CASE") || self.consume_if_ident("STRING_COMPARE_CASE") {
+        if self.consume_if_ident("STRING_EQUAL_CASE")
+            || self.consume_if_ident("STRING_COMPARE_CASE")
+        {
             let Some(rhs) = self.consume_scalar() else {
                 return EvalState::Unknown;
             };
@@ -179,7 +177,10 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 let upper = name.to_ascii_uppercase();
                 if matches!(self.peek(), Some(Token::LParen))
-                    || matches!(upper.as_str(), "GAME_IS" | "MOD_IS_INSTALLED" | "FILE_EXISTS_IN_GAME")
+                    || matches!(
+                        upper.as_str(),
+                        "GAME_IS" | "MOD_IS_INSTALLED" | "FILE_EXISTS_IN_GAME"
+                    )
                 {
                     return Some(ScalarValue::State(self.parse_call(&name)));
                 }
@@ -220,10 +221,12 @@ impl<'a> Parser<'a> {
         if values.is_empty() {
             return EvalState::Unknown;
         }
-        EvalState::from_bool(values
-            .into_iter()
-            .map(normalize_game_token)
-            .any(|game| self.prompt_eval.active_games.contains(&game)))
+        EvalState::from_bool(
+            values
+                .into_iter()
+                .map(normalize_game_token)
+                .any(|game| self.prompt_eval.active_games.contains(&game)),
+        )
     }
 
     fn eval_mod_is_installed(&mut self, opened: bool) -> EvalState {
@@ -236,9 +239,10 @@ impl<'a> Parser<'a> {
         if opened {
             self.skip_extra_values_until_rparen();
         }
-        EvalState::from_bool(self.prompt_eval
-            .checked_components
-            .contains(&(normalize_tp2_stem(&mod_name), component_id.trim().to_string())))
+        EvalState::from_bool(self.prompt_eval.checked_components.contains(&(
+            normalize_tp2_stem(&mod_name),
+            component_id.trim().to_string(),
+        )))
     }
 
     fn eval_file_exists_in_game(&mut self, opened: bool) -> EvalState {
@@ -343,7 +347,9 @@ impl ScalarValue {
         match self {
             Self::State(v) => *v,
             Self::Int(v) => EvalState::from_bool(*v != 0),
-            Self::Text(v) => EvalState::from_bool(!v.trim().is_empty() && !v.eq_ignore_ascii_case("0")),
+            Self::Text(v) => {
+                EvalState::from_bool(!v.trim().is_empty() && !v.eq_ignore_ascii_case("0"))
+            }
             Self::Unknown(_) => EvalState::Unknown,
         }
     }
@@ -376,8 +382,18 @@ impl ScalarValue {
                 }
             }
             Self::Int(v) => v.to_string(),
-            Self::Text(v) => v.trim().trim_matches('%').trim_matches('"').trim_matches('~').to_string(),
-            Self::Unknown(v) => v.trim().trim_matches('%').trim_matches('"').trim_matches('~').to_string(),
+            Self::Text(v) => v
+                .trim()
+                .trim_matches('%')
+                .trim_matches('"')
+                .trim_matches('~')
+                .to_string(),
+            Self::Unknown(v) => v
+                .trim()
+                .trim_matches('%')
+                .trim_matches('"')
+                .trim_matches('~')
+                .to_string(),
         }
     }
 }

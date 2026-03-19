@@ -3,14 +3,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::super::model::{CompatIssue, CompatIssueCode, IssueSource, Severity, Tp2Metadata, Tp2Rule};
+use super::super::model::{
+    CompatIssue, CompatIssueCode, IssueSource, Severity, Tp2Metadata, Tp2Rule,
+};
+use super::SelectedComponent;
 use super::validator_helpers as helpers;
 use super::validator_rule_handlers_any::handle_require_installed_any;
 use super::validator_rule_handlers_misc::{
     handle_conditional, handle_forbid_installed, handle_require_game_or_installed_any,
     handle_require_installed_mod,
 };
-use super::SelectedComponent;
 
 pub(super) fn apply_rule(
     issues: &mut Vec<CompatIssue>,
@@ -112,7 +114,7 @@ pub(super) fn apply_rule(
             selected_set,
             order_map,
         ),
-        Tp2Rule::RequirePath { .. } => {},
+        Tp2Rule::RequirePath { .. } => {}
         Tp2Rule::ForbidInstalledMod {
             target_mod,
             target_component,
@@ -251,7 +253,9 @@ fn handle_forbid(
             Some(component.component_id),
             target_mod.to_string(),
             Some(target_component),
-            format!("Incompatible with {target_mod} component {target_component} which is selected"),
+            format!(
+                "Incompatible with {target_mod} component {target_component} which is selected"
+            ),
             Some(raw_line.to_string()),
         ));
     }

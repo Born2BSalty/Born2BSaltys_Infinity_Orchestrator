@@ -24,9 +24,8 @@ pub type ActiveListMut<'a> = (
 pub fn normalize_active_tab(state: &mut WizardState) {
     let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
     let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let active_is_visible =
-        (state.step3.active_game_tab == "BGEE" && show_bgee)
-            || (state.step3.active_game_tab == "BG2EE" && show_bg2ee);
+    let active_is_visible = (state.step3.active_game_tab == "BGEE" && show_bgee)
+        || (state.step3.active_game_tab == "BG2EE" && show_bg2ee);
     if active_is_visible {
         return;
     }

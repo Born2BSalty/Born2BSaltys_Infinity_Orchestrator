@@ -30,7 +30,9 @@ pub fn find_best_readme(mods_root: &Path, tp2_path: &str, mod_name: &str) -> Opt
         .filter(|e| e.file_type().is_file())
     {
         let path = entry.path();
-        let Some(name_os) = path.file_name() else { continue };
+        let Some(name_os) = path.file_name() else {
+            continue;
+        };
         let filename = name_os.to_string_lossy().to_ascii_lowercase();
         let ext = path
             .extension()

@@ -35,12 +35,18 @@ pub(crate) fn render(ui: &mut egui::Ui, state: &mut WizardState) -> Option<Compa
 fn render_header(ui: &mut egui::Ui, state: &WizardState) {
     ui.horizontal(|ui| {
         ui.label(
-            crate::ui::shared::typography_global::strong(format!("{} errors", state.compat.error_count))
-                .color(crate::ui::shared::theme_global::error()),
+            crate::ui::shared::typography_global::strong(format!(
+                "{} errors",
+                state.compat.error_count
+            ))
+            .color(crate::ui::shared::theme_global::error()),
         );
         ui.label(
-            crate::ui::shared::typography_global::strong(format!("{} warnings", state.compat.warning_count))
-                .color(crate::ui::shared::theme_global::warning_soft()),
+            crate::ui::shared::typography_global::strong(format!(
+                "{} warnings",
+                state.compat.warning_count
+            ))
+            .color(crate::ui::shared::theme_global::warning_soft()),
         );
     });
 }
@@ -125,7 +131,9 @@ fn render_issue_list(
                             ui.label(crate::ui::shared::typography_global::strong("Related"));
                             ui.label(human_related(issue, &related));
                             ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("Why this appears"));
+                            ui.label(crate::ui::shared::typography_global::strong(
+                                "Why this appears",
+                            ));
                             ui.label(issue_why_this_appears(issue));
                             ui.end_row();
                             ui.label(crate::ui::shared::typography_global::strong("What to do"));
@@ -175,21 +183,24 @@ fn render_issue_list(
                     ui.add_space(2.0);
 
                     ui.horizontal(|ui| {
-                        let mut jump_affected =
-                            ui.add_enabled(can_jump_affected, egui::Button::new("Jump to affected"));
+                        let mut jump_affected = ui
+                            .add_enabled(can_jump_affected, egui::Button::new("Jump to affected"));
                         if !can_jump_affected {
-                            jump_affected = jump_affected
-                                .on_hover_text(crate::ui::shared::tooltip_global::STEP3_AFFECTED_MISSING);
+                            jump_affected = jump_affected.on_hover_text(
+                                crate::ui::shared::tooltip_global::STEP3_AFFECTED_MISSING,
+                            );
                         }
                         if jump_affected.clicked() {
-                            *jump_request = Some(CompatJumpAction::Affected(issue.issue_id.clone()));
+                            *jump_request =
+                                Some(CompatJumpAction::Affected(issue.issue_id.clone()));
                         }
 
                         let mut jump_related =
                             ui.add_enabled(can_jump_related, egui::Button::new("Jump to related"));
                         if !can_jump_related {
-                            jump_related = jump_related
-                                .on_hover_text(crate::ui::shared::tooltip_global::STEP3_RELATED_MISSING);
+                            jump_related = jump_related.on_hover_text(
+                                crate::ui::shared::tooltip_global::STEP3_RELATED_MISSING,
+                            );
                         }
                         if jump_related.clicked() {
                             *jump_request = Some(CompatJumpAction::Related(issue.issue_id.clone()));
@@ -198,8 +209,9 @@ fn render_issue_list(
                         let mut jump_auto =
                             ui.add_enabled(can_jump_auto, egui::Button::new("Jump (auto)"));
                         if !can_jump_auto {
-                            jump_auto = jump_auto
-                                .on_hover_text(crate::ui::shared::tooltip_global::STEP3_NO_JUMP_TARGET);
+                            jump_auto = jump_auto.on_hover_text(
+                                crate::ui::shared::tooltip_global::STEP3_NO_JUMP_TARGET,
+                            );
                         }
                         if jump_auto.clicked() {
                             *jump_request = Some(CompatJumpAction::Auto(issue.issue_id.clone()));

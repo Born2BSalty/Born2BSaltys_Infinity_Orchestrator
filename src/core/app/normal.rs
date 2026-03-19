@@ -3,11 +3,11 @@
 
 use std::path::Path;
 
-use anyhow::{bail, Result};
 use crate::config::options::NormalConfig;
 use crate::install::plan::InstallPlan;
 use crate::install::runner;
 use crate::mods::log_file::LogFile;
+use anyhow::{Result, bail};
 use tracing::info;
 
 pub fn run(config: &NormalConfig) -> Result<()> {
@@ -43,7 +43,10 @@ pub fn run(config: &NormalConfig) -> Result<()> {
         );
     }
 
-    info!("normal install plan contains {} component(s)", plan.components.len());
+    info!(
+        "normal install plan contains {} component(s)",
+        plan.components.len()
+    );
     runner::run_plan(&plan, &config.options, &config.game_directory)?;
     Ok(())
 }

@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::ui::state::WizardState;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::{active_mods_mut, build_prompt_eval_context};
-use crate::ui::step2::tree_step2::step2_tree::{render_mod_tree, ModTreeRenderResult};
+use crate::ui::step2::tree_step2::step2_tree::{ModTreeRenderResult, render_mod_tree};
 
 pub(crate) fn render_list_pane(
     ui: &mut egui::Ui,

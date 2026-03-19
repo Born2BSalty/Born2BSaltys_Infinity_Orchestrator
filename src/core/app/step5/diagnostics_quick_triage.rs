@@ -34,9 +34,7 @@ pub(super) fn write_quick_triage_txt(
         "step2_status={}\n",
         state.step2.scan_status.trim()
     ));
-    text.push_str(&format!(
-        "compat_blocking_issues={blocking_compat}\n"
-    ));
+    text.push_str(&format!("compat_blocking_issues={blocking_compat}\n"));
     text.push_str(&format!(
         "install_exit_code={:?}\n",
         state.step5.last_exit_code

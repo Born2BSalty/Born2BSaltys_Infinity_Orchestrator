@@ -19,7 +19,11 @@ pub(crate) fn matches_issue_filter(issue: &CompatIssueDisplay, filter: &str) -> 
     }
 }
 
-pub(crate) fn issue_target_exists(state: &WizardState, issue: &CompatIssueDisplay, affected: bool) -> bool {
+pub(crate) fn issue_target_exists(
+    state: &WizardState,
+    issue: &CompatIssueDisplay,
+    affected: bool,
+) -> bool {
     let (mod_name, component) = if affected {
         (&issue.affected_mod, issue.affected_component)
     } else {
@@ -29,7 +33,11 @@ pub(crate) fn issue_target_exists(state: &WizardState, issue: &CompatIssueDispla
         || item_target_exists(&state.step3.bg2ee_items, mod_name, component)
 }
 
-pub(crate) fn item_target_exists(items: &[Step3ItemState], mod_name: &str, component: Option<u32>) -> bool {
+pub(crate) fn item_target_exists(
+    items: &[Step3ItemState],
+    mod_name: &str,
+    component: Option<u32>,
+) -> bool {
     let target_key = normalize_mod_key(mod_name);
     for item in items {
         if item.is_parent {
@@ -75,7 +83,11 @@ pub(crate) fn human_kind(code: &str) -> &'static str {
 }
 
 pub(crate) fn human_severity(issue: &CompatIssueDisplay) -> &'static str {
-    if issue.is_blocking { "Error" } else { "Warning" }
+    if issue.is_blocking {
+        "Error"
+    } else {
+        "Warning"
+    }
 }
 
 pub(crate) fn issue_graph(issue: &CompatIssueDisplay) -> String {
@@ -85,7 +97,11 @@ pub(crate) fn issue_graph(issue: &CompatIssueDisplay) -> String {
         let games = parse_games(issue);
         return format!(
             "{affected} allowed on: {}",
-            if games.is_empty() { "N/A".to_string() } else { games }
+            if games.is_empty() {
+                "N/A".to_string()
+            } else {
+                games
+            }
         );
     }
     if issue.code.eq_ignore_ascii_case("FORBID_HIT") || issue.code.eq_ignore_ascii_case("RULE_HIT")
@@ -114,8 +130,7 @@ pub(crate) fn issue_verdict(issue: &CompatIssueDisplay) -> Option<String> {
     if is_duplicate_selection_issue(issue) {
         return Some("Same component appears multiple times in selection.".to_string());
     }
-    if issue.code.eq_ignore_ascii_case("FORBID_HIT")
-        || issue.code.eq_ignore_ascii_case("RULE_HIT")
+    if issue.code.eq_ignore_ascii_case("FORBID_HIT") || issue.code.eq_ignore_ascii_case("RULE_HIT")
     {
         return Some("Cannot install both sides at once.".to_string());
     }
@@ -132,7 +147,11 @@ pub(crate) fn issue_verdict(issue: &CompatIssueDisplay) -> Option<String> {
         let games = parse_games(issue);
         return Some(format!(
             "Not installable in current mode (allowed: {}).",
-            if games.is_empty() { "N/A".to_string() } else { games }
+            if games.is_empty() {
+                "N/A".to_string()
+            } else {
+                games
+            }
         ));
     }
     None
@@ -184,8 +203,7 @@ pub(crate) fn issue_reason(issue: &CompatIssueDisplay) -> String {
     if is_duplicate_selection_issue(issue) {
         return issue.reason.clone();
     }
-    if issue.code.eq_ignore_ascii_case("FORBID_HIT")
-        || issue.code.eq_ignore_ascii_case("RULE_HIT")
+    if issue.code.eq_ignore_ascii_case("FORBID_HIT") || issue.code.eq_ignore_ascii_case("RULE_HIT")
     {
         return format!(
             "Conflicts with {} (currently selected).",
@@ -205,7 +223,11 @@ pub(crate) fn issue_reason(issue: &CompatIssueDisplay) -> String {
         let games = parse_games(issue);
         return format!(
             "This component is restricted to: {}.",
-            if games.is_empty() { "N/A".to_string() } else { games }
+            if games.is_empty() {
+                "N/A".to_string()
+            } else {
+                games
+            }
         );
     }
     if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
@@ -222,7 +244,11 @@ pub(crate) fn human_related(issue: &CompatIssueDisplay, fallback_related: &str) 
         let games = parse_games(issue);
         return format!(
             "Allowed games: {}",
-            if games.is_empty() { "N/A".to_string() } else { games }
+            if games.is_empty() {
+                "N/A".to_string()
+            } else {
+                games
+            }
         );
     }
     fallback_related.to_string()
@@ -247,16 +273,15 @@ pub(crate) fn parse_or_targets_from_reason(reason: &str) -> Option<Vec<String>> 
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    if parts.len() > 1 {
-        Some(parts)
-    } else {
-        None
-    }
+    if parts.len() > 1 { Some(parts) } else { None }
 }
 
 pub(crate) fn is_duplicate_selection_issue(issue: &CompatIssueDisplay) -> bool {
     issue.code.eq_ignore_ascii_case("RULE_HIT")
-        && (issue.reason.to_ascii_lowercase().contains("selected multiple times")
+        && (issue
+            .reason
+            .to_ascii_lowercase()
+            .contains("selected multiple times")
             || issue
                 .raw_evidence
                 .as_deref()

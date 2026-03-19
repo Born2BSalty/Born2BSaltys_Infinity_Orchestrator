@@ -142,7 +142,10 @@ fn render_wlb_editor(ui: &mut egui::Ui, state: &mut WizardState) {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.label("Answer");
-                ui.add(egui::TextEdit::singleline(&mut state.step3.prompt_edit_answer).desired_width(360.0));
+                ui.add(
+                    egui::TextEdit::singleline(&mut state.step3.prompt_edit_answer)
+                        .desired_width(360.0),
+                );
             });
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -150,20 +153,22 @@ fn render_wlb_editor(ui: &mut egui::Ui, state: &mut WizardState) {
                     let answer = state.step3.prompt_edit_answer.trim().to_string();
                     if answer.is_empty() {
                         state.step3.prompt_edit_status =
-                            "Answer is empty. Use Clear Prompt Data to remove this entry.".to_string();
+                            "Answer is empty. Use Clear Prompt Data to remove this entry."
+                                .to_string();
                     } else {
                         let tp2_file = state.step3.prompt_edit_tp2_file.clone();
                         let component_id = state.step3.prompt_edit_component_id.clone();
                         if let Some(item) = find_component_mut(state, &tp2_file, &component_id) {
-                        item.raw_line = set_wlb_inputs(&effective_raw_line(item), &answer);
-                        state.step5.last_status_text = format!(
-                            "Saved @wlb-inputs on weidu line for {} #{}",
-                            item.mod_name, item.component_id
-                        );
+                            item.raw_line = set_wlb_inputs(&effective_raw_line(item), &answer);
+                            state.step5.last_status_text = format!(
+                                "Saved @wlb-inputs on weidu line for {} #{}",
+                                item.mod_name, item.component_id
+                            );
                             state.step3.prompt_edit_open = false;
                         } else {
                             state.step3.prompt_edit_status =
-                                "Save failed: component not found in current Step 3 tab.".to_string();
+                                "Save failed: component not found in current Step 3 tab."
+                                    .to_string();
                         }
                     }
                 }
@@ -198,7 +203,8 @@ fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 if ui.button("Save JSON").clicked() {
-                    match serde_json::from_str::<AdvancedPromptEntry>(&state.step3.prompt_edit_json) {
+                    match serde_json::from_str::<AdvancedPromptEntry>(&state.step3.prompt_edit_json)
+                    {
                         Ok(parsed) => {
                             if let Some(item) =
                                 find_component_mut(state, &parsed.tp2_file, &parsed.component_id)
@@ -206,8 +212,10 @@ fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
                                 if !parsed.raw_line.trim().is_empty() {
                                     item.raw_line = parsed.raw_line.trim().to_string();
                                 } else if !parsed.answer.trim().is_empty() {
-                                    item.raw_line =
-                                        set_wlb_inputs(&effective_raw_line(item), parsed.answer.trim());
+                                    item.raw_line = set_wlb_inputs(
+                                        &effective_raw_line(item),
+                                        parsed.answer.trim(),
+                                    );
                                 } else {
                                     item.raw_line = strip_wlb_marker(&effective_raw_line(item));
                                 }
@@ -231,8 +239,7 @@ fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
                         state.step3.prompt_edit_status = "Deleted from weidu line.".to_string();
                     } else {
                         state.step3.prompt_edit_status =
-                            "Delete failed: component not found in current Step 3 tab."
-                                .to_string();
+                            "Delete failed: component not found in current Step 3 tab.".to_string();
                     }
                 }
                 if ui.button("Close").clicked() {
@@ -272,7 +279,11 @@ fn normalize_tp2_filename(tp_file: &str) -> String {
 }
 
 fn component_key(tp_file: &str, component_id: &str) -> String {
-    format!("{}#{}", normalize_tp2_filename(tp_file), component_id.trim())
+    format!(
+        "{}#{}",
+        normalize_tp2_filename(tp_file),
+        component_id.trim()
+    )
 }
 
 fn default_raw_line(item: &Step3ItemState) -> String {

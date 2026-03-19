@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use eframe::egui;
 use crate::ui::state::WizardState;
+use eframe::egui;
 
 pub fn render(
     ui: &mut egui::Ui,

@@ -6,14 +6,16 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
 use crate::ui::state::WizardState;
 use crate::ui::step4::service_step4::build_weidu_export_lines;
-use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, prune_old_diagnostics, run_dir_from_id};
+use crate::ui::step5::service_diagnostics_run_step5::{
+    current_or_new_run_id, prune_old_diagnostics, run_dir_from_id,
+};
 use crate::ui::step5::service_step5::{
     build_install_invocation, copy_saved_weidu_logs, copy_source_weidu_logs,
 };
 use crate::ui::terminal::EmbeddedTerminal;
+use anyhow::Result;
 
 #[path = "diagnostics_appdata_copy.rs"]
 mod appdata_copy;
@@ -29,16 +31,16 @@ mod compat_summary_json;
 mod export_marker_json;
 #[path = "diagnostics_format.rs"]
 mod format;
-#[path = "diagnostics_quick_triage.rs"]
-mod quick_triage;
-#[path = "diagnostics_scan_context_json.rs"]
-mod scan_context_json;
-#[path = "diagnostics_prompt_calls_json.rs"]
-mod prompt_calls_json;
 #[path = "diagnostics_parser_events_json.rs"]
 mod parser_events_json;
 #[path = "diagnostics_parser_raw_json.rs"]
 mod parser_raw_json;
+#[path = "diagnostics_prompt_calls_json.rs"]
+mod prompt_calls_json;
+#[path = "diagnostics_quick_triage.rs"]
+mod quick_triage;
+#[path = "diagnostics_scan_context_json.rs"]
+mod scan_context_json;
 #[path = "diagnostics_text.rs"]
 mod text;
 #[path = "diagnostics_tp2_layout.rs"]
@@ -48,7 +50,9 @@ mod undefined_summary_json;
 #[path = "diagnostics_write_checks.rs"]
 mod write_checks;
 
-pub use write_checks::{AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary};
+pub use write_checks::{
+    AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary,
+};
 
 pub fn export_diagnostics(
     state: &WizardState,
@@ -123,7 +127,10 @@ pub fn export_diagnostics(
     }
     match parser_events_json::write_parser_events_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("parser_events_json_write=FAILED: {err}")),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("parser_events_json_write=FAILED: {err}"),
+        ),
     }
     match parser_raw_json::write_parser_raw_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
@@ -144,13 +151,21 @@ pub fn export_diagnostics(
         ),
     }
 
-    if let Err(err) = compat_summary_json::write_compat_summary_json(&run_dir, &state.compat.issues, ts) {
-        append_diag_note(&out_path, &format!("compat_summary_json_write=FAILED: {err}"));
+    if let Err(err) =
+        compat_summary_json::write_compat_summary_json(&run_dir, &state.compat.issues, ts)
+    {
+        append_diag_note(
+            &out_path,
+            &format!("compat_summary_json_write=FAILED: {err}"),
+        );
     } else {
         written_paths.push(run_dir.join("compat_summary.json"));
     }
     if let Err(err) = export_marker_json::write_export_marker_json(&run_dir, ts, &written_paths) {
-        append_diag_note(&out_path, &format!("export_marker_json_write=FAILED: {err}"));
+        append_diag_note(
+            &out_path,
+            &format!("export_marker_json_write=FAILED: {err}"),
+        );
     }
     Ok(out_path)
 }

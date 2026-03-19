@@ -31,7 +31,11 @@ pub(super) fn write_undefined_summary_json(
                 })
             })
             .collect::<Vec<_>>();
-        let total_undefined = report.tp2_reports.iter().map(|r| r.undefined_count).sum::<usize>();
+        let total_undefined = report
+            .tp2_reports
+            .iter()
+            .map(|r| r.undefined_count)
+            .sum::<usize>();
         json!({
             "schema_version": 1,
             "generated_at_unix": timestamp_unix_secs,
@@ -46,7 +50,9 @@ pub(super) fn write_undefined_summary_json(
             for mod_state in mods {
                 let mut hits = 0usize;
                 for component in &mod_state.components {
-                    if looks_like_undefined(&component.label) || looks_like_undefined(&component.raw_line) {
+                    if looks_like_undefined(&component.label)
+                        || looks_like_undefined(&component.raw_line)
+                    {
                         hits = hits.saturating_add(1);
                     }
                 }

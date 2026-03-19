@@ -192,9 +192,9 @@ fn push_parent_check(
     }
     let path = PathBuf::from(value);
     let Some(parent) = path.parent() else {
-        summary
-            .lines
-            .push(format!("INFO | {label} parent | {value} | no parent directory"));
+        summary.lines.push(format!(
+            "INFO | {label} parent | {value} | no parent directory"
+        ));
         return;
     };
     let key = format!("dir:{}", parent.display());

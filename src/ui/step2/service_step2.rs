@@ -128,6 +128,5 @@ pub fn recompute_selection_counts(state: &mut WizardState) {
 
 pub use crate::ui::step2::service_selection_step2::{
     current_game_tab, current_issue_for_selection, current_issue_id_for_selection,
-    issue_targets_for_current_selection, jump_to_target, rule_source_open_path,
-    selected_details,
+    issue_targets_for_current_selection, jump_to_target, rule_source_open_path, selected_details,
 };

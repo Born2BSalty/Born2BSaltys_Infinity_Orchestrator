@@ -91,7 +91,11 @@ pub(super) fn to_mod_states(
         *counts.entry(m.name.to_ascii_lowercase()).or_insert(0) += 1;
     }
     for m in &mut mods {
-        if counts.get(&m.name.to_ascii_lowercase()).copied().unwrap_or(0) > 1
+        if counts
+            .get(&m.name.to_ascii_lowercase())
+            .copied()
+            .unwrap_or(0)
+            > 1
             && let Ok(rel) = Path::new(&m.tp2_path).strip_prefix(mods_root)
             && let Some(parent) = rel.parent()
         {
@@ -127,8 +131,7 @@ fn detect_meta_mode_component_ids(
             context.push_str(&text.to_ascii_lowercase());
         }
     }
-    let has_batch_behavior = context.contains("--force-install-list")
-        && context.contains("abort");
+    let has_batch_behavior = context.contains("--force-install-list") && context.contains("abort");
     if !has_batch_behavior {
         return out;
     }

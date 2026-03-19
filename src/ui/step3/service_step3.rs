@@ -99,7 +99,9 @@ pub fn export_step3_compat_report(issues: &[CompatIssueDisplay]) -> std::io::Res
     text.push_str("===========================\n\n");
     let error_count = issues.iter().filter(|i| i.is_blocking).count();
     let warning_count = issues.len().saturating_sub(error_count);
-    text.push_str(&format!("Errors: {error_count} | Warnings: {warning_count}\n\n"));
+    text.push_str(&format!(
+        "Errors: {error_count} | Warnings: {warning_count}\n\n"
+    ));
     if issues.is_empty() {
         text.push_str("No compatibility issues.\n");
     } else {
@@ -107,7 +109,10 @@ pub fn export_step3_compat_report(issues: &[CompatIssueDisplay]) -> std::io::Res
             let sev = if issue.is_blocking { "ERROR" } else { "WARN" };
             let affected = format_issue_target(&issue.affected_mod, issue.affected_component);
             let related = format_issue_target(&issue.related_mod, issue.related_component);
-            text.push_str(&format!("- [{sev}] {} {affected} -> {related}\n", issue.code));
+            text.push_str(&format!(
+                "- [{sev}] {} {affected} -> {related}\n",
+                issue.code
+            ));
             if !issue.reason.trim().is_empty() {
                 text.push_str(&format!("  reason: {}\n", issue.reason));
             }
@@ -115,7 +120,9 @@ pub fn export_step3_compat_report(issues: &[CompatIssueDisplay]) -> std::io::Res
                 text.push_str(&format!("  source: {}\n", issue.source));
             }
             text.push_str(&format!("  graph: {}\n", issue_graph(issue)));
-            if let Some(raw) = issue.raw_evidence.as_deref() && !raw.trim().is_empty() {
+            if let Some(raw) = issue.raw_evidence.as_deref()
+                && !raw.trim().is_empty()
+            {
                 text.push_str(&format!("  rule_detail: {raw}\n"));
             }
         }
@@ -155,16 +162,15 @@ fn parse_or_targets_from_reason(reason: &str) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    if parts.len() > 1 {
-        Some(parts)
-    } else {
-        None
-    }
+    if parts.len() > 1 { Some(parts) } else { None }
 }
 
 fn is_duplicate_selection_issue(issue: &CompatIssueDisplay) -> bool {
     issue.code.eq_ignore_ascii_case("RULE_HIT")
-        && (issue.reason.to_ascii_lowercase().contains("selected multiple times")
+        && (issue
+            .reason
+            .to_ascii_lowercase()
+            .contains("selected multiple times")
             || issue
                 .raw_evidence
                 .as_deref()
@@ -190,11 +196,14 @@ fn issue_graph(issue: &CompatIssueDisplay) -> String {
         return format!(
             "{} allowed on: {}",
             format_issue_target(&issue.affected_mod, issue.affected_component),
-            if games.is_empty() { "N/A".to_string() } else { games }
+            if games.is_empty() {
+                "N/A".to_string()
+            } else {
+                games
+            }
         );
     }
-    if issue.code.eq_ignore_ascii_case("FORBID_HIT")
-        || issue.code.eq_ignore_ascii_case("RULE_HIT")
+    if issue.code.eq_ignore_ascii_case("FORBID_HIT") || issue.code.eq_ignore_ascii_case("RULE_HIT")
     {
         return format!(
             "{} conflicts with {}",
@@ -281,14 +290,20 @@ fn jump_to_step3_index(state: &mut WizardState, tab: &str, idx: usize) {
         state.step3.bgee_selected.push(idx);
         state.step3.bgee_anchor = Some(idx);
         if let Some(item) = state.step3.bgee_items.get(idx) {
-            state.step3.bgee_collapsed_blocks.retain(|b| b != &item.block_id);
+            state
+                .step3
+                .bgee_collapsed_blocks
+                .retain(|b| b != &item.block_id);
         }
     } else {
         state.step3.bg2ee_selected.clear();
         state.step3.bg2ee_selected.push(idx);
         state.step3.bg2ee_anchor = Some(idx);
         if let Some(item) = state.step3.bg2ee_items.get(idx) {
-            state.step3.bg2ee_collapsed_blocks.retain(|b| b != &item.block_id);
+            state
+                .step3
+                .bg2ee_collapsed_blocks
+                .retain(|b| b != &item.block_id);
         }
     }
 }

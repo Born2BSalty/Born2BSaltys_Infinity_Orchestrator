@@ -105,11 +105,31 @@ mod tests {
     #[test]
     fn evaluates_negated_mod_call_forms() {
         let ctx = test_context();
-        assert!(evaluate_condition_clause("!MOD_IS_INSTALLED ~randomiser~ ~1200~", &ctx, None));
-        assert!(evaluate_condition_clause("!(MOD_IS_INSTALLED ~randomiser~ ~1200~)", &ctx, None));
-        assert!(evaluate_condition_clause("! (MOD_IS_INSTALLED ~randomiser~ ~1200~)", &ctx, None));
-        assert!(evaluate_condition_clause("NOT MOD_IS_INSTALLED ~randomiser~ ~1200~", &ctx, None));
-        assert!(!evaluate_condition_clause("!MOD_IS_INSTALLED ~rr~ ~12~", &ctx, None));
+        assert!(evaluate_condition_clause(
+            "!MOD_IS_INSTALLED ~randomiser~ ~1200~",
+            &ctx,
+            None
+        ));
+        assert!(evaluate_condition_clause(
+            "!(MOD_IS_INSTALLED ~randomiser~ ~1200~)",
+            &ctx,
+            None
+        ));
+        assert!(evaluate_condition_clause(
+            "! (MOD_IS_INSTALLED ~randomiser~ ~1200~)",
+            &ctx,
+            None
+        ));
+        assert!(evaluate_condition_clause(
+            "NOT MOD_IS_INSTALLED ~randomiser~ ~1200~",
+            &ctx,
+            None
+        ));
+        assert!(!evaluate_condition_clause(
+            "!MOD_IS_INSTALLED ~rr~ ~12~",
+            &ctx,
+            None
+        ));
     }
 
     #[test]
@@ -123,14 +143,26 @@ mod tests {
     #[test]
     fn evaluates_and_or_with_parentheses() {
         let ctx = test_context();
-        assert!(evaluate_condition_clause("(MOD_IS_INSTALLED ~rr~ ~12~ AND GAME_IS ~eet~) OR MOD_IS_INSTALLED ~foo~ ~1~", &ctx, None));
-        assert!(!evaluate_condition_clause("MOD_IS_INSTALLED ~foo~ ~1~ OR (GAME_IS ~bgee~ AND MOD_IS_INSTALLED ~foo~ ~2~)", &ctx, None));
+        assert!(evaluate_condition_clause(
+            "(MOD_IS_INSTALLED ~rr~ ~12~ AND GAME_IS ~eet~) OR MOD_IS_INSTALLED ~foo~ ~1~",
+            &ctx,
+            None
+        ));
+        assert!(!evaluate_condition_clause(
+            "MOD_IS_INSTALLED ~foo~ ~1~ OR (GAME_IS ~bgee~ AND MOD_IS_INSTALLED ~foo~ ~2~)",
+            &ctx,
+            None
+        ));
     }
 
     #[test]
     fn evaluates_action_if_wrappers() {
         let ctx = test_context();
-        assert!(evaluate_condition_clause("if:ACTION_IF ! ( MOD_IS_INSTALLED ~foo~ ~1~ ) BEGIN", &ctx, None));
+        assert!(evaluate_condition_clause(
+            "if:ACTION_IF ! ( MOD_IS_INSTALLED ~foo~ ~1~ ) BEGIN",
+            &ctx,
+            None
+        ));
     }
 
     #[test]
@@ -145,8 +177,16 @@ mod tests {
         fs::create_dir_all(child.parent().expect("parent")).expect("mkdir");
         fs::write(&child, b"ok").expect("write");
         ctx.game_dir = Some(root.to_string_lossy().to_string());
-        assert!(evaluate_condition_clause("FILE_EXISTS_IN_GAME ~override/test.itm~", &ctx, None));
-        assert!(!evaluate_condition_clause("!FILE_EXISTS_IN_GAME ~override/test.itm~", &ctx, None));
+        assert!(evaluate_condition_clause(
+            "FILE_EXISTS_IN_GAME ~override/test.itm~",
+            &ctx,
+            None
+        ));
+        assert!(!evaluate_condition_clause(
+            "!FILE_EXISTS_IN_GAME ~override/test.itm~",
+            &ctx,
+            None
+        ));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -154,11 +194,7 @@ mod tests {
     fn unresolved_variable_conditions_stay_unknown() {
         let ctx = test_context();
         assert_eq!(
-            evaluate_condition_clause_state(
-                "ACTION_IF (num_selected > 0) BEGIN",
-                &ctx,
-                None,
-            ),
+            evaluate_condition_clause_state("ACTION_IF (num_selected > 0) BEGIN", &ctx, None,),
             EvalState::Unknown
         );
     }

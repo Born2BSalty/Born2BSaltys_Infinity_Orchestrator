@@ -8,10 +8,10 @@ use crate::ui::shared::tooltip_global as tt;
 use crate::ui::shared::typography_global as typo;
 use crate::ui::state::WizardState;
 use crate::ui::step4::action_step4::Step4Action;
-use crate::ui::step4::state_step4::active_tab_mut;
 use crate::ui::step4::service_step4::{format_step4_item, read_source_log_lines};
-use crate::ui::step5::service_step5::source_log_infos;
+use crate::ui::step4::state_step4::active_tab_mut;
 use crate::ui::step5::service_step5::export_diagnostics;
+use crate::ui::step5::service_step5::source_log_infos;
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -56,7 +56,10 @@ pub fn render(
                 _ => "Save weidu.log",
             };
             if ui
-                .add_sized([STEP4_SAVE_BTN_W, STEP4_SAVE_BTN_H], egui::Button::new(label))
+                .add_sized(
+                    [STEP4_SAVE_BTN_W, STEP4_SAVE_BTN_H],
+                    egui::Button::new(label),
+                )
                 .on_hover_text(tt::STEP4_SAVE_WEIDU_LOG)
                 .clicked()
             {

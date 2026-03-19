@@ -20,7 +20,10 @@ fn append_step2_summary(out: &mut String, state: &WizardState) {
 fn append_step2_selected_components(out: &mut String, state: &WizardState) {
     out.push_str("[Step2 Selected Components]\n");
     let mut listed = 0usize;
-    for (tab, mods) in [("BGEE", &state.step2.bgee_mods), ("BG2EE", &state.step2.bg2ee_mods)] {
+    for (tab, mods) in [
+        ("BGEE", &state.step2.bgee_mods),
+        ("BG2EE", &state.step2.bg2ee_mods),
+    ] {
         for mod_state in mods {
             for component in &mod_state.components {
                 if !component.checked {
@@ -43,7 +46,10 @@ fn append_step2_selected_components(out: &mut String, state: &WizardState) {
 fn append_step2_scan_undefined_signals(out: &mut String, state: &WizardState) {
     out.push_str("[Step2 Scan Undefined Signals]\n");
     let mut listed = 0usize;
-    for (tab, mods) in [("BGEE", &state.step2.bgee_mods), ("BG2EE", &state.step2.bg2ee_mods)] {
+    for (tab, mods) in [
+        ("BGEE", &state.step2.bgee_mods),
+        ("BG2EE", &state.step2.bg2ee_mods),
+    ] {
         for mod_state in mods {
             for component in &mod_state.components {
                 let label_hit = looks_like_scan_undefined(&component.label);
@@ -87,7 +93,10 @@ fn looks_like_scan_undefined(text: &str) -> bool {
 fn append_wlb_inputs_map(out: &mut String, state: &WizardState) {
     out.push_str("[@wlb-inputs Map]\n");
     let mut listed = 0usize;
-    for (tab, items) in [("BGEE", &state.step3.bgee_items), ("BG2EE", &state.step3.bg2ee_items)] {
+    for (tab, items) in [
+        ("BGEE", &state.step3.bgee_items),
+        ("BG2EE", &state.step3.bg2ee_items),
+    ] {
         for item in items {
             if item.is_parent {
                 continue;

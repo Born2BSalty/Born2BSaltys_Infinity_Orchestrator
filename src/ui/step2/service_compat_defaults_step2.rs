@@ -2,31 +2,31 @@
 // Copyright (c) 2026 Born2BSalty
 
 mod compat_defaults {
-use std::fs;
-use std::path::PathBuf;
+    use std::fs;
+    use std::path::PathBuf;
 
-use crate::platform_defaults::app_config_file;
+    use crate::platform_defaults::app_config_file;
 
-const STEP2_COMPAT_FILE_NAME: &str = "step2_compat_rules.toml";
+    const STEP2_COMPAT_FILE_NAME: &str = "step2_compat_rules.toml";
 
-pub fn create_default_step2_compat_rules_file() -> std::io::Result<PathBuf> {
-    let path = step2_compat_rules_path();
-    if path.exists() {
-        return Ok(path);
+    pub fn create_default_step2_compat_rules_file() -> std::io::Result<PathBuf> {
+        let path = step2_compat_rules_path();
+        if path.exists() {
+            return Ok(path);
+        }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, default_step2_rules_content())?;
+        Ok(path)
     }
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+
+    pub fn step2_compat_rules_path() -> PathBuf {
+        app_config_file(STEP2_COMPAT_FILE_NAME, "config")
     }
-    fs::write(&path, default_step2_rules_content())?;
-    Ok(path)
-}
 
-pub fn step2_compat_rules_path() -> PathBuf {
-    app_config_file(STEP2_COMPAT_FILE_NAME, "config")
-}
-
-fn default_step2_rules_content() -> &'static str {
-    r#"# Compatibility rules for greying out components after scan.
+    fn default_step2_rules_content() -> &'static str {
+        r#"# Compatibility rules for greying out components after scan.
 # Each rule matches by mod header name and optional component substring or id.
 # issue types: included, not_needed, not_compatible, warning, conflict
 #
@@ -186,10 +186,8 @@ tab = ["bgee", "bg2ee"]
 kind = "included"
 message = "Already included in BG:EE."
 "#
+    }
 }
-
-}
-
 
 pub(crate) fn create_default_compat_rules_file() -> std::io::Result<std::path::PathBuf> {
     compat_defaults::create_default_step2_compat_rules_file()

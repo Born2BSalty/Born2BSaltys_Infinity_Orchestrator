@@ -44,9 +44,15 @@ pub(super) fn build_base_text(
         text.push('\n');
     }
     text.push_str("\n[Step5 Status]\n");
-    text.push_str(&format!("install_running={}\n", state.step5.install_running));
+    text.push_str(&format!(
+        "install_running={}\n",
+        state.step5.install_running
+    ));
     text.push_str(&format!("last_status={}\n", state.step5.last_status_text));
-    text.push_str(&format!("last_exit_code={:?}\n", state.step5.last_exit_code));
+    text.push_str(&format!(
+        "last_exit_code={:?}\n",
+        state.step5.last_exit_code
+    ));
     append_step5_runtime_summary(&mut text, state);
     text.push_str("\n[Copied Source WeiDU Logs]\n");
     if copied_source_logs.is_empty() {
@@ -106,7 +112,9 @@ fn append_runtime_snapshot(out: &mut String, state: &WizardState, console_excerp
         "raw_output_log_enabled={}\n",
         state.step1.log_raw_output_dev
     ));
-    out.push_str("note=This snapshot contains UI/runtime output captured before or during install.\n");
+    out.push_str(
+        "note=This snapshot contains UI/runtime output captured before or during install.\n",
+    );
 }
 
 fn append_step5_runtime_summary(out: &mut String, state: &WizardState) {
@@ -298,7 +306,10 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
         s.weidu_log_log_component
     ));
     out.push_str(&format!("weidu_log_folder={}\n", s.weidu_log_folder));
-    out.push_str(&format!("mod_installer_binary={}\n", s.mod_installer_binary));
+    out.push_str(&format!(
+        "mod_installer_binary={}\n",
+        s.mod_installer_binary
+    ));
     out.push_str(&format!("bgee_game_folder={}\n", s.bgee_game_folder));
     out.push_str(&format!("bgee_log_folder={}\n", s.bgee_log_folder));
     out.push_str(&format!("bgee_log_file={}\n", s.bgee_log_file));
@@ -309,10 +320,7 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
         "eet_bgee_game_folder={}\n",
         s.eet_bgee_game_folder
     ));
-    out.push_str(&format!(
-        "eet_bgee_log_folder={}\n",
-        s.eet_bgee_log_folder
-    ));
+    out.push_str(&format!("eet_bgee_log_folder={}\n", s.eet_bgee_log_folder));
     out.push_str(&format!(
         "eet_bg2ee_game_folder={}\n",
         s.eet_bg2ee_game_folder
@@ -345,7 +353,10 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
     out.push_str(&format!("strict_matching={}\n", s.strict_matching));
     out.push_str(&format!("download={}\n", s.download));
     out.push_str(&format!("overwrite={}\n", s.overwrite));
-    out.push_str(&format!("check_last_installed={}\n", s.check_last_installed));
+    out.push_str(&format!(
+        "check_last_installed={}\n",
+        s.check_last_installed
+    ));
     out.push_str(&format!("tick={}\n", s.tick));
     out.push_str(&format!("lookback={}\n", s.lookback));
     out.push_str(&format!("casefold={}\n", s.casefold));
@@ -355,7 +366,11 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
     ));
 }
 
-fn append_effective_installer_args(out: &mut String, installer_program: &str, installer_args: &[String]) {
+fn append_effective_installer_args(
+    out: &mut String,
+    installer_program: &str,
+    installer_args: &[String],
+) {
     out.push_str("[Effective Installer Args]\n");
     out.push_str(&format!("program={installer_program}\n"));
     if installer_args.is_empty() {

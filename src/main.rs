@@ -20,10 +20,10 @@ mod install;
 mod logging;
 #[path = "core/mods/mod.rs"]
 mod mods;
-#[path = "core/platform_defaults.rs"]
-mod platform_defaults;
 #[path = "core/parser/mod.rs"]
 mod parser;
+#[path = "core/platform_defaults.rs"]
+mod platform_defaults;
 mod settings;
 mod ui;
 

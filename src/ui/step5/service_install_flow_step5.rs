@@ -5,10 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::state::WizardState;
 use crate::ui::step5::service_step5::{
-    begin_diagnostics_run,
-    build_install_invocation, build_resume_invocation, capture_resume_targets,
-    copy_weidu_logs_for_diagnostics,
-    load_scripted_inputs,
+    begin_diagnostics_run, build_install_invocation, build_resume_invocation,
+    capture_resume_targets, copy_weidu_logs_for_diagnostics, load_scripted_inputs,
     prepare_target_dirs_before_install, validate_resume_paths, validate_runtime_prep_paths,
     verify_targets_prepared,
 };
@@ -64,12 +62,19 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
             Ok(prep) => {
                 state.step5.prep_ran = state.step1.prepare_target_dirs_before_install;
                 state.step5.prep_used_backup = state.step1.backup_targets_before_eet_copy;
-                state.step5.prep_backup_paths =
-                    prep.backups.iter().map(|p| p.display().to_string()).collect();
-                state.step5.prep_cleaned_paths =
-                    prep.cleaned.iter().map(|p| p.display().to_string()).collect();
+                state.step5.prep_backup_paths = prep
+                    .backups
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect();
+                state.step5.prep_cleaned_paths = prep
+                    .cleaned
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect();
                 for path in prep.backups {
-                    state.step5.last_status_text = format!("Backed up target dir to {}", path.display());
+                    state.step5.last_status_text =
+                        format!("Backed up target dir to {}", path.display());
                     term.append_marker(&format!("Backup created: {}", path.display()));
                 }
                 for path in prep.cleaned {

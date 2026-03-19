@@ -22,7 +22,8 @@ pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
     let game_dir = match state.step2.active_game_tab.as_str() {
         "BGEE" => {
             if state.step1.game_install.eq_ignore_ascii_case("EET") {
-                if state.step1.new_pre_eet_dir_enabled && !state.step1.eet_pre_dir.trim().is_empty() {
+                if state.step1.new_pre_eet_dir_enabled && !state.step1.eet_pre_dir.trim().is_empty()
+                {
                     Some(state.step1.eet_pre_dir.clone())
                 } else {
                     Some(state.step1.eet_bgee_game_folder.clone())
@@ -68,7 +69,8 @@ fn collect_checked_components(
         let mod_key = normalize_tp2_stem(&mod_state.tp_file);
         for component in &mod_state.components {
             if component.checked {
-                checked_components.insert((mod_key.clone(), component.component_id.trim().to_string()));
+                checked_components
+                    .insert((mod_key.clone(), component.component_id.trim().to_string()));
             }
         }
     }
@@ -128,9 +130,8 @@ pub struct Step2Details {
 pub fn normalize_active_tab(state: &mut WizardState) {
     let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
     let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let active_is_visible =
-        (state.step2.active_game_tab == "BGEE" && show_bgee)
-            || (state.step2.active_game_tab == "BG2EE" && show_bg2ee);
+    let active_is_visible = (state.step2.active_game_tab == "BGEE" && show_bgee)
+        || (state.step2.active_game_tab == "BG2EE" && show_bg2ee);
     if active_is_visible {
         return;
     }

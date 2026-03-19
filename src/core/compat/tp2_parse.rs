@@ -73,19 +73,28 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
             rules.push((comp_id, rule));
         } else if let Some(rule) = parse_forbid_component(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_path_exists(&upper_expr, &raw_expr, rule_line) {
+        } else if let Some(rule) =
+            parse_require_predicate_path_exists(&upper_expr, &raw_expr, rule_line)
+        {
             rules.push((comp_id, rule));
         } else if let Some(rule) =
             parse_require_predicate_game_or_installed_any(&upper_expr, &raw_expr, rule_line)
         {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_game_is(&upper_expr, &raw_expr, rule_line) {
+        } else if let Some(rule) =
+            parse_require_predicate_game_is(&upper_expr, &raw_expr, rule_line)
+        {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_forbid_predicate_mod_installed(&upper_expr, &raw_expr, rule_line) {
+        } else if let Some(rule) =
+            parse_forbid_predicate_mod_installed(&upper_expr, &raw_expr, rule_line)
+        {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_require_predicate_mod_installed(&upper_expr, &raw_expr, rule_line) {
+        } else if let Some(rule) =
+            parse_require_predicate_mod_installed(&upper_expr, &raw_expr, rule_line)
+        {
             rules.push((comp_id, rule));
-        } else if let Some(rule) = parse_action_if_mod_installed(&upper_expr, &raw_expr, rule_line) {
+        } else if let Some(rule) = parse_action_if_mod_installed(&upper_expr, &raw_expr, rule_line)
+        {
             rules.push((comp_id, rule));
         } else if let Some(rule) = parse_action_if_mod_missing(&upper_expr, &raw_expr, rule_line) {
             rules.push((comp_id, rule));
@@ -194,7 +203,11 @@ mod tests {
         let upper = line.to_ascii_uppercase();
         let rule = parse_require_component(&upper, line, 1).unwrap();
         match rule {
-            Tp2Rule::Require { target_mod, target_component, .. } => {
+            Tp2Rule::Require {
+                target_mod,
+                target_component,
+                ..
+            } => {
                 assert_eq!(target_mod, "stratagems");
                 assert_eq!(target_component, 1000);
             }
@@ -208,7 +221,11 @@ mod tests {
         let upper = line.to_ascii_uppercase();
         let rule = parse_forbid_component(&upper, line, 1).unwrap();
         match rule {
-            Tp2Rule::Forbid { target_mod, target_component, .. } => {
+            Tp2Rule::Forbid {
+                target_mod,
+                target_component,
+                ..
+            } => {
                 assert_eq!(target_mod, "eet");
                 assert_eq!(target_component, 0);
             }
@@ -218,15 +235,17 @@ mod tests {
 
     #[test]
     fn test_normalize_tp2_ref() {
-        assert_eq!(normalize_tp2_ref("STRATAGEMS/SETUP-STRATAGEMS.TP2"), "stratagems");
+        assert_eq!(
+            normalize_tp2_ref("STRATAGEMS/SETUP-STRATAGEMS.TP2"),
+            "stratagems"
+        );
         assert_eq!(normalize_tp2_ref("EET.TP2"), "eet");
         assert_eq!(normalize_tp2_ref("setup-mymod.tp2"), "mymod");
     }
 
     #[test]
     fn test_parse_forbid_predicate_mod_is_installed_not() {
-        let line =
-            r#"REQUIRE_PREDICATE NOT MOD_IS_INSTALLED ~1pp/1pp.tp2~ ~113~ @24"#;
+        let line = r#"REQUIRE_PREDICATE NOT MOD_IS_INSTALLED ~1pp/1pp.tp2~ ~113~ @24"#;
         let upper = line.to_ascii_uppercase();
         let rule = parse_forbid_predicate_mod_installed(&upper, line, 1).unwrap();
         match rule {
@@ -309,7 +328,8 @@ REQUIRE_PREDICATE (((GAME_IS ~bgee~)  AND (FILE_EXISTS ~eefixpack/files/tph/bgee
 
     #[test]
     fn test_parse_negated_paren_mod_is_installed_as_forbid() {
-        let line = r#"REQUIRE_PREDICATE !(MOD_IS_INSTALLED ~dw_talents/dw_talents.tp2~ 40600) @50016"#;
+        let line =
+            r#"REQUIRE_PREDICATE !(MOD_IS_INSTALLED ~dw_talents/dw_talents.tp2~ 40600) @50016"#;
         let upper = line.to_ascii_uppercase();
         let forbid = parse_forbid_predicate_mod_installed(&upper, line, 1).unwrap();
         assert!(matches!(forbid, Tp2Rule::ForbidInstalledMod { .. }));
@@ -336,7 +356,10 @@ REQUIRE_PREDICATE (((GAME_IS ~bgee~)  AND (FILE_EXISTS ~eefixpack/files/tph/bgee
                 message,
                 ..
             } => {
-                assert!(matches!(kind, crate::compat::model::PathRequirementKind::Directory));
+                assert!(matches!(
+                    kind,
+                    crate::compat::model::PathRequirementKind::Directory
+                ));
                 assert_eq!(path, "BGGO-Android");
                 assert!(must_exist);
                 assert_eq!(
@@ -347,5 +370,4 @@ REQUIRE_PREDICATE (((GAME_IS ~bgee~)  AND (FILE_EXISTS ~eefixpack/files/tph/bgee
             _ => panic!("expected RequirePath"),
         }
     }
-
 }

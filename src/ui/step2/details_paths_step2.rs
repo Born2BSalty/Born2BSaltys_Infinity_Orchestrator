@@ -15,7 +15,9 @@ pub(crate) fn render_paths_grid(
     row_h: f32,
     value_chars: usize,
 ) {
-    ui.label(crate::ui::shared::typography_global::small_strong("Paths / Links"));
+    ui.label(crate::ui::shared::typography_global::small_strong(
+        "Paths / Links",
+    ));
     egui::Grid::new("step2_details_paths_grid")
         .num_columns(3)
         .spacing([8.0, 4.0])
@@ -72,7 +74,10 @@ pub(crate) fn render_paths_grid(
                 "Readme",
                 details.readme_path.as_deref(),
                 true,
-                details.readme_path.clone().map(Step2Action::OpenSelectedReadme),
+                details
+                    .readme_path
+                    .clone()
+                    .map(Step2Action::OpenSelectedReadme),
             );
             path_row(
                 ui,

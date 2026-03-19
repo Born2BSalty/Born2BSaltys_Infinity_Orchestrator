@@ -32,7 +32,11 @@ fn append_step2_compat_snapshot(tab: &str, mods: &[Step2ModState], out: &mut Str
     }
 }
 
-fn append_step2_component(mod_state: &Step2ModState, component: &Step2ComponentState, out: &mut String) {
+fn append_step2_component(
+    mod_state: &Step2ModState,
+    component: &Step2ComponentState,
+    out: &mut String,
+) {
     let kind = component.compat_kind.as_deref().unwrap_or("none");
     out.push_str(&format!(
         "  - {} #{} [{}] {}\n",
@@ -40,7 +44,11 @@ fn append_step2_component(mod_state: &Step2ModState, component: &Step2ComponentS
     ));
     out.push_str(&format!(
         "    state={} checked={}\n",
-        if component.disabled { "disabled" } else { "selectable" },
+        if component.disabled {
+            "disabled"
+        } else {
+            "selectable"
+        },
         if component.checked { "yes" } else { "no" }
     ));
     if let Some(reason) = component.disabled_reason.as_deref()
@@ -54,7 +62,8 @@ fn append_step2_component(mod_state: &Step2ModState, component: &Step2ComponentS
         out.push_str(&format!("    source: {source}\n"));
     }
     if let Some(related_mod) = component.compat_related_mod.as_deref() {
-        let related = if let Some(related_component) = component.compat_related_component.as_deref() {
+        let related = if let Some(related_component) = component.compat_related_component.as_deref()
+        {
             format!("{related_mod} #{related_component}")
         } else {
             related_mod.to_string()
@@ -74,7 +83,10 @@ fn append_step3_compat_snapshot(issues: &[CompatIssueDisplay], out: &mut String)
         let sev = if issue.is_blocking { "ERROR" } else { "WARN" };
         let affected = format_target(&issue.affected_mod, issue.affected_component);
         let related = format_target(&issue.related_mod, issue.related_component);
-        out.push_str(&format!("  - [{sev}] {} {} -> {}\n", issue.code, affected, related));
+        out.push_str(&format!(
+            "  - [{sev}] {} {} -> {}\n",
+            issue.code, affected, related
+        ));
         if !issue.reason.trim().is_empty() {
             out.push_str(&format!("    reason: {}\n", issue.reason));
         }
@@ -105,17 +117,18 @@ fn append_step3_compact_summary(issues: &[CompatIssueDisplay], out: &mut String)
     append_top_groups(out, "top_order_warn_groups", &summary.order_warn_groups);
 }
 
-fn append_top_groups(
-    out: &mut String,
-    title: &str,
-    groups: &[super::compat_summary::GroupCount],
-) {
+fn append_top_groups(out: &mut String, title: &str, groups: &[super::compat_summary::GroupCount]) {
     out.push_str(&format!("  {}:\n", title));
     if groups.is_empty() {
         out.push_str("    - none\n");
         return;
     }
     for (idx, entry) in groups.iter().take(12).enumerate() {
-        out.push_str(&format!("    {}. {} ({})\n", idx + 1, entry.group, entry.count));
+        out.push_str(&format!(
+            "    {}. {} ({})\n",
+            idx + 1,
+            entry.group,
+            entry.count
+        ));
     }
 }

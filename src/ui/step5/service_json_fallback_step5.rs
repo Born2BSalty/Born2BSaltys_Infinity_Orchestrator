@@ -30,8 +30,11 @@ pub(crate) fn try_send_json_fallback(
     {
         answer = prompt_memory::get_answer(legacy_key);
         if let Some(found) = answer.as_deref() {
-            let ctx =
-                crate::ui::step5::service_step5::auto_answer::prompt_context(term, prompt_kind.to_string(), "json_fallback");
+            let ctx = crate::ui::step5::service_step5::auto_answer::prompt_context(
+                term,
+                prompt_kind.to_string(),
+                "json_fallback",
+            );
             prompt_memory::remember_answer_with_context(prompt_key, found, preview_line, &ctx);
         }
     }
@@ -41,7 +44,11 @@ pub(crate) fn try_send_json_fallback(
     let matched_label = prompt_memory::display_name(prompt_key);
     term.send_line(&answer);
     term.echo_sent(&answer);
-    let ctx = crate::ui::step5::service_step5::auto_answer::prompt_context(term, prompt_kind.to_string(), "json_fallback");
+    let ctx = crate::ui::step5::service_step5::auto_answer::prompt_context(
+        term,
+        prompt_kind.to_string(),
+        "json_fallback",
+    );
     prompt_memory::remember_answer_with_context(prompt_key, &answer, preview_line, &ctx);
     term.append_marker(&format!(
         "Auto-answer matched {} and sent {}",

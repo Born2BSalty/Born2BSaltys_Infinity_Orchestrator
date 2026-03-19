@@ -44,13 +44,19 @@ pub(crate) mod compat_popup_issue_text_explain {
             return Some("Optional behavior change; does not block install.".to_string());
         }
         if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-            return Some("Order warning only; install can proceed but sequence is suboptimal.".to_string());
+            return Some(
+                "Order warning only; install can proceed but sequence is suboptimal.".to_string(),
+            );
         }
         if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
             let games = parse_games(issue);
             return Some(format!(
                 "Not installable in current mode (allowed: {}).",
-                if games.is_empty() { "N/A".to_string() } else { games }
+                if games.is_empty() {
+                    "N/A".to_string()
+                } else {
+                    games
+                }
             ));
         }
         None
@@ -98,7 +104,11 @@ pub(crate) mod compat_popup_issue_text_explain {
             let games = parse_games(issue);
             return format!(
                 "This component is restricted to: {}.",
-                if games.is_empty() { "N/A".to_string() } else { games }
+                if games.is_empty() {
+                    "N/A".to_string()
+                } else {
+                    games
+                }
             );
         }
         fallback.to_string()
@@ -115,7 +125,8 @@ pub(crate) mod compat_popup_issue_text_explain {
                 .to_string();
         }
         if t == "FORBID_HIT" || t == "RULE_HIT" {
-            return "This component has a conflict rule against another selected component.".to_string();
+            return "This component has a conflict rule against another selected component."
+                .to_string();
         }
         if t == "CONDITIONAL" {
             return "A conditional TP2 branch was detected and is active because the related mod/component is present."
@@ -138,7 +149,8 @@ pub(crate) mod compat_popup_issue_text_explain {
             return "Remove duplicate instance(s) so each mod component appears once.".to_string();
         }
         if t == "REQ_MISSING" {
-            return "Select/install the required related component first, then revalidate.".to_string();
+            return "Select/install the required related component first, then revalidate."
+                .to_string();
         }
         if t == "FORBID_HIT" || t == "RULE_HIT" {
             return "Keep one side and uncheck the other, then revalidate.".to_string();
@@ -152,7 +164,8 @@ pub(crate) mod compat_popup_issue_text_explain {
                 .to_string();
         }
         if t == "ORDER_WARN" {
-            return "Move the dependency earlier (or this component later), then revalidate.".to_string();
+            return "Move the dependency earlier (or this component later), then revalidate."
+                .to_string();
         }
         "Review the related target and source rule, then revalidate.".to_string()
     }
@@ -163,7 +176,10 @@ pub(crate) mod compat_popup_issue_text_helpers {
 
     pub(crate) fn is_duplicate_selection_issue(issue: &CompatIssueDisplay) -> bool {
         issue.code.eq_ignore_ascii_case("RULE_HIT")
-            && (issue.reason.to_ascii_lowercase().contains("selected multiple times")
+            && (issue
+                .reason
+                .to_ascii_lowercase()
+                .contains("selected multiple times")
                 || issue
                     .raw_evidence
                     .as_deref()

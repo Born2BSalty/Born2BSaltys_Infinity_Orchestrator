@@ -29,12 +29,13 @@ pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
     } else {
         ui.visuals().widgets.inactive.fg_stroke.color
     };
-    let button = egui::Button::new(crate::ui::shared::typography_global::plain(value).color(text_color))
-        .fill(fill)
-        .stroke(stroke)
-        .corner_radius(egui::CornerRadius::same(
-            crate::ui::shared::layout_tokens_global::RADIUS_SM as u8,
-        ));
+    let button =
+        egui::Button::new(crate::ui::shared::typography_global::plain(value).color(text_color))
+            .fill(fill)
+            .stroke(stroke)
+            .corner_radius(egui::CornerRadius::same(
+                crate::ui::shared::layout_tokens_global::RADIUS_SM as u8,
+            ));
     if ui.add_sized([58.0, 24.0], button).clicked() {
         *active = value.to_string();
     }
@@ -103,15 +104,18 @@ pub fn render_toolbar(
         }
 
         ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
-        ui.label(
-            crate::ui::shared::typography_global::weak("Right-click a row for more actions"),
-        );
+        ui.label(crate::ui::shared::typography_global::weak(
+            "Right-click a row for more actions",
+        ));
 
         if state.compat.error_count > 0
             && ui
                 .button(
-                    crate::ui::shared::typography_global::strong(format!("{} errors", state.compat.error_count))
-                        .color(crate::ui::shared::theme_global::error()),
+                    crate::ui::shared::typography_global::strong(format!(
+                        "{} errors",
+                        state.compat.error_count
+                    ))
+                    .color(crate::ui::shared::theme_global::error()),
                 )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP3_OPEN_COMPAT_ISSUES)
                 .clicked()
@@ -121,8 +125,11 @@ pub fn render_toolbar(
         if state.compat.warning_count > 0
             && ui
                 .button(
-                    crate::ui::shared::typography_global::strong(format!("{} warnings", state.compat.warning_count))
-                        .color(crate::ui::shared::theme_global::warning_soft()),
+                    crate::ui::shared::typography_global::strong(format!(
+                        "{} warnings",
+                        state.compat.warning_count
+                    ))
+                    .color(crate::ui::shared::theme_global::warning_soft()),
                 )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP3_OPEN_COMPAT_ISSUES)
                 .clicked()
@@ -150,28 +157,12 @@ pub fn render_toolbar(
                             format!("Diagnostics exported: {}", path.display());
                     }
                     Err(err) => {
-                        state.step5.last_status_text =
-                            format!("Diagnostics export failed: {err}");
+                        state.step5.last_status_text = format!("Diagnostics export failed: {err}");
                     }
                 }
             }
-            let (
-                items,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                collapsed_blocks,
-                _,
-                _,
-                undo_stack,
-                redo_stack,
-            ) = state_step3::active_list_mut(state);
+            let (items, _, _, _, _, _, _, _, _, _, collapsed_blocks, _, _, undo_stack, redo_stack) =
+                state_step3::active_list_mut(state);
             if ui
                 .button("Expand All")
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP3_EXPAND_ALL)
@@ -237,7 +228,6 @@ fn normalize_weidu_like_line(raw: &str) -> String {
     crate::ui::step3::service_step3::normalize_weidu_like_line(raw)
 }
 
-
 // --- migrated from frame_step3.rs ---
 
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -296,9 +286,15 @@ fn render_compat_modal(
             .find(|i| i.issue_id == issue_id)
             .cloned()
         && match jump_request {
-            compat_model::CompatJumpAction::Auto(_) => crate::ui::step3::service_step3::jump_to_compat_issue(state, &issue),
-            compat_model::CompatJumpAction::Affected(_) => crate::ui::step3::service_step3::jump_to_affected_issue(state, &issue),
-            compat_model::CompatJumpAction::Related(_) => crate::ui::step3::service_step3::jump_to_related_issue(state, &issue),
+            compat_model::CompatJumpAction::Auto(_) => {
+                crate::ui::step3::service_step3::jump_to_compat_issue(state, &issue)
+            }
+            compat_model::CompatJumpAction::Affected(_) => {
+                crate::ui::step3::service_step3::jump_to_affected_issue(state, &issue)
+            }
+            compat_model::CompatJumpAction::Related(_) => {
+                crate::ui::step3::service_step3::jump_to_related_issue(state, &issue)
+            }
         }
     {
         *jump_to_selected_requested = true;

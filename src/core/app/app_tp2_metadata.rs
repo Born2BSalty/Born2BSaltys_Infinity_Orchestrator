@@ -10,7 +10,8 @@ use crate::ui::state::Step2ModState;
 use super::WizardApp;
 
 pub(in crate::ui::app) fn refresh_validator_tp2_metadata(app: &mut WizardApp) {
-    let tp2_metadata = parse_tp2_metadata_from_mods(&app.state.step2.bgee_mods, &app.state.step2.bg2ee_mods);
+    let tp2_metadata =
+        parse_tp2_metadata_from_mods(&app.state.step2.bgee_mods, &app.state.step2.bg2ee_mods);
     app.compat_validator.set_tp2_metadata(tp2_metadata);
 }
 

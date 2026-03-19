@@ -58,7 +58,9 @@ pub(super) fn paths_point_to_same_dir(a: &Path, b: &Path) -> bool {
     let bc = fs::canonicalize(b).unwrap_or_else(|_| b.to_path_buf());
     #[cfg(target_os = "windows")]
     {
-        return ac.to_string_lossy().eq_ignore_ascii_case(&bc.to_string_lossy());
+        return ac
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&bc.to_string_lossy());
     }
     #[cfg(not(target_os = "windows"))]
     {

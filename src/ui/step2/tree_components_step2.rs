@@ -110,7 +110,9 @@ pub(crate) fn render_component_rows(
                             ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
                             *jump_to_selected_requested = false;
                         }
-                        if component.disabled && let Some(reason) = &component.disabled_reason {
+                        if component.disabled
+                            && let Some(reason) = &component.disabled_reason
+                        {
                             row = row.on_hover_text(reason);
                         }
                         if row.clicked() {
@@ -123,9 +125,10 @@ pub(crate) fn render_component_rows(
                         }
                         if let Some((pill_text_color, pill_bg, pill_label)) = compat {
                             ui.add_space(6.0);
-                            let pill_text = crate::ui::shared::typography_global::strong(pill_label)
-                                .color(pill_text_color)
-                                .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
+                            let pill_text =
+                                crate::ui::shared::typography_global::strong(pill_label)
+                                    .color(pill_text_color)
+                                    .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
                             let mut pill_response = ui.add(
                                 egui::Button::new(pill_text)
                                     .fill(pill_bg)
@@ -157,9 +160,10 @@ pub(crate) fn render_component_rows(
                             evaluate_component_prompt_summary(component, prompt_eval);
                         if !evaluated_prompt_summary.trim().is_empty() {
                             ui.add_space(6.0);
-                            let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
-                                .color(crate::ui::shared::theme_global::prompt_text())
-                                .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
+                            let prompt_text =
+                                crate::ui::shared::typography_global::strong("PROMPT")
+                                    .color(crate::ui::shared::theme_global::prompt_text())
+                                    .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
                             let prompt_response = ui
                                 .add(
                                     egui::Button::new(prompt_text)

@@ -16,7 +16,10 @@ pub(super) fn write_compat_decisions_json(
 ) -> Result<PathBuf> {
     let out_path = run_dir.join("compat_decisions.json");
     let mut rows = Vec::<serde_json::Value>::new();
-    for (tab, mods) in [("BGEE", &state.step2.bgee_mods), ("BG2EE", &state.step2.bg2ee_mods)] {
+    for (tab, mods) in [
+        ("BGEE", &state.step2.bgee_mods),
+        ("BG2EE", &state.step2.bg2ee_mods),
+    ] {
         for mod_state in mods {
             for component in &mod_state.components {
                 if component.compat_kind.is_none()

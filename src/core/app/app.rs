@@ -17,28 +17,28 @@ use crate::ui::terminal::EmbeddedTerminal;
 mod bootstrap;
 #[path = "app_compat_flow.rs"]
 pub mod compat_flow;
-#[path = "app_nav.rs"]
-mod nav;
-#[path = "app_nav_ui.rs"]
-mod nav_ui;
 #[path = "app_lifecycle.rs"]
 mod lifecycle;
 #[path = "app_methods.rs"]
 mod methods;
-#[path = "app_step2_log.rs"]
-mod step2_log;
+#[path = "app_nav.rs"]
+mod nav;
+#[path = "app_nav_ui.rs"]
+mod nav_ui;
 #[path = "app_step2_compat_overlay.rs"]
 mod step2_compat_overlay;
+#[path = "app_step2_log.rs"]
+mod step2_log;
 #[path = "app_step2_router.rs"]
 mod step2_router;
 #[path = "app_step2_scan.rs"]
 mod step2_scan;
 #[path = "app_step3_sync_flow.rs"]
 mod step3_sync_flow;
-#[path = "app_tp2_metadata.rs"]
-mod tp2_metadata;
 #[path = "app_step5_flow.rs"]
 pub mod step5_flow;
+#[path = "app_tp2_metadata.rs"]
+mod tp2_metadata;
 #[path = "app_update_loop.rs"]
 mod update_loop;
 
@@ -82,7 +82,6 @@ impl WizardApp {
             last_step2_sync_signature: None,
         }
     }
-
 }
 
 impl Drop for WizardApp {
@@ -95,5 +94,4 @@ impl eframe::App for WizardApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         update_loop::run(self, ctx, frame);
     }
-
 }

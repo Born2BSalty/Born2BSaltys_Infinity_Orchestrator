@@ -26,7 +26,12 @@ pub(super) fn write_prompt_calls_json(
 
     let mut groups = Vec::<serde_json::Value>::new();
     append_groups_for_tab("BGEE", &state.step2.bgee_mods, &report_by_tp2, &mut groups);
-    append_groups_for_tab("BG2EE", &state.step2.bg2ee_mods, &report_by_tp2, &mut groups);
+    append_groups_for_tab(
+        "BG2EE",
+        &state.step2.bg2ee_mods,
+        &report_by_tp2,
+        &mut groups,
+    );
 
     let payload = json!({
         "schema_version": 1,

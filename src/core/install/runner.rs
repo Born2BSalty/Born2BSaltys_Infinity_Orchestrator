@@ -3,13 +3,13 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use tracing::{info, warn};
 
 use crate::config::options::CoreOptions;
 use crate::install::plan::InstallPlan;
-use crate::mods::discovery::DiscoveryIndex;
 use crate::install::weidu_exec;
+use crate::mods::discovery::DiscoveryIndex;
 
 pub fn run_plan(plan: &InstallPlan, options: &CoreOptions, game_directory: &Path) -> Result<()> {
     let index = DiscoveryIndex::build(&options.mod_directories, options.depth);
@@ -41,11 +41,18 @@ pub fn run_plan(plan: &InstallPlan, options: &CoreOptions, game_directory: &Path
             missing.join(", ")
         ));
     }
-    info!("install preflight passed for {} component(s)", plan.components.len());
+    info!(
+        "install preflight passed for {} component(s)",
+        plan.components.len()
+    );
 
     for (component, source_folder) in resolved_sources {
-        let mod_folder_in_game =
-            stage_mod_folder(game_directory, &source_folder, &component.name, options.overwrite)?;
+        let mod_folder_in_game = stage_mod_folder(
+            game_directory,
+            &source_folder,
+            &component.name,
+            options.overwrite,
+        )?;
         info!(
             "install executing component: name={} component={} tp_file={}",
             component.name, component.component, component.tp_file

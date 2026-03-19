@@ -65,7 +65,10 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                     .map(|component| {
                         let component_tp2 = parse_component_tp2_from_raw(&component.raw_line)
                             .unwrap_or_else(|| mod_state.tp_file.clone());
-                        let component_mod_key = crate::ui::step2::service_selection_step2::selection_normalize_mod_key(&component_tp2);
+                        let component_mod_key =
+                            crate::ui::step2::service_selection_step2::selection_normalize_mod_key(
+                                &component_tp2,
+                            );
                         let component_mod_name = details_display_name_from_tp2(&component_tp2);
                         let mut compat_kind = component.compat_kind.clone();
                         let mut compat_role: Option<String> = None;
@@ -89,11 +92,10 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                         let mod_key = component_mod_key;
                         let comp_id = details_parse_component_u32(&component.component_id);
 
-                        if let Some(issue) = state
-                            .compat
-                            .issues
-                            .iter()
-                            .find(|issue| details_issue_matches_affected(issue, &mod_key, comp_id))
+                        if let Some(issue) =
+                            state.compat.issues.iter().find(|issue| {
+                                details_issue_matches_affected(issue, &mod_key, comp_id)
+                            })
                         {
                             compat_role = Some("Affected".to_string());
                             compat_code = Some(issue.code.clone());
@@ -111,11 +113,10 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             }
                             compat_graph = Some(details_issue_graph(issue));
                             compat_evidence = issue.raw_evidence.clone();
-                        } else if let Some(issue) = state
-                            .compat
-                            .issues
-                            .iter()
-                            .find(|issue| details_issue_matches_related(issue, &mod_key, comp_id))
+                        } else if let Some(issue) =
+                            state.compat.issues.iter().find(|issue| {
+                                details_issue_matches_related(issue, &mod_key, comp_id)
+                            })
                         {
                             compat_role = Some("Related target".to_string());
                             compat_code = Some(issue.code.clone());
@@ -131,7 +132,10 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             if disabled_reason.is_none() && !issue.reason.trim().is_empty() {
                                 disabled_reason = Some(format!(
                                     "Conflicts with {}",
-                                    details_format_target(&issue.affected_mod, issue.affected_component)
+                                    details_format_target(
+                                        &issue.affected_mod,
+                                        issue.affected_component
+                                    )
                                 ));
                             }
                             compat_graph = Some(details_issue_graph(issue));
@@ -142,8 +146,12 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             mod_name: Some(component_mod_name),
                             component_label: Some(component.label.clone()),
                             component_id: Some(component.component_id.clone()),
-                            component_lang: crate::ui::step2::service_step2::parse_lang(&component.raw_line),
-                            component_version: crate::ui::step2::service_step2::parse_version(&component.raw_line),
+                            component_lang: crate::ui::step2::service_step2::parse_lang(
+                                &component.raw_line,
+                            ),
+                            component_version: crate::ui::step2::service_step2::parse_version(
+                                &component.raw_line,
+                            ),
                             selected_order: component.selected_order,
                             is_checked: Some(component.checked),
                             is_disabled: Some(component.disabled),
@@ -157,7 +165,8 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             compat_evidence,
                             raw_line: Some(component.raw_line.clone()),
                             tp_file: Some(component_tp2),
-                            tp2_path: (!mod_state.tp2_path.is_empty()).then_some(mod_state.tp2_path.clone()),
+                            tp2_path: (!mod_state.tp2_path.is_empty())
+                                .then_some(mod_state.tp2_path.clone()),
                             readme_path: mod_state.readme_path.clone(),
                             web_url: mod_state.web_url.clone(),
                         }
@@ -167,8 +176,14 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
     }
 }
 
-fn details_issue_matches_affected(issue: &CompatIssueDisplay, mod_key: &str, comp_id: Option<u32>) -> bool {
-    if crate::ui::step2::service_selection_step2::selection_normalize_mod_key(&issue.affected_mod) != mod_key {
+fn details_issue_matches_affected(
+    issue: &CompatIssueDisplay,
+    mod_key: &str,
+    comp_id: Option<u32>,
+) -> bool {
+    if crate::ui::step2::service_selection_step2::selection_normalize_mod_key(&issue.affected_mod)
+        != mod_key
+    {
         return false;
     }
     match (issue.affected_component, comp_id) {
@@ -178,8 +193,14 @@ fn details_issue_matches_affected(issue: &CompatIssueDisplay, mod_key: &str, com
     }
 }
 
-fn details_issue_matches_related(issue: &CompatIssueDisplay, mod_key: &str, comp_id: Option<u32>) -> bool {
-    if crate::ui::step2::service_selection_step2::selection_normalize_mod_key(&issue.related_mod) != mod_key {
+fn details_issue_matches_related(
+    issue: &CompatIssueDisplay,
+    mod_key: &str,
+    comp_id: Option<u32>,
+) -> bool {
+    if crate::ui::step2::service_selection_step2::selection_normalize_mod_key(&issue.related_mod)
+        != mod_key
+    {
         return false;
     }
     match (issue.related_component, comp_id) {
@@ -221,10 +242,15 @@ fn details_issue_graph(issue: &CompatIssueDisplay) -> String {
         return format!(
             "{} allowed on: {}",
             details_format_target(&issue.affected_mod, issue.affected_component),
-            if games.is_empty() { "N/A".to_string() } else { games }
+            if games.is_empty() {
+                "N/A".to_string()
+            } else {
+                games
+            }
         );
     }
-    if issue.code.eq_ignore_ascii_case("FORBID_HIT") || issue.code.eq_ignore_ascii_case("RULE_HIT") {
+    if issue.code.eq_ignore_ascii_case("FORBID_HIT") || issue.code.eq_ignore_ascii_case("RULE_HIT")
+    {
         return format!(
             "{} conflicts with {}",
             details_format_target(&issue.affected_mod, issue.affected_component),
@@ -280,7 +306,11 @@ fn details_issue_related_target(issue: &CompatIssueDisplay) -> String {
             .join(", ");
         return format!(
             "Allowed games: {}",
-            if games.is_empty() { "N/A".to_string() } else { games }
+            if games.is_empty() {
+                "N/A".to_string()
+            } else {
+                games
+            }
         );
     }
     details_format_target(&issue.related_mod, issue.related_component)
@@ -295,16 +325,15 @@ fn details_parse_or_targets_from_reason(reason: &str) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    if parts.len() > 1 {
-        Some(parts)
-    } else {
-        None
-    }
+    if parts.len() > 1 { Some(parts) } else { None }
 }
 
 fn details_is_duplicate_selection_issue(issue: &CompatIssueDisplay) -> bool {
     issue.code.eq_ignore_ascii_case("RULE_HIT")
-        && (issue.reason.to_ascii_lowercase().contains("selected multiple times")
+        && (issue
+            .reason
+            .to_ascii_lowercase()
+            .contains("selected multiple times")
             || issue
                 .raw_evidence
                 .as_deref()

@@ -6,10 +6,10 @@ pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_tex
 pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_kind;
 
 pub(crate) mod compat_popup_action_row {
-    use eframe::egui;
+    use crate::ui::controller::util::open_in_shell;
     use crate::ui::state::WizardState;
-        use crate::ui::controller::util::open_in_shell;
-    
+    use eframe::egui;
+
     use crate::ui::step2::compat_popup_step2::compat_popup_actions as actions;
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_copy as issue_text_copy;
     use crate::ui::step2::compat_popup_step2::compat_popup_selection_query as selection_query;
@@ -35,13 +35,16 @@ pub(crate) mod compat_popup_action_row {
             if ui.button("Copy Issue").clicked()
                 && let Some(issue) = selection_query::current_issue_for_selection(state)
             {
-                ui.ctx().copy_text(issue_text_copy::format_issue_for_copy(&issue));
+                ui.ctx()
+                    .copy_text(issue_text_copy::format_issue_for_copy(&issue));
             }
             let source_path = selection_source::rule_source_open_path(state);
             let open_source_resp =
                 ui.add_enabled(source_path.is_some(), egui::Button::new("Open Rule Source"));
             if let Some(path) = source_path {
-                if open_source_resp.clicked() && let Err(err) = open_in_shell(&path) {
+                if open_source_resp.clicked()
+                    && let Err(err) = open_in_shell(&path)
+                {
                     state.step2.scan_status = format!("Open failed: {err}");
                 }
             }
@@ -54,7 +57,7 @@ pub(crate) mod compat_popup_action_row {
 
 pub(crate) mod compat_popup_actions {
     use crate::ui::state::WizardState;
-    
+
     use crate::ui::step2::compat_popup_step2::compat_popup_filters as filters;
     use crate::ui::step2::compat_popup_step2::compat_popup_selection_jump as selection_jump;
     use crate::ui::step2::compat_popup_step2::compat_popup_selection_query as selection_query;
@@ -93,7 +96,13 @@ pub(crate) mod compat_popup_actions {
             .issues
             .iter()
             .filter(|i| filters::matches_issue_filter(i, &filter))
-            .map(|i| (i.issue_id.clone(), i.affected_mod.clone(), i.affected_component))
+            .map(|i| {
+                (
+                    i.issue_id.clone(),
+                    i.affected_mod.clone(),
+                    i.affected_component,
+                )
+            })
             .collect();
         if issue_list.is_empty() {
             return;
@@ -110,10 +119,10 @@ pub(crate) mod compat_popup_actions {
 }
 
 pub(crate) mod compat_popup_details {
-    use eframe::egui;
     use crate::ui::state::{CompatIssueDisplay, WizardState};
     use crate::ui::step2::content_step2::step2_details_select::selected_details;
     use crate::ui::step2::state_step2::Step2Details;
+    use eframe::egui;
 
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_explain as issue_text_explain;
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_kind as issue_text_kind;
@@ -147,9 +156,14 @@ pub(crate) mod compat_popup_details {
                         crate::ui::shared::theme_global::error_emphasis(),
                     )
                 } else {
-                    ("Warning only", crate::ui::shared::theme_global::warning_soft())
+                    (
+                        "Warning only",
+                        crate::ui::shared::theme_global::warning_soft(),
+                    )
                 };
-                ui.label(crate::ui::shared::typography_global::strong(badge_text).color(badge_color));
+                ui.label(
+                    crate::ui::shared::typography_global::strong(badge_text).color(badge_color),
+                );
             }
         });
 
@@ -169,7 +183,9 @@ pub(crate) mod compat_popup_details {
         }
         if let Some(issue) = issue.as_ref() {
             ui.add_space(2.0);
-            ui.label(crate::ui::shared::typography_global::strong("Why this appears"));
+            ui.label(crate::ui::shared::typography_global::strong(
+                "Why this appears",
+            ));
             ui.label(issue_text_explain::issue_why_this_appears(issue));
 
             ui.add_space(2.0);
@@ -195,7 +211,9 @@ pub(crate) mod compat_popup_details {
         if let Some(related) = details.compat_related_target.as_deref() {
             ui.add_space(2.0);
             ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Related target"));
+                ui.label(crate::ui::shared::typography_global::strong(
+                    "Related target",
+                ));
                 ui.label(related);
             });
         }
@@ -216,9 +234,7 @@ pub(crate) mod compat_popup_details {
         }
     }
 
-    fn synth_issue_from_details(
-        details: &Step2Details,
-    ) -> Option<CompatIssueDisplay> {
+    fn synth_issue_from_details(details: &Step2Details) -> Option<CompatIssueDisplay> {
         let kind = details.compat_kind.as_deref()?.to_ascii_lowercase();
         let code = if kind == "game_mismatch" {
             "GAME_MISMATCH"
@@ -240,7 +256,10 @@ pub(crate) mod compat_popup_details {
             issue_id: "synthetic".to_string(),
             code: code.to_string(),
             is_blocking,
-            affected_mod: details.tp_file.clone().unwrap_or_else(|| "unknown".to_string()),
+            affected_mod: details
+                .tp_file
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             affected_component: details
                 .component_id
                 .as_deref()
@@ -255,9 +274,9 @@ pub(crate) mod compat_popup_details {
 }
 
 pub(crate) mod compat_popup_filter_row {
-    use eframe::egui;
     use crate::ui::state::WizardState;
-        
+    use eframe::egui;
+
     pub(crate) fn render_filter_row(ui: &mut egui::Ui, state: &mut WizardState) {
         ui.horizontal_wrapped(|ui| {
             ui.label(crate::ui::shared::typography_global::strong("Show"));

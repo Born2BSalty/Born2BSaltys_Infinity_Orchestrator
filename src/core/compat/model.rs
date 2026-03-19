@@ -205,10 +205,16 @@ pub struct CompatValidationResult {
 
 impl CompatValidationResult {
     pub fn error_count(&self) -> usize {
-        self.issues.iter().filter(|i| i.severity == Severity::Error).count()
+        self.issues
+            .iter()
+            .filter(|i| i.severity == Severity::Error)
+            .count()
     }
 
     pub fn warning_count(&self) -> usize {
-        self.issues.iter().filter(|i| i.severity == Severity::Warning).count()
+        self.issues
+            .iter()
+            .filter(|i| i.severity == Severity::Warning)
+            .count()
     }
 }

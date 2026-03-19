@@ -17,8 +17,10 @@ pub fn group_prompt_entries(
 ) -> Vec<PromptGroup> {
     use std::collections::BTreeMap;
 
-    let mut grouped: BTreeMap<String, Vec<(String, crate::ui::step5::prompt_memory::PromptAnswerEntry)>> =
-        BTreeMap::new();
+    let mut grouped: BTreeMap<
+        String,
+        Vec<(String, crate::ui::step5::prompt_memory::PromptAnswerEntry)>,
+    > = BTreeMap::new();
     for (key, entry) in entries {
         let group_label = prompt_component_label(&entry);
         grouped.entry(group_label).or_default().push((key, entry));
@@ -29,7 +31,9 @@ pub fn group_prompt_entries(
         .collect()
 }
 
-pub fn prompt_component_label(entry: &crate::ui::step5::prompt_memory::PromptAnswerEntry) -> String {
+pub fn prompt_component_label(
+    entry: &crate::ui::step5::prompt_memory::PromptAnswerEntry,
+) -> String {
     if !entry.component_name.trim().is_empty() {
         entry.component_name.clone()
     } else if !entry.tp2_file.trim().is_empty() && !entry.component_id.trim().is_empty() {
@@ -152,7 +156,10 @@ pub fn source_log_infos(step1: &Step1State) -> Vec<crate::ui::step5::log_files::
 }
 
 pub fn save_console_log(state: &WizardState, console_text: &str) -> anyhow::Result<PathBuf> {
-    Ok(crate::ui::step5::log_files::save_console_log(&state.step5, console_text)?)
+    Ok(crate::ui::step5::log_files::save_console_log(
+        &state.step5,
+        console_text,
+    )?)
 }
 
 pub fn open_console_logs_folder() -> anyhow::Result<()> {
@@ -171,7 +178,10 @@ pub fn capture_resume_targets(step1: &Step1State) -> ResumeTargets {
     step5_command::capture_resume_targets(step1)
 }
 
-pub fn build_resume_invocation(step1: &Step1State, resume_targets: &ResumeTargets) -> (String, Vec<String>) {
+pub fn build_resume_invocation(
+    step1: &Step1State,
+    resume_targets: &ResumeTargets,
+) -> (String, Vec<String>) {
     step5_command::build_resume_invocation(step1, resume_targets)
 }
 
@@ -193,19 +203,20 @@ pub fn prepare_target_dirs_before_install(
     Ok(crate::ui::step5::log_files::prepare_target_dirs_before_install(step1)?)
 }
 
-pub fn validate_resume_paths(step1: &Step1State, resume_targets: &ResumeTargets) -> anyhow::Result<()> {
+pub fn validate_resume_paths(
+    step1: &Step1State,
+    resume_targets: &ResumeTargets,
+) -> anyhow::Result<()> {
     crate::ui::step5::log_files::validate_resume_paths(step1, resume_targets)
         .map_err(anyhow::Error::msg)
 }
 
 pub fn validate_runtime_prep_paths(step1: &Step1State) -> anyhow::Result<()> {
-    crate::ui::step5::log_files::validate_runtime_prep_paths(step1)
-        .map_err(anyhow::Error::msg)
+    crate::ui::step5::log_files::validate_runtime_prep_paths(step1).map_err(anyhow::Error::msg)
 }
 
 pub fn verify_targets_prepared(step1: &Step1State) -> anyhow::Result<()> {
-    crate::ui::step5::log_files::verify_targets_prepared(step1)
-        .map_err(anyhow::Error::msg)
+    crate::ui::step5::log_files::verify_targets_prepared(step1).map_err(anyhow::Error::msg)
 }
 
 pub fn load_scripted_inputs(step1: &Step1State) -> HashMap<String, Vec<String>> {

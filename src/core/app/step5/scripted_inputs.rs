@@ -30,10 +30,7 @@ fn merge_from_prompt_memory(dst: &mut HashMap<String, Vec<String>>) {
 
 fn source_log_paths(step1: &Step1State) -> Vec<String> {
     if step1.game_install == "EET" {
-        vec![
-            resolve_bgee_log_file(step1),
-            resolve_bg2_log_file(step1),
-        ]
+        vec![resolve_bgee_log_file(step1), resolve_bg2_log_file(step1)]
     } else if step1.game_install == "BG2EE" {
         vec![resolve_bg2_log_file(step1)]
     } else {

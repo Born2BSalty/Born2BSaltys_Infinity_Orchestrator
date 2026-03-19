@@ -4,9 +4,9 @@
 use std::collections::{HashMap, HashSet};
 
 use super::super::model::{CompatIssue, CompatIssueCode, IssueSource, Severity, Tp2Metadata};
+use super::SelectedComponent;
 use super::validator_helpers as helpers;
 use super::validator_rule_handlers::apply_rule;
-use super::SelectedComponent;
 
 pub(super) fn validate_component_rules(
     selected: &[SelectedComponent],
@@ -48,7 +48,10 @@ pub(super) fn validate_duplicates(selected: &[SelectedComponent]) -> Vec<CompatI
 
     for component in selected {
         by_key
-            .entry((helpers::normalize_mod_key(&component.tp_file), component.component_id))
+            .entry((
+                helpers::normalize_mod_key(&component.tp_file),
+                component.component_id,
+            ))
             .or_default()
             .push(component);
     }

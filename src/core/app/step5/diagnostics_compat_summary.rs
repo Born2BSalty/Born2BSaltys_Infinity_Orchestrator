@@ -97,7 +97,13 @@ fn sorted_group_entries(groups: &BTreeMap<String, usize>) -> Vec<GroupCount> {
 mod tests {
     use super::*;
 
-    fn issue(code: &str, affected: &str, related: &str, reason: &str, is_blocking: bool) -> CompatIssueDisplay {
+    fn issue(
+        code: &str,
+        affected: &str,
+        related: &str,
+        reason: &str,
+        is_blocking: bool,
+    ) -> CompatIssueDisplay {
         CompatIssueDisplay {
             issue_id: "id".to_string(),
             code: code.to_string(),

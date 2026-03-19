@@ -4,8 +4,8 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use crate::parser;
 use crate::install::weidu_scan;
+use crate::parser;
 use crate::ui::scan::ScannedComponent;
 use crate::ui::scan::cache::{ScanCache, cache_get, cache_put};
 use crate::ui::scan::parse::{normalize_tp_file, parse_component_line};
@@ -38,13 +38,12 @@ pub(super) fn scan_tp2_group(
             if !cached.is_empty() {
                 probe.used_cache = true;
                 probe.selected_from_cache = true;
-                let prompt_index =
-                    parser::collect_prompt_summary_index(
-                        tp2,
-                        mods_root,
-                        Some(preferred_locale),
-                        Some(game_install),
-                    );
+                let prompt_index = parser::collect_prompt_summary_index(
+                    tp2,
+                    mods_root,
+                    Some(preferred_locale),
+                    Some(game_install),
+                );
                 apply_parser_probe_meta(&mut probe, &prompt_index);
                 let cached = apply_prompt_index(cached, &prompt_index);
                 probe.parsed_count = cached.len();
@@ -54,13 +53,12 @@ pub(super) fn scan_tp2_group(
                 continue;
             }
         }
-        let prompt_index =
-            parser::collect_prompt_summary_index(
-                tp2,
-                mods_root,
-                Some(preferred_locale),
-                Some(game_install),
-            );
+        let prompt_index = parser::collect_prompt_summary_index(
+            tp2,
+            mods_root,
+            Some(preferred_locale),
+            Some(game_install),
+        );
         apply_parser_probe_meta(&mut probe, &prompt_index);
         let expected_tp2 = tp2
             .file_name()
@@ -121,7 +119,10 @@ fn apply_prompt_index(
 
     let mut has_component_prompt = false;
     for component in &mut components {
-        if let Some(summary) = prompt_index.by_component_id.get(component.component_id.trim()) {
+        if let Some(summary) = prompt_index
+            .by_component_id
+            .get(component.component_id.trim())
+        {
             component.prompt_summary = Some(summary.clone());
             has_component_prompt = true;
         }
@@ -179,7 +180,8 @@ fn apply_parser_probe_meta(
     probe.parser_flow_event_ref_count = prompt_index.parser_flow_event_ref_count;
     probe.parser_event_with_parent_count = prompt_index.parser_event_with_parent_count;
     probe.parser_event_with_path_count = prompt_index.parser_event_with_path_count;
-    probe.parser_option_component_binding_count = prompt_index.parser_option_component_binding_count;
+    probe.parser_option_component_binding_count =
+        prompt_index.parser_option_component_binding_count;
     probe.parser_flow_preview = prompt_index.parser_flow_preview.clone();
 }
 

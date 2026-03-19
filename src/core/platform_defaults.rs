@@ -46,7 +46,8 @@ fn normalize_binary_for_platform(value: &str) -> String {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        if !value.contains('/') && !value.contains('\\')
+        if !value.contains('/')
+            && !value.contains('\\')
             && let Some(stripped) = value.strip_suffix(".exe")
             && !stripped.is_empty()
         {

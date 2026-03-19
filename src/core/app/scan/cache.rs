@@ -63,7 +63,9 @@ struct RawScanCacheMeta {
 }
 
 pub fn normalize_context_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
+    path.to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase()
 }
 
 pub fn cache_context(weidu: &Path, game_dir: &Path, mods_root: &Path) -> String {
@@ -189,9 +191,7 @@ fn inspect_cache_text(path: &Path, source: &str, text: &str) -> ScanCacheLoadMet
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_secs());
     let file_version = raw.as_ref().and_then(|r| r.version);
-    let file_writer_app_version = raw
-        .as_ref()
-        .and_then(|r| non_empty(&r.writer_app_version));
+    let file_writer_app_version = raw.as_ref().and_then(|r| non_empty(&r.writer_app_version));
     let file_writer_exe_fingerprint = raw
         .as_ref()
         .and_then(|r| non_empty(&r.writer_exe_fingerprint));

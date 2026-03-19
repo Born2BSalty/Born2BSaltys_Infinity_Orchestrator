@@ -45,7 +45,8 @@ pub fn jump_to_target(
                 let c_key = parse_component_tp2_from_raw(&c.raw_line)
                     .map(|tp2| selection_normalize_mod_key(&tp2))
                     .unwrap_or_else(|| selection_normalize_mod_key(&mod_state.tp_file));
-                c.component_id.trim().parse::<u32>().ok() == Some(target_component) && c_key == target_key
+                c.component_id.trim().parse::<u32>().ok() == Some(target_component)
+                    && c_key == target_key
             }) {
                 state.step2.selected = Some(Step2Selection::Component {
                     game_tab: game_tab.to_string(),
@@ -185,7 +186,12 @@ pub fn rule_source_open_path(state: &WizardState) -> Option<String> {
     let src = issue.source.trim();
     if let Some(tp2_token) = src.strip_prefix("TP2:") {
         let target_mod_key = selection_normalize_mod_key(&issue.affected_mod);
-        for mod_state in state.step2.bgee_mods.iter().chain(state.step2.bg2ee_mods.iter()) {
+        for mod_state in state
+            .step2
+            .bgee_mods
+            .iter()
+            .chain(state.step2.bg2ee_mods.iter())
+        {
             if selection_normalize_mod_key(&mod_state.tp_file) == target_mod_key
                 && !mod_state.tp2_path.trim().is_empty()
             {

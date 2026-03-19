@@ -16,10 +16,7 @@ pub fn begin_new_run(step5: &mut Step5State) -> String {
 }
 
 pub fn current_or_new_run_id(step5: &Step5State) -> String {
-    step5
-        .diagnostics_run_id
-        .clone()
-        .unwrap_or_else(make_run_id)
+    step5.diagnostics_run_id.clone().unwrap_or_else(make_run_id)
 }
 
 pub fn run_dir_from_id(run_id: &str) -> PathBuf {

@@ -29,12 +29,13 @@ pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
         ui.visuals().widgets.inactive.fg_stroke.color
     };
 
-    let button = egui::Button::new(crate::ui::shared::typography_global::plain(value).color(text_color))
-        .fill(fill)
-        .stroke(stroke)
-        .corner_radius(egui::CornerRadius::same(
-            crate::ui::shared::layout_tokens_global::RADIUS_SM as u8,
-        ));
+    let button =
+        egui::Button::new(crate::ui::shared::typography_global::plain(value).color(text_color))
+            .fill(fill)
+            .stroke(stroke)
+            .corner_radius(egui::CornerRadius::same(
+                crate::ui::shared::layout_tokens_global::RADIUS_SM as u8,
+            ));
 
     if ui.add_sized([58.0, 24.0], button).clicked() {
         *active = value.to_string();
@@ -100,7 +101,10 @@ pub fn render_controls(
             .any(|m| m.checked || m.components.iter().any(|c| c.checked));
         ui.horizontal(|ui| {
             if ui
-                .add_sized([STEP2_SCAN_BTN_W, STEP2_BTN_H], egui::Button::new("Scan Mods Folder"))
+                .add_sized(
+                    [STEP2_SCAN_BTN_W, STEP2_BTN_H],
+                    egui::Button::new("Scan Mods Folder"),
+                )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SCAN)
                 .clicked()
             {
@@ -211,8 +215,10 @@ pub fn render_tabs(
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(tabs_rect), |ui| {
         ui.horizontal(|ui| {
-            ui.label(crate::ui::shared::typography_global::section_title("Mods / Components"))
-                .on_hover_text(crate::ui::shared::tooltip_global::STEP2_MODS_COMPONENTS);
+            ui.label(crate::ui::shared::typography_global::section_title(
+                "Mods / Components",
+            ))
+            .on_hover_text(crate::ui::shared::tooltip_global::STEP2_MODS_COMPONENTS);
             let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
             let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
             let active_is_bgee = state.step2.active_game_tab == "BGEE";
@@ -297,13 +303,16 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
                 ui.add_space(SPACE_MD);
                 ui.separator();
                 ui.add_space(SPACE_SM);
-                ui.label(crate::ui::shared::typography_global::strong("Jump to component"));
+                ui.label(crate::ui::shared::typography_global::strong(
+                    "Jump to component",
+                ));
                 ui.add_space(SPACE_XS);
                 ui.horizontal_wrapped(|ui| {
                     for component_id in jump_ids {
-                        let button_text =
-                            crate::ui::shared::typography_global::monospace(component_id.to_string())
-                                .color(crate::ui::shared::theme_global::accent_numbers());
+                        let button_text = crate::ui::shared::typography_global::monospace(
+                            component_id.to_string(),
+                        )
+                        .color(crate::ui::shared::theme_global::accent_numbers());
                         if ui
                             .add(
                                 egui::Button::new(button_text)
@@ -433,7 +442,9 @@ pub fn render_details_pane(
             crate::ui::step2::content_step2::step2_details_select::selected_details(state);
         ui.group(|ui| {
             ui.set_min_size(right_rect.size() - egui::vec2(12.0, 12.0));
-            ui.label(crate::ui::shared::typography_global::section_title("Details"));
+            ui.label(crate::ui::shared::typography_global::section_title(
+                "Details",
+            ));
             ui.add_space(4.0);
             crate::ui::step2::content_step2::details_pane_action_bar::render(ui, &details, action);
             ui.separator();
@@ -442,12 +453,12 @@ pub fn render_details_pane(
     });
 }
 
-pub(crate) use crate::ui::step2::state_step2::Step2Details;
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_action_row;
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_details;
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_filter_row;
 pub(crate) use crate::ui::step2::details_pane_step2::details_pane_action_bar;
 pub(crate) use crate::ui::step2::details_pane_step2::details_pane_content;
+pub(crate) use crate::ui::step2::state_step2::Step2Details;
 
 pub(crate) mod step2_details_select {
     use crate::ui::state::WizardState;
