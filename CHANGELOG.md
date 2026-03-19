@@ -9,6 +9,7 @@
 - Diagnostics now keep `raw_output_*` and `bio_full_debug_*` inside the current `run_*` folder, so exporting diagnostics preserves the active run and only old runs are pruned.
 - Save Console Log now also writes `console_*` into the current `run_*` folder instead of the top-level diagnostics folder.
 - Test PR rules.
+- Test PR rules2.
 
 ## Beta 7
 - Dev-mode diagnostics now show which BIO build wrote the scan cache, so it is easier to spot reports coming from old cached scans.
