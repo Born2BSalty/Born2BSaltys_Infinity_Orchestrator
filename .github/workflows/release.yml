@@ -83,12 +83,12 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           path: release-artifacts
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@v2.3.3
+        uses: softprops/action-gh-release@v2.6.1
         with:
           files: release-artifacts/**/*
           generate_release_notes: true
