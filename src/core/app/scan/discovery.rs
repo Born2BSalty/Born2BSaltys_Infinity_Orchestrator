@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use walkdir::WalkDir;
@@ -49,21 +49,28 @@ pub fn resolve_scan_game_dir(step1: &Step1State) -> Option<PathBuf> {
 }
 
 pub fn group_tp2s(mod_root: &Path, depth: usize) -> Vec<(String, Vec<PathBuf>)> {
-    let mut grouped: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
-    WalkDir::new(mod_root)
+    let tp2_paths: Vec<PathBuf> = WalkDir::new(mod_root)
         .follow_links(false)
         .max_depth(depth)
         .into_iter()
         .flatten()
         .filter(|entry| entry.file_type().is_file())
-        .for_each(|entry| {
+        .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-            if name.ends_with(".tp2") {
-                let path = entry.path().to_path_buf();
-                let group_key = mod_group_key(mod_root, &path);
-                grouped.entry(group_key).or_default().push(path);
-            }
-        });
+            name.ends_with(".tp2").then(|| entry.path().to_path_buf())
+        })
+        .collect();
+
+    let tp2_dirs: BTreeSet<PathBuf> = tp2_paths
+        .iter()
+        .filter_map(|tp2| tp2.parent().map(Path::to_path_buf))
+        .collect();
+
+    let mut grouped: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+    for path in tp2_paths {
+        let group_key = mod_group_key(mod_root, &path, &tp2_dirs);
+        grouped.entry(group_key).or_default().push(path);
+    }
     grouped.into_iter().collect()
 }
 
@@ -102,14 +109,27 @@ pub fn display_name_from_group_key(group_key: &str) -> String {
         .unwrap_or_else(|| group_key.to_string())
 }
 
-fn mod_group_key(mod_root: &Path, tp2_path: &Path) -> String {
-    if let Some(parent) = tp2_path.parent()
-        && let Ok(rel_parent) = parent.strip_prefix(mod_root)
-        && let Some(first) = rel_parent.iter().next()
-    {
-        let first = first.to_string_lossy().trim().to_string();
-        if !first.is_empty() {
-            return first;
+fn mod_group_key(mod_root: &Path, tp2_path: &Path, tp2_dirs: &BTreeSet<PathBuf>) -> String {
+    if let Some(parent) = tp2_path.parent() {
+        let mut current = parent;
+        let mut best_group: Option<String> = None;
+        while let Ok(rel_current) = current.strip_prefix(mod_root) {
+            if tp2_dirs.contains(current) {
+                let rel_current = rel_current.display().to_string();
+                if !rel_current.trim().is_empty() {
+                    best_group = Some(rel_current);
+                }
+            }
+            let Some(next) = current.parent() else {
+                break;
+            };
+            if next == current || !next.starts_with(mod_root) {
+                break;
+            }
+            current = next;
+        }
+        if let Some(best_group) = best_group {
+            return best_group;
         }
     }
     tp2_path

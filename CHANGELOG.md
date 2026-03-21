@@ -1,3 +1,7 @@
+## Beta 9
+- Fixed Step 2 mod discovery so category folders inside the selected mods directory no longer collapse multiple mods into one entry.
+- Fixed Step 2 mod discovery so nested support TP2 files stay grouped under their parent mod instead of appearing as separate mods.
+
 ## Beta 8
 - Initial Beta 8 notes.
 - Step 1 no longer disables `-s Skip installed` when target-dir preparation is enabled.
