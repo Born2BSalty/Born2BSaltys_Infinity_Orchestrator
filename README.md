@@ -14,20 +14,22 @@ console control.
 ## Quick Start (Normal Users)
 
 1. Download the BIO release zip and extract it.
-2. Launch BIO.exe.
-3. In Step 1, set:
+2. Download weidu installer at https://github.com/WeiDUorg/weidu
+3. Download Mod installer at https://github.com/dark0dave/mod_installer
+4. Launch BIO.exe.
+5. In Step 1, set:
 - your game mode (BGEE, BG2EE, or EET)
-- your Mods Folder
-- your weidu binary
-- your mod_installer binary
-- required game/log paths for your selected mode
+- path to your Mods Folder (location of your extracted downloads)
+- path to your weidu binary (location of your weidu installer)
+- path to your mod_installer binary (location of your Mod installer)
+- path to required game/log paths for your selected mode
 4. Go to Step 2, click Scan Mods Folder, select components.
 5. Go to Step 3, reorder if needed, click Revalidate.
 6. Go to Step 4, review/save.
 7. Go to Step 5, run install.
 
-If you are helping debug issues, run BIO in dev mode:
-- Windows cmd: BIO.exe -d gui
+If you run BIO for the first time and want to help fix things faster, run BIO in dev mode:
+- Windows cmd: BIO.exe -d gui | or have "-d gui" added to the BIO shortcut of the exe! example  Target: <E:\downloads\BIO.exe -d gui>
 - Linux/macOS: ./BIO -d gui
 
 
