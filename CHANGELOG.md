@@ -1,3 +1,8 @@
+## Beta 10
+- Reworked diagnostics so WeiDU logs are now exported by where they actually came from, instead of vague source/saved folders.
+- Diagnostics now separates logs from game folders, WeiDU log folders, selected WeiDU log files, and Step 4 saved WeiDU logs.
+- EET diagnostics now also checks for `WeiDU-BGEE.log` where relevant.
+
 ## Beta 9
 - Fixed Step 2 mod discovery so category folders inside the selected mods directory no longer collapse multiple mods into one entry.
 - Fixed Step 2 mod discovery so nested support TP2 files stay grouped under their parent mod instead of appearing as separate mods.

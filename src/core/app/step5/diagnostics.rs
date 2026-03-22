@@ -11,8 +11,9 @@ use crate::ui::state::WizardState;
 use crate::ui::step4::service_step4::build_weidu_export_lines;
 use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, prune_old_diagnostics, run_dir_from_id};
 use crate::ui::step5::service_step5::{
-    build_install_invocation, copy_saved_weidu_logs, copy_source_weidu_logs,
+    build_install_invocation,
 };
+use crate::ui::step5::log_files::{copy_diagnostic_origin_logs, DiagnosticLogGroup};
 use crate::ui::terminal::EmbeddedTerminal;
 
 #[path = "diagnostics_appdata_copy.rs"]
@@ -67,10 +68,9 @@ pub fn export_diagnostics(
     fs::create_dir_all(&run_dir)?;
     let out_path = run_dir.join("bio_diag.txt");
 
-    let source_logs_dir = run_dir.join("source_logs");
-    let copied_source_logs = copy_source_weidu_logs(&state.step1, &source_logs_dir, "source");
-    let saved_logs_dir = run_dir.join("saved_logs");
-    let copied_saved_logs = copy_saved_weidu_logs(&state.step1, &saved_logs_dir, "saved");
+    let logs_dir = run_dir.join("logs");
+    let mut log_groups = copy_diagnostic_origin_logs(&state.step1, &logs_dir);
+    log_groups.extend(write_step4_weidu_log_snapshots(state, &logs_dir)?);
     let appdata_summary = appdata_copy::copy_appdata_configs(&run_dir);
     let write_check_summary = write_checks::run_write_checks(state, ts);
     let tp2_layout_summary = tp2_layout::build_tp2_layout_summary(state);
@@ -87,8 +87,7 @@ pub fn export_diagnostics(
     let mut text = text::build_base_text(
         state,
         &run_id,
-        &copied_source_logs,
-        &copied_saved_logs,
+        &log_groups,
         &active_order,
         &console_excerpt,
         ts,
@@ -105,8 +104,9 @@ pub fn export_diagnostics(
 
     fs::write(&out_path, text)?;
     let mut written_paths = vec![out_path.clone()];
-    written_paths.extend(copied_source_logs.iter().cloned());
-    written_paths.extend(copied_saved_logs.iter().cloned());
+    for group in &log_groups {
+        written_paths.extend(group.copied_paths.iter().cloned());
+    }
     written_paths.extend(appdata_summary.copied.iter().cloned());
 
     match quick_triage::write_quick_triage_txt(&run_dir, state, ts) {
@@ -153,6 +153,54 @@ pub fn export_diagnostics(
         append_diag_note(&out_path, &format!("export_marker_json_write=FAILED: {err}"));
     }
     Ok(out_path)
+}
+
+fn write_step4_weidu_log_snapshots(
+    state: &WizardState,
+    logs_dir: &PathBuf,
+) -> Result<Vec<DiagnosticLogGroup>> {
+    let header = [
+        "// Log of Currently Installed WeiDU Mods",
+        "// The top of the file is the 'oldest' mod",
+        "// ~TP2_File~ #language_number #component_number // [Subcomponent Name -> ] Component Name [ : Version]",
+    ];
+
+    let write_group =
+        |label: &str, file_name: &str, lines: Vec<String>| -> Result<DiagnosticLogGroup> {
+            let dest_dir = logs_dir.join("Save WeiDU logs").join(label);
+            fs::create_dir_all(&dest_dir)?;
+            let dest = dest_dir.join(file_name);
+            let mut out: Vec<String> = header.iter().map(|s| s.to_string()).collect();
+            out.extend(lines);
+            fs::write(&dest, out.join("\n"))?;
+            Ok(DiagnosticLogGroup {
+                label: format!("Save WeiDU logs/{label}"),
+                copied_paths: vec![dest],
+            })
+        };
+
+    let groups = match state.step1.game_install.as_str() {
+        "EET" => vec![
+            write_group("BGEE", "weidu.log", build_weidu_export_lines(&state.step3.bgee_items))?,
+            write_group(
+                "BG2EE",
+                "weidu.log",
+                build_weidu_export_lines(&state.step3.bg2ee_items),
+            )?,
+        ],
+        "BG2EE" => vec![write_group(
+            "BG2EE",
+            "weidu.log",
+            build_weidu_export_lines(&state.step3.bg2ee_items),
+        )?],
+        _ => vec![write_group(
+            "BGEE",
+            "weidu.log",
+            build_weidu_export_lines(&state.step3.bgee_items),
+        )?],
+    };
+
+    Ok(groups)
 }
 
 fn append_diag_note(out_path: &PathBuf, line: &str) {

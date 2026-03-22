@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::PathBuf;
-
+use crate::ui::step5::log_files::DiagnosticLogGroup;
 use crate::ui::state::WizardState;
 use crate::ui::step5::diagnostics::{
     AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary,
@@ -14,8 +13,7 @@ mod step2;
 pub(super) fn build_base_text(
     state: &WizardState,
     diagnostics_run_id: &str,
-    copied_source_logs: &[PathBuf],
-    copied_saved_logs: &[PathBuf],
+    log_groups: &[DiagnosticLogGroup],
     active_order: &[String],
     console_excerpt: &str,
     timestamp_unix_secs: u64,
@@ -48,24 +46,7 @@ pub(super) fn build_base_text(
     text.push_str(&format!("last_status={}\n", state.step5.last_status_text));
     text.push_str(&format!("last_exit_code={:?}\n", state.step5.last_exit_code));
     append_step5_runtime_summary(&mut text, state);
-    text.push_str("\n[Copied Source WeiDU Logs]\n");
-    if copied_source_logs.is_empty() {
-        text.push_str("none\n");
-    } else {
-        for p in copied_source_logs {
-            text.push_str(&p.display().to_string());
-            text.push('\n');
-        }
-    }
-    text.push_str("\n[Copied Saved WeiDU Logs]\n");
-    if copied_saved_logs.is_empty() {
-        text.push_str("none\n");
-    } else {
-        for p in copied_saved_logs {
-            text.push_str(&p.display().to_string());
-            text.push('\n');
-        }
-    }
+    append_weidu_log_groups(&mut text, log_groups);
     text.push_str("\n[Console Excerpt]\n");
     text.push_str(console_excerpt);
     text.push('\n');
@@ -85,6 +66,27 @@ fn append_tp2_layout_snapshot(out: &mut String, summary: &Tp2LayoutSummary) {
         out.push('\n');
     }
     out.push('\n');
+}
+
+fn append_weidu_log_groups(out: &mut String, log_groups: &[DiagnosticLogGroup]) {
+    out.push_str("\n[WeiDU Logs By Origin]\n");
+    if log_groups.is_empty() {
+        out.push_str("none\n");
+        return;
+    }
+    for group in log_groups {
+        out.push_str(&group.label);
+        out.push('\n');
+        if group.copied_paths.is_empty() {
+            out.push_str("none\n");
+        } else {
+            for path in &group.copied_paths {
+                out.push_str(&path.display().to_string());
+                out.push('\n');
+            }
+        }
+        out.push('\n');
+    }
 }
 
 fn append_runtime_snapshot(out: &mut String, state: &WizardState, console_excerpt: &str) {

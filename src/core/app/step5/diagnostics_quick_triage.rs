@@ -51,7 +51,7 @@ pub(super) fn write_quick_triage_txt(
     text.push_str("- scan_context.json\n");
     text.push_str("- undefined_summary.json\n");
     text.push_str("- compat_decisions.json\n");
-    text.push_str("- source_logs/\n");
+    text.push_str("- logs/\n");
     fs::write(&out_path, text)?;
     Ok(out_path)
 }
