@@ -135,7 +135,7 @@ impl EmbeddedTerminal {
                 self.log_bio_debug(&format!(
                     "poll_output chunk_count={} total_bytes={}",
                     joined.len(),
-                    joined.as_bytes().len()
+                    joined.len()
                 ));
                 self.has_new_data = true;
             }
@@ -182,10 +182,10 @@ impl EmbeddedTerminal {
 
     pub(in crate::ui::terminal) fn write_bytes(&mut self, data: &[u8]) {
         self.log_bio_debug(&format!("write_bytes len={}", data.len()));
-        if let Some(stdin) = self.stdin.as_mut() {
-            if stdin.write_all(data).is_ok() {
-                let _ = stdin.flush();
-            }
+        if let Some(stdin) = self.stdin.as_mut()
+            && stdin.write_all(data).is_ok()
+        {
+            let _ = stdin.flush();
         }
     }
 }

@@ -261,6 +261,30 @@ fn apply_for_tab(
 
             if let Some(meta) = metadata
                 && let Some(component_id) = component.component_id.trim().parse::<u32>().ok()
+                && let Some(rule_evidence) = find_deprecated_rule(meta, component_id)
+            {
+                component.compat_kind = Some("deprecated".to_string());
+                component.compat_source =
+                    Some(format!("step2_tp2_component_validator | TP2: {}", meta.tp_file));
+                component.compat_related_mod = None;
+                component.compat_related_component = None;
+                component.compat_graph = Some(format!(
+                    "{} #{} is deprecated",
+                    normalize_mod_key(&mod_state.tp_file),
+                    component_id
+                ));
+                component.compat_evidence = Some(rule_evidence.to_string());
+                component.disabled = true;
+                component.checked = false;
+                component.selected_order = None;
+                component.disabled_reason = Some(
+                    "This component is deprecated in the TP2 and is not installable.".to_string(),
+                );
+                continue;
+            }
+
+            if let Some(meta) = metadata
+                && let Some(component_id) = component.component_id.trim().parse::<u32>().ok()
                 && let Some(rule) = find_require_path_rule(meta, component_id)
                 && let Some(game_dir) = effective_target_game_dir(step1, tab)
                 && !path_requirement_satisfied(rule, &game_dir)
@@ -289,29 +313,85 @@ fn apply_for_tab(
 
             if let Some(meta) = metadata
                 && let Some(component_id) = component.component_id.trim().parse::<u32>().ok()
-                && let Some((allowed_games, rule_evidence)) =
-                    find_require_game_allowed_games(meta, component_id)
-                && !game_allowed(&current_game, allowed_games)
             {
-                component.compat_kind = Some("game_mismatch".to_string());
-                component.compat_source =
-                    Some(format!("step2_tp2_game_validator | TP2: {}", meta.tp_file));
-                component.compat_related_mod = Some(allowed_games.join("|"));
-                component.compat_related_component = None;
-                component.compat_graph = Some(format!(
-                    "{} #{} allowed on: {}",
-                    normalize_mod_key(&mod_state.tp_file),
-                    component_id,
-                    allowed_games.join("|")
-                ));
-                component.compat_evidence = Some(rule_evidence.to_string());
-                component.disabled = true;
-                component.checked = false;
-                component.selected_order = None;
-                component.disabled_reason = Some(format!(
-                    "This component is restricted to: {}.",
-                    allowed_games.join(", ")
-                ));
+                if let Some((blocked_games, rule_evidence)) =
+                    find_forbid_game_blocked_games(meta, component_id)
+                    && blocked_games
+                        .iter()
+                        .any(|game| game.eq_ignore_ascii_case(&current_game))
+                {
+                    component.compat_kind = Some("game_mismatch".to_string());
+                    component.compat_source =
+                        Some(format!("step2_tp2_game_validator | TP2: {}", meta.tp_file));
+                    component.compat_related_mod = Some(blocked_games.join("|"));
+                    component.compat_related_component = None;
+                    component.compat_graph = Some(format!(
+                        "{} #{} blocked on: {}",
+                        normalize_mod_key(&mod_state.tp_file),
+                        component_id,
+                        blocked_games.join("|")
+                    ));
+                    component.compat_evidence = Some(rule_evidence.to_string());
+                    component.disabled = true;
+                    component.checked = false;
+                    component.selected_order = None;
+                    component.disabled_reason = Some(format!(
+                        "This component is not available on: {}.",
+                        blocked_games.join(", ")
+                    ));
+                    continue;
+                }
+
+                if let Some((required_games, rule_evidence)) =
+                    find_require_game_includes_required_games(meta, component_id)
+                    && !game_includes(&current_game, required_games)
+                {
+                    component.compat_kind = Some("game_mismatch".to_string());
+                    component.compat_source =
+                        Some(format!("step2_tp2_game_validator | TP2: {}", meta.tp_file));
+                    component.compat_related_mod = Some(required_games.join("|"));
+                    component.compat_related_component = None;
+                    component.compat_graph = Some(format!(
+                        "{} #{} requires game including: {}",
+                        normalize_mod_key(&mod_state.tp_file),
+                        component_id,
+                        required_games.join("|")
+                    ));
+                    component.compat_evidence = Some(rule_evidence.to_string());
+                    component.disabled = true;
+                    component.checked = false;
+                    component.selected_order = None;
+                    component.disabled_reason = Some(format!(
+                        "This component requires a game including: {}.",
+                        required_games.join(", ")
+                    ));
+                    continue;
+                }
+
+                if let Some((allowed_games, rule_evidence)) =
+                    find_require_game_allowed_games(meta, component_id)
+                    && !game_allowed(&current_game, &allowed_games)
+                {
+                    component.compat_kind = Some("game_mismatch".to_string());
+                    component.compat_source =
+                        Some(format!("step2_tp2_game_validator | TP2: {}", meta.tp_file));
+                    component.compat_related_mod = Some(allowed_games.join("|"));
+                    component.compat_related_component = None;
+                    component.compat_graph = Some(format!(
+                        "{} #{} allowed on: {}",
+                        normalize_mod_key(&mod_state.tp_file),
+                        component_id,
+                        allowed_games.join("|")
+                    ));
+                    component.compat_evidence = Some(rule_evidence);
+                    component.disabled = true;
+                    component.checked = false;
+                    component.selected_order = None;
+                    component.disabled_reason = Some(format!(
+                        "This component is restricted to: {}.",
+                        allowed_games.join(", ")
+                    ));
+                }
             }
         }
         mod_state.checked = mod_state
@@ -456,10 +536,68 @@ fn path_requirement_raw_line(rule: &Tp2Rule) -> &str {
     }
 }
 
-fn find_require_game_allowed_games<'a>(
-    meta: &'a crate::compat::model::Tp2Metadata,
+fn find_forbid_game_blocked_games(
+    meta: &crate::compat::model::Tp2Metadata,
     component_id: u32,
-) -> Option<(&'a [String], &'a str)> {
+) -> Option<(&[String], &str)> {
+    for (cid, rule) in &meta.rules {
+        if *cid != component_id {
+            continue;
+        }
+        if let Tp2Rule::ForbidGame {
+            blocked_games,
+            raw_line,
+            ..
+        } = rule
+        {
+            return Some((blocked_games.as_slice(), raw_line.as_str()));
+        }
+    }
+    None
+}
+
+fn find_deprecated_rule(
+    meta: &crate::compat::model::Tp2Metadata,
+    component_id: u32,
+) -> Option<&str> {
+    for (cid, rule) in &meta.rules {
+        if *cid != component_id {
+            continue;
+        }
+        if let Tp2Rule::Deprecated { raw_line, .. } = rule {
+            return Some(raw_line.as_str());
+        }
+    }
+    None
+}
+
+fn find_require_game_includes_required_games(
+    meta: &crate::compat::model::Tp2Metadata,
+    component_id: u32,
+) -> Option<(&[String], &str)> {
+    for (cid, rule) in &meta.rules {
+        if *cid != component_id {
+            continue;
+        }
+        if let Tp2Rule::RequireGameIncludes {
+            required_games,
+            raw_line,
+            ..
+        } = rule
+        {
+            return Some((required_games.as_slice(), raw_line.as_str()));
+        }
+    }
+    None
+}
+
+fn find_require_game_allowed_games(
+    meta: &crate::compat::model::Tp2Metadata,
+    component_id: u32,
+) -> Option<(Vec<String>, String)> {
+    let mut combined_allowed: Option<Vec<String>> = None;
+    let mut evidence: Vec<String> = Vec::new();
+
     for (cid, rule) in &meta.rules {
         if *cid != component_id {
             continue;
@@ -470,10 +608,21 @@ fn find_require_game_allowed_games<'a>(
             ..
         } = rule
         {
-            return Some((allowed_games.as_slice(), raw_line.as_str()));
+            evidence.push(raw_line.clone());
+            match &mut combined_allowed {
+                Some(current) => {
+                    current.retain(|game| {
+                        allowed_games
+                            .iter()
+                            .any(|allowed| allowed.eq_ignore_ascii_case(game))
+                    });
+                }
+                None => combined_allowed = Some(allowed_games.clone()),
+            }
         }
     }
-    None
+
+    combined_allowed.map(|allowed_games| (allowed_games, evidence.join("\n")))
 }
 
 fn normalize_mod_key(value: &str) -> String {
@@ -496,6 +645,35 @@ fn normalize_game_mode(game_mode: &str) -> String {
         "BG2EE" => "bg2ee".to_string(),
         "EET" => "eet".to_string(),
         other => other.to_ascii_lowercase(),
+    }
+}
+
+fn game_includes(current_game: &str, required_games: &[String]) -> bool {
+    required_games
+        .iter()
+        .all(|required| single_game_included(current_game, required))
+}
+
+fn single_game_included(current_game: &str, required_game: &str) -> bool {
+    if current_game.eq_ignore_ascii_case(required_game) {
+        return true;
+    }
+    match current_game.to_ascii_lowercase().as_str() {
+        "bgee" => required_game.eq_ignore_ascii_case("bgee"),
+        "bg2ee" => {
+            required_game.eq_ignore_ascii_case("bg2ee")
+                || required_game.eq_ignore_ascii_case("soa")
+                || required_game.eq_ignore_ascii_case("tob")
+        }
+        "eet" => {
+            required_game.eq_ignore_ascii_case("bgee")
+                || required_game.eq_ignore_ascii_case("bg2ee")
+                || required_game.eq_ignore_ascii_case("eet")
+                || required_game.eq_ignore_ascii_case("soa")
+                || required_game.eq_ignore_ascii_case("tob")
+                || required_game.eq_ignore_ascii_case("bgt")
+        }
+        _ => false,
     }
 }
 

@@ -1,3 +1,19 @@
+## Beta 11
+- Fixed Step 3 compatibility jump so related-target navigation now goes to the exact related component instead of the wrong component in the same mod.
+- Fixed Step 2 mod-header compatibility pills
+- Fixed Step 2 so shared-package nested TP2s like `EET_gui` and `EET_end` now scan from the correct working directory instead of showing undefined strings.
+- Step 2 now shows shared subcomponent option groups as collapsible headers.
+- Step 2 now hides cosmetic/customization-only subcomponent branches from the main component list.
+- Step 2 no longer shows main mod-header pills for game mismatches or included components.
+- Step 2 TP2 compatibility parsing now ignores block comments.
+- Fixed BG1UB Restored Elfsong Tavern Movie on BGEE.
+- Step 2 now catches negated `GAME_IS` rules like `!GAME_IS ~bgee eet~` and greys those components out correctly.
+- Step 2 now catches `GAME_INCLUDES` rules like `GAME_INCLUDES ~tob~` and greys those components out correctly.
+- Fixed BG1UB Angelo Notices Shar-teel so it now shows as already included on BGEE.
+- Step 2 now greys out deprecated TP2 components and shows them with a Deprecated pill.
+- Step 2 now correctly handles components with multiple TP2 `GAME_IS` restrictions.
+- Fixed strict cargo clippy warnings
+
 ## Beta 10
 - Reworked diagnostics so WeiDU logs are now exported by where they actually came from, instead of vague source/saved folders.
 - Diagnostics now separates logs from game folders, WeiDU log folders, selected WeiDU log files, and Step 4 saved WeiDU logs.

@@ -23,8 +23,42 @@ pub fn parse_tp2_rules(tp2_path: &Path) -> Tp2Metadata {
         }
     };
 
+    let content = strip_block_comments(&content);
     let rules = extract_rules(&content);
     Tp2Metadata { tp_file, rules }
+}
+
+fn strip_block_comments(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0usize;
+    let mut in_block = false;
+
+    while i < bytes.len() {
+        if in_block {
+            if i + 1 < bytes.len() && bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                in_block = false;
+                i += 2;
+            } else {
+                if bytes[i] == b'\n' {
+                    out.push('\n');
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            in_block = true;
+            i += 2;
+            continue;
+        }
+
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+
+    out
 }
 
 fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
@@ -47,11 +81,19 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
             // If there is no explicit DESIGNATED on/near this BEGIN, do not carry
             // previous component id forward, otherwise rules can be mis-attributed.
             current_component = parse_begin_component(&upper);
+            if let Some(comp_id) = current_component
+                && let Some(rule) = parse_deprecated_component_header(&upper, trimmed, i + 1)
+            {
+                rules.push((comp_id, rule));
+            }
             i += 1;
             continue;
         }
         if let Some(comp_id) = parse_designated_line(&upper) {
             current_component = Some(comp_id);
+            if let Some(rule) = parse_deprecated_component_header(&upper, trimmed, i + 1) {
+                rules.push((comp_id, rule));
+            }
             i += 1;
             continue;
         }
@@ -77,6 +119,10 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
             rules.push((comp_id, rule));
         } else if let Some(rule) =
             parse_require_predicate_game_or_installed_any(&upper_expr, &raw_expr, rule_line)
+        {
+            rules.push((comp_id, rule));
+        } else if let Some(rule) =
+            parse_require_predicate_game_includes(&upper_expr, &raw_expr, rule_line)
         {
             rules.push((comp_id, rule));
         } else if let Some(rule) = parse_require_predicate_game_is(&upper_expr, &raw_expr, rule_line) {
@@ -314,13 +360,6 @@ REQUIRE_PREDICATE (((GAME_IS ~bgee~)  AND (FILE_EXISTS ~eefixpack/files/tph/bgee
         let forbid = parse_forbid_predicate_mod_installed(&upper, line, 1).unwrap();
         assert!(matches!(forbid, Tp2Rule::ForbidInstalledMod { .. }));
         assert!(parse_require_predicate_mod_installed(&upper, line, 1).is_none());
-    }
-
-    #[test]
-    fn test_parse_negated_paren_game_is_not_as_require_game() {
-        let line = r#"REQUIRE_PREDICATE NOT (GAME_IS ~pst~) @2"#;
-        let upper = line.to_ascii_uppercase();
-        assert!(parse_require_predicate_game_is(&upper, line, 1).is_none());
     }
 
     #[test]

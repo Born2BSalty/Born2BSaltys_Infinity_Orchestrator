@@ -29,31 +29,28 @@ pub(super) fn parse_forbid_component(upper: &str, raw: &str, line: usize) -> Opt
     })
 }
 
+pub(super) fn parse_deprecated_component_header(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+    if !upper.contains("DEPRECATED") {
+        return None;
+    }
+    Some(Tp2Rule::Deprecated {
+        raw_line: raw.to_string(),
+        line,
+    })
+}
+
 pub(super) fn parse_mod_component_args(after: &str) -> Option<(String, u32)> {
     let trimmed = after.trim_start();
 
-    let mod_name = if trimmed.starts_with('~') {
-        let end = trimmed[1..].find('~')?;
-        trimmed[1..1 + end].to_string()
-    } else if trimmed.starts_with('"') {
-        let end = trimmed[1..].find('"')?;
-        trimmed[1..1 + end].to_string()
-    } else if trimmed.starts_with('%') {
-        let end = trimmed[1..].find('%')?;
-        trimmed[1..1 + end].to_string()
-    } else {
-        return None;
-    };
-
-    let after_mod = if trimmed.starts_with('~') {
-        let end = trimmed[1..].find('~')?;
-        &trimmed[2 + end..]
-    } else if trimmed.starts_with('"') {
-        let end = trimmed[1..].find('"')?;
-        &trimmed[2 + end..]
-    } else if trimmed.starts_with('%') {
-        let end = trimmed[1..].find('%')?;
-        &trimmed[2 + end..]
+    let (mod_name, after_mod) = if let Some(stripped) = trimmed.strip_prefix('~') {
+        let end = stripped.find('~')?;
+        (stripped[..end].to_string(), &stripped[end + 1..])
+    } else if let Some(stripped) = trimmed.strip_prefix('"') {
+        let end = stripped.find('"')?;
+        (stripped[..end].to_string(), &stripped[end + 1..])
+    } else if let Some(stripped) = trimmed.strip_prefix('%') {
+        let end = stripped.find('%')?;
+        (stripped[..end].to_string(), &stripped[end + 1..])
     } else {
         return None;
     };
@@ -112,11 +109,34 @@ pub(super) fn parse_require_predicate_game_is(upper: &str, raw: &str, line: usiz
         return None;
     }
     let allowed_games = parse_positive_game_is_groups(upper, raw);
-    if allowed_games.is_empty() {
+    if !allowed_games.is_empty() {
+        return Some(Tp2Rule::RequireGame {
+            allowed_games,
+            raw_line: raw.to_string(),
+            line,
+        });
+    }
+    let blocked_games = parse_negated_game_is_groups(upper, raw);
+    if blocked_games.is_empty() {
         return None;
     }
-    Some(Tp2Rule::RequireGame {
-        allowed_games,
+    Some(Tp2Rule::ForbidGame {
+        blocked_games,
+        raw_line: raw.to_string(),
+        line,
+    })
+}
+
+pub(super) fn parse_require_predicate_game_includes(upper: &str, raw: &str, line: usize) -> Option<Tp2Rule> {
+    if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("GAME_INCLUDES") {
+        return None;
+    }
+    let required_games = parse_game_includes_groups(upper, raw);
+    if required_games.is_empty() {
+        return None;
+    }
+    Some(Tp2Rule::RequireGameIncludes {
+        required_games,
         raw_line: raw.to_string(),
         line,
     })
@@ -310,6 +330,42 @@ pub(super) fn is_negated_mod_is_installed(upper: &str, idx: usize) -> bool {
     j > 0 && bytes[j - 1] == b'!'
 }
 
+pub(super) fn parse_game_includes_groups(upper: &str, raw: &str) -> Vec<String> {
+    let mut required_games: Vec<String> = Vec::new();
+    let mut offset = 0usize;
+    while let Some(rel_idx) = upper[offset..].find("GAME_INCLUDES") {
+        let idx = offset + rel_idx;
+        let after = &raw[idx + "GAME_INCLUDES".len()..];
+        for token in parse_token_group(after) {
+            let normalized = token.to_ascii_lowercase();
+            if !required_games.contains(&normalized) {
+                required_games.push(normalized);
+            }
+        }
+        offset = idx + "GAME_INCLUDES".len();
+    }
+    required_games
+}
+
+pub(super) fn parse_negated_game_is_groups(upper: &str, raw: &str) -> Vec<String> {
+    let mut blocked_games: Vec<String> = Vec::new();
+    let mut offset = 0usize;
+    while let Some(rel_idx) = upper[offset..].find("GAME_IS") {
+        let idx = offset + rel_idx;
+        if is_negated_game_is(upper, idx) {
+            let after = &raw[idx + "GAME_IS".len()..];
+            for token in parse_token_group(after) {
+                let normalized = token.to_ascii_lowercase();
+                if !blocked_games.contains(&normalized) {
+                    blocked_games.push(normalized);
+                }
+            }
+        }
+        offset = idx + "GAME_IS".len();
+    }
+    blocked_games
+}
+
 pub(super) fn parse_positive_game_is_groups(upper: &str, raw: &str) -> Vec<String> {
     let mut allowed_games: Vec<String> = Vec::new();
     let mut offset = 0usize;
@@ -384,6 +440,11 @@ pub(super) fn parse_token_group(input: &str) -> Vec<String> {
         && let Some(end) = rest.find('%')
     {
         body = &rest[..end];
+    } else {
+        let end = trimmed
+            .find(|c: char| c.is_ascii_whitespace() || matches!(c, ')' | '(' | '|' | '&' | '@'))
+            .unwrap_or(trimmed.len());
+        body = &trimmed[..end];
     }
     body.split_whitespace().map(|s| s.to_string()).collect()
 }

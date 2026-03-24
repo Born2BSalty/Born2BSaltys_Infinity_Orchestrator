@@ -106,14 +106,20 @@ pub(crate) fn set_component_checked_state(
     }
 }
 
-fn subcomponent_base_key(label: &str) -> Option<String> {
-    let (base, _choice) = label.split_once("->")?;
+pub(crate) fn split_subcomponent_label(label: &str) -> Option<(String, String)> {
+    let (base, choice) = label.split_once("->")?;
     let base = base.trim();
-    if base.is_empty() {
+    let choice = choice.trim();
+    if base.is_empty() || choice.is_empty() {
         None
     } else {
-        Some(base.to_ascii_lowercase())
+        Some((base.to_string(), choice.to_string()))
     }
+}
+
+fn subcomponent_base_key(label: &str) -> Option<String> {
+    let (base, _choice) = split_subcomponent_label(label)?;
+    Some(base.to_ascii_lowercase())
 }
 
 pub(crate) fn compat_colors(kind: Option<&str>) -> Option<(egui::Color32, egui::Color32, &'static str)> {
@@ -147,6 +153,11 @@ pub(crate) fn compat_colors(kind: Option<&str>) -> Option<(egui::Color32, egui::
             crate::ui::shared::theme_global::warning_emphasis(),
             crate::ui::shared::theme_global::warning_fill(),
             "Warning",
+        )),
+        "deprecated" => Some((
+            crate::ui::shared::theme_global::warning_emphasis(),
+            crate::ui::shared::theme_global::warning_fill(),
+            "Deprecated",
         )),
         _ => None,
     }
@@ -186,16 +197,6 @@ pub(crate) fn parent_compat_summary(
             format!("{missing_deps} missing dep{}", if missing_deps == 1 { "" } else { "s" }),
         ));
     }
-    if game_mismatch > 0 {
-        return Some((
-            crate::ui::shared::theme_global::game_mismatch(),
-            crate::ui::shared::theme_global::game_mismatch_fill(),
-            format!(
-                "{game_mismatch} game mismatch{}",
-                if game_mismatch == 1 { "" } else { "es" }
-            ),
-        ));
-    }
     if conditional > 0 {
         return Some((
             crate::ui::shared::theme_global::conditional_parent(),
@@ -213,12 +214,37 @@ pub(crate) fn parent_compat_summary(
             format!("{warnings} warning{}", if warnings == 1 { "" } else { "s" }),
         ));
     }
-    if included > 0 {
-        return Some((
-            crate::ui::shared::theme_global::included_parent(),
-            crate::ui::shared::theme_global::included_fill(),
-            format!("{included} included"),
-        ));
+    None
+}
+
+pub(crate) fn parent_compat_target(mod_state: &Step2ModState) -> Option<&Step2ComponentState> {
+    let priority = [
+        "conflict",
+        "not_compatible",
+        "missing_dep",
+        "game_mismatch",
+        "conditional",
+        "warning",
+        "included",
+        "not_needed",
+    ];
+    for kind in priority {
+        let prefer_checked = kind == "conflict"
+            || kind == "not_compatible"
+            || kind == "missing_dep";
+        if let Some(component) = mod_state.components.iter().find(|component| {
+            component.compat_kind.as_deref() == Some(kind)
+                && (!prefer_checked || component.checked)
+        }) {
+            return Some(component);
+        }
+        if let Some(component) = mod_state
+            .components
+            .iter()
+            .find(|component| component.compat_kind.as_deref() == Some(kind))
+        {
+            return Some(component);
+        }
     }
     None
 }
@@ -241,12 +267,14 @@ pub(super) fn finalize_mod_checked_state(mod_state: &mut Step2ModState) {
 
 }
 
-mod render {
+pub(crate) mod render {
     use eframe::egui;
 use crate::ui::state::{Step2ModState, Step2Selection};
 use crate::ui::step2::service_step2::mod_matches_filter;
 
-use crate::ui::step2::tree_components_step2::render_component_rows;
+use crate::ui::step2::tree_components_step2::{
+    render_component_rows, ComponentRowsContext,
+};
 use super::render_filter::finalize_mod_checked_state;
 use crate::ui::step2::tree_parent_step2::{ParentRowResult, render_parent_row};
 
@@ -256,25 +284,29 @@ pub struct ModTreeRenderResult {
     pub open_prompt_popup: Option<(String, String)>,
 }
 
+pub struct ModTreeRenderContext<'a> {
+    pub filter: &'a str,
+    pub active_tab: &'a str,
+    pub selected: &'a Option<Step2Selection>,
+    pub next_selection_order: &'a mut usize,
+    pub prompt_eval: &'a crate::ui::step2::state_step2::PromptEvalContext,
+    pub collapse_epoch: u64,
+    pub collapse_default_open: bool,
+    pub jump_to_selected_requested: &'a mut bool,
+}
+
 pub fn render_mod_tree(
     ui: &mut egui::Ui,
-    filter: &str,
-    active_tab: &str,
-    selected: &Option<Step2Selection>,
-    next_selection_order: &mut usize,
-    prompt_eval: &crate::ui::step2::state_step2::PromptEvalContext,
-    collapse_epoch: u64,
-    collapse_default_open: bool,
-    jump_to_selected_requested: &mut bool,
+    ctx: &mut ModTreeRenderContext<'_>,
     mod_state: &mut Step2ModState,
 ) -> Option<ModTreeRenderResult> {
-    if !mod_matches_filter(mod_state, filter) {
+    if !mod_matches_filter(mod_state, ctx.filter) {
         return None;
     }
 
     let header_id = egui::Id::new((
         "mod_header",
-        collapse_epoch,
+        ctx.collapse_epoch,
         &mod_state.tp_file,
         &mod_state.name,
         &mod_state.tp2_path,
@@ -282,10 +314,10 @@ pub fn render_mod_tree(
     let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
         ui.ctx(),
         header_id,
-        collapse_default_open,
+        ctx.collapse_default_open,
     );
-    if *jump_to_selected_requested
-        && selection_targets_mod(selected, active_tab, &mod_state.tp_file)
+    if *ctx.jump_to_selected_requested
+        && selection_targets_mod(ctx.selected, ctx.active_tab, &mod_state.tp_file)
     {
         state.set_open(true);
     }
@@ -302,11 +334,11 @@ pub fn render_mod_tree(
             } = render_parent_row(
                 ui,
                 mod_state,
-                active_tab,
-                selected,
-                next_selection_order,
-                prompt_eval,
-                jump_to_selected_requested,
+                ctx.active_tab,
+                ctx.selected,
+                ctx.next_selection_order,
+                ctx.prompt_eval,
+                ctx.jump_to_selected_requested,
             );
             if selection.is_some() {
                 new_selection = selection;
@@ -319,24 +351,27 @@ pub fn render_mod_tree(
             }
         })
         .body(|ui| {
-            let (selection_from_rows, compat_target, prompt_popup) = render_component_rows(
-                ui,
-                filter,
-                active_tab,
-                selected,
-                next_selection_order,
-                prompt_eval,
-                jump_to_selected_requested,
-                mod_state,
-            );
-            if selection_from_rows.is_some() {
-                new_selection = selection_from_rows;
+            let tp_file = mod_state.tp_file.clone();
+            let mod_name = mod_state.name.clone();
+            let mut row_ctx = ComponentRowsContext {
+                filter: ctx.filter,
+                active_tab: ctx.active_tab,
+                selected: ctx.selected,
+                next_selection_order: ctx.next_selection_order,
+                prompt_eval: ctx.prompt_eval,
+                jump_to_selected_requested: ctx.jump_to_selected_requested,
+                tp_file: &tp_file,
+                mod_name: &mod_name,
+            };
+            let row_result = render_component_rows(ui, &mut row_ctx, mod_state);
+            if row_result.selection.is_some() {
+                new_selection = row_result.selection;
             }
-            if compat_target.is_some() {
-                open_compat_for_component = compat_target;
+            if row_result.compat_popup.is_some() {
+                open_compat_for_component = row_result.compat_popup;
             }
-            if prompt_popup.is_some() {
-                open_prompt_popup = prompt_popup;
+            if row_result.prompt_popup.is_some() {
+                open_prompt_popup = row_result.prompt_popup;
             }
         });
 
@@ -344,7 +379,7 @@ pub fn render_mod_tree(
     if new_selection.is_some() || open_compat_for_component.is_some() || open_prompt_popup.is_some()
     {
         let selected = new_selection.unwrap_or_else(|| Step2Selection::Mod {
-            game_tab: active_tab.to_string(),
+            game_tab: ctx.active_tab.to_string(),
             tp_file: mod_state.tp_file.clone(),
         });
         Some(ModTreeRenderResult {

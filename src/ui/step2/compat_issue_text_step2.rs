@@ -197,6 +197,7 @@ pub(crate) mod compat_popup_issue_text_kind {
             "conflict" | "not_compatible" => "Conflict",
             "conditional" => "Conditional patch",
             "warning" => "Warning",
+            "deprecated" => "Deprecated",
             _ => "Compatibility issue",
         }
     }

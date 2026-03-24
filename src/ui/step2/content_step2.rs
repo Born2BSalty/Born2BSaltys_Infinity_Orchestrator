@@ -344,7 +344,7 @@ fn parse_prompt_jump_component_ids(text: &str) -> Vec<u32> {
         let Some(rest) = trimmed.strip_prefix("Component:") else {
             continue;
         };
-        let id_token = rest.trim().split_whitespace().next().unwrap_or_default();
+        let id_token = rest.split_whitespace().next().unwrap_or_default();
         if let Ok(id) = id_token.parse::<u32>()
             && !ids.contains(&id)
         {

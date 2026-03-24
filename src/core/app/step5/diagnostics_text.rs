@@ -10,48 +10,50 @@ use crate::ui::step5::diagnostics::{
 #[path = "diagnostics_text_step2.rs"]
 mod step2;
 
-pub(super) fn build_base_text(
-    state: &WizardState,
-    diagnostics_run_id: &str,
-    log_groups: &[DiagnosticLogGroup],
-    active_order: &[String],
-    console_excerpt: &str,
-    timestamp_unix_secs: u64,
-    diag_ctx: &DiagnosticsContext,
-    installer_program: &str,
-    installer_args: &[String],
-    appdata_summary: &AppDataCopySummary,
-    write_check_summary: &WriteCheckSummary,
-    tp2_layout_summary: &Tp2LayoutSummary,
-) -> String {
+pub(super) struct BuildBaseTextInput<'a> {
+    pub state: &'a WizardState,
+    pub diagnostics_run_id: &'a str,
+    pub log_groups: &'a [DiagnosticLogGroup],
+    pub active_order: &'a [String],
+    pub console_excerpt: &'a str,
+    pub timestamp_unix_secs: u64,
+    pub diag_ctx: &'a DiagnosticsContext,
+    pub installer_program: &'a str,
+    pub installer_args: &'a [String],
+    pub appdata_summary: &'a AppDataCopySummary,
+    pub write_check_summary: &'a WriteCheckSummary,
+    pub tp2_layout_summary: &'a Tp2LayoutSummary,
+}
+
+pub(super) fn build_base_text(input: BuildBaseTextInput<'_>) -> String {
     let mut text = String::new();
     text.push_str("BIO Diagnostics\n");
     text.push_str("====================\n\n");
-    append_run_metadata(&mut text, diagnostics_run_id, timestamp_unix_secs, diag_ctx);
-    append_validation_summary(&mut text, state);
-    append_step1_snapshot(&mut text, state);
-    append_effective_installer_args(&mut text, installer_program, installer_args);
+    append_run_metadata(&mut text, input.diagnostics_run_id, input.timestamp_unix_secs, input.diag_ctx);
+    append_validation_summary(&mut text, input.state);
+    append_step1_snapshot(&mut text, input.state);
+    append_effective_installer_args(&mut text, input.installer_program, input.installer_args);
     append_installer_invocation_context(&mut text);
-    step2::append_step2_sections(&mut text, state);
-    append_tp2_layout_snapshot(&mut text, tp2_layout_summary);
-    append_write_checks(&mut text, write_check_summary);
-    append_appdata_copies(&mut text, appdata_summary);
+    step2::append_step2_sections(&mut text, input.state);
+    append_tp2_layout_snapshot(&mut text, input.tp2_layout_summary);
+    append_write_checks(&mut text, input.write_check_summary);
+    append_appdata_copies(&mut text, input.appdata_summary);
     text.push_str("\n[Step3 Install Order]\n");
-    for line in active_order {
+    for line in input.active_order {
         text.push_str(line);
         text.push('\n');
     }
     text.push_str("\n[Step5 Status]\n");
-    text.push_str(&format!("install_running={}\n", state.step5.install_running));
-    text.push_str(&format!("last_status={}\n", state.step5.last_status_text));
-    text.push_str(&format!("last_exit_code={:?}\n", state.step5.last_exit_code));
-    append_step5_runtime_summary(&mut text, state);
-    append_weidu_log_groups(&mut text, log_groups);
+    text.push_str(&format!("install_running={}\n", input.state.step5.install_running));
+    text.push_str(&format!("last_status={}\n", input.state.step5.last_status_text));
+    text.push_str(&format!("last_exit_code={:?}\n", input.state.step5.last_exit_code));
+    append_step5_runtime_summary(&mut text, input.state);
+    append_weidu_log_groups(&mut text, input.log_groups);
     text.push_str("\n[Console Excerpt]\n");
-    text.push_str(console_excerpt);
+    text.push_str(input.console_excerpt);
     text.push('\n');
-    append_runtime_snapshot(&mut text, state, console_excerpt);
-    append_undefined_string_signals(&mut text, console_excerpt);
+    append_runtime_snapshot(&mut text, input.state, input.console_excerpt);
+    append_undefined_string_signals(&mut text, input.console_excerpt);
     text
 }
 

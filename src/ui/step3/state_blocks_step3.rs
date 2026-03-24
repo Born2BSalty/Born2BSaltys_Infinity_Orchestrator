@@ -37,8 +37,8 @@ pub fn merge_adjacent_same_mod_blocks(items: &mut Vec<Step3ItemState>, selected:
             continue;
         }
         let mut next_parent = None;
-        for j in idx + 1..items.len() {
-            if items[j].is_parent {
+        for (j, next_item) in items.iter().enumerate().skip(idx + 1) {
+            if next_item.is_parent {
                 next_parent = Some(j);
                 break;
             }

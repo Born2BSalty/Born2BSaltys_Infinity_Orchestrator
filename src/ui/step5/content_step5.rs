@@ -320,7 +320,7 @@ pub(super) fn render(
         ui.checkbox(&mut state.step5.auto_scroll, "Auto-scroll")
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_AUTO_SCROLL);
     });
-    cancel_flow::render_cancel_confirm(ui, state, terminal.as_deref_mut());
+    cancel_flow::render_cancel_confirm(ui, state, terminal);
     action
 }
 }

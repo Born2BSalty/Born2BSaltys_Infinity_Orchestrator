@@ -3,7 +3,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::super::model::{CompatIssue, CompatIssueCode, IssueSource, Severity, Tp2Metadata};
+use super::super::model::{
+    CompatIssue, CompatIssueCode, CompatIssueInit, IssueSource, Severity, Tp2Metadata,
+};
 use super::validator_helpers as helpers;
 use super::validator_rule_handlers::apply_rule;
 use super::SelectedComponent;
@@ -58,23 +60,23 @@ pub(super) fn validate_duplicates(selected: &[SelectedComponent]) -> Vec<CompatI
             continue;
         }
         let display_mod = rows[0].mod_name.clone();
-        issues.push(CompatIssue::new(
-            CompatIssueCode::RuleHit,
-            Severity::Error,
-            IssueSource::ExternalRule {
+        issues.push(CompatIssue::new(CompatIssueInit {
+            code: CompatIssueCode::RuleHit,
+            severity: Severity::Error,
+            source: IssueSource::ExternalRule {
                 file: "validator".to_string(),
                 line: 0,
             },
-            display_mod.clone(),
-            Some(component_id),
-            display_mod,
-            Some(component_id),
-            format!(
+            affected_mod: display_mod.clone(),
+            affected_component: Some(component_id),
+            related_mod: display_mod,
+            related_component: Some(component_id),
+            reason: format!(
                 "Component selected multiple times: {mod_key} #{component_id} appears {} times",
                 rows.len()
             ),
-            Some("selected_set_duplicate".to_string()),
-        ));
+            raw_evidence: Some("selected_set_duplicate".to_string()),
+        }));
     }
 
     issues

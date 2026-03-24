@@ -31,8 +31,20 @@ pub(crate) fn format_component_row_label(
     fallback_component_id: &str,
     label: &str,
 ) -> String {
+    format_component_row_label_with_display(raw_line, fallback_component_id, label)
+}
+
+pub(crate) fn format_component_row_label_with_display(
+    raw_line: &str,
+    fallback_component_id: &str,
+    display_override: &str,
+) -> String {
     let (lang, component) = parse_lang_and_component_ids(raw_line, fallback_component_id);
-    let display = display_from_raw_line(raw_line, label);
+    let display = if display_override.trim().is_empty() {
+        display_from_raw_line(raw_line, display_override)
+    } else {
+        display_override.trim().to_string()
+    };
     format!("#{lang} #{component} // {display}")
 }
 

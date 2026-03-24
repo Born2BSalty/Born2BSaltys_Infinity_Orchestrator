@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[path = "validator_helpers.rs"]
 mod validator_helpers;
@@ -22,6 +23,14 @@ pub struct SelectedComponent {
     pub tp_file: String,
     pub component_id: u32,
     pub order: usize,
+}
+
+pub(super) struct RuleEvalContext<'a> {
+    pub metadata: &'a Tp2Metadata,
+    pub component: &'a SelectedComponent,
+    pub game_mode: &'a str,
+    pub selected_set: &'a HashSet<(String, u32)>,
+    pub order_map: &'a HashMap<(String, u32), usize>,
 }
 
 pub struct CompatValidator {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{bail, Result};
 use crate::config::options::EetConfig;
@@ -40,8 +40,8 @@ pub fn run(config: &EetConfig) -> Result<()> {
 }
 
 fn build_plan(
-    log_path: &PathBuf,
-    game_directory: &PathBuf,
+    log_path: &Path,
+    game_directory: &Path,
     skip_installed: bool,
     strict_matching: bool,
     label: &str,

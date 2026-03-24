@@ -63,10 +63,10 @@ pub fn apply_log_to_mods(
             target_mods = find_mods_by_tp2_filename(mods, &installed.tp_file);
         }
 
-        if target_mods.is_empty() {
-            if let Some(idx) = find_unique_mod_by_tp2_stem(mods, &installed.tp_file) {
-                target_mods.push(idx);
-            }
+        if target_mods.is_empty()
+            && let Some(idx) = find_unique_mod_by_tp2_stem(mods, &installed.tp_file)
+        {
+            target_mods.push(idx);
         }
 
         if target_mods.is_empty() {

@@ -59,18 +59,17 @@ pub(crate) fn render_list_pane(
                                         continue;
                                     }
                                     rendered_any = true;
-                                    let maybe_selected = render_mod_tree(
-                                        ui,
-                                        &filter,
-                                        &active_tab,
-                                        &selected,
-                                        &mut next_selection_order,
-                                        &prompt_eval,
+                                    let mut render_ctx = crate::ui::step2::tree_step2::step2_tree::render::ModTreeRenderContext {
+                                        filter: &filter,
+                                        active_tab: &active_tab,
+                                        selected: &selected,
+                                        next_selection_order: &mut next_selection_order,
+                                        prompt_eval: &prompt_eval,
                                         collapse_epoch,
                                         collapse_default_open,
-                                        &mut jump_to_selected_requested,
-                                        mod_state,
-                                    );
+                                        jump_to_selected_requested: &mut jump_to_selected_requested,
+                                    };
+                                    let maybe_selected = render_mod_tree(ui, &mut render_ctx, mod_state);
                                     if let Some(ModTreeRenderResult {
                                         selected: new_selected,
                                         open_compat_for_component,

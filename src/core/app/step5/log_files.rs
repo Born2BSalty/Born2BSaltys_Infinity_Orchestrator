@@ -366,42 +366,42 @@ pub struct DiagnosticLogGroup {
 
 pub fn copy_diagnostic_origin_logs(step1: &Step1State, logs_dir: &Path) -> Vec<DiagnosticLogGroup> {
     let _ = fs::create_dir_all(logs_dir);
-    let mut groups = Vec::new();
-
-    groups.push(copy_directory_group(
-        logs_dir,
-        "BGEE Game Folder",
-        &resolve_bgee_game_folder(step1),
-        should_check_weidu_bgee_log(step1, "BGEE Game Folder"),
-    ));
-    groups.push(copy_directory_group(
-        logs_dir,
-        "BG2EE Game Folder",
-        &resolve_bg2_game_folder(step1),
-        should_check_weidu_bgee_log(step1, "BG2EE Game Folder"),
-    ));
-    groups.push(copy_directory_group(
-        logs_dir,
-        "BGEE WeiDU Log Folder",
-        &resolve_bgee_log_folder(step1),
-        should_check_weidu_bgee_log(step1, "BGEE WeiDU Log Folder"),
-    ));
-    groups.push(copy_directory_group(
-        logs_dir,
-        "BG2EE WeiDU Log Folder",
-        &resolve_bg2_log_folder(step1),
-        should_check_weidu_bgee_log(step1, "BG2EE WeiDU Log Folder"),
-    ));
-    groups.push(copy_file_group(
-        logs_dir,
-        "BGEE WeiDU Log File",
-        step1.bgee_log_file.trim(),
-    ));
-    groups.push(copy_file_group(
-        logs_dir,
-        "BG2EE WeiDU Log File",
-        step1.bg2ee_log_file.trim(),
-    ));
+    let mut groups = vec![
+        copy_directory_group(
+            logs_dir,
+            "BGEE Game Folder",
+            &resolve_bgee_game_folder(step1),
+            should_check_weidu_bgee_log(step1, "BGEE Game Folder"),
+        ),
+        copy_directory_group(
+            logs_dir,
+            "BG2EE Game Folder",
+            &resolve_bg2_game_folder(step1),
+            should_check_weidu_bgee_log(step1, "BG2EE Game Folder"),
+        ),
+        copy_directory_group(
+            logs_dir,
+            "BGEE WeiDU Log Folder",
+            &resolve_bgee_log_folder(step1),
+            should_check_weidu_bgee_log(step1, "BGEE WeiDU Log Folder"),
+        ),
+        copy_directory_group(
+            logs_dir,
+            "BG2EE WeiDU Log Folder",
+            &resolve_bg2_log_folder(step1),
+            should_check_weidu_bgee_log(step1, "BG2EE WeiDU Log Folder"),
+        ),
+        copy_file_group(
+            logs_dir,
+            "BGEE WeiDU Log File",
+            step1.bgee_log_file.trim(),
+        ),
+        copy_file_group(
+            logs_dir,
+            "BG2EE WeiDU Log File",
+            step1.bg2ee_log_file.trim(),
+        ),
+    ];
 
     if !step1.eet_pre_dir.trim().is_empty() {
         groups.push(copy_directory_group(

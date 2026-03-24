@@ -10,7 +10,7 @@ use crate::ui::controller::log_apply_keys::{
 use crate::ui::state::{Step2ComponentState, Step2ModState};
 
 pub fn normalize_component_name(value: &str) -> String {
-    let mut s = value.replace('\u{2013}', "-").replace('\u{2014}', "-");
+    let mut s = value.replace(['\u{2013}', '\u{2014}'], "-");
     if let Some((head, tail)) = s.rsplit_once(':') {
         let t = tail.trim();
         let looks_like_version =

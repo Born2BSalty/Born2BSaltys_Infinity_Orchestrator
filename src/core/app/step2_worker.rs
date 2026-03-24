@@ -16,7 +16,7 @@ pub fn run_scan(step1: Step1State, sender: Sender<Step2ScanEvent>, cancel: Arc<A
             let _ = sender.send(Step2ScanEvent::Finished {
                 bgee_mods,
                 bg2ee_mods,
-                report,
+                report: Box::new(report),
             });
         }
         Err(err) if err == "canceled" => {

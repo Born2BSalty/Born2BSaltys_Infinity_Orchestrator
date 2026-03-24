@@ -44,11 +44,11 @@ fn default_step2_rules_content() -> &'static str {
 
 [[rules]]
 mod = "bg1ub"
-component = "Restored Elfsong Tavern Movie"
+component = "Angelo Notices Shar-teel"
 mode = ["EET", "BGEE", "BG2EE"]
 tab = ["bgee", "bg2ee"]
-kind = "not_compatible"
-message = "Not compatible with BG:EE."
+kind = "included"
+message = "Already included in BG:EE."
 
 [[rules]]
 mod = "bg1ub"

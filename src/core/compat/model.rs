@@ -68,36 +68,38 @@ pub struct CompatIssue {
     pub raw_evidence: Option<String>,
 }
 
+pub struct CompatIssueInit {
+    pub code: CompatIssueCode,
+    pub severity: Severity,
+    pub source: IssueSource,
+    pub affected_mod: String,
+    pub affected_component: Option<u32>,
+    pub related_mod: String,
+    pub related_component: Option<u32>,
+    pub reason: String,
+    pub raw_evidence: Option<String>,
+}
+
 impl CompatIssue {
-    pub fn new(
-        code: CompatIssueCode,
-        severity: Severity,
-        source: IssueSource,
-        affected_mod: String,
-        affected_component: Option<u32>,
-        related_mod: String,
-        related_component: Option<u32>,
-        reason: String,
-        raw_evidence: Option<String>,
-    ) -> Self {
+    pub fn new(init: CompatIssueInit) -> Self {
         let issue_id = compute_issue_id(
-            &code,
-            &affected_mod,
-            affected_component,
-            &related_mod,
-            related_component,
+            &init.code,
+            &init.affected_mod,
+            init.affected_component,
+            &init.related_mod,
+            init.related_component,
         );
         Self {
             issue_id,
-            code,
-            severity,
-            source,
-            affected_mod,
-            affected_component,
-            related_mod,
-            related_component,
-            reason,
-            raw_evidence,
+            code: init.code,
+            severity: init.severity,
+            source: init.source,
+            affected_mod: init.affected_mod,
+            affected_component: init.affected_component,
+            related_mod: init.related_mod,
+            related_component: init.related_component,
+            reason: init.reason,
+            raw_evidence: init.raw_evidence,
         }
     }
 
@@ -144,6 +146,20 @@ pub enum Tp2Rule {
     },
     RequireGame {
         allowed_games: Vec<String>,
+        raw_line: String,
+        line: usize,
+    },
+    ForbidGame {
+        blocked_games: Vec<String>,
+        raw_line: String,
+        line: usize,
+    },
+    RequireGameIncludes {
+        required_games: Vec<String>,
+        raw_line: String,
+        line: usize,
+    },
+    Deprecated {
         raw_line: String,
         line: usize,
     },

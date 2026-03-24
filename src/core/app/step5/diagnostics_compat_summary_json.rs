@@ -43,7 +43,7 @@ fn sorted_group_entries(
     limit: usize,
 ) -> Vec<serde_json::Value> {
     groups
-        .into_iter()
+        .iter()
         .take(limit)
         .map(|entry| json!({ "group": &entry.group, "count": entry.count }))
         .collect()

@@ -42,6 +42,36 @@ pub(super) fn normalize_game_mode(game_mode: &str) -> String {
     }
 }
 
+pub(super) fn game_includes(current_game: &str, required_games: &[String]) -> bool {
+    required_games
+        .iter()
+        .all(|required| single_game_included(current_game, required))
+}
+
+fn single_game_included(current_game: &str, required_game: &str) -> bool {
+    if current_game.eq_ignore_ascii_case(required_game) {
+        return true;
+    }
+
+    match current_game.to_ascii_lowercase().as_str() {
+        "bgee" => required_game.eq_ignore_ascii_case("bgee"),
+        "bg2ee" => {
+            required_game.eq_ignore_ascii_case("bg2ee")
+                || required_game.eq_ignore_ascii_case("soa")
+                || required_game.eq_ignore_ascii_case("tob")
+        }
+        "eet" => {
+            required_game.eq_ignore_ascii_case("bgee")
+                || required_game.eq_ignore_ascii_case("bg2ee")
+                || required_game.eq_ignore_ascii_case("eet")
+                || required_game.eq_ignore_ascii_case("soa")
+                || required_game.eq_ignore_ascii_case("tob")
+                || required_game.eq_ignore_ascii_case("bgt")
+        }
+        _ => false,
+    }
+}
+
 pub(super) fn game_allowed(current_game: &str, allowed_games: &[String]) -> bool {
     if allowed_games
         .iter()

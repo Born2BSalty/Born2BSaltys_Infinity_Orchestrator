@@ -61,7 +61,7 @@ pub(in crate::ui::app) fn poll_step2_scan_events(app: &mut WizardApp) {
                 app.state.step2.next_selection_order = 1;
                 app.state.step2.scan_progress_percent = 100;
                 app.state.step2.scan_status = "Done".to_string();
-                app.state.step2.last_scan_report = Some(report);
+                app.state.step2.last_scan_report = Some(*report);
                 super::super::tp2_metadata::refresh_validator_tp2_metadata(app);
                 app.revalidate_compat_step2_checked_order();
                 app.state.step2.is_scanning = false;

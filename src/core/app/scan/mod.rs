@@ -46,7 +46,7 @@ pub enum Step2ScanEvent {
     Finished {
         bgee_mods: Vec<Step2ModState>,
         bg2ee_mods: Vec<Step2ModState>,
-        report: Step2ScanReport,
+        report: Box<Step2ScanReport>,
     },
     Failed(String),
     Canceled,

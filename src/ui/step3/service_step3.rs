@@ -309,6 +309,7 @@ fn find_issue_in_items(
     let related_key = normalize_mod_key(issue.related_mod.as_str());
 
     let mut best_affected: Option<usize> = None;
+    let mut exact_related: Option<usize> = None;
     let mut best_related: Option<usize> = None;
 
     for (idx, item) in items.iter().enumerate() {
@@ -334,8 +335,8 @@ fn find_issue_in_items(
             && (item_tp_key == related_key || item_name_key == related_key);
         if related_match {
             if issue.related_component.is_none() || issue.related_component == comp_id {
-                if best_related.is_none() {
-                    best_related = Some(idx);
+                if exact_related.is_none() {
+                    exact_related = Some(idx);
                 }
             } else if best_related.is_none() {
                 best_related = Some(idx);
@@ -345,8 +346,8 @@ fn find_issue_in_items(
 
     match side {
         JumpSide::Affected => best_affected,
-        JumpSide::Related => best_related,
-        JumpSide::Auto => best_affected.or(best_related),
+        JumpSide::Related => exact_related.or(best_related),
+        JumpSide::Auto => best_affected.or(exact_related).or(best_related),
     }
 }
 

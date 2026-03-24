@@ -3,7 +3,7 @@
 
 use super::{CompatState, Step1State, Step2State, Step3State, Step5State};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WizardState {
     pub current_step: usize,
     pub step1: Step1State,

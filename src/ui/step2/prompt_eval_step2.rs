@@ -114,7 +114,7 @@ pub(crate) fn normalize_prompt_blocks(lines: Vec<String>) -> Vec<String> {
     }
     merged
         .into_iter()
-        .filter(|line| !(is_yes_no_prompt(line) && !is_question_prompt(line)))
+        .filter(|line| !is_yes_no_prompt(line) || is_question_prompt(line))
         .collect()
 }
 

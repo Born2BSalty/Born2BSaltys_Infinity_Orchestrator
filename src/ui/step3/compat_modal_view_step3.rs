@@ -205,9 +205,6 @@ fn render_issue_list(
                             *jump_request = Some(CompatJumpAction::Auto(issue.issue_id.clone()));
                         }
                     });
-                    if jump_request.is_some() {
-                        return;
-                    }
                 });
                 ui.add_space(4.0);
             }

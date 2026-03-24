@@ -7,19 +7,53 @@ use crate::ui::state::Step3ItemState;
 use crate::ui::step3::blocks;
 use crate::ui::step3::drag;
 
-pub(crate) fn finalize_on_release(
-    ui: &egui::Ui,
-    items: &mut Vec<Step3ItemState>,
-    selected: &mut Vec<usize>,
-    drag_from: &mut Option<usize>,
-    drag_over: &mut Option<usize>,
-    drag_indices: &mut Vec<usize>,
-    drag_grab_offset: &mut f32,
-    drag_grab_pos_in_block: &mut usize,
-    drag_row_h: &mut f32,
-    last_insert_at: &mut Option<usize>,
-    clone_seq: &mut usize,
-) {
+pub(crate) struct DragFinalizeContext<'a> {
+    pub items: &'a mut Vec<Step3ItemState>,
+    pub selected: &'a mut Vec<usize>,
+    pub drag_from: &'a mut Option<usize>,
+    pub drag_over: &'a mut Option<usize>,
+    pub drag_indices: &'a mut Vec<usize>,
+    pub drag_grab_offset: &'a mut f32,
+    pub drag_grab_pos_in_block: &'a mut usize,
+    pub drag_row_h: &'a mut f32,
+    pub last_insert_at: &'a mut Option<usize>,
+    pub clone_seq: &'a mut usize,
+}
+
+pub(crate) struct DragPointerContext<'a> {
+    pub items: &'a [Step3ItemState],
+    pub drag_from: &'a Option<usize>,
+    pub drag_over: &'a mut Option<usize>,
+    pub drag_indices: &'a [usize],
+    pub drag_grab_offset: &'a f32,
+    pub drag_grab_pos_in_block: &'a usize,
+    pub drag_row_h: &'a f32,
+    pub visible_rows: &'a [(usize, egui::Rect)],
+}
+
+pub(crate) struct LiveReorderContext<'a> {
+    pub items: &'a mut Vec<Step3ItemState>,
+    pub selected: &'a mut Vec<usize>,
+    pub drag_from: &'a mut Option<usize>,
+    pub drag_over: &'a Option<usize>,
+    pub drag_indices: &'a mut Vec<usize>,
+    pub drag_grab_pos_in_block: &'a usize,
+    pub last_insert_at: &'a mut Option<usize>,
+    pub locked_blocks: &'a [String],
+    pub visible_rows: &'a [(usize, egui::Rect)],
+}
+
+pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'_>) {
+    let items = &mut *ctx.items;
+    let selected = &mut *ctx.selected;
+    let drag_from = &mut *ctx.drag_from;
+    let drag_over = &mut *ctx.drag_over;
+    let drag_indices = &mut *ctx.drag_indices;
+    let drag_grab_offset = &mut *ctx.drag_grab_offset;
+    let drag_grab_pos_in_block = &mut *ctx.drag_grab_pos_in_block;
+    let drag_row_h = &mut *ctx.drag_row_h;
+    let last_insert_at = &mut *ctx.last_insert_at;
+    let clone_seq = &mut *ctx.clone_seq;
     if !ui.input(|i| i.pointer.any_released()) {
         return;
     }
@@ -88,15 +122,16 @@ pub(crate) fn draw_insert_marker(
 
 pub(crate) fn update_drag_target_from_pointer(
     ui: &egui::Ui,
-    items: &[Step3ItemState],
-    drag_from: &Option<usize>,
-    drag_over: &mut Option<usize>,
-    drag_indices: &[usize],
-    drag_grab_offset: &f32,
-    drag_grab_pos_in_block: &usize,
-    drag_row_h: &f32,
-    visible_rows: &[(usize, egui::Rect)],
+    ctx: &mut DragPointerContext<'_>,
 ) {
+    let items = ctx.items;
+    let drag_from = ctx.drag_from;
+    let drag_over = &mut *ctx.drag_over;
+    let drag_indices = ctx.drag_indices;
+    let drag_grab_offset = ctx.drag_grab_offset;
+    let drag_grab_pos_in_block = ctx.drag_grab_pos_in_block;
+    let drag_row_h = ctx.drag_row_h;
+    let visible_rows = ctx.visible_rows;
     if drag_from.is_none() {
         return;
     }
@@ -130,18 +165,16 @@ pub(crate) fn update_drag_target_from_pointer(
     }
 }
 
-pub(crate) fn apply_live_reorder(
-    ui: &egui::Ui,
-    items: &mut Vec<Step3ItemState>,
-    selected: &mut Vec<usize>,
-    drag_from: &mut Option<usize>,
-    drag_over: &Option<usize>,
-    drag_indices: &mut Vec<usize>,
-    drag_grab_pos_in_block: &usize,
-    last_insert_at: &mut Option<usize>,
-    locked_blocks: &[String],
-    visible_rows: &[(usize, egui::Rect)],
-) {
+pub(crate) fn apply_live_reorder(ui: &egui::Ui, ctx: &mut LiveReorderContext<'_>) {
+    let items = &mut *ctx.items;
+    let selected = &mut *ctx.selected;
+    let drag_from = &mut *ctx.drag_from;
+    let drag_over = ctx.drag_over;
+    let drag_indices = &mut *ctx.drag_indices;
+    let drag_grab_pos_in_block = ctx.drag_grab_pos_in_block;
+    let last_insert_at = &mut *ctx.last_insert_at;
+    let locked_blocks = ctx.locked_blocks;
+    let visible_rows = ctx.visible_rows;
     if !ui.input(|i| i.pointer.primary_down()) || drag_from.is_none() || drag_indices.is_empty() {
         return;
     }

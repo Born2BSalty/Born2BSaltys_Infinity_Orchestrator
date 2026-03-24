@@ -5,6 +5,13 @@ use eframe::egui;
 
 use crate::ui::step2::state_step2::Step2Details;
 
+struct SelectionGridLayout {
+    label_w: f32,
+    value_w: f32,
+    row_h: f32,
+    value_chars: usize,
+}
+
 pub(crate) fn render_selection_grid(
     ui: &mut egui::Ui,
     details: &Step2Details,
@@ -13,6 +20,12 @@ pub(crate) fn render_selection_grid(
     row_h: f32,
     value_chars: usize,
 ) {
+    let layout = SelectionGridLayout {
+        label_w,
+        value_w,
+        row_h,
+        value_chars,
+    };
     ui.label(crate::ui::shared::typography_global::small_strong("Selection"));
     egui::Grid::new("step2_details_selection_grid")
         .num_columns(3)
@@ -20,64 +33,46 @@ pub(crate) fn render_selection_grid(
         .show(ui, |ui| {
             render_value_row(
                 ui,
+                &layout,
                 "Component",
                 details.component_label.as_deref(),
                 false,
-                label_w,
-                value_w,
-                row_h,
-                value_chars,
             );
             render_value_row(
                 ui,
+                &layout,
                 "ID",
                 details.component_id.as_deref(),
                 true,
-                label_w,
-                value_w,
-                row_h,
-                value_chars,
             );
             render_value_row(
                 ui,
+                &layout,
                 "Language",
                 details.component_lang.as_deref(),
                 true,
-                label_w,
-                value_w,
-                row_h,
-                value_chars,
             );
             render_value_row(
                 ui,
+                &layout,
                 "Version",
                 details.component_version.as_deref(),
                 true,
-                label_w,
-                value_w,
-                row_h,
-                value_chars,
             );
             render_value_row(
                 ui,
+                &layout,
                 "TP2 File",
                 details.tp_file.as_deref(),
                 true,
-                label_w,
-                value_w,
-                row_h,
-                value_chars,
             );
             let selected_order = details.selected_order.map(|n| n.to_string());
             render_value_row(
                 ui,
+                &layout,
                 "Order",
                 selected_order.as_deref(),
                 true,
-                label_w,
-                value_w,
-                row_h,
-                value_chars,
             );
 
             render_checked_row(ui, details, label_w, value_w, row_h);
@@ -91,26 +86,23 @@ pub(crate) fn render_selection_grid(
 
 fn render_value_row(
     ui: &mut egui::Ui,
+    layout: &SelectionGridLayout,
     label: &str,
     value: Option<&str>,
     monospace: bool,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
 ) {
     ui.add_sized(
-        [label_w, row_h],
+        [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong(label)),
     );
     let raw = value.unwrap_or("No data");
-    let display = ellipsize_end(raw, value_chars);
+    let display = ellipsize_end(raw, layout.value_chars);
     let text = if monospace {
         crate::ui::shared::typography_global::monospace(display)
     } else {
         crate::ui::shared::typography_global::plain(display)
     };
-    ui.add_sized([value_w, row_h], egui::Label::new(text))
+    ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
         .on_hover_text(raw);
     if let Some(copy_value) = value {
         if ui
@@ -183,25 +175,25 @@ fn render_compat_rows(
     row_h: f32,
     value_chars: usize,
 ) {
+    let layout = SelectionGridLayout {
+        label_w,
+        value_w,
+        row_h,
+        value_chars,
+    };
     render_value_row(
         ui,
+        &layout,
         "Role",
         details.compat_role.as_deref(),
         false,
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
     );
     render_value_row(
         ui,
+        &layout,
         "Issue Code",
         details.compat_code.as_deref(),
         true,
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
     );
 
     render_reason_row(ui, details, label_w, value_w, row_h, value_chars);

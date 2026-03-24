@@ -40,10 +40,11 @@ pub(crate) mod compat_popup_action_row {
             let source_path = selection_source::rule_source_open_path(state);
             let open_source_resp =
                 ui.add_enabled(source_path.is_some(), egui::Button::new("Open Rule Source"));
-            if let Some(path) = source_path {
-                if open_source_resp.clicked() && let Err(err) = open_in_shell(&path) {
-                    state.step2.scan_status = format!("Open failed: {err}");
-                }
+            if let Some(path) = source_path
+                && open_source_resp.clicked()
+                && let Err(err) = open_in_shell(&path)
+            {
+                state.step2.scan_status = format!("Open failed: {err}");
             }
             if ui.button("Close").clicked() {
                 state.step2.compat_popup_open = false;

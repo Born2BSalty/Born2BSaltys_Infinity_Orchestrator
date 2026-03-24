@@ -23,7 +23,7 @@ use crate::ui::state::{Step1State, Step2ModState, Step2ScanReport, Step2Tp2Probe
 
 use super::build_states::to_mod_states;
 use super::language::detect_preferred_game_locale;
-use super::scan_group::scan_tp2_group;
+use super::scan_group::{scan_tp2_group, ScanGroupContext};
 
 pub fn scan_impl(
     step1: &Step1State,
@@ -110,18 +110,17 @@ pub fn scan_impl(
                         continue;
                     };
 
-                    let (entries, reports) =
-                        scan_tp2_group(
-                            label,
-                            &weidu,
-                            &game_dir,
-                            &mods_root,
-                            tp2_paths,
-                            &cache,
-                            &ctx,
-                            preferred_locale.locale.as_str(),
-                            step1.game_install.as_str(),
-                        );
+                    let scan_group_ctx = ScanGroupContext {
+                        group_label: label,
+                        weidu: &weidu,
+                        game_dir: &game_dir,
+                        mods_root: &mods_root,
+                        cache: &cache,
+                        ctx: &ctx,
+                        preferred_locale: preferred_locale.locale.as_str(),
+                        game_install: step1.game_install.as_str(),
+                    };
+                    let (entries, reports) = scan_tp2_group(&scan_group_ctx, tp2_paths);
 
                     if let Ok(mut map) = mods_map.lock() {
                         map.entry(label.clone()).or_default().extend(entries);

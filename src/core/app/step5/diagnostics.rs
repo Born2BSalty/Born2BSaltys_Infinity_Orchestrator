@@ -84,20 +84,20 @@ pub fn export_diagnostics(
         .unwrap_or_else(|| fallback_console_excerpt(state, 40_000));
     let (installer_program, installer_args) = build_install_invocation(&state.step1);
 
-    let mut text = text::build_base_text(
+    let mut text = text::build_base_text(text::BuildBaseTextInput {
         state,
-        &run_id,
-        &log_groups,
-        &active_order,
-        &console_excerpt,
-        ts,
-        ctx,
-        &installer_program,
-        &installer_args,
-        &appdata_summary,
-        &write_check_summary,
-        &tp2_layout_summary,
-    );
+        diagnostics_run_id: &run_id,
+        log_groups: &log_groups,
+        active_order: &active_order,
+        console_excerpt: &console_excerpt,
+        timestamp_unix_secs: ts,
+        diag_ctx: ctx,
+        installer_program: &installer_program,
+        installer_args: &installer_args,
+        appdata_summary: &appdata_summary,
+        write_check_summary: &write_check_summary,
+        tp2_layout_summary: &tp2_layout_summary,
+    });
     if ctx.dev_mode {
         compat_snapshot::append_dev_compat_snapshots(state, &mut text);
     }
@@ -157,7 +157,7 @@ pub fn export_diagnostics(
 
 fn write_step4_weidu_log_snapshots(
     state: &WizardState,
-    logs_dir: &PathBuf,
+    logs_dir: &std::path::Path,
 ) -> Result<Vec<DiagnosticLogGroup>> {
     let header = [
         "// Log of Currently Installed WeiDU Mods",

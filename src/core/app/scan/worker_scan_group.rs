@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use crate::parser;
@@ -13,54 +14,56 @@ use crate::ui::state::Step2Tp2ProbeReport;
 
 use super::language::candidate_language_ids;
 
+pub(super) struct ScanGroupContext<'a> {
+    pub group_label: &'a str,
+    pub weidu: &'a Path,
+    pub game_dir: &'a Path,
+    pub mods_root: &'a Path,
+    pub cache: &'a Arc<Mutex<ScanCache>>,
+    pub ctx: &'a Arc<String>,
+    pub preferred_locale: &'a str,
+    pub game_install: &'a str,
+}
+
 pub(super) fn scan_tp2_group(
-    group_label: &str,
-    weidu: &Path,
-    game_dir: &Path,
-    mods_root: &Path,
+    scan_ctx: &ScanGroupContext<'_>,
     tp2_paths: &[std::path::PathBuf],
-    cache: &Arc<Mutex<ScanCache>>,
-    ctx: &Arc<String>,
-    preferred_locale: &str,
-    game_install: &str,
 ) -> (Vec<ScannedComponent>, Vec<Step2Tp2ProbeReport>) {
     let mut entries = Vec::<ScannedComponent>::new();
     let mut reports = Vec::<Step2Tp2ProbeReport>::new();
     for tp2 in tp2_paths {
-        let work_dir = preferred_scan_work_dir(tp2, mods_root);
+        let work_dir = preferred_scan_work_dir(tp2, scan_ctx.mods_root);
         let mut probe = Step2Tp2ProbeReport {
-            group_label: group_label.to_string(),
+            group_label: scan_ctx.group_label.to_string(),
             tp2_path: tp2.display().to_string(),
             work_dir: work_dir.display().to_string(),
             ..Step2Tp2ProbeReport::default()
         };
-        if let Some(cached) = cache_get(cache, ctx, tp2) {
-            if !cached.is_empty() {
-                probe.used_cache = true;
-                probe.selected_from_cache = true;
-                let prompt_index =
-                    parser::collect_prompt_summary_index(
-                        tp2,
-                        mods_root,
-                        Some(preferred_locale),
-                        Some(game_install),
-                    );
-                apply_parser_probe_meta(&mut probe, &prompt_index);
-                let cached = apply_prompt_index(cached, &prompt_index);
-                probe.parsed_count = cached.len();
-                probe.undefined_count = count_undefined_components(&cached);
-                reports.push(probe);
-                entries.extend(cached);
-                continue;
-            }
-        }
-        let prompt_index =
-            parser::collect_prompt_summary_index(
+        if let Some(cached) = cache_get(scan_ctx.cache, scan_ctx.ctx, tp2)
+            && !cached.is_empty()
+        {
+            probe.used_cache = true;
+            probe.selected_from_cache = true;
+            let prompt_index = parser::collect_prompt_summary_index(
                 tp2,
-                mods_root,
-                Some(preferred_locale),
-                Some(game_install),
+                scan_ctx.mods_root,
+                Some(scan_ctx.preferred_locale),
+                Some(scan_ctx.game_install),
             );
+            apply_parser_probe_meta(&mut probe, &prompt_index);
+            let cached = apply_prompt_index(cached, &prompt_index);
+            probe.parsed_count = cached.len();
+            probe.undefined_count = count_undefined_components(&cached);
+            reports.push(probe);
+            entries.extend(cached);
+            continue;
+        }
+        let prompt_index = parser::collect_prompt_summary_index(
+            tp2,
+            scan_ctx.mods_root,
+            Some(scan_ctx.preferred_locale),
+            Some(scan_ctx.game_install),
+        );
         apply_parser_probe_meta(&mut probe, &prompt_index);
         let expected_tp2 = tp2
             .file_name()
@@ -69,12 +72,24 @@ pub(super) fn scan_tp2_group(
             .unwrap_or_default();
         let mut fallback_components = Vec::<ScannedComponent>::new();
         let mut fallback_language = None::<String>;
-        let language_ids = candidate_language_ids(weidu, tp2, game_dir, work_dir, preferred_locale);
+        let language_ids = candidate_language_ids(
+            scan_ctx.weidu,
+            tp2,
+            scan_ctx.game_dir,
+            &work_dir,
+            scan_ctx.preferred_locale,
+        );
         probe.language_ids_tried = language_ids.clone();
 
         for lang_id in language_ids {
-            let lines = weidu_scan::list_components_lines(weidu, game_dir, work_dir, tp2, &lang_id)
-                .unwrap_or_default();
+            let lines = weidu_scan::list_components_lines(
+                scan_ctx.weidu,
+                scan_ctx.game_dir,
+                &work_dir,
+                tp2,
+                &lang_id,
+            )
+            .unwrap_or_default();
             let parsed_for_tp2 = parse_lines_for_tp2(tp2, &expected_tp2, lines);
             if parsed_for_tp2.is_empty() {
                 continue;
@@ -88,7 +103,7 @@ pub(super) fn scan_tp2_group(
                 let parsed_for_tp2 = apply_prompt_index(parsed_for_tp2, &prompt_index);
                 probe.parsed_count = parsed_for_tp2.len();
                 probe.undefined_count = undefined;
-                cache_put(cache, ctx, tp2, parsed_for_tp2.clone());
+                cache_put(scan_ctx.cache, scan_ctx.ctx, tp2, parsed_for_tp2.clone());
                 entries.extend(parsed_for_tp2);
                 fallback_components.clear();
                 break;
@@ -103,7 +118,7 @@ pub(super) fn scan_tp2_group(
             let fallback_components = apply_prompt_index(fallback_components, &prompt_index);
             probe.parsed_count = fallback_components.len();
             probe.undefined_count = count_undefined_components(&fallback_components);
-            cache_put(cache, ctx, tp2, fallback_components.clone());
+            cache_put(scan_ctx.cache, scan_ctx.ctx, tp2, fallback_components.clone());
             entries.extend(fallback_components);
         }
         reports.push(probe);
@@ -183,16 +198,57 @@ fn apply_parser_probe_meta(
     probe.parser_flow_preview = prompt_index.parser_flow_preview.clone();
 }
 
-fn preferred_scan_work_dir<'a>(tp2: &'a Path, mods_root: &'a Path) -> &'a Path {
+fn preferred_scan_work_dir(tp2: &Path, mods_root: &Path) -> PathBuf {
+    if let Some(shared_work_dir) = shared_package_scan_work_dir(tp2, mods_root) {
+        return shared_work_dir;
+    }
     if let Some(parent) = tp2.parent()
         && let Some(parent_of_parent) = parent.parent()
     {
-        return parent_of_parent;
+        return parent_of_parent.to_path_buf();
     }
     if let Some(parent) = tp2.parent() {
-        return parent;
+        return parent.to_path_buf();
     }
-    mods_root
+    mods_root.to_path_buf()
+}
+
+fn shared_package_scan_work_dir(tp2: &Path, mods_root: &Path) -> Option<PathBuf> {
+    let source = fs::read_to_string(tp2).ok()?;
+    let source_lower = source.to_ascii_lowercase();
+    let tp2_parent = tp2.parent()?;
+    let mut current = tp2_parent.parent()?;
+
+    loop {
+        if !current.starts_with(mods_root) {
+            break;
+        }
+        let folder_name = current.file_name().and_then(|s| s.to_str())?;
+        if source_references_shared_root(&source_lower, folder_name) {
+            let work_dir = current
+                .parent()
+                .filter(|p| p.starts_with(mods_root))
+                .unwrap_or(mods_root);
+            return Some(work_dir.to_path_buf());
+        }
+        if current == mods_root {
+            break;
+        }
+        let next = current.parent()?;
+        if next == current {
+            break;
+        }
+        current = next;
+    }
+
+    None
+}
+
+fn source_references_shared_root(source_lower: &str, folder_name: &str) -> bool {
+    let folder_name = folder_name.to_ascii_lowercase();
+    let tilde = format!("~{folder_name}/");
+    let quote = format!("\"{folder_name}/");
+    source_lower.contains(&tilde) || source_lower.contains(&quote)
 }
 
 fn parse_lines_for_tp2(

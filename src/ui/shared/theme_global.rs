@@ -163,9 +163,6 @@ pub fn warning_parent() -> egui::Color32 {
     egui::Color32::from_rgb(222, 182, 92)
 }
 
-pub fn included_parent() -> egui::Color32 {
-    egui::Color32::from_gray(170)
-}
 
 // Step 5 phase/state
 pub fn status_running() -> egui::Color32 {

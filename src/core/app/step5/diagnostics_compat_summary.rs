@@ -145,7 +145,7 @@ mod tests {
         let summary = build_compat_summary(&issues);
         assert_eq!(summary.by_code.get("FORBID_HIT"), Some(&2));
         assert_eq!(summary.by_code.get("ORDER_WARN"), Some(&1));
-        assert!(summary.by_code.get("forbid_hit").is_none());
-        assert!(summary.by_code.get("Order_Warn").is_none());
+        assert!(!summary.by_code.contains_key("forbid_hit"));
+        assert!(!summary.by_code.contains_key("Order_Warn"));
     }
 }

@@ -56,11 +56,10 @@ pub(crate) fn render(
                             return;
                         }
                         let visible_indices = blocks::visible_indices(items, collapsed_blocks);
-                        let row_outcome = rows::render_rows(
-                            ui,
-                            &prompt_eval,
-                            &tab_id,
-                            &visible_indices,
+                        let mut row_ctx = rows::RowRenderContext {
+                            prompt_eval: &prompt_eval,
+                            tab_id: &tab_id,
+                            visible_indices: &visible_indices,
                             jump_to_selected_requested,
                             items,
                             selected,
@@ -77,10 +76,10 @@ pub(crate) fn render(
                             locked_blocks,
                             undo_stack,
                             redo_stack,
-                        );
+                        };
+                        let row_outcome = rows::render_rows(ui, &mut row_ctx);
                         let mut visible_rows = row_outcome.visible_rows;
-                        crate::ui::step3::service_step3::drag_ops::update_drag_target_from_pointer(
-                            ui,
+                        let mut pointer_ctx = crate::ui::step3::service_step3::drag_ops::DragPointerContext {
                             items,
                             drag_from,
                             drag_over,
@@ -88,11 +87,14 @@ pub(crate) fn render(
                             drag_grab_offset,
                             drag_grab_pos_in_block,
                             drag_row_h,
-                            &visible_rows,
+                            visible_rows: &visible_rows,
+                        };
+                        crate::ui::step3::service_step3::drag_ops::update_drag_target_from_pointer(
+                            ui,
+                            &mut pointer_ctx,
                         );
                         crate::ui::step3::service_step3::drag_ops::draw_insert_marker(ui, items, drag_from, *drag_over, &visible_rows);
-                        crate::ui::step3::service_step3::drag_ops::apply_live_reorder(
-                            ui,
+                        let mut reorder_ctx = crate::ui::step3::service_step3::drag_ops::LiveReorderContext {
                             items,
                             selected,
                             drag_from,
@@ -101,10 +103,13 @@ pub(crate) fn render(
                             drag_grab_pos_in_block,
                             last_insert_at,
                             locked_blocks,
-                            &visible_rows,
-                        );
-                        crate::ui::step3::service_step3::drag_ops::finalize_on_release(
+                            visible_rows: &visible_rows,
+                        };
+                        crate::ui::step3::service_step3::drag_ops::apply_live_reorder(
                             ui,
+                            &mut reorder_ctx,
+                        );
+                        let mut finalize_ctx = crate::ui::step3::service_step3::drag_ops::DragFinalizeContext {
                             items,
                             selected,
                             drag_from,
@@ -115,6 +120,10 @@ pub(crate) fn render(
                             drag_row_h,
                             last_insert_at,
                             clone_seq,
+                        };
+                        crate::ui::step3::service_step3::drag_ops::finalize_on_release(
+                            ui,
+                            &mut finalize_ctx,
                         );
                         visible_rows.clear();
                         (row_outcome.uncheck_requests, row_outcome.prompt_requests, row_outcome.open_prompt_popup)
@@ -173,6 +182,28 @@ pub(super) struct RowRenderOutcome {
     pub open_prompt_popup: Option<(String, String)>,
 }
 
+pub(super) struct RowRenderContext<'a> {
+    pub prompt_eval: &'a crate::ui::step2::state_step2::PromptEvalContext,
+    pub tab_id: &'a str,
+    pub visible_indices: &'a [usize],
+    pub jump_to_selected_requested: &'a mut bool,
+    pub items: &'a mut Vec<Step3ItemState>,
+    pub selected: &'a mut Vec<usize>,
+    pub drag_from: &'a mut Option<usize>,
+    pub drag_over: &'a mut Option<usize>,
+    pub drag_indices: &'a mut Vec<usize>,
+    pub anchor: &'a mut Option<usize>,
+    pub drag_grab_offset: &'a mut f32,
+    pub drag_grab_pos_in_block: &'a mut usize,
+    pub drag_row_h: &'a mut f32,
+    pub last_insert_at: &'a mut Option<usize>,
+    pub collapsed_blocks: &'a mut Vec<String>,
+    pub clone_seq: &'a mut usize,
+    pub locked_blocks: &'a mut Vec<String>,
+    pub undo_stack: &'a mut Vec<Vec<Step3ItemState>>,
+    pub redo_stack: &'a mut Vec<Vec<Step3ItemState>>,
+}
+
 const STEP3_HISTORY_LIMIT: usize = 100;
 
 fn push_undo_snapshot(
@@ -187,28 +218,26 @@ fn push_undo_snapshot(
     redo_stack.clear();
 }
 
-pub(super) fn render_rows(
-    ui: &mut egui::Ui,
-    prompt_eval: &crate::ui::step2::state_step2::PromptEvalContext,
-    tab_id: &str,
-    visible_indices: &[usize],
-    jump_to_selected_requested: &mut bool,
-    items: &mut Vec<Step3ItemState>,
-    selected: &mut Vec<usize>,
-    drag_from: &mut Option<usize>,
-    drag_over: &mut Option<usize>,
-    drag_indices: &mut Vec<usize>,
-    anchor: &mut Option<usize>,
-    drag_grab_offset: &mut f32,
-    drag_grab_pos_in_block: &mut usize,
-    drag_row_h: &mut f32,
-    last_insert_at: &mut Option<usize>,
-    collapsed_blocks: &mut Vec<String>,
-    clone_seq: &mut usize,
-    locked_blocks: &mut Vec<String>,
-    undo_stack: &mut Vec<Vec<Step3ItemState>>,
-    redo_stack: &mut Vec<Vec<Step3ItemState>>,
-) -> RowRenderOutcome {
+pub(super) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> RowRenderOutcome {
+    let prompt_eval = ctx.prompt_eval;
+    let tab_id = ctx.tab_id;
+    let visible_indices = ctx.visible_indices;
+    let jump_to_selected_requested = &mut *ctx.jump_to_selected_requested;
+    let items = &mut *ctx.items;
+    let selected = &mut *ctx.selected;
+    let drag_from = &mut *ctx.drag_from;
+    let drag_over = &mut *ctx.drag_over;
+    let drag_indices = &mut *ctx.drag_indices;
+    let anchor = &mut *ctx.anchor;
+    let drag_grab_offset = &mut *ctx.drag_grab_offset;
+    let drag_grab_pos_in_block = &mut *ctx.drag_grab_pos_in_block;
+    let drag_row_h = &mut *ctx.drag_row_h;
+    let last_insert_at = &mut *ctx.last_insert_at;
+    let collapsed_blocks = &mut *ctx.collapsed_blocks;
+    let clone_seq = &mut *ctx.clone_seq;
+    let locked_blocks = &mut *ctx.locked_blocks;
+    let undo_stack = &mut *ctx.undo_stack;
+    let redo_stack = &mut *ctx.redo_stack;
     let mut visible_rows: Vec<(usize, egui::Rect)> = Vec::with_capacity(visible_indices.len());
     let mut uncheck_requests: Vec<(String, String)> = Vec::new();
     let mut prompt_requests: Vec<PromptActionRequest> = Vec::new();

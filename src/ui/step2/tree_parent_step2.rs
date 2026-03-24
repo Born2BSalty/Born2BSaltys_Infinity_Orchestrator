@@ -8,7 +8,7 @@ use crate::ui::step2::prompt_eval_step2::{evaluate_component_prompt_summary, eve
 use crate::ui::step2::state_step2::PromptEvalContext;
 use crate::ui::step2::tree_step2::step2_tree::render_helpers::{
     enforce_meta_mode_after_bulk, enforce_subcomponent_single_select_keep_first,
-    parent_compat_summary, set_component_checked_state,
+    parent_compat_summary, parent_compat_target, set_component_checked_state,
 };
 
 pub(crate) struct ParentRowResult {
@@ -124,15 +124,12 @@ pub(crate) fn render_parent_row(
                         .min_size(egui::vec2(0.0, 18.0)),
                     );
                     if resp.clicked()
-                        && let Some(first_compat) = mod_state
-                            .components
-                            .iter()
-                            .find(|c| c.compat_kind.is_some())
+                        && let Some(target_compat) = parent_compat_target(mod_state)
                     {
                         open_compat_for_component = Some((
                             mod_state.tp_file.clone(),
-                            first_compat.component_id.clone(),
-                            first_compat.raw_line.clone(),
+                            target_compat.component_id.clone(),
+                            target_compat.raw_line.clone(),
                         ));
                     }
                 }
