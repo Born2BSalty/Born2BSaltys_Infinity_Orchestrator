@@ -3,6 +3,8 @@
 
 use std::collections::{HashMap, VecDeque};
 
+use crate::platform_defaults::{compose_component_key, normalize_tp2_filename};
+
 use super::EmbeddedTerminal;
 
 struct ComponentContext {
@@ -79,25 +81,11 @@ fn parse_component_key_from_installer_line(line: &str) -> Option<ComponentContex
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     Some(ComponentContext {
-        key: component_key(&tp_file, component),
+        key: compose_component_key(&tp_file, component),
         tp_file: normalize_tp2_filename(&tp_file),
         component: component.to_string(),
         component_name,
     })
-}
-
-fn component_key(tp_file: &str, component: &str) -> String {
-    format!("{}#{}", normalize_tp2_filename(tp_file), component.trim())
-}
-
-fn normalize_tp2_filename(tp_file: &str) -> String {
-    let replaced = tp_file.replace('\\', "/");
-    let filename = replaced
-        .rsplit('/')
-        .next()
-        .unwrap_or(replaced.as_str())
-        .trim();
-    filename.to_ascii_uppercase()
 }
 
 fn extract_field(line: &str, field: &str) -> Option<String> {

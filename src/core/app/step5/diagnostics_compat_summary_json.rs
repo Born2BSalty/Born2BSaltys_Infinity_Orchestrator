@@ -31,7 +31,7 @@ pub(super) fn write_compat_summary_json(
         "by_code": summary.by_code,
         "top_conflict_groups": sorted_group_entries(&summary.conflict_groups, TOP_GROUP_LIMIT),
         "top_missing_dep_groups": sorted_group_entries(&summary.missing_dep_groups, TOP_GROUP_LIMIT),
-        "top_order_warn_groups": sorted_group_entries(&summary.order_warn_groups, TOP_GROUP_LIMIT),
+        "top_order_groups": sorted_group_entries(&summary.order_groups, TOP_GROUP_LIMIT),
         "generated_at_unix": timestamp_unix_secs
     });
     fs::write(&out_path, serde_json::to_string_pretty(&payload)?)?;
@@ -75,6 +75,7 @@ mod tests {
             reason: "conflict".to_string(),
             source: "TP2".to_string(),
             raw_evidence: None,
+            component_block: None,
         }];
 
         let path = write_compat_summary_json(&run_dir, &issues, 123).expect("write json");
@@ -86,7 +87,7 @@ mod tests {
         assert!(v.get("by_code").is_some());
         assert!(v.get("top_conflict_groups").is_some());
         assert!(v.get("top_missing_dep_groups").is_some());
-        assert!(v.get("top_order_warn_groups").is_some());
+        assert!(v.get("top_order_groups").is_some());
 
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_dir_all(run_dir);
@@ -114,6 +115,7 @@ mod tests {
                 reason: "conflict".to_string(),
                 source: "TP2".to_string(),
                 raw_evidence: None,
+                component_block: None,
             });
         }
 

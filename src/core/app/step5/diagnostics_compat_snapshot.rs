@@ -102,7 +102,7 @@ fn append_step3_compact_summary(issues: &[CompatIssueDisplay], out: &mut String)
     }
     append_top_groups(out, "top_conflict_groups", &summary.conflict_groups);
     append_top_groups(out, "top_missing_dep_groups", &summary.missing_dep_groups);
-    append_top_groups(out, "top_order_warn_groups", &summary.order_warn_groups);
+    append_top_groups(out, "top_order_groups", &summary.order_groups);
 }
 
 fn append_top_groups(

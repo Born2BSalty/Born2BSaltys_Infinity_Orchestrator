@@ -7,7 +7,8 @@ use crate::ui::state::{Step2ComponentState, Step2ModState, Step2Selection};
 use crate::ui::step2::prompt_eval_step2::{evaluate_component_prompt_summary, event_applies, normalize_prompt_blocks};
 use crate::ui::step2::state_step2::PromptEvalContext;
 use crate::ui::step2::tree_step2::step2_tree::render_helpers::{
-    enforce_meta_mode_after_bulk, enforce_subcomponent_single_select_keep_first,
+    enforce_collapsible_group_umbrella_after_bulk, enforce_meta_mode_after_bulk,
+    enforce_subcomponent_single_select_keep_first, enforce_tp2_same_mod_exclusive_after_bulk,
     parent_compat_summary, parent_compat_target, set_component_checked_state,
 };
 
@@ -76,6 +77,8 @@ pub(crate) fn render_parent_row(
             }
             if set_value {
                 enforce_subcomponent_single_select_keep_first(mod_state);
+                enforce_collapsible_group_umbrella_after_bulk(mod_state);
+                enforce_tp2_same_mod_exclusive_after_bulk(mod_state);
             }
             enforce_meta_mode_after_bulk(mod_state);
             mod_state.checked = enabled_count > 0

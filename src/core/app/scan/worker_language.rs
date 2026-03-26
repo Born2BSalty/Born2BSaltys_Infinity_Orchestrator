@@ -16,6 +16,14 @@ pub(super) struct PreferredLocaleInfo {
 }
 
 pub(super) fn detect_preferred_game_locale(step1: &Step1State) -> PreferredLocaleInfo {
+    if !step1.language.trim().is_empty() {
+        return PreferredLocaleInfo {
+            locale: step1.language.trim().to_string(),
+            source: "step1_language".to_string(),
+            baldur_lua_path: None,
+        };
+    }
+
     for base in documents_roots() {
         for profile in profile_dir_names(&step1.game_install) {
             let path = base.join(profile).join("Baldur.lua");

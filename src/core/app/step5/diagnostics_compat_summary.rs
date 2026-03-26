@@ -21,7 +21,7 @@ pub(super) struct CompatSummary {
     pub by_code: BTreeMap<String, usize>,
     pub conflict_groups: Vec<GroupCount>,
     pub missing_dep_groups: Vec<GroupCount>,
-    pub order_warn_groups: Vec<GroupCount>,
+    pub order_groups: Vec<GroupCount>,
 }
 
 pub(super) fn build_compat_summary(issues: &[CompatIssueDisplay]) -> CompatSummary {
@@ -37,13 +37,13 @@ pub(super) fn build_compat_summary(issues: &[CompatIssueDisplay]) -> CompatSumma
         let key = match code.as_str() {
             "REQ_MISSING" => missing_group_key(issue),
             "FORBID_HIT" => conflict_or_order_group_key(issue),
-            "ORDER_WARN" => conflict_or_order_group_key(issue),
+            "ORDER_BLOCK" => conflict_or_order_group_key(issue),
             _ => continue,
         };
         match code.as_str() {
             "FORBID_HIT" => *conflict_groups.entry(key).or_default() += 1,
+            "ORDER_BLOCK" => *order_groups.entry(key).or_default() += 1,
             "REQ_MISSING" => *missing_groups.entry(key).or_default() += 1,
-            "ORDER_WARN" => *order_groups.entry(key).or_default() += 1,
             _ => {}
         }
     }
@@ -59,7 +59,7 @@ pub(super) fn build_compat_summary(issues: &[CompatIssueDisplay]) -> CompatSumma
         by_code,
         conflict_groups: sorted_group_entries(&conflict_groups),
         missing_dep_groups: sorted_group_entries(&missing_groups),
-        order_warn_groups: sorted_group_entries(&order_groups),
+        order_groups: sorted_group_entries(&order_groups),
     }
 }
 
@@ -109,6 +109,7 @@ mod tests {
             reason: reason.to_string(),
             source: "TP2".to_string(),
             raw_evidence: None,
+            component_block: None,
         }
     }
 
@@ -140,12 +141,12 @@ mod tests {
         let issues = vec![
             issue("forbid_hit", "a", "b", "x", true),
             issue("FORBID_HIT", "a", "b", "x", true),
-            issue("Order_Warn", "a", "b", "x", false),
+            issue("order_block", "a", "b", "x", true),
         ];
         let summary = build_compat_summary(&issues);
         assert_eq!(summary.by_code.get("FORBID_HIT"), Some(&2));
-        assert_eq!(summary.by_code.get("ORDER_WARN"), Some(&1));
+        assert_eq!(summary.by_code.get("ORDER_BLOCK"), Some(&1));
         assert!(!summary.by_code.contains_key("forbid_hit"));
-        assert!(!summary.by_code.contains_key("Order_Warn"));
+        assert!(!summary.by_code.contains_key("order_block"));
     }
 }

@@ -4,6 +4,7 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
+use crate::platform_defaults::{compose_component_key, normalize_tp2_filename};
 use crate::ui::state::{Step3ItemState, WizardState};
 use crate::ui::step3::state_step3;
 
@@ -62,7 +63,7 @@ fn open_wlb_editor(
     component_label: &str,
     mod_name: &str,
 ) {
-    let component_key = component_key(tp_file, component_id);
+    let component_key = compose_component_key(tp_file, component_id);
     state.step3.prompt_edit_key = component_key.clone();
     state.step3.prompt_edit_component_key = component_key;
     state.step3.prompt_edit_tp2_file = normalize_tp2_filename(tp_file);
@@ -86,7 +87,7 @@ fn open_json_editor(
     component_label: &str,
     mod_name: &str,
 ) {
-    let component_key = component_key(tp_file, component_id);
+    let component_key = compose_component_key(tp_file, component_id);
     state.step3.prompt_edit_key = component_key.clone();
     state.step3.prompt_edit_component_key = component_key;
     state.step3.prompt_edit_tp2_file = normalize_tp2_filename(tp_file);
@@ -259,20 +260,6 @@ fn find_component_mut<'a>(
             && normalize_tp2_filename(&i.tp_file) == tp_norm
             && i.component_id.trim() == id_norm
     })
-}
-
-fn normalize_tp2_filename(tp_file: &str) -> String {
-    let replaced = tp_file.replace('\\', "/");
-    let filename = replaced
-        .rsplit('/')
-        .next()
-        .unwrap_or(replaced.as_str())
-        .trim();
-    filename.to_ascii_uppercase()
-}
-
-fn component_key(tp_file: &str, component_id: &str) -> String {
-    format!("{}#{}", normalize_tp2_filename(tp_file), component_id.trim())
 }
 
 fn default_raw_line(item: &Step3ItemState) -> String {

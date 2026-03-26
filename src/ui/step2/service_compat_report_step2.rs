@@ -20,6 +20,9 @@ pub(super) fn issue_graph(issue: &CompatIssueDisplay) -> String {
         }
         return format!("{affected} requires {related}");
     }
+    if issue.code.eq_ignore_ascii_case("INCLUDED") {
+        return format!("{affected} is included by {related}");
+    }
     format!("{affected} -> {related}")
 }
 

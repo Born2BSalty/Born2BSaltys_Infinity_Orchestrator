@@ -4,6 +4,7 @@
 use super::super::model::{
     CompatIssue, CompatIssueCode, CompatIssueInit, IssueSource, Severity,
 };
+use super::validator_helpers as helpers;
 use super::RuleEvalContext;
 
 pub(super) fn handle_require_installed_any(
@@ -13,20 +14,16 @@ pub(super) fn handle_require_installed_any(
     raw_line: &str,
     line: usize,
 ) {
-    let hit = targets.iter().any(|(target_mod, target_component)| match target_component {
-        Some(cid) => ctx.selected_set.contains(&(target_mod.clone(), *cid)),
-        None => ctx.selected_set.iter().any(|(m, _)| m == target_mod),
-    });
-
-    if !hit {
-        let related_text = targets
-            .iter()
-            .map(|(m, c)| match c {
-                Some(id) => format!("{m} #{id}"),
-                None => format!("{m} (any component)"),
-            })
-            .collect::<Vec<_>>()
-            .join(" OR ");
+    let related_text = targets
+        .iter()
+        .map(|(m, c)| match c {
+            Some(id) => format!("{m} #{id}"),
+            None => format!("{m} (any component)"),
+        })
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let matched_orders = helpers::matching_orders_for_targets(ctx.order_map, targets);
+    if matched_orders.is_empty() {
         let (related_mod, related_component) = targets
             .first()
             .cloned()
@@ -42,45 +39,27 @@ pub(super) fn handle_require_installed_any(
             affected_component: Some(ctx.component.component_id),
             related_mod,
             related_component,
-            reason: format!("Requires one of: {related_text}"),
+            reason: helpers::resolved_reason_or(
+                ctx.metadata,
+                raw_line,
+                format!("Requires one of: {related_text}"),
+            ),
             raw_evidence: Some(raw_line.to_string()),
+            component_block: helpers::component_block_for(ctx.metadata, ctx.component.component_id),
         }));
         return;
     }
 
-    let mut matched_orders: Vec<usize> = Vec::new();
-    for (target_mod, target_component) in targets {
-        match target_component {
-            Some(cid) => {
-                if ctx.selected_set.contains(&(target_mod.clone(), *cid))
-                    && let Some(order) = ctx.order_map.get(&(target_mod.clone(), *cid))
-                {
-                    matched_orders.push(*order);
-                }
-            }
-            None => {
-                for ((mod_key, _), order) in ctx.order_map {
-                    if mod_key == target_mod {
-                        matched_orders.push(*order);
-                    }
-                }
-            }
-        }
-    }
-    matched_orders.sort_unstable();
-    matched_orders.dedup();
-
-    if matched_orders.is_empty() || matched_orders.iter().any(|order| *order <= ctx.component.order) {
+    if matched_orders.iter().any(|(_, _, order)| *order <= ctx.component.order) {
         return;
     }
 
-    let (related_mod, related_component) = targets
-        .first()
-        .cloned()
-        .unwrap_or_else(|| ("unknown".to_string(), None));
+    let mut later = matched_orders;
+    later.sort_by_key(|(_, _, order)| *order);
+    let (related_mod, related_component, _) = later[0].clone();
     issues.push(CompatIssue::new(CompatIssueInit {
-        code: CompatIssueCode::OrderWarn,
-        severity: Severity::Warning,
+        code: CompatIssueCode::OrderBlock,
+        severity: Severity::Error,
         source: IssueSource::Tp2 {
             file: ctx.metadata.tp_file.clone(),
             line,
@@ -88,18 +67,12 @@ pub(super) fn handle_require_installed_any(
         affected_mod: ctx.component.mod_name.clone(),
         affected_component: Some(ctx.component.component_id),
         related_mod,
-        related_component,
+        related_component: Some(related_component),
         reason: format!(
-            "Requires one of: {} but all matching selected targets are ordered after this component",
-            targets
-                .iter()
-                .map(|(m, c)| match c {
-                    Some(id) => format!("{m} #{id}"),
-                    None => format!("{m} (any component)"),
-                })
-                .collect::<Vec<_>>()
-                .join(" OR ")
+            "Requires one of: {} before this component, but all matching selected targets are currently ordered after it",
+            related_text
         ),
         raw_evidence: Some(raw_line.to_string()),
+        component_block: helpers::component_block_for(ctx.metadata, ctx.component.component_id),
     }));
 }

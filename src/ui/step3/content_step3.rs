@@ -234,7 +234,7 @@ fn append_text(
 }
 
 fn normalize_weidu_like_line(raw: &str) -> String {
-    crate::ui::step3::service_step3::normalize_weidu_like_line(raw)
+    crate::platform_defaults::normalize_weidu_like_line(raw)
 }
 
 

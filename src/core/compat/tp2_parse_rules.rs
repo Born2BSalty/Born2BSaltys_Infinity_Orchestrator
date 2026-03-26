@@ -108,20 +108,20 @@ pub(super) fn parse_require_predicate_game_is(upper: &str, raw: &str, line: usiz
     if !upper.contains("REQUIRE_PREDICATE") || !upper.contains("GAME_IS") {
         return None;
     }
-    let allowed_games = parse_positive_game_is_groups(upper, raw);
-    if !allowed_games.is_empty() {
-        return Some(Tp2Rule::RequireGame {
-            allowed_games,
+    let blocked_games = parse_negated_game_is_groups(upper, raw);
+    if !blocked_games.is_empty() {
+        return Some(Tp2Rule::ForbidGame {
+            blocked_games,
             raw_line: raw.to_string(),
             line,
         });
     }
-    let blocked_games = parse_negated_game_is_groups(upper, raw);
-    if blocked_games.is_empty() {
+    let allowed_games = parse_positive_game_is_groups(upper, raw);
+    if allowed_games.is_empty() {
         return None;
     }
-    Some(Tp2Rule::ForbidGame {
-        blocked_games,
+    Some(Tp2Rule::RequireGame {
+        allowed_games,
         raw_line: raw.to_string(),
         line,
     })
@@ -152,6 +152,12 @@ pub(super) fn parse_require_predicate_game_or_installed_any(upper: &str, raw: &s
     // This rule is meant for OR-style predicates:
     // REQUIRE_PREDICATE GAME_IS ~iwdee~ || MOD_IS_INSTALLED ...
     if !(upper.contains("||") || upper.contains(" OR ")) {
+        return None;
+    }
+    // Do not swallow AND-combined predicates like:
+    // REQUIRE_PREDICATE (GAME_IS ~iwdee~) && (MOD_IS_INSTALLED ... || MOD_IS_INSTALLED ...)
+    // Those should still expose normal game mismatch handling from GAME_IS itself.
+    if upper.contains("&&") || upper.contains(" AND ") {
         return None;
     }
     let allowed_games = parse_positive_game_is_groups(upper, raw);
@@ -297,7 +303,11 @@ pub(super) fn parse_all_mod_is_installed_by_negation(
     let mut offset = 0usize;
     while let Some(rel_idx) = upper[offset..].find("MOD_IS_INSTALLED") {
         let idx = offset + rel_idx;
-        if is_negated_mod_is_installed(upper, idx) == want_negated {
+        let mut is_negated = is_negated_mod_is_installed(upper, idx);
+        if let Some(forced) = comparison_negation_for_mod_is_installed(upper, idx) {
+            is_negated = forced;
+        }
+        if is_negated == want_negated {
             let after = &raw[idx + "MOD_IS_INSTALLED".len()..];
             if let Some(target) = parse_mod_component_optional(after)
                 && !out.contains(&target)
@@ -308,6 +318,33 @@ pub(super) fn parse_all_mod_is_installed_by_negation(
         offset = idx + "MOD_IS_INSTALLED".len();
     }
     out
+}
+
+fn comparison_negation_for_mod_is_installed(upper: &str, idx: usize) -> Option<bool> {
+    let start = idx + "MOD_IS_INSTALLED".len();
+    if start >= upper.len() {
+        return None;
+    }
+
+    let tail = &upper[start..];
+    let mut end = tail.len();
+    for marker in ["&&", "||", " AND ", " OR ", "@"] {
+        if let Some(pos) = tail.find(marker) {
+            end = end.min(pos);
+        }
+    }
+    let compact: String = tail[..end]
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .collect();
+
+    if compact.contains("!=0") || compact.contains("==1") || compact.contains("=1") {
+        return Some(false);
+    }
+    if compact.contains("!=1") || compact.contains("==0") || compact.contains("=0") {
+        return Some(true);
+    }
+    None
 }
 
 pub(super) fn is_negated_mod_is_installed(upper: &str, idx: usize) -> bool {

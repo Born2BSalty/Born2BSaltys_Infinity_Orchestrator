@@ -14,6 +14,9 @@ pub(crate) fn evaluate_step3_item_prompt_summary(
     let component = Step2ComponentState {
         component_id: item.component_id.clone(),
         label: item.component_label.clone(),
+        weidu_group: None,
+        collapsible_group: None,
+        collapsible_group_is_umbrella: false,
         raw_line: item.raw_line.clone(),
         prompt_summary: item.prompt_summary.clone(),
         prompt_events: item.prompt_events.clone(),

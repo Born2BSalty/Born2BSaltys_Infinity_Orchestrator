@@ -136,6 +136,9 @@ pub struct Step2ModState {
 pub struct Step2ComponentState {
     pub component_id: String,
     pub label: String,
+    pub weidu_group: Option<String>,
+    pub collapsible_group: Option<String>,
+    pub collapsible_group_is_umbrella: bool,
     pub raw_line: String,
     pub prompt_summary: Option<String>,
     pub prompt_events: Vec<crate::parser::PromptSummaryEvent>,

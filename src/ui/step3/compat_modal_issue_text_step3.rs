@@ -8,13 +8,14 @@ pub(crate) fn matches_issue_filter(issue: &CompatIssueDisplay, filter: &str) -> 
     match filter.to_ascii_lowercase().as_str() {
         "conflicts" => {
             issue.code.eq_ignore_ascii_case("FORBID_HIT")
+                || issue.code.eq_ignore_ascii_case("ORDER_BLOCK")
                 || issue.code.eq_ignore_ascii_case("RULE_HIT")
                 || issue.reason.to_ascii_lowercase().contains("incompatible")
                 || issue.reason.to_ascii_lowercase().contains("conflict")
         }
         "dependencies" => issue.code.eq_ignore_ascii_case("REQ_MISSING"),
         "conditionals" => issue.code.eq_ignore_ascii_case("CONDITIONAL"),
-        "warnings" => !issue.is_blocking || issue.code.eq_ignore_ascii_case("ORDER_WARN"),
+        "warnings" => !issue.is_blocking,
         _ => true,
     }
 }
@@ -58,24 +59,31 @@ pub(crate) fn format_issue_target(mod_name: &str, component: Option<u32>) -> Str
     }
 }
 
+pub(crate) fn is_require_order_issue(issue: &CompatIssueDisplay) -> bool {
+    issue.code.eq_ignore_ascii_case("ORDER_BLOCK")
+        && issue
+            .raw_evidence
+            .as_deref()
+            .map(|raw| raw.trim_start().to_ascii_uppercase().starts_with("REQUIRE"))
+            .unwrap_or(false)
+}
+
 pub(crate) fn human_kind(code: &str) -> &'static str {
     if code.eq_ignore_ascii_case("GAME_MISMATCH") {
         "Game mismatch"
     } else if code.eq_ignore_ascii_case("REQ_MISSING") {
         "Missing dependency"
+    } else if code.eq_ignore_ascii_case("INCLUDED") {
+        "Included"
     } else if code.eq_ignore_ascii_case("CONDITIONAL") {
         "Conditional patch"
     } else if code.eq_ignore_ascii_case("FORBID_HIT") || code.eq_ignore_ascii_case("RULE_HIT") {
         "Conflict"
-    } else if code.eq_ignore_ascii_case("ORDER_WARN") {
-        "Order warning"
+    } else if code.eq_ignore_ascii_case("ORDER_BLOCK") {
+        "Install order"
     } else {
         "Compatibility issue"
     }
-}
-
-pub(crate) fn human_severity(issue: &CompatIssueDisplay) -> &'static str {
-    if issue.is_blocking { "Error" } else { "Warning" }
 }
 
 pub(crate) fn issue_graph(issue: &CompatIssueDisplay) -> String {
@@ -95,6 +103,16 @@ pub(crate) fn issue_graph(issue: &CompatIssueDisplay) -> String {
         }
         return format!("{affected} conflicts with {related}");
     }
+    if issue.code.eq_ignore_ascii_case("INCLUDED") {
+        return format!("{affected} is included by {related}");
+    }
+    if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
+        return if is_require_order_issue(issue) {
+            format!("{affected} must be installed after {related}")
+        } else {
+            format!("{affected} must be installed before {related}")
+        };
+    }
     if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
         if let Some(or_targets) = parse_or_targets_from_reason(&issue.reason) {
             return format!("{affected} requires one of: {}", or_targets.join(" | "));
@@ -104,128 +122,73 @@ pub(crate) fn issue_graph(issue: &CompatIssueDisplay) -> String {
     if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
         return format!("{affected} has optional patch for {related}");
     }
-    if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-        return format!("{affected} should be installed after {related}");
-    }
     format!("{affected} -> {related}")
 }
 
-pub(crate) fn issue_verdict(issue: &CompatIssueDisplay) -> Option<String> {
+pub(crate) fn issue_summary(issue: &CompatIssueDisplay) -> String {
     if is_duplicate_selection_issue(issue) {
-        return Some("Same component appears multiple times in selection.".to_string());
+        return "Duplicate selection".to_string();
+    }
+    if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
+        let games = parse_games(issue);
+        return if games.is_empty() {
+            "Not available in this game mode".to_string()
+        } else {
+            format!("Only available on `{games}`")
+        };
+    }
+    if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
+        if let Some(or_targets) = parse_or_targets_from_reason(&issue.reason) {
+            let joined = or_targets
+                .into_iter()
+                .map(|target| format!("`{target}`"))
+                .collect::<Vec<_>>()
+                .join(" or ");
+            return format!("Needs {joined}");
+        }
+        let related = format_issue_target(&issue.related_mod, issue.related_component);
+        return format!("Needs `{related}`");
     }
     if issue.code.eq_ignore_ascii_case("FORBID_HIT")
         || issue.code.eq_ignore_ascii_case("RULE_HIT")
     {
-        return Some("Cannot install both sides at once.".to_string());
+        if issue.related_mod.eq_ignore_ascii_case("unknown") {
+            return "Blocked by another component".to_string();
+        }
+        let related = format_issue_target(&issue.related_mod, issue.related_component);
+        return format!("Blocked by `{related}`");
     }
-    if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
-        return Some("Missing dependency blocks install until satisfied.".to_string());
+    if issue.code.eq_ignore_ascii_case("INCLUDED") {
+        let related = format_issue_target(&issue.related_mod, issue.related_component);
+        return format!("Included by `{related}`");
     }
-    if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
-        return Some("Optional behavior change; does not block install.".to_string());
-    }
-    if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-        return Some("Order warning only; install can proceed.".to_string());
-    }
-    if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
-        let games = parse_games(issue);
-        return Some(format!(
-            "Not installable in current mode (allowed: {}).",
-            if games.is_empty() { "N/A".to_string() } else { games }
-        ));
-    }
-    None
-}
-
-pub(crate) fn issue_why_this_appears(issue: &CompatIssueDisplay) -> &'static str {
-    if is_duplicate_selection_issue(issue) {
-        return "The same mod component is present more than once in current selection/order.";
-    }
-    if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
-        "This component references another component that is not selected or not installed yet."
-    } else if issue.code.eq_ignore_ascii_case("FORBID_HIT")
-        || issue.code.eq_ignore_ascii_case("RULE_HIT")
-    {
-        "This component has a conflict rule against another selected component."
-    } else if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
-        "A conditional TP2 branch was detected and is active."
-    } else if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
-        "The component declares allowed game targets that do not match the current validation context."
-    } else if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-        "The dependency exists, but current order places it after this component."
-    } else {
-        "A compatibility rule was matched for this selection."
-    }
-}
-
-pub(crate) fn issue_what_to_do(issue: &CompatIssueDisplay) -> &'static str {
-    if is_duplicate_selection_issue(issue) {
-        return "Remove duplicate instance(s) so each mod component appears once.";
-    }
-    if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
-        "Select/install the required related component first, then revalidate."
-    } else if issue.code.eq_ignore_ascii_case("FORBID_HIT")
-        || issue.code.eq_ignore_ascii_case("RULE_HIT")
-    {
-        "Keep one side and uncheck the other, then revalidate."
-    } else if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
-        "No action required unless you want to change optional behavior."
-    } else if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
-        "Use a compatible game mode for this component, or remove this component for current mode."
-    } else if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-        "Move dependency earlier (or this component later), then revalidate."
-    } else {
-        "Review the related target and source rule, then revalidate."
-    }
-}
-
-pub(crate) fn issue_reason(issue: &CompatIssueDisplay) -> String {
-    if is_duplicate_selection_issue(issue) {
-        return issue.reason.clone();
-    }
-    if issue.code.eq_ignore_ascii_case("FORBID_HIT")
-        || issue.code.eq_ignore_ascii_case("RULE_HIT")
-    {
-        return format!(
-            "Conflicts with {} (currently selected).",
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
-        return format!(
-            "Requires {} which is not currently selected/installed.",
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
+    if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
+        let related = format_issue_target(&issue.related_mod, issue.related_component);
+        return if is_require_order_issue(issue) {
+            format!("Must be after `{related}`")
+        } else {
+            format!("Must be before `{related}`")
+        };
     }
     if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
-        return issue.reason.clone();
+        let related = format_issue_target(&issue.related_mod, issue.related_component);
+        return format!("Conditional on `{related}`");
     }
-    if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
-        let games = parse_games(issue);
-        return format!(
-            "This component is restricted to: {}.",
-            if games.is_empty() { "N/A".to_string() } else { games }
-        );
+    let fallback = issue.reason.trim();
+    if !fallback.is_empty() && !fallback.eq_ignore_ascii_case("unknown") {
+        fallback.to_string()
+    } else {
+        "Compatibility issue".to_string()
     }
-    if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-        return format!(
-            "Order issue: {} should be installed before this component.",
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    issue.reason.clone()
 }
 
-pub(crate) fn human_related(issue: &CompatIssueDisplay, fallback_related: &str) -> String {
-    if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
-        let games = parse_games(issue);
-        return format!(
-            "Allowed games: {}",
-            if games.is_empty() { "N/A".to_string() } else { games }
-        );
+pub(crate) fn display_source(source: &str) -> String {
+    let trimmed = source.trim();
+    if let Some(idx) = trimmed.find("TP2:") {
+        trimmed[idx..].to_string()
+    } else {
+        trimmed.to_string()
     }
-    fallback_related.to_string()
 }
 
 pub(crate) fn parse_games(issue: &CompatIssueDisplay) -> String {

@@ -11,9 +11,14 @@ pub(super) fn apply_step2_checked_order_issues(app: &mut WizardApp) {
     clear_dynamic_compat(&mut app.state.step2.bgee_mods);
     clear_dynamic_compat(&mut app.state.step2.bg2ee_mods);
 
+    let active_mods = if app.state.step2.active_game_tab == "BG2EE" {
+        &mut app.state.step2.bg2ee_mods
+    } else {
+        &mut app.state.step2.bgee_mods
+    };
+
     for issue in &app.state.compat.issues {
-        apply_issue_to_mods(&mut app.state.step2.bgee_mods, issue);
-        apply_issue_to_mods(&mut app.state.step2.bg2ee_mods, issue);
+        apply_issue_to_mods(active_mods, issue);
     }
 }
 
@@ -66,6 +71,10 @@ fn apply_issue_to_mods(mods: &mut [Step2ModState], issue: &CompatIssueDisplay) {
                 "game_mismatch".to_string()
             } else if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
                 "conditional".to_string()
+            } else if issue.code.eq_ignore_ascii_case("INCLUDED") {
+                "included".to_string()
+            } else if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
+                "order_block".to_string()
             } else if issue.is_blocking {
                 "conflict".to_string()
             } else {
@@ -83,11 +92,6 @@ fn apply_issue_to_mods(mods: &mut [Step2ModState], issue: &CompatIssueDisplay) {
                 issue.related_component.unwrap_or_default()
             ));
             component.compat_evidence = issue.raw_evidence.clone();
-            if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
-                component.disabled = true;
-                component.checked = false;
-                component.selected_order = None;
-            }
             if !issue.reason.trim().is_empty() {
                 component.disabled_reason = Some(issue.reason.clone());
             }

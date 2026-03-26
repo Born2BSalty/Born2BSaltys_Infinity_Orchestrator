@@ -5,9 +5,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::platform_defaults::compose_weidu_log_path;
+use crate::platform_defaults::compose_component_key;
 use crate::ui::state::Step1State;
 use crate::ui::step5::prompt_memory;
+use crate::ui::step5::service_step5_command_step5::{resolve_bg2_log_file, resolve_bgee_log_file};
 
 pub fn load_from_step1(step1: &Step1State) -> HashMap<String, Vec<String>> {
     let mut out: HashMap<String, Vec<String>> = HashMap::new();
@@ -39,30 +40,6 @@ fn source_log_paths(step1: &Step1State) -> Vec<String> {
     } else {
         vec![resolve_bgee_log_file(step1)]
     }
-}
-
-fn resolve_bgee_log_file(step1: &Step1State) -> String {
-    if step1.have_weidu_logs && !step1.bgee_log_file.trim().is_empty() {
-        return step1.bgee_log_file.trim().to_string();
-    }
-    let folder = if step1.game_install == "EET" {
-        step1.eet_bgee_log_folder.trim()
-    } else {
-        step1.bgee_log_folder.trim()
-    };
-    compose_weidu_log_path(folder)
-}
-
-fn resolve_bg2_log_file(step1: &Step1State) -> String {
-    if step1.have_weidu_logs && !step1.bg2ee_log_file.trim().is_empty() {
-        return step1.bg2ee_log_file.trim().to_string();
-    }
-    let folder = if step1.game_install == "EET" {
-        step1.eet_bg2ee_log_folder.trim()
-    } else {
-        step1.bg2ee_log_folder.trim()
-    };
-    compose_weidu_log_path(folder)
 }
 
 fn merge_from_path(dst: &mut HashMap<String, Vec<String>>, path: &Path) {
@@ -104,7 +81,7 @@ fn parse_line(line: &str) -> Option<(String, Vec<String>)> {
         return None;
     }
 
-    let key = component_key(tp2, comp);
+    let key = compose_component_key(tp2, comp);
     let inputs = parse_inputs(spec);
     Some((key, inputs))
 }
@@ -113,16 +90,3 @@ fn parse_inputs(spec: &str) -> Vec<String> {
     spec.split(',').map(|p| p.trim().to_string()).collect()
 }
 
-fn component_key(tp_file: &str, component: &str) -> String {
-    format!("{}#{}", normalize_tp2_filename(tp_file), component.trim())
-}
-
-fn normalize_tp2_filename(tp_file: &str) -> String {
-    let replaced = tp_file.replace('\\', "/");
-    let filename = replaced
-        .rsplit('/')
-        .next()
-        .unwrap_or(replaced.as_str())
-        .trim();
-    filename.to_ascii_uppercase()
-}

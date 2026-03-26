@@ -3,7 +3,7 @@
 
 use eframe::egui;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::state::{CompatIssueDisplay, Step3ItemState, WizardState};
@@ -62,29 +62,6 @@ pub fn apply_row_selection(
     }
 }
 
-pub fn normalize_weidu_like_line(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if !trimmed.starts_with('~') {
-        return trimmed.to_string();
-    }
-    let Some(end) = trimmed[1..].find('~').map(|i| i + 1) else {
-        return trimmed.to_string();
-    };
-    let path_part = &trimmed[1..end];
-    let suffix = &trimmed[end + 1..];
-    let p = Path::new(path_part);
-    let file = p
-        .file_name()
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| item_fallback_file(path_part));
-    let folder = p
-        .parent()
-        .and_then(|v| v.file_name())
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| item_fallback_folder(path_part));
-    format!("~{}\\{}~{}", folder, file, suffix)
-}
-
 pub fn export_step3_compat_report(issues: &[CompatIssueDisplay]) -> std::io::Result<PathBuf> {
     let out_dir = PathBuf::from("diagnostics");
     fs::create_dir_all(&out_dir)?;
@@ -123,20 +100,6 @@ pub fn export_step3_compat_report(issues: &[CompatIssueDisplay]) -> std::io::Res
 
     fs::write(&out_path, text)?;
     Ok(out_path)
-}
-
-fn item_fallback_file(path_part: &str) -> String {
-    path_part
-        .rsplit(['\\', '/'])
-        .next()
-        .unwrap_or(path_part)
-        .to_string()
-}
-
-fn item_fallback_folder(path_part: &str) -> String {
-    let mut parts = path_part.rsplit(['\\', '/']);
-    let _ = parts.next();
-    parts.next().unwrap_or("MOD").to_string()
 }
 
 fn format_issue_target(mod_name: &str, component: Option<u32>) -> String {
@@ -202,6 +165,27 @@ fn issue_graph(issue: &CompatIssueDisplay) -> String {
             format_issue_target(&issue.related_mod, issue.related_component)
         );
     }
+    if issue.code.eq_ignore_ascii_case("INCLUDED") {
+        return format!(
+            "{} is included by {}",
+            format_issue_target(&issue.affected_mod, issue.affected_component),
+            format_issue_target(&issue.related_mod, issue.related_component)
+        );
+    }
+    if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
+        let affected = format_issue_target(&issue.affected_mod, issue.affected_component);
+        let related = format_issue_target(&issue.related_mod, issue.related_component);
+        let is_require_order = issue
+            .raw_evidence
+            .as_deref()
+            .map(|raw| raw.trim_start().to_ascii_uppercase().starts_with("REQUIRE"))
+            .unwrap_or(false);
+        return if is_require_order {
+            format!("{affected} must be installed after {related}")
+        } else {
+            format!("{affected} must be installed before {related}")
+        };
+    }
     if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
         if let Some(or_targets) = parse_or_targets_from_reason(&issue.reason) {
             return format!(
@@ -219,13 +203,6 @@ fn issue_graph(issue: &CompatIssueDisplay) -> String {
     if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
         return format!(
             "{} has optional patch for {}",
-            format_issue_target(&issue.affected_mod, issue.affected_component),
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-        return format!(
-            "{} should be installed after {}",
             format_issue_target(&issue.affected_mod, issue.affected_component),
             format_issue_target(&issue.related_mod, issue.related_component)
         );

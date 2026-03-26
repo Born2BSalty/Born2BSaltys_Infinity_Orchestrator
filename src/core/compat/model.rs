@@ -7,10 +7,10 @@ use std::hash::{Hash, Hasher};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompatIssueCode {
     ReqMissing,
-    ForbidHit,
     GameMismatch,
     Conditional,
-    OrderWarn,
+    Included,
+    OrderBlock,
     RuleHit,
 }
 
@@ -18,10 +18,10 @@ impl CompatIssueCode {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ReqMissing => "REQ_MISSING",
-            Self::ForbidHit => "FORBID_HIT",
             Self::GameMismatch => "GAME_MISMATCH",
             Self::Conditional => "CONDITIONAL",
-            Self::OrderWarn => "ORDER_WARN",
+            Self::Included => "INCLUDED",
+            Self::OrderBlock => "ORDER_BLOCK",
             Self::RuleHit => "RULE_HIT",
         }
     }
@@ -66,6 +66,7 @@ pub struct CompatIssue {
     pub related_component: Option<u32>,
     pub reason: String,
     pub raw_evidence: Option<String>,
+    pub component_block: Option<String>,
 }
 
 pub struct CompatIssueInit {
@@ -78,6 +79,7 @@ pub struct CompatIssueInit {
     pub related_component: Option<u32>,
     pub reason: String,
     pub raw_evidence: Option<String>,
+    pub component_block: Option<String>,
 }
 
 impl CompatIssue {
@@ -100,6 +102,7 @@ impl CompatIssue {
             related_component: init.related_component,
             reason: init.reason,
             raw_evidence: init.raw_evidence,
+            component_block: init.component_block,
         }
     }
 
@@ -211,6 +214,8 @@ pub enum Tp2Rule {
 #[derive(Debug, Clone, Default)]
 pub struct Tp2Metadata {
     pub tp_file: String,
+    pub setup_tra: std::collections::HashMap<String, String>,
+    pub component_blocks: std::collections::HashMap<u32, String>,
     pub rules: Vec<(u32, Tp2Rule)>,
 }
 

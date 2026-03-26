@@ -4,7 +4,11 @@
 pub(crate) mod step2_tree {
 pub(crate) mod render_helpers {
     use eframe::egui;
-use crate::ui::state::{Step2ComponentState, Step2ModState};
+    use std::path::Path;
+
+    use crate::compat::model::Tp2Rule;
+    use crate::compat::tp2_parse::parse_tp2_rules;
+    use crate::ui::state::{Step2ComponentState, Step2ModState};
 
 pub(crate) fn enforce_subcomponent_single_select(mod_state: &mut Step2ModState, changed_idx: usize) {
     let Some(base_key) = subcomponent_base_key(&mod_state.components[changed_idx].label) else {
@@ -34,6 +38,62 @@ pub(crate) fn enforce_subcomponent_single_select_keep_first(mod_state: &mut Step
             continue;
         };
         if !seen.insert(base_key) {
+            comp.checked = false;
+            comp.selected_order = None;
+        }
+    }
+}
+
+pub(crate) fn enforce_collapsible_group_umbrella_rules(
+    mod_state: &mut Step2ModState,
+    changed_idx: usize,
+) {
+    let Some(group) = mod_state.components[changed_idx].collapsible_group.clone() else {
+        return;
+    };
+
+    let changed_is_umbrella = mod_state.components[changed_idx].collapsible_group_is_umbrella;
+    for (idx, comp) in mod_state.components.iter_mut().enumerate() {
+        if idx == changed_idx {
+            continue;
+        }
+        if !comp
+            .collapsible_group
+            .as_deref()
+            .is_some_and(|other| other.eq_ignore_ascii_case(&group))
+        {
+            continue;
+        }
+        if changed_is_umbrella || comp.collapsible_group_is_umbrella {
+            comp.checked = false;
+            comp.selected_order = None;
+        }
+    }
+}
+
+pub(crate) fn enforce_collapsible_group_umbrella_after_bulk(mod_state: &mut Step2ModState) {
+    let mut groups_with_specific_choices = std::collections::HashSet::<String>::new();
+    for comp in &mod_state.components {
+        if comp.checked
+            && !comp.collapsible_group_is_umbrella
+            && let Some(group) = comp.collapsible_group.as_deref()
+        {
+            groups_with_specific_choices.insert(group.to_ascii_lowercase());
+        }
+    }
+
+    if groups_with_specific_choices.is_empty() {
+        return;
+    }
+
+    for comp in &mut mod_state.components {
+        if !comp.checked || !comp.collapsible_group_is_umbrella {
+            continue;
+        }
+        let Some(group) = comp.collapsible_group.as_deref() else {
+            continue;
+        };
+        if groups_with_specific_choices.contains(&group.to_ascii_lowercase()) {
             comp.checked = false;
             comp.selected_order = None;
         }
@@ -92,6 +152,51 @@ pub(crate) fn enforce_meta_mode_after_bulk(mod_state: &mut Step2ModState) {
     }
 }
 
+pub(crate) fn enforce_tp2_same_mod_exclusive_on_select(
+    mod_state: &mut Step2ModState,
+    changed_idx: usize,
+) {
+    if !mod_state
+        .components
+        .get(changed_idx)
+        .is_some_and(|component| component.checked)
+    {
+        return;
+    }
+
+    let target_ids = same_mod_exclusive_targets(mod_state, changed_idx);
+    if target_ids.is_empty() {
+        return;
+    }
+
+    for (idx, comp) in mod_state.components.iter_mut().enumerate() {
+        if idx == changed_idx {
+            continue;
+        }
+        if target_ids.iter().any(|id| id == comp.component_id.trim()) {
+            comp.checked = false;
+            comp.selected_order = None;
+        }
+    }
+}
+
+pub(crate) fn enforce_tp2_same_mod_exclusive_after_bulk(mod_state: &mut Step2ModState) {
+    let mut checked_indices: Vec<usize> = mod_state
+        .components
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, comp)| comp.checked.then_some(idx))
+        .collect();
+    checked_indices.sort_by_key(|idx| mod_state.components[*idx].selected_order.unwrap_or(usize::MAX));
+
+    for idx in checked_indices {
+        if !mod_state.components.get(idx).is_some_and(|component| component.checked) {
+            continue;
+        }
+        enforce_tp2_same_mod_exclusive_on_select(mod_state, idx);
+    }
+}
+
 pub(crate) fn set_component_checked_state(
     component: &mut Step2ComponentState,
     next_selection_order: &mut usize,
@@ -122,6 +227,47 @@ fn subcomponent_base_key(label: &str) -> Option<String> {
     Some(base.to_ascii_lowercase())
 }
 
+fn same_mod_exclusive_targets(mod_state: &Step2ModState, source_idx: usize) -> Vec<String> {
+    let Some(source_component_id) = mod_state.components.get(source_idx).and_then(|component| {
+        component.component_id.trim().parse::<u32>().ok()
+    }) else {
+        return Vec::new();
+    };
+    let tp2_path = mod_state.tp2_path.trim();
+    if tp2_path.is_empty() {
+        return Vec::new();
+    }
+
+    let metadata = parse_tp2_rules(Path::new(tp2_path));
+    let own_mod_key =
+        crate::ui::step2::service_selection_step2::selection_normalize_mod_key(&mod_state.tp_file);
+    let mut out = Vec::<String>::new();
+
+    for (component_id, rule) in &metadata.rules {
+        if *component_id != source_component_id {
+            continue;
+        }
+        let Tp2Rule::ForbidInstalledMod {
+            target_mod,
+            target_component: Some(target_component),
+            ..
+        } = rule
+        else {
+            continue;
+        };
+
+        let target_mod_key =
+            crate::ui::step2::service_selection_step2::selection_normalize_mod_key(target_mod);
+        if target_mod_key == own_mod_key {
+            out.push((*target_component).to_string());
+        }
+    }
+
+    out.sort();
+    out.dedup();
+    out
+}
+
 pub(crate) fn compat_colors(kind: Option<&str>) -> Option<(egui::Color32, egui::Color32, &'static str)> {
     match kind.unwrap_or_default() {
         "included" | "not_needed" => Some((
@@ -134,6 +280,11 @@ pub(crate) fn compat_colors(kind: Option<&str>) -> Option<(egui::Color32, egui::
             crate::ui::shared::theme_global::conflict_fill(),
             "Conflict",
         )),
+        "order_block" => Some((
+            crate::ui::shared::theme_global::warning_emphasis(),
+            crate::ui::shared::theme_global::warning_fill(),
+            "Install Order",
+        )),
         "missing_dep" => Some((
             crate::ui::shared::theme_global::info(),
             crate::ui::shared::theme_global::info_fill(),
@@ -143,6 +294,11 @@ pub(crate) fn compat_colors(kind: Option<&str>) -> Option<(egui::Color32, egui::
             crate::ui::shared::theme_global::game_mismatch(),
             crate::ui::shared::theme_global::game_mismatch_fill(),
             "Game Mismatch",
+        )),
+        "path_requirement" => Some((
+            crate::ui::shared::theme_global::info(),
+            crate::ui::shared::theme_global::info_fill(),
+            "Path Requirement",
         )),
         "conditional" => Some((
             crate::ui::shared::theme_global::conditional(),
@@ -168,16 +324,22 @@ pub(crate) fn parent_compat_summary(
 ) -> Option<(egui::Color32, egui::Color32, String)> {
     let mut conflicts = 0usize;
     let mut missing_deps = 0usize;
+    let mut order_blocks = 0usize;
     let mut warnings = 0usize;
     let mut game_mismatch = 0usize;
+    let mut path_requirements = 0usize;
+    let mut deprecated = 0usize;
     let mut conditional = 0usize;
     let mut included = 0usize;
     for component in &mod_state.components {
         match component.compat_kind.as_deref().unwrap_or_default() {
             "not_compatible" | "conflict" => conflicts = conflicts.saturating_add(1),
+            "order_block" => order_blocks = order_blocks.saturating_add(1),
             "missing_dep" => missing_deps = missing_deps.saturating_add(1),
             "warning" => warnings = warnings.saturating_add(1),
             "game_mismatch" => game_mismatch = game_mismatch.saturating_add(1),
+            "path_requirement" => path_requirements = path_requirements.saturating_add(1),
+            "deprecated" => deprecated = deprecated.saturating_add(1),
             "conditional" => conditional = conditional.saturating_add(1),
             "included" | "not_needed" => included = included.saturating_add(1),
             _ => {}
@@ -190,11 +352,45 @@ pub(crate) fn parent_compat_summary(
             format!("{conflicts} conflict{}", if conflicts == 1 { "" } else { "s" }),
         ));
     }
+    if order_blocks > 0 {
+        return Some((
+            crate::ui::shared::theme_global::warning_parent(),
+            crate::ui::shared::theme_global::warning_fill(),
+            format!("{order_blocks} order issue{}", if order_blocks == 1 { "" } else { "s" }),
+        ));
+    }
     if missing_deps > 0 {
         return Some((
             crate::ui::shared::theme_global::missing_dep_parent(),
             crate::ui::shared::theme_global::info_fill(),
             format!("{missing_deps} missing dep{}", if missing_deps == 1 { "" } else { "s" }),
+        ));
+    }
+    if game_mismatch > 0 {
+        return Some((
+            crate::ui::shared::theme_global::game_mismatch(),
+            crate::ui::shared::theme_global::game_mismatch_fill(),
+            format!(
+                "{game_mismatch} game mismatch{}",
+                if game_mismatch == 1 { "" } else { "es" }
+            ),
+        ));
+    }
+    if path_requirements > 0 {
+        return Some((
+            crate::ui::shared::theme_global::missing_dep_parent(),
+            crate::ui::shared::theme_global::info_fill(),
+            format!(
+                "{path_requirements} path requirement{}",
+                if path_requirements == 1 { "" } else { "s" }
+            ),
+        ));
+    }
+    if deprecated > 0 {
+        return Some((
+            crate::ui::shared::theme_global::warning_parent(),
+            crate::ui::shared::theme_global::warning_fill(),
+            format!("{deprecated} deprecated"),
         ));
     }
     if conditional > 0 {
@@ -205,6 +401,13 @@ pub(crate) fn parent_compat_summary(
                 "{conditional} conditional{}",
                 if conditional == 1 { "" } else { "s" }
             ),
+        ));
+    }
+    if included > 0 {
+        return Some((
+            crate::ui::shared::theme_global::included(),
+            crate::ui::shared::theme_global::included_fill(),
+            format!("{included} included"),
         ));
     }
     if warnings > 0 {
@@ -220,16 +423,20 @@ pub(crate) fn parent_compat_summary(
 pub(crate) fn parent_compat_target(mod_state: &Step2ModState) -> Option<&Step2ComponentState> {
     let priority = [
         "conflict",
+        "order_block",
         "not_compatible",
         "missing_dep",
         "game_mismatch",
+        "path_requirement",
+        "deprecated",
         "conditional",
-        "warning",
         "included",
         "not_needed",
+        "warning",
     ];
     for kind in priority {
         let prefer_checked = kind == "conflict"
+            || kind == "order_block"
             || kind == "not_compatible"
             || kind == "missing_dep";
         if let Some(component) = mod_state.components.iter().find(|component| {

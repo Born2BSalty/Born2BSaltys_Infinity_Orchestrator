@@ -3,6 +3,7 @@
 
 use crate::ui::state::Step2ModState;
 use crate::ui::state::{CompatState, Step1State, Step2State, WizardState};
+use crate::ui::step2::tree_step2::step2_tree::render_helpers::enforce_tp2_same_mod_exclusive_after_bulk;
 use std::io;
 use std::path::PathBuf;
 
@@ -48,6 +49,7 @@ pub fn select_visible(mods: &mut [Step2ModState], filter: &str, next_selection_o
             }
         }
         enforce_meta_mode_after_bulk(mod_state);
+        enforce_tp2_same_mod_exclusive_after_bulk(mod_state);
         mod_state.checked = mod_state
             .components
             .iter()

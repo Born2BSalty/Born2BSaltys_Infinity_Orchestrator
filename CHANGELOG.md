@@ -1,3 +1,17 @@
+## Beta 12
+- Fixed several Step 2 / Step 3 compatibility misreads for complex WeiDU TP2 rules.
+- Improved Stratagems / SCS compatibility handling, including order rules, mutual exclusivity, and Item Revisions-related checks.
+- Fixed stale or duplicated Step 2 conflict pills after changing selections.
+- Improved jump-to-conflict so BIO now expands collapsed mod/group headers to reveal the target component.
+- Improved compatibility popups in Step 2 / Step 3:
+- cleaner layout
+- scroll support for large entries
+- collapsible `Component block`
+- Improved dependency and order reporting, including better handling of OR requirements.
+- Improved `Path requirement` reporting to show the actual missing file/folder BIO checked.
+- Fixed several mod grouping / ordering issues so component trees match WeiDU more closely.
+- Added a Step 1 install language dropdown that applies across scan and install flow.
+
 ## Beta 11
 - Fixed Step 3 compatibility jump so related-target navigation now goes to the exact related component instead of the wrong component in the same mod.
 - Fixed Step 2 mod-header compatibility pills

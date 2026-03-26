@@ -2,8 +2,10 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::ui::controller::log_apply_match::parse_component_tp2_from_raw;
+use crate::compat::parse_tp2_rules;
 use crate::ui::state::{CompatIssueDisplay, Step2Selection, WizardState};
 use crate::ui::step2::state_step2::Step2Details;
+use std::path::Path;
 
 pub fn selected_details(state: &WizardState) -> Step2Details {
     let Some(selection) = &state.step2.selected else {
@@ -39,6 +41,7 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                 compat_related_target: None,
                 compat_graph: None,
                 compat_evidence: None,
+                compat_component_block: None,
                 raw_line: None,
                 tp_file: Some(mod_state.tp_file.clone()),
                 tp2_path: (!mod_state.tp2_path.is_empty()).then_some(mod_state.tp2_path.clone()),
@@ -85,6 +88,7 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             });
                         let mut compat_graph: Option<String> = component.compat_graph.clone();
                         let mut compat_evidence: Option<String> = component.compat_evidence.clone();
+                        let mut compat_component_block: Option<String> = None;
                         let mut disabled_reason = component.disabled_reason.clone();
                         let mod_key = component_mod_key;
                         let comp_id = details_parse_component_u32(&component.component_id);
@@ -111,6 +115,7 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             }
                             compat_graph = Some(details_issue_graph(issue));
                             compat_evidence = issue.raw_evidence.clone();
+                            compat_component_block = issue.component_block.clone();
                         } else if let Some(issue) = state
                             .compat
                             .issues
@@ -136,6 +141,11 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             }
                             compat_graph = Some(details_issue_graph(issue));
                             compat_evidence = issue.raw_evidence.clone();
+                            compat_component_block = issue.component_block.clone();
+                        }
+                        if compat_component_block.is_none() {
+                            compat_component_block =
+                                details_component_block_from_tp2(&mod_state.tp2_path, &component.component_id);
                         }
 
                         Step2Details {
@@ -155,6 +165,7 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             compat_related_target,
                             compat_graph,
                             compat_evidence,
+                            compat_component_block,
                             raw_line: Some(component.raw_line.clone()),
                             tp_file: Some(component_tp2),
                             tp2_path: (!mod_state.tp2_path.is_empty()).then_some(mod_state.tp2_path.clone()),
@@ -165,6 +176,16 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
             })
             .unwrap_or_default(),
     }
+}
+
+fn details_component_block_from_tp2(tp2_path: &str, component_id: &str) -> Option<String> {
+    let comp_id = details_parse_component_u32(component_id)?;
+    let tp2 = tp2_path.trim();
+    if tp2.is_empty() {
+        return None;
+    }
+    let metadata = parse_tp2_rules(Path::new(tp2));
+    metadata.component_blocks.get(&comp_id).cloned()
 }
 
 fn details_issue_matches_affected(issue: &CompatIssueDisplay, mod_key: &str, comp_id: Option<u32>) -> bool {
@@ -196,6 +217,10 @@ fn details_issue_to_compat_kind(issue: &CompatIssueDisplay) -> String {
         "game_mismatch".to_string()
     } else if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
         "conditional".to_string()
+    } else if issue.code.eq_ignore_ascii_case("INCLUDED") {
+        "included".to_string()
+    } else if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
+        "order_block".to_string()
     } else if issue.is_blocking {
         "conflict".to_string()
     } else {
@@ -231,6 +256,27 @@ fn details_issue_graph(issue: &CompatIssueDisplay) -> String {
             details_format_target(&issue.related_mod, issue.related_component)
         );
     }
+    if issue.code.eq_ignore_ascii_case("INCLUDED") {
+        return format!(
+            "{} is included by {}",
+            details_format_target(&issue.affected_mod, issue.affected_component),
+            details_format_target(&issue.related_mod, issue.related_component)
+        );
+    }
+    if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
+        let affected = details_format_target(&issue.affected_mod, issue.affected_component);
+        let related = details_format_target(&issue.related_mod, issue.related_component);
+        let is_require_order = issue
+            .raw_evidence
+            .as_deref()
+            .map(|raw| raw.trim_start().to_ascii_uppercase().starts_with("REQUIRE"))
+            .unwrap_or(false);
+        return if is_require_order {
+            format!("{affected} must be installed after {related}")
+        } else {
+            format!("{affected} must be installed before {related}")
+        };
+    }
     if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
         if let Some(or_targets) = details_parse_or_targets_from_reason(&issue.reason) {
             return format!(
@@ -248,13 +294,6 @@ fn details_issue_graph(issue: &CompatIssueDisplay) -> String {
     if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
         return format!(
             "{} has optional patch for {}",
-            details_format_target(&issue.affected_mod, issue.affected_component),
-            details_format_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("ORDER_WARN") {
-        return format!(
-            "{} should be installed after {}",
             details_format_target(&issue.affected_mod, issue.affected_component),
             details_format_target(&issue.related_mod, issue.related_component)
         );

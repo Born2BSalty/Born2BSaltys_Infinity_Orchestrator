@@ -35,6 +35,14 @@ pub(super) fn to_mod_states(
             if let Some(tp2_text) = tp2_text.as_deref() {
                 reorder_components_by_tp2_order(&mut deduped_components, tp2_text);
             }
+            let derived_weidu_groups = tp2_text
+                .as_deref()
+                .map(|tp2_text| detect_weidu_groups(&tp2_path, tp2_text, &deduped_components))
+                .unwrap_or_default();
+            let derived_collapsible_groups = tp2_text
+                .as_deref()
+                .map(|tp2_text| detect_derived_collapsible_groups(&tp_file, tp2_text, &deduped_components))
+                .unwrap_or_default();
             let hidden_prompt_like_component_ids =
                 detect_hidden_prompt_like_component_ids(tp2_text.as_deref(), &deduped_components);
             deduped_components.retain(|component| {
@@ -65,24 +73,36 @@ pub(super) fn to_mod_states(
                 checked: false,
                 components: deduped_components
                     .into_iter()
-                    .map(|component| Step2ComponentState {
-                        is_meta_mode_component: meta_mode_component_ids
-                            .contains(component.component_id.trim()),
-                        component_id: component.component_id,
-                        label: component.display,
-                        raw_line: component.raw_line,
-                        prompt_summary: component.prompt_summary,
-                        prompt_events: component.prompt_events,
-                        disabled: false,
-                        compat_kind: None,
-                        compat_source: None,
-                        compat_related_mod: None,
-                        compat_related_component: None,
-                        compat_graph: None,
-                        compat_evidence: None,
-                        disabled_reason: None,
-                        checked: false,
-                        selected_order: None,
+                    .map(|component| {
+                        let derived_group = derived_collapsible_groups
+                            .get(component.component_id.trim())
+                            .cloned();
+                        Step2ComponentState {
+                            is_meta_mode_component: meta_mode_component_ids
+                                .contains(component.component_id.trim()),
+                            component_id: component.component_id.clone(),
+                            label: component.display,
+                            weidu_group: derived_weidu_groups
+                                .get(component.component_id.trim())
+                                .cloned(),
+                            collapsible_group: derived_group.as_ref().map(|group| group.header.clone()),
+                            collapsible_group_is_umbrella: derived_group
+                                .as_ref()
+                                .is_some_and(|group| group.is_umbrella),
+                            raw_line: component.raw_line,
+                            prompt_summary: component.prompt_summary,
+                            prompt_events: component.prompt_events,
+                            disabled: false,
+                            compat_kind: None,
+                            compat_source: None,
+                            compat_related_mod: None,
+                            compat_related_component: None,
+                            compat_graph: None,
+                            compat_evidence: None,
+                            disabled_reason: None,
+                            checked: false,
+                            selected_order: None,
+                        }
                     })
                     .collect(),
             }
@@ -106,6 +126,326 @@ pub(super) fn to_mod_states(
     }
 
     mods
+}
+
+fn detect_weidu_groups(
+    tp2_path: &str,
+    tp2_text: &str,
+    components: &[ScannedComponent],
+) -> HashMap<String, String> {
+    let ordered_blocks = parse_tp2_component_blocks_in_order(tp2_text);
+    if ordered_blocks.len() < 2 {
+        return HashMap::new();
+    }
+
+    let tra_map = load_tp2_setup_tra_map(Path::new(tp2_path));
+    let component_ids = components
+        .iter()
+        .map(|component| component.component_id.trim().to_string())
+        .collect::<std::collections::HashSet<_>>();
+
+    let mut out = HashMap::<String, String>::new();
+    let mut distinct = std::collections::HashSet::<String>::new();
+    for block in &ordered_blocks {
+        let component_id = block.component_id.trim();
+        if !component_ids.contains(component_id) {
+            continue;
+        }
+        let Some(group_token) = block.group_key.as_deref() else {
+            continue;
+        };
+        let Some(group_label) = resolve_group_token_label(group_token, &tra_map) else {
+            continue;
+        };
+        let cleaned = group_label.trim();
+        if cleaned.is_empty() {
+            continue;
+        }
+        out.insert(component_id.to_string(), cleaned.to_string());
+        distinct.insert(cleaned.to_ascii_lowercase());
+    }
+
+    if distinct.len() < 2 {
+        HashMap::new()
+    } else {
+        out
+    }
+}
+
+fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String> {
+    let Some(base) = tp2_path.parent() else {
+        return HashMap::new();
+    };
+
+    let mut candidates = Vec::<std::path::PathBuf>::new();
+    let preferred = [
+        base.join("lang/english/setup.tra"),
+        base.join("lang/en_us/setup.tra"),
+        base.join("lang/en_US/setup.tra"),
+        base.join("setup.tra"),
+    ];
+    for path in preferred {
+        if path.is_file() && !candidates.iter().any(|existing| existing == &path) {
+            candidates.push(path);
+        }
+    }
+    if candidates.is_empty() {
+        for path in walk_setup_tra_files(base) {
+            if !candidates.iter().any(|existing| existing == &path) {
+                candidates.push(path);
+            }
+        }
+    }
+
+    for path in candidates {
+        if let Ok(text) = fs::read_to_string(&path) {
+            let map = parse_tra_string_map(&text);
+            if !map.is_empty() {
+                return map;
+            }
+        }
+    }
+    HashMap::new()
+}
+
+fn walk_setup_tra_files(base: &Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::<std::path::PathBuf>::new();
+    let Ok(read_dir) = fs::read_dir(base) else {
+        return out;
+    };
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            out.extend(walk_setup_tra_files(&path));
+            continue;
+        }
+        if path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("setup.tra"))
+        {
+            out.push(path);
+        }
+    }
+    out
+}
+
+fn parse_tra_string_map(text: &str) -> HashMap<String, String> {
+    let mut out = HashMap::<String, String>::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('@') {
+            continue;
+        }
+        let Some((key, rhs)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().to_string();
+        let rhs = rhs.trim();
+        let value = if let Some(rest) = rhs.strip_prefix('~') {
+            rest.split('~').next().unwrap_or_default().trim().to_string()
+        } else if let Some(rest) = rhs.strip_prefix('"') {
+            rest.split('"').next().unwrap_or_default().trim().to_string()
+        } else {
+            continue;
+        };
+        if !value.is_empty() {
+            out.insert(key, value);
+        }
+    }
+    out
+}
+
+fn resolve_group_token_label(token: &str, tra_map: &HashMap<String, String>) -> Option<String> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with('@') {
+        return tra_map.get(trimmed).cloned();
+    }
+    if let Some(rest) = trimmed.strip_prefix('~') {
+        return Some(rest.split('~').next().unwrap_or_default().trim().to_string());
+    }
+    if let Some(rest) = trimmed.strip_prefix('"') {
+        return Some(rest.split('"').next().unwrap_or_default().trim().to_string());
+    }
+    Some(trimmed.to_string())
+}
+
+fn detect_derived_collapsible_groups(
+    tp_file: &str,
+    tp2_text: &str,
+    components: &[ScannedComponent],
+) -> HashMap<String, DerivedCollapsibleGroup> {
+    let ordered_blocks = parse_tp2_component_blocks_in_order(tp2_text);
+    if ordered_blocks.len() < 3 {
+        return HashMap::new();
+    }
+
+    let display_by_id: HashMap<String, String> = components
+        .iter()
+        .map(|component| {
+            (
+                component.component_id.trim().to_string(),
+                component.display.trim().to_string(),
+            )
+        })
+        .collect();
+
+    let mut same_mod_installed_guards = HashMap::<String, String>::new();
+    for block in &ordered_blocks {
+        let mut targets = block
+            .body_lines
+            .iter()
+            .filter_map(|line| parse_same_mod_installed_guard_target(tp_file, line))
+            .collect::<Vec<_>>();
+        targets.sort();
+        targets.dedup();
+        if targets.len() == 1 {
+            same_mod_installed_guards.insert(block.component_id.clone(), targets[0].clone());
+        }
+    }
+
+    let mut out = HashMap::<String, DerivedCollapsibleGroup>::new();
+    let mut idx = 0usize;
+    while idx < ordered_blocks.len() {
+        let umbrella = &ordered_blocks[idx];
+        let umbrella_id = umbrella.component_id.trim();
+        let Some(umbrella_display) = display_by_id.get(umbrella_id) else {
+            idx += 1;
+            continue;
+        };
+        if split_subcomponent_display_label(umbrella_display).is_some() {
+            idx += 1;
+            continue;
+        }
+
+        let mut child_ids = Vec::<String>::new();
+        let mut j = idx + 1;
+        while j < ordered_blocks.len() {
+            let child = &ordered_blocks[j];
+            if same_mod_installed_guards
+                .get(child.component_id.trim())
+                .is_some_and(|target| target == umbrella_id)
+            {
+                child_ids.push(child.component_id.clone());
+                j += 1;
+            } else {
+                break;
+            }
+        }
+
+        if child_ids.len() >= 2 {
+            let header = derive_collapsible_group_header(umbrella_display);
+            out.insert(
+                umbrella_id.to_string(),
+                DerivedCollapsibleGroup {
+                    header: header.clone(),
+                    is_umbrella: true,
+                },
+            );
+            for child_id in child_ids {
+                if display_by_id.contains_key(child_id.trim()) {
+                    out.insert(
+                        child_id,
+                        DerivedCollapsibleGroup {
+                            header: header.clone(),
+                            is_umbrella: false,
+                        },
+                    );
+                }
+            }
+            idx = j;
+            continue;
+        }
+        idx += 1;
+    }
+
+    out
+}
+
+fn derive_collapsible_group_header(umbrella_display: &str) -> String {
+    let trimmed = umbrella_display.trim();
+    let without_parenthetical = if trimmed.ends_with(')') {
+        trimmed
+            .rsplit_once('(')
+            .map(|(head, _)| head.trim_end())
+            .filter(|head| !head.is_empty())
+            .unwrap_or(trimmed)
+    } else {
+        trimmed
+    };
+    let lower = without_parenthetical.to_ascii_lowercase();
+    if lower.starts_with("install all spell tweaks") {
+        return "Spell Tweaks".to_string();
+    }
+    let derived = lower
+        .strip_prefix("install all ")
+        .map(str::trim)
+        .or_else(|| lower.strip_prefix("all ").map(str::trim));
+    if let Some(rest) = derived
+        && !rest.is_empty()
+    {
+        return title_case_words(rest);
+    }
+    without_parenthetical.to_string()
+}
+
+fn title_case_words(value: &str) -> String {
+    value
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            let Some(first) = chars.next() else {
+                return String::new();
+            };
+            let mut out = String::new();
+            out.extend(first.to_uppercase());
+            out.push_str(&chars.as_str().to_ascii_lowercase());
+            out
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn parse_same_mod_installed_guard_target(tp_file: &str, line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    let upper = trimmed.to_ascii_uppercase();
+    if !upper.starts_with("REQUIRE_PREDICATE") || !upper.contains("!MOD_IS_INSTALLED") {
+        return None;
+    }
+
+    let guard_idx = upper.find("!MOD_IS_INSTALLED")?;
+    let after = trimmed[guard_idx + "!MOD_IS_INSTALLED".len()..].trim_start();
+    let quote = after.chars().next()?;
+    if quote != '~' && quote != '"' {
+        return None;
+    }
+
+    let rest = &after[quote.len_utf8()..];
+    let end = rest.find(quote)?;
+    let raw_path = rest[..end].trim();
+    if raw_path.is_empty() {
+        return None;
+    }
+
+    let normalized_path = raw_path.replace('\\', "/");
+    let raw_file = Path::new(&normalized_path)
+        .file_name()
+        .and_then(|v| v.to_str())?
+        .to_ascii_lowercase();
+    if raw_file != tp_file.to_ascii_lowercase() {
+        return None;
+    }
+
+    let tail = rest[end + quote.len_utf8()..].trim_start();
+    let component_id: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if component_id.is_empty() {
+        None
+    } else {
+        Some(component_id)
+    }
 }
 
 fn detect_meta_mode_component_ids(
@@ -156,15 +496,20 @@ fn detect_meta_mode_component_ids(
 }
 
 fn reorder_components_by_tp2_order(components: &mut [ScannedComponent], tp2_text: &str) {
-    let order = parse_tp2_component_order(tp2_text);
-    if order.is_empty() {
+    let (order_by_id, order_by_label) = parse_tp2_component_order(tp2_text);
+    if order_by_id.is_empty() && order_by_label.is_empty() {
         return;
     }
 
     components.sort_by_key(|component| {
-        order
+        order_by_id
             .get(component.component_id.trim())
             .copied()
+            .or_else(|| {
+                order_by_label
+                    .get(&normalize_component_order_label(&component.display))
+                    .copied()
+            })
             .unwrap_or(usize::MAX)
     });
 }
@@ -208,6 +553,14 @@ fn detect_hidden_prompt_like_component_ids(
     for (_, component_ids) in families {
         if component_ids.len() < 2 {
             continue;
+        }
+        for id in &component_ids {
+            if let Some(component) = components.iter().find(|component| component.component_id.trim() == id)
+                && let Some((_header, choice)) = split_subcomponent_display_label(&component.display)
+                && choice.eq_ignore_ascii_case("skip")
+            {
+                hidden.insert(id.clone());
+            }
         }
         let mut family_blocks = Vec::<&Tp2ComponentBlock>::new();
         for id in &component_ids {
@@ -263,6 +616,8 @@ fn parse_tp2_component_blocks(tp2_text: &str) -> HashMap<String, Tp2ComponentBlo
             out.insert(
                 id.clone(),
                 Tp2ComponentBlock {
+                    component_id: id.clone(),
+                    group_key: block.iter().find_map(|line| parse_group_key(line)),
                     subcomponent_key: block.iter().find_map(|line| parse_subcomponent_key(line)),
                     body_lines: block.iter().map(|line| (*line).to_string()).collect(),
                 },
@@ -294,7 +649,13 @@ fn parse_tp2_component_blocks_in_order(tp2_text: &str) -> Vec<Tp2ComponentBlock>
         }
 
         let block = &lines[i..j];
+        let component_id = block
+            .iter()
+            .find_map(|bl| parse_designated_id(&bl.to_ascii_uppercase()))
+            .unwrap_or_default();
         out.push(Tp2ComponentBlock {
+            component_id,
+            group_key: block.iter().find_map(|line| parse_group_key(line)),
             subcomponent_key: block.iter().find_map(|line| parse_subcomponent_key(line)),
             body_lines: block.iter().map(|line| (*line).to_string()).collect(),
         });
@@ -391,6 +752,33 @@ fn copy_line_looks_like_cosmetic_asset(line: &str) -> bool {
     has_cosmetic_dir || ext_ok
 }
 
+fn parse_group_key(line: &str) -> Option<String> {
+    if line.trim_start().starts_with("//") {
+        return None;
+    }
+    let upper = line.to_ascii_uppercase();
+    let idx = upper.find("GROUP")?;
+    let tail = line[idx + "GROUP".len()..].trim_start();
+    if tail.is_empty() {
+        return None;
+    }
+    if let Some(rest) = tail.strip_prefix('~') {
+        let end = rest.find('~')?;
+        let value = rest[..end].trim();
+        return (!value.is_empty()).then(|| format!("~{}~", value));
+    }
+    if let Some(rest) = tail.strip_prefix('"') {
+        let end = rest.find('"')?;
+        let value = rest[..end].trim();
+        return (!value.is_empty()).then(|| format!("\"{}\"", value));
+    }
+    let value: String = tail
+        .chars()
+        .take_while(|c| !c.is_whitespace() && *c != '/')
+        .collect();
+    (!value.is_empty()).then_some(value)
+}
+
 fn extract_tilde_or_quote_paths(line: &str) -> Vec<String> {
     let mut out = Vec::<String>::new();
     let bytes = line.as_bytes();
@@ -419,6 +807,9 @@ fn extract_tilde_or_quote_paths(line: &str) -> Vec<String> {
 
 fn parse_subcomponent_key(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
+    if trimmed.starts_with("//") {
+        return None;
+    }
     if !trimmed.to_ascii_uppercase().starts_with("SUBCOMPONENT ") {
         return None;
     }
@@ -444,15 +835,17 @@ fn parse_subcomponent_key(line: &str) -> Option<String> {
 }
 
 
-fn parse_tp2_component_order(tp2_text: &str) -> HashMap<String, usize> {
-    let mut out = HashMap::<String, usize>::new();
+fn parse_tp2_component_order(tp2_text: &str) -> (HashMap<String, usize>, HashMap<String, usize>) {
+    let mut out_by_id = HashMap::<String, usize>::new();
+    let mut out_by_label = HashMap::<String, usize>::new();
     let lines: Vec<&str> = tp2_text.lines().collect();
     let mut i = 0usize;
     let mut begin_index = 0usize;
 
     while i < lines.len() {
         let line = lines[i];
-        if !line.trim_start().to_ascii_uppercase().starts_with("BEGIN ") {
+        let trimmed = line.trim_start();
+        if !trimmed.to_ascii_uppercase().starts_with("BEGIN ") {
             i += 1;
             continue;
         }
@@ -467,9 +860,14 @@ fn parse_tp2_component_order(tp2_text: &str) -> HashMap<String, usize> {
         }
 
         let block = &lines[i..j];
+        if let Some(label) = parse_begin_label(trimmed) {
+            out_by_label
+                .entry(normalize_component_order_label(&label))
+                .or_insert(begin_index);
+        }
         for bl in block {
             if let Some(id) = parse_designated_id(&bl.to_ascii_uppercase()) {
-                out.entry(id).or_insert(begin_index);
+                out_by_id.entry(id).or_insert(begin_index);
                 break;
             }
         }
@@ -478,7 +876,31 @@ fn parse_tp2_component_order(tp2_text: &str) -> HashMap<String, usize> {
         i = j;
     }
 
-    out
+    (out_by_id, out_by_label)
+}
+
+fn parse_begin_label(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("//") {
+        return None;
+    }
+    let upper = trimmed.to_ascii_uppercase();
+    if !upper.starts_with("BEGIN ") {
+        return None;
+    }
+    let tail = trimmed["BEGIN".len()..].trim_start();
+    let quote = tail.chars().next()?;
+    if quote != '~' && quote != '"' {
+        return None;
+    }
+    let rest = &tail[quote.len_utf8()..];
+    let end = rest.find(quote)?;
+    let value = rest[..end].trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+fn normalize_component_order_label(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
 }
 
 fn include_paths_from_tp2(
@@ -518,8 +940,16 @@ fn include_paths_from_tp2(
 
 #[derive(Debug, Clone)]
 struct Tp2ComponentBlock {
+    component_id: String,
+    group_key: Option<String>,
     subcomponent_key: Option<String>,
     body_lines: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct DerivedCollapsibleGroup {
+    header: String,
+    is_umbrella: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -571,13 +1001,21 @@ fn parse_no_log_record_candidates(tp2_text: &str) -> Vec<CandidateMetaComponent>
 }
 
 fn parse_designated_id(upper_line: &str) -> Option<String> {
+    if upper_line.trim_start().starts_with("//") {
+        return None;
+    }
     let idx = upper_line.find("DESIGNATED")?;
     let tail = upper_line[idx + "DESIGNATED".len()..].trim_start();
     let digits: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
     if digits.is_empty() {
         None
     } else {
-        Some(digits)
+        let normalized = digits.trim_start_matches('0');
+        if normalized.is_empty() {
+            Some("0".to_string())
+        } else {
+            Some(normalized.to_string())
+        }
     }
 }
 

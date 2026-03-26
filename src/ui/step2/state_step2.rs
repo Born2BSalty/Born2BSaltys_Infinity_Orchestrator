@@ -118,6 +118,7 @@ pub struct Step2Details {
     pub compat_related_target: Option<String>,
     pub compat_graph: Option<String>,
     pub compat_evidence: Option<String>,
+    pub compat_component_block: Option<String>,
     pub raw_line: Option<String>,
     pub tp_file: Option<String>,
     pub tp2_path: Option<String>,

@@ -412,7 +412,12 @@ pub fn render_compat_popup(ui: &mut egui::Ui, state: &mut WizardState) {
         .min_width(420.0)
         .min_height(200.0)
         .show(ui.ctx(), |ui| {
-            crate::ui::step2::content_step2::compat_popup_details::render_details(ui, state);
+            let details_h = (ui.available_height() - 58.0).max(40.0);
+            egui::ScrollArea::vertical()
+                .max_height(details_h)
+                .show(ui, |ui| {
+                    crate::ui::step2::content_step2::compat_popup_details::render_details(ui, state);
+                });
 
             ui.add_space(10.0);
             crate::ui::step2::content_step2::compat_popup_filter_row::render_filter_row(ui, state);

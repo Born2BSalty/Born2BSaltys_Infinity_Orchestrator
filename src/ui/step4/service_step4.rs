@@ -4,6 +4,7 @@
 use std::path::Path;
 use std::{fs, io};
 
+use crate::platform_defaults::normalize_weidu_like_line;
 use crate::ui::state::Step3ItemState;
 
 pub fn build_weidu_export_lines(items: &[Step3ItemState]) -> Vec<String> {
@@ -29,41 +30,4 @@ pub fn format_step4_item(item: &Step3ItemState) -> String {
 pub fn read_source_log_lines(path: &Path) -> io::Result<Vec<String>> {
     let content = fs::read_to_string(path)?;
     Ok(content.lines().map(|line| line.to_string()).collect())
-}
-
-fn normalize_weidu_like_line(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if !trimmed.starts_with('~') {
-        return trimmed.to_string();
-    }
-    let Some(end) = trimmed[1..].find('~').map(|i| i + 1) else {
-        return trimmed.to_string();
-    };
-    let path_part = &trimmed[1..end];
-    let suffix = &trimmed[end + 1..];
-    let p = Path::new(path_part);
-    let file = p
-        .file_name()
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| item_fallback_file(path_part));
-    let folder = p
-        .parent()
-        .and_then(|v| v.file_name())
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| item_fallback_folder(path_part));
-    format!("~{}\\{}~{}", folder, file, suffix)
-}
-
-fn item_fallback_file(path_part: &str) -> String {
-    path_part
-        .rsplit(['\\', '/'])
-        .next()
-        .unwrap_or(path_part)
-        .to_string()
-}
-
-fn item_fallback_folder(path_part: &str) -> String {
-    let mut parts = path_part.rsplit(['\\', '/']);
-    let _ = parts.next();
-    parts.next().unwrap_or("MOD").to_string()
 }

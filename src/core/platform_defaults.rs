@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::path::PathBuf;
+use std::path::Path;
 
 #[cfg(target_os = "windows")]
 const DEFAULT_WEIDU_BINARY: &str = "weidu.exe";
@@ -106,4 +107,55 @@ pub fn app_config_file(file_name: &str, fallback_dir: &str) -> PathBuf {
         return dir.join(file_name);
     }
     PathBuf::from(fallback_dir).join(file_name)
+}
+
+pub fn normalize_tp2_filename(tp_file: &str) -> String {
+    let replaced = tp_file.replace('\\', "/");
+    let filename = replaced
+        .rsplit('/')
+        .next()
+        .unwrap_or(replaced.as_str())
+        .trim();
+    filename.to_ascii_uppercase()
+}
+
+pub fn compose_component_key(tp_file: &str, component: &str) -> String {
+    format!("{}#{}", normalize_tp2_filename(tp_file), component.trim())
+}
+
+pub fn normalize_weidu_like_line(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if !trimmed.starts_with('~') {
+        return trimmed.to_string();
+    }
+    let Some(end) = trimmed[1..].find('~').map(|i| i + 1) else {
+        return trimmed.to_string();
+    };
+    let path_part = &trimmed[1..end];
+    let suffix = &trimmed[end + 1..];
+    let path = Path::new(path_part);
+    let file = path
+        .file_name()
+        .map(|v| v.to_string_lossy().to_string())
+        .unwrap_or_else(|| weidu_path_fallback_file(path_part));
+    let folder = path
+        .parent()
+        .and_then(|v| v.file_name())
+        .map(|v| v.to_string_lossy().to_string())
+        .unwrap_or_else(|| weidu_path_fallback_folder(path_part));
+    format!("~{}\\{}~{}", folder, file, suffix)
+}
+
+fn weidu_path_fallback_file(path_part: &str) -> String {
+    path_part
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(path_part)
+        .to_string()
+}
+
+fn weidu_path_fallback_folder(path_part: &str) -> String {
+    let mut parts = path_part.rsplit(['\\', '/']);
+    let _ = parts.next();
+    parts.next().unwrap_or("MOD").to_string()
 }

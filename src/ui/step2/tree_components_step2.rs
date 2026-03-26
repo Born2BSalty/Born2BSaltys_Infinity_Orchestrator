@@ -12,7 +12,8 @@ use crate::ui::step2::prompt_eval_step2::evaluate_component_prompt_summary;
 use crate::ui::step2::state_step2::PromptEvalContext;
 use crate::ui::step2::tree_parent_step2::format_component_prompt_popup_text_with_body;
 use crate::ui::step2::tree_step2::step2_tree::render_helpers::{
-    compat_colors, enforce_meta_mode_exclusive, enforce_subcomponent_single_select,
+    compat_colors, enforce_collapsible_group_umbrella_rules, enforce_meta_mode_exclusive,
+    enforce_subcomponent_single_select, enforce_tp2_same_mod_exclusive_on_select,
     set_component_checked_state, split_subcomponent_label,
 };
 
@@ -36,12 +37,47 @@ pub(crate) struct ComponentRowsContext<'a> {
     pub mod_name: &'a str,
 }
 
-struct ComponentRowUiState<'a> {
+struct ComponentRenderState<'a> {
     selection: &'a mut Option<Step2Selection>,
     compat_popup: &'a mut CompatPopupTarget,
     prompt_popup: &'a mut PromptPopupTarget,
     enforce_single_select_for: &'a mut Vec<usize>,
+    enforce_collapsible_group_for: &'a mut Vec<usize>,
     enforce_meta_for: &'a mut Vec<usize>,
+}
+
+fn reborrow_render_state<'a>(state: &'a mut ComponentRenderState<'_>) -> ComponentRenderState<'a> {
+    ComponentRenderState {
+        selection: &mut *state.selection,
+        compat_popup: &mut *state.compat_popup,
+        prompt_popup: &mut *state.prompt_popup,
+        enforce_single_select_for: &mut *state.enforce_single_select_for,
+        enforce_collapsible_group_for: &mut *state.enforce_collapsible_group_for,
+        enforce_meta_for: &mut *state.enforce_meta_for,
+    }
+}
+
+fn selected_component_targets_range(
+    selected: &Option<Step2Selection>,
+    active_tab: &str,
+    tp_file: &str,
+    components: &[Step2ComponentState],
+) -> bool {
+    let Some(Step2Selection::Component {
+        game_tab,
+        tp_file: selected_tp,
+        component_id,
+        ..
+    }) = selected
+    else {
+        return false;
+    };
+    if game_tab != active_tab || selected_tp != tp_file {
+        return false;
+    }
+    components
+        .iter()
+        .any(|component| component.component_id == *component_id)
 }
 
 pub(crate) fn render_component_rows(
@@ -54,15 +90,206 @@ pub(crate) fn render_component_rows(
     let mut open_compat_for_component: CompatPopupTarget = None;
     let mut open_prompt_popup: PromptPopupTarget = None;
     let mut enforce_single_select_for = Vec::<usize>::new();
+    let mut enforce_collapsible_group_for = Vec::<usize>::new();
     let mut enforce_meta_for = Vec::<usize>::new();
 
     let mut component_idx = 0usize;
     while component_idx < mod_state.components.len() {
-        let current_label = mod_state.components[component_idx].label.clone();
+        let current_weidu_group = mod_state.components[component_idx].weidu_group.clone();
+        if let Some(header) = current_weidu_group {
+            let mut group_end = component_idx + 1;
+            while group_end < mod_state.components.len()
+                && mod_state.components[group_end]
+                    .weidu_group
+                    .as_deref()
+                    .is_some_and(|next| next.eq_ignore_ascii_case(&header))
+            {
+                group_end += 1;
+            }
+
+            let group_matches = !ctx.filter.is_empty() && header.to_lowercase().contains(ctx.filter);
+            let any_child_visible = (component_idx..group_end).any(|idx| {
+                mod_name_match
+                    || group_matches
+                    || mod_state.components[idx].label.to_lowercase().contains(ctx.filter)
+            });
+            if any_child_visible {
+                let header_id =
+                    egui::Id::new(("step2_weidu_group", ctx.tp_file, component_idx, header.as_str()));
+                let mut state =
+                    egui::collapsing_header::CollapsingState::load_with_default_open(
+                        ui.ctx(),
+                        header_id,
+                        false,
+                    );
+                if *ctx.jump_to_selected_requested
+                    && selected_component_targets_range(
+                        ctx.selected,
+                        ctx.active_tab,
+                        ctx.tp_file,
+                        &mod_state.components[component_idx..group_end],
+                    )
+                {
+                    state.set_open(true);
+                }
+                state.show_header(ui, |ui| {
+                    ui.label(header.as_str());
+                })
+                .body(|ui| {
+                        let mut render_state = ComponentRenderState {
+                            selection: &mut new_selection,
+                            compat_popup: &mut open_compat_for_component,
+                            prompt_popup: &mut open_prompt_popup,
+                            enforce_single_select_for: &mut enforce_single_select_for,
+                            enforce_collapsible_group_for: &mut enforce_collapsible_group_for,
+                            enforce_meta_for: &mut enforce_meta_for,
+                        };
+                        render_component_rows_range(
+                            ui,
+                            ctx,
+                            mod_state,
+                            component_idx,
+                            group_end,
+                            true,
+                            &mut render_state,
+                        );
+                    });
+            }
+            component_idx = group_end;
+            continue;
+        }
+
+        let mut group_end = component_idx + 1;
+        while group_end < mod_state.components.len() && mod_state.components[group_end].weidu_group.is_none() {
+            group_end += 1;
+        }
+        let mut render_state = ComponentRenderState {
+            selection: &mut new_selection,
+            compat_popup: &mut open_compat_for_component,
+            prompt_popup: &mut open_prompt_popup,
+            enforce_single_select_for: &mut enforce_single_select_for,
+            enforce_collapsible_group_for: &mut enforce_collapsible_group_for,
+            enforce_meta_for: &mut enforce_meta_for,
+        };
+        render_component_rows_range(
+            ui,
+            ctx,
+            mod_state,
+            component_idx,
+            group_end,
+            false,
+            &mut render_state,
+        );
+        component_idx = group_end;
+    }
+
+    for idx in enforce_single_select_for {
+        enforce_subcomponent_single_select(mod_state, idx);
+    }
+    for idx in enforce_collapsible_group_for {
+        enforce_collapsible_group_umbrella_rules(mod_state, idx);
+    }
+    for idx in &enforce_meta_for {
+        enforce_tp2_same_mod_exclusive_on_select(mod_state, *idx);
+    }
+    for idx in enforce_meta_for {
+        enforce_meta_mode_exclusive(mod_state, idx);
+    }
+
+    ComponentRowsResult {
+        selection: new_selection,
+        compat_popup: open_compat_for_component,
+        prompt_popup: open_prompt_popup,
+    }
+}
+
+fn render_component_rows_range(
+    ui: &mut egui::Ui,
+    ctx: &mut ComponentRowsContext<'_>,
+    mod_state: &mut Step2ModState,
+    start_idx: usize,
+    end_idx: usize,
+    within_weidu_group: bool,
+    render_state: &mut ComponentRenderState<'_>,
+) {
+    let mod_name_match = ctx.filter.is_empty() || ctx.mod_name.to_lowercase().contains(ctx.filter);
+    let mut component_idx = start_idx;
+    while component_idx < end_idx {
+        let current_component = &mod_state.components[component_idx];
+        let current_label = current_component.label.clone();
+        let collapsible_group = current_component.collapsible_group.clone();
         let subgroup = split_subcomponent_label(&current_label);
+
+        if let Some(header) = collapsible_group {
+            let mut group_end = component_idx + 1;
+            while group_end < end_idx
+                && mod_state.components[group_end]
+                    .collapsible_group
+                    .as_deref()
+                    .is_some_and(|next| next.eq_ignore_ascii_case(&header))
+            {
+                group_end += 1;
+            }
+
+            let group_matches = !ctx.filter.is_empty() && header.to_lowercase().contains(ctx.filter);
+            let any_child_visible = (component_idx..group_end).any(|idx| {
+                mod_name_match
+                    || group_matches
+                    || mod_state.components[idx].label.to_lowercase().contains(ctx.filter)
+            });
+            if any_child_visible {
+                let header_id = egui::Id::new((
+                    "step2_collapsible_group",
+                    ctx.tp_file,
+                    component_idx,
+                    header.as_str(),
+                ));
+                let mut state =
+                    egui::collapsing_header::CollapsingState::load_with_default_open(
+                        ui.ctx(),
+                        header_id,
+                        false,
+                    );
+                if *ctx.jump_to_selected_requested
+                    && selected_component_targets_range(
+                        ctx.selected,
+                        ctx.active_tab,
+                        ctx.tp_file,
+                        &mod_state.components[component_idx..group_end],
+                    )
+                {
+                    state.set_open(true);
+                }
+                state.show_header(ui, |ui| {
+                    ui.label(header.as_str());
+                })
+                .body(|ui| {
+                        for idx in component_idx..group_end {
+                            let row_visible = mod_name_match
+                                || group_matches
+                                || mod_state.components[idx].label.to_lowercase().contains(ctx.filter);
+                            if row_visible {
+                                let mut ui_state = reborrow_render_state(render_state);
+                                render_component_row(
+                                    ui,
+                                    ctx,
+                                    &mut ui_state,
+                                    idx,
+                                    &mut mod_state.components[idx],
+                                    None,
+                                    45.0,
+                                );
+                            }
+                        }
+                    });
+            }
+            component_idx = group_end;
+            continue;
+        }
+
         let mut group_end = component_idx + 1;
         if let Some((header, _)) = subgroup.as_ref() {
-            while group_end < mod_state.components.len() {
+            while group_end < end_idx {
                 let next_label = mod_state.components[group_end].label.clone();
                 let Some((next_header, _)) = split_subcomponent_label(&next_label) else {
                     break;
@@ -85,15 +312,30 @@ pub(crate) fn render_component_rows(
                     || mod_state.components[idx].label.to_lowercase().contains(ctx.filter)
             });
             if any_child_visible {
-                egui::CollapsingHeader::new(header.as_str())
-                    .id_salt(("step2_subgroup", ctx.tp_file, component_idx, header.as_str()))
-                    .default_open(true)
-                    .show(ui, |ui| {
+                let subgroup_indent = if within_weidu_group { 45.0 } else { 25.0 };
+                let header_id =
+                    egui::Id::new(("step2_subgroup", ctx.tp_file, component_idx, header.as_str()));
+                let mut state =
+                    egui::collapsing_header::CollapsingState::load_with_default_open(
+                        ui.ctx(),
+                        header_id,
+                        false,
+                    );
+                if *ctx.jump_to_selected_requested
+                    && selected_component_targets_range(
+                        ctx.selected,
+                        ctx.active_tab,
+                        ctx.tp_file,
+                        &mod_state.components[component_idx..group_end],
+                    )
+                {
+                    state.set_open(true);
+                }
+                state.show_header(ui, |ui| {
+                    ui.label(header.as_str());
+                })
+                .body(|ui| {
                         for idx in component_idx..group_end {
-                            let child_choice =
-                                split_subcomponent_label(&mod_state.components[idx].label)
-                                    .map(|(_, choice)| choice)
-                                    .unwrap_or_else(|| mod_state.components[idx].label.clone());
                             let row_visible = mod_name_match
                                 || subgroup_matches
                                 || mod_state.components[idx]
@@ -101,21 +343,15 @@ pub(crate) fn render_component_rows(
                                     .to_lowercase()
                                     .contains(ctx.filter);
                             if row_visible {
-                                let mut ui_state = ComponentRowUiState {
-                                    selection: &mut new_selection,
-                                    compat_popup: &mut open_compat_for_component,
-                                    prompt_popup: &mut open_prompt_popup,
-                                    enforce_single_select_for: &mut enforce_single_select_for,
-                                    enforce_meta_for: &mut enforce_meta_for,
-                                };
+                                let mut ui_state = reborrow_render_state(render_state);
                                 render_component_row(
                                     ui,
                                     ctx,
                                     &mut ui_state,
                                     idx,
                                     &mut mod_state.components[idx],
-                                    Some(child_choice.as_str()),
-                                    45.0,
+                                    None,
+                                    subgroup_indent,
                                 );
                             }
                         }
@@ -128,13 +364,7 @@ pub(crate) fn render_component_rows(
         let label = mod_state.components[component_idx].label.clone();
         let row_visible = mod_name_match || label.to_lowercase().contains(ctx.filter);
         if row_visible {
-            let mut ui_state = ComponentRowUiState {
-                selection: &mut new_selection,
-                compat_popup: &mut open_compat_for_component,
-                prompt_popup: &mut open_prompt_popup,
-                enforce_single_select_for: &mut enforce_single_select_for,
-                enforce_meta_for: &mut enforce_meta_for,
-            };
+            let mut ui_state = reborrow_render_state(render_state);
             render_component_row(
                 ui,
                 ctx,
@@ -147,30 +377,22 @@ pub(crate) fn render_component_rows(
         }
         component_idx += 1;
     }
-
-    for idx in enforce_single_select_for {
-        enforce_subcomponent_single_select(mod_state, idx);
-    }
-    for idx in enforce_meta_for {
-        enforce_meta_mode_exclusive(mod_state, idx);
-    }
-
-    ComponentRowsResult {
-        selection: new_selection,
-        compat_popup: open_compat_for_component,
-        prompt_popup: open_prompt_popup,
-    }
 }
 
 fn render_component_row(
     ui: &mut egui::Ui,
     ctx: &mut ComponentRowsContext<'_>,
-    ui_state: &mut ComponentRowUiState<'_>,
+    ui_state: &mut ComponentRenderState<'_>,
     component_idx: usize,
     component: &mut Step2ComponentState,
     display_override: Option<&str>,
     indent: f32,
 ) {
+    let effectively_disabled = component.disabled
+        || matches!(
+            component.compat_kind.as_deref(),
+            Some("game_mismatch") | Some("included")
+        );
     let display_label = match display_override {
         Some(display) => format_component_row_label_with_display(
             component.raw_line.as_str(),
@@ -197,7 +419,7 @@ fn render_component_row(
                 component_idx,
             ),
             |ui| {
-                ui.add_enabled_ui(!component.disabled, |ui| {
+                ui.add_enabled_ui(!effectively_disabled, |ui| {
                     ui.checkbox(&mut component.checked, "");
                 });
             },
@@ -206,10 +428,11 @@ fn render_component_row(
             set_component_checked_state(component, ctx.next_selection_order);
             if component.checked {
                 ui_state.enforce_single_select_for.push(component_idx);
+                ui_state.enforce_collapsible_group_for.push(component_idx);
                 ui_state.enforce_meta_for.push(component_idx);
             }
         }
-        if component.disabled && component.checked {
+        if effectively_disabled && component.checked {
             component.checked = false;
             component.selected_order = None;
         }
@@ -228,7 +451,7 @@ fn render_component_row(
                 && component_id == &component.component_id
                 && component_key == &component.raw_line
         );
-        let widget_text = if component.disabled {
+        let widget_text = if effectively_disabled {
             egui::WidgetText::RichText(
                 crate::ui::shared::typography_global::strong(display_label.as_str())
                     .color(crate::ui::shared::theme_global::text_disabled()),
@@ -248,7 +471,7 @@ fn render_component_row(
                     ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
                     *ctx.jump_to_selected_requested = false;
                 }
-                if component.disabled && let Some(reason) = &component.disabled_reason {
+                if effectively_disabled && let Some(reason) = &component.disabled_reason {
                     row = row.on_hover_text(reason);
                 }
                 if row.clicked() {

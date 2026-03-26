@@ -289,25 +289,23 @@ fn apply_for_tab(
                 && let Some(game_dir) = effective_target_game_dir(step1, tab)
                 && !path_requirement_satisfied(rule, &game_dir)
             {
+                let path_summary = path_requirement_summary(rule, &game_dir);
                 component.compat_kind = Some("path_requirement".to_string());
                 component.compat_source =
                     Some(format!("step2_tp2_path_validator | TP2: {}", meta.tp_file));
-                component.compat_related_mod = Some(path_requirement_summary(rule));
+                component.compat_related_mod = Some(path_summary.clone());
                 component.compat_related_component = None;
                 component.compat_graph = Some(format!(
                     "{} #{} requires {}",
                     normalize_mod_key(&mod_state.tp_file),
                     component_id,
-                    path_requirement_summary(rule)
+                    path_summary
                 ));
                 component.compat_evidence = Some(path_requirement_raw_line(rule).to_string());
                 component.disabled = true;
                 component.checked = false;
                 component.selected_order = None;
-                component.disabled_reason = Some(
-                    path_requirement_message(rule)
-                        .unwrap_or_else(|| path_requirement_fallback_message(rule)),
-                );
+                component.disabled_reason = Some(path_requirement_message(rule, &game_dir));
                 continue;
             }
 
@@ -331,7 +329,7 @@ fn apply_for_tab(
                         component_id,
                         blocked_games.join("|")
                     ));
-                    component.compat_evidence = Some(rule_evidence.to_string());
+                    component.compat_evidence = Some(rule_evidence);
                     component.disabled = true;
                     component.checked = false;
                     component.selected_order = None;
@@ -485,7 +483,7 @@ fn resolve_requirement_path(game_dir: &str, path: &str) -> PathBuf {
     }
 }
 
-fn path_requirement_summary(rule: &Tp2Rule) -> String {
+fn path_requirement_summary(rule: &Tp2Rule, game_dir: &str) -> String {
     let Tp2Rule::RequirePath {
         kind,
         path,
@@ -498,18 +496,15 @@ fn path_requirement_summary(rule: &Tp2Rule) -> String {
         PathRequirementKind::Directory => "directory",
         PathRequirementKind::File => "file",
     };
-    let state = if *must_exist { "exists" } else { "missing" };
-    format!("{kind_label} {path} must be {state}")
-}
-
-fn path_requirement_message(rule: &Tp2Rule) -> Option<String> {
-    match rule {
-        Tp2Rule::RequirePath { message, .. } => message.clone(),
-        _ => None,
+    let resolved = resolve_requirement_path(game_dir, path);
+    if *must_exist {
+        format!("Missing {kind_label}: {}", resolved.display())
+    } else {
+        format!("{kind_label} must be absent: {}", resolved.display())
     }
 }
 
-fn path_requirement_fallback_message(rule: &Tp2Rule) -> String {
+fn path_requirement_message(rule: &Tp2Rule, game_dir: &str) -> String {
     let Tp2Rule::RequirePath {
         kind,
         path,
@@ -522,10 +517,11 @@ fn path_requirement_fallback_message(rule: &Tp2Rule) -> String {
         PathRequirementKind::Directory => "directory",
         PathRequirementKind::File => "file",
     };
+    let resolved = resolve_requirement_path(game_dir, path);
     if *must_exist {
-        format!("This component requires {kind_label} '{path}' to exist in the target game directory.")
+        format!("Missing {kind_label}: {}", resolved.display())
     } else {
-        format!("This component requires {kind_label} '{path}' to be absent from the target game directory.")
+        format!("{kind_label} must be absent: {}", resolved.display())
     }
 }
 
@@ -539,7 +535,10 @@ fn path_requirement_raw_line(rule: &Tp2Rule) -> &str {
 fn find_forbid_game_blocked_games(
     meta: &crate::compat::model::Tp2Metadata,
     component_id: u32,
-) -> Option<(&[String], &str)> {
+) -> Option<(Vec<String>, String)> {
+    let mut combined_blocked: Vec<String> = Vec::new();
+    let mut evidence: Vec<String> = Vec::new();
+
     for (cid, rule) in &meta.rules {
         if *cid != component_id {
             continue;
@@ -550,10 +549,23 @@ fn find_forbid_game_blocked_games(
             ..
         } = rule
         {
-            return Some((blocked_games.as_slice(), raw_line.as_str()));
+            evidence.push(raw_line.clone());
+            for game in blocked_games {
+                if !combined_blocked
+                    .iter()
+                    .any(|existing| existing.eq_ignore_ascii_case(game))
+                {
+                    combined_blocked.push(game.clone());
+                }
+            }
         }
     }
-    None
+
+    if combined_blocked.is_empty() {
+        None
+    } else {
+        Some((combined_blocked, evidence.join("\n")))
+    }
 }
 
 fn find_deprecated_rule(

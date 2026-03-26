@@ -308,3 +308,4 @@ pub(crate) use builders_install::build_install_invocation;
 pub(crate) use builders_resume::{build_resume_invocation, capture_resume_targets};
 pub(crate) use builders_text::build_install_command;
 pub(crate) use display::{build_command_preview_lines, wrap_display_line};
+pub(crate) use log_paths::{resolve_bg2_log_file, resolve_bgee_log_file};

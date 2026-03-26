@@ -25,7 +25,41 @@ pub fn render_game_selection_content(ui: &mut egui::Ui, s: &mut Step1State) {
                 ui.selectable_value(&mut s.game_install, "BG2EE".to_string(), "BG2EE");
                 ui.selectable_value(&mut s.game_install, "EET".to_string(), "EET");
             });
+
+        ui.add_space(12.0);
+        ui.label("Language");
+        egui::ComboBox::from_id_salt("install_language")
+            .selected_text(step1_language_label(&s.language))
+            .show_ui(ui, |ui| {
+                for (value, label) in step1_language_options() {
+                    ui.selectable_value(&mut s.language, value.to_string(), *label);
+                }
+            });
     });
+}
+
+fn step1_language_options() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("en_US", "English"),
+        ("de_DE", "German"),
+        ("fr_FR", "French"),
+        ("es_ES", "Spanish"),
+        ("it_IT", "Italian"),
+        ("pl_PL", "Polish"),
+        ("pt_BR", "Portuguese"),
+        ("cs_CZ", "Czech"),
+        ("tr_TR", "Turkish"),
+        ("uk_UA", "Ukrainian"),
+        ("ru_RU", "Russian"),
+    ]
+}
+
+fn step1_language_label(value: &str) -> String {
+    step1_language_options()
+        .iter()
+        .find_map(|(locale, label)| locale.eq_ignore_ascii_case(value).then_some(*label))
+        .unwrap_or(value)
+        .to_string()
 }
 
 pub fn render_advanced_options_content(ui: &mut egui::Ui, s: &mut Step1State, dev_mode: bool) {

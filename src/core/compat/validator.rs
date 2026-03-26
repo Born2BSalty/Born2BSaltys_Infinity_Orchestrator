@@ -48,7 +48,12 @@ impl CompatValidator {
         self.tp2_metadata = metadata;
     }
 
-    pub fn validate(&self, selected: &[SelectedComponent], game_mode: &str) -> CompatValidationResult {
+    pub fn validate_with_installed(
+        &self,
+        selected: &[SelectedComponent],
+        game_mode: &str,
+        _installed_set: &HashSet<(String, u32)>,
+    ) -> CompatValidationResult {
         let selected_set = validator_helpers::build_selected_set(selected);
         let order_map = validator_helpers::build_order_map(selected);
 
@@ -61,6 +66,24 @@ impl CompatValidator {
         );
         issues.extend(validator_rules::validate_duplicates(selected));
 
+        CompatValidationResult { issues }
+    }
+
+    pub fn validate_step2_selection(
+        &self,
+        selected: &[SelectedComponent],
+        game_mode: &str,
+    ) -> CompatValidationResult {
+        let selected_set = validator_helpers::build_selected_set(selected);
+        let order_map = validator_helpers::build_order_map(selected);
+        let mut issues = validator_rules::validate_step2_selection_rules(
+            selected,
+            game_mode,
+            &self.tp2_metadata,
+            &selected_set,
+            &order_map,
+        );
+        issues.extend(validator_rules::validate_duplicates(selected));
         CompatValidationResult { issues }
     }
 }
@@ -78,6 +101,8 @@ mod tests {
             "moda".to_string(),
             Tp2Metadata {
                 tp_file: "setup-moda.tp2".to_string(),
+                setup_tra: HashMap::new(),
+                component_blocks: HashMap::new(),
                 rules: vec![(
                     10,
                     Tp2Rule::RequireInstalledAny {
@@ -106,13 +131,22 @@ mod tests {
             },
         ];
 
-        let result = validator.validate(&selected, "BGEE");
+        let result = validator.validate_with_installed(&selected, "BGEE", &HashSet::new());
         assert!(
             result
                 .issues
                 .iter()
-                .any(|i| i.code == CompatIssueCode::OrderWarn),
-            "expected ORDER_WARN for any-component dependency when target mod is after source"
+                .any(|i| i.code == CompatIssueCode::OrderBlock),
+            "expected ORDER_BLOCK for any-component dependency when target mod is after source"
+        );
+
+        let step2_result = validator.validate_step2_selection(&selected, "BGEE");
+        assert!(
+            step2_result
+                .issues
+                .iter()
+                .any(|i| i.code == CompatIssueCode::OrderBlock),
+            "expected ORDER_BLOCK in Step 2 when required target mod is selected after source"
         );
     }
 }

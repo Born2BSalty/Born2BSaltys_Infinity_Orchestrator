@@ -122,11 +122,17 @@ pub(crate) mod compat_popup_details {
 
     pub(crate) fn render_details(ui: &mut egui::Ui, state: &WizardState) {
         let details = selected_details(state);
-        let title = details
+        let base_title = details
             .component_label
             .as_deref()
             .or(details.mod_name.as_deref())
             .unwrap_or("No component selected");
+        let title = match details.component_id.as_deref().map(str::trim) {
+            Some(id) if !id.is_empty() && !base_title.trim_start().starts_with('#') => {
+                format!("#{id} {base_title}")
+            }
+            _ => base_title.to_string(),
+        };
         ui.label(crate::ui::shared::typography_global::strong(title));
         ui.add_space(6.0);
 
@@ -154,66 +160,27 @@ pub(crate) mod compat_popup_details {
             }
         });
 
-        if let Some(role) = details.compat_role.as_deref() {
-            ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Role"));
-                ui.label(role);
-            });
-        }
-        if let Some(issue) = issue.as_ref()
-            && let Some(verdict) = issue_text_explain::issue_verdict(issue)
-        {
-            ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Verdict"));
-                ui.label(verdict);
-            });
-        }
         if let Some(issue) = issue.as_ref() {
-            ui.add_space(2.0);
-            ui.label(crate::ui::shared::typography_global::strong("Why this appears"));
-            ui.label(issue_text_explain::issue_why_this_appears(issue));
-
-            ui.add_space(2.0);
-            ui.label(crate::ui::shared::typography_global::strong("What to do"));
-            ui.label(issue_text_explain::issue_what_to_do(issue));
-        }
-        if let Some(reason) = details.disabled_reason.as_deref() {
-            ui.add_space(2.0);
-            ui.label(crate::ui::shared::typography_global::strong("Reason"));
-            if let Some(issue) = issue.as_ref() {
-                ui.label(issue_text_explain::issue_reason(issue, reason));
-            } else {
-                ui.label(reason);
-            }
+            ui.add_space(4.0);
+            ui.label(issue_text_explain::issue_summary(issue));
+        } else if let Some(reason) = details.disabled_reason.as_deref() {
+            ui.add_space(4.0);
+            ui.label(reason);
         }
         if let Some(source) = details.compat_source.as_deref() {
-            ui.add_space(2.0);
-            ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Source"));
-                ui.monospace(source);
-            });
+            ui.add_space(6.0);
+            ui.label(crate::ui::shared::typography_global::strong("TP2 source"));
+            ui.monospace(issue_text_explain::display_source(source));
         }
-        if let Some(related) = details.compat_related_target.as_deref() {
-            ui.add_space(2.0);
-            ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Related target"));
-                ui.label(related);
+        if let Some(block) = details.compat_component_block.as_deref() {
+            ui.add_space(6.0);
+            egui::CollapsingHeader::new(
+                crate::ui::shared::typography_global::strong("Component block"),
+            )
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.monospace(block);
             });
-        }
-        if let Some(graph) = details.compat_graph.as_deref() {
-            ui.add_space(2.0);
-            ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Graph"));
-                ui.monospace(graph);
-            });
-        }
-        if let Some(evidence) = details.compat_evidence.as_deref() {
-            ui.add_space(2.0);
-            egui::CollapsingHeader::new("Rule detail")
-                .default_open(false)
-                .show(ui, |ui| {
-                    ui.monospace(evidence);
-                });
         }
     }
 
@@ -226,13 +193,21 @@ pub(crate) mod compat_popup_details {
         } else if kind == "missing_dep" {
             "REQ_MISSING"
         } else if kind == "conflict" || kind == "not_compatible" {
-            "FORBID_HIT"
+            "RULE_HIT"
+        } else if kind == "included" {
+            "INCLUDED"
+        } else if kind == "order_block" {
+            "ORDER_BLOCK"
         } else if kind == "conditional" {
             "CONDITIONAL"
+        } else if kind == "path_requirement" {
+            "PATH_REQUIREMENT"
+        } else if kind == "deprecated" {
+            "DEPRECATED"
         } else {
             "RULE_HIT"
         };
-        let is_blocking = !matches!(code, "CONDITIONAL" | "ORDER_WARN");
+        let is_blocking = !matches!(code, "CONDITIONAL" | "INCLUDED");
         let related = details
             .compat_related_target
             .clone()
@@ -251,6 +226,7 @@ pub(crate) mod compat_popup_details {
             reason: details.disabled_reason.clone().unwrap_or_default(),
             source: details.compat_source.clone().unwrap_or_default(),
             raw_evidence: details.compat_evidence.clone(),
+            component_block: details.compat_component_block.clone(),
         })
     }
 }
@@ -285,13 +261,16 @@ pub(crate) mod compat_popup_filters {
         match filter.to_ascii_lowercase().as_str() {
             "conflicts" => {
                 issue.code.eq_ignore_ascii_case("FORBID_HIT")
+                    || issue.code.eq_ignore_ascii_case("ORDER_BLOCK")
                     || issue.code.eq_ignore_ascii_case("RULE_HIT")
+                    || issue.code.eq_ignore_ascii_case("PATH_REQUIREMENT")
+                    || issue.code.eq_ignore_ascii_case("DEPRECATED")
                     || issue.reason.to_ascii_lowercase().contains("incompatible")
                     || issue.reason.to_ascii_lowercase().contains("conflict")
             }
             "dependencies" => issue.code.eq_ignore_ascii_case("REQ_MISSING"),
             "conditionals" => issue.code.eq_ignore_ascii_case("CONDITIONAL"),
-            "warnings" => !issue.is_blocking || issue.code.eq_ignore_ascii_case("ORDER_WARN"),
+            "warnings" => !issue.is_blocking,
             _ => true,
         }
     }

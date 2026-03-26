@@ -21,4 +21,5 @@ pub struct CompatIssueDisplay {
     pub reason: String,
     pub source: String,
     pub raw_evidence: Option<String>,
+    pub component_block: Option<String>,
 }

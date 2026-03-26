@@ -90,8 +90,6 @@ fn render_issue_list(
                 } else {
                     crate::ui::shared::theme_global::warning_soft()
                 };
-                let affected = format_issue_target(&issue.affected_mod, issue.affected_component);
-                let related = format_issue_target(&issue.related_mod, issue.related_component);
                 let graph = issue_graph(issue);
                 egui::CollapsingHeader::new(
                     crate::ui::shared::typography_global::strong(format!(
@@ -104,49 +102,38 @@ fn render_issue_list(
                 .id_salt(("step3_compat_modal_issue", issue.issue_id.as_str()))
                 .default_open(false)
                 .show(ui, |ui| {
-                    egui::Grid::new(("step3_compat_modal_grid", issue.issue_id.as_str()))
-                        .num_columns(2)
-                        .spacing([10.0, 4.0])
-                        .show(ui, |ui| {
-                            ui.label(crate::ui::shared::typography_global::strong("Severity"));
-                            ui.label(human_severity(issue));
-                            ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("Kind"));
-                            ui.label(human_kind(&issue.code));
-                            ui.end_row();
-                            if let Some(verdict) = issue_verdict(issue) {
-                                ui.label(crate::ui::shared::typography_global::strong("Verdict"));
-                                ui.label(verdict);
-                                ui.end_row();
-                            }
-                            ui.label(crate::ui::shared::typography_global::strong("Affected"));
-                            ui.label(&affected);
-                            ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("Related"));
-                            ui.label(human_related(issue, &related));
-                            ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("Why this appears"));
-                            ui.label(issue_why_this_appears(issue));
-                            ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("What to do"));
-                            ui.label(issue_what_to_do(issue));
-                            ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("Reason"));
-                            ui.label(issue_reason(issue));
-                            ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("Source"));
-                            ui.label(&issue.source);
-                            ui.end_row();
-                            ui.label(crate::ui::shared::typography_global::strong("Graph"));
-                            ui.monospace(graph);
-                            ui.end_row();
-                        });
-                    if let Some(evidence) = issue.raw_evidence.as_deref() {
-                        ui.add_space(4.0);
-                        ui.label(crate::ui::shared::typography_global::strong("Evidence"));
-                        ui.monospace(evidence);
-                    }
+                    ui.horizontal(|ui| {
+                        ui.label(crate::ui::shared::typography_global::strong("Kind"));
+                        ui.label(human_kind(&issue.code));
+                        let (badge_text, badge_color) = if issue.is_blocking {
+                            (
+                                "Blocks install",
+                                crate::ui::shared::theme_global::error_emphasis(),
+                            )
+                        } else {
+                            (
+                                "Warning only",
+                                crate::ui::shared::theme_global::warning_soft(),
+                            )
+                        };
+                        ui.label(crate::ui::shared::typography_global::strong(badge_text).color(badge_color));
+                    });
                     ui.add_space(4.0);
+                    ui.label(issue_summary(issue));
+                    ui.add_space(6.0);
+                    ui.label(crate::ui::shared::typography_global::strong("TP2 source"));
+                    ui.monospace(display_source(&issue.source));
+                    if let Some(block) = issue.component_block.as_deref() {
+                        ui.add_space(6.0);
+                        egui::CollapsingHeader::new(
+                            crate::ui::shared::typography_global::strong("Component block"),
+                        )
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            ui.monospace(block);
+                        });
+                    }
+                    ui.add_space(6.0);
 
                     let can_jump_affected = issue_target_exists(state, issue, true);
                     let can_jump_related = issue_target_exists(state, issue, false);

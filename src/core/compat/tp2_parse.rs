@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -12,12 +13,13 @@ pub fn parse_tp2_rules(tp2_path: &Path) -> Tp2Metadata {
         .and_then(|n| n.to_str())
         .unwrap_or_default()
         .to_string();
-
     let content = match fs::read_to_string(tp2_path) {
         Ok(c) => c,
         Err(_) => {
             return Tp2Metadata {
                 tp_file,
+                setup_tra: HashMap::new(),
+                component_blocks: HashMap::new(),
                 rules: Vec::new(),
             };
         }
@@ -25,7 +27,66 @@ pub fn parse_tp2_rules(tp2_path: &Path) -> Tp2Metadata {
 
     let content = strip_block_comments(&content);
     let rules = extract_rules(&content);
-    Tp2Metadata { tp_file, rules }
+    let setup_tra = load_tp2_setup_tra_map(tp2_path);
+    let component_blocks = extract_component_blocks(&content);
+    Tp2Metadata {
+        tp_file,
+        setup_tra,
+        component_blocks,
+        rules,
+    }
+}
+
+fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String> {
+    let Some(base) = tp2_path.parent() else {
+        return HashMap::new();
+    };
+
+    let candidates = [
+        base.join("lang/english/setup.tra"),
+        base.join("lang/en_us/setup.tra"),
+        base.join("lang/en_US/setup.tra"),
+        base.join("setup.tra"),
+    ];
+
+    for path in candidates {
+        if !path.is_file() {
+            continue;
+        }
+        if let Ok(text) = fs::read_to_string(&path) {
+            let map = parse_tra_string_map(&text);
+            if !map.is_empty() {
+                return map;
+            }
+        }
+    }
+    HashMap::new()
+}
+
+fn parse_tra_string_map(text: &str) -> HashMap<String, String> {
+    let mut out = HashMap::<String, String>::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('@') {
+            continue;
+        }
+        let Some((key, rhs)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().trim_start_matches('@').to_string();
+        let rhs = rhs.trim();
+        let value = if let Some(rest) = rhs.strip_prefix('~') {
+            rest.split('~').next().unwrap_or_default().trim().to_string()
+        } else if let Some(rest) = rhs.strip_prefix('"') {
+            rest.split('"').next().unwrap_or_default().trim().to_string()
+        } else {
+            continue;
+        };
+        if !value.is_empty() {
+            out.insert(key, value);
+        }
+    }
+    out
 }
 
 fn strip_block_comments(input: &str) -> String {
@@ -141,6 +202,100 @@ fn extract_rules(content: &str) -> Vec<(u32, Tp2Rule)> {
     }
 
     rules
+}
+
+fn extract_component_blocks(content: &str) -> HashMap<u32, String> {
+    let mut blocks = HashMap::<u32, String>::new();
+    let lines: Vec<&str> = content.lines().collect();
+    let mut begins: Vec<(usize, u32)> = Vec::new();
+
+    for (idx, line) in lines.iter().enumerate() {
+        let upper = line.trim().to_ascii_uppercase();
+        if upper.contains("BEGIN") && let Some(component_id) = parse_begin_component(&upper) {
+            begins.push((idx, component_id));
+        }
+    }
+
+    for (pos, (begin_idx, component_id)) in begins.iter().enumerate() {
+        let next_begin_idx = begins
+            .get(pos + 1)
+            .map(|(idx, _)| *idx)
+            .unwrap_or(lines.len());
+
+        let start_idx = header_start_index(&lines, *begin_idx);
+        let mut end_exclusive = next_begin_idx;
+        trim_trailing_banner_lines(&lines, *begin_idx, &mut end_exclusive);
+
+        if start_idx >= end_exclusive {
+            continue;
+        }
+
+        let text = lines[start_idx..end_exclusive].join("\n").trim().to_string();
+        if !text.is_empty() {
+            blocks.entry(*component_id).or_insert(text);
+        }
+    }
+
+    blocks
+}
+
+fn header_start_index(lines: &[&str], begin_idx: usize) -> usize {
+    if begin_idx == 0 {
+        return 0;
+    }
+
+    let mut i = begin_idx;
+    let mut saw_comment = false;
+    while i > 0 {
+        let prev = lines[i - 1].trim();
+        if prev.is_empty() {
+            if saw_comment {
+                i -= 1;
+                continue;
+            }
+            break;
+        }
+        if is_commentish_line(prev) {
+            saw_comment = true;
+            i -= 1;
+            continue;
+        }
+        break;
+    }
+
+    i
+}
+
+fn trim_trailing_banner_lines(lines: &[&str], begin_idx: usize, end_exclusive: &mut usize) {
+    let mut i = *end_exclusive;
+    let mut saw_banner = false;
+    while i > begin_idx {
+        let candidate = lines[i - 1].trim();
+        if candidate.is_empty() {
+            if saw_banner {
+                i -= 1;
+                continue;
+            }
+            break;
+        }
+        if is_commentish_line(candidate) {
+            saw_banner = true;
+            i -= 1;
+            continue;
+        }
+        break;
+    }
+
+    if saw_banner {
+        *end_exclusive = i;
+    }
+}
+
+fn is_commentish_line(trimmed: &str) -> bool {
+    trimmed.starts_with("//")
+        || trimmed.starts_with("/*")
+        || trimmed.starts_with('*')
+        || trimmed.starts_with("*/")
 }
 
 fn parse_begin_component(upper: &str) -> Option<u32> {

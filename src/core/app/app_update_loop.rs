@@ -16,12 +16,12 @@ pub(super) fn render_current_step(app: &mut WizardApp, ctx: &egui::Context) {
     egui::CentralPanel::default().show(ctx, |ui| match app.state.current_step {
         0 => step1::page_step1::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str()),
         1 => {
-            app.revalidate_compat_step2_checked_order();
             if let Some(action) =
                 step2::page_step2::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str())
             {
                 app.handle_step2_action(action);
             }
+            app.revalidate_compat_step2_checked_order();
         }
         2 => {
             if let Some(action) =
