@@ -6,12 +6,8 @@ use std::collections::HashSet;
 
 #[path = "validator_helpers.rs"]
 mod validator_helpers;
-#[path = "validator_rule_handlers_any.rs"]
-mod validator_rule_handlers_any;
 #[path = "validator_rule_handlers.rs"]
 mod validator_rule_handlers;
-#[path = "validator_rule_handlers_misc.rs"]
-mod validator_rule_handlers_misc;
 #[path = "validator_rules.rs"]
 mod validator_rules;
 
@@ -48,27 +44,6 @@ impl CompatValidator {
         self.tp2_metadata = metadata;
     }
 
-    pub fn validate_with_installed(
-        &self,
-        selected: &[SelectedComponent],
-        game_mode: &str,
-        _installed_set: &HashSet<(String, u32)>,
-    ) -> CompatValidationResult {
-        let selected_set = validator_helpers::build_selected_set(selected);
-        let order_map = validator_helpers::build_order_map(selected);
-
-        let mut issues = validator_rules::validate_component_rules(
-            selected,
-            game_mode,
-            &self.tp2_metadata,
-            &selected_set,
-            &order_map,
-        );
-        issues.extend(validator_rules::validate_duplicates(selected));
-
-        CompatValidationResult { issues }
-    }
-
     pub fn validate_step2_selection(
         &self,
         selected: &[SelectedComponent],
@@ -86,6 +61,25 @@ impl CompatValidator {
         issues.extend(validator_rules::validate_duplicates(selected));
         CompatValidationResult { issues }
     }
+
+    pub fn validate_step3_order(
+        &self,
+        selected: &[SelectedComponent],
+        game_mode: &str,
+    ) -> CompatValidationResult {
+        let selected_set = validator_helpers::build_selected_set(selected);
+        let order_map = validator_helpers::build_order_map(selected);
+        let mut issues = validator_rules::validate_step3_selection_rules(
+            selected,
+            game_mode,
+            &self.tp2_metadata,
+            &selected_set,
+            &order_map,
+        );
+        issues.extend(validator_rules::validate_duplicates(selected));
+        CompatValidationResult { issues }
+    }
+
 }
 
 #[cfg(test)]
@@ -131,7 +125,7 @@ mod tests {
             },
         ];
 
-        let result = validator.validate_with_installed(&selected, "BGEE", &HashSet::new());
+        let result = validator.validate_step3_order(&selected, "BGEE");
         assert!(
             result
                 .issues

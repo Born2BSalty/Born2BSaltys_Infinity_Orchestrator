@@ -1,3 +1,16 @@
+## Beta 13
+- Fixed several component ordering issues so BIO matches manual WeiDU TP2 order more closely.
+- Improved TP2 label/order matching for mods using `BEGIN @...`, custom setup TRA files, and WeiDU version-suffixed labels.
+- Increased scan worker cap from `8` to `16`.
+- Fixed false `GAME_INCLUDES "bg2"` mismatches on `BG2EE` and `EET`.
+- Improved Step 3 compatibility handling:
+- dedicated validator path
+- row compat pills
+- automatic revalidation after drag-drop and uncheck actions
+- Removed redundant `Revalidate` buttons from Step 2 and Step 3.
+- Improved Step 3 instructions and compatibility filter UI.
+- Cleaned up orphaned compat code and reduced duplicated formatting helpers.
+
 ## Beta 12
 - Fixed several Step 2 / Step 3 compatibility misreads for complex WeiDU TP2 rules.
 - Improved Stratagems / SCS compatibility handling, including order rules, mutual exclusivity, and Item Revisions-related checks.

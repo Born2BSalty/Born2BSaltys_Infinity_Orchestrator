@@ -33,7 +33,7 @@ pub(super) fn to_mod_states(
             };
             let mut deduped_components = dedup_components(comps);
             if let Some(tp2_text) = tp2_text.as_deref() {
-                reorder_components_by_tp2_order(&mut deduped_components, tp2_text);
+                reorder_components_by_tp2_order(&mut deduped_components, &tp2_path, tp2_text);
             }
             let derived_weidu_groups = tp2_text
                 .as_deref()
@@ -178,11 +178,41 @@ fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String> {
     };
 
     let mut candidates = Vec::<std::path::PathBuf>::new();
+    let tp2_stem = tp2_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let mod_key = tp2_stem.strip_prefix("setup-").unwrap_or(tp2_stem);
+    let custom_setup_name = if mod_key.is_empty() {
+        None
+    } else {
+        Some(format!("{mod_key}setup.tra"))
+    };
     let preferred = [
         base.join("lang/english/setup.tra"),
+        base.join("lang/english").join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join("lang/english").join(name))
+            .unwrap_or_default(),
         base.join("lang/en_us/setup.tra"),
+        base.join("lang/en_us").join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join("lang/en_us").join(name))
+            .unwrap_or_default(),
         base.join("lang/en_US/setup.tra"),
+        base.join("lang/en_US").join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join("lang/en_US").join(name))
+            .unwrap_or_default(),
         base.join("setup.tra"),
+        base.join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join(name))
+            .unwrap_or_default(),
     ];
     for path in preferred {
         if path.is_file() && !candidates.iter().any(|existing| existing == &path) {
@@ -222,7 +252,9 @@ fn walk_setup_tra_files(base: &Path) -> Vec<std::path::PathBuf> {
         if path
             .file_name()
             .and_then(|value| value.to_str())
-            .is_some_and(|name| name.eq_ignore_ascii_case("setup.tra"))
+            .is_some_and(|name| {
+                name.ends_with(".tra") && name.to_ascii_lowercase().contains("setup")
+            })
         {
             out.push(path);
         }
@@ -495,8 +527,13 @@ fn detect_meta_mode_component_ids(
     out
 }
 
-fn reorder_components_by_tp2_order(components: &mut [ScannedComponent], tp2_text: &str) {
-    let (order_by_id, order_by_label) = parse_tp2_component_order(tp2_text);
+fn reorder_components_by_tp2_order(
+    components: &mut [ScannedComponent],
+    tp2_path: &str,
+    tp2_text: &str,
+) {
+    let tra_map = load_tp2_setup_tra_map(Path::new(tp2_path));
+    let (order_by_id, order_by_label) = parse_tp2_component_order(tp2_text, &tra_map);
     if order_by_id.is_empty() && order_by_label.is_empty() {
         return;
     }
@@ -835,7 +872,10 @@ fn parse_subcomponent_key(line: &str) -> Option<String> {
 }
 
 
-fn parse_tp2_component_order(tp2_text: &str) -> (HashMap<String, usize>, HashMap<String, usize>) {
+fn parse_tp2_component_order(
+    tp2_text: &str,
+    tra_map: &HashMap<String, String>,
+) -> (HashMap<String, usize>, HashMap<String, usize>) {
     let mut out_by_id = HashMap::<String, usize>::new();
     let mut out_by_label = HashMap::<String, usize>::new();
     let lines: Vec<&str> = tp2_text.lines().collect();
@@ -860,7 +900,7 @@ fn parse_tp2_component_order(tp2_text: &str) -> (HashMap<String, usize>, HashMap
         }
 
         let block = &lines[i..j];
-        if let Some(label) = parse_begin_label(trimmed) {
+        if let Some(label) = parse_begin_label(trimmed, tra_map) {
             out_by_label
                 .entry(normalize_component_order_label(&label))
                 .or_insert(begin_index);
@@ -879,7 +919,7 @@ fn parse_tp2_component_order(tp2_text: &str) -> (HashMap<String, usize>, HashMap
     (out_by_id, out_by_label)
 }
 
-fn parse_begin_label(line: &str) -> Option<String> {
+fn parse_begin_label(line: &str, tra_map: &HashMap<String, String>) -> Option<String> {
     let trimmed = line.trim_start();
     if trimmed.starts_with("//") {
         return None;
@@ -889,6 +929,14 @@ fn parse_begin_label(line: &str) -> Option<String> {
         return None;
     }
     let tail = trimmed["BEGIN".len()..].trim_start();
+    if let Some(rest) = tail.strip_prefix('@') {
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if digits.is_empty() {
+            return None;
+        }
+        let token = format!("@{digits}");
+        return resolve_group_token_label(&token, tra_map);
+    }
     let quote = tail.chars().next()?;
     if quote != '~' && quote != '"' {
         return None;
@@ -900,7 +948,20 @@ fn parse_begin_label(line: &str) -> Option<String> {
 }
 
 fn normalize_component_order_label(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
+    let trimmed = value.trim();
+    let base = trimmed
+        .rsplit_once(':')
+        .and_then(|(head, tail)| {
+            let versionish = tail.trim();
+            let normalized = versionish.strip_prefix('v').unwrap_or(versionish);
+            (!normalized.is_empty()
+                && normalized
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || c == '.' || c == '_' || c == '-'))
+            .then_some(head.trim())
+        })
+        .unwrap_or(trimmed);
+    base.to_ascii_lowercase()
 }
 
 fn include_paths_from_tp2(

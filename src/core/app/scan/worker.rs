@@ -77,7 +77,7 @@ pub fn scan_impl(
     let worker_count = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)
-        .clamp(2, 8);
+        .clamp(2, 16);
     let scan_reports = Arc::new(Mutex::new(Vec::<Step2Tp2ProbeReport>::new()));
 
     thread::scope(|scope| {

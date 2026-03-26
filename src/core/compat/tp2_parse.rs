@@ -42,11 +42,41 @@ fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String> {
         return HashMap::new();
     };
 
+    let tp2_stem = tp2_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let mod_key = tp2_stem.strip_prefix("setup-").unwrap_or(tp2_stem);
+    let custom_setup_name = if mod_key.is_empty() {
+        None
+    } else {
+        Some(format!("{mod_key}setup.tra"))
+    };
     let candidates = [
         base.join("lang/english/setup.tra"),
+        base.join("lang/english").join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join("lang/english").join(name))
+            .unwrap_or_default(),
         base.join("lang/en_us/setup.tra"),
+        base.join("lang/en_us").join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join("lang/en_us").join(name))
+            .unwrap_or_default(),
         base.join("lang/en_US/setup.tra"),
+        base.join("lang/en_US").join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join("lang/en_US").join(name))
+            .unwrap_or_default(),
         base.join("setup.tra"),
+        base.join(format!("{tp2_stem}.tra")),
+        custom_setup_name
+            .as_ref()
+            .map(|name| base.join(name))
+            .unwrap_or_default(),
     ];
 
     for path in candidates {

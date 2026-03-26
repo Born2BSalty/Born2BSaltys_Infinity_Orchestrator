@@ -5,6 +5,7 @@ pub(crate) mod list {
 use eframe::egui;
 
 use crate::ui::state::WizardState;
+use crate::ui::step3::action_step3::Step3Action;
 use crate::ui::step3::blocks;
 use crate::ui::step3::state_step3;
 
@@ -12,6 +13,7 @@ use crate::ui::step3::state_step3;
 pub(crate) fn render(
     ui: &mut egui::Ui,
     state: &mut WizardState,
+    action: &mut Option<Step3Action>,
     jump_to_selected_requested: &mut bool,
 ) {
     ui.group(|ui| {
@@ -33,7 +35,8 @@ pub(crate) fn render(
                     ui.set_min_width(viewport_w);
                     let tab_id = state.step3.active_game_tab.clone();
                     let prompt_eval = crate::ui::step2::state_step2::build_prompt_eval_context(state);
-                    let (pending_unchecks, pending_prompt_actions, open_prompt_popup) = {
+                    let compat_issues = state.compat.issues.clone();
+                    let (pending_unchecks, pending_prompt_actions, open_prompt_popup, open_compat_modal, revalidate_after_drag) = {
                         let (
                             items,
                             selected,
@@ -58,6 +61,7 @@ pub(crate) fn render(
                         let visible_indices = blocks::visible_indices(items, collapsed_blocks);
                         let mut row_ctx = rows::RowRenderContext {
                             prompt_eval: &prompt_eval,
+                            compat_issues: &compat_issues,
                             tab_id: &tab_id,
                             visible_indices: &visible_indices,
                             jump_to_selected_requested,
@@ -121,13 +125,27 @@ pub(crate) fn render(
                             last_insert_at,
                             clone_seq,
                         };
-                        crate::ui::step3::service_step3::drag_ops::finalize_on_release(
+                        let finalized_drag = crate::ui::step3::service_step3::drag_ops::finalize_on_release(
                             ui,
                             &mut finalize_ctx,
                         );
                         visible_rows.clear();
-                        (row_outcome.uncheck_requests, row_outcome.prompt_requests, row_outcome.open_prompt_popup)
+                        (
+                            row_outcome.uncheck_requests,
+                            row_outcome.prompt_requests,
+                            row_outcome.open_prompt_popup,
+                            row_outcome.open_compat_modal,
+                            finalized_drag,
+                        )
                     };
+                    let should_revalidate =
+                        revalidate_after_drag || !pending_unchecks.is_empty();
+                    if should_revalidate {
+                        *action = Some(Step3Action::Revalidate);
+                    }
+                    if open_compat_modal {
+                        state.step3.compat_modal_open = true;
+                    }
                     if let Some((title, text)) = open_prompt_popup {
                         state.step2.prompt_popup_title = title;
                         state.step2.prompt_popup_text = text;
@@ -149,8 +167,11 @@ pub(crate) fn render(
 pub(crate) mod rows {
 use eframe::egui;
 
+use crate::ui::state::CompatIssueDisplay;
 use crate::ui::state::Step3ItemState;
+use crate::ui::step2::tree_step2::step2_tree::render_helpers::compat_colors;
 use crate::ui::step3::blocks;
+use crate::ui::step3::compat_modal_step3::compat_model::normalize_mod_key;
 use crate::ui::step3::content_step3;
 use crate::ui::step3::prompt_popup_step3;
 use crate::ui::step3::service_step3;
@@ -180,10 +201,12 @@ pub(super) struct RowRenderOutcome {
     pub uncheck_requests: Vec<(String, String)>,
     pub prompt_requests: Vec<PromptActionRequest>,
     pub open_prompt_popup: Option<(String, String)>,
+    pub open_compat_modal: bool,
 }
 
 pub(super) struct RowRenderContext<'a> {
     pub prompt_eval: &'a crate::ui::step2::state_step2::PromptEvalContext,
+    pub compat_issues: &'a [CompatIssueDisplay],
     pub tab_id: &'a str,
     pub visible_indices: &'a [usize],
     pub jump_to_selected_requested: &'a mut bool,
@@ -218,8 +241,43 @@ fn push_undo_snapshot(
     redo_stack.clear();
 }
 
+fn issue_to_compat_kind(issue: &CompatIssueDisplay) -> &'static str {
+    if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
+        "missing_dep"
+    } else if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
+        "game_mismatch"
+    } else if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
+        "conditional"
+    } else if issue.code.eq_ignore_ascii_case("INCLUDED") {
+        "included"
+    } else if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
+        "order_block"
+    } else if issue.is_blocking {
+        "conflict"
+    } else {
+        "warning"
+    }
+}
+
+fn row_issue<'a>(item: &Step3ItemState, issues: &'a [CompatIssueDisplay]) -> Option<&'a CompatIssueDisplay> {
+    let item_tp_key = normalize_mod_key(item.tp_file.as_str());
+    let item_name_key = normalize_mod_key(item.mod_name.as_str());
+    let comp_id = item.component_id.parse::<u32>().ok();
+
+    issues.iter().find(|issue| {
+        let affected_key = normalize_mod_key(issue.affected_mod.as_str());
+        (item_tp_key == affected_key || item_name_key == affected_key)
+            && match (issue.affected_component, comp_id) {
+                (Some(a), Some(b)) => a == b,
+                (None, _) => true,
+                _ => false,
+            }
+    })
+}
+
 pub(super) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> RowRenderOutcome {
     let prompt_eval = ctx.prompt_eval;
+    let compat_issues = ctx.compat_issues;
     let tab_id = ctx.tab_id;
     let visible_indices = ctx.visible_indices;
     let jump_to_selected_requested = &mut *ctx.jump_to_selected_requested;
@@ -238,6 +296,7 @@ pub(super) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> 
     let locked_blocks = &mut *ctx.locked_blocks;
     let undo_stack = &mut *ctx.undo_stack;
     let redo_stack = &mut *ctx.redo_stack;
+    let mut open_compat_modal = false;
     let mut visible_rows: Vec<(usize, egui::Rect)> = Vec::with_capacity(visible_indices.len());
     let mut uncheck_requests: Vec<(String, String)> = Vec::new();
     let mut prompt_requests: Vec<PromptActionRequest> = Vec::new();
@@ -297,11 +356,38 @@ pub(super) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> 
             resp.on_hover_text(crate::ui::shared::tooltip_global::STEP3_DRAG_PARENT)
         } else {
             let prompt_summary = prompt_popup_step3::evaluate_step3_item_prompt_summary(item, prompt_eval);
+            let compat_issue = row_issue(item, compat_issues);
             ui.horizontal(|ui| {
                 ui.add_space(25.0);
                 let text = content_step3::format_step3_item(item);
                 let row_text = content_step3::weidu_colored_widget_text(ui, &text);
                 let resp = ui.selectable_label(selected.contains(&idx), row_text);
+                if let Some(issue) = compat_issue
+                    && let Some((pill_text_color, pill_bg, pill_label)) =
+                        compat_colors(Some(issue_to_compat_kind(issue)))
+                {
+                    ui.add_space(6.0);
+                    let pill_text = crate::ui::shared::typography_global::strong(pill_label)
+                        .color(pill_text_color)
+                        .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
+                    let pill_response = ui
+                        .add(
+                            egui::Button::new(pill_text)
+                                .fill(pill_bg)
+                                .stroke(egui::Stroke::new(
+                                    crate::ui::shared::layout_tokens_global::BORDER_THIN,
+                                    pill_bg,
+                                ))
+                                .corner_radius(egui::CornerRadius::same(7))
+                                .min_size(egui::vec2(0.0, 18.0)),
+                        )
+                        .on_hover_text(issue.reason.as_str());
+                    if pill_response.clicked() {
+                        selected.clear();
+                        selected.push(idx);
+                        open_compat_modal = true;
+                    }
+                }
                 if !prompt_summary.trim().is_empty() {
                     ui.add_space(6.0);
                     let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
@@ -426,6 +512,7 @@ pub(super) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> 
         uncheck_requests,
         prompt_requests,
         open_prompt_popup,
+        open_compat_modal,
     }
 }
 }

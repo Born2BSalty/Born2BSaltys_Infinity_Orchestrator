@@ -86,7 +86,6 @@ pub fn format_step3_item(item: &Step3ItemState) -> String {
 pub fn render_toolbar(
     ui: &mut egui::Ui,
     state: &mut WizardState,
-    action: &mut Option<Step3Action>,
     dev_mode: bool,
     exe_fingerprint: &str,
 ) {
@@ -98,14 +97,9 @@ pub fn render_toolbar(
             draw_tab(ui, &mut state.step3.active_game_tab, "BG2EE");
         } else if show_bgee {
             ui.label(typo::monospace("BGEE"));
-        } else if show_bg2ee {
+    } else if show_bg2ee {
             ui.label(typo::monospace("BG2EE"));
         }
-
-        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
-        ui.label(
-            crate::ui::shared::typography_global::weak("Right-click a row for more actions"),
-        );
 
         if state.compat.error_count > 0
             && ui
@@ -131,13 +125,6 @@ pub fn render_toolbar(
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .button("Revalidate")
-                .on_hover_text(crate::ui::shared::tooltip_global::STEP3_REVALIDATE)
-                .clicked()
-            {
-                *action = Some(Step3Action::Revalidate);
-            }
             if dev_mode
                 && ui
                     .button("Export diagnostics")
@@ -253,20 +240,24 @@ pub fn render(
     state_step3::normalize_active_tab(state);
 
     ui.heading("Step 3: Reorder and Resolve");
-    ui.label("Arrange components into a valid install order.");
+    ui.label("Review and adjust install order. Drag and drop components to reorder them.");
+    ui.label(
+        crate::ui::shared::typography_global::weak(
+            "Right-click a component for more actions, including uncheck and prompt tools.",
+        ),
+    );
     ui.add_space(8.0);
 
     crate::ui::step3::content_step3::render_toolbar(
         ui,
         state,
-        &mut action,
         dev_mode,
         exe_fingerprint,
     );
 
     ui.add_space(6.0);
     let mut jump_to_selected_requested = state.step3.jump_to_selected_requested;
-    list::render(ui, state, &mut jump_to_selected_requested);
+    list::render(ui, state, &mut action, &mut jump_to_selected_requested);
 
     if state.step3.compat_modal_open {
         render_compat_modal(ui, state, &mut jump_to_selected_requested);

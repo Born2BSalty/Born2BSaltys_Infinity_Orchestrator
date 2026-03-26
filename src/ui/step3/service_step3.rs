@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::state::{CompatIssueDisplay, Step3ItemState, WizardState};
+use crate::ui::step3::compat_modal_issue_text_step3::issue_graph;
+use crate::ui::step3::compat_modal_step3::compat_model::normalize_mod_key;
 
 pub fn apply_row_selection(
     selected: &mut Vec<usize>,
@@ -107,111 +109,6 @@ fn format_issue_target(mod_name: &str, component: Option<u32>) -> String {
         Some(id) => format!("{mod_name} #{id}"),
         None => mod_name.to_string(),
     }
-}
-
-fn parse_or_targets_from_reason(reason: &str) -> Option<Vec<String>> {
-    let prefix = "Requires one of:";
-    let body = reason.strip_prefix(prefix)?.trim();
-    let parts = body
-        .split(" OR ")
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
-    if parts.len() > 1 {
-        Some(parts)
-    } else {
-        None
-    }
-}
-
-fn is_duplicate_selection_issue(issue: &CompatIssueDisplay) -> bool {
-    issue.code.eq_ignore_ascii_case("RULE_HIT")
-        && (issue.reason.to_ascii_lowercase().contains("selected multiple times")
-            || issue
-                .raw_evidence
-                .as_deref()
-                .unwrap_or_default()
-                .eq_ignore_ascii_case("selected_set_duplicate"))
-}
-
-fn issue_graph(issue: &CompatIssueDisplay) -> String {
-    if is_duplicate_selection_issue(issue) {
-        return format!(
-            "{} appears multiple times in selection",
-            format_issue_target(&issue.affected_mod, issue.affected_component)
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
-        let games = issue
-            .related_mod
-            .split('|')
-            .map(|s| s.trim().to_ascii_uppercase())
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(", ");
-        return format!(
-            "{} allowed on: {}",
-            format_issue_target(&issue.affected_mod, issue.affected_component),
-            if games.is_empty() { "N/A".to_string() } else { games }
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("FORBID_HIT")
-        || issue.code.eq_ignore_ascii_case("RULE_HIT")
-    {
-        return format!(
-            "{} conflicts with {}",
-            format_issue_target(&issue.affected_mod, issue.affected_component),
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("INCLUDED") {
-        return format!(
-            "{} is included by {}",
-            format_issue_target(&issue.affected_mod, issue.affected_component),
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("ORDER_BLOCK") {
-        let affected = format_issue_target(&issue.affected_mod, issue.affected_component);
-        let related = format_issue_target(&issue.related_mod, issue.related_component);
-        let is_require_order = issue
-            .raw_evidence
-            .as_deref()
-            .map(|raw| raw.trim_start().to_ascii_uppercase().starts_with("REQUIRE"))
-            .unwrap_or(false);
-        return if is_require_order {
-            format!("{affected} must be installed after {related}")
-        } else {
-            format!("{affected} must be installed before {related}")
-        };
-    }
-    if issue.code.eq_ignore_ascii_case("REQ_MISSING") {
-        if let Some(or_targets) = parse_or_targets_from_reason(&issue.reason) {
-            return format!(
-                "{} requires one of: {}",
-                format_issue_target(&issue.affected_mod, issue.affected_component),
-                or_targets.join(" | ")
-            );
-        }
-        return format!(
-            "{} requires {}",
-            format_issue_target(&issue.affected_mod, issue.affected_component),
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
-        return format!(
-            "{} has optional patch for {}",
-            format_issue_target(&issue.affected_mod, issue.affected_component),
-            format_issue_target(&issue.related_mod, issue.related_component)
-        );
-    }
-    format!(
-        "{} -> {}",
-        format_issue_target(&issue.affected_mod, issue.affected_component),
-        format_issue_target(&issue.related_mod, issue.related_component)
-    )
 }
 
 pub fn jump_to_compat_issue(state: &mut WizardState, issue: &CompatIssueDisplay) -> bool {
@@ -326,20 +223,6 @@ fn find_issue_in_items(
         JumpSide::Related => exact_related.or(best_related),
         JumpSide::Auto => best_affected.or(exact_related).or(best_related),
     }
-}
-
-fn normalize_mod_key(value: &str) -> String {
-    let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
-    let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
-    without_ext
-        .strip_prefix("setup-")
-        .unwrap_or(without_ext)
-        .to_string()
 }
 
 pub(crate) mod component_uncheck {

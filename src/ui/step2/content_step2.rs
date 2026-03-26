@@ -182,16 +182,6 @@ pub fn render_controls(
             if ui
                 .add_enabled(
                     has_scanned,
-                    egui::Button::new("Revalidate").min_size(egui::vec2(94.0, STEP2_BTN_H)),
-                )
-                .on_hover_text(crate::ui::shared::tooltip_global::STEP2_REVALIDATE)
-                .clicked()
-            {
-                *action = Some(Step2Action::RevalidateCompat);
-            }
-            if ui
-                .add_enabled(
-                    has_scanned,
                     egui::Button::new("Export Compat").min_size(egui::vec2(114.0, STEP2_BTN_H)),
                 )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_EXPORT_COMPAT)

@@ -257,7 +257,7 @@ pub(crate) mod compat_popup_filter_row {
 pub(crate) mod compat_popup_filters {
     use crate::ui::state::CompatIssueDisplay;
 
-    pub(super) fn matches_issue_filter(issue: &CompatIssueDisplay, filter: &str) -> bool {
+    pub(crate) fn matches_issue_filter(issue: &CompatIssueDisplay, filter: &str) -> bool {
         match filter.to_ascii_lowercase().as_str() {
             "conflicts" => {
                 issue.code.eq_ignore_ascii_case("FORBID_HIT")

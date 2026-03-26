@@ -51,7 +51,6 @@ pub const STEP2_SELECT_VISIBLE: &str = "Check all filter-matching components in 
 pub const STEP2_COLLAPSE_ALL: &str = "Collapse all parent mods in the tree.";
 pub const STEP2_EXPAND_ALL: &str = "Expand all parent mods in the tree.";
 pub const STEP2_JUMP_SELECTED: &str = "Scroll to the currently selected row in the tree.";
-pub const STEP2_REVALIDATE: &str = "Re-run compatibility checks against current selections/order.";
 pub const STEP2_EXPORT_COMPAT: &str = "Export Step 2 compatibility report to diagnostics (TXT).";
 pub const STEP2_MODS_COMPONENTS: &str =
     "Active game tab controls which component list and log-apply action are used.";
@@ -62,7 +61,6 @@ pub const STEP2_DETAILS_WEB: &str = "Open the selected mod website.";
 pub const STEP2_DETAILS_TP2: &str = "Open the selected TP2 file/folder.";
 
 pub const STEP3_OPEN_COMPAT_ISSUES: &str = "Open compatibility issues";
-pub const STEP3_REVALIDATE: &str = "Re-run compatibility check for current selection/order.";
 pub const STEP3_EXPORT_DIAGNOSTICS: &str = "Export diagnostics from current state.";
 pub const STEP3_EXPAND_ALL: &str = "Expand all parent blocks.";
 pub const STEP3_COLLAPSE_ALL: &str = "Collapse all parent blocks.";

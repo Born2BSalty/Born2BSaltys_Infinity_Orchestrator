@@ -5,85 +5,7 @@ use super::super::model::{
     CompatIssue, CompatIssueCode, CompatIssueInit, IssueSource, Severity, Tp2Rule,
 };
 use super::validator_helpers::{self as helpers, SameModBlockMeaning};
-use super::validator_rule_handlers_any::handle_require_installed_any;
-use super::validator_rule_handlers_misc::{
-    handle_conditional, handle_forbid_installed, handle_require_game_or_installed_any,
-    handle_require_installed_mod,
-};
 use super::RuleEvalContext;
-
-pub(super) fn apply_rule(
-    issues: &mut Vec<CompatIssue>,
-    ctx: &RuleEvalContext<'_>,
-    rule: &Tp2Rule,
-) {
-    match rule {
-        Tp2Rule::Require {
-            target_mod,
-            target_component,
-            raw_line,
-            line,
-        } => handle_require(issues, ctx, target_mod, *target_component, raw_line, *line),
-        Tp2Rule::Forbid {
-            target_mod,
-            target_component,
-            raw_line,
-            line,
-        } => handle_forbid(issues, ctx, target_mod, *target_component, raw_line, *line),
-        Tp2Rule::RequireGame {
-            allowed_games,
-            raw_line,
-            line,
-        } => handle_require_game(issues, ctx, allowed_games, raw_line, *line),
-        Tp2Rule::ForbidGame {
-            blocked_games,
-            raw_line,
-            line,
-        } => handle_forbid_game(issues, ctx, blocked_games, raw_line, *line),
-        Tp2Rule::RequireGameIncludes {
-            required_games,
-            raw_line,
-            line,
-        } => handle_require_game_includes(issues, ctx, required_games, raw_line, *line),
-        Tp2Rule::Deprecated { .. } => {},
-        Tp2Rule::RequireGameOrInstalledAny {
-            allowed_games,
-            targets,
-            raw_line,
-            line,
-        } => handle_require_game_or_installed_any(issues, ctx, allowed_games, targets, raw_line, *line),
-        Tp2Rule::RequireInstalledMod {
-            target_mod,
-            target_component,
-            raw_line,
-            line,
-        } => handle_require_installed_mod(issues, ctx, target_mod, *target_component, raw_line, *line),
-        Tp2Rule::RequireInstalledAny {
-            targets,
-            raw_line,
-            line,
-        } => handle_require_installed_any(issues, ctx, targets, raw_line, *line),
-        Tp2Rule::RequirePath { .. } => {}
-        Tp2Rule::ForbidInstalledMod {
-            target_mod,
-            target_component,
-            raw_line,
-            line,
-        } => handle_forbid_installed(issues, ctx, target_mod, *target_component, raw_line, *line),
-        Tp2Rule::ConditionalOnInstalled {
-            target_mod,
-            target_component,
-            raw_line,
-            line,
-        } => handle_conditional(issues, ctx, target_mod, *target_component, raw_line, *line, true),
-        Tp2Rule::ConditionalOnMissing {
-            target_mod,
-            target_component,
-            raw_line,
-            line,
-        } => handle_conditional(issues, ctx, target_mod, *target_component, raw_line, *line, false),
-    }
-}
 
 pub(super) fn apply_step2_selection_rule(
     issues: &mut Vec<CompatIssue>,
@@ -162,76 +84,132 @@ pub(super) fn apply_step2_selection_rule(
             target_component,
             raw_line,
             line,
-        } => handle_conditional_selected_only(issues, ctx, target_mod, *target_component, raw_line, *line, true),
+        } => handle_conditional_selected_only(
+            issues,
+            ctx,
+            target_mod,
+            *target_component,
+            raw_line,
+            *line,
+            true,
+        ),
         Tp2Rule::ConditionalOnMissing {
             target_mod,
             target_component,
             raw_line,
             line,
-        } => handle_conditional_selected_only(issues, ctx, target_mod, *target_component, raw_line, *line, false),
+        } => handle_conditional_selected_only(
+            issues,
+            ctx,
+            target_mod,
+            *target_component,
+            raw_line,
+            *line,
+            false,
+        ),
     }
 }
 
-fn handle_require(
+pub(super) fn apply_step3_selection_rule(
     issues: &mut Vec<CompatIssue>,
     ctx: &RuleEvalContext<'_>,
-    target_mod: &str,
-    target_component: u32,
-    raw_line: &str,
-    line: usize,
+    rule: &Tp2Rule,
 ) {
-    let target_key = (target_mod.to_string(), target_component);
-    let current_key = (
-        helpers::normalize_mod_key(&ctx.component.tp_file),
-        ctx.component.component_id,
-    );
-    if target_key == current_key {
-        return;
-    }
-
-    if !ctx.selected_set.contains(&target_key) {
-        issues.push(CompatIssue::new(CompatIssueInit {
-            code: CompatIssueCode::ReqMissing,
-            severity: Severity::Error,
-            source: IssueSource::Tp2 {
-                file: ctx.metadata.tp_file.clone(),
-                line,
-            },
-            affected_mod: ctx.component.mod_name.clone(),
-            affected_component: Some(ctx.component.component_id),
-            related_mod: target_mod.to_string(),
-            related_component: Some(target_component),
-            reason: helpers::resolved_reason_or(
-                ctx.metadata,
-                raw_line,
-                format!("Requires {target_mod} component {target_component} which is not selected"),
-            ),
-            raw_evidence: Some(raw_line.to_string()),
-            component_block: helpers::component_block_for(ctx.metadata, ctx.component.component_id),
-        }));
-        return;
-    }
-
-    if let Some(target_order) = ctx.order_map.get(&target_key)
-        && *target_order > ctx.component.order
-    {
-        issues.push(CompatIssue::new(CompatIssueInit {
-            code: CompatIssueCode::OrderBlock,
-            severity: Severity::Error,
-            source: IssueSource::Tp2 {
-                file: ctx.metadata.tp_file.clone(),
-                line,
-            },
-            affected_mod: ctx.component.mod_name.clone(),
-            affected_component: Some(ctx.component.component_id),
-            related_mod: target_mod.to_string(),
-            related_component: Some(target_component),
-            reason: format!(
-                "Requires {target_mod} #{target_component} before this component, but it is currently ordered after it"
-            ),
-            raw_evidence: Some(raw_line.to_string()),
-            component_block: helpers::component_block_for(ctx.metadata, ctx.component.component_id),
-        }));
+    match rule {
+        Tp2Rule::Require {
+            target_mod,
+            target_component,
+            raw_line,
+            line,
+        } => handle_require_selected_only(issues, ctx, target_mod, *target_component, raw_line, *line),
+        Tp2Rule::Forbid {
+            target_mod,
+            target_component,
+            raw_line,
+            line,
+        } => handle_forbid_selected_only(
+            issues,
+            ctx,
+            target_mod,
+            Some(*target_component),
+            raw_line,
+            *line,
+        ),
+        Tp2Rule::RequireGame {
+            allowed_games,
+            raw_line,
+            line,
+        } => handle_require_game(issues, ctx, allowed_games, raw_line, *line),
+        Tp2Rule::ForbidGame {
+            blocked_games,
+            raw_line,
+            line,
+        } => handle_forbid_game(issues, ctx, blocked_games, raw_line, *line),
+        Tp2Rule::RequireGameIncludes {
+            required_games,
+            raw_line,
+            line,
+        } => handle_require_game_includes(issues, ctx, required_games, raw_line, *line),
+        Tp2Rule::Deprecated { .. } => {}
+        Tp2Rule::RequireGameOrInstalledAny {
+            allowed_games,
+            targets,
+            raw_line,
+            line,
+        } => handle_require_game_or_selected_any(issues, ctx, allowed_games, targets, raw_line, *line),
+        Tp2Rule::RequireInstalledMod {
+            target_mod,
+            target_component,
+            raw_line,
+            line,
+        } => handle_require_installed_selected_only(
+            issues,
+            ctx,
+            target_mod,
+            *target_component,
+            raw_line,
+            *line,
+        ),
+        Tp2Rule::RequireInstalledAny {
+            targets,
+            raw_line,
+            line,
+        } => handle_require_installed_any_selected_only(issues, ctx, targets, raw_line, *line),
+        Tp2Rule::RequirePath { .. } => {}
+        Tp2Rule::ForbidInstalledMod {
+            target_mod,
+            target_component,
+            raw_line,
+            line,
+        } => handle_forbid_selected_only(issues, ctx, target_mod, *target_component, raw_line, *line),
+        Tp2Rule::ConditionalOnInstalled {
+            target_mod,
+            target_component,
+            raw_line,
+            line,
+        } => handle_conditional_selected_only(
+            issues,
+            ctx,
+            target_mod,
+            *target_component,
+            raw_line,
+            *line,
+            true,
+        ),
+        Tp2Rule::ConditionalOnMissing {
+            target_mod,
+            target_component,
+            raw_line,
+            line,
+        } => handle_conditional_selected_only(
+            issues,
+            ctx,
+            target_mod,
+            *target_component,
+            raw_line,
+            *line,
+            false,
+        ),
     }
 }
 
@@ -649,6 +627,7 @@ fn handle_conditional_selected_only(
     if hit != when_installed {
         return;
     }
+
     let description = if when_installed {
         if let Some(cid) = target_component {
             format!("Conditional patch path active because {} #{} is selected", target_mod, cid)
@@ -666,6 +645,7 @@ fn handle_conditional_selected_only(
             target_mod
         )
     };
+
     issues.push(CompatIssue::new(CompatIssueInit {
         code: CompatIssueCode::Conditional,
         severity: Severity::Warning,
@@ -678,91 +658,6 @@ fn handle_conditional_selected_only(
         related_mod: target_mod.to_string(),
         related_component: target_component,
         reason: helpers::resolved_reason_or(ctx.metadata, raw_line, description),
-        raw_evidence: Some(raw_line.to_string()),
-        component_block: helpers::component_block_for(ctx.metadata, ctx.component.component_id),
-    }));
-}
-
-fn handle_forbid(
-    issues: &mut Vec<CompatIssue>,
-    ctx: &RuleEvalContext<'_>,
-    target_mod: &str,
-    target_component: u32,
-    raw_line: &str,
-    line: usize,
-) {
-    let affected_mod_key = helpers::normalize_mod_key(&ctx.component.tp_file);
-    let related_mod_key = helpers::normalize_mod_key(target_mod);
-    if affected_mod_key == related_mod_key && ctx.component.component_id == target_component {
-        return;
-    }
-    let target_key = (target_mod.to_string(), target_component);
-    if !ctx.selected_set.contains(&target_key) {
-        return;
-    }
-
-    let same_mod_meaning = helpers::classify_same_mod_block(
-        ctx.metadata,
-        &ctx.component.tp_file,
-        target_mod,
-        raw_line,
-    );
-
-    if let Some(target_order) = ctx.order_map.get(&target_key) {
-        if *target_order < ctx.component.order {
-            let (code, severity, reason) = match same_mod_meaning {
-                Some(SameModBlockMeaning::Included) => (
-                    CompatIssueCode::Included,
-                    Severity::Warning,
-                    format!(
-                        "Already provided by {target_mod} component {target_component}; that component is currently ordered earlier"
-                    ),
-                ),
-                _ => (
-                    CompatIssueCode::OrderBlock,
-                    Severity::Error,
-                    format!(
-                        "Must be installed before {target_mod} component {target_component}; that component is currently ordered earlier"
-                    ),
-                ),
-            };
-            issues.push(CompatIssue::new(CompatIssueInit {
-                code,
-                severity,
-                source: IssueSource::Tp2 {
-                    file: ctx.metadata.tp_file.clone(),
-                    line,
-                },
-                affected_mod: ctx.component.mod_name.clone(),
-                affected_component: Some(ctx.component.component_id),
-                related_mod: target_mod.to_string(),
-                related_component: Some(target_component),
-                reason,
-                raw_evidence: Some(raw_line.to_string()),
-                component_block: helpers::component_block_for(ctx.metadata, ctx.component.component_id),
-            }));
-        }
-        return;
-    }
-
-    issues.push(CompatIssue::new(CompatIssueInit {
-        code: CompatIssueCode::OrderBlock,
-        severity: Severity::Error,
-        source: IssueSource::Tp2 {
-            file: ctx.metadata.tp_file.clone(),
-            line,
-        },
-        affected_mod: ctx.component.mod_name.clone(),
-        affected_component: Some(ctx.component.component_id),
-        related_mod: target_mod.to_string(),
-        related_component: Some(target_component),
-        reason: helpers::resolved_reason_or(
-            ctx.metadata,
-            raw_line,
-            format!(
-                "Must be installed before {target_mod} component {target_component}; the selected order could not be resolved"
-            ),
-        ),
         raw_evidence: Some(raw_line.to_string()),
         component_block: helpers::component_block_for(ctx.metadata, ctx.component.component_id),
     }));

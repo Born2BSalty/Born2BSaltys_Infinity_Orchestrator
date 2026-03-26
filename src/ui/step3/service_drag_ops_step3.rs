@@ -43,7 +43,7 @@ pub(crate) struct LiveReorderContext<'a> {
     pub visible_rows: &'a [(usize, egui::Rect)],
 }
 
-pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'_>) {
+pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'_>) -> bool {
     let items = &mut *ctx.items;
     let selected = &mut *ctx.selected;
     let drag_from = &mut *ctx.drag_from;
@@ -55,8 +55,9 @@ pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'
     let last_insert_at = &mut *ctx.last_insert_at;
     let clone_seq = &mut *ctx.clone_seq;
     if !ui.input(|i| i.pointer.any_released()) {
-        return;
+        return false;
     }
+    let had_drag = drag_from.is_some() || !drag_indices.is_empty();
     let selected_keys: std::collections::HashSet<String> = selected
         .iter()
         .filter_map(|idx| items.get(*idx))
@@ -86,6 +87,7 @@ pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'
         selected.sort_unstable();
         selected.dedup();
     }
+    had_drag
 }
 
 pub(crate) fn draw_insert_marker(

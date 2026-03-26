@@ -4,7 +4,10 @@
 use eframe::egui;
 
 use crate::ui::state::WizardState;
-use crate::ui::step3::compat_modal_issue_text_step3::*;
+use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_explain as step2_issue_text_explain;
+use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_kind as step2_issue_text_kind;
+use crate::ui::step2::compat_popup_step2::compat_popup_filters as step2_popup_filters;
+use crate::ui::step3::compat_modal_issue_text_step3::{issue_graph, issue_target_exists};
 use crate::ui::step3::compat_modal_step3::compat_model::CompatJumpAction;
 use crate::ui::step3::service_step3::export_step3_compat_report;
 
@@ -52,6 +55,7 @@ fn render_filter_row(ui: &mut egui::Ui, state: &mut WizardState) {
             ("all", "All"),
             ("conflicts", "Conflicts"),
             ("dependencies", "Missing deps"),
+            ("order", "Install order"),
             ("conditionals", "Conditionals"),
             ("warnings", "Warnings"),
         ] {
@@ -73,7 +77,7 @@ fn render_issue_list(
         .compat
         .issues
         .iter()
-        .filter(|i| matches_issue_filter(i, &filter))
+        .filter(|i| step2_popup_filters::matches_issue_filter(i, &filter))
         .collect();
 
     let issue_list_h = (ui.available_height() - 90.0).max(40.0);
@@ -94,7 +98,7 @@ fn render_issue_list(
                 egui::CollapsingHeader::new(
                     crate::ui::shared::typography_global::strong(format!(
                         "[{}] {}",
-                        human_kind(&issue.code),
+                        step2_issue_text_kind::human_kind(&issue.code),
                         graph
                     ))
                     .color(color),
@@ -104,7 +108,7 @@ fn render_issue_list(
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(crate::ui::shared::typography_global::strong("Kind"));
-                        ui.label(human_kind(&issue.code));
+                        ui.label(step2_issue_text_kind::human_kind(&issue.code));
                         let (badge_text, badge_color) = if issue.is_blocking {
                             (
                                 "Blocks install",
@@ -119,10 +123,10 @@ fn render_issue_list(
                         ui.label(crate::ui::shared::typography_global::strong(badge_text).color(badge_color));
                     });
                     ui.add_space(4.0);
-                    ui.label(issue_summary(issue));
+                    ui.label(step2_issue_text_explain::issue_summary(issue));
                     ui.add_space(6.0);
                     ui.label(crate::ui::shared::typography_global::strong("TP2 source"));
-                    ui.monospace(display_source(&issue.source));
+                    ui.monospace(step2_issue_text_explain::display_source(&issue.source));
                     if let Some(block) = issue.component_block.as_deref() {
                         ui.add_space(6.0);
                         egui::CollapsingHeader::new(

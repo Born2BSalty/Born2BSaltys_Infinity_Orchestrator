@@ -116,7 +116,7 @@ pub(super) fn run_validation(validator: &CompatValidator, state: &WizardState) -
     };
 
     let selected = select::build_selected_components(items);
-    let result = validator.validate_with_installed(&selected, game, &std::collections::HashSet::new());
+    let result = validator.validate_step3_order(&selected, game);
     map::to_state(result)
 }
 
@@ -131,8 +131,8 @@ pub(super) fn run_validation_for_both_games(
             let bgee_selected = select::build_selected_components(&state.step3.bgee_items);
             let bg2ee_selected = select::build_selected_components(&state.step3.bg2ee_items);
 
-            let bgee_result = validator.validate_with_installed(&bgee_selected, "EET", &std::collections::HashSet::new());
-            let bg2ee_result = validator.validate_with_installed(&bg2ee_selected, "EET", &std::collections::HashSet::new());
+            let bgee_result = validator.validate_step3_order(&bgee_selected, "EET");
+            let bg2ee_result = validator.validate_step3_order(&bg2ee_selected, "EET");
 
             let left = map::to_state(bgee_result);
             let right = map::to_state(bg2ee_result);
@@ -153,8 +153,10 @@ pub(super) fn run_validation_for_step2_checked_order(
             let bgee_selected = select::build_selected_components_from_step2(&state.step2.bgee_mods);
             let bg2ee_selected = select::build_selected_components_from_step2(&state.step2.bg2ee_mods);
 
-            let bgee_result = validator.validate_step2_selection(&bgee_selected, "EET");
-            let bg2ee_result = validator.validate_step2_selection(&bg2ee_selected, "EET");
+            let bgee_result =
+                validator.validate_step2_selection(&bgee_selected, "EET");
+            let bg2ee_result =
+                validator.validate_step2_selection(&bg2ee_selected, "EET");
 
             let left = map::to_state(bgee_result);
             let right = map::to_state(bg2ee_result);

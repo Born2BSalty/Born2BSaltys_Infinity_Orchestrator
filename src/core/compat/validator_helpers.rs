@@ -104,11 +104,13 @@ fn single_game_included(current_game: &str, required_game: &str) -> bool {
         "bgee" => required_game.eq_ignore_ascii_case("bgee"),
         "bg2ee" => {
             required_game.eq_ignore_ascii_case("bg2ee")
+                || required_game.eq_ignore_ascii_case("bg2")
                 || required_game.eq_ignore_ascii_case("soa")
                 || required_game.eq_ignore_ascii_case("tob")
         }
         "eet" => {
             required_game.eq_ignore_ascii_case("bgee")
+                || required_game.eq_ignore_ascii_case("bg2")
                 || required_game.eq_ignore_ascii_case("bg2ee")
                 || required_game.eq_ignore_ascii_case("eet")
                 || required_game.eq_ignore_ascii_case("soa")
