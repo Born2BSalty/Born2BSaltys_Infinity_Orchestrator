@@ -3,7 +3,6 @@
 
 use crate::ui::controller::util::open_in_shell;
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::step2::service_step2::export_compat_report;
 
 use super::WizardApp;
 use super::{step2_log, step2_scan};
@@ -14,14 +13,6 @@ pub(super) fn handle_step2_action(app: &mut WizardApp, action: Step2Action) {
         Step2Action::CancelScan => step2_scan::cancel_step2_scan(app),
         Step2Action::SelectBgeeViaLog => step2_log::apply_weidu_log_selection(app, true),
         Step2Action::SelectBg2eeViaLog => step2_log::apply_weidu_log_selection(app, false),
-        Step2Action::ExportCompatReport => match export_compat_report(&app.state.step2, &app.state.compat) {
-            Ok(path) => {
-                app.state.step2.scan_status = format!("Compat report exported: {}", path.display());
-            }
-            Err(err) => {
-                app.state.step2.scan_status = format!("Compat export failed: {err}");
-            }
-        },
         Step2Action::OpenSelectedReadme(path)
         | Step2Action::OpenSelectedTp2(path)
         | Step2Action::OpenSelectedWeb(path) => {
@@ -41,6 +32,7 @@ pub(super) fn handle_step2_action(app: &mut WizardApp, action: Step2Action) {
                 component_id,
                 component_key,
             });
+            app.state.step2.compat_popup_issue_override = None;
             app.state.step2.compat_popup_open = true;
         }
     }

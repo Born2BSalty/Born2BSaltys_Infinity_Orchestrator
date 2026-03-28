@@ -34,6 +34,9 @@ pub(super) fn handle_reset(app: &mut WizardApp) {
 
 pub(super) fn handle_back(app: &mut WizardApp) {
     let prev_step = app.state.current_step;
+    if prev_step == 2 {
+        app.sync_step2_from_step3();
+    }
     if app.state.step1.have_weidu_logs && (app.state.current_step == 3 || app.state.current_step == 4) {
         app.state.current_step = 0;
     } else {
@@ -291,10 +294,6 @@ pub(super) fn advance_after_next(app: &mut WizardApp) {
             if should_sync {
                 app.sync_step3_from_step2();
                 app.last_step2_sync_signature = Some(signature);
-            } else {
-                // Even if Step 3 structure didn't need sync, revalidate to refresh
-                // mode-dependent issues (e.g. BGEE <-> EET switch).
-                app.revalidate_compat();
             }
         }
         if app.state.current_step == 3
@@ -325,7 +324,11 @@ fn step2_selection_signature(app: &WizardApp) -> String {
             let tp = m.tp_file.to_ascii_uppercase();
             for c in &m.components {
                 if c.checked {
-                    entries.push(format!("{tag}|{tp}|{}", c.component_id));
+                    entries.push(format!(
+                        "{tag}|{tp}|{}|{}",
+                        c.component_id,
+                        c.selected_order.unwrap_or(usize::MAX)
+                    ));
                 }
             }
         }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use super::{CompatState, Step1State, Step2State, Step3State, Step5State};
+use super::{Step1State, Step2State, Step3State, Step5State};
 
 #[derive(Debug, Clone, Default)]
 pub struct WizardState {
@@ -14,5 +14,4 @@ pub struct WizardState {
     pub step2: Step2State,
     pub step3: Step3State,
     pub step5: Step5State,
-    pub compat: CompatState,
 }

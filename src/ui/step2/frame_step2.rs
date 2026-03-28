@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::ui::shared::layout_tokens_global::*;
 use crate::ui::state::WizardState;
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::step2::service_step2::recompute_selection_counts;
+use crate::ui::step2::service_list_ops_step2::recompute_selection_counts;
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -112,7 +112,7 @@ impl egui::Widget for Step2LayoutWidget<'_> {
         crate::ui::step2::list_pane_step2::render_list_pane(ui, self.state, self.action, left_rect);
         crate::ui::step2::content_step2::render_details_pane(ui, self.state, self.action, right_rect);
         crate::ui::step2::content_step2::render_compat_popup(ui, self.state);
-        crate::ui::step2::content_step2::render_prompt_popup(ui, self.state);
+        crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, self.state);
 
         let vis = &ui.visuals().widgets.noninteractive;
         let splitter_x = splitter_rect.center().x;

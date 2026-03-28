@@ -3,5 +3,5 @@
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step5Action {
-    CheckCompatBeforeInstall,
+    StartInstall,
 }

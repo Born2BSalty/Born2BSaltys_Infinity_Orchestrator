@@ -42,7 +42,11 @@ pub(crate) fn try_auto_answer_prompt(
         format!("{}|{}", prompt_key, prompt_kind)
     };
     let now_ms = now_unix_millis();
-    crate::ui::step5::service_step5::readiness::update_prompt_readiness(state, &prompt_signature, now_ms);
+    crate::ui::step5::service_readiness_step5::update_prompt_readiness(
+        state,
+        &prompt_signature,
+        now_ms,
+    );
     let headers_ready = term.prompt_headers_ready();
     let scripted_debounce_ms = initial_delay_base_ms(state);
     let fallback_debounce_ms = adaptive_prompt_debounce_ms(
@@ -51,9 +55,17 @@ pub(crate) fn try_auto_answer_prompt(
         line_count,
         char_count,
     );
-    let ready_for_scripted = crate::ui::step5::service_step5::readiness::ready_for_scripted(state, now_ms, scripted_debounce_ms);
-    let ready_for_fallback =
-        crate::ui::step5::service_step5::readiness::ready_for_fallback(state, now_ms, headers_ready, fallback_debounce_ms);
+    let ready_for_scripted = crate::ui::step5::service_readiness_step5::ready_for_scripted(
+        state,
+        now_ms,
+        scripted_debounce_ms,
+    );
+    let ready_for_fallback = crate::ui::step5::service_readiness_step5::ready_for_fallback(
+        state,
+        now_ms,
+        headers_ready,
+        fallback_debounce_ms,
+    );
     if has_scripted_candidate {
         if !ready_for_scripted {
             return;
@@ -64,12 +76,16 @@ pub(crate) fn try_auto_answer_prompt(
     let prompt_cycle = prompt_cycle_count(term);
     let prompt_cycle_signature = format!("{prompt_key}|{prompt_cycle}");
     let post_send_delay_ms = post_send_delay_ms(state);
-    let settle_active = crate::ui::step5::service_step5::readiness::settle_active(state, now_ms, post_send_delay_ms);
+    let settle_active = crate::ui::step5::service_readiness_step5::settle_active(
+        state,
+        now_ms,
+        post_send_delay_ms,
+    );
     if settle_active {
         return;
     }
     if has_scripted_candidate
-        && crate::ui::step5::service_step5::scripted::send_scripted(
+        && crate::ui::step5::service_scripted_step5::send_scripted(
             state,
             term,
             &prompt_key,
@@ -81,7 +97,8 @@ pub(crate) fn try_auto_answer_prompt(
     {
         return;
     }
-    let allow_json_fallback = crate::ui::step5::service_step5::scripted::allow_json_fallback_after_scripted(
+    let allow_json_fallback =
+        crate::ui::step5::service_scripted_step5::allow_json_fallback_after_scripted(
         state,
         term,
         &prompt_key,
@@ -91,7 +108,7 @@ pub(crate) fn try_auto_answer_prompt(
     if !allow_json_fallback {
         return;
     }
-    let _ = crate::ui::step5::service_step5::json_fallback::try_send_json_fallback(
+    let _ = crate::ui::step5::service_json_fallback_step5::try_send_json_fallback(
         state,
         term,
         &prompt_key,

@@ -4,58 +4,16 @@
 use eframe::egui;
 
 use crate::ui::state::{Step2ComponentState, Step2ModState, Step2Selection};
-use crate::ui::step2::format_step2::{
-    colored_component_widget_text, format_component_row_label,
-    format_component_row_label_with_display,
+use crate::ui::step2::tree_component_row_step2::render_component_row;
+use crate::ui::step2::tree_component_types_step2::{
+    reborrow_render_state, CompatPopupTarget, ComponentRenderState, ComponentRowsContext,
+    ComponentRowsResult, PromptPopupTarget,
 };
-use crate::ui::step2::prompt_eval_step2::evaluate_component_prompt_summary;
-use crate::ui::step2::state_step2::PromptEvalContext;
-use crate::ui::step2::tree_parent_step2::format_component_prompt_popup_text_with_body;
-use crate::ui::step2::tree_step2::step2_tree::render_helpers::{
-    compat_colors, enforce_collapsible_group_umbrella_rules, enforce_meta_mode_exclusive,
+use crate::ui::step2::tree_selection_rules_step2::{
+    enforce_collapsible_group_umbrella_rules, enforce_meta_mode_exclusive,
     enforce_subcomponent_single_select, enforce_tp2_same_mod_exclusive_on_select,
-    set_component_checked_state, split_subcomponent_label,
+    split_subcomponent_label,
 };
-
-type CompatPopupTarget = Option<(String, String, String)>;
-type PromptPopupTarget = Option<(String, String)>;
-
-pub(crate) struct ComponentRowsResult {
-    pub selection: Option<Step2Selection>,
-    pub compat_popup: CompatPopupTarget,
-    pub prompt_popup: PromptPopupTarget,
-}
-
-pub(crate) struct ComponentRowsContext<'a> {
-    pub filter: &'a str,
-    pub active_tab: &'a str,
-    pub selected: &'a Option<Step2Selection>,
-    pub next_selection_order: &'a mut usize,
-    pub prompt_eval: &'a PromptEvalContext,
-    pub jump_to_selected_requested: &'a mut bool,
-    pub tp_file: &'a str,
-    pub mod_name: &'a str,
-}
-
-struct ComponentRenderState<'a> {
-    selection: &'a mut Option<Step2Selection>,
-    compat_popup: &'a mut CompatPopupTarget,
-    prompt_popup: &'a mut PromptPopupTarget,
-    enforce_single_select_for: &'a mut Vec<usize>,
-    enforce_collapsible_group_for: &'a mut Vec<usize>,
-    enforce_meta_for: &'a mut Vec<usize>,
-}
-
-fn reborrow_render_state<'a>(state: &'a mut ComponentRenderState<'_>) -> ComponentRenderState<'a> {
-    ComponentRenderState {
-        selection: &mut *state.selection,
-        compat_popup: &mut *state.compat_popup,
-        prompt_popup: &mut *state.prompt_popup,
-        enforce_single_select_for: &mut *state.enforce_single_select_for,
-        enforce_collapsible_group_for: &mut *state.enforce_collapsible_group_for,
-        enforce_meta_for: &mut *state.enforce_meta_for,
-    }
-}
 
 fn selected_component_targets_range(
     selected: &Option<Step2Selection>,
@@ -115,12 +73,18 @@ pub(crate) fn render_component_rows(
             });
             if any_child_visible {
                 let header_id =
-                    egui::Id::new(("step2_weidu_group", ctx.tp_file, component_idx, header.as_str()));
+                    egui::Id::new((
+                        "step2_weidu_group",
+                        ctx.collapse_epoch,
+                        ctx.tp_file,
+                        component_idx,
+                        header.as_str(),
+                    ));
                 let mut state =
                     egui::collapsing_header::CollapsingState::load_with_default_open(
                         ui.ctx(),
                         header_id,
-                        false,
+                        ctx.collapse_default_open,
                     );
                 if *ctx.jump_to_selected_requested
                     && selected_component_targets_range(
@@ -240,6 +204,7 @@ fn render_component_rows_range(
             if any_child_visible {
                 let header_id = egui::Id::new((
                     "step2_collapsible_group",
+                    ctx.collapse_epoch,
                     ctx.tp_file,
                     component_idx,
                     header.as_str(),
@@ -248,7 +213,7 @@ fn render_component_rows_range(
                     egui::collapsing_header::CollapsingState::load_with_default_open(
                         ui.ctx(),
                         header_id,
-                        false,
+                        ctx.collapse_default_open,
                     );
                 if *ctx.jump_to_selected_requested
                     && selected_component_targets_range(
@@ -314,12 +279,18 @@ fn render_component_rows_range(
             if any_child_visible {
                 let subgroup_indent = if within_weidu_group { 45.0 } else { 25.0 };
                 let header_id =
-                    egui::Id::new(("step2_subgroup", ctx.tp_file, component_idx, header.as_str()));
+                    egui::Id::new((
+                        "step2_subgroup",
+                        ctx.collapse_epoch,
+                        ctx.tp_file,
+                        component_idx,
+                        header.as_str(),
+                    ));
                 let mut state =
                     egui::collapsing_header::CollapsingState::load_with_default_open(
                         ui.ctx(),
                         header_id,
-                        false,
+                        ctx.collapse_default_open,
                     );
                 if *ctx.jump_to_selected_requested
                     && selected_component_targets_range(
@@ -377,179 +348,4 @@ fn render_component_rows_range(
         }
         component_idx += 1;
     }
-}
-
-fn render_component_row(
-    ui: &mut egui::Ui,
-    ctx: &mut ComponentRowsContext<'_>,
-    ui_state: &mut ComponentRenderState<'_>,
-    component_idx: usize,
-    component: &mut Step2ComponentState,
-    display_override: Option<&str>,
-    indent: f32,
-) {
-    let effectively_disabled = component.disabled
-        || matches!(
-            component.compat_kind.as_deref(),
-            Some("game_mismatch") | Some("included")
-        );
-    let display_label = match display_override {
-        Some(display) => format_component_row_label_with_display(
-            component.raw_line.as_str(),
-            component.component_id.as_str(),
-            display,
-        ),
-        None => format_component_row_label(
-            component.raw_line.as_str(),
-            component.component_id.as_str(),
-            component.label.as_str(),
-        ),
-    };
-
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 4.0;
-        ui.add_space(indent);
-        let was_checked = component.checked;
-        ui.push_id(
-            (
-                "mod_component_checkbox",
-                ctx.tp_file,
-                ctx.mod_name,
-                &component.component_id,
-                component_idx,
-            ),
-            |ui| {
-                ui.add_enabled_ui(!effectively_disabled, |ui| {
-                    ui.checkbox(&mut component.checked, "");
-                });
-            },
-        );
-        if component.checked != was_checked {
-            set_component_checked_state(component, ctx.next_selection_order);
-            if component.checked {
-                ui_state.enforce_single_select_for.push(component_idx);
-                ui_state.enforce_collapsible_group_for.push(component_idx);
-                ui_state.enforce_meta_for.push(component_idx);
-            }
-        }
-        if effectively_disabled && component.checked {
-            component.checked = false;
-            component.selected_order = None;
-        }
-        if let Some((dot_color, _, _)) = compat_colors(component.compat_kind.as_deref()) {
-            ui.label(crate::ui::shared::typography_global::strong("•").color(dot_color));
-        }
-        let is_selected = matches!(
-            ctx.selected,
-            Some(Step2Selection::Component {
-                game_tab,
-                tp_file: selected_tp,
-                component_id,
-                component_key,
-            }) if game_tab == ctx.active_tab
-                && selected_tp == ctx.tp_file
-                && component_id == &component.component_id
-                && component_key == &component.raw_line
-        );
-        let widget_text = if effectively_disabled {
-            egui::WidgetText::RichText(
-                crate::ui::shared::typography_global::strong(display_label.as_str())
-                    .color(crate::ui::shared::theme_global::text_disabled()),
-            )
-        } else {
-            colored_component_widget_text(ui, display_label.as_str())
-        };
-        let row_w = ui.available_width().max(0.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(row_w, ui.spacing().interact_size.y),
-            egui::Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                ui.set_max_width(row_w);
-                let compat = compat_colors(component.compat_kind.as_deref());
-                let mut row = ui.selectable_label(is_selected, widget_text);
-                if *ctx.jump_to_selected_requested && is_selected {
-                    ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
-                    *ctx.jump_to_selected_requested = false;
-                }
-                if effectively_disabled && let Some(reason) = &component.disabled_reason {
-                    row = row.on_hover_text(reason);
-                }
-                if row.clicked() {
-                    *ui_state.selection = Some(Step2Selection::Component {
-                        game_tab: ctx.active_tab.to_string(),
-                        tp_file: ctx.tp_file.to_string(),
-                        component_id: component.component_id.clone(),
-                        component_key: component.raw_line.clone(),
-                    });
-                }
-                if let Some((pill_text_color, pill_bg, pill_label)) = compat {
-                    ui.add_space(6.0);
-                    let pill_text = crate::ui::shared::typography_global::strong(pill_label)
-                        .color(pill_text_color)
-                        .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
-                    let mut pill_response = ui.add(
-                        egui::Button::new(pill_text)
-                            .fill(pill_bg)
-                            .stroke(egui::Stroke::new(
-                                crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                                pill_bg,
-                            ))
-                            .corner_radius(egui::CornerRadius::same(7))
-                            .min_size(egui::vec2(0.0, 18.0)),
-                    );
-                    if let Some(reason) = &component.disabled_reason {
-                        pill_response = pill_response.on_hover_text(reason);
-                    }
-                    if pill_response.clicked() {
-                        *ui_state.selection = Some(Step2Selection::Component {
-                            game_tab: ctx.active_tab.to_string(),
-                            tp_file: ctx.tp_file.to_string(),
-                            component_id: component.component_id.clone(),
-                            component_key: component.raw_line.clone(),
-                        });
-                        *ui_state.compat_popup = Some((
-                            ctx.tp_file.to_string(),
-                            component.component_id.clone(),
-                            component.raw_line.clone(),
-                        ));
-                    }
-                }
-                let evaluated_prompt_summary =
-                    evaluate_component_prompt_summary(component, ctx.prompt_eval);
-                if !evaluated_prompt_summary.trim().is_empty() {
-                    ui.add_space(6.0);
-                    let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
-                        .color(crate::ui::shared::theme_global::prompt_text())
-                        .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
-                    let prompt_response = ui
-                        .add(
-                            egui::Button::new(prompt_text)
-                                .fill(crate::ui::shared::theme_global::prompt_fill())
-                                .stroke(egui::Stroke::new(
-                                    crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                                    crate::ui::shared::theme_global::prompt_stroke(),
-                                ))
-                                .corner_radius(egui::CornerRadius::same(7))
-                                .min_size(egui::vec2(0.0, 18.0)),
-                        )
-                        .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
-                    if prompt_response.clicked() {
-                        *ui_state.selection = Some(Step2Selection::Component {
-                            game_tab: ctx.active_tab.to_string(),
-                            tp_file: ctx.tp_file.to_string(),
-                            component_id: component.component_id.clone(),
-                            component_key: component.raw_line.clone(),
-                        });
-                        *ui_state.prompt_popup = Some((
-                            format!("{} #{}", ctx.tp_file, component.component_id),
-                            format_component_prompt_popup_text_with_body(
-                                component,
-                                &evaluated_prompt_summary,
-                            ),
-                        ));
-                    }
-                }
-            },
-        );
-    });
 }

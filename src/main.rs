@@ -10,8 +10,6 @@ use clap::Parser;
 mod app;
 #[path = "core/cli/mod.rs"]
 mod cli;
-#[path = "core/compat/mod.rs"]
-mod compat;
 #[path = "core/config/mod.rs"]
 mod config;
 #[path = "core/install/mod.rs"]

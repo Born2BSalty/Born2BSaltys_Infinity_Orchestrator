@@ -6,9 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::platform_defaults::{compose_component_key, normalize_tp2_filename};
 use crate::ui::state::{Step3ItemState, WizardState};
+use crate::ui::step3::list_rows_step3::PromptActionRequest;
 use crate::ui::step3::state_step3;
-
-use crate::ui::step3::list_step3::list::rows::PromptActionRequest;
 
 const WLB_MARKER: &str = "@wlb-inputs:";
 

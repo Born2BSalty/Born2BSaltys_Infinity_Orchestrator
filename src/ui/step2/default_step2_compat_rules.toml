@@ -1,0 +1,158 @@
+schema_version = 1
+
+# BIO-owned default compatibility rules.
+# BIO may replace the AppData copy of this file when you update BIO.
+# Put personal custom rules in:
+# - %APPDATA%/bio/step2_compat_rules_user.toml
+#
+# Compatibility rules for greying out components after scan.
+# BIO applies TP2/scan compat first, then this file is applied after scan.
+# Manual rules in this file win over scan results.
+#
+# Each rule matches by mod header name and optional component substring or id.
+# component and component_id can be a single string or a list.
+# Rule phases:
+# 1. direct/path/allow rules
+# 2. relation rules (conflict, missing_dep, order_block with related targets)
+# Within each phase, rules are applied top-to-bottom and later matching rules can
+# override earlier ones.
+#
+# Supported kinds:
+# - allow            -> clears the current auto/manual issue and leaves the component selectable
+# - included
+# - not_needed
+# - not_compatible
+# - warning
+# - conflict
+# - mismatch
+# - order_block
+# - missing_dep
+# - path_requirement
+# - conditional
+# - deprecated
+#
+# Common optional fields:
+# - mode = ["EET", "BGEE", "BG2EE"]
+# - tab = ["BGEE", "BG2EE"]
+# - match_kind = ["mismatch"]            -> only match when the current kind already matches
+# - clear_kinds = ["mismatch"]           -> clear current kinds before this rule applies
+# - source = "step2_compat_rules_user.toml" -> shown in Details pane
+# - related_mod = "SOME_MOD"             -> relation target mod
+# - related_component = "2"              -> relation target component id
+# - position = "before" | "after"        -> for order_block rules
+# - path_field = "eet_pre_dir"           -> for path_requirement rules
+# - path_check = "set" | "exists"        -> path_requirement check mode
+#
+# Example one-block override + order rule (copy/paste and edit):
+# [[rules]]
+# mod = "eefixpack"
+# component_id = "0"
+# mode = ["EET"]                        # optional: only apply when selected game mode matches
+# tab = ["BG2EE"]                       # optional: only apply on these Step 2 tabs
+# clear_kinds = ["mismatch"]            # remove bad auto mismatch first
+# kind = "order_block"
+# related_mod = "EET"
+# related_component = "0"
+# position = "before"
+# message = "Core Fixes must be installed before EET core."
+#
+# Example simple clear-only rule:
+# [[rules]]
+# mod = "eefixpack"
+# component_id = ["1", "2"]
+# mode = ["EET"]
+# tab = ["BG2EE"]
+# match_kind = ["mismatch"]
+# kind = "allow"
+# message = "Allow these components even if TP2 scan marks them as mismatch."
+#
+# Example conflict rule:
+# [[rules]]
+# mod = "some_mod"
+# component_id = "10"
+# mode = ["EET"]
+# tab = ["BG2EE"]
+# kind = "conflict"
+# related_mod = "other_mod"
+# related_component = "0"
+# message = "Conflicts with other_mod #0."
+#
+# Example missing dependency rule:
+# [[rules]]
+# mod = "some_mod"
+# component_id = "20"
+# mode = ["EET"]
+# tab = ["BG2EE"]
+# kind = "missing_dep"
+# related_mod = "EET"
+# related_component = "0"
+# message = "Requires EET core first."
+#
+# Example install-order rule:
+# [[rules]]
+# mod = "some_mod"
+# component_id = "30"
+# mode = ["EET"]
+# tab = ["BG2EE"]
+# kind = "order_block"
+# related_mod = "EET"
+# related_component = "0"
+# position = "before"
+# message = "Install this before EET core."
+#
+# Example path requirement rule:
+# [[rules]]
+# mod = "some_mod"
+# component_id = "40"
+# kind = "path_requirement"
+# path_field = "eet_pre_dir"
+# path_check = "exists"
+# message = "Pre-EET directory must exist."
+#
+# Example manual pill rule:
+# [[rules]]
+# mod = "bg1ub"
+# component = "Ice Island Level Two Restoration"
+# mode = ["EET", "BGEE", "BG2EE"]
+# tab = ["BGEE", "BG2EE"]
+# kind = "included"
+# message = "Already included in BG:EE v2.5+."
+# source = "step2_compat_rules_user.toml" # optional: shown in Details pane
+# related_mod = "SOME_MOD"           # optional: related conflict/dependency target
+# related_component = "2"            # optional: related target component id
+
+[[rules]]
+mod = "bg1ub"
+component_id = ["3", "15", "9", "5", "8", "20", "23", "24", "25", "26", "27", "31"]
+mode = ["EET", "BGEE", "BG2EE"]
+tab = ["bgee", "bg2ee"]
+kind = "included"
+message = "Already included in BG:EE."
+
+[[rules]]
+mod = "bg1ub"
+component_id = ["4", "1", "28", "7", "6", "10"]
+mode = ["EET", "BGEE", "BG2EE"]
+tab = ["bgee", "bg2ee"]
+kind = "included"
+message = "Already included in BG:EE v2.5+."
+
+[[rules]]
+mod = "bg1ub"
+component_id = "2"
+mode = ["EET", "BGEE", "BG2EE"]
+tab = ["bgee", "bg2ee"]
+kind = "included"
+message = "Already fixed in BGEE/BGT."
+
+[[rules]]
+mod = "eefixpack"
+component_id = ["0", "1", "2"]
+mode = ["EET"]
+tab = ["BG2EE"]
+clear_kinds = ["mismatch"]
+kind = "order_block"
+related_mod = "EET"
+related_component = "0"
+position = "before"
+message = "Install these components before EET core."

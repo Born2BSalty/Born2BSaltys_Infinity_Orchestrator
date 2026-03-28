@@ -10,9 +10,7 @@ use anyhow::Result;
 use crate::ui::state::WizardState;
 use crate::ui::step4::service_step4::build_weidu_export_lines;
 use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, prune_old_diagnostics, run_dir_from_id};
-use crate::ui::step5::service_step5::{
-    build_install_invocation,
-};
+use crate::ui::step5::service_step5_command_step5::build_install_invocation;
 use crate::ui::step5::log_files::{copy_diagnostic_origin_logs, DiagnosticLogGroup};
 use crate::ui::terminal::EmbeddedTerminal;
 
@@ -20,20 +18,18 @@ use crate::ui::terminal::EmbeddedTerminal;
 mod appdata_copy;
 #[path = "diagnostics_compat_decisions_json.rs"]
 mod compat_decisions_json;
+#[path = "diagnostics_compat_rule_trace_json.rs"]
+mod compat_rule_trace_json;
 #[path = "diagnostics_compat_snapshot.rs"]
 mod compat_snapshot;
-#[path = "diagnostics_compat_summary.rs"]
-mod compat_summary;
-#[path = "diagnostics_compat_summary_json.rs"]
-mod compat_summary_json;
 #[path = "diagnostics_export_marker_json.rs"]
 mod export_marker_json;
-#[path = "diagnostics_format.rs"]
-mod format;
 #[path = "diagnostics_quick_triage.rs"]
 mod quick_triage;
 #[path = "diagnostics_scan_context_json.rs"]
 mod scan_context_json;
+#[path = "diagnostics_step2_render_order_json.rs"]
+mod step2_render_order_json;
 #[path = "diagnostics_prompt_calls_json.rs"]
 mod prompt_calls_json;
 #[path = "diagnostics_parser_events_json.rs"]
@@ -117,6 +113,10 @@ pub fn export_diagnostics(
         Ok(path) => written_paths.push(path),
         Err(err) => append_diag_note(&out_path, &format!("scan_context_json_write=FAILED: {err}")),
     }
+    match step2_render_order_json::write_step2_render_order_json(&run_dir, state, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(&out_path, &format!("step2_render_order_json_write=FAILED: {err}")),
+    }
     match prompt_calls_json::write_prompt_calls_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
         Err(err) => append_diag_note(&out_path, &format!("prompt_calls_json_write=FAILED: {err}")),
@@ -143,12 +143,14 @@ pub fn export_diagnostics(
             &format!("compat_decisions_json_write=FAILED: {err}"),
         ),
     }
-
-    if let Err(err) = compat_summary_json::write_compat_summary_json(&run_dir, &state.compat.issues, ts) {
-        append_diag_note(&out_path, &format!("compat_summary_json_write=FAILED: {err}"));
-    } else {
-        written_paths.push(run_dir.join("compat_summary.json"));
+    match compat_rule_trace_json::write_compat_rule_trace_json(&run_dir, state, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("compat_rule_trace_json_write=FAILED: {err}"),
+        ),
     }
+
     if let Err(err) = export_marker_json::write_export_marker_json(&run_dir, ts, &written_paths) {
         append_diag_note(&out_path, &format!("export_marker_json_write=FAILED: {err}"));
     }

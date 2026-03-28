@@ -4,13 +4,14 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::state::WizardState;
-use crate::ui::step5::service_step5::{
-    begin_diagnostics_run,
-    build_install_invocation, build_resume_invocation, capture_resume_targets,
+use crate::ui::step5::service_diagnostics_run_step5::begin_new_run;
+use crate::ui::step5::service_diagnostics_support_step5::{
     copy_weidu_logs_for_diagnostics,
-    load_scripted_inputs,
     prepare_target_dirs_before_install, validate_resume_paths, validate_runtime_prep_paths,
     verify_targets_prepared,
+};
+use crate::ui::step5::service_step5_command_step5::{
+    build_install_invocation, build_resume_invocation, capture_resume_targets,
 };
 use crate::ui::terminal::EmbeddedTerminal;
 
@@ -20,7 +21,6 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
     }
 
     state.step5.start_install_requested = false;
-    state.compat.show_pre_install_modal = false;
     state.step5.prep_ran = false;
     state.step5.prep_used_backup = false;
     state.step5.prep_backup_paths.clear();
@@ -29,7 +29,7 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
     state.step5.resolved_bg2_game_dir.clear();
     state.step5.resolved_game_dir.clear();
 
-    let scripted = load_scripted_inputs(&state.step1);
+    let scripted = crate::ui::step5::scripted_inputs::load_from_step1(&state.step1);
     let scripted_count = term.set_scripted_inputs(scripted);
     if scripted_count > 0 {
         term.append_marker(&format!("Loaded {scripted_count} @wlb-inputs token(s)"));
@@ -100,7 +100,7 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
         return;
     }
 
-    let run_id = begin_diagnostics_run(state);
+    let run_id = begin_new_run(&mut state.step5);
     term.configure_from_step1(&state.step1, Some(&run_id));
     copy_weidu_logs_for_diagnostics(&state.step1, &run_id);
 

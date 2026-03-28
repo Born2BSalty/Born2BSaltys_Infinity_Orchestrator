@@ -1,28 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-pub(crate) mod compat_popup_issue_text_copy {
-    use crate::ui::state::CompatIssueDisplay;
-
-    use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_helpers::format_issue_target;
-
-    pub(crate) fn format_issue_for_copy(issue: &CompatIssueDisplay) -> String {
-        let affected = format_issue_target(&issue.affected_mod, issue.affected_component);
-        let related = format_issue_target(&issue.related_mod, issue.related_component);
-        format!(
-            "[{}] {} -> {}\nBlocking: {}\nReason: {}\nSource: {}",
-            issue.code,
-            affected,
-            related,
-            if issue.is_blocking { "yes" } else { "no" },
-            issue.reason,
-            issue.source
-        )
-    }
-}
-
 pub(crate) mod compat_popup_issue_text_explain {
-    use crate::ui::state::CompatIssueDisplay;
+    use crate::ui::step2::compat_types_step2::CompatIssueDisplay;
 
     use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_helpers::{
         format_issue_target, is_duplicate_selection_issue, is_require_order_issue,
@@ -33,7 +13,9 @@ pub(crate) mod compat_popup_issue_text_explain {
         if is_duplicate_selection_issue(issue) {
             return "Duplicate selection".to_string();
         }
-        if issue.code.eq_ignore_ascii_case("GAME_MISMATCH") {
+        if issue.code.eq_ignore_ascii_case("MISMATCH")
+            || issue.code.eq_ignore_ascii_case("GAME_MISMATCH")
+        {
             let games = parse_games(issue);
             return if games.is_empty() {
                 "Not available in this game mode".to_string()
@@ -56,6 +38,17 @@ pub(crate) mod compat_popup_issue_text_explain {
         if issue.code.eq_ignore_ascii_case("FORBID_HIT")
             || issue.code.eq_ignore_ascii_case("RULE_HIT")
         {
+            if issue
+                .raw_evidence
+                .as_deref()
+                .map(|raw| raw.trim_start().to_ascii_uppercase().starts_with("FORBID_COMPONENT"))
+                .unwrap_or(false)
+            {
+                let reason = issue.reason.trim();
+                if !reason.is_empty() && !reason.eq_ignore_ascii_case("unknown") {
+                    return reason.to_string();
+                }
+            }
             if issue.related_mod.eq_ignore_ascii_case("unknown") {
                 return "Blocked by another component".to_string();
             }
@@ -97,7 +90,7 @@ pub(crate) mod compat_popup_issue_text_explain {
 }
 
 pub(crate) mod compat_popup_issue_text_helpers {
-    use crate::ui::state::CompatIssueDisplay;
+    use crate::ui::step2::compat_types_step2::CompatIssueDisplay;
 
     pub(crate) fn is_duplicate_selection_issue(issue: &CompatIssueDisplay) -> bool {
         issue.code.eq_ignore_ascii_case("RULE_HIT")
@@ -155,7 +148,7 @@ pub(crate) mod compat_popup_issue_text_helpers {
 pub(crate) mod compat_popup_issue_text_kind {
     pub(crate) fn human_kind(kind: &str) -> &'static str {
         match kind.to_ascii_lowercase().as_str() {
-            "game_mismatch" => "Game mismatch",
+            "mismatch" | "game_mismatch" => "Mismatch",
             "missing_dep" => "Missing dependency",
             "conflict" | "not_compatible" => "Conflict",
             "included" => "Included",

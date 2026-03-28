@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::Step2Details;
 
 struct SelectionGridLayout {
@@ -15,6 +16,7 @@ struct SelectionGridLayout {
 pub(crate) fn render_selection_grid(
     ui: &mut egui::Ui,
     details: &Step2Details,
+    action: &mut Option<Step2Action>,
     label_w: f32,
     value_w: f32,
     row_h: f32,
@@ -37,20 +39,23 @@ pub(crate) fn render_selection_grid(
                 "Component",
                 details.component_label.as_deref(),
                 false,
+                None,
+                action,
             );
-            render_value_row(
-                ui,
-                &layout,
-                "ID",
-                details.component_id.as_deref(),
-                true,
-            );
+            render_value_row(ui, &layout, "ID", details.component_id.as_deref(), true, None, action);
+            render_checked_row(ui, details, label_w, value_w, row_h);
+            render_state_row(ui, details, label_w, value_w, row_h);
+            if details.compat_kind.is_some() {
+                render_compat_rows(ui, details, label_w, value_w, row_h, value_chars);
+            }
             render_value_row(
                 ui,
                 &layout,
                 "Language",
                 details.component_lang.as_deref(),
                 true,
+                None,
+                action,
             );
             render_value_row(
                 ui,
@@ -58,6 +63,8 @@ pub(crate) fn render_selection_grid(
                 "Version",
                 details.component_version.as_deref(),
                 true,
+                None,
+                action,
             );
             render_value_row(
                 ui,
@@ -65,6 +72,8 @@ pub(crate) fn render_selection_grid(
                 "TP2 File",
                 details.tp_file.as_deref(),
                 true,
+                details.tp2_path.clone().map(Step2Action::OpenSelectedTp2),
+                action,
             );
             let selected_order = details.selected_order.map(|n| n.to_string());
             render_value_row(
@@ -73,14 +82,9 @@ pub(crate) fn render_selection_grid(
                 "Order",
                 selected_order.as_deref(),
                 true,
+                None,
+                action,
             );
-
-            render_checked_row(ui, details, label_w, value_w, row_h);
-            render_state_row(ui, details, label_w, value_w, row_h);
-
-            if details.compat_kind.is_some() {
-                render_compat_rows(ui, details, label_w, value_w, row_h, value_chars);
-            }
         });
 }
 
@@ -90,12 +94,16 @@ fn render_value_row(
     label: &str,
     value: Option<&str>,
     monospace: bool,
+    open_action: Option<Step2Action>,
+    action: &mut Option<Step2Action>,
 ) {
+    let Some(raw) = value else {
+        return;
+    };
     ui.add_sized(
         [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong(label)),
     );
-    let raw = value.unwrap_or("No data");
     let display = ellipsize_end(raw, layout.value_chars);
     let text = if monospace {
         crate::ui::shared::typography_global::monospace(display)
@@ -104,16 +112,20 @@ fn render_value_row(
     };
     ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
         .on_hover_text(raw);
-    if let Some(copy_value) = value {
-        if ui
-            .small_button("C")
-            .on_hover_text(crate::ui::shared::tooltip_global::COPY)
+    if ui
+        .small_button("C")
+        .on_hover_text(crate::ui::shared::tooltip_global::COPY)
+        .clicked()
+    {
+        ui.ctx().copy_text(raw.to_string());
+    }
+    if let Some(next_action) = open_action
+        && ui
+            .small_button("O")
+            .on_hover_text(crate::ui::shared::tooltip_global::OPEN)
             .clicked()
-        {
-            ui.ctx().copy_text(copy_value.to_string());
-        }
-    } else {
-        ui.label("");
+    {
+        *action = Some(next_action);
     }
     ui.end_row();
 }
@@ -125,16 +137,18 @@ fn render_checked_row(
     value_w: f32,
     row_h: f32,
 ) {
+    let Some(checked) = details.is_checked else {
+        return;
+    };
     ui.add_sized(
         [label_w, row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("Checked")),
     );
-    let checked_pill = match details.is_checked {
-        Some(true) => crate::ui::shared::typography_global::strong("Checked")
+    let checked_pill = match checked {
+        true => crate::ui::shared::typography_global::strong("Checked")
             .color(crate::ui::shared::theme_global::success()),
-        Some(false) => crate::ui::shared::typography_global::strong("Unchecked")
+        false => crate::ui::shared::typography_global::strong("Unchecked")
             .color(crate::ui::shared::theme_global::text_muted()),
-        None => crate::ui::shared::typography_global::strong("No data"),
     };
     ui.add_sized([value_w, row_h], egui::Label::new(checked_pill));
     ui.label("");
@@ -148,11 +162,14 @@ fn render_state_row(
     value_w: f32,
     row_h: f32,
 ) {
+    let Some(is_disabled) = details.is_disabled else {
+        return;
+    };
     ui.add_sized(
         [label_w, row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("State")),
     );
-    let state_text = if details.is_disabled == Some(true) {
+    let state_text = if is_disabled {
         crate::ui::shared::typography_global::strong("Disabled")
             .color(crate::ui::shared::theme_global::warning())
     } else {
@@ -181,19 +198,24 @@ fn render_compat_rows(
         row_h,
         value_chars,
     };
+    let mut ignored_action = None;
     render_value_row(
         ui,
         &layout,
-        "Role",
+        "Source Type",
         details.compat_role.as_deref(),
         false,
+        None,
+        &mut ignored_action,
     );
     render_value_row(
         ui,
         &layout,
-        "Issue Code",
+        "Issue",
         details.compat_code.as_deref(),
         true,
+        None,
+        &mut ignored_action,
     );
 
     render_reason_row(ui, details, label_w, value_w, row_h, value_chars);
@@ -218,7 +240,7 @@ fn render_compat_rows(
     );
     render_optional_monospace_row(
         ui,
-        "Rule Detail",
+        "Matched Rule",
         details.compat_evidence.as_deref(),
         label_w,
         value_w,
@@ -277,7 +299,7 @@ fn render_origin_row(
     let origin = details
         .compat_source
         .as_deref()
-        .unwrap_or("step2_compat_rules.toml");
+        .unwrap_or("step2_compat_rules_user.toml");
     ui.add_sized(
         [value_w, row_h],
         egui::Label::new(crate::ui::shared::typography_global::monospace(ellipsize_end(

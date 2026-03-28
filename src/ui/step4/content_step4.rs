@@ -10,8 +10,7 @@ use crate::ui::state::WizardState;
 use crate::ui::step4::action_step4::Step4Action;
 use crate::ui::step4::state_step4::active_tab_mut;
 use crate::ui::step4::service_step4::{format_step4_item, read_source_log_lines};
-use crate::ui::step5::service_step5::source_log_infos;
-use crate::ui::step5::service_step5::export_diagnostics;
+use crate::ui::step5::service_diagnostics_support_step5::{export_diagnostics, source_log_infos};
 
 pub fn render(
     ui: &mut egui::Ui,

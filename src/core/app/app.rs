@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Receiver;
 
-use crate::compat::CompatValidator;
 use crate::settings::store::SettingsStore;
 use crate::ui::state::{Step1State, WizardState};
 use crate::ui::step2_worker::Step2ScanEvent;
@@ -15,8 +14,6 @@ use crate::ui::terminal::EmbeddedTerminal;
 
 #[path = "app_bootstrap.rs"]
 mod bootstrap;
-#[path = "app_compat_flow.rs"]
-pub mod compat_flow;
 #[path = "app_nav.rs"]
 mod nav;
 #[path = "app_nav_ui.rs"]
@@ -27,16 +24,14 @@ mod lifecycle;
 mod methods;
 #[path = "app_step2_log.rs"]
 mod step2_log;
-#[path = "app_step2_compat_overlay.rs"]
-mod step2_compat_overlay;
 #[path = "app_step2_router.rs"]
 mod step2_router;
+#[path = "app_step2_sync_flow.rs"]
+mod step2_sync_flow;
 #[path = "app_step2_scan.rs"]
 mod step2_scan;
 #[path = "app_step3_sync_flow.rs"]
 mod step3_sync_flow;
-#[path = "app_tp2_metadata.rs"]
-mod tp2_metadata;
 #[path = "app_step5_flow.rs"]
 pub mod step5_flow;
 #[path = "app_update_loop.rs"]
@@ -53,7 +48,6 @@ pub struct WizardApp {
     step2_progress_queue: VecDeque<(usize, usize, String)>,
     step5_terminal: Option<EmbeddedTerminal>,
     step5_terminal_error: Option<String>,
-    compat_validator: CompatValidator,
     last_step2_sync_signature: Option<String>,
 }
 
@@ -66,7 +60,7 @@ impl Default for WizardApp {
 impl WizardApp {
     pub fn new(dev_mode: bool) -> Self {
         let init = bootstrap::initialize(dev_mode);
-        let _ = crate::ui::step2::service_step2::create_default_compat_rules_file();
+        let _ = crate::ui::step2::service_compat_defaults_step2::ensure_compat_rules_files();
         Self {
             state: WizardState::with_step1(init.step1.clone()),
             settings_store: init.settings_store,
@@ -78,7 +72,6 @@ impl WizardApp {
             step2_progress_queue: VecDeque::new(),
             step5_terminal: None,
             step5_terminal_error: None,
-            compat_validator: CompatValidator::new(),
             last_step2_sync_signature: None,
         }
     }

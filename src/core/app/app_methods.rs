@@ -26,6 +26,10 @@ impl WizardApp {
         super::step3_sync_flow::sync_step3_from_step2(self);
     }
 
+    pub(super) fn sync_step2_from_step3(&mut self) {
+        super::step2_sync_flow::sync_step2_from_step3(self);
+    }
+
     pub(super) fn handle_step2_action(&mut self, action: crate::ui::step2::action_step2::Step2Action) {
         super::step2_router::handle_step2_action(self, action);
     }
@@ -44,26 +48,5 @@ impl WizardApp {
 
     pub(super) fn save_settings_best_effort(&mut self) {
         super::lifecycle::save_settings_best_effort(self);
-    }
-
-    pub(super) fn revalidate_compat(&mut self) {
-        super::tp2_metadata::refresh_validator_tp2_metadata(self);
-        self.state.compat = super::compat_flow::run_validation_for_both_games(&self.compat_validator, &self.state);
-    }
-
-    pub(super) fn revalidate_compat_step2_checked_order(&mut self) {
-        super::tp2_metadata::refresh_validator_tp2_metadata(self);
-        self.state.compat = super::compat_flow::run_validation_for_step2_checked_order(
-            &self.compat_validator,
-            &self.state,
-        );
-        super::step2_compat_overlay::apply_step2_checked_order_issues(self);
-    }
-
-    pub(super) fn check_compat_before_install(&mut self) -> bool {
-        super::tp2_metadata::refresh_validator_tp2_metadata(self);
-        self.state.compat = super::compat_flow::run_validation_for_both_games(&self.compat_validator, &self.state);
-        self.state.compat.show_pre_install_modal = false;
-        self.state.compat.error_count == 0
     }
 }

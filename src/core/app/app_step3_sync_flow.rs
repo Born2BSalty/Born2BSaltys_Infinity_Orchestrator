@@ -29,19 +29,34 @@ pub(super) fn sync_step3_from_step2(app: &mut WizardApp) {
     app.state.step3.bgee_anchor = None;
     app.state.step3.bg2ee_anchor = None;
     app.state.step3.jump_to_selected_requested = false;
-    app.state.step3.compat_modal_open = false;
-
-    super::tp2_metadata::refresh_validator_tp2_metadata(app);
-    app.revalidate_compat();
 }
 
 fn reconcile_step3_items(current: &[Step3ItemState], fresh: Vec<Step3ItemState>) -> Vec<Step3ItemState> {
+    let current_order: Vec<String> = current
+        .iter()
+        .filter(|item| !item.is_parent)
+        .map(child_key)
+        .collect();
     let mut fresh_by_key = HashMap::<String, Step3ItemState>::new();
     let mut fresh_order = Vec::<String>::new();
     for item in fresh.into_iter().filter(|item| !item.is_parent) {
         let key = child_key(&item);
         fresh_order.push(key.clone());
         fresh_by_key.insert(key, item);
+    }
+
+    let same_selected_set = current_order.len() == fresh_order.len()
+        && current_order
+            .iter()
+            .all(|key| fresh_by_key.contains_key(key));
+    if same_selected_set && current_order != fresh_order {
+        let mut reordered_children = Vec::<Step3ItemState>::new();
+        for key in fresh_order {
+            if let Some(fresh_item) = fresh_by_key.remove(&key) {
+                reordered_children.push(fresh_item);
+            }
+        }
+        return rebuild_parent_blocks(reordered_children);
     }
 
     let mut ordered_children = Vec::<Step3ItemState>::new();

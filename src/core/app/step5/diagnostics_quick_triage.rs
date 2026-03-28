@@ -14,8 +14,7 @@ pub(super) fn write_quick_triage_txt(
     timestamp_unix_secs: u64,
 ) -> Result<PathBuf> {
     let out_path = run_dir.join("quick_triage.txt");
-    let blocking_compat = state.compat.issues.iter().filter(|i| i.is_blocking).count();
-    let first_failure = detect_first_failure(state, blocking_compat);
+    let first_failure = detect_first_failure(state);
     let mut text = String::new();
     text.push_str("BIO quick triage\n");
     text.push_str("================\n\n");
@@ -35,9 +34,6 @@ pub(super) fn write_quick_triage_txt(
         state.step2.scan_status.trim()
     ));
     text.push_str(&format!(
-        "compat_blocking_issues={blocking_compat}\n"
-    ));
-    text.push_str(&format!(
         "install_exit_code={:?}\n",
         state.step5.last_exit_code
     ));
@@ -47,8 +43,8 @@ pub(super) fn write_quick_triage_txt(
     ));
     text.push_str("open_these_files_first:\n");
     text.push_str("- bio_diag.txt\n");
-    text.push_str("- compat_summary.json\n");
     text.push_str("- scan_context.json\n");
+    text.push_str("- step2_render_order.json\n");
     text.push_str("- undefined_summary.json\n");
     text.push_str("- compat_decisions.json\n");
     text.push_str("- logs/\n");
@@ -56,7 +52,7 @@ pub(super) fn write_quick_triage_txt(
     Ok(out_path)
 }
 
-fn detect_first_failure(state: &WizardState, blocking_compat: usize) -> String {
+fn detect_first_failure(state: &WizardState) -> String {
     if let Some((ok, msg)) = &state.step1_path_check
         && !ok
     {
@@ -65,9 +61,6 @@ fn detect_first_failure(state: &WizardState, blocking_compat: usize) -> String {
     let step2_status = state.step2.scan_status.to_ascii_lowercase();
     if step2_status.contains("scan failed") {
         return format!("step2_scan_failed: {}", state.step2.scan_status.trim());
-    }
-    if blocking_compat > 0 {
-        return format!("step3_compat_blocking: {blocking_compat} issue(s)");
     }
     if let Some(code) = state.step5.last_exit_code
         && code != 0

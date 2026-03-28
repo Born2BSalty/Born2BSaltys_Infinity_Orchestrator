@@ -74,21 +74,60 @@ pub(crate) fn render_paths_grid(
                 true,
                 details.readme_path.clone().map(Step2Action::OpenSelectedReadme),
             );
-            path_row(
-                ui,
-                "Web",
-                details.web_url.as_deref(),
-                false,
-                details.web_url.clone().map(Step2Action::OpenSelectedWeb),
-            );
+            if details.web_url.is_some() {
+                path_row(
+                    ui,
+                    "Web",
+                    details.web_url.as_deref(),
+                    false,
+                    details.web_url.clone().map(Step2Action::OpenSelectedWeb),
+                );
+            }
+        });
+}
+
+pub(crate) fn render_component_block(ui: &mut egui::Ui, details: &Step2Details) {
+    let Some(block) = details.compat_component_block.as_deref() else {
+        return;
+    };
+    egui::CollapsingHeader::new("Component Block")
+        .id_salt((
+            "step2_component_block",
+            details.tp_file.as_deref().unwrap_or_default(),
+            details.component_id.as_deref().unwrap_or_default(),
+        ))
+        .default_open(false)
+        .show(ui, |ui| {
+            if ui
+                .small_button("C")
+                .on_hover_text(crate::ui::shared::tooltip_global::COPY)
+                .clicked()
+            {
+                ui.ctx().copy_text(block.to_string());
+            }
+            ui.add(egui::Label::new(crate::ui::shared::typography_global::monospace(block)).wrap());
         });
 }
 
 pub(crate) fn render_raw_line(ui: &mut egui::Ui, details: &Step2Details) {
-    egui::CollapsingHeader::new("Raw line")
+    let Some(raw) = details.raw_line.as_deref() else {
+        return;
+    };
+    egui::CollapsingHeader::new("WeiDU Line")
+        .id_salt((
+            "step2_weidu_line",
+            details.tp_file.as_deref().unwrap_or_default(),
+            details.component_id.as_deref().unwrap_or_default(),
+        ))
         .default_open(false)
         .show(ui, |ui| {
-            let raw = details.raw_line.as_deref().unwrap_or("No data");
+            if ui
+                .small_button("C")
+                .on_hover_text(crate::ui::shared::tooltip_global::COPY)
+                .clicked()
+            {
+                ui.ctx().copy_text(raw.to_string());
+            }
             ui.add(egui::Label::new(crate::ui::shared::typography_global::monospace(raw)).wrap());
         });
 }

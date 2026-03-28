@@ -2,22 +2,33 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod action_step5;
+pub mod content_cancel_step5;
+pub mod content_dev_header_step5;
+pub mod content_install_row_step5;
 pub mod content_step5;
 pub mod frame_step5;
 pub mod menus_step5;
 pub mod page_step5;
 pub mod prompt_answers_step5;
+pub mod prompt_answers_rows_step5;
+pub mod prompt_answers_table_step5;
+pub mod prompt_answers_top_bar_step5;
 pub mod service_auto_answer_step5;
+pub mod service_diagnostics_support_step5;
 pub mod service_diagnostics_run_step5;
 pub mod service_install_flow_step5;
 pub mod service_json_fallback_step5;
 pub mod service_process_line_step5;
+pub mod service_prompt_groups_step5;
 pub mod service_readiness_step5;
 pub mod service_scripted_step5;
+pub mod service_sound_step5;
 pub mod service_step5_command_step5;
-pub mod service_step5;
 pub mod service_timefmt_step5;
 pub mod state_step5;
+pub mod status_console_step5;
+pub mod status_input_row_step5;
+pub mod status_phase_step5;
 pub mod status_bar_step5;
 pub mod top_panels_step5;
 #[path = "../../core/app/step5/diagnostics.rs"]

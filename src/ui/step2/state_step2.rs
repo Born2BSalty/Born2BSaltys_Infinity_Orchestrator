@@ -115,6 +115,8 @@ pub struct Step2Details {
     pub compat_code: Option<String>,
     pub disabled_reason: Option<String>,
     pub compat_source: Option<String>,
+    pub compat_related_mod: Option<String>,
+    pub compat_related_component: Option<String>,
     pub compat_related_target: Option<String>,
     pub compat_graph: Option<String>,
     pub compat_evidence: Option<String>,

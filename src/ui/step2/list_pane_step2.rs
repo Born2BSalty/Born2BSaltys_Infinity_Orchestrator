@@ -5,8 +5,11 @@ use eframe::egui;
 
 use crate::ui::state::WizardState;
 use crate::ui::step2::action_step2::Step2Action;
+use crate::ui::step2::service_list_ops_step2::mod_matches_filter;
 use crate::ui::step2::state_step2::{active_mods_mut, build_prompt_eval_context};
-use crate::ui::step2::tree_step2::step2_tree::{render_mod_tree, ModTreeRenderResult};
+use crate::ui::step2::tree_render_step2::{
+    render_mod_tree, ModTreeRenderContext, ModTreeRenderResult,
+};
 
 pub(crate) fn render_list_pane(
     ui: &mut egui::Ui,
@@ -14,6 +17,7 @@ pub(crate) fn render_list_pane(
     action: &mut Option<Step2Action>,
     left_rect: egui::Rect,
 ) {
+    let selection_before = selection_snapshot(state);
     ui.scope_builder(egui::UiBuilder::new().max_rect(left_rect), |ui| {
         ui.set_clip_rect(left_rect);
         egui::Frame::group(ui.style())
@@ -51,15 +55,12 @@ pub(crate) fn render_list_pane(
                             } else {
                                 let mut rendered_any = false;
                                 for mod_state in mods.iter_mut() {
-                                    let matches =
-                                        crate::ui::step2::service_step2::mod_matches_filter(
-                                            mod_state, &filter,
-                                        );
+                                    let matches = mod_matches_filter(mod_state, &filter);
                                     if !matches {
                                         continue;
                                     }
                                     rendered_any = true;
-                                    let mut render_ctx = crate::ui::step2::tree_step2::step2_tree::render::ModTreeRenderContext {
+                                    let mut render_ctx = ModTreeRenderContext {
                                         filter: &filter,
                                         active_tab: &active_tab,
                                         selected: &selected,
@@ -109,4 +110,34 @@ pub(crate) fn render_list_pane(
                 });
             });
     });
+    if selection_before != selection_snapshot(state) {
+        crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
+            &state.step1,
+            &mut state.step2.bgee_mods,
+            &mut state.step2.bg2ee_mods,
+        );
+    }
+}
+
+fn selection_snapshot(state: &WizardState) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    collect_tab_snapshot("BGEE", &state.step2.bgee_mods, &mut out);
+    collect_tab_snapshot("BG2EE", &state.step2.bg2ee_mods, &mut out);
+    out.sort();
+    out
+}
+
+fn collect_tab_snapshot(tag: &str, mods: &[crate::ui::state::Step2ModState], out: &mut Vec<String>) {
+    for mod_state in mods {
+        for component in &mod_state.components {
+            if component.checked {
+                out.push(format!(
+                    "{tag}|{}|{}|{}",
+                    mod_state.tp_file,
+                    component.component_id,
+                    component.selected_order.unwrap_or(usize::MAX)
+                ));
+            }
+        }
+    }
 }

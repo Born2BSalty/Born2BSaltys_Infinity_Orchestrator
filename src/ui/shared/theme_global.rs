@@ -73,10 +73,6 @@ pub fn warning_soft() -> egui::Color32 {
     egui::Color32::from_rgb(220, 180, 100)
 }
 
-pub fn warning_soft_alt() -> egui::Color32 {
-    egui::Color32::from_rgb(220, 160, 100)
-}
-
 pub fn warning_emphasis() -> egui::Color32 {
     egui::Color32::from_rgb(214, 174, 84)
 }
@@ -149,10 +145,6 @@ pub fn conflict() -> egui::Color32 {
 
 pub fn conflict_parent() -> egui::Color32 {
     egui::Color32::from_rgb(220, 122, 122)
-}
-
-pub fn missing_dep_parent() -> egui::Color32 {
-    egui::Color32::from_rgb(130, 196, 236)
 }
 
 pub fn conditional_parent() -> egui::Color32 {

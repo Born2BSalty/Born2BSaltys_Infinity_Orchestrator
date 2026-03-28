@@ -4,6 +4,7 @@ use antlr4rust::common_token_stream::CommonTokenStream;
 use antlr4rust::Parser;
 use antlr4rust::tree::{ParseTree, ParseTreeVisitorCompat};
 use antlr4rust::InputStream;
+use encoding_rs::{Encoding, WINDOWS_1250, WINDOWS_1252};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::OsStr;
@@ -1422,8 +1423,7 @@ fn collect_parse_targets(
         return Ok(());
     }
 
-    let source = std::fs::read_to_string(path)
-        .map_err(|e| format!("failed to read '{}': {e}", path.to_string_lossy()))?;
+    let source = read_text_with_fallback(path)?;
     out.push((path.to_path_buf(), source.clone()));
 
     for include in extract_include_paths(&source, path, mod_root) {
@@ -1448,8 +1448,7 @@ fn collect_include_component_hints(
         return Ok(());
     }
 
-    let source = std::fs::read_to_string(path)
-        .map_err(|e| format!("failed to read '{}': {e}", path.to_string_lossy()))?;
+    let source = read_text_with_fallback(path)?;
     let mut current_component = inherited_component;
     let mut begin_index = 0usize;
 
@@ -2515,8 +2514,7 @@ fn load_all_tra_from_dir(dir: &Path) -> Result<HashMap<String, String>, String> 
 }
 
 fn parse_tra_file(path: &Path) -> Result<HashMap<String, String>, String> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
+    let text = read_text_with_fallback(path)?;
     let mut map = HashMap::new();
     let mut i = 0usize;
     let lines: Vec<&str> = text.lines().collect();
@@ -2561,6 +2559,27 @@ fn parse_tra_file(path: &Path) -> Result<HashMap<String, String>, String> {
         }
     }
     Ok(map)
+}
+
+fn read_text_with_fallback(path: &Path) -> Result<String, String> {
+    let bytes = std::fs::read(path)
+        .map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
+
+    if let Ok(text) = String::from_utf8(bytes.clone()) {
+        return Ok(text);
+    }
+
+    for encoding in [WINDOWS_1252, WINDOWS_1250] {
+        let (decoded, _, had_errors) = encoding.decode(&bytes);
+        if !had_errors {
+            return Ok(decoded.into_owned());
+        }
+    }
+
+    let (decoded, _, _) = Encoding::for_label(b"iso-8859-1")
+        .unwrap_or(WINDOWS_1252)
+        .decode(&bytes);
+    Ok(decoded.into_owned())
 }
 
 fn extract_readln_var(action_text: &str) -> String {

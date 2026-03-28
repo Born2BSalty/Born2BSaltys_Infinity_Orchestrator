@@ -5,8 +5,9 @@ use eframe::egui;
 use chrono::{DateTime, Local};
 
 use crate::ui::state::WizardState;
-use crate::ui::step5::service_step5::{
-    build_command_preview_lines, build_install_command, source_log_infos, wrap_display_line,
+use crate::ui::step5::service_diagnostics_support_step5::source_log_infos;
+use crate::ui::step5::service_step5_command_step5::{
+    build_command_preview_lines, build_install_command, wrap_display_line,
 };
 
 pub(crate) fn render(ui: &mut egui::Ui, state: &WizardState) {

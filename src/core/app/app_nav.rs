@@ -13,7 +13,7 @@ pub(super) fn can_advance_from_current_step(app: &WizardApp) -> bool {
                 && matches!(app.state.step1_path_check, Some((true, _)))
         }
         1 => step2_has_selection(app),
-        2 => step3_has_items(app) && app.state.compat.error_count == 0,
+        2 => step3_has_items(app) && step3_conflicts_resolved(app),
         _ => true,
     }
 }
@@ -35,5 +35,13 @@ fn step3_has_items(app: &WizardApp) -> bool {
         "BG2EE" => real_items_in(&app.state.step3.bg2ee_items),
         "EET" => real_items_in(&app.state.step3.bgee_items) || real_items_in(&app.state.step3.bg2ee_items),
         _ => real_items_in(&app.state.step3.bgee_items),
+    }
+}
+
+fn step3_conflicts_resolved(app: &WizardApp) -> bool {
+    match app.state.step1.game_install.as_str() {
+        "BG2EE" => !app.state.step3.bg2ee_has_conflict,
+        "EET" => !app.state.step3.bgee_has_conflict && !app.state.step3.bg2ee_has_conflict,
+        _ => !app.state.step3.bgee_has_conflict,
     }
 }

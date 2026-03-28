@@ -6,10 +6,12 @@ use eframe::egui;
 use crate::ui::shared::layout_tokens_global::*;
 use crate::ui::state::WizardState;
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::step2::service_selection_step2::jump_to_target;
-use crate::ui::step2::service_step2::{clear_all, select_visible};
+use crate::ui::step2::service_list_ops_step2::{clear_all, select_visible};
 use crate::ui::step2::state_step2::active_mods_mut;
-use crate::ui::step5::service_step5::export_diagnostics;
+use crate::ui::step2::toolbar_compat_step2::{
+    active_tab_compat_summary, draw_active_tab_issue_badge, first_active_tab_issue_target,
+};
+use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
 
 pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
     let is_active = active == value;
@@ -93,6 +95,7 @@ pub fn render_controls(
     controls_rect: egui::Rect,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(controls_rect), |ui| {
+        let mut refresh_compat = false;
         let bgee_scanned = !state.step2.bgee_mods.is_empty();
         let bg2_scanned = !state.step2.bg2ee_mods.is_empty();
         let has_any_checked = active_mods_ref(state)
@@ -132,6 +135,7 @@ pub fn render_controls(
                 clear_all(mods, &mut next_order);
                 state.step2.next_selection_order = next_order;
                 state.step2.selected = None;
+                refresh_compat = true;
             }
             if ui
                 .add_enabled(
@@ -146,6 +150,7 @@ pub fn render_controls(
                 let mods = active_mods_mut(&mut state.step2);
                 select_visible(mods, &filter, &mut next_order);
                 state.step2.next_selection_order = next_order;
+                refresh_compat = true;
             }
             if ui
                 .add_enabled(
@@ -179,17 +184,14 @@ pub fn render_controls(
             {
                 state.step2.jump_to_selected_requested = true;
             }
-            if ui
-                .add_enabled(
-                    has_scanned,
-                    egui::Button::new("Export Compat").min_size(egui::vec2(114.0, STEP2_BTN_H)),
-                )
-                .on_hover_text(crate::ui::shared::tooltip_global::STEP2_EXPORT_COMPAT)
-                .clicked()
-            {
-                *action = Some(Step2Action::ExportCompatReport);
-            }
         });
+        if refresh_compat {
+            crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
+                &state.step1,
+                &mut state.step2.bgee_mods,
+                &mut state.step2.bg2ee_mods,
+            );
+        }
     });
 }
 
@@ -219,6 +221,17 @@ pub fn render_tabs(
                 ui.label(crate::ui::shared::typography_global::monospace("BG2EE"));
             }
 
+            let issue_summary = active_tab_compat_summary(active_mods_ref(state));
+            let target_filter = if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
+                issue_summary.dominant_filter
+            } else {
+                state.step2.compat_popup_filter.as_str()
+            };
+            let issue_target = first_active_tab_issue_target(
+                active_mods_ref(state),
+                target_filter,
+            );
+
             ui.add_space(10.0);
             if active_is_bgee
                 && ui
@@ -244,6 +257,24 @@ pub fn render_tabs(
             {
                 *action = Some(Step2Action::SelectBg2eeViaLog);
             }
+            if draw_active_tab_issue_badge(
+                ui,
+                &state.step2.active_game_tab,
+                &issue_summary,
+                &state.step2.compat_popup_filter,
+            )
+                && let Some(target) = issue_target
+            {
+                if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
+                    state.step2.compat_popup_filter = issue_summary.dominant_filter.to_string();
+                }
+                *action = Some(Step2Action::OpenCompatForComponent {
+                    game_tab: state.step2.active_game_tab.clone(),
+                    tp_file: target.tp_file,
+                    component_id: target.component_id,
+                    component_key: target.component_key,
+                });
+            }
         });
     });
 }
@@ -254,137 +285,6 @@ fn active_mods_ref(state: &WizardState) -> &Vec<crate::ui::state::Step2ModState>
     } else {
         &state.step2.bg2ee_mods
     }
-}
-
-pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
-    if !state.step2.prompt_popup_open {
-        return;
-    }
-    let title = state.step2.prompt_popup_title.clone();
-    let text = state.step2.prompt_popup_text.clone();
-    let jump_ids = collect_prompt_jump_component_ids(state, &title, &text);
-    let mut open = state.step2.prompt_popup_open;
-    let mut jump_to_component_id: Option<u32> = None;
-    egui::Window::new(format!("Parsed prompts - {}", title))
-        .open(&mut open)
-        .resizable(true)
-        .collapsible(false)
-        .default_width(700.0)
-        .default_height(320.0)
-        .show(ui.ctx(), |ui| {
-            ui.label("Prompt summary from Lapdu parser:");
-            ui.separator();
-            let max_scroll_height = (ui.available_height() - 72.0).max(140.0);
-            let scroll_width = ui.available_width();
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .max_height(max_scroll_height)
-                .show(ui, |ui| {
-                    ui.set_min_width(scroll_width);
-                    ui.label(&text);
-                });
-            if !jump_ids.is_empty() {
-                ui.add_space(SPACE_MD);
-                ui.separator();
-                ui.add_space(SPACE_SM);
-                ui.label(crate::ui::shared::typography_global::strong("Jump to component"));
-                ui.add_space(SPACE_XS);
-                ui.horizontal_wrapped(|ui| {
-                    for component_id in jump_ids {
-                        let button_text =
-                            crate::ui::shared::typography_global::monospace(component_id.to_string())
-                                .color(crate::ui::shared::theme_global::accent_numbers());
-                        if ui
-                            .add(
-                                egui::Button::new(button_text)
-                                    .min_size(egui::vec2(42.0, 22.0))
-                                    .fill(ui.visuals().widgets.inactive.bg_fill)
-                                    .stroke(ui.visuals().widgets.inactive.bg_stroke),
-                            )
-                            .clicked()
-                        {
-                            jump_to_component_id = Some(component_id);
-                        }
-                    }
-                });
-            }
-        });
-    state.step2.prompt_popup_open = open;
-    if let Some(component_id) = jump_to_component_id {
-        let game_tab = state.step2.active_game_tab.clone();
-        let mod_ref = parse_prompt_popup_mod_ref(&title);
-        jump_to_target(state, &game_tab, &mod_ref, Some(component_id));
-        state.step2.jump_to_selected_requested = true;
-    }
-}
-
-fn parse_prompt_popup_mod_ref(title: &str) -> String {
-    title
-        .split(" #")
-        .next()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| title.trim().to_string())
-}
-
-fn parse_prompt_jump_component_ids(text: &str) -> Vec<u32> {
-    let mut ids = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim();
-        let Some(rest) = trimmed.strip_prefix("Component:") else {
-            continue;
-        };
-        let id_token = rest.split_whitespace().next().unwrap_or_default();
-        if let Ok(id) = id_token.parse::<u32>()
-            && !ids.contains(&id)
-        {
-            ids.push(id);
-        }
-    }
-    ids
-}
-
-fn collect_prompt_jump_component_ids(state: &WizardState, title: &str, text: &str) -> Vec<u32> {
-    let mut ids = parse_prompt_jump_component_ids(text);
-    let mod_ref = parse_prompt_popup_mod_ref(title);
-    let target_mod_key = normalize_mod_key(&mod_ref);
-    for mod_state in active_mods_ref(state) {
-        if normalize_mod_key(&mod_state.tp_file) != target_mod_key {
-            continue;
-        }
-        for component in &mod_state.components {
-            let has_prompt = component
-                .prompt_summary
-                .as_ref()
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false)
-                || !component.prompt_events.is_empty();
-            if !has_prompt {
-                continue;
-            }
-            if let Ok(id) = component.component_id.trim().parse::<u32>()
-                && !ids.contains(&id)
-            {
-                ids.push(id);
-            }
-        }
-    }
-    ids.sort_unstable();
-    ids
-}
-
-fn normalize_mod_key(value: &str) -> String {
-    let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
-    let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
-    without_ext
-        .strip_prefix("setup-")
-        .unwrap_or(without_ext)
-        .to_string()
 }
 
 pub fn render_compat_popup(ui: &mut egui::Ui, state: &mut WizardState) {
@@ -410,11 +310,12 @@ pub fn render_compat_popup(ui: &mut egui::Ui, state: &mut WizardState) {
                 });
 
             ui.add_space(10.0);
-            crate::ui::step2::content_step2::compat_popup_filter_row::render_filter_row(ui, state);
-            ui.add_space(6.0);
             crate::ui::step2::content_step2::compat_popup_action_row::render_action_row(ui, state);
         });
     state.step2.compat_popup_open = open && state.step2.compat_popup_open;
+    if !state.step2.compat_popup_open {
+        state.step2.compat_popup_issue_override = None;
+    }
 }
 
 pub fn render_details_pane(
@@ -430,8 +331,6 @@ pub fn render_details_pane(
             ui.set_min_size(right_rect.size() - egui::vec2(12.0, 12.0));
             ui.label(crate::ui::shared::typography_global::section_title("Details"));
             ui.add_space(4.0);
-            crate::ui::step2::content_step2::details_pane_action_bar::render(ui, &details, action);
-            ui.separator();
             crate::ui::step2::content_step2::details_pane_content::render(ui, &details, action);
         });
     });
@@ -440,8 +339,6 @@ pub fn render_details_pane(
 pub(crate) use crate::ui::step2::state_step2::Step2Details;
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_action_row;
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_details;
-pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_filter_row;
-pub(crate) use crate::ui::step2::details_pane_step2::details_pane_action_bar;
 pub(crate) use crate::ui::step2::details_pane_step2::details_pane_content;
 
 pub(crate) mod step2_details_select {
@@ -449,6 +346,6 @@ pub(crate) mod step2_details_select {
     use crate::ui::step2::state_step2::Step2Details;
 
     pub fn selected_details(state: &WizardState) -> Step2Details {
-        crate::ui::step2::service_step2::selected_details(state)
+        crate::ui::step2::service_details_step2::selected_details(state)
     }
 }

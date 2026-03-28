@@ -1,43 +1,49 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_copy;
 pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_explain;
 pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_kind;
 
 pub(crate) mod compat_popup_action_row {
     use eframe::egui;
+
+    use crate::ui::controller::util::open_in_shell;
     use crate::ui::state::WizardState;
-        use crate::ui::controller::util::open_in_shell;
-    
-    use crate::ui::step2::compat_popup_step2::compat_popup_actions as actions;
-    use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_copy as issue_text_copy;
-    use crate::ui::step2::compat_popup_step2::compat_popup_selection_query as selection_query;
-    use crate::ui::step2::compat_popup_step2::compat_popup_selection_source as selection_source;
+    use crate::ui::step2::compat_popup_nav_step2::{
+        next_target, refresh_popup_override, select_popup_target, selected_game_tab,
+    };
+    use crate::ui::step2::compat_popup_step2::compat_popup_details as details;
+    use crate::ui::step2::compat_types_step2::CompatIssueDisplay;
+    use crate::ui::step2::service_selection_step2::{jump_to_target, rule_source_open_path};
+    use crate::ui::step3::state_step3;
 
     pub(crate) fn render_action_row(ui: &mut egui::Ui, state: &mut WizardState) {
+        let issue = details::selected_or_synth_issue(state);
+        let can_jump_this = selected_game_tab(state).is_some();
+        let can_jump_related = issue.as_ref().is_some_and(can_jump_to_related);
+        let can_next = next_target(state).is_some();
+
         ui.horizontal(|ui| {
-            if ui.button("Jump To Other").clicked() {
-                actions::jump_to_related_component(state);
-                state.step2.jump_to_selected_requested = true;
-            }
-            if ui.button("Jump To This").clicked() {
-                actions::jump_to_affected_component(state);
-                state.step2.jump_to_selected_requested = true;
-            }
-            if ui.button("Select Other").clicked() {
-                actions::jump_to_related_component(state);
-            }
-            if ui.button("Next Issue").clicked() {
-                actions::jump_to_next_conflict(state);
-                state.step2.jump_to_selected_requested = true;
-            }
-            if ui.button("Copy Issue").clicked()
-                && let Some(issue) = selection_query::current_issue_for_selection(state)
+            if ui
+                .add_enabled(can_jump_this, egui::Button::new("Jump To This"))
+                .clicked()
             {
-                ui.ctx().copy_text(issue_text_copy::format_issue_for_copy(&issue));
+                jump_to_this(state);
             }
-            let source_path = selection_source::rule_source_open_path(state);
+            if ui
+                .add_enabled(can_jump_related, egui::Button::new("Jump To Related"))
+                .clicked()
+                && let Some(issue) = issue.as_ref()
+            {
+                jump_to_related(state, issue);
+            }
+            if ui
+                .add_enabled(can_next, egui::Button::new("Next"))
+                .clicked()
+            {
+                jump_to_next(state);
+            }
+            let source_path = rule_source_open_path(state);
             let open_source_resp =
                 ui.add_enabled(source_path.is_some(), egui::Button::new("Open Rule Source"));
             if let Some(path) = source_path
@@ -51,77 +57,97 @@ pub(crate) mod compat_popup_action_row {
             }
         });
     }
-}
 
-pub(crate) mod compat_popup_actions {
-    use crate::ui::state::WizardState;
-    
-    use crate::ui::step2::compat_popup_step2::compat_popup_filters as filters;
-    use crate::ui::step2::compat_popup_step2::compat_popup_selection_jump as selection_jump;
-    use crate::ui::step2::compat_popup_step2::compat_popup_selection_query as selection_query;
-
-    pub(super) fn jump_to_related_component(state: &mut WizardState) {
-        let Some((related_mod, related_component, _, _)) =
-            selection_query::issue_targets_for_current_selection(state)
-        else {
-            return;
-        };
-        let Some(game_tab) = selection_query::current_game_tab(state) else {
-            return;
-        };
-        selection_jump::jump_to_target(state, &game_tab, &related_mod, related_component);
+    fn can_jump_to_related(issue: &CompatIssueDisplay) -> bool {
+        let related = issue.related_mod.trim();
+        !related.is_empty() && !related.eq_ignore_ascii_case("unknown")
     }
 
-    pub(super) fn jump_to_affected_component(state: &mut WizardState) {
-        let Some((_, _, affected_mod, affected_component)) =
-            selection_query::issue_targets_for_current_selection(state)
-        else {
-            return;
-        };
-        let Some(game_tab) = selection_query::current_game_tab(state) else {
-            return;
-        };
-        selection_jump::jump_to_target(state, &game_tab, &affected_mod, affected_component);
-    }
-
-    pub(super) fn jump_to_next_conflict(state: &mut WizardState) {
-        let Some(game_tab) = selection_query::current_game_tab(state) else {
-            return;
-        };
-        let filter = state.step2.compat_popup_filter.clone();
-        let issue_list: Vec<(String, String, Option<u32>)> = state
-            .compat
-            .issues
-            .iter()
-            .filter(|i| filters::matches_issue_filter(i, &filter))
-            .map(|i| (i.issue_id.clone(), i.affected_mod.clone(), i.affected_component))
-            .collect();
-        if issue_list.is_empty() {
+    fn jump_to_this(state: &mut WizardState) {
+        if state.current_step == 2
+            && let Some((game_tab, mod_ref, component_ref)) = selected_step3_jump_target(state)
+            && state_step3::jump_to_target(state, &game_tab, &mod_ref, component_ref)
+        {
+            state.current_step = 2;
+            refresh_popup_override(state);
             return;
         }
-        let current_issue_id = selection_query::current_issue_id_for_selection(state);
-        let start = current_issue_id
-            .as_ref()
-            .and_then(|id| issue_list.iter().position(|i| &i.0 == id))
-            .map(|idx| (idx + 1) % issue_list.len())
-            .unwrap_or(0);
-        let issue = &issue_list[start];
-        selection_jump::jump_to_target(state, &game_tab, &issue.1, issue.2);
+
+        let Some(game_tab) = selected_game_tab(state) else {
+            return;
+        };
+        state.current_step = 1;
+        state.step2.active_game_tab = game_tab;
+        state.step2.jump_to_selected_requested = true;
+        state.step2.compat_popup_issue_override = None;
+    }
+
+    fn jump_to_related(state: &mut WizardState, issue: &CompatIssueDisplay) {
+        let Some(game_tab) = selected_game_tab(state) else {
+            return;
+        };
+        jump_to_target(state, &game_tab, &issue.related_mod, issue.related_component);
+        state.step2.active_game_tab = game_tab.clone();
+        state.step2.jump_to_selected_requested = true;
+        if state.current_step == 2 {
+            let _ = state_step3::jump_to_target(
+                state,
+                &game_tab,
+                &issue.related_mod,
+                issue.related_component,
+            );
+            state.current_step = 2;
+            refresh_popup_override(state);
+        } else {
+            state.current_step = 1;
+            state.step2.compat_popup_issue_override = None;
+        }
+    }
+
+    fn jump_to_next(state: &mut WizardState) {
+        let Some(target) = next_target(state) else {
+            return;
+        };
+        select_popup_target(state, &target);
+    }
+
+    fn selected_step3_jump_target(
+        state: &WizardState,
+    ) -> Option<(String, String, Option<u32>)> {
+        match state.step2.selected.as_ref()? {
+            crate::ui::state::Step2Selection::Mod { game_tab, tp_file } => {
+                Some((game_tab.clone(), tp_file.clone(), None))
+            }
+            crate::ui::state::Step2Selection::Component {
+                game_tab,
+                tp_file,
+                component_id,
+                ..
+            } => Some((
+                game_tab.clone(),
+                tp_file.clone(),
+                component_id.trim().parse::<u32>().ok(),
+            )),
+        }
     }
 }
 
 pub(crate) mod compat_popup_details {
     use eframe::egui;
-    use crate::ui::state::{CompatIssueDisplay, WizardState};
-    use crate::ui::step2::content_step2::step2_details_select::selected_details;
-    use crate::ui::step2::state_step2::Step2Details;
 
+    use crate::ui::step2::compat_popup_nav_step2::{
+        compat_filter_matches, COMPAT_POPUP_FILTER_OPTIONS,
+    };
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_explain as issue_text_explain;
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_kind as issue_text_kind;
-    use crate::ui::step2::compat_popup_step2::compat_popup_selection_query as selection_query;
+    use crate::ui::step2::compat_types_step2::{CompatIssueDisplay, CompatIssueStatusTone};
+    use crate::ui::step2::content_step2::step2_details_select::selected_details;
+    use crate::ui::step2::state_step2::Step2Details;
+    use crate::ui::state::WizardState;
 
-    pub(crate) fn render_details(ui: &mut egui::Ui, state: &WizardState) {
+    pub(crate) fn render_details(ui: &mut egui::Ui, state: &mut WizardState) {
         let details = selected_details(state);
+        let issue = selected_or_synth_issue(state);
         let base_title = details
             .component_label
             .as_deref()
@@ -136,27 +162,35 @@ pub(crate) mod compat_popup_details {
         ui.label(crate::ui::shared::typography_global::strong(title));
         ui.add_space(6.0);
 
-        if details.compat_kind.is_none() && details.disabled_reason.is_none() {
+        if issue.is_none() && details.compat_kind.is_none() && details.disabled_reason.is_none() {
             ui.label("No compatibility issue data for this item.");
             return;
         }
 
-        let issue = selection_query::current_issue_for_selection(state)
-            .or_else(|| synth_issue_from_details(&details));
-        let kind = details.compat_kind.as_deref().unwrap_or("unknown");
+        let kind = details
+            .compat_kind
+            .as_deref()
+            .or(issue.as_ref().map(|issue| issue.kind.as_str()))
+            .unwrap_or("unknown");
         ui.horizontal(|ui| {
             ui.label(crate::ui::shared::typography_global::strong("Kind"));
             ui.label(issue_text_kind::human_kind(kind));
             if let Some(issue) = issue.as_ref() {
-                let (badge_text, badge_color) = if issue.is_blocking {
-                    (
-                        "Blocks install",
-                        crate::ui::shared::theme_global::error_emphasis(),
-                    )
-                } else {
-                    ("Warning only", crate::ui::shared::theme_global::warning_soft())
+                let badge_color = match issue.status_tone {
+                    CompatIssueStatusTone::Neutral => {
+                        crate::ui::shared::theme_global::text_muted()
+                    }
+                    CompatIssueStatusTone::Blocking => {
+                        crate::ui::shared::theme_global::error_emphasis()
+                    }
+                    CompatIssueStatusTone::Warning => {
+                        crate::ui::shared::theme_global::warning_soft()
+                    }
                 };
-                ui.label(crate::ui::shared::typography_global::strong(badge_text).color(badge_color));
+                ui.label(
+                    crate::ui::shared::typography_global::strong(issue.status_label.as_str())
+                        .color(badge_color),
+                );
             }
         });
 
@@ -167,9 +201,13 @@ pub(crate) mod compat_popup_details {
             ui.add_space(4.0);
             ui.label(reason);
         }
-        if let Some(source) = details.compat_source.as_deref() {
+        let source = details
+            .compat_source
+            .as_deref()
+            .or(issue.as_ref().map(|issue| issue.source.as_str()));
+        if let Some(source) = source {
             ui.add_space(6.0);
-            ui.label(crate::ui::shared::typography_global::strong("TP2 source"));
+            ui.label(crate::ui::shared::typography_global::strong("Rule source"));
             ui.monospace(issue_text_explain::display_source(source));
         }
         if let Some(block) = details.compat_component_block.as_deref() {
@@ -182,14 +220,28 @@ pub(crate) mod compat_popup_details {
                 ui.monospace(block);
             });
         }
+
+        if issue.is_some() || details.compat_kind.is_some() {
+            ui.add_space(6.0);
+            let current_kind = issue
+                .as_ref()
+                .map(|issue| issue.kind.as_str())
+                .or(details.compat_kind.as_deref());
+            render_filter_row(ui, state, current_kind);
+        }
     }
 
-    fn synth_issue_from_details(
-        details: &Step2Details,
-    ) -> Option<CompatIssueDisplay> {
+    pub(crate) fn selected_or_synth_issue(state: &WizardState) -> Option<CompatIssueDisplay> {
+        if let Some(issue) = state.step2.compat_popup_issue_override.clone() {
+            return Some(issue);
+        }
+        synth_issue_from_details(&selected_details(state))
+    }
+
+    fn synth_issue_from_details(details: &Step2Details) -> Option<CompatIssueDisplay> {
         let kind = details.compat_kind.as_deref()?.to_ascii_lowercase();
-        let code = if kind == "game_mismatch" {
-            "GAME_MISMATCH"
+        let code = if kind == "mismatch" || kind == "game_mismatch" {
+            "MISMATCH"
         } else if kind == "missing_dep" {
             "REQ_MISSING"
         } else if kind == "conflict" || kind == "not_compatible" {
@@ -207,114 +259,69 @@ pub(crate) mod compat_popup_details {
         } else {
             "RULE_HIT"
         };
-        let is_blocking = !matches!(code, "CONDITIONAL" | "INCLUDED");
-        let related = details
-            .compat_related_target
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
+        let (status_label, status_tone) = popup_issue_status(kind.as_str());
+        let related = if kind == "mismatch" || kind == "game_mismatch" {
+            details.compat_related_target.clone().unwrap_or_default()
+        } else {
+            details
+                .compat_related_target
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string())
+        };
         Some(CompatIssueDisplay {
-            issue_id: "synthetic".to_string(),
+            kind,
             code: code.to_string(),
-            is_blocking,
-            affected_mod: details.tp_file.clone().unwrap_or_else(|| "unknown".to_string()),
-            affected_component: details
-                .component_id
+            status_label: status_label.to_string(),
+            status_tone,
+            related_mod: details.compat_related_mod.clone().unwrap_or(related),
+            related_component: details
+                .compat_related_component
                 .as_deref()
-                .and_then(|v| v.parse::<u32>().ok()),
-            related_mod: related,
-            related_component: None,
+                .and_then(|value| value.parse::<u32>().ok()),
             reason: details.disabled_reason.clone().unwrap_or_default(),
             source: details.compat_source.clone().unwrap_or_default(),
             raw_evidence: details.compat_evidence.clone(),
-            component_block: details.compat_component_block.clone(),
         })
     }
-}
 
-pub(crate) mod compat_popup_filter_row {
-    use eframe::egui;
-    use crate::ui::state::WizardState;
-        
-    pub(crate) fn render_filter_row(ui: &mut egui::Ui, state: &mut WizardState) {
+    fn popup_issue_status(kind: &str) -> (&'static str, CompatIssueStatusTone) {
+        match kind {
+            "included" => ("Already included", CompatIssueStatusTone::Neutral),
+            "not_needed" => ("Not needed", CompatIssueStatusTone::Neutral),
+            "missing_dep" | "order_block" | "warning" | "deprecated" | "conditional" => {
+                ("Warning only", CompatIssueStatusTone::Warning)
+            }
+            _ => ("Resolve before continuing", CompatIssueStatusTone::Blocking),
+        }
+    }
+
+    fn render_filter_row(ui: &mut egui::Ui, state: &mut WizardState, current_kind: Option<&str>) {
+        ui.label(crate::ui::shared::typography_global::strong("Filter"));
         ui.horizontal_wrapped(|ui| {
-            ui.label(crate::ui::shared::typography_global::strong("Show"));
-            for (id, label) in [
-                ("all", "All"),
-                ("conflicts", "Conflicts"),
-                ("dependencies", "Missing deps"),
-                ("conditionals", "Conditionals"),
-                ("warnings", "Warnings"),
-            ] {
-                let is_selected = state.step2.compat_popup_filter.eq_ignore_ascii_case(id);
-                if ui.selectable_label(is_selected, label).clicked() {
-                    state.step2.compat_popup_filter = id.to_string();
+            for option in COMPAT_POPUP_FILTER_OPTIONS {
+                let is_selected = state.step2.compat_popup_filter.eq_ignore_ascii_case(option);
+                let visuals = ui.visuals();
+                let fill = if is_selected {
+                    visuals.widgets.active.bg_fill
+                } else {
+                    visuals.widgets.inactive.bg_fill
+                };
+                let stroke = if is_selected {
+                    visuals.widgets.active.bg_stroke
+                } else {
+                    visuals.widgets.inactive.bg_stroke
+                };
+                let mut button = egui::Button::new(*option).fill(fill).stroke(stroke);
+                if !compat_filter_matches(option, current_kind) {
+                    button = button.stroke(egui::Stroke::new(
+                        crate::ui::shared::layout_tokens_global::BORDER_THIN,
+                        crate::ui::shared::theme_global::text_disabled(),
+                    ));
+                }
+                if ui.add(button).clicked() {
+                    state.step2.compat_popup_filter = (*option).to_string();
                 }
             }
         });
-    }
-}
-
-pub(crate) mod compat_popup_filters {
-    use crate::ui::state::CompatIssueDisplay;
-
-    pub(crate) fn matches_issue_filter(issue: &CompatIssueDisplay, filter: &str) -> bool {
-        match filter.to_ascii_lowercase().as_str() {
-            "conflicts" => {
-                issue.code.eq_ignore_ascii_case("FORBID_HIT")
-                    || issue.code.eq_ignore_ascii_case("ORDER_BLOCK")
-                    || issue.code.eq_ignore_ascii_case("RULE_HIT")
-                    || issue.code.eq_ignore_ascii_case("PATH_REQUIREMENT")
-                    || issue.code.eq_ignore_ascii_case("DEPRECATED")
-                    || issue.reason.to_ascii_lowercase().contains("incompatible")
-                    || issue.reason.to_ascii_lowercase().contains("conflict")
-            }
-            "dependencies" => issue.code.eq_ignore_ascii_case("REQ_MISSING"),
-            "conditionals" => issue.code.eq_ignore_ascii_case("CONDITIONAL"),
-            "warnings" => !issue.is_blocking,
-            _ => true,
-        }
-    }
-}
-
-pub(crate) mod compat_popup_selection_jump {
-    use crate::ui::state::WizardState;
-
-    pub(crate) fn jump_to_target(
-        state: &mut WizardState,
-        game_tab: &str,
-        mod_ref: &str,
-        component_ref: Option<u32>,
-    ) {
-        crate::ui::step2::service_step2::jump_to_target(state, game_tab, mod_ref, component_ref);
-    }
-}
-
-pub(crate) mod compat_popup_selection_query {
-    use crate::ui::state::{CompatIssueDisplay, WizardState};
-
-    pub(crate) fn current_game_tab(state: &WizardState) -> Option<String> {
-        crate::ui::step2::service_step2::current_game_tab(state)
-    }
-
-    pub(crate) fn issue_targets_for_current_selection(
-        state: &WizardState,
-    ) -> Option<(String, Option<u32>, String, Option<u32>)> {
-        crate::ui::step2::service_step2::issue_targets_for_current_selection(state)
-    }
-
-    pub(crate) fn current_issue_id_for_selection(state: &WizardState) -> Option<String> {
-        crate::ui::step2::service_step2::current_issue_id_for_selection(state)
-    }
-
-    pub(crate) fn current_issue_for_selection(state: &WizardState) -> Option<CompatIssueDisplay> {
-        crate::ui::step2::service_step2::current_issue_for_selection(state)
-    }
-}
-
-pub(crate) mod compat_popup_selection_source {
-    use crate::ui::state::WizardState;
-
-    pub(crate) fn rule_source_open_path(state: &WizardState) -> Option<String> {
-        crate::ui::step2::service_step2::rule_source_open_path(state)
     }
 }

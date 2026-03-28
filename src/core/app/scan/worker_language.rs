@@ -80,7 +80,7 @@ pub(super) fn candidate_language_ids(
         let id = entry.id;
         let label = entry.label.to_ascii_lowercase();
         let locale_matches_label =
-            !wants_english && (!locale_key.is_empty() && label.contains(&locale_key));
+            !wants_english && matches_locale_token(&label, &locale_key);
         if !wants_english && (contains_any_hint(&label, &preferred_hints) || locale_matches_label) {
             preferred.push(id);
         } else if contains_any_hint(&label, &english_hints) {
@@ -115,22 +115,57 @@ pub(super) fn candidate_language_ids(
 }
 
 fn contains_any_hint(text: &str, hints: &[&str]) -> bool {
-    hints.iter().any(|h| !h.is_empty() && text.contains(h))
+    let text_tokens = tokenize_language_label(text);
+    let normalized_text = normalize_language_phrase(text);
+    hints.iter().any(|hint| {
+        let hint = normalize_language_phrase(hint);
+        !hint.is_empty()
+            && (normalized_text == hint
+                || normalized_text.contains(&hint)
+                || text_tokens.iter().any(|token| token == &hint))
+    })
+}
+
+fn matches_locale_token(label: &str, locale_key: &str) -> bool {
+    if locale_key.is_empty() {
+        return false;
+    }
+    tokenize_language_label(label)
+        .into_iter()
+        .any(|token| token == locale_key)
+}
+
+fn tokenize_language_label(label: &str) -> Vec<String> {
+    label
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .map(|part| part.to_ascii_lowercase())
+        .collect()
+}
+
+fn normalize_language_phrase(value: &str) -> String {
+    let tokens = tokenize_language_label(value);
+    if tokens.is_empty() {
+        String::new()
+    } else {
+        format!(" {} ", tokens.join(" "))
+    }
 }
 
 fn language_hints_for_locale(locale_key: &str) -> Vec<&'static str> {
     match locale_key {
-        "en" => vec!["english", "en_us", "en-gb", "american english"],
+        "en" => vec!["english", "en", "en_us", "en-gb", "american english"],
         "de" => vec!["german", "deutsch", "de_de"],
         "ru" => vec!["russian", "ru_ru", "рус"],
         "fr" => vec!["french", "fr_fr", "francais", "français"],
-        "es" => vec!["spanish", "es_es", "español", "espanol"],
+        "es" => vec!["spanish", "es", "es_es", "es-es", "español", "espanol"],
         "it" => vec!["italian", "it_it", "italiano"],
         "pl" => vec!["polish", "pl_pl", "polski"],
         "pt" => vec!["portuguese", "pt_br", "pt_pt", "português", "portugues"],
         "cs" => vec!["czech", "cs_cz", "čeština", "cestina"],
         "tr" => vec!["turkish", "tr_tr", "türkçe", "turkce"],
         "uk" => vec!["ukrainian", "uk_ua", "україн"],
+        "zh" => vec!["zh", "zh_cn", "zh_tw", "chinese", "schinese", "tchinese"],
         _ => vec![],
     }
 }

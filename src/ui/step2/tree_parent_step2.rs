@@ -4,12 +4,15 @@
 use eframe::egui;
 
 use crate::ui::state::{Step2ComponentState, Step2ModState, Step2Selection};
-use crate::ui::step2::prompt_eval_step2::{evaluate_component_prompt_summary, event_applies, normalize_prompt_blocks};
+use crate::ui::step2::prompt_eval_step2::{
+    evaluate_component_prompt_summary, event_applies, normalize_prompt_blocks,
+};
 use crate::ui::step2::state_step2::PromptEvalContext;
-use crate::ui::step2::tree_step2::step2_tree::render_helpers::{
+use crate::ui::step2::tree_compat_display_step2::{parent_compat_summary, parent_compat_target};
+use crate::ui::step2::tree_selection_rules_step2::{
     enforce_collapsible_group_umbrella_after_bulk, enforce_meta_mode_after_bulk,
     enforce_subcomponent_single_select_keep_first, enforce_tp2_same_mod_exclusive_after_bulk,
-    parent_compat_summary, parent_compat_target, set_component_checked_state,
+    set_component_checked_state,
 };
 
 pub(crate) struct ParentRowResult {

@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::ui::state::WizardState;
-use crate::ui::step5::service_step5::{
+use crate::ui::step5::service_diagnostics_support_step5::{
     export_diagnostics, open_console_logs_folder, open_last_log_file, save_console_log,
 };
 use crate::ui::terminal::EmbeddedTerminal;

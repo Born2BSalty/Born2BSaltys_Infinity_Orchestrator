@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{CompatState, Step1State, Step2State, Step3State, Step5State, WizardState};
+use crate::ui::state::{Step1State, Step2State, Step3State, Step5State, WizardState};
 use crate::ui::state_validation;
 
 impl WizardState {
@@ -42,7 +42,6 @@ impl WizardState {
             step2: Step2State::default(),
             step3: Step3State::default(),
             step5: Step5State::default(),
-            compat: CompatState::default(),
         }
     }
 
@@ -55,6 +54,5 @@ impl WizardState {
         self.step2 = Step2State::default();
         self.step3 = Step3State::default();
         self.step5 = Step5State::default();
-        self.compat = CompatState::default();
     }
 }

@@ -9,6 +9,6 @@ pub fn render(
     state: &mut WizardState,
     dev_mode: bool,
     exe_fingerprint: &str,
-) -> Option<crate::ui::step3::action_step3::Step3Action> {
+) {
     crate::ui::step3::frame_step3::render(ui, state, dev_mode, exe_fingerprint)
 }

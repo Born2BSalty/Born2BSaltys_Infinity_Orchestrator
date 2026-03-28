@@ -7,7 +7,6 @@ pub enum Step2Action {
     CancelScan,
     SelectBgeeViaLog,
     SelectBg2eeViaLog,
-    ExportCompatReport,
     OpenSelectedReadme(String),
     OpenSelectedWeb(String),
     OpenSelectedTp2(String),

@@ -21,14 +21,9 @@ pub(super) fn render_current_step(app: &mut WizardApp, ctx: &egui::Context) {
             {
                 app.handle_step2_action(action);
             }
-            app.revalidate_compat_step2_checked_order();
         }
         2 => {
-            if let Some(action) =
-                step3::page_step3::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str())
-            {
-                handle_step3_action(app, action);
-            }
+            step3::page_step3::render(ui, &mut app.state, app.dev_mode, app.exe_fingerprint.as_str());
         }
         3 => {
             if let Some(action) =
@@ -53,24 +48,10 @@ pub(super) fn render_current_step(app: &mut WizardApp, ctx: &egui::Context) {
     });
 }
 
-fn handle_step3_action(app: &mut WizardApp, action: crate::ui::step3::action_step3::Step3Action) {
-    match action {
-        crate::ui::step3::action_step3::Step3Action::Revalidate => {
-            app.revalidate_compat();
-        }
-    }
-}
-
 fn handle_step5_action(app: &mut WizardApp, action: step5::action_step5::Step5Action) {
     match action {
-        step5::action_step5::Step5Action::CheckCompatBeforeInstall => {
-            if app.check_compat_before_install() {
-                app.state.compat.show_pre_install_modal = false;
-                app.state.step5.start_install_requested = true;
-            } else {
-                app.state.step5.last_status_text =
-                    "Blocking compatibility errors found. Fix them on Step 3.".to_string();
-            }
+        step5::action_step5::Step5Action::StartInstall => {
+            app.state.step5.start_install_requested = true;
         }
     }
 }
@@ -124,7 +105,6 @@ fn process_graceful_cancel(
     if let Some(start) = step5.cancel_pending_output_len
         && start > term.output_len()
     {
-        // Output buffer rotated; reset anchor so graceful cancel does not stall forever.
         step5.cancel_pending_output_len = Some(0);
     }
     let boundary_counter = term.boundary_event_count();

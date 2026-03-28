@@ -1,0 +1,23 @@
+schema_version = 1
+
+# Custom compatibility override rules.
+# BIO creates this file once and never overwrites it afterward.
+#
+# BIO-owned shipped defaults live in:
+# - %APPDATA%/bio/step2_compat_rules_default.toml
+#
+# This user file lives in:
+# - %APPDATA%/bio/step2_compat_rules_user.toml
+#
+# Load order:
+# 1. step2_compat_rules_default.toml
+# 2. this file
+# Later matching user rules win over earlier default rules.
+#
+# Example:
+# [[rules]]
+# mod = "some_mod"
+# component_id = "10"
+# clear_kinds = ["mismatch"]
+# kind = "allow"
+# message = "Allow this component for my local setup."

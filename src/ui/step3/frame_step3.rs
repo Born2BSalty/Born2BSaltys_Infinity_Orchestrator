@@ -4,13 +4,12 @@
 use eframe::egui;
 
 use crate::ui::state::WizardState;
-use crate::ui::step3::action_step3::Step3Action;
 
 pub fn render(
     ui: &mut egui::Ui,
     state: &mut WizardState,
     dev_mode: bool,
     exe_fingerprint: &str,
-) -> Option<Step3Action> {
+) {
     crate::ui::step3::content_step3::render(ui, state, dev_mode, exe_fingerprint)
 }
