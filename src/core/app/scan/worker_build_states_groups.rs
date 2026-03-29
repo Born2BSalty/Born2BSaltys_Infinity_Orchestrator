@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::ui::scan::ScannedComponent;
 
+use super::order::{normalize_component_order_label, parse_begin_label};
 use super::tp2_blocks::{parse_tp2_component_blocks_in_order, split_subcomponent_display_label};
 use super::tra::{load_tp2_setup_tra_map, resolve_group_token_label};
 
@@ -29,15 +30,33 @@ pub(super) fn detect_weidu_groups(
     let component_ids = components
         .iter()
         .map(|component| component.component_id.trim().to_string())
-        .collect::<std::collections::HashSet<_>>();
+        .collect::<HashSet<_>>();
+    let ordered_components = components
+        .iter()
+        .map(|component| {
+            (
+                component.component_id.trim().to_string(),
+                normalize_component_order_label(&component.display),
+            )
+        })
+        .collect::<Vec<_>>();
 
     let mut out = HashMap::<String, String>::new();
-    let mut distinct = std::collections::HashSet::<String>::new();
+    let mut distinct = HashSet::<String>::new();
+    let mut matched_components = HashSet::<String>::new();
+    let mut component_cursor = 0usize;
     for block in &ordered_blocks {
-        let component_id = block.component_id.trim();
-        if !component_ids.contains(component_id) {
+        let Some(bound_component_id) = bind_block_to_component_id(
+            block,
+            &tra_map,
+            &component_ids,
+            &ordered_components,
+            &matched_components,
+            &mut component_cursor,
+        ) else {
             continue;
-        }
+        };
+        matched_components.insert(bound_component_id.clone());
         let Some(group_token) = block.group_key.as_deref() else {
             continue;
         };
@@ -48,7 +67,7 @@ pub(super) fn detect_weidu_groups(
         if cleaned.is_empty() {
             continue;
         }
-        out.insert(component_id.to_string(), cleaned.to_string());
+        out.insert(bound_component_id, cleaned.to_string());
         distinct.insert(cleaned.to_ascii_lowercase());
     }
 
@@ -56,6 +75,92 @@ pub(super) fn detect_weidu_groups(
         HashMap::new()
     } else {
         out
+    }
+}
+
+fn bind_block_to_component_id(
+    block: &super::tp2_blocks::Tp2ComponentBlock,
+    tra_map: &HashMap<String, String>,
+    component_ids: &HashSet<String>,
+    ordered_components: &[(String, String)],
+    matched_components: &HashSet<String>,
+    component_cursor: &mut usize,
+) -> Option<String> {
+    let block_component_id = block.component_id.trim();
+    if !block_component_id.is_empty()
+        && component_ids.contains(block_component_id)
+        && !matched_components.contains(block_component_id)
+    {
+        if let Some(index) = ordered_components
+            .iter()
+            .position(|(component_id, _)| component_id == block_component_id)
+        {
+            *component_cursor = index.saturating_add(1);
+        }
+        return Some(block_component_id.to_string());
+    }
+
+    let block_labels = build_block_match_labels(block, tra_map);
+    if block_labels.is_empty() {
+        return None;
+    }
+
+    for (index, (component_id, component_label)) in ordered_components
+        .iter()
+        .enumerate()
+        .skip(*component_cursor)
+    {
+        if matched_components.contains(component_id) {
+            continue;
+        }
+        if block_labels.iter().any(|label| component_label == label) {
+            *component_cursor = index.saturating_add(1);
+            return Some(component_id.clone());
+        }
+    }
+
+    for (index, (component_id, component_label)) in ordered_components.iter().enumerate() {
+        if matched_components.contains(component_id) {
+            continue;
+        }
+        if block_labels.iter().any(|label| component_label == label) {
+            *component_cursor = index.saturating_add(1);
+            return Some(component_id.clone());
+        }
+    }
+
+    None
+}
+
+fn build_block_match_labels(
+    block: &super::tp2_blocks::Tp2ComponentBlock,
+    tra_map: &HashMap<String, String>,
+) -> Vec<String> {
+    let Some(begin_label) = block
+        .body_lines
+        .first()
+        .and_then(|line| parse_begin_label(line, tra_map))
+    else {
+        return Vec::new();
+    };
+
+    let mut labels = Vec::<String>::new();
+    push_match_label(&mut labels, &begin_label);
+
+    if let Some(subcomponent_key) = block.subcomponent_key.as_deref()
+        && let Some(parent_label) = resolve_group_token_label(subcomponent_key, tra_map)
+    {
+        let combined = format!("{} -> {}", parent_label.trim(), begin_label.trim());
+        push_match_label(&mut labels, &combined);
+    }
+
+    labels
+}
+
+fn push_match_label(labels: &mut Vec<String>, value: &str) {
+    let normalized = normalize_component_order_label(value);
+    if !normalized.is_empty() && !labels.iter().any(|existing| existing == &normalized) {
+        labels.push(normalized);
     }
 }
 

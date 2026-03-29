@@ -15,8 +15,18 @@ pub fn collect_prompt_summary_index(
     mods_root: &Path,
     preferred_lang: Option<&str>,
     preferred_game: Option<&str>,
-) -> Result<PromptSummaryIndex, String> {
-    let run = runner::run_lapdu_parser(tp2_path, mods_root, preferred_lang)?;
+) -> PromptSummaryIndex {
+    let run = match runner::run_lapdu_parser(tp2_path, mods_root, preferred_lang) {
+        Ok(run) => run,
+        Err(err) => {
+            return PromptSummaryIndex {
+                parser_error_count: 1,
+                parser_diagnostic_preview: Some(err.message),
+                parser_raw_json: err.raw_json,
+                ..PromptSummaryIndex::default()
+            };
+        }
+    };
     let mut index = map_to_bio::build_prompt_summary_index(&run.output, preferred_game);
     index.parser_raw_json = Some(run.raw_json);
     index.parser_tra_language_requested = non_empty(&run.output.tra_language_requested);
@@ -43,7 +53,7 @@ pub fn collect_prompt_summary_index(
         .map(|o| o.component_ids.len())
         .sum();
     index.parser_flow_preview = collect_flow_preview(&run.output.flow, 8);
-    Ok(index)
+    index
 }
 
 fn collect_flow_preview(nodes: &[ParserFlowNode], limit: usize) -> Vec<(String, String)> {

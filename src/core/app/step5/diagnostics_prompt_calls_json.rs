@@ -67,36 +67,34 @@ fn append_groups_for_tab(
     groups: &mut Vec<serde_json::Value>,
 ) {
     for mod_state in mods {
-        let mut prompt_calls = Vec::<serde_json::Value>::new();
-
-        if let Some(summary) = mod_state.mod_prompt_summary.as_deref() {
-            let summary = summary.trim();
-            if !summary.is_empty() {
-                prompt_calls.push(json!({
-                    "scope": "mod",
-                    "component_id": null,
-                    "component_label": null,
-                    "summary": summary
-                }));
-            }
-        }
+        let mut component_calls = Vec::<serde_json::Value>::new();
+        let mod_summary = mod_state
+            .mod_prompt_summary
+            .as_deref()
+            .map(str::trim)
+            .filter(|summary| !summary.is_empty())
+            .map(str::to_string);
 
         for component in &mod_state.components {
-            if let Some(summary) = component.prompt_summary.as_deref() {
-                let summary = summary.trim();
-                if summary.is_empty() {
-                    continue;
-                }
-                prompt_calls.push(json!({
-                    "scope": "component",
-                    "component_id": component.component_id,
-                    "component_label": component.label,
-                    "summary": summary
-                }));
+            let summary = component
+                .prompt_summary
+                .as_deref()
+                .map(str::trim)
+                .filter(|summary| !summary.is_empty())
+                .map(str::to_string);
+            if summary.is_none() && component.prompt_events.is_empty() {
+                continue;
             }
+            component_calls.push(json!({
+                "component_id": component.component_id,
+                "component_label": component.label,
+                "summary": summary,
+                "prompt_event_count": component.prompt_events.len(),
+                "prompt_events": &component.prompt_events,
+            }));
         }
 
-        if prompt_calls.is_empty() {
+        if mod_summary.is_none() && mod_state.mod_prompt_events.is_empty() && component_calls.is_empty() {
             continue;
         }
 
@@ -111,8 +109,11 @@ fn append_groups_for_tab(
             "mod_name": mod_state.name,
             "tp_file": mod_state.tp_file,
             "tp2_path": mod_state.tp2_path,
-            "prompt_calls_count": prompt_calls.len(),
-            "prompt_calls": prompt_calls,
+            "mod_prompt_summary": mod_summary,
+            "mod_prompt_event_count": mod_state.mod_prompt_events.len(),
+            "mod_prompt_events": &mod_state.mod_prompt_events,
+            "component_prompt_count": component_calls.len(),
+            "component_prompts": component_calls,
             "parser_meta": parser_meta
         }));
     }

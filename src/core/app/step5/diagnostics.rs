@@ -18,6 +18,10 @@ use crate::ui::terminal::EmbeddedTerminal;
 mod appdata_copy;
 #[path = "diagnostics_compat_decisions_json.rs"]
 mod compat_decisions_json;
+#[path = "diagnostics_compat_rule_inventory_json.rs"]
+mod compat_rule_inventory_json;
+#[path = "diagnostics_compat_rule_matches_summary_json.rs"]
+mod compat_rule_matches_summary_json;
 #[path = "diagnostics_compat_rule_trace_json.rs"]
 mod compat_rule_trace_json;
 #[path = "diagnostics_compat_snapshot.rs"]
@@ -40,6 +44,12 @@ mod parser_raw_json;
 mod text;
 #[path = "diagnostics_tp2_layout.rs"]
 mod tp2_layout;
+#[path = "diagnostics_runtime_assumptions_json.rs"]
+mod runtime_assumptions_json;
+#[path = "diagnostics_step3_issue_snapshot_json.rs"]
+mod step3_issue_snapshot_json;
+#[path = "diagnostics_undefined_detect.rs"]
+mod undefined_detect;
 #[path = "diagnostics_undefined_summary_json.rs"]
 mod undefined_summary_json;
 #[path = "diagnostics_write_checks.rs"]
@@ -105,7 +115,14 @@ pub fn export_diagnostics(
     }
     written_paths.extend(appdata_summary.copied.iter().cloned());
 
-    match quick_triage::write_quick_triage_txt(&run_dir, state, ts) {
+    match runtime_assumptions_json::write_runtime_assumptions_json(&run_dir, state, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("runtime_assumptions_json_write=FAILED: {err}"),
+        ),
+    }
+    match quick_triage::write_quick_triage_txt(&run_dir, state, &write_check_summary, ts) {
         Ok(path) => written_paths.push(path),
         Err(err) => append_diag_note(&out_path, &format!("quick_triage_write=FAILED: {err}")),
     }
@@ -143,11 +160,32 @@ pub fn export_diagnostics(
             &format!("compat_decisions_json_write=FAILED: {err}"),
         ),
     }
+    match compat_rule_inventory_json::write_compat_rule_inventory_json(&run_dir, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("compat_rule_inventory_json_write=FAILED: {err}"),
+        ),
+    }
     match compat_rule_trace_json::write_compat_rule_trace_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
         Err(err) => append_diag_note(
             &out_path,
             &format!("compat_rule_trace_json_write=FAILED: {err}"),
+        ),
+    }
+    match compat_rule_matches_summary_json::write_compat_rule_matches_summary_json(&run_dir, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("compat_rule_matches_summary_json_write=FAILED: {err}"),
+        ),
+    }
+    match step3_issue_snapshot_json::write_step3_issue_snapshot_json(&run_dir, state, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("step3_issue_snapshot_json_write=FAILED: {err}"),
         ),
     }
 

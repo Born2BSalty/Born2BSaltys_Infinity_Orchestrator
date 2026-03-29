@@ -10,6 +10,8 @@ use serde_json::json;
 
 use crate::ui::state::WizardState;
 
+use super::undefined_detect::looks_like_undefined_signal;
+
 pub(super) fn write_undefined_summary_json(
     run_dir: &Path,
     state: &WizardState,
@@ -46,7 +48,9 @@ pub(super) fn write_undefined_summary_json(
             for mod_state in mods {
                 let mut hits = 0usize;
                 for component in &mod_state.components {
-                    if looks_like_undefined(&component.label) || looks_like_undefined(&component.raw_line) {
+                    if looks_like_undefined_signal(&component.label)
+                        || looks_like_undefined_signal(&component.raw_line)
+                    {
                         hits = hits.saturating_add(1);
                     }
                 }
@@ -74,11 +78,4 @@ pub(super) fn write_undefined_summary_json(
     };
     fs::write(&out_path, serde_json::to_string_pretty(&payload)?)?;
     Ok(out_path)
-}
-
-fn looks_like_undefined(text: &str) -> bool {
-    let lower = text.to_ascii_lowercase();
-    (lower.contains("undefined") && lower.contains("string"))
-        || lower.contains("no translation provided")
-        || lower.contains("cannot resolve string")
 }

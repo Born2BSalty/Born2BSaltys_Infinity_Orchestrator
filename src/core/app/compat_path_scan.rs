@@ -30,6 +30,9 @@ pub(crate) fn apply_step2_scan_path_requirement(
             ) else {
                 continue;
             };
+            if hit.kind.eq_ignore_ascii_case("missing_dep") && !component.checked {
+                continue;
+            }
 
             apply_path_requirement(component, &current_mod_key, &hit);
         }

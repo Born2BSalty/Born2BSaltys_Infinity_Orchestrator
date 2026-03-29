@@ -21,6 +21,29 @@
 - deprecated components now override mismatch
 - they are shown as deprecated, greyed out/uncheckable, but still selectable for details
 - deprecated status is now component-only and no longer shown on main mod headers
+=======
+## Beta 14
+- Reworked compatibility handling and messaging:
+- FORBID_COMPONENT now distinguishes install-order issues from real conflicts
+- mutual exclusions are clearer
+- included/mismatch wording is improved
+- Added richer Step 2 compatibility UX:
+- toolbar badges
+- compat popup filters
+- compat Next navigation
+- better jump behavior and popup persistence
+- Improved Step 2 details and scanning:
+- Details frame copy buttons
+- Details TP2 folder shortcut
+- cleaner TP2 block extraction
+- better TP2 grouping/order handling for mods like TNT
+- Added TP2 deprecated detection and improved dependency/path handling:
+- deprecated now overrides mismatch
+- FILE_EXISTS checks behave as missing dependencies
+- Improved parser and diagnostics:
+- better prompt extraction for affected mods
+- more complete diagnostics exports and triage files
+>>>>>>> e7832a6 (Beta 14)
 
 ## Beta 13
 - Fixed several component ordering issues so BIO matches manual WeiDU TP2 order more closely.

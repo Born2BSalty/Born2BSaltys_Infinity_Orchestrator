@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::ui::scan::ScannedComponent;
 
-use super::tp2_blocks::parse_designated_id;
+use super::tp2_blocks::parse_tp2_component_blocks_in_order;
 use super::tra::{load_tp2_setup_tra_map, resolve_group_token_label};
 
 pub(super) fn reorder_components_by_tp2_order(
@@ -87,48 +87,57 @@ fn parse_tp2_component_order(
 ) -> (HashMap<String, usize>, HashMap<String, usize>) {
     let mut out_by_id = HashMap::<String, usize>::new();
     let mut out_by_label = HashMap::<String, usize>::new();
-    let lines: Vec<&str> = tp2_text.lines().collect();
-    let mut index = 0usize;
-    let mut begin_index = 0usize;
-
-    while index < lines.len() {
-        let line = lines[index];
-        let trimmed = line.trim_start();
-        if !trimmed.to_ascii_uppercase().starts_with("BEGIN ") {
-            index += 1;
-            continue;
-        }
-
-        let mut end = index + 1;
-        while end < lines.len() {
-            let next = lines[end].trim_start().to_ascii_uppercase();
-            if next.starts_with("BEGIN ") {
-                break;
-            }
-            end += 1;
-        }
-
-        let block = &lines[index..end];
-        if let Some(label) = parse_begin_label(trimmed, tra_map) {
-            out_by_label
-                .entry(normalize_component_order_label(&label))
+    for (begin_index, block) in parse_tp2_component_blocks_in_order(tp2_text)
+        .into_iter()
+        .enumerate()
+    {
+        let component_id = block.component_id.trim();
+        if !component_id.is_empty() {
+            out_by_id
+                .entry(component_id.to_string())
                 .or_insert(begin_index);
         }
-        for line in block {
-            if let Some(id) = parse_designated_id(&line.to_ascii_uppercase()) {
-                out_by_id.entry(id).or_insert(begin_index);
-                break;
-            }
+        for label in build_block_order_labels(&block, tra_map) {
+            out_by_label.entry(label).or_insert(begin_index);
         }
-
-        begin_index += 1;
-        index = end;
     }
 
     (out_by_id, out_by_label)
 }
 
-fn parse_begin_label(line: &str, tra_map: &HashMap<String, String>) -> Option<String> {
+fn build_block_order_labels(
+    block: &super::tp2_blocks::Tp2ComponentBlock,
+    tra_map: &HashMap<String, String>,
+) -> Vec<String> {
+    let Some(begin_label) = block
+        .body_lines
+        .first()
+        .and_then(|line| parse_begin_label(line, tra_map))
+    else {
+        return Vec::new();
+    };
+
+    let mut labels = Vec::<String>::new();
+    push_order_label(&mut labels, &begin_label);
+
+    if let Some(subcomponent_key) = block.subcomponent_key.as_deref()
+        && let Some(parent_label) = resolve_group_token_label(subcomponent_key, tra_map)
+    {
+        let combined = format!("{} -> {}", parent_label.trim(), begin_label.trim());
+        push_order_label(&mut labels, &combined);
+    }
+
+    labels
+}
+
+fn push_order_label(labels: &mut Vec<String>, value: &str) {
+    let normalized = normalize_component_order_label(value);
+    if !normalized.is_empty() && !labels.iter().any(|existing| existing == &normalized) {
+        labels.push(normalized);
+    }
+}
+
+pub(super) fn parse_begin_label(line: &str, tra_map: &HashMap<String, String>) -> Option<String> {
     let trimmed = line.trim_start();
     if trimmed.starts_with("//") {
         return None;
@@ -156,7 +165,7 @@ fn parse_begin_label(line: &str, tra_map: &HashMap<String, String>) -> Option<St
     (!value.is_empty()).then(|| value.to_string())
 }
 
-fn normalize_component_order_label(value: &str) -> String {
+pub(super) fn normalize_component_order_label(value: &str) -> String {
     let trimmed = value.trim();
     let base = trimmed
         .rsplit_once(':')

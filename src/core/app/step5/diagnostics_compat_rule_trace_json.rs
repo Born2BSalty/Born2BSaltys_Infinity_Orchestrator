@@ -9,10 +9,12 @@ use serde_json::json;
 
 use crate::ui::compat_logic::apply_step2_compat_rules;
 use crate::ui::compat_rule_runtime::{
-    collect_step2_active_items, compat_component_matches, compat_mod_matches, direct_rule_applies,
-    match_kind_matches, relation_rule_applies, tab_matches, mode_matches,
+    active_item_order, collect_step2_active_items, compat_component_matches, compat_mod_matches,
+    direct_rule_applies, match_kind_matches, mode_matches, relation_rule_applies, tab_matches,
 };
-use crate::ui::compat_rules::load_rules;
+use crate::ui::compat_rules::{
+    compat_rule_source_bucket, compat_rule_source_path, load_rules,
+};
 use crate::ui::state::{Step2ComponentState, Step2ModState, WizardState};
 
 pub(super) fn write_compat_rule_trace_json(
@@ -59,6 +61,11 @@ fn trace_tab(
             .iter()
             .zip(recomputed_mod.components.iter())
         {
+            let active_order = active_item_order(
+                &active_items,
+                &actual_mod.tp_file,
+                &actual_component.component_id,
+            );
             let rule_matches = build_rule_matches(
                 state,
                 tab,
@@ -66,6 +73,7 @@ fn trace_tab(
                 actual_component,
                 rules,
                 &active_items,
+                active_order,
             );
             let actual_kind = actual_component.compat_kind.as_deref().unwrap_or_default();
             let recomputed_kind = recomputed_component.compat_kind.as_deref().unwrap_or_default();
@@ -83,6 +91,8 @@ fn trace_tab(
                 "tp_file": actual_mod.tp_file,
                 "component_id": actual_component.component_id,
                 "label": actual_component.label,
+                "selected_order_raw": actual_component.selected_order,
+                "selected_order_active": active_order,
                 "actual": {
                     "compat_kind": actual_component.compat_kind,
                     "disabled": actual_component.disabled,
@@ -114,6 +124,7 @@ fn build_rule_matches(
     component: &Step2ComponentState,
     rules: &[crate::ui::compat_rules::CompatRule],
     active_items: &[crate::ui::compat_rule_runtime::CompatActiveItem],
+    active_order: Option<usize>,
 ) -> Vec<serde_json::Value> {
     let mut out = Vec::<serde_json::Value>::new();
 
@@ -135,7 +146,7 @@ fn build_rule_matches(
                 rule,
                 &mod_state.tp_file,
                 &component.component_id,
-                component.selected_order,
+                active_order,
                 active_items,
             );
 
@@ -147,6 +158,8 @@ fn build_rule_matches(
             "rule_index": rule_index,
             "kind": rule.kind,
             "message": rule.message,
+            "source_bucket": compat_rule_source_bucket(rule),
+            "source_path": compat_rule_source_path(rule),
             "component": rule.component.as_ref().map(|value| value.trimmed_items()),
             "component_id": rule.component_id.as_ref().map(|value| value.trimmed_items()),
             "mode_match": mode_match,

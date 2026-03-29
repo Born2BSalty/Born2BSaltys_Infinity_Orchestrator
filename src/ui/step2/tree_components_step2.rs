@@ -114,7 +114,6 @@ pub(crate) fn render_component_rows(
                             mod_state,
                             component_idx,
                             group_end,
-                            true,
                             &mut render_state,
                         );
                     });
@@ -141,7 +140,6 @@ pub(crate) fn render_component_rows(
             mod_state,
             component_idx,
             group_end,
-            false,
             &mut render_state,
         );
         component_idx = group_end;
@@ -173,7 +171,6 @@ fn render_component_rows_range(
     mod_state: &mut Step2ModState,
     start_idx: usize,
     end_idx: usize,
-    within_weidu_group: bool,
     render_state: &mut ComponentRenderState<'_>,
 ) {
     let mod_name_match = ctx.filter.is_empty() || ctx.mod_name.to_lowercase().contains(ctx.filter);
@@ -242,7 +239,7 @@ fn render_component_rows_range(
                                     idx,
                                     &mut mod_state.components[idx],
                                     None,
-                                    45.0,
+                                    0.0,
                                 );
                             }
                         }
@@ -277,7 +274,7 @@ fn render_component_rows_range(
                     || mod_state.components[idx].label.to_lowercase().contains(ctx.filter)
             });
             if any_child_visible {
-                let subgroup_indent = if within_weidu_group { 45.0 } else { 25.0 };
+                let subgroup_indent = 0.0;
                 let header_id =
                     egui::Id::new((
                         "step2_subgroup",
@@ -343,7 +340,7 @@ fn render_component_rows_range(
                 component_idx,
                 &mut mod_state.components[component_idx],
                 None,
-                25.0,
+                0.0,
             );
         }
         component_idx += 1;

@@ -10,6 +10,8 @@ use crate::ui::step5::diagnostics::{
 #[path = "diagnostics_text_step2.rs"]
 mod step2;
 
+use super::undefined_detect;
+
 pub(super) struct BuildBaseTextInput<'a> {
     pub state: &'a WizardState,
     pub diagnostics_run_id: &'a str,
@@ -167,12 +169,7 @@ fn append_undefined_string_signals(out: &mut String, console_excerpt: &str) {
     out.push_str("\n[Undefined String Signals]\n");
     let mut hits: Vec<&str> = console_excerpt
         .lines()
-        .filter(|line| {
-            let lower = line.to_ascii_lowercase();
-            (lower.contains("undefined") && lower.contains("string"))
-                || lower.contains("no translation provided")
-                || lower.contains("cannot resolve string")
-        })
+        .filter(|line| undefined_detect::looks_like_undefined_signal(line))
         .collect();
     if hits.is_empty() {
         out.push_str("none_detected\n");

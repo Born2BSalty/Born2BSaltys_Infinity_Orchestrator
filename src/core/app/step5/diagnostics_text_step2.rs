@@ -3,6 +3,8 @@
 
 use crate::ui::state::WizardState;
 
+use super::super::undefined_detect::looks_like_undefined_signal;
+
 pub(super) fn append_step2_sections(out: &mut String, state: &WizardState) {
     append_step2_summary(out, state);
     append_step2_selected_components(out, state);
@@ -72,16 +74,7 @@ fn append_step2_scan_undefined_signals(out: &mut String, state: &WizardState) {
 }
 
 fn looks_like_scan_undefined(text: &str) -> bool {
-    let t = text.trim();
-    if t.is_empty() {
-        return false;
-    }
-    let lower = t.to_ascii_lowercase();
-    lower.contains("undefined")
-        || lower.contains("invalid")
-        || lower.contains("no translation provided")
-        || lower.contains("cannot resolve string")
-        || (t.contains('@') && t.chars().any(|c| c.is_ascii_digit()))
+    looks_like_undefined_signal(text)
 }
 
 fn append_wlb_inputs_map(out: &mut String, state: &WizardState) {

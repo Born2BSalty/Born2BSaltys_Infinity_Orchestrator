@@ -51,12 +51,5 @@ pub fn collect_prompt_summary_index(
     preferred_lang: Option<&str>,
     preferred_game: Option<&str>,
 ) -> PromptSummaryIndex {
-    match lapdu::collect_prompt_summary_index(tp2_path, mods_root, preferred_lang, preferred_game) {
-        Ok(index) => index,
-        Err(err) => PromptSummaryIndex {
-            parser_error_count: 1,
-            parser_diagnostic_preview: Some(err.clone()),
-            ..PromptSummaryIndex::default()
-        },
-    }
+    lapdu::collect_prompt_summary_index(tp2_path, mods_root, preferred_lang, preferred_game)
 }

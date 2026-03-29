@@ -123,24 +123,24 @@ pub(super) fn run_write_checks(state: &WizardState, ts: u64) -> WriteCheckSummar
     );
 
     let weidu_binary = resolve_weidu_binary(&s.weidu_binary);
-    push_parent_check("WeiDU binary", &weidu_binary, ts, &mut seen, &mut summary);
+    push_file_check("WeiDU binary", &weidu_binary, ts, &mut seen, &mut summary);
     let mod_installer_binary = resolve_mod_installer_binary(&s.mod_installer_binary);
-    push_parent_check(
+    push_file_check(
         "mod_installer binary",
         &mod_installer_binary,
         ts,
         &mut seen,
         &mut summary,
     );
-    push_parent_check("WeiDU log file", &s.log_file, ts, &mut seen, &mut summary);
-    push_parent_check(
+    push_file_check("WeiDU log file", &s.log_file, ts, &mut seen, &mut summary);
+    push_file_check(
         "BGEE WeiDU log file",
         &s.bgee_log_file,
         ts,
         &mut seen,
         &mut summary,
     );
-    push_parent_check(
+    push_file_check(
         "BG2EE WeiDU log file",
         &s.bg2ee_log_file,
         ts,
@@ -179,7 +179,7 @@ fn push_dir_check(
     summary.lines.push(line);
 }
 
-fn push_parent_check(
+fn push_file_check(
     label: &str,
     raw: &str,
     ts: u64,
@@ -191,10 +191,29 @@ fn push_parent_check(
         return;
     }
     let path = PathBuf::from(value);
+    let target_key = format!("file:{}", path.display());
+    if seen.insert(target_key) {
+        match probe_file_target(&path) {
+            Ok(true) => summary.lines.push(format!(
+                "OK | {label} target_exists | {}",
+                path.display()
+            )),
+            Ok(false) => summary.lines.push(format!(
+                "FAIL | {label} target_exists | {} | file does not exist",
+                path.display()
+            )),
+            Err(err) => summary.lines.push(format!(
+                "FAIL | {label} target_is_file | {} | {err}",
+                path.display()
+            )),
+        }
+    }
     let Some(parent) = path.parent() else {
         summary
             .lines
-            .push(format!("INFO | {label} parent | {value} | no parent directory"));
+            .push(format!(
+                "INFO | {label} parent_writable | {value} | no parent directory"
+            ));
         return;
     };
     let key = format!("dir:{}", parent.display());
@@ -202,10 +221,23 @@ fn push_parent_check(
         return;
     }
     let line = match probe_write_dir(parent, ts) {
-        Ok(()) => format!("OK | {label} parent | {}", parent.display()),
-        Err(err) => format!("FAIL | {label} parent | {} | {err}", parent.display()),
+        Ok(()) => format!("OK | {label} parent_writable | {}", parent.display()),
+        Err(err) => format!(
+            "FAIL | {label} parent_writable | {} | {err}",
+            parent.display()
+        ),
     };
     summary.lines.push(line);
+}
+
+fn probe_file_target(path: &Path) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    if !path.is_file() {
+        return Err("path exists but is not a file".to_string());
+    }
+    Ok(true)
 }
 
 fn probe_write_dir(dir: &Path, ts: u64) -> Result<(), String> {

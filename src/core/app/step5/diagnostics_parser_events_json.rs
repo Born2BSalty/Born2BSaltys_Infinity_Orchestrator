@@ -29,8 +29,8 @@ pub(super) fn write_parser_events_json(
     };
 
     let mut mapped_by_tp2 = HashMap::<String, Vec<serde_json::Value>>::new();
-    append_mapped_for_tab(&state.step2.bgee_mods, &mut mapped_by_tp2);
-    append_mapped_for_tab(&state.step2.bg2ee_mods, &mut mapped_by_tp2);
+    append_mapped_for_tab("BGEE", &state.step2.bgee_mods, &mut mapped_by_tp2);
+    append_mapped_for_tab("BG2EE", &state.step2.bg2ee_mods, &mut mapped_by_tp2);
 
     let tp2_run_by_key = report
         .tp2_reports
@@ -95,41 +95,50 @@ pub(super) fn write_parser_events_json(
 }
 
 fn append_mapped_for_tab(
+    tab: &str,
     mods: &[Step2ModState],
     out: &mut HashMap<String, Vec<serde_json::Value>>,
 ) {
     for mod_state in mods {
-        let mut row = Vec::<serde_json::Value>::new();
-        if let Some(summary) = mod_state.mod_prompt_summary.as_deref() {
-            let summary = summary.trim();
-            if !summary.is_empty() {
-                row.push(json!({
-                    "scope": "mod",
-                    "component_id": null,
-                    "component_label": null,
-                    "summary": summary
-                }));
-            }
-        }
+        let mut component_rows = Vec::<serde_json::Value>::new();
+        let mod_summary = mod_state
+            .mod_prompt_summary
+            .as_deref()
+            .map(str::trim)
+            .filter(|summary| !summary.is_empty())
+            .map(str::to_string);
         for c in &mod_state.components {
-            if let Some(summary) = c.prompt_summary.as_deref() {
-                let summary = summary.trim();
-                if summary.is_empty() {
-                    continue;
-                }
-                row.push(json!({
-                    "scope": "component",
-                    "component_id": c.component_id,
-                    "component_label": c.label,
-                    "summary": summary
-                }));
+            let summary = c
+                .prompt_summary
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            if summary.is_none() && c.prompt_events.is_empty() {
+                continue;
             }
+            component_rows.push(json!({
+                "component_id": c.component_id,
+                "component_label": c.label,
+                "summary": summary,
+                "prompt_event_count": c.prompt_events.len(),
+                "prompt_events": &c.prompt_events,
+            }));
         }
-        if row.is_empty() {
+        if mod_summary.is_none() && mod_state.mod_prompt_events.is_empty() && component_rows.is_empty() {
             continue;
         }
         let key = normalize_path(&mod_state.tp2_path);
-        out.insert(key, row);
+        out.entry(key).or_default().push(json!({
+            "tab": tab,
+            "mod_name": mod_state.name,
+            "tp_file": mod_state.tp_file,
+            "tp2_path": mod_state.tp2_path,
+            "mod_prompt_summary": mod_summary,
+            "mod_prompt_event_count": mod_state.mod_prompt_events.len(),
+            "mod_prompt_events": &mod_state.mod_prompt_events,
+            "component_prompts": component_rows,
+        }));
     }
 }
 
