@@ -20,6 +20,29 @@
 - better prompt extraction for affected mods
 - more complete diagnostics exports and triage files
 
+## Beta 14
+- Improved Step 2 and Step 3 compatibility UX:
+- toolbar issue badges, popup filters, Next navigation, and better jump behavior
+- Fixed stale and misleading compatibility states in Step 2:
+- Clear All / Select Visible now refresh correctly
+- missing_dep only shows for checked components
+- FILE_EXISTS checks now classify as missing dependencies
+- Reworked TP2 compatibility handling:
+- better ENGINE_IS mismatch handling
+- FORBID_COMPONENT now behaves as install-order logic where appropriate
+- clearer mutual-exclusion reporting for true impossible combinations
+- Step 2 conflicts no longer auto-grey or auto-uncheck components, so users can resolve them manually
+- Improved Step 3 ordering behavior:
+- dragging full mod selections now keeps headers with their components
+- Step 2 checkbox order now syncs back into Step 3 correctly
+- Added better TP2 details in Step 2:
+- copy buttons for Component Block and WeiDU Line
+- cleaner component-block extraction for large mods like EET
+- Added TP2 DEPRECATED scanning:
+- deprecated components now override mismatch
+- they are shown as deprecated, greyed out/uncheckable, but still selectable for details
+- deprecated status is now component-only and no longer shown on main mod headers
+
 ## Beta 13
 - Fixed several component ordering issues so BIO matches manual WeiDU TP2 order more closely.
 - Improved TP2 label/order matching for mods using `BEGIN @...`, custom setup TRA files, and WeiDU version-suffixed labels.
