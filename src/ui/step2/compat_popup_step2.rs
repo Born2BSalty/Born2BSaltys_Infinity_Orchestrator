@@ -172,10 +172,11 @@ pub(crate) mod compat_popup_details {
             .as_deref()
             .or(issue.as_ref().map(|issue| issue.kind.as_str()))
             .unwrap_or("unknown");
-        ui.horizontal(|ui| {
-            ui.label(crate::ui::shared::typography_global::strong("Kind"));
-            ui.label(issue_text_kind::human_kind(kind));
-            if let Some(issue) = issue.as_ref() {
+        if let Some(issue) = issue.as_ref()
+            && !kind.eq_ignore_ascii_case("included")
+        {
+            ui.horizontal(|ui| {
+                ui.label(crate::ui::shared::typography_global::strong("Status"));
                 let badge_color = match issue.status_tone {
                     CompatIssueStatusTone::Neutral => {
                         crate::ui::shared::theme_global::text_muted()
@@ -191,12 +192,16 @@ pub(crate) mod compat_popup_details {
                     crate::ui::shared::typography_global::strong(issue.status_label.as_str())
                         .color(badge_color),
                 );
-            }
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.label(crate::ui::shared::typography_global::strong("Kind"));
+            ui.label(issue_text_kind::human_kind(kind));
         });
 
         if let Some(issue) = issue.as_ref() {
             ui.add_space(4.0);
-            ui.label(issue_text_explain::issue_summary(issue));
+            ui.label(issue_text_explain::issue_summary(issue, &state.step1.game_install));
         } else if let Some(reason) = details.disabled_reason.as_deref() {
             ui.add_space(4.0);
             ui.label(reason);

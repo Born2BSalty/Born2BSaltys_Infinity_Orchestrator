@@ -9,7 +9,7 @@ pub(crate) mod compat_popup_issue_text_explain {
         parse_games, parse_or_targets_from_reason,
     };
 
-    pub(crate) fn issue_summary(issue: &CompatIssueDisplay) -> String {
+    pub(crate) fn issue_summary(issue: &CompatIssueDisplay, selected_mode: &str) -> String {
         if is_duplicate_selection_issue(issue) {
             return "Duplicate selection".to_string();
         }
@@ -18,7 +18,13 @@ pub(crate) mod compat_popup_issue_text_explain {
         {
             let games = parse_games(issue);
             return if games.is_empty() {
-                "Not available in this game mode".to_string()
+                if selected_mode.eq_ignore_ascii_case("BGEE")
+                    || selected_mode.eq_ignore_ascii_case("BG2EE")
+                {
+                    "This component is not available on the current game mode.".to_string()
+                } else {
+                    "This component is not available on the current game tab.".to_string()
+                }
             } else {
                 format!("Only available on `{games}`")
             };
@@ -56,6 +62,13 @@ pub(crate) mod compat_popup_issue_text_explain {
             return format!("Blocked by `{related}`");
         }
         if issue.code.eq_ignore_ascii_case("INCLUDED") {
+            let reason = issue.reason.trim();
+            if !reason.is_empty() && !reason.eq_ignore_ascii_case("unknown") {
+                return reason.to_string();
+            }
+            if issue.related_mod.eq_ignore_ascii_case("unknown") {
+                return "Already included elsewhere".to_string();
+            }
             let related = format_issue_target(&issue.related_mod, issue.related_component);
             return format!("Included by `{related}`");
         }

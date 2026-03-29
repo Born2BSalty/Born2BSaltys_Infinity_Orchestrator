@@ -9,6 +9,7 @@ pub enum Step2Action {
     SelectBg2eeViaLog,
     OpenSelectedReadme(String),
     OpenSelectedWeb(String),
+    OpenSelectedTp2Folder(String),
     OpenSelectedTp2(String),
     OpenCompatForComponent {
         game_tab: String,

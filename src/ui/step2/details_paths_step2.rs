@@ -6,6 +6,13 @@ use eframe::egui;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::Step2Details;
 
+struct PathsGridLayout {
+    label_w: f32,
+    value_w: f32,
+    row_h: f32,
+    value_chars: usize,
+}
+
 pub(crate) fn render_paths_grid(
     ui: &mut egui::Ui,
     details: &Step2Details,
@@ -15,68 +22,51 @@ pub(crate) fn render_paths_grid(
     row_h: f32,
     value_chars: usize,
 ) {
+    let layout = PathsGridLayout {
+        label_w,
+        value_w,
+        row_h,
+        value_chars,
+    };
     ui.label(crate::ui::shared::typography_global::small_strong("Paths / Links"));
     egui::Grid::new("step2_details_paths_grid")
         .num_columns(3)
         .spacing([8.0, 4.0])
         .show(ui, |ui| {
-            let mut path_row = |ui: &mut egui::Ui,
-                                label: &str,
-                                value: Option<&str>,
-                                missing_amber: bool,
-                                open_action: Option<Step2Action>| {
-                ui.add_sized(
-                    [label_w, row_h],
-                    egui::Label::new(crate::ui::shared::typography_global::strong(label)),
-                );
-                let raw = value.unwrap_or("No data");
-                let display = ellipsize_end(raw, value_chars);
-                let mut text = crate::ui::shared::typography_global::monospace(display);
-                if value.is_none() && missing_amber {
-                    text = text.color(crate::ui::shared::theme_global::warning());
-                }
-                ui.add_sized([value_w, row_h], egui::Label::new(text))
-                    .on_hover_text(raw);
-                if let Some(copy_value) = value {
-                    ui.horizontal(|ui| {
-                        if ui
-                            .small_button("C")
-                            .on_hover_text(crate::ui::shared::tooltip_global::COPY)
-                            .clicked()
-                        {
-                            ui.ctx().copy_text(copy_value.to_string());
-                        }
-                        if ui
-                            .small_button("O")
-                            .on_hover_text(crate::ui::shared::tooltip_global::OPEN)
-                            .clicked()
-                            && let Some(a) = open_action.clone()
-                        {
-                            *action = Some(a);
-                        }
-                    });
-                } else {
-                    ui.label("");
-                }
-                ui.end_row();
-            };
-            path_row(
+            render_open_only_row(
                 ui,
+                action,
+                &layout,
+                "TP2 Folder",
+                details.tp2_folder.as_deref(),
+                details
+                    .tp2_folder
+                    .clone()
+                    .map(Step2Action::OpenSelectedTp2Folder),
+            );
+            render_path_row(
+                ui,
+                action,
+                &layout,
                 "TP2 Path",
                 details.tp2_path.as_deref(),
                 true,
                 details.tp2_path.clone().map(Step2Action::OpenSelectedTp2),
             );
-            path_row(
+            render_path_row(
                 ui,
+                action,
+                &layout,
                 "Readme",
                 details.readme_path.as_deref(),
                 true,
                 details.readme_path.clone().map(Step2Action::OpenSelectedReadme),
             );
             if details.web_url.is_some() {
-                path_row(
+                render_path_row(
                     ui,
+                    action,
+                    &layout,
                     "Web",
                     details.web_url.as_deref(),
                     false,
@@ -84,6 +74,83 @@ pub(crate) fn render_paths_grid(
                 );
             }
         });
+}
+
+fn render_open_only_row(
+    ui: &mut egui::Ui,
+    action: &mut Option<Step2Action>,
+    layout: &PathsGridLayout,
+    label: &str,
+    value: Option<&str>,
+    open_action: Option<Step2Action>,
+) {
+    let Some(raw) = value else {
+        return;
+    };
+    ui.add_sized(
+        [layout.label_w, layout.row_h],
+        egui::Label::new(crate::ui::shared::typography_global::strong(label)),
+    );
+    let display = ellipsize_end(raw, layout.value_chars);
+    ui.add_sized(
+        [layout.value_w, layout.row_h],
+        egui::Label::new(crate::ui::shared::typography_global::monospace(display)),
+    )
+    .on_hover_text(raw);
+    if let Some(next_action) = open_action
+        && ui
+            .small_button("O")
+            .on_hover_text(crate::ui::shared::tooltip_global::OPEN)
+            .clicked()
+    {
+        *action = Some(next_action);
+    }
+    ui.end_row();
+}
+
+fn render_path_row(
+    ui: &mut egui::Ui,
+    action: &mut Option<Step2Action>,
+    layout: &PathsGridLayout,
+    label: &str,
+    value: Option<&str>,
+    missing_amber: bool,
+    open_action: Option<Step2Action>,
+) {
+    ui.add_sized(
+        [layout.label_w, layout.row_h],
+        egui::Label::new(crate::ui::shared::typography_global::strong(label)),
+    );
+    let raw = value.unwrap_or("No data");
+    let display = ellipsize_end(raw, layout.value_chars);
+    let mut text = crate::ui::shared::typography_global::monospace(display);
+    if value.is_none() && missing_amber {
+        text = text.color(crate::ui::shared::theme_global::warning());
+    }
+    ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
+        .on_hover_text(raw);
+    if let Some(copy_value) = value {
+        ui.horizontal(|ui| {
+            if ui
+                .small_button("C")
+                .on_hover_text(crate::ui::shared::tooltip_global::COPY)
+                .clicked()
+            {
+                ui.ctx().copy_text(copy_value.to_string());
+            }
+            if ui
+                .small_button("O")
+                .on_hover_text(crate::ui::shared::tooltip_global::OPEN)
+                .clicked()
+                && let Some(a) = open_action.clone()
+            {
+                *action = Some(a);
+            }
+        });
+    } else {
+        ui.label("");
+    }
+    ui.end_row();
 }
 
 pub(crate) fn render_component_block(ui: &mut egui::Ui, details: &Step2Details) {

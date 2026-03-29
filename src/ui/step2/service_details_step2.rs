@@ -51,6 +51,7 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                 compat_component_block: None,
                 raw_line: None,
                 tp_file: Some(details_tp2_file_name(&mod_state.tp_file)),
+                tp2_folder: details_parent_folder(&mod_state.tp2_path),
                 tp2_path: (!mod_state.tp2_path.is_empty()).then_some(mod_state.tp2_path.clone()),
                 readme_path: mod_state.readme_path.clone(),
                 web_url: mod_state.web_url.clone(),
@@ -115,6 +116,7 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             compat_component_block,
                             raw_line: Some(component.raw_line.clone()),
                             tp_file: Some(details_tp2_file_name(&component_tp2)),
+                            tp2_folder: details_parent_folder(&mod_state.tp2_path),
                             tp2_path: (!mod_state.tp2_path.is_empty()).then_some(mod_state.tp2_path.clone()),
                             readme_path: mod_state.readme_path.clone(),
                             web_url: mod_state.web_url.clone(),
@@ -123,6 +125,17 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
             })
             .unwrap_or_default(),
     }
+}
+
+fn details_parent_folder(tp2_path: &str) -> Option<String> {
+    let tp2_path = tp2_path.trim();
+    if tp2_path.is_empty() {
+        return None;
+    }
+    std::path::Path::new(tp2_path)
+        .parent()
+        .map(|path| path.display().to_string())
+        .filter(|path| !path.trim().is_empty())
 }
 
 fn details_component_block_from_tp2(tp2_path: &str, component_id: &str) -> Option<String> {

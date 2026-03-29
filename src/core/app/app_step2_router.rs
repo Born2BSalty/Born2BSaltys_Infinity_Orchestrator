@@ -14,6 +14,7 @@ pub(super) fn handle_step2_action(app: &mut WizardApp, action: Step2Action) {
         Step2Action::SelectBgeeViaLog => step2_log::apply_weidu_log_selection(app, true),
         Step2Action::SelectBg2eeViaLog => step2_log::apply_weidu_log_selection(app, false),
         Step2Action::OpenSelectedReadme(path)
+        | Step2Action::OpenSelectedTp2Folder(path)
         | Step2Action::OpenSelectedTp2(path)
         | Step2Action::OpenSelectedWeb(path) => {
             if let Err(err) = open_in_shell(&path) {
