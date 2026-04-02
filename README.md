@@ -11,13 +11,12 @@ for that.
 - Checks compatibility, dependencies, and install-order problems
 - Installs WeiDU mod setups in a guided workflow
   
-Supported targets:
+## Supported targets:
 - BGEE
 - BG2EE
 - EET
 
-BIO scans TP2 components, lets you select and reorder installs, validates compatibility, and runs mod_installer with live
-console control.
+BIO scans TP2 components, lets you select and reorder installs, validates compatibility, and runs `mod_installer` with live console control.
 
 
 ## Quick Start (Normal Users)
