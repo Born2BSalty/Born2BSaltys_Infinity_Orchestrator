@@ -1,3 +1,31 @@
+## Beta 16
+- Added proper prompt ownership for helper-driven WeiDU/LAF prompt flows in the lapdu parser.
+- Fixed missing component PROMPT pills for Choose manually style components such as A7-MultiKits.
+- Added a toolbar PROMPT badge for Step 2 and Step 3.
+- Added a structured prompt popup:
+- collapsed by mod
+- expanded to prompt-bearing component numbers
+- jump to component from the popup
+- Fixed Step 2 prompt badge/popup to show all prompt-bearing components, not only checked ones.
+- Fixed Step 3 prompt popup to use Step 3 selected items only.
+- Fixed Jump To Related for multi-target conditional compat rules by using the actual matched related target.
+- Expanded manual compat rules to support multiple related_mod / related_component targets.
+- Added target-install file checks for manual compat rules with game_file + game_file_check.
+- Added relation-based conditional manual compat rules so selected mods/components can disable other choices.
+- Adjusted Step 2 tree indentation so component rows under mod/group headers no longer get extra indent.
+- Fixed Step 2 component ordering for tricky TP2 layouts:
+  - FORCED_SUBCOMPONENT blocks now order correctly
+  - BEGIN @... fallback ids no longer beat exact label matches
+  - commented-out BEGIN blocks are ignored when building TP2 order
+- Fixed Step 2 wrongly hiding real portrait-choice components for mods like Sirene, Sirene_BG2, and Aura_BG1_2_EET
+- Hid deprecated dummy placeholder components from Step 2, such as workaround dummy entries in EEUITweaks
+- Added Step 2 hidden-component capture to diagnostics
+- Added Step 2 details-panel counts for:
+  - Shown
+  - Hidden
+  - Raw
+- Added Step 2 main mod-header counts using the current visible Step 2 component count
+
 ## Beta 15
 - Reworked compatibility handling and messaging:
 - FORBID_COMPONENT now distinguishes install-order issues from real conflicts

@@ -112,6 +112,15 @@ struct GameConditionMeta {
     deny: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+struct ActionFunctionDefinition {
+    normalized_name: String,
+    source_path: PathBuf,
+    start_line: u32,
+    end_line: u32,
+    callees: HashSet<String>,
+}
+
 struct ComponentReadlnCollector {
     temp: (),
     current_component: Option<usize>,
@@ -324,6 +333,14 @@ pub fn parse_path_to_json(root_path: &Path, preferred_lang: Option<&str>) -> Res
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut targets: Vec<(PathBuf, String)> = Vec::new();
     collect_parse_targets(&root_path, &mod_root, &mut visited, &mut targets)?;
+    let action_function_definitions = collect_action_function_definitions(&targets);
+    let action_function_definitions_by_file =
+        group_action_function_definitions_by_file(&action_function_definitions);
+    let root_source = read_text_with_fallback(root_path)?;
+    let action_function_component_owners = build_action_function_component_owners(
+        &collect_component_function_calls_from_root(&root_source),
+        &action_function_definitions,
+    );
     let mut include_component_hints: HashMap<PathBuf, HashSet<String>> = HashMap::new();
     let mut include_walk_visited: HashSet<(PathBuf, Option<String>)> = HashSet::new();
     collect_include_component_hints(
@@ -345,6 +362,7 @@ pub fn parse_path_to_json(root_path: &Path, preferred_lang: Option<&str>) -> Res
         let source_file = path.to_string_lossy().to_string();
         let source_normalized = normalize_for_visited(&path);
         let component_hints = include_component_hints.get(&source_normalized);
+        let action_function_defs = action_function_definitions_by_file.get(&source_normalized);
         match parse_source(&source, &path) {
             Ok(visitor) => append_events_from_visitor(
                 &mut events,
@@ -355,6 +373,8 @@ pub fn parse_path_to_json(root_path: &Path, preferred_lang: Option<&str>) -> Res
                 &mut tra_language_used,
                 Some(&root_tra_lookup.map),
                 component_hints,
+                action_function_defs,
+                &action_function_component_owners,
             ),
             Err(err) => warnings.push(ParserDiagnostic {
                 code: "PARSE_FILE_FAILED".to_string(),
@@ -596,6 +616,8 @@ fn append_events_from_visitor(
     tra_language_used: &mut Option<String>,
     root_tra_map: Option<&HashMap<String, String>>,
     include_component_hints: Option<&HashSet<String>>,
+    action_function_definitions: Option<&Vec<ActionFunctionDefinition>>,
+    action_function_component_owners: &HashMap<String, HashSet<String>>,
 ) {
     let mut quick_menu_search_from_line = 0usize;
     let mut match_prompt_search_from_line = 0usize;
@@ -840,7 +862,14 @@ fn append_events_from_visitor(
         } else {
             friendly_text
         };
-        let inferred_components = infer_component_hints_from_include_context(include_component_hints);
+        let inferred_components = match infer_component_hints_from_function_context(
+            line,
+            action_function_definitions,
+            action_function_component_owners,
+        ) {
+            Some(components) => components,
+            None => infer_component_hints_from_include_context(include_component_hints),
+        };
 
         let options_key = options
             .iter()
@@ -972,6 +1001,29 @@ fn infer_component_hints_from_include_context(
     normalized.sort();
     normalized.dedup();
     normalized
+}
+
+fn infer_component_hints_from_function_context(
+    line: Option<u32>,
+    action_function_definitions: Option<&Vec<ActionFunctionDefinition>>,
+    action_function_component_owners: &HashMap<String, HashSet<String>>,
+) -> Option<Vec<String>> {
+    let line = line?;
+    let function_name = action_function_definitions?
+        .iter()
+        .find(|definition| line >= definition.start_line && line <= definition.end_line)?
+        .normalized_name
+        .clone();
+    let mut normalized = action_function_component_owners
+        .get(&function_name)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|hint| normalize_component_hint(&hint))
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    Some(normalized)
 }
 
 fn normalize_component_hint(hint: &str) -> Option<String> {
@@ -1451,16 +1503,24 @@ fn collect_include_component_hints(
     let source = read_text_with_fallback(path)?;
     let mut current_component = inherited_component;
     let mut begin_index = 0usize;
+    let mut in_block_comment = false;
+    let allow_component_boundaries = current_component.is_none();
 
     for raw_line in source.lines() {
-        let code = strip_inline_comment(raw_line).trim();
+        let cleaned = strip_code_comments_line(raw_line, &mut in_block_comment);
+        let code = cleaned.trim();
         if code.is_empty() {
             continue;
         }
 
-        if let Some(component) = parse_begin_component_hint(code, begin_index) {
-            current_component = Some(component);
-            begin_index = begin_index.saturating_add(1);
+        if allow_component_boundaries {
+            if let Some(component) = parse_begin_component_hint(code, begin_index) {
+                current_component = Some(component);
+                begin_index = begin_index.saturating_add(1);
+            }
+            if let Some(designated) = extract_designated_component_id_from_line(code) {
+                current_component = Some(designated);
+            }
         }
 
         if !code.to_ascii_uppercase().starts_with("INCLUDE") {
@@ -1493,6 +1553,159 @@ fn collect_include_component_hints(
     }
 
     Ok(())
+}
+
+fn collect_action_function_definitions(
+    targets: &[(PathBuf, String)],
+) -> Vec<ActionFunctionDefinition> {
+    let mut out: Vec<ActionFunctionDefinition> = Vec::new();
+    for (path, source) in targets {
+        let source_path = normalize_for_visited(path);
+        let total_lines = source.lines().count() as u32;
+        let mut in_block_comment = false;
+        let mut current: Option<ActionFunctionDefinition> = None;
+        for (idx, raw_line) in source.lines().enumerate() {
+            let cleaned = strip_code_comments_line(raw_line, &mut in_block_comment);
+            let code = cleaned.trim();
+            let line_number = (idx + 1) as u32;
+            if let Some(function_name) = extract_define_action_function_name(code) {
+                if let Some(mut definition) = current.take() {
+                    definition.end_line = line_number.saturating_sub(1);
+                    out.push(definition);
+                }
+                current = Some(ActionFunctionDefinition {
+                    normalized_name: normalize_action_function_name(&function_name),
+                    source_path: source_path.clone(),
+                    start_line: line_number,
+                    end_line: total_lines,
+                    callees: HashSet::new(),
+                });
+                continue;
+            }
+            if let Some(definition) = current.as_mut() {
+                if let Some(function_name) = extract_laf_function_name(code) {
+                    definition
+                        .callees
+                        .insert(normalize_action_function_name(&function_name));
+                }
+            }
+        }
+        if let Some(mut definition) = current.take() {
+            definition.end_line = total_lines;
+            out.push(definition);
+        }
+    }
+    out
+}
+
+fn group_action_function_definitions_by_file(
+    definitions: &[ActionFunctionDefinition],
+) -> HashMap<PathBuf, Vec<ActionFunctionDefinition>> {
+    let mut out: HashMap<PathBuf, Vec<ActionFunctionDefinition>> = HashMap::new();
+    for definition in definitions {
+        out.entry(definition.source_path.clone())
+            .or_default()
+            .push(definition.clone());
+    }
+    for entries in out.values_mut() {
+        entries.sort_by_key(|definition| definition.start_line);
+    }
+    out
+}
+
+fn collect_component_function_calls_from_root(source: &str) -> HashMap<String, HashSet<String>> {
+    let mut out: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut current_component: Option<String> = None;
+    let mut begin_index = 0usize;
+    let mut in_block_comment = false;
+
+    for raw_line in source.lines() {
+        let cleaned = strip_code_comments_line(raw_line, &mut in_block_comment);
+        let code = cleaned.trim();
+        if code.is_empty() {
+            continue;
+        }
+
+        if let Some(component) = parse_begin_component_hint(code, begin_index) {
+            current_component = Some(component);
+            begin_index = begin_index.saturating_add(1);
+        }
+        if let Some(designated) = extract_designated_component_id_from_line(code) {
+            current_component = Some(designated);
+        }
+
+        let Some(component) = current_component.clone() else {
+            continue;
+        };
+        let Some(function_name) = extract_laf_function_name(code) else {
+            continue;
+        };
+        out.entry(normalize_action_function_name(&function_name))
+            .or_default()
+            .insert(component);
+    }
+
+    out
+}
+
+fn build_action_function_component_owners(
+    component_function_calls: &HashMap<String, HashSet<String>>,
+    action_function_definitions: &[ActionFunctionDefinition],
+) -> HashMap<String, HashSet<String>> {
+    let mut owners = component_function_calls.clone();
+    let mut callees_by_function: HashMap<String, HashSet<String>> = HashMap::new();
+    for definition in action_function_definitions {
+        callees_by_function
+            .entry(definition.normalized_name.clone())
+            .or_default()
+            .extend(definition.callees.iter().cloned());
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let snapshot = owners.clone();
+        for (function_name, components) in snapshot {
+            let Some(callees) = callees_by_function.get(&function_name) else {
+                continue;
+            };
+            for callee in callees {
+                let entry = owners.entry(callee.clone()).or_default();
+                for component in &components {
+                    if entry.insert(component.clone()) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    owners
+}
+
+fn extract_define_action_function_name(code: &str) -> Option<String> {
+    let rest = code
+        .trim_start()
+        .strip_prefix("DEFINE_ACTION_FUNCTION")
+        .or_else(|| code.trim_start().strip_prefix("define_action_function"))?
+        .trim_start();
+    parse_first_atom(rest)
+}
+
+fn extract_laf_function_name(code: &str) -> Option<String> {
+    let rest = code
+        .trim_start()
+        .strip_prefix("LAF")
+        .or_else(|| code.trim_start().strip_prefix("laf"))?
+        .trim_start();
+    parse_first_atom(rest)
+}
+
+fn normalize_action_function_name(name: &str) -> String {
+    name.trim()
+        .trim_matches('~')
+        .trim_matches('"')
+        .to_ascii_lowercase()
 }
 
 fn parse_begin_component_hint(code: &str, default_index: usize) -> Option<String> {
@@ -1734,6 +1947,34 @@ fn collect_previous_print_texts_in_range(
 
 fn strip_inline_comment(line: &str) -> &str {
     line.split("//").next().unwrap_or(line)
+}
+
+fn strip_code_comments_line(line: &str, in_block_comment: &mut bool) -> String {
+    let bytes = line.as_bytes();
+    let mut out = String::new();
+    let mut idx = 0usize;
+    while idx < bytes.len() {
+        if *in_block_comment {
+            if idx + 1 < bytes.len() && bytes[idx] == b'*' && bytes[idx + 1] == b'/' {
+                *in_block_comment = false;
+                idx += 2;
+            } else {
+                idx += 1;
+            }
+            continue;
+        }
+        if idx + 1 < bytes.len() && bytes[idx] == b'/' && bytes[idx + 1] == b'*' {
+            *in_block_comment = true;
+            idx += 2;
+            continue;
+        }
+        if idx + 1 < bytes.len() && bytes[idx] == b'/' && bytes[idx + 1] == b'/' {
+            break;
+        }
+        out.push(bytes[idx] as char);
+        idx += 1;
+    }
+    out
 }
 
 fn extract_inline_comment(line: &str) -> Option<String> {

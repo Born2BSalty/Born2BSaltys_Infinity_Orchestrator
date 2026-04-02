@@ -6,6 +6,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub(super) struct Tp2ComponentBlock {
     pub component_id: String,
+    pub begin_at_component_id: bool,
     pub group_key: Option<String>,
     pub subcomponent_key: Option<String>,
     pub body_lines: Vec<String>,
@@ -15,17 +16,17 @@ pub(super) fn parse_tp2_component_blocks(tp2_text: &str) -> HashMap<String, Tp2C
     let mut out = HashMap::<String, Tp2ComponentBlock>::new();
     let lines: Vec<&str> = tp2_text.lines().collect();
     let mut index = 0usize;
+    let mut in_block_comment = false;
     while index < lines.len() {
         let line = lines[index];
-        if !line.trim_start().to_ascii_uppercase().starts_with("BEGIN ") {
+        if !line_starts_begin_outside_block_comment(line, &mut in_block_comment) {
             index += 1;
             continue;
         }
 
         let mut end = index + 1;
         while end < lines.len() {
-            let next = lines[end].trim_start().to_ascii_uppercase();
-            if next.starts_with("BEGIN ") {
+            if line_starts_begin_outside_block_comment(lines[end], &mut in_block_comment) {
                 break;
             }
             end += 1;
@@ -40,6 +41,7 @@ pub(super) fn parse_tp2_component_blocks(tp2_text: &str) -> HashMap<String, Tp2C
                 id.clone(),
                 Tp2ComponentBlock {
                     component_id: id.clone(),
+                    begin_at_component_id: false,
                     group_key: block.iter().find_map(|line| parse_group_key(line)),
                     subcomponent_key: block.iter().find_map(|line| parse_subcomponent_key(line)),
                     body_lines: block.iter().map(|line| (*line).to_string()).collect(),
@@ -55,29 +57,38 @@ pub(super) fn parse_tp2_component_blocks_in_order(tp2_text: &str) -> Vec<Tp2Comp
     let mut out = Vec::<Tp2ComponentBlock>::new();
     let lines: Vec<&str> = tp2_text.lines().collect();
     let mut index = 0usize;
+    let mut in_block_comment = false;
     while index < lines.len() {
         let line = lines[index];
-        if !line.trim_start().to_ascii_uppercase().starts_with("BEGIN ") {
+        if !line_starts_begin_outside_block_comment(line, &mut in_block_comment) {
             index += 1;
             continue;
         }
 
         let mut end = index + 1;
         while end < lines.len() {
-            let next = lines[end].trim_start().to_ascii_uppercase();
-            if next.starts_with("BEGIN ") {
+            if line_starts_begin_outside_block_comment(lines[end], &mut in_block_comment) {
                 break;
             }
             end += 1;
         }
 
         let block = &lines[index..end];
-        let component_id = block
+        let designated_component_id = block
             .iter()
-            .find_map(|line| parse_designated_id(&line.to_ascii_uppercase()))
+            .find_map(|line| parse_designated_id(&line.to_ascii_uppercase()));
+        let begin_at_component_id =
+            designated_component_id.is_none()
+                && block
+                    .first()
+                    .and_then(|line| parse_begin_at_component_id(line))
+                    .is_some();
+        let component_id = designated_component_id
+            .or_else(|| block.first().and_then(|line| parse_begin_at_component_id(line)))
             .unwrap_or_default();
         out.push(Tp2ComponentBlock {
             component_id,
+            begin_at_component_id,
             group_key: block.iter().find_map(|line| parse_group_key(line)),
             subcomponent_key: block.iter().find_map(|line| parse_subcomponent_key(line)),
             body_lines: block.iter().map(|line| (*line).to_string()).collect(),
@@ -85,6 +96,43 @@ pub(super) fn parse_tp2_component_blocks_in_order(tp2_text: &str) -> Vec<Tp2Comp
         index = end;
     }
     out
+}
+
+fn line_starts_begin_outside_block_comment(line: &str, in_block_comment: &mut bool) -> bool {
+    let trimmed = line.trim_start();
+    if *in_block_comment {
+        if trimmed.contains("*/") {
+            *in_block_comment = false;
+        }
+        return false;
+    }
+    if trimmed.starts_with("/*") {
+        if !trimmed.contains("*/") {
+            *in_block_comment = true;
+        }
+        return false;
+    }
+    trimmed.to_ascii_uppercase().starts_with("BEGIN ")
+}
+
+fn parse_begin_at_component_id(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("//") || !trimmed.to_ascii_uppercase().starts_with("BEGIN ") {
+        return None;
+    }
+    let tail = trimmed["BEGIN".len()..].trim_start();
+    let rest = tail.strip_prefix('@')?;
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        None
+    } else {
+        let normalized = digits.trim_start_matches('0');
+        if normalized.is_empty() {
+            Some("0".to_string())
+        } else {
+            Some(normalized.to_string())
+        }
+    }
 }
 
 pub(super) fn split_subcomponent_display_label(label: &str) -> Option<(String, String)> {
@@ -175,10 +223,15 @@ fn parse_subcomponent_key(line: &str) -> Option<String> {
     if trimmed.starts_with("//") {
         return None;
     }
-    if !trimmed.to_ascii_uppercase().starts_with("SUBCOMPONENT ") {
+    let upper = trimmed.to_ascii_uppercase();
+    let keyword = if upper.starts_with("FORCED_SUBCOMPONENT ") {
+        "FORCED_SUBCOMPONENT"
+    } else if upper.starts_with("SUBCOMPONENT ") {
+        "SUBCOMPONENT"
+    } else {
         return None;
-    }
-    let tail = trimmed["SUBCOMPONENT".len()..].trim_start();
+    };
+    let tail = trimmed[keyword.len()..].trim_start();
     if tail.is_empty() {
         return None;
     }

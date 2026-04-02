@@ -12,7 +12,7 @@ pub(super) fn can_advance_from_current_step(app: &WizardApp) -> bool {
             app.state.is_step1_valid()
                 && matches!(app.state.step1_path_check, Some((true, _)))
         }
-        1 => step2_has_selection(app),
+        1 => !app.state.step2.is_scanning && step2_has_selection(app),
         2 => step3_has_items(app) && step3_conflicts_resolved(app),
         _ => true,
     }

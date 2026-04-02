@@ -31,6 +31,8 @@ pub(crate) fn render_parent_row(
     jump_to_selected_requested: &mut bool,
 ) -> ParentRowResult {
     let mod_name = mod_state.name.clone();
+    let mod_visible_count = mod_state.components.len();
+    let mod_header_label = format!("{mod_name} ({mod_visible_count})");
     let parent_summary = parent_compat_summary(mod_state);
     let enabled_count = mod_state.components.iter().filter(|c| !c.disabled).count();
     let all_selected = enabled_count > 0
@@ -102,7 +104,7 @@ pub(crate) fn render_parent_row(
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
                 ui.set_max_width(row_w);
-                let row = ui.selectable_label(is_selected, mod_name.as_str());
+                let row = ui.selectable_label(is_selected, mod_header_label.as_str());
                 if *jump_to_selected_requested && is_selected {
                     ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
                     *jump_to_selected_requested = false;

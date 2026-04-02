@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use eframe::egui;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ui::step2::compat_types_step2::CompatIssueDisplay;
 use crate::ui::state::Step3ItemState;
@@ -79,49 +79,49 @@ fn push_undo_snapshot(
 
 fn single_child_main_parent_block_indices(items: &[Step3ItemState], idx: usize) -> Option<Vec<usize>> {
     let item = items.get(idx)?;
-    if item.is_parent {
-        return None;
-    }
+    if item.is_parent { return None; }
     let parent_idx = items
         .iter()
         .position(|it| it.is_parent && it.block_id == item.block_id)?;
     let parent = items.get(parent_idx)?;
-    if parent.parent_placeholder || blocks::count_children_in_block(items, parent_idx) != 1 {
-        return None;
-    }
-    Some(blocks::block_indices(items, parent_idx))
+    (!parent.parent_placeholder && blocks::count_children_in_block(items, parent_idx) == 1)
+        .then(|| blocks::block_indices(items, parent_idx))
 }
 
-fn selected_full_main_parent_block_indices(
-    items: &[Step3ItemState],
-    selected: &[usize],
-    idx: usize,
-) -> Option<Vec<usize>> {
+fn selected_full_main_parent_block_indices(items: &[Step3ItemState], selected: &[usize], idx: usize) -> Option<Vec<usize>> {
     let item = items.get(idx)?;
-    if item.is_parent || !selected.contains(&idx) {
+    if !selected.contains(&idx) {
         return None;
+    }
+    if item.is_parent {
+        let selected_blocks: HashSet<&str> = selected
+            .iter()
+            .filter_map(|selected_idx| items.get(*selected_idx))
+            .map(|selected_item| selected_item.block_id.as_str())
+            .collect();
+        return (selected_blocks.len() > 1).then(|| {
+            items.iter().enumerate().filter_map(|(row_idx, row_item)| {
+                selected_blocks.contains(row_item.block_id.as_str()).then_some(row_idx)
+            }).collect()
+        });
     }
     let parent_idx = items
         .iter()
         .position(|it| it.is_parent && it.block_id == item.block_id)?;
     let parent = items.get(parent_idx)?;
-    if parent.parent_placeholder {
-        return None;
-    }
-
+    if parent.parent_placeholder { return None; }
     let child_indices: Vec<usize> = items
         .iter()
         .enumerate()
-        .filter_map(|(i, it)| (!it.is_parent && it.block_id == item.block_id).then_some(i))
+        .filter_map(|(row_idx, row_item)| {
+            (!row_item.is_parent && row_item.block_id == item.block_id).then_some(row_idx)
+        })
         .collect();
-    if child_indices.is_empty() {
-        return None;
-    }
-
-    let selected_non_parent: Vec<usize> = selected
+    if child_indices.is_empty() { return None; }
+    let selected_non_parent: HashSet<usize> = selected
         .iter()
         .copied()
-        .filter(|i| items.get(*i).is_some_and(|it| !it.is_parent))
+        .filter(|selected_idx| items.get(*selected_idx).is_some_and(|selected_item| !selected_item.is_parent))
         .collect();
     if selected_non_parent.len() != child_indices.len() {
         return None;
@@ -129,7 +129,6 @@ fn selected_full_main_parent_block_indices(
     if !child_indices.iter().all(|child_idx| selected_non_parent.contains(child_idx)) {
         return None;
     }
-
     Some(blocks::block_indices(items, parent_idx))
 }
 
@@ -355,12 +354,10 @@ pub(crate) fn render_rows(
             }
             push_undo_snapshot(items, undo_stack, redo_stack);
             *drag_from = Some(idx);
-            if items[idx].is_parent {
-                *drag_indices = blocks::block_indices(items, idx);
-            } else if let Some(block_indices) =
-                selected_full_main_parent_block_indices(items, selected, idx)
-            {
+            if let Some(block_indices) = selected_full_main_parent_block_indices(items, selected, idx) {
                 *drag_indices = block_indices;
+            } else if items[idx].is_parent {
+                *drag_indices = blocks::block_indices(items, idx);
             } else if selected.contains(&idx) && selected.len() > 1 {
                 *drag_indices = selected.clone();
             } else if let Some(block_indices) = single_child_main_parent_block_indices(items, idx) {

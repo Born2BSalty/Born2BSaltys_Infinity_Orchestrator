@@ -99,6 +99,7 @@ mod tests {
             active_games,
             game_dir: None,
             checked_components,
+            signature: "test".to_string(),
         }
     }
 

@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
+
 use crate::parser::PromptSummaryEvent;
 use crate::ui::state::Step2ComponentState;
 use crate::ui::step2::prompt_eval_expr_step2::evaluate_condition_clause;
 use crate::ui::step2::prompt_eval_vars_step2::build_prompt_var_context;
 use crate::ui::step2::state_step2::PromptEvalContext;
+
+const PROMPT_SUMMARY_CACHE_LIMIT: usize = 8192;
 
 pub(crate) fn evaluate_component_prompt_summary(
     component: &Step2ComponentState,
@@ -14,33 +21,54 @@ pub(crate) fn evaluate_component_prompt_summary(
     if !component.checked {
         return String::new();
     }
-    if component.prompt_events.is_empty() {
-        return component
+    let cache_key = prompt_summary_cache_key(component, prompt_eval);
+    if let Some(cached) = prompt_summary_cache()
+        .lock()
+        .expect("prompt summary cache lock poisoned")
+        .get(&cache_key)
+        .cloned()
+    {
+        return cached;
+    }
+
+    let result = if component.prompt_events.is_empty() {
+        component
             .prompt_summary
             .as_deref()
             .map(str::trim)
             .unwrap_or("")
-            .to_string();
-    }
-    let prompt_vars = build_prompt_var_context(component, prompt_eval);
-    let mut out = Vec::<String>::new();
-    for event in &component.prompt_events {
-        if !event_applies_with_vars(event, prompt_eval, Some(&prompt_vars)) {
-            continue;
+            .to_string()
+    } else {
+        let prompt_vars = build_prompt_var_context(component, prompt_eval);
+        let mut out = Vec::<String>::new();
+        for event in &component.prompt_events {
+            if !event_applies_with_vars(event, prompt_eval, Some(&prompt_vars)) {
+                continue;
+            }
+            let line = event.summary_line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if !out.iter().any(|existing| existing == line) {
+                out.push(line.to_string());
+            }
         }
-        let line = event.summary_line.trim();
-        if line.is_empty() {
-            continue;
+        out = normalize_prompt_blocks(out);
+        if out.is_empty() {
+            String::new()
+        } else {
+            out.into_iter().take(6).collect::<Vec<_>>().join("\n\n")
         }
-        if !out.iter().any(|existing| existing == line) {
-            out.push(line.to_string());
-        }
+    };
+
+    let mut cache = prompt_summary_cache()
+        .lock()
+        .expect("prompt summary cache lock poisoned");
+    if cache.len() >= PROMPT_SUMMARY_CACHE_LIMIT {
+        cache.clear();
     }
-    out = normalize_prompt_blocks(out);
-    if out.is_empty() {
-        return String::new();
-    }
-    out.into_iter().take(6).collect::<Vec<_>>().join("\n\n")
+    cache.insert(cache_key, result.clone());
+    result
 }
 
 pub(crate) fn event_applies(event: &PromptSummaryEvent, prompt_eval: &PromptEvalContext) -> bool {
@@ -198,5 +226,38 @@ fn is_validation_retry_block(block: &str) -> bool {
         || lower.contains("must be an integer")
         || lower.contains("invalid");
     mentions_retry && mentions_validation
+}
+
+fn prompt_summary_cache() -> &'static Mutex<HashMap<u64, String>> {
+    static CACHE: OnceLock<Mutex<HashMap<u64, String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn prompt_summary_cache_key(component: &Step2ComponentState, prompt_eval: &PromptEvalContext) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    prompt_eval.signature.hash(&mut hasher);
+    component.checked.hash(&mut hasher);
+    component.component_id.hash(&mut hasher);
+    component.raw_line.hash(&mut hasher);
+    component.prompt_summary.hash(&mut hasher);
+    hash_prompt_events(&component.prompt_events, &mut hasher);
+    hasher.finish()
+}
+
+fn hash_prompt_events(events: &[PromptSummaryEvent], state: &mut DefaultHasher) {
+    events.len().hash(state);
+    for event in events {
+        event.kind.hash(state);
+        event.node_id.hash(state);
+        event.text.hash(state);
+        event.summary_line.hash(state);
+        event.source_file.hash(state);
+        event.line.hash(state);
+        event.branch_path.hash(state);
+        event.condition.hash(state);
+        event.condition_id.hash(state);
+        event.game_allow.hash(state);
+        event.game_deny.hash(state);
+    }
 }
 

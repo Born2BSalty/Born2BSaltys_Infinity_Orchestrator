@@ -11,7 +11,8 @@ use super::compat_path_scan::apply_step2_scan_path_requirement;
 use super::compat_rule_runtime::{
     active_item_order, clear_kind_matches, collect_step2_active_items, compat_component_matches,
     compat_mod_matches, direct_rule_applies, kind_disables_selection, match_kind_matches,
-    mode_matches, non_empty, normalize_kind, normalize_mod_key, relation_rule_applies,
+    matched_related_target, mode_matches, non_empty, normalize_kind, normalize_mod_key, relation_rule_applies,
+    single_related_target,
     tab_matches,
 };
 use super::compat_rules::{compat_rule_source_path, load_rules, CompatRule};
@@ -84,10 +85,10 @@ fn apply_direct_rules_to_tab(
                 }
                 let component = &mut mod_state.components[component_idx];
                 clear_rule_kinds(rule, component);
-                if !direct_rule_applies(rule, step1) {
+                if !direct_rule_applies(rule, step1, tab) {
                     continue;
                 }
-                apply_rule(rule, &tp_file, component);
+                apply_rule(rule, &tp_file, component, single_related_target(rule));
             }
         }
     }
@@ -111,17 +112,23 @@ fn apply_relation_rules_to_tab(
                     continue;
                 }
                 let component = &mut mod_state.components[component_idx];
+                let component_id = component.component_id.clone();
                 clear_rule_kinds(rule, component);
                 if !relation_rule_applies(
                     rule,
                     &tp_file,
-                    &component.component_id,
-                    active_item_order(&active_items, &tp_file, &component.component_id),
+                    &component_id,
+                    active_item_order(&active_items, &tp_file, &component_id),
                     &active_items,
                 ) {
                     continue;
                 }
-                apply_rule(rule, &tp_file, component);
+                apply_rule(
+                    rule,
+                    &tp_file,
+                    component,
+                    matched_related_target(rule, &tp_file, &component_id, &active_items),
+                );
             }
         }
     }
@@ -194,7 +201,12 @@ fn refresh_mod_checked_state(mod_state: &mut Step2ModState) {
             .all(|component| component.checked);
 }
 
-fn apply_rule(rule: &CompatRule, tp_file: &str, component: &mut Step2ComponentState) {
+fn apply_rule(
+    rule: &CompatRule,
+    tp_file: &str,
+    component: &mut Step2ComponentState,
+    related_target: Option<(String, Option<String>)>,
+) {
     let kind = normalize_kind(&rule.kind);
     if kind.eq_ignore_ascii_case("allow") {
         clear_component_compat(component);
@@ -203,8 +215,8 @@ fn apply_rule(rule: &CompatRule, tp_file: &str, component: &mut Step2ComponentSt
     component.disabled = false;
     component.compat_kind = Some(kind.to_string());
     component.compat_source = Some(compat_rule_source_path(rule));
-    component.compat_related_mod = non_empty(rule.related_mod.as_deref());
-    component.compat_related_component = non_empty(rule.related_component.as_deref());
+    component.compat_related_mod = related_target.as_ref().map(|(related_mod, _)| related_mod.clone());
+    component.compat_related_component = related_target.and_then(|(_, related_component)| related_component);
     component.compat_graph = build_graph(tp_file, component.component_id.as_str(), kind, rule);
     component.compat_evidence = Some(rule_debug_line(rule));
     component.disabled_reason = non_empty(Some(rule.message.as_str()));
@@ -236,16 +248,16 @@ fn build_graph(
     kind: &str,
     rule: &CompatRule,
 ) -> Option<String> {
-    let related_mod = rule.related_mod.as_deref()?.trim();
-    if related_mod.is_empty() {
-        return None;
-    }
-    let related_component = rule.related_component.as_deref().unwrap_or_default().trim();
+    let (related_mod, related_component) = single_related_target(rule)?;
     let left = format!("{} #{}", normalize_mod_key(tp_file), component_id.trim());
-    let right = if related_component.is_empty() {
-        normalize_mod_key(related_mod)
+    let right = if related_component.as_deref().is_none_or(str::is_empty) {
+        normalize_mod_key(&related_mod)
     } else {
-        format!("{} #{}", normalize_mod_key(related_mod), related_component)
+        format!(
+            "{} #{}",
+            normalize_mod_key(&related_mod),
+            related_component.unwrap_or_default()
+        )
     };
     Some(format!("{left} {kind} {right}"))
 }
@@ -278,6 +290,24 @@ fn rule_debug_line(rule: &CompatRule) -> String {
     }
     if let Some(path_field) = non_empty(rule.path_field.as_deref()) {
         parts.push(format!("path_field={path_field}"));
+    }
+    if let Some(game_file) = non_empty(rule.game_file.as_deref()) {
+        parts.push(format!("game_file={game_file}"));
+    }
+    if let Some(game_file_check) = non_empty(rule.game_file_check.as_deref()) {
+        parts.push(format!("game_file_check={game_file_check}"));
+    }
+    if let Some(related_mod) = rule.related_mod.as_ref() {
+        let items = related_mod.trimmed_items();
+        if !items.is_empty() {
+            parts.push(format!("related_mod={}", items.join(",")));
+        }
+    }
+    if let Some(related_component) = rule.related_component.as_ref() {
+        let items = related_component.trimmed_items();
+        if !items.is_empty() {
+            parts.push(format!("related_component={}", items.join(",")));
+        }
     }
     if let Some(message) = non_empty(Some(rule.message.as_str())) {
         parts.push(format!("message={message}"));

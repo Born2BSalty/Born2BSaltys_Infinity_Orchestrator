@@ -34,6 +34,10 @@ mod quick_triage;
 mod scan_context_json;
 #[path = "diagnostics_step2_render_order_json.rs"]
 mod step2_render_order_json;
+#[path = "diagnostics_step2_component_audit_json.rs"]
+mod step2_component_audit_json;
+#[path = "diagnostics_step2_component_audit_txt.rs"]
+mod step2_component_audit_txt;
 #[path = "diagnostics_prompt_calls_json.rs"]
 mod prompt_calls_json;
 #[path = "diagnostics_parser_events_json.rs"]
@@ -133,6 +137,14 @@ pub fn export_diagnostics(
     match step2_render_order_json::write_step2_render_order_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
         Err(err) => append_diag_note(&out_path, &format!("step2_render_order_json_write=FAILED: {err}")),
+    }
+    match step2_component_audit_json::write_step2_component_audit_json(&run_dir, state, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(&out_path, &format!("step2_component_audit_json_write=FAILED: {err}")),
+    }
+    match step2_component_audit_txt::write_step2_component_audit_txt(&run_dir, state, ts) {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(&out_path, &format!("step2_component_audit_txt_write=FAILED: {err}")),
     }
     match prompt_calls_json::write_prompt_calls_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),

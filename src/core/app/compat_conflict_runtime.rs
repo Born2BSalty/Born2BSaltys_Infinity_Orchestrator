@@ -29,32 +29,32 @@ struct ConflictEdge {
     raw_evidence: String,
 }
 
-pub(crate) fn scan_conflict_hit(
-    tp2_path: &str,
+pub(crate) struct ConflictScanContext {
+    active_orders: HashMap<String, usize>,
+    adjacency: HashMap<String, Vec<ConflictEdge>>,
+}
+
+pub(crate) fn build_conflict_scan_context(
+    active_items: &[CompatActiveItem],
+    conflict_cache: &mut ComponentConflictCache,
+) -> ConflictScanContext {
+    ConflictScanContext {
+        active_orders: active_order_map(active_items),
+        adjacency: build_selected_conflict_graph(active_items, conflict_cache),
+    }
+}
+
+pub(crate) fn scan_conflict_hit_with_context(
     current_tp_file: &str,
     current_component_id: &str,
     current_component_order: Option<usize>,
-    active_items: &[CompatActiveItem],
-    conflict_cache: &mut ComponentConflictCache,
+    context: &ConflictScanContext,
 ) -> Option<ConflictCompatHit> {
-    if tp2_path.trim().is_empty() {
-        return None;
-    }
-
-    let conflicts_by_component = conflict_cache
-        .entry(tp2_path.to_string())
-        .or_insert_with(|| load_component_conflicts(tp2_path));
-    if conflicts_by_component.is_empty() {
-        return None;
-    }
-
     let current_key = active_item_key(current_tp_file, current_component_id);
-    let active_orders = active_order_map(active_items);
-    let adjacency = build_selected_conflict_graph(active_items, conflict_cache);
-    let edges = adjacency.get(&current_key)?;
+    let edges = context.adjacency.get(&current_key)?;
 
-    detect_cycle_hit(edges, &current_key, &adjacency)
-        .or_else(|| detect_order_hit(edges, &active_orders, current_component_order))
+    detect_cycle_hit(edges, &current_key, &context.adjacency)
+        .or_else(|| detect_order_hit(edges, &context.active_orders, current_component_order))
 }
 
 fn detect_order_hit(

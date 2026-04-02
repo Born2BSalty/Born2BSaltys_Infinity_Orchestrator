@@ -6,6 +6,9 @@ use eframe::egui;
 use crate::ui::shared::layout_tokens_global::*;
 use crate::ui::state::WizardState;
 use crate::ui::step2::action_step2::Step2Action;
+use crate::ui::step2::prompt_popup_step2::{
+    collect_step2_prompt_toolbar_entries, draw_prompt_toolbar_badge, open_toolbar_prompt_popup,
+};
 use crate::ui::step2::service_list_ops_step2::{clear_all, select_visible};
 use crate::ui::step2::state_step2::active_mods_mut;
 use crate::ui::step2::toolbar_compat_step2::{
@@ -79,11 +82,15 @@ pub fn render_header(
     });
     ui.scope_builder(egui::UiBuilder::new().max_rect(search_rect), |ui| {
         let search_w = search_rect.width().min(STEP2_SEARCH_MAX_W);
-        let resp = ui.add_sized(
-            [search_w, STEP2_SEARCH_INPUT_H],
-            egui::TextEdit::singleline(&mut state.step2.search_query)
-                .hint_text("Search mods or components..."),
-        );
+        let resp = ui
+            .add_enabled_ui(!state.step2.is_scanning, |ui| {
+                ui.add_sized(
+                    [search_w, STEP2_SEARCH_INPUT_H],
+                    egui::TextEdit::singleline(&mut state.step2.search_query)
+                        .hint_text("Search mods or components..."),
+                )
+            })
+            .inner;
         resp.on_hover_text(crate::ui::shared::tooltip_global::STEP2_SEARCH);
     });
 }
@@ -96,6 +103,7 @@ pub fn render_controls(
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(controls_rect), |ui| {
         let mut refresh_compat = false;
+        let ui_locked = state.step2.is_scanning;
         let bgee_scanned = !state.step2.bgee_mods.is_empty();
         let bg2_scanned = !state.step2.bg2ee_mods.is_empty();
         let has_any_checked = active_mods_ref(state)
@@ -103,7 +111,11 @@ pub fn render_controls(
             .any(|m| m.checked || m.components.iter().any(|c| c.checked));
         ui.horizontal(|ui| {
             if ui
-                .add_sized([STEP2_SCAN_BTN_W, STEP2_BTN_H], egui::Button::new("Scan Mods Folder"))
+                .add_enabled(
+                    !ui_locked,
+                    egui::Button::new("Scan Mods Folder")
+                        .min_size(egui::vec2(STEP2_SCAN_BTN_W, STEP2_BTN_H)),
+                )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SCAN)
                 .clicked()
             {
@@ -124,7 +136,7 @@ pub fn render_controls(
             if has_any_checked
                 && ui
                     .add_enabled(
-                        has_scanned,
+                        has_scanned && !ui_locked,
                         egui::Button::new("Clear All").min_size(egui::vec2(84.0, STEP2_BTN_H)),
                     )
                     .on_hover_text(crate::ui::shared::tooltip_global::STEP2_CLEAR_ALL)
@@ -139,7 +151,7 @@ pub fn render_controls(
             }
             if ui
                 .add_enabled(
-                    has_scanned,
+                    has_scanned && !ui_locked,
                     egui::Button::new("Select Visible").min_size(egui::vec2(108.0, STEP2_BTN_H)),
                 )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_VISIBLE)
@@ -154,7 +166,7 @@ pub fn render_controls(
             }
             if ui
                 .add_enabled(
-                    has_scanned,
+                    has_scanned && !ui_locked,
                     egui::Button::new("Collapse All").min_size(egui::vec2(104.0, STEP2_BTN_H)),
                 )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_COLLAPSE_ALL)
@@ -165,7 +177,7 @@ pub fn render_controls(
             }
             if ui
                 .add_enabled(
-                    has_scanned,
+                    has_scanned && !ui_locked,
                     egui::Button::new("Expand All").min_size(egui::vec2(94.0, STEP2_BTN_H)),
                 )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_EXPAND_ALL)
@@ -176,7 +188,7 @@ pub fn render_controls(
             }
             if ui
                 .add_enabled(
-                    state.step2.selected.is_some(),
+                    state.step2.selected.is_some() && !ui_locked,
                     egui::Button::new("Jump to Selected").min_size(egui::vec2(132.0, STEP2_BTN_H)),
                 )
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_JUMP_SELECTED)
@@ -205,76 +217,86 @@ pub fn render_tabs(
         ui.horizontal(|ui| {
             ui.label(crate::ui::shared::typography_global::section_title("Mods / Components"))
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_MODS_COMPONENTS);
-            let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-            let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-            let active_is_bgee = state.step2.active_game_tab == "BGEE";
-            let active_is_bg2 = state.step2.active_game_tab == "BG2EE";
-            let bgee_scanned = !state.step2.bgee_mods.is_empty();
-            let bg2_scanned = !state.step2.bg2ee_mods.is_empty();
+            ui.add_enabled_ui(!state.step2.is_scanning, |ui| {
+                let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+                let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+                let active_is_bgee = state.step2.active_game_tab == "BGEE";
+                let active_is_bg2 = state.step2.active_game_tab == "BG2EE";
+                let bgee_scanned = !state.step2.bgee_mods.is_empty();
+                let bg2_scanned = !state.step2.bg2ee_mods.is_empty();
 
-            if show_bgee && show_bg2ee {
-                draw_tab(ui, &mut state.step2.active_game_tab, "BGEE");
-                draw_tab(ui, &mut state.step2.active_game_tab, "BG2EE");
-            } else if show_bgee {
-                ui.label(crate::ui::shared::typography_global::monospace("BGEE"));
-            } else if show_bg2ee {
-                ui.label(crate::ui::shared::typography_global::monospace("BG2EE"));
-            }
-
-            let issue_summary = active_tab_compat_summary(active_mods_ref(state));
-            let target_filter = if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
-                issue_summary.dominant_filter
-            } else {
-                state.step2.compat_popup_filter.as_str()
-            };
-            let issue_target = first_active_tab_issue_target(
-                active_mods_ref(state),
-                target_filter,
-            );
-
-            ui.add_space(10.0);
-            if active_is_bgee
-                && ui
-                    .add_enabled(
-                        bgee_scanned,
-                        egui::Button::new("Select BGEE via WeiDU Log")
-                            .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BGEE_W, 24.0)),
-                    )
-                    .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BGEE_LOG)
-                    .clicked()
-            {
-                *action = Some(Step2Action::SelectBgeeViaLog);
-            }
-            if active_is_bg2
-                && ui
-                    .add_enabled(
-                        bg2_scanned,
-                        egui::Button::new("Select BG2EE via WeiDU Log")
-                            .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BG2EE_W, 24.0)),
-                    )
-                    .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BG2EE_LOG)
-                    .clicked()
-            {
-                *action = Some(Step2Action::SelectBg2eeViaLog);
-            }
-            if draw_active_tab_issue_badge(
-                ui,
-                &state.step2.active_game_tab,
-                &issue_summary,
-                &state.step2.compat_popup_filter,
-            )
-                && let Some(target) = issue_target
-            {
-                if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
-                    state.step2.compat_popup_filter = issue_summary.dominant_filter.to_string();
+                if show_bgee && show_bg2ee {
+                    draw_tab(ui, &mut state.step2.active_game_tab, "BGEE");
+                    draw_tab(ui, &mut state.step2.active_game_tab, "BG2EE");
+                } else if show_bgee {
+                    ui.label(crate::ui::shared::typography_global::monospace("BGEE"));
+                } else if show_bg2ee {
+                    ui.label(crate::ui::shared::typography_global::monospace("BG2EE"));
                 }
-                *action = Some(Step2Action::OpenCompatForComponent {
-                    game_tab: state.step2.active_game_tab.clone(),
-                    tp_file: target.tp_file,
-                    component_id: target.component_id,
-                    component_key: target.component_key,
-                });
-            }
+
+                let issue_summary = active_tab_compat_summary(active_mods_ref(state));
+                let prompt_entries = collect_step2_prompt_toolbar_entries(state);
+                let prompt_count: usize = prompt_entries.iter().map(|entry| entry.component_ids.len()).sum();
+                let target_filter = if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
+                    issue_summary.dominant_filter
+                } else {
+                    state.step2.compat_popup_filter.as_str()
+                };
+                let issue_target = first_active_tab_issue_target(
+                    active_mods_ref(state),
+                    target_filter,
+                );
+
+                ui.add_space(10.0);
+                if active_is_bgee
+                    && ui
+                        .add_enabled(
+                            bgee_scanned,
+                            egui::Button::new("Select BGEE via WeiDU Log")
+                                .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BGEE_W, 24.0)),
+                        )
+                        .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BGEE_LOG)
+                        .clicked()
+                {
+                    *action = Some(Step2Action::SelectBgeeViaLog);
+                }
+                if active_is_bg2
+                    && ui
+                        .add_enabled(
+                            bg2_scanned,
+                            egui::Button::new("Select BG2EE via WeiDU Log")
+                                .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BG2EE_W, 24.0)),
+                        )
+                        .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BG2EE_LOG)
+                        .clicked()
+                {
+                    *action = Some(Step2Action::SelectBg2eeViaLog);
+                }
+                if draw_active_tab_issue_badge(
+                    ui,
+                    &state.step2.active_game_tab,
+                    &issue_summary,
+                    &state.step2.compat_popup_filter,
+                )
+                    && let Some(target) = issue_target
+                {
+                    if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
+                        state.step2.compat_popup_filter = issue_summary.dominant_filter.to_string();
+                    }
+                    *action = Some(Step2Action::OpenCompatForComponent {
+                        game_tab: state.step2.active_game_tab.clone(),
+                        tp_file: target.tp_file,
+                        component_id: target.component_id,
+                        component_key: target.component_key,
+                    });
+                }
+                if draw_prompt_toolbar_badge(ui, prompt_count) {
+                    open_toolbar_prompt_popup(
+                        state,
+                        &format!("Prompt Components ({})", state.step2.active_game_tab),
+                    );
+                }
+            });
         });
     });
 }

@@ -81,6 +81,10 @@ pub(crate) mod compat_popup_issue_text_explain {
             };
         }
         if issue.code.eq_ignore_ascii_case("CONDITIONAL") {
+            let reason = issue.reason.trim();
+            if !reason.is_empty() && !reason.eq_ignore_ascii_case("unknown") {
+                return reason.to_string();
+            }
             let related = format_issue_target(&issue.related_mod, issue.related_component);
             return format!("Conditional on `{related}`");
         }

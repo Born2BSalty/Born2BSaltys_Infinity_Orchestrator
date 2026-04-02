@@ -155,9 +155,9 @@ pub(crate) fn render(
                         )
                     };
                     if let Some((title, text)) = open_prompt_popup {
-                        state.step2.prompt_popup_title = title;
-                        state.step2.prompt_popup_text = text;
-                        state.step2.prompt_popup_open = true;
+                        crate::ui::step2::prompt_popup_step2::open_text_prompt_popup(
+                            state, title, text,
+                        );
                     }
                     if let Some((tp_file, component_id, component_key, issue)) = open_compat_popup {
                         state.step2.selected = Some(Step2Selection::Component {

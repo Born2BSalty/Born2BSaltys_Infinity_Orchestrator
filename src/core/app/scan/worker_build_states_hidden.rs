@@ -6,6 +6,7 @@ use std::path::Path;
 
 use crate::ui::scan::ScannedComponent;
 
+use super::order::normalize_component_order_label;
 use super::tp2_blocks::{
     extract_tilde_or_quote_paths, parse_tp2_component_blocks, parse_tp2_component_blocks_in_order,
     split_subcomponent_display_label, Tp2ComponentBlock,
@@ -14,8 +15,8 @@ use super::tp2_blocks::{
 pub(super) fn detect_hidden_prompt_like_component_ids(
     tp2_text: Option<&str>,
     components: &[ScannedComponent],
-) -> HashSet<String> {
-    let mut hidden = HashSet::<String>::new();
+) -> HashMap<String, String> {
+    let mut hidden = HashMap::<String, String>::new();
     let Some(tp2_text) = tp2_text else {
         return hidden;
     };
@@ -46,7 +47,7 @@ pub(super) fn detect_hidden_prompt_like_component_ids(
 
     let asset_only_cluster_counts = asset_only_subcomponent_cluster_size_counts(&ordered_blocks);
 
-    for (_, component_ids) in families {
+    for (header_key, component_ids) in families {
         if component_ids.len() < 2 {
             continue;
         }
@@ -58,8 +59,13 @@ pub(super) fn detect_hidden_prompt_like_component_ids(
                     split_subcomponent_display_label(&component.display)
                 && choice.eq_ignore_ascii_case("skip")
             {
-                hidden.insert(id.clone());
+                hidden
+                    .entry(id.clone())
+                    .or_insert_with(|| "subcomponent_skip_choice".to_string());
             }
+        }
+        if header_key.contains("portrait") {
+            continue;
         }
         let mut family_blocks = Vec::<&Tp2ComponentBlock>::new();
         for id in &component_ids {
@@ -75,13 +81,27 @@ pub(super) fn detect_hidden_prompt_like_component_ids(
             let asset_cluster_size_is_unique =
                 asset_only_cluster_counts.get(&size).copied().unwrap_or(0) == 1;
             if family_size_is_unique && asset_cluster_size_is_unique {
-                hidden.extend(component_ids);
+                for id in component_ids {
+                    hidden
+                        .entry(id)
+                        .or_insert_with(|| "asset_only_subcomponent_family_fallback".to_string());
+                }
             }
             continue;
         }
         if family_blocks.iter().all(|block| block_is_asset_choice_only(block)) {
-            hidden.extend(component_ids);
+            for id in component_ids {
+                hidden
+                    .entry(id)
+                    .or_insert_with(|| "asset_only_subcomponent_family".to_string());
+            }
         }
+    }
+
+    for id in detect_deprecated_dummy_component_ids(&ordered_blocks, components) {
+        hidden
+            .entry(id)
+            .or_insert_with(|| "deprecated_dummy_placeholder".to_string());
     }
 
     hidden
@@ -139,6 +159,81 @@ fn asset_only_subcomponent_cluster_size_counts(
         index = end;
     }
     out
+}
+
+fn detect_deprecated_dummy_component_ids(
+    ordered_blocks: &[Tp2ComponentBlock],
+    components: &[ScannedComponent],
+) -> HashSet<String> {
+    let dummy_count = ordered_blocks
+        .iter()
+        .filter(|block| block_is_deprecated_dummy_placeholder(block))
+        .count();
+    if dummy_count == 0 {
+        return HashSet::new();
+    }
+
+    components
+        .iter()
+        .filter(|component| normalize_component_order_label(&component.display) == "dummy")
+        .take(dummy_count)
+        .map(|component| component.component_id.trim().to_string())
+        .collect()
+}
+
+fn block_is_deprecated_dummy_placeholder(block: &Tp2ComponentBlock) -> bool {
+    let Some(begin_line) = block.body_lines.first() else {
+        return false;
+    };
+    if !begin_line_is_dummy(begin_line) {
+        return false;
+    }
+
+    let mut saw_deprecated = false;
+    for line in &block.body_lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
+            continue;
+        }
+        let upper = trimmed.to_ascii_uppercase();
+        if upper.starts_with("DEPRECATED") {
+            saw_deprecated = true;
+            continue;
+        }
+        if upper.starts_with("BEGIN ")
+            || upper.starts_with("GROUP ")
+            || upper.starts_with("LABEL ")
+            || upper.starts_with("SUBCOMPONENT ")
+            || upper.starts_with("FORCED_SUBCOMPONENT ")
+            || upper.starts_with("REQUIRE_")
+            || upper.starts_with("DESIGNATED ")
+        {
+            continue;
+        }
+        return false;
+    }
+
+    saw_deprecated
+}
+
+fn begin_line_is_dummy(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    let upper = trimmed.to_ascii_uppercase();
+    if !upper.starts_with("BEGIN ") {
+        return false;
+    }
+    let tail = trimmed["BEGIN".len()..].trim_start();
+    let Some(quote) = tail.chars().next() else {
+        return false;
+    };
+    if quote != '~' && quote != '"' {
+        return false;
+    }
+    let rest = &tail[quote.len_utf8()..];
+    let Some(end) = rest.find(quote) else {
+        return false;
+    };
+    rest[..end].trim().eq_ignore_ascii_case("dummy")
 }
 
 fn copy_line_looks_like_cosmetic_asset(line: &str) -> bool {

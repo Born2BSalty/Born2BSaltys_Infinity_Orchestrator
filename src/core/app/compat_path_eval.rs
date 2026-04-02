@@ -21,6 +21,7 @@ pub(crate) struct PathEvalOutcome {
 pub(crate) enum PathTriState {
     True,
     False,
+    Ignored,
     Unknown,
 }
 
@@ -32,6 +33,7 @@ impl PathTriState {
     fn and(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::False, _) | (_, Self::False) => Self::False,
+            (Self::Ignored, value) | (value, Self::Ignored) => value,
             (Self::True, Self::True) => Self::True,
             _ => Self::Unknown,
         }
@@ -40,6 +42,7 @@ impl PathTriState {
     fn or(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::True, _) | (_, Self::True) => Self::True,
+            (Self::Ignored, value) | (value, Self::Ignored) => value,
             (Self::False, Self::False) => Self::False,
             _ => Self::Unknown,
         }
@@ -49,6 +52,7 @@ impl PathTriState {
         match self {
             Self::True => Self::False,
             Self::False => Self::True,
+            Self::Ignored => Self::Ignored,
             Self::Unknown => Self::Unknown,
         }
     }
@@ -186,7 +190,8 @@ impl<'a> Parser<'a> {
         self.pos += 1;
         match name.to_ascii_uppercase().as_str() {
             "DIRECTORY_EXISTS" => self.parse_path_call(true),
-            "FILE_EXISTS" => self.parse_path_call(false),
+            "FILE_EXISTS_IN_GAME" => self.parse_ignored_file_call(),
+            "FILE_EXISTS" => self.parse_ignored_file_call(),
             "TRUE" => PathTriState::True,
             "FALSE" => PathTriState::False,
             _ => PathTriState::Unknown,
@@ -210,6 +215,19 @@ impl<'a> Parser<'a> {
             PathTriState::Unknown
         } else {
             outcome
+        }
+    }
+
+    fn parse_ignored_file_call(&mut self) -> PathTriState {
+        let opened = self.consume_if(&Token::LParen);
+        let value = self.consume_call_value();
+        if value.is_none() {
+            return PathTriState::Unknown;
+        }
+        if opened && !self.consume_if(&Token::RParen) {
+            PathTriState::Unknown
+        } else {
+            PathTriState::Ignored
         }
     }
 

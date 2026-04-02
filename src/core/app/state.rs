@@ -14,7 +14,7 @@ mod state_wizard;
 
 pub use state_step1::Step1State;
 pub use state_step2::{
-    Step2ComponentState, Step2ModState, Step2ScanReport, Step2Selection, Step2State,
+    PromptPopupMode, Step2ComponentState, Step2HiddenComponentAudit, Step2ModState, Step2ScanReport, Step2Selection, Step2State,
     Step2Tp2ProbeReport,
 };
 pub use state_step3::{Step3ItemState, Step3State};

@@ -9,7 +9,7 @@ mod language;
 
 mod orchestrate {
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc::Sender};
 use std::thread;
@@ -24,6 +24,42 @@ use crate::ui::state::{Step1State, Step2ModState, Step2ScanReport, Step2Tp2Probe
 use super::build_states::to_mod_states;
 use super::language::detect_preferred_game_locale;
 use super::scan_group::{scan_tp2_group, ScanGroupContext};
+
+fn select_main_tp2<'a>(group_label: &str, tp2_paths: &'a [PathBuf], mods_root: &Path) -> Option<&'a PathBuf> {
+    let first = tp2_paths.first()?;
+    let group_root = mods_root.join(group_label);
+    let group_name = Path::new(group_label)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(group_label)
+        .to_ascii_lowercase();
+    let preferred_setup = format!("setup-{group_name}.tp2");
+    let preferred_plain = format!("{group_name}.tp2");
+    let mut root_level = None::<&PathBuf>;
+    let mut root_plain = None::<&PathBuf>;
+
+    for tp2 in tp2_paths {
+        if tp2.parent() != Some(group_root.as_path()) {
+            continue;
+        }
+        let file_name = tp2
+            .file_name()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
+        if file_name == preferred_setup {
+            return Some(tp2);
+        }
+        if file_name == preferred_plain {
+            root_plain = Some(tp2);
+        }
+        if root_level.is_none() {
+            root_level = Some(tp2);
+        }
+    }
+
+    root_plain.or(root_level).or(Some(first))
+}
 
 pub fn scan_impl(
     step1: &Step1State,
@@ -106,7 +142,7 @@ pub fn scan_impl(
                         break;
                     }
                     let (label, tp2_paths) = &grouped[idx];
-                    let Some(main_tp2) = tp2_paths.first() else {
+                    let Some(main_tp2) = select_main_tp2(label, tp2_paths, &mods_root) else {
                         continue;
                     };
 

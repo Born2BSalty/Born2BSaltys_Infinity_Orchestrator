@@ -51,13 +51,17 @@ pub(crate) struct CompatRule {
     #[serde(default)]
     pub(crate) path_check: Option<String>,
     #[serde(default)]
+    pub(crate) game_file: Option<String>,
+    #[serde(default)]
+    pub(crate) game_file_check: Option<String>,
+    #[serde(default)]
     pub(crate) message: String,
     #[serde(default)]
     pub(crate) source: Option<String>,
     #[serde(default)]
-    pub(crate) related_mod: Option<String>,
+    pub(crate) related_mod: Option<StringOrMany>,
     #[serde(default)]
-    pub(crate) related_component: Option<String>,
+    pub(crate) related_component: Option<StringOrMany>,
     #[serde(skip)]
     pub(crate) loaded_from: Option<String>,
 }
@@ -143,6 +147,18 @@ pub(crate) fn effective_compat_rules_user_path() -> PathBuf {
     }
 }
 
+pub(crate) fn rules_files_signature() -> String {
+    let default_path = compat_rules_default_path();
+    let user_path = effective_compat_rules_user_path();
+    format!(
+        "{}|{}|{}|{}",
+        default_path.display(),
+        cache_stamp_signature(&default_path),
+        user_path.display(),
+        cache_stamp_signature(&user_path)
+    )
+}
+
 pub(crate) fn load_rules() -> Vec<CompatRule> {
     let default_path = compat_rules_default_path();
     let user_path = effective_compat_rules_user_path();
@@ -223,6 +239,16 @@ fn cache_stamp(path: &PathBuf) -> FileCacheStamp {
             len: 0,
         },
     }
+}
+
+fn cache_stamp_signature(path: &PathBuf) -> String {
+    let stamp = cache_stamp(path);
+    let modified = stamp
+        .modified
+        .and_then(|value| value.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|value| value.as_nanos().to_string())
+        .unwrap_or_default();
+    format!("{modified}:{}", stamp.len)
 }
 
 fn load_rules_from_path(path: &PathBuf) -> Vec<CompatRule> {

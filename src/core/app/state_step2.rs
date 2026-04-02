@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PromptPopupMode {
+    Text,
+    ToolbarIndex,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Step2State {
     pub search_query: String,
@@ -21,6 +27,7 @@ pub struct Step2State {
     pub compat_popup_issue_override: Option<crate::ui::step2::compat_types_step2::CompatIssueDisplay>,
     pub compat_popup_filter: String,
     pub prompt_popup_open: bool,
+    pub prompt_popup_mode: PromptPopupMode,
     pub prompt_popup_title: String,
     pub prompt_popup_text: String,
     pub left_pane_ratio: f32,
@@ -48,6 +55,7 @@ impl Default for Step2State {
             compat_popup_issue_override: None,
             compat_popup_filter: "All".to_string(),
             prompt_popup_open: false,
+            prompt_popup_mode: PromptPopupMode::Text,
             prompt_popup_title: String::new(),
             prompt_popup_text: String::new(),
             left_pane_ratio: 0.74,
@@ -131,7 +139,16 @@ pub struct Step2ModState {
     pub mod_prompt_summary: Option<String>,
     pub mod_prompt_events: Vec<crate::parser::PromptSummaryEvent>,
     pub checked: bool,
+    pub hidden_components: Vec<Step2HiddenComponentAudit>,
     pub components: Vec<Step2ComponentState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step2HiddenComponentAudit {
+    pub component_id: String,
+    pub label: String,
+    pub raw_line: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

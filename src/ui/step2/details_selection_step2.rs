@@ -75,6 +75,36 @@ pub(crate) fn render_selection_grid(
                 details.tp2_path.clone().map(Step2Action::OpenSelectedTp2),
                 action,
             );
+            let shown_count = details.shown_component_count.map(|n| n.to_string());
+            render_value_row(
+                ui,
+                &layout,
+                "Shown",
+                shown_count.as_deref(),
+                true,
+                None,
+                action,
+            );
+            let hidden_count = details.hidden_component_count.map(|n| n.to_string());
+            render_value_row(
+                ui,
+                &layout,
+                "Hidden",
+                hidden_count.as_deref(),
+                true,
+                None,
+                action,
+            );
+            let raw_count = details.raw_component_count.map(|n| n.to_string());
+            render_value_row(
+                ui,
+                &layout,
+                "Raw",
+                raw_count.as_deref(),
+                true,
+                None,
+                action,
+            );
             let selected_order = details.selected_order.map(|n| n.to_string());
             render_value_row(
                 ui,

@@ -15,8 +15,12 @@ pub(super) fn reorder_components_by_tp2_order(
     tp2_text: &str,
 ) {
     let tra_map = load_tp2_setup_tra_map(Path::new(tp2_path));
-    let (order_by_id, order_by_label) = parse_tp2_component_order(tp2_text, &tra_map);
-    if order_by_id.is_empty() && order_by_label.is_empty() {
+    let (order_by_designated_id, order_by_label, order_by_begin_at_id) =
+        parse_tp2_component_order(tp2_text, &tra_map);
+    if order_by_designated_id.is_empty()
+        && order_by_label.is_empty()
+        && order_by_begin_at_id.is_empty()
+    {
         return;
     }
 
@@ -24,12 +28,17 @@ pub(super) fn reorder_components_by_tp2_order(
         .iter()
         .enumerate()
         .map(|(original_index, component)| {
-            let sort_key = order_by_id
+            let sort_key = order_by_designated_id
                 .get(component.component_id.trim())
                 .copied()
                 .or_else(|| {
                     order_by_label
                         .get(&normalize_component_order_label(&component.display))
+                        .copied()
+                })
+                .or_else(|| {
+                    order_by_begin_at_id
+                        .get(component.component_id.trim())
                         .copied()
                 })
                 .unwrap_or(usize::MAX);
@@ -84,16 +93,26 @@ pub(super) fn display_is_blank_version_only(value: &str) -> bool {
 fn parse_tp2_component_order(
     tp2_text: &str,
     tra_map: &HashMap<String, String>,
-) -> (HashMap<String, usize>, HashMap<String, usize>) {
-    let mut out_by_id = HashMap::<String, usize>::new();
+) -> (
+    HashMap<String, usize>,
+    HashMap<String, usize>,
+    HashMap<String, usize>,
+) {
+    let mut out_by_designated_id = HashMap::<String, usize>::new();
     let mut out_by_label = HashMap::<String, usize>::new();
+    let mut out_by_begin_at_id = HashMap::<String, usize>::new();
     for (begin_index, block) in parse_tp2_component_blocks_in_order(tp2_text)
         .into_iter()
         .enumerate()
     {
         let component_id = block.component_id.trim();
         if !component_id.is_empty() {
-            out_by_id
+            let target = if block.begin_at_component_id {
+                &mut out_by_begin_at_id
+            } else {
+                &mut out_by_designated_id
+            };
+            target
                 .entry(component_id.to_string())
                 .or_insert(begin_index);
         }
@@ -102,7 +121,7 @@ fn parse_tp2_component_order(
         }
     }
 
-    (out_by_id, out_by_label)
+    (out_by_designated_id, out_by_label, out_by_begin_at_id)
 }
 
 fn build_block_order_labels(

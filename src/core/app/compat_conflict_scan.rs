@@ -3,12 +3,15 @@
 
 use crate::ui::state::{Step2ComponentState, Step2ModState};
 
-use super::compat_conflict_runtime::{ComponentConflictCache, ConflictCompatHit, scan_conflict_hit};
+use super::compat_conflict_runtime::{
+    build_conflict_scan_context, scan_conflict_hit_with_context, ComponentConflictCache, ConflictCompatHit,
+};
 use super::compat_rule_runtime::{active_item_order, collect_step2_active_items, normalize_mod_key};
 
 pub(crate) fn apply_step2_scan_conflict(mods: &mut [Step2ModState]) {
     let active_items = collect_step2_active_items(mods);
     let mut conflict_cache = ComponentConflictCache::new();
+    let conflict_context = build_conflict_scan_context(&active_items, &mut conflict_cache);
 
     for mod_state in mods {
         let current_mod_key = normalize_mod_key(&mod_state.tp_file);
@@ -22,13 +25,11 @@ pub(crate) fn apply_step2_scan_conflict(mods: &mut [Step2ModState]) {
                 continue;
             }
 
-            let Some(hit) = scan_conflict_hit(
-                &mod_state.tp2_path,
+            let Some(hit) = scan_conflict_hit_with_context(
                 &mod_state.tp_file,
                 &component.component_id,
                 active_item_order(&active_items, &mod_state.tp_file, &component.component_id),
-                &active_items,
-                &mut conflict_cache,
+                &conflict_context,
             ) else {
                 continue;
             };

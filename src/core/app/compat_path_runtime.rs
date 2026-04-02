@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
@@ -58,13 +57,6 @@ pub(crate) fn scan_path_requirement_hit(
 }
 
 fn classify_failing_guard(eval_text: &str) -> (&'static str, Option<String>, String) {
-    if let Some(file_target) = first_predicate_target(eval_text, "FILE_EXISTS") {
-        let display_target = display_file_target(&file_target);
-        let message = format!(
-            "Required dependency file `{display_target}` is missing from the current game folder."
-        );
-        return ("missing_dep", Some(display_target), message);
-    }
     if let Some(dir_target) = first_predicate_target(eval_text, "DIRECTORY_EXISTS") {
         return (
             "path_requirement",
@@ -75,7 +67,7 @@ fn classify_failing_guard(eval_text: &str) -> (&'static str, Option<String>, Str
     (
         "path_requirement",
         None,
-        "Required file or folder is missing for the current game folder.".to_string(),
+        "Required folder is missing from the current game folder.".to_string(),
     )
 }
 
@@ -103,16 +95,6 @@ fn first_predicate_target(eval_text: &str, predicate: &str) -> Option<String> {
         }
     }
     None
-}
-
-fn display_file_target(value: &str) -> String {
-    Path::new(value)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or(value)
-        .trim()
-        .to_string()
 }
 
 fn load_component_path_guards(tp2_path: &str) -> HashMap<String, Vec<PathGuard>> {
@@ -219,28 +201,40 @@ fn collect_path_guards(block: &[&str]) -> Vec<PathGuard> {
 
     while index < block.len() {
         let trimmed = block[index].trim();
-        if !trimmed.to_ascii_uppercase().starts_with("REQUIRE_PREDICATE") {
+        let upper = trimmed.to_ascii_uppercase();
+        let strip = if upper.starts_with("REQUIRE_PREDICATE") {
+            strip_requirement_prefix as fn(&str) -> Option<String>
+        } else if upper.starts_with("SUBCOMPONENT ") {
+            strip_subcomponent_condition as fn(&str) -> Option<String>
+        } else {
             index += 1;
             continue;
-        }
+        };
 
         let mut raw_line = trimmed.to_string();
+        let mut clean_line = strip_inline_comments(trimmed);
+        let mut eval_text = strip(&clean_line);
         let mut next = index + 1;
         while next < block.len() {
             let candidate = block[next].trim();
-            if candidate.is_empty() {
+            let cleaned_candidate = strip_inline_comments(candidate);
+            let cleaned_candidate = cleaned_candidate.trim();
+            if cleaned_candidate.is_empty() {
                 next += 1;
                 continue;
             }
-            if !should_extend_requirement(&raw_line, candidate) {
+            if !should_extend_guard(eval_text.as_deref().unwrap_or(""), cleaned_candidate) {
                 break;
             }
             raw_line.push(' ');
             raw_line.push_str(candidate);
+            clean_line.push(' ');
+            clean_line.push_str(cleaned_candidate);
+            eval_text = strip(&clean_line);
             next += 1;
         }
 
-        if let Some(eval_text) = strip_requirement_prefix(&raw_line) {
+        if let Some(eval_text) = eval_text.filter(|text| !text.trim().is_empty()) {
             out.push(PathGuard { raw_line, eval_text });
         }
         index = next;
@@ -264,11 +258,46 @@ fn strip_requirement_prefix(line: &str) -> Option<String> {
     }
 }
 
-fn should_extend_requirement(current: &str, next: &str) -> bool {
+fn strip_subcomponent_condition(line: &str) -> Option<String> {
+    let trimmed = strip_inline_comments(line);
+    let trimmed = trimmed.trim_start();
+    let upper = trimmed.to_ascii_uppercase();
+    if !upper.starts_with("SUBCOMPONENT") {
+        return None;
+    }
+    let tail = trimmed["SUBCOMPONENT".len()..].trim_start();
+    if tail.is_empty() {
+        return None;
+    }
+    let tail = if let Some(rest) = tail.strip_prefix('~') {
+        let end = rest.find('~')?;
+        &rest[end + 1..]
+    } else if let Some(rest) = tail.strip_prefix('"') {
+        let end = rest.find('"')?;
+        &rest[end + 1..]
+    } else {
+        let split = tail
+            .find(|ch: char| ch.is_whitespace() || ch == '/')
+            .unwrap_or(tail.len());
+        &tail[split..]
+    };
+    let tail = tail.trim_start();
+    if tail.is_empty() {
+        None
+    } else {
+        Some(tail.to_string())
+    }
+}
+
+fn should_extend_guard(current: &str, next: &str) -> bool {
     if next.to_ascii_uppercase().starts_with("REQUIRE_PREDICATE")
+        || next.to_ascii_uppercase().starts_with("SUBCOMPONENT ")
         || next.to_ascii_uppercase().starts_with("BEGIN ")
     {
         return false;
+    }
+    if current.trim().is_empty() {
+        return next.starts_with('(');
     }
     paren_balance(current) > 0
         || current.trim_end().ends_with("AND")

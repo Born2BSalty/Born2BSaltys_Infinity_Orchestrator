@@ -207,6 +207,7 @@ pub(crate) fn kind_disables_selection(kind: &str) -> bool {
     kind.eq_ignore_ascii_case("included")
         || kind.eq_ignore_ascii_case("not_needed")
         || kind.eq_ignore_ascii_case("not_compatible")
+        || kind.eq_ignore_ascii_case("conditional")
         || kind.eq_ignore_ascii_case("mismatch")
         || kind.eq_ignore_ascii_case("path_requirement")
 }
@@ -235,14 +236,48 @@ pub(crate) fn non_empty(value: Option<&str>) -> Option<String> {
 }
 
 pub(crate) fn rule_uses_related_target(rule: &CompatRule) -> bool {
-    non_empty(rule.related_mod.as_deref()).is_some()
+    !string_or_many_items(rule.related_mod.as_ref()).is_empty()
 }
 
 pub(crate) fn rule_uses_path_requirement(rule: &CompatRule) -> bool {
     non_empty(rule.path_field.as_deref()).is_some()
 }
 
-pub(crate) fn direct_rule_applies(rule: &CompatRule, step1: &Step1State) -> bool {
+pub(crate) fn single_related_target(rule: &CompatRule) -> Option<(String, Option<String>)> {
+    let mut targets = related_targets(rule).into_iter();
+    let first = targets.next()?;
+    if targets.next().is_none() {
+        Some(first)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn matched_related_target(
+    rule: &CompatRule,
+    current_tp_file: &str,
+    current_component_id: &str,
+    active_items: &[CompatActiveItem],
+) -> Option<(String, Option<String>)> {
+    let targets = related_targets(rule);
+    active_items.iter().find_map(|item| {
+        targets.iter().find_map(|(related_mod, related_component)| {
+            target_matches_one(
+                item,
+                current_tp_file,
+                current_component_id,
+                related_mod,
+                related_component.as_deref(),
+            )
+            .then(|| (related_mod.clone(), related_component.clone()))
+        })
+    })
+}
+
+pub(crate) fn direct_rule_applies(rule: &CompatRule, step1: &Step1State, tab: &str) -> bool {
+    if rule_uses_related_target(rule) {
+        return false;
+    }
     if normalize_kind(&rule.kind).eq_ignore_ascii_case("path_requirement")
         && rule_uses_path_requirement(rule)
     {
@@ -252,7 +287,10 @@ pub(crate) fn direct_rule_applies(rule: &CompatRule, step1: &Step1State) -> bool
             rule.path_check.as_deref(),
         );
     }
-    !rule_uses_related_target(rule)
+    if let Some(game_file) = non_empty(rule.game_file.as_deref()) {
+        return game_file_rule_applies(step1, tab, &game_file, rule.game_file_check.as_deref());
+    }
+    true
 }
 
 pub(crate) fn relation_rule_applies(
@@ -267,7 +305,9 @@ pub(crate) fn relation_rule_applies(
     }
 
     match normalize_kind(&rule.kind) {
-        "conflict" => target_selected(active_items, rule, current_tp_file, current_component_id),
+        "conflict" | "conditional" => {
+            target_selected(active_items, rule, current_tp_file, current_component_id)
+        }
         "missing_dep" => {
             !target_selected(active_items, rule, current_tp_file, current_component_id)
         }
@@ -332,12 +372,26 @@ fn target_matches(
     current_tp_file: &str,
     current_component_id: &str,
 ) -> bool {
-    let related_mod = non_empty(rule.related_mod.as_deref()).unwrap_or_default();
-    if related_mod.is_empty() {
-        return false;
-    }
-    if normalize_mod_key(&item.tp_file) != normalize_mod_key(&related_mod)
-        && normalize_mod_key(&item.mod_name) != normalize_mod_key(&related_mod)
+    related_targets(rule).into_iter().any(|(related_mod, related_component)| {
+        target_matches_one(
+            item,
+            current_tp_file,
+            current_component_id,
+            &related_mod,
+            related_component.as_deref(),
+        )
+    })
+}
+
+fn target_matches_one(
+    item: &CompatActiveItem,
+    current_tp_file: &str,
+    current_component_id: &str,
+    related_mod: &str,
+    related_component: Option<&str>,
+) -> bool {
+    if normalize_mod_key(&item.tp_file) != normalize_mod_key(related_mod)
+        && normalize_mod_key(&item.mod_name) != normalize_mod_key(related_mod)
         && !item.mod_name.trim().eq_ignore_ascii_case(related_mod.trim())
     {
         return false;
@@ -351,11 +405,48 @@ fn target_matches(
         return false;
     }
 
-    if let Some(component_id) = non_empty(rule.related_component.as_deref()) {
+    if let Some(component_id) = non_empty(related_component) {
         item.component_id.trim().eq_ignore_ascii_case(component_id.trim())
     } else {
         true
     }
+}
+
+fn string_or_many_items(value: Option<&StringOrMany>) -> Vec<String> {
+    value.map(StringOrMany::trimmed_items).unwrap_or_default()
+}
+
+fn related_targets(rule: &CompatRule) -> Vec<(String, Option<String>)> {
+    let related_mods = string_or_many_items(rule.related_mod.as_ref());
+    if related_mods.is_empty() {
+        return Vec::new();
+    }
+
+    let related_components = string_or_many_items(rule.related_component.as_ref());
+    if related_components.is_empty() {
+        return related_mods
+            .into_iter()
+            .map(|related_mod| (related_mod, None))
+            .collect();
+    }
+
+    if related_mods.len() == 1 {
+        let related_mod = related_mods[0].clone();
+        return related_components
+            .into_iter()
+            .map(|related_component| (related_mod.clone(), Some(related_component)))
+            .collect();
+    }
+
+    if related_mods.len() == related_components.len() {
+        return related_mods
+            .into_iter()
+            .zip(related_components)
+            .map(|(related_mod, related_component)| (related_mod, Some(related_component)))
+            .collect();
+    }
+
+    Vec::new()
 }
 
 fn path_requirement_unmet(step1: &Step1State, field: &str, check: Option<&str>) -> bool {
@@ -369,6 +460,56 @@ fn path_requirement_unmet(step1: &Step1State, field: &str, check: Option<&str>) 
         non_empty(check).unwrap_or_default().to_ascii_lowercase().as_str(),
         "exists" | "dir_exists" | "file_exists"
     ) && !Path::new(path).exists()
+}
+
+fn game_file_rule_applies(step1: &Step1State, tab: &str, rel_path: &str, check: Option<&str>) -> bool {
+    let Some(game_dir) = game_dir_for_tab(step1, tab) else {
+        return false;
+    };
+    let exists = Path::new(game_dir)
+        .join(rel_path.replace('\\', "/"))
+        .exists();
+    match non_empty(check)
+        .unwrap_or_else(|| "exists".to_string())
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "exists" | "file_exists" => exists,
+        "missing" | "not_exists" | "absent" => !exists,
+        _ => false,
+    }
+}
+
+fn game_dir_for_tab<'a>(step1: &'a Step1State, tab: &str) -> Option<&'a str> {
+    let value = if tab.eq_ignore_ascii_case("BGEE") {
+        if step1.game_install.eq_ignore_ascii_case("EET") {
+            if step1.new_pre_eet_dir_enabled && !step1.eet_pre_dir.trim().is_empty() {
+                step1.eet_pre_dir.trim()
+            } else {
+                step1.eet_bgee_game_folder.trim()
+            }
+        } else if step1.generate_directory_enabled && !step1.generate_directory.trim().is_empty() {
+            step1.generate_directory.trim()
+        } else {
+            step1.bgee_game_folder.trim()
+        }
+    } else if step1.game_install.eq_ignore_ascii_case("EET") {
+        if step1.new_eet_dir_enabled && !step1.eet_new_dir.trim().is_empty() {
+            step1.eet_new_dir.trim()
+        } else {
+            step1.eet_bg2ee_game_folder.trim()
+        }
+    } else if step1.generate_directory_enabled && !step1.generate_directory.trim().is_empty() {
+        step1.generate_directory.trim()
+    } else {
+        step1.bg2ee_game_folder.trim()
+    };
+
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn path_field_value<'a>(step1: &'a Step1State, field: &str) -> Option<&'a str> {

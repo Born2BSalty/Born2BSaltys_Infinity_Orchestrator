@@ -140,7 +140,7 @@ fn build_rule_matches(
             &component.raw_line,
         );
         let selector_match = mode_match && tab_match && kind_match && mod_match && component_match;
-        let direct_match = selector_match && direct_rule_applies(rule, &state.step1);
+        let direct_match = selector_match && direct_rule_applies(rule, &state.step1, tab);
         let relation_match = selector_match
             && relation_rule_applies(
                 rule,

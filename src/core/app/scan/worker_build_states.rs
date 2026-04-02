@@ -9,7 +9,7 @@ use crate::ui::scan::discovery::display_name_from_group_key;
 use crate::ui::scan::parse::dedup_components;
 use crate::ui::scan::readme::find_best_readme;
 use crate::ui::scan::ScannedComponent;
-use crate::ui::state::{Step2ComponentState, Step2ModState};
+use crate::ui::state::{Step2ComponentState, Step2HiddenComponentAudit, Step2ModState};
 
 #[path = "worker_build_states_groups.rs"]
 mod groups;
@@ -73,8 +73,27 @@ pub(super) fn to_mod_states(
                     tp2_text.as_deref(),
                     &deduped_components,
                 );
+            let hidden_components = deduped_components
+                .iter()
+                .filter_map(|component| {
+                    let component_id = component.component_id.trim().to_string();
+                    hidden_prompt_like_component_ids
+                        .get(component_id.as_str())
+                        .cloned()
+                        .or_else(|| {
+                            order::display_is_blank_version_only(&component.display)
+                                .then(|| "blank_version_only_label".to_string())
+                        })
+                        .map(|reason| Step2HiddenComponentAudit {
+                            component_id,
+                            label: component.display.clone(),
+                            raw_line: component.raw_line.clone(),
+                            reason,
+                        })
+                })
+                .collect::<Vec<_>>();
             deduped_components.retain(|component| {
-                !hidden_prompt_like_component_ids.contains(component.component_id.trim())
+                !hidden_prompt_like_component_ids.contains_key(component.component_id.trim())
                     && !order::display_is_blank_version_only(&component.display)
             });
             let mod_prompt_summary = deduped_components
@@ -101,6 +120,7 @@ pub(super) fn to_mod_states(
                 mod_prompt_events,
                 name: display_name,
                 checked: false,
+                hidden_components,
                 components: deduped_components
                     .into_iter()
                     .map(|component| {

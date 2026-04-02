@@ -35,6 +35,18 @@ pub(super) fn apply_weidu_log_selection(app: &mut WizardApp, bgee: bool) {
     };
 
     let mut next_order = app.state.step2.next_selection_order;
+    match (app.state.step1.game_install.as_str(), bgee) {
+        ("EET", true) => {
+            crate::ui::compat_logic::clear_step2_compat_state(&mut app.state.step2.bgee_mods);
+            crate::ui::compat_logic::clear_step2_compat_state(&mut app.state.step2.bg2ee_mods);
+        }
+        (_, true) => {
+            crate::ui::compat_logic::clear_step2_compat_state(&mut app.state.step2.bgee_mods);
+        }
+        _ => {
+            crate::ui::compat_logic::clear_step2_compat_state(&mut app.state.step2.bg2ee_mods);
+        }
+    }
     let matched = match (app.state.step1.game_install.as_str(), bgee) {
         ("EET", true) => {
             let picked_bgee =
@@ -53,12 +65,14 @@ pub(super) fn apply_weidu_log_selection(app: &mut WizardApp, bgee: bool) {
         _ => apply_log_to_mods(&mut app.state.step2.bg2ee_mods, &log, None, true, &mut next_order),
     };
     app.state.step2.next_selection_order = next_order;
+    crate::ui::compat_logic::apply_step2_compat_rules(
+        &app.state.step1,
+        &mut app.state.step2.bgee_mods,
+        &mut app.state.step2.bg2ee_mods,
+    );
     let label = if bgee { "BGEE" } else { "BG2EE" };
     app.state.step2.scan_status = format!("{label} selected from log: {matched}");
-    // Treat explicit "select via WeiDU log" as a fresh Step 2 source of truth.
-    // This avoids carrying stale/custom Step 3 blocks when re-applying logs.
     app.last_step2_sync_signature = None;
-    app.sync_step3_from_step2();
 }
 
 fn pick_weidu_log_file(app: &mut WizardApp, bgee: bool) -> Option<PathBuf> {

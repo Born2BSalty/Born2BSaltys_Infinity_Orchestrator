@@ -96,6 +96,7 @@ pub fn build_preview_mods(grouped: &[(String, Vec<PathBuf>)]) -> Vec<Step2ModSta
                 mod_prompt_summary: None,
                 mod_prompt_events: Vec::new(),
                 checked: false,
+                hidden_components: Vec::new(),
                 components: Vec::new(),
             }
         })

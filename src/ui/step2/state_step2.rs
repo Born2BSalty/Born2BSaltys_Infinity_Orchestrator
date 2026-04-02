@@ -10,6 +10,7 @@ pub struct PromptEvalContext {
     pub active_games: HashSet<String>,
     pub game_dir: Option<String>,
     pub checked_components: HashSet<(String, String)>,
+    pub signature: String,
 }
 
 pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
@@ -53,11 +54,36 @@ pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
     }
     .filter(|v| !v.trim().is_empty());
 
+    let signature = build_prompt_eval_signature(&active_games, game_dir.as_deref(), &checked_components);
+
     PromptEvalContext {
         active_games,
         game_dir,
         checked_components,
+        signature,
     }
+}
+
+fn build_prompt_eval_signature(
+    active_games: &HashSet<String>,
+    game_dir: Option<&str>,
+    checked_components: &HashSet<(String, String)>,
+) -> String {
+    let mut games = active_games.iter().cloned().collect::<Vec<_>>();
+    games.sort_unstable();
+
+    let mut checked = checked_components
+        .iter()
+        .map(|(mod_key, component_id)| format!("{mod_key}|{component_id}"))
+        .collect::<Vec<_>>();
+    checked.sort_unstable();
+
+    format!(
+        "games={};dir={};checked={}",
+        games.join(","),
+        game_dir.unwrap_or(""),
+        checked.join(";")
+    )
 }
 
 fn collect_checked_components(
@@ -105,6 +131,9 @@ pub struct Step2Details {
     pub mod_name: Option<String>,
     pub component_label: Option<String>,
     pub component_id: Option<String>,
+    pub shown_component_count: Option<usize>,
+    pub hidden_component_count: Option<usize>,
+    pub raw_component_count: Option<usize>,
     pub component_lang: Option<String>,
     pub component_version: Option<String>,
     pub selected_order: Option<usize>,

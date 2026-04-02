@@ -33,6 +33,11 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                 mod_name: Some(mod_state.name.clone()),
                 component_label: None,
                 component_id: None,
+                shown_component_count: Some(mod_state.components.len()),
+                hidden_component_count: Some(mod_state.hidden_components.len()),
+                raw_component_count: Some(
+                    mod_state.components.len() + mod_state.hidden_components.len(),
+                ),
                 component_lang: None,
                 component_version: None,
                 selected_order: None,
@@ -96,6 +101,11 @@ pub fn selected_details(state: &WizardState) -> Step2Details {
                             mod_name: Some(details_display_name_from_tp2(&component_tp2)),
                             component_label: Some(component.label.clone()),
                             component_id: Some(component.component_id.clone()),
+                            shown_component_count: Some(mod_state.components.len()),
+                            hidden_component_count: Some(mod_state.hidden_components.len()),
+                            raw_component_count: Some(
+                                mod_state.components.len() + mod_state.hidden_components.len(),
+                            ),
                             component_lang: parse_lang(&component.raw_line),
                             component_version: parse_version(&component.raw_line),
                             selected_order: component.selected_order,

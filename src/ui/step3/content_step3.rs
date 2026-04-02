@@ -7,6 +7,10 @@ use crate::ui::shared::typography_global as typo;
 use crate::ui::state::{Step2Selection, Step3ItemState, WizardState};
 use crate::ui::compat_step3_rules::Step3CompatMarker;
 use crate::ui::step2::compat_types_step2::{CompatIssueDisplay, CompatIssueStatusTone};
+use crate::ui::step2::prompt_popup_step2::{
+    collect_step3_prompt_toolbar_entries_from_items, draw_prompt_toolbar_badge,
+    open_toolbar_prompt_popup,
+};
 use crate::ui::step3::list_step3;
 use crate::ui::step3::state_step3;
 use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
@@ -115,6 +119,8 @@ struct Step3ToolbarSummary {
     show_bg2ee: bool,
     bgee_summary: (usize, bool),
     bg2ee_summary: (usize, bool),
+    bgee_prompt_count: usize,
+    bg2ee_prompt_count: usize,
     bgee_target: Option<Step3ToolbarIssueTarget>,
     bg2ee_target: Option<Step3ToolbarIssueTarget>,
 }
@@ -239,6 +245,17 @@ fn render_toolbar(
             {
                 open_toolbar_issue_popup(state, target);
             }
+            let active_prompt_count = if state.step3.active_game_tab == "BGEE" {
+                summary.bgee_prompt_count
+            } else {
+                summary.bg2ee_prompt_count
+            };
+            if draw_prompt_toolbar_badge(ui, active_prompt_count) {
+                open_toolbar_prompt_popup(
+                    state,
+                    &format!("Prompt Components ({})", state.step3.active_game_tab),
+                );
+            }
         } else if summary.show_bgee {
             ui.label(typo::monospace("BGEE"));
             if draw_tab_issue_badge(
@@ -251,6 +268,9 @@ fn render_toolbar(
             {
                 open_toolbar_issue_popup(state, target);
             }
+            if draw_prompt_toolbar_badge(ui, summary.bgee_prompt_count) {
+                open_toolbar_prompt_popup(state, "Prompt Components (BGEE)");
+            }
         } else if summary.show_bg2ee {
             ui.label(typo::monospace("BG2EE"));
             if draw_tab_issue_badge(
@@ -262,6 +282,9 @@ fn render_toolbar(
             ) && let Some(target) = summary.bg2ee_target.as_ref()
             {
                 open_toolbar_issue_popup(state, target);
+            }
+            if draw_prompt_toolbar_badge(ui, summary.bg2ee_prompt_count) {
+                open_toolbar_prompt_popup(state, "Prompt Components (BG2EE)");
             }
         }
 
@@ -394,6 +417,23 @@ pub fn render(
     } else {
         std::collections::HashMap::new()
     };
+    let prompt_eval = crate::ui::step2::state_step2::build_prompt_eval_context(state);
+    let bgee_prompt_count = if show_bgee {
+        collect_step3_prompt_toolbar_entries_from_items(&state.step3.bgee_items, &prompt_eval)
+            .into_iter()
+            .map(|entry| entry.component_ids.len())
+            .sum()
+    } else {
+        0
+    };
+    let bg2ee_prompt_count = if show_bg2ee {
+        collect_step3_prompt_toolbar_entries_from_items(&state.step3.bg2ee_items, &prompt_eval)
+            .into_iter()
+            .map(|entry| entry.component_ids.len())
+            .sum()
+    } else {
+        0
+    };
     let active_markers = if state.step3.active_game_tab == "BGEE" {
         &bgee_markers
     } else {
@@ -404,6 +444,8 @@ pub fn render(
         show_bg2ee,
         bgee_summary: tab_compat_summary(&bgee_markers),
         bg2ee_summary: tab_compat_summary(&bg2ee_markers),
+        bgee_prompt_count,
+        bg2ee_prompt_count,
         bgee_target: first_tab_issue_target("BGEE", &state.step3.bgee_items, &bgee_markers),
         bg2ee_target: first_tab_issue_target("BG2EE", &state.step3.bg2ee_items, &bg2ee_markers),
     };

@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 use std::fs;
+use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 use crate::ui::state::{Step2ComponentState, Step2ModState};
 
@@ -65,6 +67,26 @@ fn load_component_deprecated_hits(tp2_path: &str) -> HashMap<String, DeprecatedH
     if tp2_path.trim().is_empty() {
         return HashMap::new();
     }
+    let cache = deprecated_hit_file_cache();
+    let mut cache = cache.lock().expect("compat deprecated cache lock poisoned");
+    let stamp = cache_stamp(tp2_path);
+    if let Some(entry) = cache.get(tp2_path)
+        && entry.stamp == stamp
+    {
+        return entry.hits.clone();
+    }
+    let hits = load_component_deprecated_hits_uncached(tp2_path);
+    cache.insert(
+        tp2_path.to_string(),
+        CachedDeprecatedHits {
+            stamp,
+            hits: hits.clone(),
+        },
+    );
+    hits
+}
+
+fn load_component_deprecated_hits_uncached(tp2_path: &str) -> HashMap<String, DeprecatedHit> {
     let Ok(tp2_text) = fs::read_to_string(tp2_path) else {
         return HashMap::new();
     };
@@ -112,6 +134,36 @@ fn load_component_deprecated_hits(tp2_path: &str) -> HashMap<String, DeprecatedH
     }
 
     out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileCacheStamp {
+    modified: Option<SystemTime>,
+    len: u64,
+}
+
+#[derive(Debug, Clone)]
+struct CachedDeprecatedHits {
+    stamp: FileCacheStamp,
+    hits: HashMap<String, DeprecatedHit>,
+}
+
+fn deprecated_hit_file_cache() -> &'static Mutex<HashMap<String, CachedDeprecatedHits>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, CachedDeprecatedHits>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
+    match fs::metadata(tp2_path) {
+        Ok(meta) => FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+        Err(_) => FileCacheStamp {
+            modified: None,
+            len: 0,
+        },
+    }
 }
 
 fn find_deprecated_evidence(block: &[&str]) -> Option<String> {
