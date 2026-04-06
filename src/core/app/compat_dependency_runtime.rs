@@ -3,7 +3,9 @@
 
 use std::collections::HashMap;
 
-use super::compat_dependency_parse::{ComponentRequirement, load_component_requirements};
+use super::compat_dependency_parse::{
+    ComponentRequirement, ComponentRequirementTarget, load_component_requirements,
+};
 use super::compat_rule_runtime::{CompatActiveItem, normalize_mod_key};
 
 pub(crate) type ComponentRequirementCache = HashMap<String, HashMap<String, Vec<ComponentRequirement>>>;
@@ -43,7 +45,7 @@ pub(crate) fn scan_dependency_hit(
 
     if let Some(requirement) = requirements
         .iter()
-        .find(|requirement| target_order(active_items, requirement).is_none())
+        .find(|requirement| selected_targets(active_items, requirement).is_empty())
     {
         let missing_message = match mode {
             DependencyEvalMode::MissingOnly => {
@@ -57,25 +59,30 @@ pub(crate) fn scan_dependency_hit(
             "missing_dep",
             tp2_path,
             requirement,
-            requirement
-                .message
-                .clone()
-                .unwrap_or_else(|| missing_message.to_string()),
+            requirement.targets.first()?,
+            missing_dependency_message(requirement, missing_message),
         ));
     }
 
     if mode == DependencyEvalMode::MissingThenOrder {
         let component_order = component_order?;
-        if let Some(requirement) = requirements.iter().find(|requirement| {
-            target_order(active_items, requirement).is_some_and(|target_order| component_order < target_order)
+        if let Some((requirement, target)) = requirements.iter().find_map(|requirement| {
+            let selected = selected_targets(active_items, requirement);
+            if selected.is_empty() || selected.iter().any(|(_, target_order)| component_order >= *target_order)
+            {
+                return None;
+            }
+            selected
+                .into_iter()
+                .min_by_key(|(_, target_order)| *target_order)
+                .map(|(target, _)| (requirement, target))
         }) {
             return Some(compat_hit(
                 "order_block",
                 tp2_path,
                 requirement,
-                requirement.message.clone().unwrap_or_else(|| {
-                    "Required component must be installed earlier in the current order.".to_string()
-                }),
+                target,
+                order_block_message(requirement),
             ));
         }
     }
@@ -87,25 +94,72 @@ fn compat_hit(
     kind: &'static str,
     tp2_path: &str,
     requirement: &ComponentRequirement,
+    target: &ComponentRequirementTarget,
     message: String,
 ) -> DependencyCompatHit {
     DependencyCompatHit {
         kind,
-        target_mod: requirement.target_mod.clone(),
-        target_component_id: requirement.target_component_id.clone(),
+        target_mod: target.target_mod.clone(),
+        target_component_id: target.target_component_id.clone(),
         message,
         source: tp2_path.to_string(),
         raw_evidence: requirement.raw_line.clone(),
     }
 }
 
-fn target_order(
+fn selected_targets<'a>(
     active_items: &[CompatActiveItem],
-    requirement: &ComponentRequirement,
-) -> Option<usize> {
-    active_items.iter().find_map(|item| {
-        (item.component_id.trim() == requirement.target_component_id
-            && normalize_mod_key(&item.tp_file) == requirement.target_mod)
-            .then_some(item.order?)
+    requirement: &'a ComponentRequirement,
+) -> Vec<(&'a ComponentRequirementTarget, usize)> {
+    requirement
+        .targets
+        .iter()
+        .filter_map(|target| {
+            active_items.iter().find_map(|item| {
+                if item.component_id.trim() == target.target_component_id
+                    && normalize_mod_key(&item.tp_file) == target.target_mod
+                {
+                    item.order.map(|order| (target, order))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect()
+}
+
+fn missing_dependency_message(requirement: &ComponentRequirement, fallback: &str) -> String {
+    if requirement.targets.len() > 1 {
+        return format!("Requires one of: {}", joined_targets(requirement));
+    }
+    requirement
+        .message
+        .clone()
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn order_block_message(requirement: &ComponentRequirement) -> String {
+    if requirement.targets.len() > 1 {
+        return "Selected prerequisite must be installed earlier in the current order.".to_string();
+    }
+    requirement.message.clone().unwrap_or_else(|| {
+        "Required component must be installed earlier in the current order.".to_string()
     })
 }
+
+fn joined_targets(requirement: &ComponentRequirement) -> String {
+    requirement
+        .targets
+        .iter()
+        .map(target_label)
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
+
+fn target_label(target: &ComponentRequirementTarget) -> String {
+    format!("{} #{}", target.target_mod, target.target_component_id)
+}
+
+#[cfg(test)]
+#[path = "compat_dependency_runtime_tests.rs"]
+mod tests;

@@ -163,7 +163,7 @@ pub(crate) fn render_component_block(ui: &mut egui::Ui, details: &Step2Details) 
             details.tp_file.as_deref().unwrap_or_default(),
             details.component_id.as_deref().unwrap_or_default(),
         ))
-        .default_open(false)
+        .default_open(true)
         .show(ui, |ui| {
             if ui
                 .small_button("C")

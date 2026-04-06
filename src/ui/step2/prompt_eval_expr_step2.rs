@@ -89,7 +89,9 @@ mod tests {
     fn test_context() -> PromptEvalContext {
         let mut active_games = HashSet::new();
         active_games.insert("eet".to_string());
-        active_games.insert("bg2ee".to_string());
+
+        let mut active_engines = HashSet::new();
+        active_engines.insert("bg2ee".to_string());
 
         let mut checked_components = HashSet::new();
         checked_components.insert(("randomiser".to_string(), "1300".to_string()));
@@ -97,6 +99,7 @@ mod tests {
 
         PromptEvalContext {
             active_games,
+            active_engines,
             game_dir: None,
             checked_components,
             signature: "test".to_string(),
@@ -117,8 +120,9 @@ mod tests {
     fn evaluates_game_is_with_negation() {
         let ctx = test_context();
         assert!(evaluate_condition_clause("GAME_IS ~bg2ee eet~", &ctx, None));
-        assert!(!evaluate_condition_clause("!GAME_IS ~bg2ee~", &ctx, None));
+        assert!(evaluate_condition_clause("!GAME_IS ~bg2ee~", &ctx, None));
         assert!(evaluate_condition_clause("NOT GAME_IS ~bgee~", &ctx, None));
+        assert!(evaluate_condition_clause("ENGINE_IS ~bg2ee~", &ctx, None));
     }
 
     #[test]

@@ -10,6 +10,8 @@ use std::sync::mpsc::Receiver;
 use crate::settings::store::SettingsStore;
 use crate::ui::state::{Step1State, WizardState};
 use crate::ui::step2_worker::Step2ScanEvent;
+use crate::ui::step5::log_files::TargetPrepResult;
+use crate::ui::step5::service_install_flow_step5::PendingInstallStart;
 use crate::ui::terminal::EmbeddedTerminal;
 
 #[path = "app_bootstrap.rs"]
@@ -48,6 +50,8 @@ pub struct WizardApp {
     step2_progress_queue: VecDeque<(usize, usize, String)>,
     step5_terminal: Option<EmbeddedTerminal>,
     step5_terminal_error: Option<String>,
+    step5_prep_rx: Option<Receiver<Result<TargetPrepResult, String>>>,
+    step5_pending_start: Option<PendingInstallStart>,
     last_step2_sync_signature: Option<String>,
 }
 
@@ -72,6 +76,8 @@ impl WizardApp {
             step2_progress_queue: VecDeque::new(),
             step5_terminal: None,
             step5_terminal_error: None,
+            step5_prep_rx: None,
+            step5_pending_start: None,
             last_step2_sync_signature: None,
         }
     }

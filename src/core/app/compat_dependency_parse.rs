@@ -6,14 +6,21 @@ use std::fs;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
+use crate::ui::step2::prompt_eval_expr_tokens_step2::{tokenize, Token};
+
 use super::compat_rule_runtime::normalize_mod_key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ComponentRequirement {
     pub(crate) raw_line: String,
+    pub(crate) targets: Vec<ComponentRequirementTarget>,
+    pub(crate) message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ComponentRequirementTarget {
     pub(crate) target_mod: String,
     pub(crate) target_component_id: String,
-    pub(crate) message: Option<String>,
 }
 
 pub(crate) fn load_component_requirements(
@@ -121,7 +128,9 @@ fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
 fn collect_component_requirements(block: &[&str]) -> Vec<ComponentRequirement> {
     let mut out = Vec::<ComponentRequirement>::new();
     for line in block {
-        let Some(requirement) = parse_requirement_line(line) else {
+        let Some(requirement) = parse_requirement_line(line)
+            .or_else(|| parse_predicate_requirement_line(line))
+        else {
             continue;
         };
         out.push(requirement);
@@ -162,10 +171,208 @@ fn parse_requirement_line(line: &str) -> Option<ComponentRequirement> {
 
     Some(ComponentRequirement {
         raw_line: trimmed.to_string(),
-        target_mod,
-        target_component_id,
+        targets: vec![ComponentRequirementTarget {
+            target_mod,
+            target_component_id,
+        }],
         message,
     })
+}
+
+fn parse_predicate_requirement_line(line: &str) -> Option<ComponentRequirement> {
+    let stripped = strip_inline_comments(line);
+    let trimmed = stripped.trim();
+    let upper = trimmed.to_ascii_uppercase();
+    if !upper.starts_with("REQUIRE_PREDICATE") {
+        return None;
+    }
+
+    let tail = trimmed["REQUIRE_PREDICATE".len()..].trim_start();
+    let targets = parse_mod_is_installed_dependency_targets(tail)?;
+    if targets.is_empty() {
+        return None;
+    }
+
+    Some(ComponentRequirement {
+        raw_line: trimmed.to_string(),
+        targets,
+        message: None,
+    })
+}
+
+pub(crate) fn parse_mod_is_installed_dependency_targets(
+    input: &str,
+) -> Option<Vec<ComponentRequirementTarget>> {
+    let tokens = tokenize(input);
+    let mut index = 0usize;
+    let mut out = Vec::<ComponentRequirementTarget>::new();
+
+    loop {
+        while matches!(tokens.get(index), Some(Token::LParen)) {
+            index += 1;
+        }
+
+        let Token::Ident(name) = tokens.get(index)? else {
+            return None;
+        };
+        if !name.eq_ignore_ascii_case("MOD_IS_INSTALLED") {
+            return None;
+        }
+        index += 1;
+
+        let target_mod = normalize_mod_key(&token_value(tokens.get(index)?)?);
+        index += 1;
+        let target_component_id = normalize_component_id(&token_value(tokens.get(index)?)?)?;
+        index += 1;
+
+        while matches!(tokens.get(index), Some(Token::RParen)) {
+            index += 1;
+        }
+
+        if target_mod.is_empty() {
+            return None;
+        }
+        out.push(ComponentRequirementTarget {
+            target_mod,
+            target_component_id,
+        });
+
+        if !matches!(tokens.get(index), Some(Token::Or)) {
+            break;
+        }
+        index += 1;
+    }
+
+    if out.is_empty() {
+        return None;
+    }
+
+    if tokens[index..].iter().any(|token| {
+        matches!(
+            token,
+            Token::LParen
+                | Token::RParen
+                | Token::Bang
+                | Token::Eq
+                | Token::Gt
+                | Token::Lt
+                | Token::And
+                | Token::Or
+                | Token::Not
+        ) || matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("MOD_IS_INSTALLED"))
+    }) {
+        return None;
+    }
+
+    Some(out)
+}
+
+pub(crate) fn parse_negated_mod_is_installed_targets(
+    input: &str,
+) -> Option<Vec<ComponentRequirementTarget>> {
+    let tokens = tokenize(input);
+    let mut index = 0usize;
+    let mut out = Vec::<ComponentRequirementTarget>::new();
+
+    while index < tokens.len() {
+        if !matches!(tokens.get(index), Some(Token::Bang) | Some(Token::Not)) {
+            index += 1;
+            continue;
+        }
+
+        let mut cursor = index + 1;
+        let wrapped = matches!(tokens.get(cursor), Some(Token::LParen));
+        if wrapped {
+            cursor += 1;
+        }
+
+        let Some(Token::Ident(name)) = tokens.get(cursor) else {
+            index += 1;
+            continue;
+        };
+        if !name.eq_ignore_ascii_case("MOD_IS_INSTALLED") {
+            index += 1;
+            continue;
+        }
+        cursor += 1;
+
+        let opened = matches!(tokens.get(cursor), Some(Token::LParen));
+        if opened {
+            cursor += 1;
+        }
+
+        let Some(target_mod) = tokens
+            .get(cursor)
+            .and_then(token_value)
+            .map(|value| normalize_mod_key(&value))
+        else {
+            index += 1;
+            continue;
+        };
+        cursor += 1;
+
+        let Some(target_component_id) = tokens
+            .get(cursor)
+            .and_then(token_value)
+            .and_then(|value| normalize_component_id(&value))
+        else {
+            index += 1;
+            continue;
+        };
+        cursor += 1;
+
+        if opened && !matches!(tokens.get(cursor), Some(Token::RParen)) {
+            index += 1;
+            continue;
+        }
+        if opened {
+            cursor += 1;
+        }
+
+        if wrapped && !matches!(tokens.get(cursor), Some(Token::RParen)) {
+            index += 1;
+            continue;
+        }
+        if wrapped {
+            cursor += 1;
+        }
+
+        if !target_mod.is_empty()
+            && !out.iter().any(|target| {
+                target.target_mod == target_mod && target.target_component_id == target_component_id
+            })
+        {
+            out.push(ComponentRequirementTarget {
+                target_mod,
+                target_component_id,
+            });
+        }
+
+        index = cursor;
+    }
+
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn parse_simple_mod_is_installed_predicate(input: &str) -> Option<(String, String)> {
+    let mut targets = parse_mod_is_installed_dependency_targets(input)?;
+    if targets.len() != 1 {
+        return None;
+    }
+    let target = targets.pop()?;
+    Some((target.target_mod, target.target_component_id))
+}
+
+fn token_value(token: &Token) -> Option<String> {
+    match token {
+        Token::Atom(value) | Token::Ident(value) => Some(value.trim().to_string()),
+        _ => None,
+    }
 }
 
 fn strip_inline_comments(line: &str) -> String {
@@ -271,44 +478,5 @@ fn parse_designated_id(upper_line: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{normalize_component_id, parse_requirement_line};
-
-    #[test]
-    fn parses_tilde_requirement_component() {
-        let parsed = parse_requirement_line(
-            r#"REQUIRE_COMPONENT ~bg1npc/bg1npc.tp2~ 0 @1004 /* comment */"#,
-        )
-        .expect("requirement should parse");
-        assert_eq!(parsed.target_mod, "bg1npc");
-        assert_eq!(parsed.target_component_id, "0");
-        assert_eq!(parsed.message, None);
-    }
-
-    #[test]
-    fn parses_quoted_requirement_component() {
-        let parsed = parse_requirement_line(
-            r#"REQUIRE_COMPONENT "setup-arestorationp.tp2" "11" ~Requires the previous component.~"#,
-        )
-        .expect("requirement should parse");
-        assert_eq!(parsed.target_mod, "arestorationp");
-        assert_eq!(parsed.target_component_id, "11");
-        assert_eq!(
-            parsed.message.as_deref(),
-            Some("Requires the previous component.")
-        );
-    }
-
-    #[test]
-    fn ignores_commented_requirement_component() {
-        assert!(parse_requirement_line(r#"// REQUIRE_COMPONENT ~foo.tp2~ 0 @1"#).is_none());
-        assert!(parse_requirement_line(r#"/* REQUIRE_COMPONENT ~foo.tp2~ 0 @1 */"#).is_none());
-    }
-
-    #[test]
-    fn normalizes_component_ids() {
-        assert_eq!(normalize_component_id("007").as_deref(), Some("7"));
-        assert_eq!(normalize_component_id("~000~").as_deref(), Some("0"));
-        assert_eq!(normalize_component_id("abc"), None);
-    }
-}
+#[path = "compat_dependency_parse_tests.rs"]
+mod tests;

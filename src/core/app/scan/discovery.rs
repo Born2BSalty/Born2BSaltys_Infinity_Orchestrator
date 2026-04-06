@@ -111,6 +111,9 @@ pub fn display_name_from_group_key(group_key: &str) -> String {
 }
 
 fn mod_group_key(mod_root: &Path, tp2_path: &Path, tp2_dirs: &BTreeSet<PathBuf>) -> String {
+    if let Some(named_group) = named_package_group_key(mod_root, tp2_path, tp2_dirs) {
+        return named_group;
+    }
     if let Some(parent) = tp2_path.parent() {
         let mut current = parent;
         let mut best_group: Option<String> = None;
@@ -138,4 +141,82 @@ fn mod_group_key(mod_root: &Path, tp2_path: &Path, tp2_dirs: &BTreeSet<PathBuf>)
         .and_then(|p| p.file_name())
         .map(|v| v.to_string_lossy().to_string())
         .unwrap_or_else(|| tp2_path.display().to_string())
+}
+
+fn named_package_group_key(
+    mod_root: &Path,
+    tp2_path: &Path,
+    tp2_dirs: &BTreeSet<PathBuf>,
+) -> Option<String> {
+    let tp2_stem = tp2_path.file_stem()?.to_str()?;
+    let tp2_key = tp2_stem
+        .strip_prefix("setup-")
+        .unwrap_or(tp2_stem)
+        .to_ascii_lowercase();
+    let mut current = tp2_path.parent()?;
+
+    while let Ok(rel_current) = current.strip_prefix(mod_root) {
+        if tp2_dirs.contains(current)
+            && current
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case(&tp2_key))
+        {
+            let rel = rel_current.display().to_string();
+            if !rel.trim().is_empty() {
+                return Some(rel);
+            }
+        }
+        let Some(next) = current.parent() else {
+            break;
+        };
+        if next == current || !next.starts_with(mod_root) {
+            break;
+        }
+        current = next;
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mod_group_key;
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
+
+    #[test]
+    fn nested_self_named_tp2_uses_its_own_group() {
+        let mods_root = PathBuf::from("/mods");
+        let tp2_path = PathBuf::from(
+            "/mods/EET/other/BGEE_to_EET_mod_checker/BGEE_to_EET_mod_checker/BGEE_to_EET_mod_checker.tp2",
+        );
+        let tp2_dirs = BTreeSet::from([
+            PathBuf::from("/mods/EET"),
+            PathBuf::from(
+                "/mods/EET/other/BGEE_to_EET_mod_checker/BGEE_to_EET_mod_checker",
+            ),
+        ]);
+
+        let group = mod_group_key(&mods_root, &tp2_path, &tp2_dirs);
+
+        assert_eq!(
+            group,
+            "EET/other/BGEE_to_EET_mod_checker/BGEE_to_EET_mod_checker"
+        );
+    }
+
+    #[test]
+    fn helper_tp2_without_named_package_stays_under_parent_group() {
+        let mods_root = PathBuf::from("/mods");
+        let tp2_path = PathBuf::from("/mods/questpack/simwork/sahuagin.tp2");
+        let tp2_dirs = BTreeSet::from([
+            PathBuf::from("/mods/questpack"),
+            PathBuf::from("/mods/questpack/simwork"),
+        ]);
+
+        let group = mod_group_key(&mods_root, &tp2_path, &tp2_dirs);
+
+        assert_eq!(group, "questpack");
+    }
 }

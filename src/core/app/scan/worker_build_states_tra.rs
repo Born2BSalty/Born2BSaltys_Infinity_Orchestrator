@@ -52,6 +52,11 @@ pub(super) fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String>
             candidates.push(path);
         }
     }
+    for path in declared_language_tra_paths(tp2_path) {
+        if path.is_file() && !candidates.iter().any(|existing| existing == &path) {
+            candidates.push(path);
+        }
+    }
     if candidates.is_empty() {
         for path in walk_setup_tra_files(base) {
             if !candidates.iter().any(|existing| existing == &path) {
@@ -70,6 +75,52 @@ pub(super) fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String>
         }
     }
     merged
+}
+
+fn declared_language_tra_paths(tp2_path: &Path) -> Vec<std::path::PathBuf> {
+    let Some(base) = tp2_path.parent() else {
+        return Vec::new();
+    };
+    let Ok(text) = fs::read_to_string(tp2_path) else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::<std::path::PathBuf>::new();
+    let lines: Vec<&str> = text.lines().collect();
+    let mut index = 0usize;
+    while index < lines.len() {
+        let trimmed = lines[index].trim_start();
+        if trimmed.starts_with("//") || !trimmed.to_ascii_uppercase().starts_with("LANGUAGE") {
+            index += 1;
+            continue;
+        }
+        for offset in 0..4usize {
+            let Some(line) = lines.get(index + offset) else {
+                break;
+            };
+            for token in extract_quoted_tokens(line) {
+                if !token.to_ascii_lowercase().ends_with(".tra") {
+                    continue;
+                }
+                let candidate = Path::new(&token);
+                let resolved = if candidate.is_absolute() {
+                    candidate.to_path_buf()
+                } else if base.join(candidate).is_file() {
+                    base.join(candidate)
+                } else if let Some(parent) = base.parent() {
+                    parent.join(candidate)
+                } else {
+                    base.join(candidate)
+                };
+                if !out.iter().any(|existing| existing == &resolved) {
+                    out.push(resolved);
+                }
+            }
+        }
+        index += 1;
+    }
+
+    out
 }
 
 pub(super) fn resolve_group_token_label(
@@ -140,4 +191,73 @@ fn parse_tra_string_map(text: &str) -> HashMap<String, String> {
         }
     }
     out
+}
+
+fn extract_quoted_tokens(line: &str) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    let bytes = line.as_bytes();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        let quote = bytes[index];
+        if quote != b'~' && quote != b'"' {
+            index += 1;
+            continue;
+        }
+        index += 1;
+        let start = index;
+        while index < bytes.len() && bytes[index] != quote {
+            index += 1;
+        }
+        if index <= bytes.len() {
+            let value = line[start..index].trim();
+            if !value.is_empty() {
+                out.push(value.to_string());
+            }
+        }
+        index += 1;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_tp2_setup_tra_map;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::process;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_test_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should move forward")
+            .as_nanos();
+        std::env::temp_dir().join(format!("bio-{name}-{}-{nanos}", process::id()))
+    }
+
+    #[test]
+    fn loads_declared_language_tra_for_begin_labels() {
+        let root = temp_test_dir("tra-loader");
+        let mod_dir = root.join("EpicThieving");
+        let tra_dir = mod_dir.join("tra/english");
+        fs::create_dir_all(&tra_dir).expect("create temp tra dir");
+        let tp2_path = mod_dir.join("EpicThieving.tp2");
+        fs::write(
+            &tp2_path,
+            "LANGUAGE\n\"English\"\nENGLISH\n ~EpicThieving/tra/english/english.tra~\n\nBEGIN @2\nBEGIN @3 DESIGNATED 100\n",
+        )
+        .expect("write temp tp2");
+        fs::write(
+            tra_dir.join("english.tra"),
+            "@2 = ~Epic Locks~\n@3 = ~Epic Traps~\n",
+        )
+        .expect("write temp tra");
+
+        let tra_map = load_tp2_setup_tra_map(&tp2_path);
+
+        assert_eq!(tra_map.get("@2").map(String::as_str), Some("Epic Locks"));
+        assert_eq!(tra_map.get("@3").map(String::as_str), Some("Epic Traps"));
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

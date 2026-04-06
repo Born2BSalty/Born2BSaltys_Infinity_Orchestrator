@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::sync::mpsc::{Receiver, channel};
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::ui::state::WizardState;
+use crate::ui::state::{Step1State, WizardState};
+use crate::ui::step5::log_files::TargetPrepResult;
 use crate::ui::step5::service_diagnostics_run_step5::begin_new_run;
 use crate::ui::step5::service_diagnostics_support_step5::{
     copy_weidu_logs_for_diagnostics,
@@ -15,12 +18,58 @@ use crate::ui::step5::service_step5_command_step5::{
 };
 use crate::ui::terminal::EmbeddedTerminal;
 
-pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTerminal) {
-    if !state.step5.start_install_requested {
-        return;
+pub(crate) struct PendingInstallStart {
+    program: String,
+    args: Vec<String>,
+    resume_mode: bool,
+    restart_mode: bool,
+}
+
+pub(crate) fn step3_install_block_reason(state: &WizardState) -> Option<String> {
+    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let mut blocked_tabs = Vec::<String>::new();
+
+    for (tab, show, mods, items) in [
+        ("BGEE", show_bgee, &state.step2.bgee_mods, &state.step3.bgee_items),
+        ("BG2EE", show_bg2ee, &state.step2.bg2ee_mods, &state.step3.bg2ee_items),
+    ] {
+        if !show {
+            continue;
+        }
+        let count = crate::ui::compat_step3_rules::collect_step3_compat_markers(
+            &state.step1,
+            tab,
+            mods,
+            items,
+        )
+        .values()
+        .filter(|marker| {
+            marker.kind.eq_ignore_ascii_case("missing_dep")
+                || marker.kind.eq_ignore_ascii_case("order_block")
+        })
+        .count();
+        if count > 0 {
+            blocked_tabs.push(format!("{tab}: {count}"));
+        }
     }
 
+    if blocked_tabs.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "Resolve Step 3 dependency/order issues before install ({}).",
+            blocked_tabs.join(", ")
+        ))
+    }
+}
+
+pub(crate) fn prepare_start_request(
+    state: &mut WizardState,
+    term: &mut EmbeddedTerminal,
+) -> Option<(PendingInstallStart, bool)> {
     state.step5.start_install_requested = false;
+    state.step5.prep_running = false;
     state.step5.prep_ran = false;
     state.step5.prep_used_backup = false;
     state.step5.prep_backup_paths.clear();
@@ -28,6 +77,12 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
     state.step5.resolved_bg1_game_dir.clear();
     state.step5.resolved_bg2_game_dir.clear();
     state.step5.resolved_game_dir.clear();
+
+    if let Some(reason) = step3_install_block_reason(state) {
+        state.step5.last_status_text = reason.clone();
+        term.append_marker(&reason);
+        return None;
+    }
 
     let scripted = crate::ui::step5::scripted_inputs::load_from_step1(&state.step1);
     let scripted_count = term.set_scripted_inputs(scripted);
@@ -55,50 +110,88 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
         }
     };
 
-    let can_start = if !runtime_ready {
-        false
-    } else if resume_mode {
-        true
-    } else {
-        match prepare_target_dirs_before_install(&state.step1) {
-            Ok(prep) => {
-                state.step5.prep_ran = state.step1.prepare_target_dirs_before_install;
-                state.step5.prep_used_backup = state.step1.backup_targets_before_eet_copy;
-                state.step5.prep_backup_paths =
-                    prep.backups.iter().map(|p| p.display().to_string()).collect();
-                state.step5.prep_cleaned_paths =
-                    prep.cleaned.iter().map(|p| p.display().to_string()).collect();
-                for path in prep.backups {
-                    state.step5.last_status_text = format!("Backed up target dir to {}", path.display());
-                    term.append_marker(&format!("Backup created: {}", path.display()));
-                }
-                for path in prep.cleaned {
-                    state.step5.last_status_text = format!("Cleaned target dir {}", path.display());
-                    term.append_marker(&format!("Target cleaned: {}", path.display()));
-                }
-                match verify_targets_prepared(&state.step1) {
-                    Ok(()) => true,
-                    Err(err) => {
-                        state.step5.last_status_text = format!("Target prep verify failed: {err}");
-                        term.append_marker(&format!("Target prep verify failed: {err}"));
-                        false
-                    }
-                }
-            }
-            Err(err) => {
-                state.step5.prep_ran = state.step1.prepare_target_dirs_before_install;
-                state.step5.prep_used_backup = state.step1.backup_targets_before_eet_copy;
-                state.step5.prep_backup_paths.clear();
-                state.step5.prep_cleaned_paths.clear();
-                state.step5.last_status_text = format!("Backup target dirs failed: {err}");
-                false
-            }
-        }
-    };
-
-    if !can_start {
-        return;
+    if !runtime_ready {
+        return None;
     }
+
+    Some((
+        PendingInstallStart {
+            program,
+            args,
+            resume_mode,
+            restart_mode,
+        },
+        !resume_mode && state.step1.prepare_target_dirs_before_install,
+    ))
+}
+
+pub(crate) fn spawn_target_prep_worker(
+    step1: Step1State,
+) -> Receiver<Result<TargetPrepResult, String>> {
+    let (tx, rx) = channel();
+    thread::spawn(move || {
+        let result = prepare_target_dirs_before_install(&step1)
+            .map_err(|err| format!("Target prep failed: {err}"))
+            .and_then(|prep| {
+                verify_targets_prepared(&step1)
+                    .map_err(|err| format!("Target prep verify failed: {err}"))?;
+                Ok(prep)
+            });
+        let _ = tx.send(result);
+    });
+    rx
+}
+
+pub(crate) fn apply_completed_prep(
+    state: &mut WizardState,
+    term: &mut EmbeddedTerminal,
+    result: Result<TargetPrepResult, String>,
+) -> bool {
+    state.step5.prep_running = false;
+    state.step5.prep_ran = state.step1.prepare_target_dirs_before_install;
+    state.step5.prep_used_backup = state.step1.backup_targets_before_eet_copy;
+
+    match result {
+        Ok(prep) => {
+            state.step5.prep_backup_paths =
+                prep.backups.iter().map(|p| p.display().to_string()).collect();
+            state.step5.prep_cleaned_paths =
+                prep.cleaned.iter().map(|p| p.display().to_string()).collect();
+            for path in prep.backups {
+                state.step5.last_status_text = format!("Backed up target dir to {}", path.display());
+                term.append_marker(&format!("Backup created: {}", path.display()));
+            }
+            for path in prep.cleaned {
+                state.step5.last_status_text = format!("Cleaned target dir {}", path.display());
+                term.append_marker(&format!("Target cleaned: {}", path.display()));
+            }
+            if state.step5.prep_backup_paths.is_empty() && state.step5.prep_cleaned_paths.is_empty() {
+                state.step5.last_status_text = "Target prep finished".to_string();
+                term.append_marker("Target prep finished");
+            }
+            true
+        }
+        Err(err) => {
+            state.step5.prep_backup_paths.clear();
+            state.step5.prep_cleaned_paths.clear();
+            state.step5.last_status_text = err.clone();
+            term.append_marker(&err);
+            false
+        }
+    }
+}
+
+pub(crate) fn start_install_process(
+    state: &mut WizardState,
+    term: &mut EmbeddedTerminal,
+    pending: PendingInstallStart,
+) {
+    let PendingInstallStart {
+        program,
+        args,
+        resume_mode,
+        restart_mode,
+    } = pending;
 
     let run_id = begin_new_run(&mut state.step5);
     term.configure_from_step1(&state.step1, Some(&run_id));
@@ -107,6 +200,7 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
     match term.start_process(program.as_str(), &args) {
         Ok(()) => {
             apply_start_metadata(state, resume_mode, restart_mode, &args);
+            state.step5.prep_running = false;
             state.step5.run_counter = state.step5.run_counter.saturating_add(1);
             state.step5.active_run_id = Some(state.step5.run_counter);
             term.append_marker(&format!("Run #{} started", state.step5.run_counter));
@@ -143,6 +237,7 @@ pub(crate) fn start_if_requested(state: &mut WizardState, term: &mut EmbeddedTer
         Err(err) => {
             state.step2.scan_status = format!("Install start failed: {err}");
             state.step5.last_status_text = "Start failed".to_string();
+            state.step5.prep_running = false;
         }
     }
 }

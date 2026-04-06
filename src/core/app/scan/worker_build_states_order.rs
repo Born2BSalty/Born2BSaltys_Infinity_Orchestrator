@@ -200,3 +200,66 @@ pub(super) fn normalize_component_order_label(value: &str) -> String {
         .unwrap_or(trimmed);
     base.to_ascii_lowercase()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::reorder_components_by_tp2_order;
+    use crate::ui::scan::ScannedComponent;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::process;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_test_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should move forward")
+            .as_nanos();
+        std::env::temp_dir().join(format!("bio-{name}-{}-{nanos}", process::id()))
+    }
+
+    fn component(id: &str, display: &str) -> ScannedComponent {
+        ScannedComponent {
+            tp_file: Some("EpicThieving.tp2".to_string()),
+            component_id: id.to_string(),
+            display: display.to_string(),
+            raw_line: display.to_string(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn reorder_uses_declared_language_labels_for_implicit_first_component() {
+        let root = temp_test_dir("order-implicit-begin");
+        let mod_dir = root.join("EpicThieving");
+        let tra_dir = mod_dir.join("tra/english");
+        fs::create_dir_all(&tra_dir).expect("create temp tra dir");
+        let tp2_path = mod_dir.join("EpicThieving.tp2");
+        let tp2_text = "LANGUAGE\n\"English\"\nENGLISH\n ~EpicThieving/tra/english/english.tra~\n\nBEGIN @2\n\nBEGIN @3 DESIGNATED 100\n";
+        fs::write(&tp2_path, tp2_text).expect("write temp tp2");
+        fs::write(
+            tra_dir.join("english.tra"),
+            "@2 = ~Epic Locks~\n@3 = ~Epic Traps~\n",
+        )
+        .expect("write temp tra");
+
+        let mut components = vec![
+            component("100", "Epic Traps"),
+            component("0", "Epic Locks"),
+        ];
+
+        reorder_components_by_tp2_order(
+            &mut components,
+            tp2_path.to_string_lossy().as_ref(),
+            tp2_text,
+        );
+
+        assert_eq!(components[0].component_id, "0");
+        assert_eq!(components[1].component_id, "100");
+
+        let _ = fs::remove_dir_all(root);
+    }
+}

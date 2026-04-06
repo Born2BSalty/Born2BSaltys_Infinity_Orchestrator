@@ -11,6 +11,8 @@ use crate::ui::scan::readme::find_best_readme;
 use crate::ui::scan::ScannedComponent;
 use crate::ui::state::{Step2ComponentState, Step2HiddenComponentAudit, Step2ModState};
 
+const NESTED_UTILITY_HIDE_REASON: &str = "nested_other_no_log_record_utility";
+
 #[path = "worker_build_states_groups.rs"]
 mod groups;
 #[path = "worker_build_states_hidden.rs"]
@@ -70,6 +72,7 @@ pub(super) fn to_mod_states(
                 .unwrap_or_default();
             let hidden_prompt_like_component_ids =
                 hidden::detect_hidden_prompt_like_component_ids(
+                    Some(&tp2_path),
                     tp2_text.as_deref(),
                     &deduped_components,
                 );
@@ -161,6 +164,8 @@ pub(super) fn to_mod_states(
         })
         .collect();
 
+    mods.retain(|mod_state| !should_drop_hidden_only_utility_mod(mod_state));
+
     let mut counts: HashMap<String, usize> = HashMap::new();
     for mod_state in &mods {
         *counts.entry(mod_state.name.to_ascii_lowercase()).or_insert(0) += 1;
@@ -180,4 +185,66 @@ pub(super) fn to_mod_states(
     }
 
     mods
+}
+
+fn should_drop_hidden_only_utility_mod(mod_state: &Step2ModState) -> bool {
+    mod_state.components.is_empty()
+        && !mod_state.hidden_components.is_empty()
+        && mod_state
+            .hidden_components
+            .iter()
+            .all(|component| component.reason == NESTED_UTILITY_HIDE_REASON)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_drop_hidden_only_utility_mod;
+    use crate::ui::state::{Step2HiddenComponentAudit, Step2ModState};
+
+    #[test]
+    fn drops_mod_header_when_only_nested_utility_components_are_hidden() {
+        let mod_state = Step2ModState {
+            name: "EET_modConverter".to_string(),
+            tp_file: "EET_modConverter.tp2".to_string(),
+            tp2_path: "/mods/EET/other/EET_modConverter/EET_modConverter/EET_modConverter.tp2"
+                .to_string(),
+            readme_path: None,
+            web_url: None,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: vec![Step2HiddenComponentAudit {
+                component_id: "0".to_string(),
+                label: "EET_modConverter: beta 0.1".to_string(),
+                raw_line: "EET_modConverter".to_string(),
+                reason: "nested_other_no_log_record_utility".to_string(),
+            }],
+            components: Vec::new(),
+        };
+
+        assert!(should_drop_hidden_only_utility_mod(&mod_state));
+    }
+
+    #[test]
+    fn keeps_mod_header_when_non_utility_hidden_reason_is_present() {
+        let mod_state = Step2ModState {
+            name: "SomeMod".to_string(),
+            tp_file: "SomeMod.tp2".to_string(),
+            tp2_path: "/mods/SomeMod/SomeMod.tp2".to_string(),
+            readme_path: None,
+            web_url: None,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: vec![Step2HiddenComponentAudit {
+                component_id: "100".to_string(),
+                label: "dummy".to_string(),
+                raw_line: "dummy".to_string(),
+                reason: "deprecated_dummy_placeholder".to_string(),
+            }],
+            components: Vec::new(),
+        };
+
+        assert!(!should_drop_hidden_only_utility_mod(&mod_state));
+    }
 }

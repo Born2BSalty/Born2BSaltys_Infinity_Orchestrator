@@ -29,7 +29,7 @@ pub(crate) struct CompatRule {
     #[serde(default = "default_true")]
     pub(crate) enabled: bool,
     #[serde(default, alias = "mod_name")]
-    pub(crate) r#mod: String,
+    pub(crate) r#mod: StringOrMany,
     #[serde(default)]
     pub(crate) component: Option<StringOrMany>,
     #[serde(default)]
@@ -92,6 +92,12 @@ pub(crate) struct CompatRulesInventory {
 pub(crate) enum StringOrMany {
     One(String),
     Many(Vec<String>),
+}
+
+impl Default for StringOrMany {
+    fn default() -> Self {
+        Self::One(String::new())
+    }
 }
 
 impl StringOrMany {
@@ -267,7 +273,7 @@ fn load_rules_from_path(path: &PathBuf) -> Vec<CompatRule> {
     let _schema_version = schema_version.unwrap_or(COMPAT_RULES_SCHEMA_VERSION);
     rules
         .into_iter()
-        .filter(|rule| rule.enabled && !rule.r#mod.trim().is_empty() && !rule.kind.trim().is_empty())
+        .filter(|rule| rule.enabled && !rule.r#mod.trimmed_items().is_empty() && !rule.kind.trim().is_empty())
         .map(|mut rule| {
             rule.loaded_from = Some(path.to_string_lossy().to_string());
             rule
@@ -352,7 +358,7 @@ fn inspect_rules_file(role: &str, path: &PathBuf) -> CompatRulesFileInventory {
     inventory.loaded_rules = parsed
         .rules
         .iter()
-        .filter(|rule| rule.enabled && !rule.r#mod.trim().is_empty() && !rule.kind.trim().is_empty())
+        .filter(|rule| rule.enabled && !rule.r#mod.trimmed_items().is_empty() && !rule.kind.trim().is_empty())
         .count();
     inventory
 }

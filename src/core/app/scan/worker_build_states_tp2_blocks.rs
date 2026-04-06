@@ -223,15 +223,17 @@ fn parse_subcomponent_key(line: &str) -> Option<String> {
     if trimmed.starts_with("//") {
         return None;
     }
-    let upper = trimmed.to_ascii_uppercase();
-    let keyword = if upper.starts_with("FORCED_SUBCOMPONENT ") {
-        "FORCED_SUBCOMPONENT"
-    } else if upper.starts_with("SUBCOMPONENT ") {
-        "SUBCOMPONENT"
+    let content = trimmed.split("//").next().unwrap_or(trimmed).trim_end();
+    let upper = content.to_ascii_uppercase();
+    let keyword_index = if let Some(index) = upper.find("FORCED_SUBCOMPONENT ") {
+        (index, "FORCED_SUBCOMPONENT")
+    } else if let Some(index) = upper.find("SUBCOMPONENT ") {
+        (index, "SUBCOMPONENT")
     } else {
         return None;
     };
-    let tail = trimmed[keyword.len()..].trim_start();
+    let keyword = keyword_index.1;
+    let tail = content[keyword_index.0 + keyword.len()..].trim_start();
     if tail.is_empty() {
         return None;
     }

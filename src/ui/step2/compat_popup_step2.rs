@@ -4,6 +4,84 @@
 pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_explain;
 pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_kind;
 
+fn issue_related_target(
+    issue: &crate::ui::step2::compat_types_step2::CompatIssueDisplay,
+) -> Option<(String, Option<u32>)> {
+    explicit_related_target(
+        Some(issue.related_mod.as_str()),
+        issue.related_component,
+    )
+    .or_else(|| extract_first_jump_target(issue.raw_evidence.as_deref()))
+}
+
+fn details_related_target(
+    details: &crate::ui::step2::state_step2::Step2Details,
+) -> Option<(String, Option<u32>)> {
+    explicit_related_target(
+        details.compat_related_mod.as_deref(),
+        details
+            .compat_related_component
+            .as_deref()
+            .and_then(|value| value.parse::<u32>().ok()),
+    )
+    .or_else(|| extract_first_jump_target(details.compat_evidence.as_deref()))
+}
+
+fn explicit_related_target(mod_ref: Option<&str>, component_ref: Option<u32>) -> Option<(String, Option<u32>)> {
+    let mod_ref = mod_ref?.trim();
+    if mod_ref.is_empty() || mod_ref.eq_ignore_ascii_case("unknown") {
+        return None;
+    }
+    Some((mod_ref.to_string(), component_ref))
+}
+
+fn extract_first_jump_target(raw_evidence: Option<&str>) -> Option<(String, Option<u32>)> {
+    use crate::ui::step2::prompt_eval_expr_tokens_step2::{tokenize, Token};
+    use crate::ui::step2::service_selection_step2::selection_normalize_mod_key;
+
+    let tokens = tokenize(raw_evidence?.trim());
+    let mut index = 0usize;
+
+    while index < tokens.len() {
+        let Token::Ident(name) = &tokens[index] else {
+            index += 1;
+            continue;
+        };
+        if !name.eq_ignore_ascii_case("MOD_IS_INSTALLED") {
+            index += 1;
+            continue;
+        }
+        let Some(mod_ref) = token_value(tokens.get(index + 1)) else {
+            index += 1;
+            continue;
+        };
+        let Some(component_ref) = token_value(tokens.get(index + 2)).and_then(parse_component_id) else {
+            index += 1;
+            continue;
+        };
+        return Some((selection_normalize_mod_key(&mod_ref), Some(component_ref)));
+    }
+
+    None
+}
+
+fn token_value(token: Option<&crate::ui::step2::prompt_eval_expr_tokens_step2::Token>) -> Option<String> {
+    use crate::ui::step2::prompt_eval_expr_tokens_step2::Token;
+
+    match token? {
+        Token::Atom(value) | Token::Ident(value) => Some(value.trim().to_string()),
+        _ => None,
+    }
+}
+
+fn parse_component_id(value: String) -> Option<u32> {
+    let trimmed = value
+        .trim()
+        .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
+    let digits: String = trimmed.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+    digits.parse::<u32>().ok()
+}
+
 pub(crate) mod compat_popup_action_row {
     use eframe::egui;
 
@@ -59,8 +137,7 @@ pub(crate) mod compat_popup_action_row {
     }
 
     fn can_jump_to_related(issue: &CompatIssueDisplay) -> bool {
-        let related = issue.related_mod.trim();
-        !related.is_empty() && !related.eq_ignore_ascii_case("unknown")
+        super::issue_related_target(issue).is_some()
     }
 
     fn jump_to_this(state: &mut WizardState) {
@@ -86,15 +163,18 @@ pub(crate) mod compat_popup_action_row {
         let Some(game_tab) = selected_game_tab(state) else {
             return;
         };
-        jump_to_target(state, &game_tab, &issue.related_mod, issue.related_component);
+        let Some((related_mod, related_component)) = super::issue_related_target(issue) else {
+            return;
+        };
+        jump_to_target(state, &game_tab, &related_mod, related_component);
         state.step2.active_game_tab = game_tab.clone();
         state.step2.jump_to_selected_requested = true;
         if state.current_step == 2 {
             let _ = state_step3::jump_to_target(
                 state,
                 &game_tab,
-                &issue.related_mod,
-                issue.related_component,
+                &related_mod,
+                related_component,
             );
             state.current_step = 2;
             refresh_popup_override(state);
@@ -201,7 +281,18 @@ pub(crate) mod compat_popup_details {
 
         if let Some(issue) = issue.as_ref() {
             ui.add_space(4.0);
-            ui.label(issue_text_explain::issue_summary(issue, &state.step1.game_install));
+            let summary = issue_text_explain::issue_summary(issue, &state.step1.game_install);
+            ui.label(summary.clone());
+            if let Some(reason) = details.disabled_reason.as_deref() {
+                let trimmed = reason.trim();
+                if !trimmed.is_empty()
+                    && !trimmed.eq_ignore_ascii_case("unknown")
+                    && !trimmed.eq_ignore_ascii_case(summary.trim())
+                {
+                    ui.add_space(2.0);
+                    ui.label(trimmed);
+                }
+            }
         } else if let Some(reason) = details.disabled_reason.as_deref() {
             ui.add_space(4.0);
             ui.label(reason);
@@ -273,16 +364,22 @@ pub(crate) mod compat_popup_details {
                 .clone()
                 .unwrap_or_else(|| "unknown".to_string())
         };
+        let fallback_related = super::details_related_target(details);
         Some(CompatIssueDisplay {
             kind,
             code: code.to_string(),
             status_label: status_label.to_string(),
             status_tone,
-            related_mod: details.compat_related_mod.clone().unwrap_or(related),
+            related_mod: details
+                .compat_related_mod
+                .clone()
+                .or_else(|| fallback_related.as_ref().map(|(related_mod, _)| related_mod.clone()))
+                .unwrap_or(related),
             related_component: details
                 .compat_related_component
                 .as_deref()
-                .and_then(|value| value.parse::<u32>().ok()),
+                .and_then(|value| value.parse::<u32>().ok())
+                .or_else(|| fallback_related.and_then(|(_, related_component)| related_component)),
             reason: details.disabled_reason.clone().unwrap_or_default(),
             source: details.compat_source.clone().unwrap_or_default(),
             raw_evidence: details.compat_evidence.clone(),

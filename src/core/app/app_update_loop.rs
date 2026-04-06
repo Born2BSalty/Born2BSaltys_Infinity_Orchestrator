@@ -70,9 +70,84 @@ pub(super) fn request_if_needed(app: &WizardApp, ctx: &egui::Context) {
             .as_ref()
             .map(|t| t.has_new_data())
             .unwrap_or(false)
+        || app.step5_prep_rx.is_some()
+        || app.state.step5.prep_running
         || app.state.step5.install_running
     {
         ctx.request_repaint_after(Duration::from_millis(16));
+    }
+}
+}
+mod prep {
+use std::sync::mpsc::TryRecvError;
+
+use eframe::egui;
+
+use super::super::WizardApp;
+use crate::ui::step5::service_install_flow_step5::{
+    apply_completed_prep, prepare_start_request, spawn_target_prep_worker, start_install_process,
+};
+
+pub(super) fn poll_step5_prep(app: &mut WizardApp, ctx: &egui::Context) {
+    let Some(rx) = app.step5_prep_rx.as_ref() else {
+        return;
+    };
+
+    let result = match rx.try_recv() {
+        Ok(result) => Some(result),
+        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Disconnected) => {
+            Some(Err("Target prep worker disconnected".to_string()))
+        }
+    };
+    let Some(result) = result else {
+        return;
+    };
+
+    app.step5_prep_rx = None;
+    app.state.step5.prep_running = false;
+    app.ensure_step5_terminal(ctx);
+    let Some(term) = app.step5_terminal.as_mut() else {
+        app.step5_pending_start = None;
+        app.state.step5.last_status_text = "Target prep finished, but terminal is unavailable".to_string();
+        return;
+    };
+
+    if apply_completed_prep(&mut app.state, term, result) {
+        if let Some(pending) = app.step5_pending_start.take() {
+            start_install_process(&mut app.state, term, pending);
+        }
+    } else {
+        app.step5_pending_start = None;
+    }
+    ctx.request_repaint();
+}
+
+pub(super) fn start_if_requested(app: &mut WizardApp, ctx: &egui::Context) {
+    if !app.state.step5.start_install_requested || app.state.step5.prep_running {
+        return;
+    }
+
+    app.ensure_step5_terminal(ctx);
+    let Some(term) = app.step5_terminal.as_mut() else {
+        app.state.step5.start_install_requested = false;
+        app.state.step5.last_status_text = "Install start failed: terminal unavailable".to_string();
+        return;
+    };
+
+    let Some((pending, needs_prep)) = prepare_start_request(&mut app.state, term) else {
+        return;
+    };
+
+    if needs_prep {
+        app.state.step5.prep_running = true;
+        app.state.step5.last_status_text = "Target prep in progress...".to_string();
+        term.append_marker("Target prep started");
+        app.step5_pending_start = Some(pending);
+        app.step5_prep_rx = Some(spawn_target_prep_worker(app.state.step1.clone()));
+        ctx.request_repaint();
+    } else {
+        start_install_process(&mut app.state, term, pending);
     }
 }
 }
@@ -210,7 +285,9 @@ pub(super) fn run(app: &mut WizardApp, ctx: &egui::Context, _frame: &mut eframe:
 
     app.poll_step2_scan_events();
     terminal::poll_step5_terminal(app, ctx);
+    prep::poll_step5_prep(app, ctx);
     dispatch::render_current_step(app, ctx);
+    prep::start_if_requested(app, ctx);
     super::nav_ui::render_nav_buttons(app, ctx);
 
     if app.state.step1 != app.last_saved_step1 {

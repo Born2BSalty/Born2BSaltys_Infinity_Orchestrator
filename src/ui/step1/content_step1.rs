@@ -158,7 +158,10 @@ Prompt sequence with blank input\n\
     if copy_resp.clicked() {
         ui.ctx().copy_text("// @wlb-inputs:".to_string());
     }
-    ui.checkbox(&mut s.have_weidu_logs, "Have WeiDU Logs?")
+    ui.checkbox(
+        &mut s.have_weidu_logs,
+        "Install from Weidu Logs (With No Changes)?",
+    )
         .on_hover_text(tt::STEP1_HAVE_WEIDU_LOGS);
     ui.checkbox(&mut s.weidu_log_mode_enabled, "Enable WeiDU Logging Options (-u)")
         .on_hover_text(tt::STEP1_WEIDU_LOG_MODE);

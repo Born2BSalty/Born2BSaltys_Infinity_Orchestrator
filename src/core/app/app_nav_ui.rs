@@ -194,7 +194,8 @@ use super::super::WizardApp;
 pub(super) fn render(app: &mut WizardApp, ctx: &egui::Context) {
     let can_next = app.can_advance_from_current_step();
     let on_last_step = app.state.current_step + 1 == WizardState::STEP_COUNT;
-    let step5_install_running = app.state.current_step == 4 && app.state.step5.install_running;
+    let step5_install_running =
+        app.state.current_step == 4 && (app.state.step5.prep_running || app.state.step5.install_running);
     let right_margin = -19.0;
     egui::Area::new("wizard_nav_buttons".into())
         .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(right_margin, -4.0))
@@ -278,8 +279,6 @@ pub(super) fn advance_after_next(app: &mut WizardApp) {
         return;
     }
     if app.state.current_step == 0 && app.state.step1.have_weidu_logs {
-        // With "Have WeiDU Logs?" enabled, skip Step 2/3 but still land on Step 4
-        // so users can review/confirm log sources before install.
         app.state.current_step = 3;
     } else {
         if app.state.current_step == 1 {

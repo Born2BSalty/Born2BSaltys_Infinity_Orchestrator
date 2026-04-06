@@ -8,6 +8,7 @@ use crate::ui::state::{Step2ModState, Step2State, WizardState};
 #[derive(Debug, Clone, Default)]
 pub struct PromptEvalContext {
     pub active_games: HashSet<String>,
+    pub active_engines: HashSet<String>,
     pub game_dir: Option<String>,
     pub checked_components: HashSet<(String, String)>,
     pub signature: String,
@@ -18,7 +19,8 @@ pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
     collect_checked_components(&state.step2.bgee_mods, &mut checked_components);
     collect_checked_components(&state.step2.bg2ee_mods, &mut checked_components);
 
-    let active_games = build_active_games(state);
+    let active_games = build_active_games(state, &checked_components);
+    let active_engines = build_active_engines(state);
 
     let game_dir = match state.step2.active_game_tab.as_str() {
         "BGEE" => {
@@ -54,10 +56,16 @@ pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
     }
     .filter(|v| !v.trim().is_empty());
 
-    let signature = build_prompt_eval_signature(&active_games, game_dir.as_deref(), &checked_components);
+    let signature = build_prompt_eval_signature(
+        &active_games,
+        &active_engines,
+        game_dir.as_deref(),
+        &checked_components,
+    );
 
     PromptEvalContext {
         active_games,
+        active_engines,
         game_dir,
         checked_components,
         signature,
@@ -66,11 +74,14 @@ pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
 
 fn build_prompt_eval_signature(
     active_games: &HashSet<String>,
+    active_engines: &HashSet<String>,
     game_dir: Option<&str>,
     checked_components: &HashSet<(String, String)>,
 ) -> String {
     let mut games = active_games.iter().cloned().collect::<Vec<_>>();
     games.sort_unstable();
+    let mut engines = active_engines.iter().cloned().collect::<Vec<_>>();
+    engines.sort_unstable();
 
     let mut checked = checked_components
         .iter()
@@ -79,8 +90,9 @@ fn build_prompt_eval_signature(
     checked.sort_unstable();
 
     format!(
-        "games={};dir={};checked={}",
+        "games={};engines={};dir={};checked={}",
         games.join(","),
+        engines.join(","),
         game_dir.unwrap_or(""),
         checked.join(";")
     )
@@ -100,23 +112,41 @@ fn collect_checked_components(
     }
 }
 
-fn build_active_games(state: &WizardState) -> HashSet<String> {
+fn build_active_games(
+    state: &WizardState,
+    checked_components: &HashSet<(String, String)>,
+) -> HashSet<String> {
     let mut active_games = HashSet::<String>::new();
     match state.step2.active_game_tab.as_str() {
         "BGEE" => {
             active_games.insert("bgee".to_string());
-            if state.step1.game_install.eq_ignore_ascii_case("EET") {
-                active_games.insert("eet".to_string());
-            }
         }
         _ => {
-            active_games.insert("bg2ee".to_string());
-            if state.step1.game_install.eq_ignore_ascii_case("EET") {
+            if is_eet_core_selected(checked_components) {
                 active_games.insert("eet".to_string());
+            } else {
+                active_games.insert("bg2ee".to_string());
             }
         }
     }
     active_games
+}
+
+fn build_active_engines(state: &WizardState) -> HashSet<String> {
+    let mut active_engines = HashSet::<String>::new();
+    match state.step2.active_game_tab.as_str() {
+        "BGEE" => {
+            active_engines.insert("bgee".to_string());
+        }
+        _ => {
+            active_engines.insert("bg2ee".to_string());
+        }
+    }
+    active_engines
+}
+
+fn is_eet_core_selected(checked_components: &HashSet<(String, String)>) -> bool {
+    checked_components.contains(&("eet".to_string(), "0".to_string()))
 }
 
 pub fn normalize_tp2_stem(value: &str) -> String {
@@ -181,3 +211,7 @@ pub fn active_mods_mut(step2: &mut Step2State) -> &mut Vec<Step2ModState> {
         &mut step2.bg2ee_mods
     }
 }
+
+#[cfg(test)]
+#[path = "state_step2_tests.rs"]
+mod state_step2_tests;

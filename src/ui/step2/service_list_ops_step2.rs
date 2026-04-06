@@ -2,7 +2,10 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::ui::state::{Step2ModState, WizardState};
-use crate::ui::step2::tree_selection_rules_step2::enforce_tp2_same_mod_exclusive_after_bulk;
+use crate::ui::step2::tree_selection_rules_step2::{
+    enforce_collapsible_group_umbrella_after_bulk, enforce_subcomponent_single_select_keep_first,
+    enforce_tp2_same_mod_exclusive_after_bulk,
+};
 
 pub fn mod_matches_filter(mod_state: &Step2ModState, filter: &str) -> bool {
     if filter.is_empty() {
@@ -45,6 +48,8 @@ pub fn select_visible(mods: &mut [Step2ModState], filter: &str, next_selection_o
                 *next_selection_order += 1;
             }
         }
+        enforce_subcomponent_single_select_keep_first(mod_state);
+        enforce_collapsible_group_umbrella_after_bulk(mod_state);
         enforce_meta_mode_after_bulk(mod_state);
         enforce_tp2_same_mod_exclusive_after_bulk(mod_state);
         mod_state.checked = mod_state

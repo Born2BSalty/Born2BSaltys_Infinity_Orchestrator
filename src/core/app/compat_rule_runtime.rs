@@ -98,13 +98,19 @@ pub(crate) fn tab_matches(rule: &CompatRule, tab: &str) -> bool {
 }
 
 pub(crate) fn compat_mod_matches(rule: &CompatRule, tp_file: &str, mod_name: &str) -> bool {
-    let rule_key = normalize_mod_key(&rule.r#mod);
-    if rule_key.is_empty() {
+    let rule_mods = rule.r#mod.trimmed_items();
+    if rule_mods.is_empty() {
         return false;
     }
-    normalize_mod_key(tp_file) == rule_key
-        || normalize_mod_key(mod_name) == rule_key
-        || mod_name.trim().eq_ignore_ascii_case(rule.r#mod.trim())
+    let tp_file_key = normalize_mod_key(tp_file);
+    let mod_name_key = normalize_mod_key(mod_name);
+    rule_mods.into_iter().any(|rule_mod| {
+        let rule_key = normalize_mod_key(&rule_mod);
+        !rule_key.is_empty()
+            && (tp_file_key == rule_key
+                || mod_name_key == rule_key
+                || mod_name.trim().eq_ignore_ascii_case(rule_mod.trim()))
+    })
 }
 
 pub(crate) fn compat_component_matches(
@@ -133,7 +139,10 @@ pub(crate) fn compat_component_matches(
     } else {
         component_ids
             .iter()
-            .any(|rule_id| component_id.trim().eq_ignore_ascii_case(rule_id.trim()))
+            .any(|rule_id| {
+                rule_id.trim() == "*"
+                    || component_id.trim().eq_ignore_ascii_case(rule_id.trim())
+            })
     };
 
     let label_match = if component_labels.is_empty() {
@@ -415,6 +424,10 @@ fn target_matches_one(
 fn string_or_many_items(value: Option<&StringOrMany>) -> Vec<String> {
     value.map(StringOrMany::trimmed_items).unwrap_or_default()
 }
+
+#[cfg(test)]
+#[path = "compat_rule_runtime_tests.rs"]
+mod tests;
 
 fn related_targets(rule: &CompatRule) -> Vec<(String, Option<String>)> {
     let related_mods = string_or_many_items(rule.related_mod.as_ref());

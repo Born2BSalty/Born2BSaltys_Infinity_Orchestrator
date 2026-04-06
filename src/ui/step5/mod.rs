@@ -34,7 +34,7 @@ pub mod top_panels_step5;
 #[path = "../../core/app/step5/diagnostics.rs"]
 mod diagnostics;
 #[path = "../../core/app/step5/log_files.rs"]
-mod log_files;
+pub(crate) mod log_files;
 #[path = "../../core/app/step5/prompt_memory.rs"]
 pub(crate) mod prompt_memory;
 #[path = "../../core/app/step5/scripted_inputs.rs"]

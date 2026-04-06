@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::ui::state::WizardState;
 use crate::ui::step5::action_step5::Step5Action;
-use crate::ui::step5::service_install_flow_step5::start_if_requested;
+use crate::ui::step5::service_install_flow_step5::step3_install_block_reason;
 use crate::ui::terminal::EmbeddedTerminal;
 
 pub(crate) fn render_install_row(
@@ -20,9 +20,20 @@ pub(crate) fn render_install_row(
     ui.horizontal(|ui| {
         let can_install = terminal.is_some() && terminal_error.is_none();
         let diagnostics_ready = crate::ui::step5::menus_step5::diagnostics_ready_for_dev(state);
-        let install_allowed = can_install && (!dev_mode || diagnostics_ready);
+        let install_block_reason = step3_install_block_reason(state);
+        let install_allowed =
+            can_install
+                && !state.step5.prep_running
+                && install_block_reason.is_none()
+                && (!dev_mode || diagnostics_ready);
 
-        if state.step5.install_running {
+        if state.step5.prep_running {
+            ui.label(
+                crate::ui::shared::typography_global::strong("Preparing target dirs...")
+                    .color(crate::ui::shared::theme_global::accent_path()),
+            );
+            ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
+        } else if state.step5.install_running {
             ui.label(
                 crate::ui::shared::typography_global::strong("Install in progress...")
                     .color(crate::ui::shared::theme_global::accent_path()),
@@ -60,14 +71,15 @@ pub(crate) fn render_install_row(
                         crate::ui::shared::layout_tokens_global::STEP5_INSTALL_BTN_W,
                         crate::ui::shared::layout_tokens_global::STEP5_INSTALL_BTN_H,
                     )),
-                )
-                .on_hover_text(crate::ui::shared::tooltip_global::STEP5_START_INSTALL);
-            let install_resp = if dev_mode && !diagnostics_ready {
+                );
+            let install_resp = if let Some(reason) = install_block_reason.as_deref() {
+                install_resp.on_hover_text(reason)
+            } else if dev_mode && !diagnostics_ready {
                 install_resp.on_hover_text(
                     crate::ui::shared::tooltip_global::STEP5_DEV_MODE_DIAG_REQUIRED,
                 )
             } else {
-                install_resp
+                install_resp.on_hover_text(crate::ui::shared::tooltip_global::STEP5_START_INSTALL)
             };
             if install_resp.clicked() {
                 if dev_mode && !diagnostics_ready {
@@ -83,10 +95,10 @@ pub(crate) fn render_install_row(
                     action = Some(Step5Action::StartInstall);
                 }
             }
-        }
-
-        if let Some(term) = terminal.as_deref_mut() {
-            start_if_requested(state, term);
+            if let Some(reason) = install_block_reason {
+                ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
+                ui.label(crate::ui::shared::typography_global::weak(reason));
+            }
         }
 
         crate::ui::step5::menus_step5::render_actions_menu(ui, state, terminal.as_deref_mut());

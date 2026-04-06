@@ -111,6 +111,14 @@ fn apply_relation_rules_to_tab(
                 {
                     continue;
                 }
+                if normalize_kind(&rule.kind).eq_ignore_ascii_case("order_block") {
+                    continue;
+                }
+                if normalize_kind(&rule.kind).eq_ignore_ascii_case("conflict")
+                    && !component.checked
+                {
+                    continue;
+                }
                 let component = &mut mod_state.components[component_idx];
                 let component_id = component.component_id.clone();
                 clear_rule_kinds(rule, component);
@@ -263,10 +271,11 @@ fn build_graph(
 }
 
 fn rule_debug_line(rule: &CompatRule) -> String {
-    let mut parts = vec![
-        format!("mod={}", rule.r#mod.trim()),
-        format!("kind={}", rule.kind.trim()),
-    ];
+    let mut parts = vec![format!("kind={}", rule.kind.trim())];
+    let mod_items = rule.r#mod.trimmed_items();
+    if !mod_items.is_empty() {
+        parts.insert(0, format!("mod={}", mod_items.join(",")));
+    }
     if let Some(component) = rule.component.as_ref() {
         let items = component.trimmed_items();
         if !items.is_empty() {

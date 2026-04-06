@@ -156,6 +156,7 @@ impl<'a> Parser<'a> {
         let opened = self.consume_if(&Token::LParen);
         let value = match name.to_ascii_uppercase().as_str() {
             "GAME_IS" => self.eval_game_is(opened),
+            "ENGINE_IS" => self.eval_engine_is(opened),
             "MOD_IS_INSTALLED" => self.eval_mod_is_installed(opened),
             "FILE_EXISTS_IN_GAME" => self.eval_file_exists_in_game(opened),
             "TRUE" => EvalState::True,
@@ -179,7 +180,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 let upper = name.to_ascii_uppercase();
                 if matches!(self.peek(), Some(Token::LParen))
-                    || matches!(upper.as_str(), "GAME_IS" | "MOD_IS_INSTALLED" | "FILE_EXISTS_IN_GAME")
+                    || matches!(upper.as_str(), "GAME_IS" | "ENGINE_IS" | "MOD_IS_INSTALLED" | "FILE_EXISTS_IN_GAME")
                 {
                     return Some(ScalarValue::State(self.parse_call(&name)));
                 }
@@ -224,6 +225,17 @@ impl<'a> Parser<'a> {
             .into_iter()
             .map(normalize_game_token)
             .any(|game| self.prompt_eval.active_games.contains(&game)))
+    }
+
+    fn eval_engine_is(&mut self, opened: bool) -> EvalState {
+        let values = self.collect_call_values(opened);
+        if values.is_empty() {
+            return EvalState::Unknown;
+        }
+        EvalState::from_bool(values
+            .into_iter()
+            .map(normalize_game_token)
+            .any(|game| self.prompt_eval.active_engines.contains(&game)))
     }
 
     fn eval_mod_is_installed(&mut self, opened: bool) -> EvalState {

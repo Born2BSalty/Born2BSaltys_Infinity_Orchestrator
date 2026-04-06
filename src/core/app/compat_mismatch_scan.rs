@@ -8,10 +8,15 @@ use std::time::SystemTime;
 
 use crate::ui::state::{Step1State, Step2ModState};
 
-use super::compat_mismatch_eval::{
-    build_mismatch_context, evaluate_requirement, render_requirement_evidence, TriState,
+use super::compat_dependency_parse::{
+    ComponentRequirementTarget, parse_mod_is_installed_dependency_targets,
+    parse_negated_mod_is_installed_targets,
 };
-use super::compat_rule_runtime::normalize_mod_key;
+use super::compat_mismatch_eval::{
+    build_mismatch_context, classify_failed_requirement, evaluate_requirement,
+    render_requirement_evidence, RequirementFailureClass, TriState,
+};
+use super::compat_rule_runtime::{kind_disables_selection, normalize_mod_key};
 
 pub(crate) fn apply_step2_scan_mismatch(
     step1: &Step1State,
@@ -27,28 +32,157 @@ pub(crate) fn apply_step2_scan_mismatch(
             .or_insert_with(|| load_component_guards(&mod_state.tp2_path));
 
         for component in &mut mod_state.components {
-            let Some(guards) = component_guards.get(component.component_id.trim()) else {
+            let Some(hit) = component_guards
+                .get(component.component_id.trim())
+                .and_then(|guards| preferred_guard_hit(guards, &context))
+            else {
                 continue;
             };
-            let failing_guard = guards.iter().find_map(|guard| {
-                (evaluate_requirement(&guard.eval_text, &context) == TriState::False)
-                    .then(|| guard.display_line.clone())
-            });
-            let Some(failing_guard) = failing_guard else {
+            if hit.kind.eq_ignore_ascii_case("conflict") && !component.checked {
                 continue;
-            };
+            }
 
-            component.disabled = true;
-            component.compat_kind = Some("mismatch".to_string());
+            component.disabled = kind_disables_selection(hit.kind);
+            component.compat_kind = Some(hit.kind.to_string());
             component.compat_source = Some(mismatch_source(&mod_state.tp2_path, &mod_state.tp_file));
-            component.compat_related_mod = None;
-            component.compat_related_component = None;
+            component.compat_related_mod = hit.related_mod.clone();
+            component.compat_related_component = hit.related_component.clone();
             component.compat_graph = None;
-            component.compat_evidence = Some(failing_guard);
-            component.disabled_reason =
-                Some("TP2 REQUIRE_PREDICATE excludes this component for the current game tab.".to_string());
+            component.compat_evidence = Some(hit.raw_evidence);
+            component.disabled_reason = Some(hit.message);
         }
 
+    }
+}
+
+pub(crate) fn scan_predicate_guard_hit(
+    tp2_path: &str,
+    component_id: &str,
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> Option<PredicateGuardHit> {
+    if tp2_path.trim().is_empty() {
+        return None;
+    }
+    let guards_by_component = load_component_guards(tp2_path);
+    let guards = guards_by_component.get(component_id.trim())?;
+    preferred_guard_hit(guards, context)
+}
+
+fn preferred_guard_hit(
+    guards: &[RequirementGuard],
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> Option<PredicateGuardHit> {
+    let mut best = None::<(u8, PredicateGuardHit)>;
+
+    for guard in guards {
+        if parse_mod_is_installed_dependency_targets(&guard.eval_text).is_some() {
+            continue;
+        }
+        if evaluate_requirement(&guard.eval_text, context) != TriState::False {
+            continue;
+        }
+
+        let candidate = classify_guard_hit(guard, context);
+        let priority = match candidate.kind {
+            "mismatch" => 2u8,
+            "conflict" => 1u8,
+            _ => 0u8,
+        };
+        if priority == 2 {
+            return Some(candidate);
+        }
+        if best
+            .as_ref()
+            .map(|(current, _)| priority > *current)
+            .unwrap_or(true)
+        {
+            best = Some((priority, candidate));
+        }
+    }
+
+    best.map(|(_, hit)| hit)
+}
+
+#[cfg(test)]
+fn preferred_failing_guard(
+    guards: &[RequirementGuard],
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> Option<(String, String, String)> {
+    preferred_guard_hit(guards, context).map(|hit| {
+        (
+            hit.raw_evidence,
+            hit.kind.to_string(),
+            hit.message,
+        )
+    })
+}
+
+fn classify_guard_hit(
+    guard: &RequirementGuard,
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> PredicateGuardHit {
+    let classification = classify_guard(&guard.eval_text, context);
+    if !classification.kind.eq_ignore_ascii_case("mismatch")
+        && let Some(target) = first_selected_negated_target(&guard.eval_text, context)
+    {
+        return PredicateGuardHit {
+            kind: "conflict",
+            related_mod: Some(target.target_mod.clone()),
+            related_component: Some(target.target_component_id.clone()),
+            message: format!(
+                "Blocked by selected component {} #{}.",
+                target.target_mod, target.target_component_id
+            ),
+            raw_evidence: guard.display_line.clone(),
+        };
+    }
+
+    PredicateGuardHit {
+        kind: classification.kind,
+        related_mod: None,
+        related_component: None,
+        message: classification.message.to_string(),
+        raw_evidence: guard.display_line.clone(),
+    }
+}
+
+fn first_selected_negated_target(
+    eval_text: &str,
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> Option<ComponentRequirementTarget> {
+    parse_negated_mod_is_installed_targets(eval_text)?
+        .into_iter()
+        .find(|target| context.has_checked_component(&target.target_mod, &target.target_component_id))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GuardClassification {
+    kind: &'static str,
+    message: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PredicateGuardHit {
+    pub(crate) kind: &'static str,
+    pub(crate) related_mod: Option<String>,
+    pub(crate) related_component: Option<String>,
+    pub(crate) message: String,
+    pub(crate) raw_evidence: String,
+}
+
+fn classify_guard(
+    eval_text: &str,
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> GuardClassification {
+    match classify_failed_requirement(eval_text, context) {
+        RequirementFailureClass::Mismatch => GuardClassification {
+            kind: "mismatch",
+            message: "TP2 predicate excludes this component for the current game tab.",
+        },
+        RequirementFailureClass::Conditional => GuardClassification {
+            kind: "conditional",
+            message: "TP2 predicate excludes this component for the current plan or install state.",
+        },
     }
 }
 
@@ -267,10 +401,63 @@ fn strip_requirement_prefix(line: &str) -> Option<String> {
         return None;
     }
     let tail = trimmed["REQUIRE_PREDICATE".len()..].trim_start();
+    let tail = trim_trailing_requirement_message(tail);
     if tail.is_empty() {
         None
     } else {
         Some(tail.to_string())
+    }
+}
+
+fn trim_trailing_requirement_message(input: &str) -> &str {
+    let without_tra = trim_trailing_tra_reference(input);
+    let Some(candidate) = trim_trailing_quoted_argument(without_tra) else {
+        return without_tra;
+    };
+    if render_requirement_evidence(candidate).is_some() {
+        candidate
+    } else {
+        without_tra
+    }
+}
+
+fn trim_trailing_tra_reference(input: &str) -> &str {
+    let trimmed = input.trim_end();
+    let Some(last_whitespace) = trimmed.rfind(char::is_whitespace) else {
+        return if is_tra_reference(trimmed) { "" } else { trimmed };
+    };
+    let (head, tail) = trimmed.split_at(last_whitespace);
+    let tail = tail.trim_start();
+    if is_tra_reference(tail) {
+        head.trim_end()
+    } else {
+        trimmed
+    }
+}
+
+fn is_tra_reference(token: &str) -> bool {
+    token
+        .strip_prefix('@')
+        .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|ch| ch.is_ascii_digit()))
+}
+
+fn trim_trailing_quoted_argument(input: &str) -> Option<&str> {
+    let trimmed = input.trim_end();
+    let quote = trimmed.chars().last()?;
+    if !matches!(quote, '~' | '"') {
+        return None;
+    }
+    let last_quote = trimmed.len() - quote.len_utf8();
+    let start_quote = trimmed[..last_quote].rfind(quote)?;
+    let before = &trimmed[..start_quote];
+    if !before.chars().last().is_some_and(char::is_whitespace) {
+        return None;
+    }
+    let candidate = before.trim_end();
+    if candidate.is_empty() {
+        None
+    } else {
+        Some(candidate)
     }
 }
 
@@ -392,3 +579,7 @@ fn paren_balance(input: &str) -> i32 {
     }
     balance
 }
+
+#[cfg(test)]
+#[path = "compat_mismatch_scan_tests.rs"]
+mod tests;

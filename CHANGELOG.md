@@ -1,3 +1,25 @@
+## Beta 17
+- Fixed more WeiDU predicate checks:
+  - GAME_IS on EET now works like WeiDU
+  - ENGINE_IS still works as BG2EE on EET
+  - trailing @tra and ~message~ text no longer breaks REQUIRE_PREDICATE
+- Fixed EET-only tab logic:
+  - eet_end / eet_gui stay off the BGEE tab
+  - EET helper TP2s no longer show as fake/extra EET components
+  - hidden EET helper headers are gone too
+- Fixed more Step 2 grouping/order issues:
+  - real SUBCOMPONENT groups now keep the parent row inside the header
+  - inline SUBCOMPONENT on BEGIN lines is detected
+  - deprecated bridge rows no longer split groups
+  - EpicThieving #0 now loads in the right TP2 order
+- Improved manual compat rules:
+  - mod = [...] now works
+  - component_id = "*" now works
+  - custom conflict messages now show under Blocked by ...
+- Step 2 mod headers now show selected/total counts like (3/12).
+- Renamed Have WeiDU Logs? to Install from Weidu Logs (With No Changes)?
+- Moved target-dir prep before -p/-n/-g installs off the UI thread so BIO should not freeze while deleting big old install folders.
+
 ## Beta 16
 - Added proper prompt ownership for helper-driven WeiDU/LAF prompt flows in the lapdu parser.
 - Fixed missing component PROMPT pills for Choose manually style components such as A7-MultiKits.

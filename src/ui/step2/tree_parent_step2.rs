@@ -32,7 +32,13 @@ pub(crate) fn render_parent_row(
 ) -> ParentRowResult {
     let mod_name = mod_state.name.clone();
     let mod_visible_count = mod_state.components.len();
-    let mod_header_label = format!("{mod_name} ({mod_visible_count})");
+    let selected_visible_count = mod_state
+        .components
+        .iter()
+        .filter(|component| component.checked)
+        .count();
+    let mod_header_label =
+        format!("{mod_name} ({selected_visible_count}/{mod_visible_count})");
     let parent_summary = parent_compat_summary(mod_state);
     let enabled_count = mod_state.components.iter().filter(|c| !c.disabled).count();
     let all_selected = enabled_count > 0

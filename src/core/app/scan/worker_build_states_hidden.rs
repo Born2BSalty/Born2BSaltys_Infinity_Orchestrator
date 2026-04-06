@@ -13,6 +13,7 @@ use super::tp2_blocks::{
 };
 
 pub(super) fn detect_hidden_prompt_like_component_ids(
+    tp2_path: Option<&str>,
     tp2_text: Option<&str>,
     components: &[ScannedComponent],
 ) -> HashMap<String, String> {
@@ -104,7 +105,37 @@ pub(super) fn detect_hidden_prompt_like_component_ids(
             .or_insert_with(|| "deprecated_dummy_placeholder".to_string());
     }
 
+    for id in detect_nested_other_utility_component_ids(tp2_path, &ordered_blocks, components) {
+        hidden
+            .entry(id)
+            .or_insert_with(|| "nested_other_no_log_record_utility".to_string());
+    }
+
     hidden
+}
+
+fn detect_nested_other_utility_component_ids(
+    tp2_path: Option<&str>,
+    ordered_blocks: &[Tp2ComponentBlock],
+    components: &[ScannedComponent],
+) -> HashSet<String> {
+    let Some(tp2_path) = tp2_path else {
+        return HashSet::new();
+    };
+    if components.len() != 1 || ordered_blocks.len() != 1 {
+        return HashSet::new();
+    }
+    let lower = tp2_path.replace('\\', "/").to_ascii_lowercase();
+    if !lower.contains("/other/") {
+        return HashSet::new();
+    }
+    if !block_has_no_log_record(&ordered_blocks[0]) {
+        return HashSet::new();
+    }
+    components
+        .iter()
+        .map(|component| component.component_id.trim().to_string())
+        .collect()
 }
 
 fn block_is_asset_choice_only(block: &Tp2ComponentBlock) -> bool {
@@ -165,6 +196,24 @@ fn detect_deprecated_dummy_component_ids(
     ordered_blocks: &[Tp2ComponentBlock],
     components: &[ScannedComponent],
 ) -> HashSet<String> {
+    let components_by_id = components
+        .iter()
+        .map(|component| (component.component_id.trim().to_string(), component))
+        .collect::<HashMap<_, _>>();
+    let direct_matches = ordered_blocks
+        .iter()
+        .filter(|block| block_is_deprecated_dummy_placeholder(block))
+        .filter_map(|block| {
+            let component_id = block.component_id.trim();
+            let component = components_by_id.get(component_id)?;
+            (normalize_component_order_label(&component.display) == "dummy")
+                .then(|| component_id.to_string())
+        })
+        .collect::<HashSet<_>>();
+    if !direct_matches.is_empty() {
+        return direct_matches;
+    }
+
     let dummy_count = ordered_blocks
         .iter()
         .filter(|block| block_is_deprecated_dummy_placeholder(block))
@@ -182,13 +231,6 @@ fn detect_deprecated_dummy_component_ids(
 }
 
 fn block_is_deprecated_dummy_placeholder(block: &Tp2ComponentBlock) -> bool {
-    let Some(begin_line) = block.body_lines.first() else {
-        return false;
-    };
-    if !begin_line_is_dummy(begin_line) {
-        return false;
-    }
-
     let mut saw_deprecated = false;
     for line in &block.body_lines {
         let trimmed = line.trim();
@@ -196,9 +238,11 @@ fn block_is_deprecated_dummy_placeholder(block: &Tp2ComponentBlock) -> bool {
             continue;
         }
         let upper = trimmed.to_ascii_uppercase();
-        if upper.starts_with("DEPRECATED") {
+        if upper.starts_with("DEPRECATED") || upper.contains(" DEPRECATED ") || upper.ends_with(" DEPRECATED") {
             saw_deprecated = true;
-            continue;
+            if upper.starts_with("DEPRECATED") {
+                continue;
+            }
         }
         if upper.starts_with("BEGIN ")
             || upper.starts_with("GROUP ")
@@ -216,24 +260,11 @@ fn block_is_deprecated_dummy_placeholder(block: &Tp2ComponentBlock) -> bool {
     saw_deprecated
 }
 
-fn begin_line_is_dummy(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    let upper = trimmed.to_ascii_uppercase();
-    if !upper.starts_with("BEGIN ") {
-        return false;
-    }
-    let tail = trimmed["BEGIN".len()..].trim_start();
-    let Some(quote) = tail.chars().next() else {
-        return false;
-    };
-    if quote != '~' && quote != '"' {
-        return false;
-    }
-    let rest = &tail[quote.len_utf8()..];
-    let Some(end) = rest.find(quote) else {
-        return false;
-    };
-    rest[..end].trim().eq_ignore_ascii_case("dummy")
+fn block_has_no_log_record(block: &Tp2ComponentBlock) -> bool {
+    block.body_lines.iter().any(|line| {
+        let trimmed = line.trim();
+        !trimmed.starts_with("//") && line.to_ascii_uppercase().contains("NO_LOG_RECORD")
+    })
 }
 
 fn copy_line_looks_like_cosmetic_asset(line: &str) -> bool {
@@ -264,3 +295,7 @@ fn copy_line_looks_like_cosmetic_asset(line: &str) -> bool {
         });
     has_cosmetic_dir || ext_ok
 }
+
+#[cfg(test)]
+#[path = "worker_build_states_hidden_tests.rs"]
+mod tests;

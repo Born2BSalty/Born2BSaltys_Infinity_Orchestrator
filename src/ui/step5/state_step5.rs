@@ -4,5 +4,5 @@
 use crate::ui::state::WizardState;
 
 pub fn install_in_progress(state: &WizardState) -> bool {
-    state.step5.install_running || state.step5.cancel_pending
+    state.step5.prep_running || state.step5.install_running || state.step5.cancel_pending
 }

@@ -16,11 +16,13 @@ use super::compat_conflict_runtime::{
 use super::compat_dependency_runtime::{
     ComponentRequirementCache, DependencyCompatHit, DependencyEvalMode, scan_dependency_hit,
 };
+use super::compat_mismatch_eval::build_mismatch_context;
+use super::compat_mismatch_scan::scan_predicate_guard_hit;
 use super::compat_path_eval::{game_dir_for_tab, PathRequirementContext};
 use super::compat_path_runtime::{ComponentPathGuardCache, PathRequirementHit, scan_path_requirement_hit};
 use super::compat_rule_runtime::{
-    clear_kind_matches, collect_step3_active_items, compat_component_matches, compat_mod_matches,
-    direct_rule_applies, match_kind_matches, non_empty, normalize_kind, relation_rule_applies,
+    CompatActiveItem, clear_kind_matches, collect_step3_active_items, compat_component_matches, compat_mod_matches,
+    direct_rule_applies, match_kind_matches, non_empty, normalize_kind, normalize_mod_key, relation_rule_applies,
     mode_matches, single_related_target, tab_matches,
 };
 use super::compat_rules::{compat_rule_source_path, load_rules, rules_files_signature, CompatRule};
@@ -80,6 +82,8 @@ fn collect_step3_compat_markers_uncached(
     let mut path_guard_cache = ComponentPathGuardCache::new();
     let path_context = PathRequirementContext::for_tab(step1, tab);
     let conflict_context = build_conflict_scan_context(&active_items, &mut conflict_cache);
+    let predicate_context =
+        build_mismatch_context(step1, tab, collect_checked_components(&active_items));
 
     for item in items.iter().filter(|item| !item.is_parent) {
         let key = marker_key(item);
@@ -91,6 +95,7 @@ fn collect_step3_compat_markers_uncached(
                     &conflict_context,
                 )
             })
+            .or_else(|| scan_predicate_marker_for_item(item, &tp2_paths, &predicate_context))
             .or_else(|| {
                 scan_dependency_marker_for_item(
                     item,
@@ -256,6 +261,20 @@ fn requirement_marker(hit: DependencyCompatHit) -> Step3CompatMarker {
     }
 }
 
+fn collect_checked_components(
+    active_items: &[CompatActiveItem],
+) -> std::collections::HashSet<(String, String)> {
+    active_items
+        .iter()
+        .map(|item| {
+            (
+                normalize_mod_key(&item.tp_file),
+                item.component_id.trim().to_string(),
+            )
+        })
+        .collect()
+}
+
 fn scan_conflict_marker_for_item(
     item: &Step3ItemState,
     component_order: usize,
@@ -279,6 +298,28 @@ fn conflict_marker(hit: ConflictCompatHit) -> Step3CompatMarker {
         source: Some(hit.source),
         raw_evidence: Some(hit.raw_evidence),
     }
+}
+
+fn scan_predicate_marker_for_item(
+    item: &Step3ItemState,
+    tp2_paths: &HashMap<String, String>,
+    predicate_context: &super::compat_mismatch_eval::MismatchContext,
+) -> Option<Step3CompatMarker> {
+    let tp2_path = tp2_paths
+        .get(&tp2_lookup_key(&item.tp_file, &item.mod_name))
+        .filter(|value| !value.trim().is_empty())?;
+    let hit = scan_predicate_guard_hit(tp2_path, &item.component_id, predicate_context)?;
+    if !hit.kind.eq_ignore_ascii_case("conflict") {
+        return None;
+    }
+    Some(Step3CompatMarker {
+        kind: hit.kind.to_string(),
+        message: Some(hit.message),
+        related_mod: hit.related_mod,
+        related_component: hit.related_component,
+        source: Some(tp2_path.to_string()),
+        raw_evidence: Some(hit.raw_evidence),
+    })
 }
 
 fn scan_path_marker_for_item(

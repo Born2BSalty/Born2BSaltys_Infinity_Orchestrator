@@ -33,6 +33,9 @@ pub(crate) fn apply_step2_scan_conflict(mods: &mut [Step2ModState]) {
             ) else {
                 continue;
             };
+            if hit.kind.eq_ignore_ascii_case("order_block") {
+                continue;
+            }
 
             apply_conflict(component, &current_mod_key, &hit);
         }
