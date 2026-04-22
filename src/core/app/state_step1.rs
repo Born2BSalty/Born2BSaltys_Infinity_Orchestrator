@@ -71,8 +71,7 @@ pub struct Step1State {
 impl Step1State {
     pub const INSTALL_MODE_BUILD_FROM_SCANNED_MODS: &str = "build_from_scanned_mods";
     pub const INSTALL_MODE_EXACT_WEIDU_LOGS: &str = "install_exactly_from_weidu_logs";
-    pub const INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT: &str =
-        "start_from_weidu_logs_then_review_edit";
+    pub const INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT: &str = "start_from_weidu_logs_then_review_edit";
 
     pub fn derive_install_mode_from_legacy(
         have_weidu_logs: bool,
@@ -93,9 +92,7 @@ impl Step1State {
                 Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS
             }
             Self::INSTALL_MODE_EXACT_WEIDU_LOGS => Self::INSTALL_MODE_EXACT_WEIDU_LOGS,
-            Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT => {
-                Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
-            }
+            Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT => Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT,
             _ => Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS,
         }
     }

@@ -12,8 +12,7 @@ use crate::app::state::WizardState;
 const GITHUB_OAUTH_CLIENT_ID: &str = "Ov23liVv971wvRTUbkrW";
 const GITHUB_DEVICE_CODE_URL: &str = "https://github.com/login/device/code";
 const GITHUB_ACCESS_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
-const GITHUB_DEVICE_GRANT_TYPE: &str =
-    "urn:ietf:params:oauth:grant-type:device_code";
+const GITHUB_DEVICE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
 
 #[derive(Debug, Clone)]
 pub(crate) struct GitHubOAuthPrompt {
@@ -58,8 +57,8 @@ enum GitHubAccessTokenPollOutcome {
     Failed(String),
 }
 
-pub(crate) fn start_github_oauth_device_flow(
-) -> Result<(GitHubOAuthPrompt, Receiver<GitHubOAuthFlowResult>), String> {
+pub(crate) fn start_github_oauth_device_flow()
+-> Result<(GitHubOAuthPrompt, Receiver<GitHubOAuthFlowResult>), String> {
     let response = request_device_code()?;
 
     let (tx, rx) = mpsc::channel::<GitHubOAuthFlowResult>();
@@ -74,8 +73,8 @@ pub(crate) fn start_github_oauth_device_flow(
         GitHubOAuthPrompt {
             user_code: response.user_code,
             verification_uri: response.verification_uri,
-            status_text:
-                "Open GitHub from this popup, then enter the code to continue.".to_string(),
+            status_text: "Open GitHub from this popup, then enter the code to continue."
+                .to_string(),
         },
         rx,
     ))
@@ -110,7 +109,8 @@ pub(crate) fn poll_github_oauth_flow(
             state.github_auth_popup_open = true;
             state.github_auth_user_code.clear();
             state.github_auth_verification_uri.clear();
-            state.github_auth_status_text = "GitHub authorization failed: worker disconnected".to_string();
+            state.github_auth_status_text =
+                "GitHub authorization failed: worker disconnected".to_string();
             state.step2.scan_status = state.github_auth_status_text.clone();
             *github_auth_rx = None;
             return;
@@ -126,20 +126,20 @@ pub(crate) fn poll_github_oauth_flow(
     state.github_auth_user_code.clear();
     state.github_auth_verification_uri.clear();
     match result {
-        Ok(validated) => match super::app_step2_update_github_auth::store_github_oauth_token(
-            &validated.token,
-        ) {
-            Ok(()) => {
-                state.github_auth_login = validated.login.clone();
-                state.github_auth_status_text.clear();
-                state.step2.scan_status = format!("Connected as {}.", validated.login);
+        Ok(validated) => {
+            match super::app_step2_update_github_auth::store_github_oauth_token(&validated.token) {
+                Ok(()) => {
+                    state.github_auth_login = validated.login.clone();
+                    state.github_auth_status_text.clear();
+                    state.step2.scan_status = format!("Connected as {}.", validated.login);
+                }
+                Err(err) => {
+                    state.github_auth_status_text =
+                        format!("GitHub connected, but secure token storage failed: {err}");
+                    state.step2.scan_status = state.github_auth_status_text.clone();
+                }
             }
-            Err(err) => {
-                state.github_auth_status_text =
-                    format!("GitHub connected, but secure token storage failed: {err}");
-                state.step2.scan_status = state.github_auth_status_text.clone();
-            }
-        },
+        }
         Err(err) => {
             state.github_auth_status_text = err.clone();
             state.step2.scan_status = err;
@@ -184,9 +184,8 @@ fn poll_for_access_token(
         match poll_access_token_once(&agent, &device_code) {
             Ok(GitHubAccessTokenPollOutcome::Success(token)) => {
                 let _ = tx.send(
-                    fetch_github_login_for_token(&agent, &token).map(|login| {
-                        GitHubOAuthValidatedToken { token, login }
-                    }),
+                    fetch_github_login_for_token(&agent, &token)
+                        .map(|login| GitHubOAuthValidatedToken { token, login }),
                 );
                 return;
             }
@@ -256,8 +255,8 @@ fn fetch_github_login_for_token(agent: &ureq::Agent, token: &str) -> Result<Stri
         .call()
         .map_err(|err| err.to_string())?;
     let text = response.into_string().map_err(|err| err.to_string())?;
-    let viewer = serde_json::from_str::<GitHubViewerResponse>(&text)
-        .map_err(|err| err.to_string())?;
+    let viewer =
+        serde_json::from_str::<GitHubViewerResponse>(&text).map_err(|err| err.to_string())?;
     let login = viewer.login.trim();
     if login.is_empty() {
         Err("GitHub authorization failed: authenticated user login missing".to_string())

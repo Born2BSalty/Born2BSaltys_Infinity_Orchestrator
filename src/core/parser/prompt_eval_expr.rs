@@ -25,8 +25,7 @@ pub(crate) use parser::Parser;
 pub(crate) use values::EvalState;
 pub use vars::normalize_tp2_stem;
 pub(crate) use vars::{
-    PromptComponentInput, PromptVarContext, PromptVarValue,
-    apply_component_block_assignments_text, apply_mod_compat_prompt_value_from_text,
-    apply_source_file_assignments_text, extract_copy_table_path, extract_tp2_path_from_raw_line,
-    lookup_var, resolve_table_path,
+    PromptComponentInput, PromptVarContext, PromptVarValue, apply_component_block_assignments_text,
+    apply_mod_compat_prompt_value_from_text, apply_source_file_assignments_text,
+    extract_copy_table_path, extract_tp2_path_from_raw_line, lookup_var, resolve_table_path,
 };

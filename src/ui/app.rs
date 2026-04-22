@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Receiver;
 
-use crate::app::state::{Step1State, WizardState};
 use crate::app::app_step1_github_oauth;
+use crate::app::state::{Step1State, WizardState};
 use crate::app::step2_worker::Step2ScanEvent;
 use crate::app::step5::install_flow::PendingInstallStart;
 use crate::app::step5::log_files::TargetPrepResult;

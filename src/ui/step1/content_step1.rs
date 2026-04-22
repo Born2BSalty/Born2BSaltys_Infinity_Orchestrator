@@ -206,8 +206,11 @@ Prompt sequence with blank input\n\
         "Sound cue when prompt input is required",
     )
     .on_hover_text(tt::STEP1_PROMPT_REQUIRED_SOUND);
-    ui.checkbox(&mut s.download_archive, "Download Missing Mods and Keep Archives")
-        .on_hover_text(tt::STEP1_DOWNLOAD_ARCHIVE);
+    ui.checkbox(
+        &mut s.download_archive,
+        "Download Missing Mods and Keep Archives",
+    )
+    .on_hover_text(tt::STEP1_DOWNLOAD_ARCHIVE);
 
     ui.horizontal(|ui| {
         ui.checkbox(&mut s.lookback_enabled, "Prompt context lookback")

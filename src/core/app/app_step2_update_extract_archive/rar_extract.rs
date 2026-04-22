@@ -21,7 +21,9 @@ pub(super) fn extract_rar_archive(archive_path: &Path, out_dir: &Path) -> Result
         let Some(entry) = archive.read_header().map_err(|err| err.to_string())? else {
             break;
         };
-        archive = entry.extract_with_base(out_dir).map_err(|err| err.to_string())?;
+        archive = entry
+            .extract_with_base(out_dir)
+            .map_err(|err| err.to_string())?;
     }
     Ok(())
 }

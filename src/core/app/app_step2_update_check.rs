@@ -120,9 +120,15 @@ pub(crate) fn poll_step2_update_check(
         state.step2.update_selected_update_assets.clear();
         state.step2.update_selected_update_sources.clear();
         state.step2.update_selected_missing_sources.clear();
-        state.step2.update_selected_exact_version_failed_sources.clear();
+        state
+            .step2
+            .update_selected_exact_version_failed_sources
+            .clear();
         state.step2.update_selected_failed_sources.clear();
-        state.step2.update_selected_exact_version_retry_requests.clear();
+        state
+            .step2
+            .update_selected_exact_version_retry_requests
+            .clear();
     }
     state.step2.update_selected_check_done_count = state.step2.update_selected_check_total_count;
     let sources = mod_downloads::load_mod_download_sources();
@@ -219,7 +225,10 @@ pub(crate) fn poll_step2_update_check(
     state.step2.update_selected_merge_latest_fallback = false;
     let updates = state.step2.update_selected_update_sources.len();
     let missing = state.step2.update_selected_missing_sources.len();
-    let failed = state.step2.update_selected_exact_version_failed_sources.len()
+    let failed = state
+        .step2
+        .update_selected_exact_version_failed_sources
+        .len()
         + state.step2.update_selected_failed_sources.len();
     state.step2.scan_status = if merge_latest_fallback {
         format!(
@@ -228,7 +237,8 @@ pub(crate) fn poll_step2_update_check(
         )
     } else if state.step1.installs_exactly_from_weidu_logs() {
         format!("Check mod list finished: {missing} downloadable missing, {failed} failed")
-    } else if state.step1.bootstraps_from_weidu_logs() && !state.step2.log_pending_downloads.is_empty()
+    } else if state.step1.bootstraps_from_weidu_logs()
+        && !state.step2.log_pending_downloads.is_empty()
     {
         format!("Check updates finished: {updates} updates, {missing} missing, {failed} failed")
     } else {
@@ -286,7 +296,11 @@ fn store_latest_checked_version(state: &mut WizardState, game_tab: &str, tp_file
     }
 }
 
-fn exact_log_missing_download_requested(state: &WizardState, game_tab: &str, tp_file: &str) -> bool {
+fn exact_log_missing_download_requested(
+    state: &WizardState,
+    game_tab: &str,
+    tp_file: &str,
+) -> bool {
     let requested_tp2 = mod_downloads::normalize_mod_download_tp2(tp_file);
     state.step2.log_pending_downloads.iter().any(|pending| {
         pending.game_tab == game_tab
@@ -330,7 +344,9 @@ fn push_exact_version_retry_request(state: &mut WizardState, game_tab: &str, tp_
         .step2
         .update_selected_exact_version_retry_requests
         .iter()
-        .any(|existing| existing.game_tab == request.game_tab && existing.tp_file == request.tp_file)
+        .any(|existing| {
+            existing.game_tab == request.game_tab && existing.tp_file == request.tp_file
+        })
     {
         return;
     }

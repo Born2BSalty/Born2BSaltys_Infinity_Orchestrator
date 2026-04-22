@@ -113,10 +113,16 @@ pub(crate) fn preview_update_selected(
     state.step2.update_selected_missing_sources.clear();
     state.step2.update_selected_downloaded_sources.clear();
     state.step2.update_selected_download_failed_sources.clear();
-    state.step2.update_selected_exact_version_failed_sources.clear();
+    state
+        .step2
+        .update_selected_exact_version_failed_sources
+        .clear();
     state.step2.update_selected_failed_sources.clear();
     state.step2.update_selected_check_requests.clear();
-    state.step2.update_selected_exact_version_retry_requests.clear();
+    state
+        .step2
+        .update_selected_exact_version_retry_requests
+        .clear();
     state.step2.update_selected_confirm_latest_fallback_open = false;
     state.step2.update_selected_merge_latest_fallback = false;
     state.step2.update_selected_check_done_count = 0;
@@ -230,10 +236,16 @@ pub(crate) fn preview_update_selected_mod(
     state.step2.update_selected_missing_sources.clear();
     state.step2.update_selected_downloaded_sources.clear();
     state.step2.update_selected_download_failed_sources.clear();
-    state.step2.update_selected_exact_version_failed_sources.clear();
+    state
+        .step2
+        .update_selected_exact_version_failed_sources
+        .clear();
     state.step2.update_selected_failed_sources.clear();
     state.step2.update_selected_check_requests.clear();
-    state.step2.update_selected_exact_version_retry_requests.clear();
+    state
+        .step2
+        .update_selected_exact_version_retry_requests
+        .clear();
     state.step2.update_selected_confirm_latest_fallback_open = false;
     state.step2.update_selected_merge_latest_fallback = false;
     state.step2.update_selected_check_done_count = 0;

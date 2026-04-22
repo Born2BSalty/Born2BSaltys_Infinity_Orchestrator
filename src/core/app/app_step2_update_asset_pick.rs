@@ -82,8 +82,7 @@ fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
                     || lower.contains("64bit"))
         }
         "macarmzip" => {
-            lower.ends_with(".zip")
-                && contains_any(&lower, &["arm64", "aarch64", "apple-silicon"])
+            lower.ends_with(".zip") && contains_any(&lower, &["arm64", "aarch64", "apple-silicon"])
         }
         "macx64zip" => {
             lower.ends_with(".zip")

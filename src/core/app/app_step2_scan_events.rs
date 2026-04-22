@@ -58,10 +58,14 @@ pub(super) fn poll_step2_scan_events(
                         )
                     }
                     (Some(lock_err), None) => {
-                        format!("0/{total}: discovering mods... (update lock load failed: {lock_err})")
+                        format!(
+                            "0/{total}: discovering mods... (update lock load failed: {lock_err})"
+                        )
                     }
                     (None, Some(compat_err)) => {
-                        format!("0/{total}: discovering mods... (compat rules load failed: {compat_err})")
+                        format!(
+                            "0/{total}: discovering mods... (compat rules load failed: {compat_err})"
+                        )
                     }
                     (None, None) => format!("0/{total}: discovering mods..."),
                 };

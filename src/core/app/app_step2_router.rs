@@ -55,26 +55,32 @@ pub(crate) fn handle_step2_action(
                 .step2
                 .update_selected_exact_version_retry_requests
                 .iter()
-                .map(|request| super::app_step2_update_check::Step2UpdateCheckRequest {
-                    game_tab: request.game_tab.clone(),
-                    tp_file: request.tp_file.clone(),
-                    label: request.label.clone(),
-                    repo: request.repo.clone(),
-                    exact_github: Vec::new(),
-                    source_url: request.source_url.clone(),
-                    channel: request.channel.clone(),
-                    pkg: request.pkg.clone(),
-                    requested_version: None,
-                })
+                .map(
+                    |request| super::app_step2_update_check::Step2UpdateCheckRequest {
+                        game_tab: request.game_tab.clone(),
+                        tp_file: request.tp_file.clone(),
+                        label: request.label.clone(),
+                        repo: request.repo.clone(),
+                        exact_github: Vec::new(),
+                        source_url: request.source_url.clone(),
+                        channel: request.channel.clone(),
+                        pkg: request.pkg.clone(),
+                        requested_version: None,
+                    },
+                )
                 .collect::<Vec<_>>();
             if requests.is_empty() {
-                state.step2.scan_status = "No exact-version misses available for latest fallback".to_string();
+                state.step2.scan_status =
+                    "No exact-version misses available for latest fallback".to_string();
                 state.step2.update_selected_confirm_latest_fallback_open = false;
                 return;
             }
             state.step2.update_selected_merge_latest_fallback = true;
             state.step2.update_selected_confirm_latest_fallback_open = false;
-            state.step2.update_selected_exact_version_retry_requests.clear();
+            state
+                .step2
+                .update_selected_exact_version_retry_requests
+                .clear();
             state.step2.update_selected_check_done_count = 0;
             state.step2.update_selected_check_total_count = requests.len();
             state.step2.scan_status =
@@ -238,7 +244,10 @@ fn move_cached_update_entry_to_locked(state: &mut WizardState, update_entry: Opt
     let mut keep = Vec::new();
     for entry in state.step2.update_selected_update_sources.drain(..) {
         if entry == update_entry {
-            state.step2.update_selected_locked_update_sources.push(entry);
+            state
+                .step2
+                .update_selected_locked_update_sources
+                .push(entry);
         } else {
             keep.push(entry);
         }

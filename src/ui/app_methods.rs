@@ -41,8 +41,7 @@ impl WizardApp {
                         self.state.github_auth_running = false;
                         self.state.github_auth_status_text =
                             format!("GitHub authorization could not start: {err}");
-                        self.state.step2.scan_status =
-                            self.state.github_auth_status_text.clone();
+                        self.state.step2.scan_status = self.state.github_auth_status_text.clone();
                     }
                 }
             }

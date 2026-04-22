@@ -35,7 +35,10 @@ pub(crate) fn can_advance_from_current_step(state: &WizardState) -> bool {
             }
         }
         2 => step3_has_items(state) && step3_conflicts_resolved(state),
-        3 => !state.step1.installs_exactly_from_weidu_logs() || state.step2.exact_log_mod_list_checked,
+        3 => {
+            !state.step1.installs_exactly_from_weidu_logs()
+                || state.step2.exact_log_mod_list_checked
+        }
         _ => true,
     }
 }
@@ -54,8 +57,8 @@ pub(crate) fn should_show_step1_clean_confirm(state: &WizardState) -> bool {
 
 pub(crate) fn decide_back_action(state: &WizardState) -> BackAction {
     let needs_sync = state.current_step == 2;
-    let return_to_step1 =
-        state.step1.installs_exactly_from_weidu_logs() && (state.current_step == 3 || state.current_step == 4);
+    let return_to_step1 = state.step1.installs_exactly_from_weidu_logs()
+        && (state.current_step == 3 || state.current_step == 4);
     match (needs_sync, return_to_step1) {
         (true, true) => BackAction::SyncThenReturnToStep1FromLogs,
         (true, false) => BackAction::SyncThenGoBack,

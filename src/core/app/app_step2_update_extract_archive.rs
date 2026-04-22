@@ -204,7 +204,11 @@ fn backup_existing_mod_root(
     if !same_windows_drive(parent, backup_root) {
         return Err("Backup must be on the same drive as Mods Folder".to_string());
     }
-    let name = sanitize_backup_name_part(root.file_name().and_then(|value| value.to_str()).unwrap_or("mod"));
+    let name = sanitize_backup_name_part(
+        root.file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("mod"),
+    );
     let version_or_ref = sanitize_backup_name_part(backup_version_tag);
     let ts = Local::now().format("%Y-%m-%d_%H-%M-%S");
     let backup = backup_root.join(format!("{name}__{version_or_ref}__{ts}"));

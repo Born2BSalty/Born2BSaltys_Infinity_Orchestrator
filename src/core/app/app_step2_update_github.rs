@@ -406,8 +406,7 @@ fn repo_source_declares_requested_version(
         return false;
     }
     tp2_paths.into_iter().any(|tp2_path| {
-        let Ok(tp2_text) =
-            fetch_github_raw_text(agent, repo.full_name.trim(), &branch, &tp2_path)
+        let Ok(tp2_text) = fetch_github_raw_text(agent, repo.full_name.trim(), &branch, &tp2_path)
         else {
             return false;
         };

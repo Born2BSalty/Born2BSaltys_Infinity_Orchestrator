@@ -253,7 +253,10 @@ mod tests {
     fn keeps_version_like_labels() {
         assert_eq!(requested_version_text("v29").as_deref(), Some("v29"));
         assert_eq!(requested_version_text("1.57").as_deref(), Some("1.57"));
-        assert_eq!(requested_version_text("Alpha 3").as_deref(), Some("Alpha 3"));
+        assert_eq!(
+            requested_version_text("Alpha 3").as_deref(),
+            Some("Alpha 3")
+        );
         assert_eq!(
             requested_version_text("master@149ac53b1470").as_deref(),
             Some("master@149ac53b1470")
@@ -264,7 +267,10 @@ mod tests {
     fn drops_component_text_labels() {
         assert_eq!(requested_version_text("BG1 Prologue Expansion"), None);
         assert_eq!(requested_version_text("Main Component"), None);
-        assert_eq!(requested_version_text("Book 1 - Quiet Before the Storm"), None);
+        assert_eq!(
+            requested_version_text("Book 1 - Quiet Before the Storm"),
+            None
+        );
         assert_eq!(requested_version_text("EE and SoD"), None);
     }
 }

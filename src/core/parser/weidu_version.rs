@@ -74,7 +74,13 @@ mod tests {
 
     #[test]
     fn normalizes_separator_variants_equally() {
-        assert_eq!(normalize_version_text("Alpha 3"), normalize_version_text("Alpha_3"));
-        assert_eq!(normalize_version_text("Alpha 3"), normalize_version_text("Alpha-3"));
+        assert_eq!(
+            normalize_version_text("Alpha 3"),
+            normalize_version_text("Alpha_3")
+        );
+        assert_eq!(
+            normalize_version_text("Alpha 3"),
+            normalize_version_text("Alpha-3")
+        );
     }
 }

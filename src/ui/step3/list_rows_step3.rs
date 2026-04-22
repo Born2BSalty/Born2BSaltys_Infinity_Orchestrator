@@ -113,8 +113,7 @@ pub(crate) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> 
                         !collapsed,
                     );
                 collapse_state.set_open(!collapsed);
-                collapse_state
-                    .show_toggle_button(ui, egui::collapsing_header::paint_default_icon);
+                collapse_state.show_toggle_button(ui, egui::collapsing_header::paint_default_icon);
                 let now_collapsed = !collapse_state.is_open();
                 if now_collapsed != collapsed {
                     if now_collapsed {

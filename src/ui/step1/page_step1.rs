@@ -7,7 +7,9 @@ use crate::app::state::WizardState;
 use crate::ui::layout::SECTION_GAP;
 use crate::ui::step1::action_step1::Step1Action;
 use crate::ui::step1::frame_step1::{render_bottom, render_top};
-use crate::ui::step1::service_step1::{split_path_check_lines, sync_install_mode, sync_weidu_log_mode};
+use crate::ui::step1::service_step1::{
+    split_path_check_lines, sync_install_mode, sync_weidu_log_mode,
+};
 use crate::ui::step1::state_step1::clear_path_check_if_step1_changed;
 use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
 

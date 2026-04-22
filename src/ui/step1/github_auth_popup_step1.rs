@@ -7,11 +7,7 @@ use crate::app::controller::util::open_in_shell;
 use crate::app::state::WizardState;
 use crate::ui::step1::action_step1::Step1Action;
 
-pub fn render(
-    ctx: &egui::Context,
-    state: &mut WizardState,
-    action: &mut Option<Step1Action>,
-) {
+pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<Step1Action>) {
     if !state.github_auth_popup_open {
         return;
     }
@@ -25,10 +21,7 @@ pub fn render(
         .default_size(egui::vec2(420.0, 180.0))
         .show(ctx, |ui| {
             if !state.github_auth_login.trim().is_empty() && !state.github_auth_running {
-                ui.label(format!(
-                    "Connected as {}",
-                    state.github_auth_login.trim()
-                ));
+                ui.label(format!("Connected as {}", state.github_auth_login.trim()));
                 ui.add_space(8.0);
             }
             if !state.github_auth_status_text.trim().is_empty() {
@@ -60,8 +53,7 @@ pub fn render(
                     && ui.button("Open GitHub").clicked()
                     && let Err(err) = open_in_shell(&state.github_auth_verification_uri)
                 {
-                    state.github_auth_status_text =
-                        format!("Open GitHub failed: {err}");
+                    state.github_auth_status_text = format!("Open GitHub failed: {err}");
                 }
                 if !state.github_auth_login.trim().is_empty()
                     && !state.github_auth_running

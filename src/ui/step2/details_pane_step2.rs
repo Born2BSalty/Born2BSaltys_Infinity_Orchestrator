@@ -47,7 +47,10 @@ pub(crate) mod details_pane_content {
         let manual_sources = state.step2.update_selected_manual_sources.len();
         let no_source_entries = state.step2.update_selected_unknown_sources.len();
         let source_check_failed = state.step2.update_selected_failed_sources.len();
-        let exact_version_pending = state.step2.update_selected_exact_version_retry_requests.len();
+        let exact_version_pending = state
+            .step2
+            .update_selected_exact_version_retry_requests
+            .len();
 
         egui::ScrollArea::vertical()
             .id_salt("step2_details_scroll")
@@ -77,7 +80,9 @@ pub(crate) mod details_pane_content {
                 ui.label(format!("Manual sources: {manual_sources}"));
                 ui.label(format!("No source entries: {no_source_entries}"));
                 ui.label(format!("Source check failed: {source_check_failed}"));
-                ui.label(format!("Exact version fallback pending: {exact_version_pending}"));
+                ui.label(format!(
+                    "Exact version fallback pending: {exact_version_pending}"
+                ));
             });
     }
 

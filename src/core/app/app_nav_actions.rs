@@ -41,10 +41,7 @@ pub(crate) fn handle_reset(
     crate::app::step5::prompt_memory::clear_all();
     state.reset_workflow_keep_step1();
     if !reset_warnings.is_empty() {
-        state.step2.scan_status = format!(
-            "Reset warning: {}",
-            reset_warnings.join(" | ")
-        );
+        state.step2.scan_status = format!("Reset warning: {}", reset_warnings.join(" | "));
     }
     app_lifecycle::save_settings_best_effort(
         state,
