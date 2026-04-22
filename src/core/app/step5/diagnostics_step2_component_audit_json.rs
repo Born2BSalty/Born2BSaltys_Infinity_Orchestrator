@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::WizardState;
+use crate::app::state::{Step2ModState, WizardState};
 
 pub(super) fn write_step2_component_audit_json(
     run_dir: &Path,
@@ -16,7 +16,7 @@ pub(super) fn write_step2_component_audit_json(
 ) -> Result<PathBuf> {
     let out_path = run_dir.join("step2_component_audit.json");
 
-    let serialize_tab = |tab_name: &str, mods: &[crate::ui::state::Step2ModState]| {
+    let serialize_tab = |tab_name: &str, mods: &[Step2ModState]| {
         mods.iter()
             .enumerate()
             .map(|(mod_index, mod_state)| {

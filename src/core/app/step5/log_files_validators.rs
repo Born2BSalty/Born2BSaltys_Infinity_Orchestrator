@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::ui::state::{ResumeTargets, Step1State};
+use crate::app::state::{ResumeTargets, Step1State};
 
 use super::target_prep::paths_point_to_same_dir;
 
@@ -91,7 +91,8 @@ pub fn verify_targets_prepared(step1: &Step1State) -> Result<(), String> {
         if !path.exists() || !path.is_dir() {
             return Err(format!("{label} does not exist after prep: {target}"));
         }
-        let mut entries = fs::read_dir(path).map_err(|err| format!("{label} read failed: {err}"))?;
+        let mut entries =
+            fs::read_dir(path).map_err(|err| format!("{label} read failed: {err}"))?;
         if entries.next().is_some() {
             return Err(format!("{label} is not empty after prep: {target}"));
         }

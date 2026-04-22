@@ -4,9 +4,9 @@
 use eframe::egui;
 use rfd::FileDialog;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
+use crate::app::terminal::EmbeddedTerminal;
 use crate::ui::step5::prompt_memory;
-use crate::ui::terminal::EmbeddedTerminal;
 
 pub(crate) fn render_top_bar(
     ui: &mut egui::Ui,
@@ -15,7 +15,10 @@ pub(crate) fn render_top_bar(
 ) {
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(terminal.is_some(), egui::Button::new("Capture Current Prompt"))
+            .add_enabled(
+                terminal.is_some(),
+                egui::Button::new("Capture Current Prompt"),
+            )
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_CAPTURE_PROMPT)
             .clicked()
             && let Some(term) = terminal

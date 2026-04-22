@@ -77,14 +77,17 @@ pub(super) fn parse_tp2_component_blocks_in_order(tp2_text: &str) -> Vec<Tp2Comp
         let designated_component_id = block
             .iter()
             .find_map(|line| parse_designated_id(&line.to_ascii_uppercase()));
-        let begin_at_component_id =
-            designated_component_id.is_none()
-                && block
+        let begin_at_component_id = designated_component_id.is_none()
+            && block
+                .first()
+                .and_then(|line| parse_begin_at_component_id(line))
+                .is_some();
+        let component_id = designated_component_id
+            .or_else(|| {
+                block
                     .first()
                     .and_then(|line| parse_begin_at_component_id(line))
-                    .is_some();
-        let component_id = designated_component_id
-            .or_else(|| block.first().and_then(|line| parse_begin_at_component_id(line)))
+            })
             .unwrap_or_default();
         out.push(Tp2ComponentBlock {
             component_id,

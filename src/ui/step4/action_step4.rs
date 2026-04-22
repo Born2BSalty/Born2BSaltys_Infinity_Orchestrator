@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Step4Action {
-    SaveWeiduLog,
-}
+pub use crate::app::step4_action::Step4Action;

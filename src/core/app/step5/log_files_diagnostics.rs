@@ -4,7 +4,60 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::ui::state::Step1State;
+use chrono::Local;
+
+use super::source_logs::{copy_saved_weidu_logs, copy_source_weidu_logs};
+use crate::app::state::{Step1State, Step5State};
+
+pub fn begin_new_run(step5: &mut Step5State) -> String {
+    prune_old_diagnostics(None);
+    let run_id = make_run_id();
+    step5.diagnostics_run_id = Some(run_id.clone());
+    run_id
+}
+
+pub fn current_or_new_run_id(step5: &Step5State) -> String {
+    step5.diagnostics_run_id.clone().unwrap_or_else(make_run_id)
+}
+
+pub fn run_dir_from_id(run_id: &str) -> PathBuf {
+    PathBuf::from("diagnostics").join(format!("run_{run_id}"))
+}
+
+pub fn prune_old_diagnostics(keep_run_id: Option<&str>) {
+    let diagnostics_dir = Path::new("diagnostics");
+    let entries = match fs::read_dir(diagnostics_dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() && name.starts_with("run_") {
+            let keep_name = keep_run_id.map(|id| format!("run_{id}"));
+            if keep_name.as_deref() == Some(name.as_ref()) {
+                continue;
+            }
+            let _ = fs::remove_dir_all(&path);
+        }
+    }
+}
+
+pub fn copy_weidu_logs_for_diagnostics(step1: &Step1State, run_id: &str) {
+    if !step1.bio_full_debug && !step1.log_raw_output_dev {
+        return;
+    }
+    let run_dir = run_dir_from_id(run_id);
+    let source_logs_dir = run_dir.join("source_logs");
+    let _ = copy_source_weidu_logs(step1, &source_logs_dir, "original");
+    let saved_logs_dir = run_dir.join("saved_logs");
+    let _ = copy_saved_weidu_logs(step1, &saved_logs_dir, "original");
+}
+
+fn make_run_id() -> String {
+    Local::now().format("%Y-%m-%d_%H-%M-%S_%3f").to_string()
+}
 
 #[derive(Debug, Clone)]
 pub struct DiagnosticLogGroup {
@@ -40,7 +93,11 @@ pub fn copy_diagnostic_origin_logs(step1: &Step1State, logs_dir: &Path) -> Vec<D
             should_check_weidu_bgee_log(step1, "BG2EE WeiDU Log Folder"),
         ),
         copy_file_group(logs_dir, "BGEE WeiDU Log File", step1.bgee_log_file.trim()),
-        copy_file_group(logs_dir, "BG2EE WeiDU Log File", step1.bg2ee_log_file.trim()),
+        copy_file_group(
+            logs_dir,
+            "BG2EE WeiDU Log File",
+            step1.bg2ee_log_file.trim(),
+        ),
     ];
 
     if !step1.eet_pre_dir.trim().is_empty() {

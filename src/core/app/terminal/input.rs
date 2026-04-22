@@ -13,11 +13,6 @@ pub(super) fn send_line(term_state: &mut EmbeddedTerminal, line: &str) {
     send_bytes(term_state, data);
 }
 
-pub(super) fn focus(term_state: &mut EmbeddedTerminal) {
-    term_state.request_focus = true;
-    term_state.active = true;
-}
-
 pub(super) fn shutdown(term_state: &mut EmbeddedTerminal) {
     send_bytes(term_state, vec![0x03]);
     send_line(term_state, "exit");

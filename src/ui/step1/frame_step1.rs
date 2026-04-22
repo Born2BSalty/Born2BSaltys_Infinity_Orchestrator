@@ -3,12 +3,20 @@
 
 use eframe::egui;
 
+use crate::app::state::Step1State;
 use crate::ui::layout::{SECTION_GAP, TOP_BOX_HEIGHT};
 use crate::ui::shared::layout_tokens_global::{STEP1_ADVANCED_MIN_H, STEP1_SIDE_PANEL_MIN_H};
-use crate::ui::state::Step1State;
+use crate::ui::step1::action_step1::Step1Action;
+use crate::ui::step1::archive_backup_step1;
 use crate::ui::step1::content_step1;
 
-pub fn render_top(ui: &mut egui::Ui, state: &mut Step1State, dev_mode: bool) {
+pub fn render_top(
+    ui: &mut egui::Ui,
+    state: &mut Step1State,
+    dev_mode: bool,
+    github_button_label: &str,
+    action: &mut Option<Step1Action>,
+) {
     ui.columns(3, |cols| {
         cols[0].group(|ui| {
             ui.set_width(ui.available_width());
@@ -27,7 +35,7 @@ pub fn render_top(ui: &mut egui::Ui, state: &mut Step1State, dev_mode: bool) {
             ui.set_width(ui.available_width());
             ui.set_min_height(STEP1_SIDE_PANEL_MIN_H + 1.0);
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-            content_step1::render_options_content(ui, state);
+            content_step1::render_options_content(ui, state, github_button_label, action);
         });
 
         cols[2].group(|ui| {
@@ -54,6 +62,15 @@ pub fn render_bottom(ui: &mut egui::Ui, state: &mut Step1State) {
             content_step1::render_tools_content(ui, state);
         });
     });
+
+    if state.download_archive {
+        ui.add_space(SECTION_GAP);
+        ui.group(|ui| {
+            ui.set_width(ui.available_width());
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+            archive_backup_step1::render_archive_backup_content(ui, state);
+        });
+    }
 
     ui.add_space(SECTION_GAP);
 

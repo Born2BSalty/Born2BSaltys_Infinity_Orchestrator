@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
 
 use super::Tp2LayoutSummary;
 

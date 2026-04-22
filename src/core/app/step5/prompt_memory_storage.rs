@@ -13,13 +13,33 @@ use super::types::{PromptAnswerDiskEntry, PromptAnswerEntry, PromptAnswersDisk};
 static PROMPT_MEMORY: OnceLock<Mutex<HashMap<String, PromptAnswerEntry>>> = OnceLock::new();
 
 pub(super) fn memory() -> &'static Mutex<HashMap<String, PromptAnswerEntry>> {
-    PROMPT_MEMORY.get_or_init(|| Mutex::new(load_from_disk().unwrap_or_default()))
+    PROMPT_MEMORY.get_or_init(|| Mutex::new(load_from_disk()))
 }
 
-pub(super) fn load_from_disk() -> Option<HashMap<String, PromptAnswerEntry>> {
+pub(super) fn load_from_disk() -> HashMap<String, PromptAnswerEntry> {
+    set_last_load_error(None);
     let path = prompt_memory_path();
-    let content = fs::read_to_string(path).ok()?;
-    parse_content(&content)
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return HashMap::new(),
+        Err(err) => {
+            set_last_load_error(Some(format!(
+                "Load prompt memory failed for {}: {err}",
+                path.display()
+            )));
+            return HashMap::new();
+        }
+    };
+    match parse_content(&content) {
+        Some(parsed) => parsed,
+        None => {
+            set_last_load_error(Some(format!(
+                "Parse prompt memory failed for {}",
+                path.display()
+            )));
+            HashMap::new()
+        }
+    }
 }
 
 pub(super) fn save_to_disk(map: &HashMap<String, PromptAnswerEntry>) -> std::io::Result<()> {
@@ -33,11 +53,11 @@ pub(super) fn save_to_disk(map: &HashMap<String, PromptAnswerEntry>) -> std::io:
     fs::write(path, raw)
 }
 
-pub(super) fn delete_disk_file() {
+pub(super) fn delete_disk_file() -> std::io::Result<()> {
     match fs::remove_file(prompt_memory_path()) {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => {}
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
     }
 }
 
@@ -145,6 +165,10 @@ pub(super) fn parse_content(content: &str) -> Option<HashMap<String, PromptAnswe
     None
 }
 
+pub(super) fn take_last_load_error() -> Option<String> {
+    load_error().lock().ok().and_then(|mut guard| guard.take())
+}
+
 pub(super) fn dedupe_in_place(map: &mut HashMap<String, PromptAnswerEntry>) {
     let mut by_signature: HashMap<String, (String, PromptAnswerEntry)> = HashMap::new();
     let mut keys: Vec<String> = map.keys().cloned().collect();
@@ -238,4 +262,15 @@ fn merge_entries(mut keep: PromptAnswerEntry, incoming: PromptAnswerEntry) -> Pr
 
 fn prompt_memory_path() -> PathBuf {
     app_config_file("prompt_answers.json", ".")
+}
+
+fn load_error() -> &'static Mutex<Option<String>> {
+    static LOAD_ERROR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    LOAD_ERROR.get_or_init(|| Mutex::new(None))
+}
+
+fn set_last_load_error(message: Option<String>) {
+    if let Ok(mut guard) = load_error().lock() {
+        *guard = message;
+    }
 }

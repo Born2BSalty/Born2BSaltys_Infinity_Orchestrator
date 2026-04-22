@@ -1,15 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::Receiver;
 use std::sync::mpsc::TryRecvError;
 
-use crate::ui::controller::util::sort_mods_alphabetically;
-use crate::ui::step2_worker::Step2ScanEvent;
+use crate::app::controller::util::sort_mods_alphabetically;
+use crate::app::state::WizardState;
+use crate::app::step2_worker::Step2ScanEvent;
 
-use super::super::WizardApp;
-
-pub(in crate::ui::app) fn poll_step2_scan_events(app: &mut WizardApp) {
-    let Some(rx) = app.step2_scan_rx.as_ref() else {
+pub(super) fn poll_step2_scan_events(
+    state: &mut WizardState,
+    step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
+    step2_cancel: &mut Option<Arc<AtomicBool>>,
+    step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
+) {
+    let Some(rx) = step2_scan_rx.as_ref() else {
         return;
     };
     let mut reached_terminal = false;
@@ -20,9 +28,9 @@ pub(in crate::ui::app) fn poll_step2_scan_events(app: &mut WizardApp) {
                 total,
                 name,
             }) => {
-                app.step2_progress_queue.push_back((current, total, name));
-                if app.step2_progress_queue.len() > 512 {
-                    let _ = app.step2_progress_queue.pop_front();
+                step2_progress_queue.push_back((current, total, name));
+                if step2_progress_queue.len() > 512 {
+                    let _ = step2_progress_queue.pop_front();
                 }
             }
             Ok(Step2ScanEvent::Preview {
@@ -30,17 +38,33 @@ pub(in crate::ui::app) fn poll_step2_scan_events(app: &mut WizardApp) {
                 mut bg2ee_mods,
                 total,
             }) => {
-                crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
-                    &app.state.step1,
+                let compat_error = crate::app::compat_logic::apply_step2_compat_rules(
+                    &state.step1,
                     &mut bgee_mods,
                     &mut bg2ee_mods,
                 );
-                app.state.step2.bgee_mods = bgee_mods;
-                app.state.step2.bg2ee_mods = bg2ee_mods;
-                app.state.step2.selected = None;
-                app.state.step2.next_selection_order = 1;
-                app.state.step2.scan_progress_percent = 0;
-                app.state.step2.scan_status = format!("0/{total}: discovering mods...");
+                crate::app::mod_update_locks::apply_mod_update_locks(&mut bgee_mods);
+                crate::app::mod_update_locks::apply_mod_update_locks(&mut bg2ee_mods);
+                let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
+                state.step2.bgee_mods = bgee_mods;
+                state.step2.bg2ee_mods = bg2ee_mods;
+                state.step2.selected = None;
+                state.step2.next_selection_order = 1;
+                state.step2.scan_progress_percent = 0;
+                state.step2.scan_status = match (lock_load_error, compat_error) {
+                    (Some(lock_err), Some(compat_err)) => {
+                        format!(
+                            "0/{total}: discovering mods... (update lock load failed: {lock_err}; compat rules load failed: {compat_err})"
+                        )
+                    }
+                    (Some(lock_err), None) => {
+                        format!("0/{total}: discovering mods... (update lock load failed: {lock_err})")
+                    }
+                    (None, Some(compat_err)) => {
+                        format!("0/{total}: discovering mods... (compat rules load failed: {compat_err})")
+                    }
+                    (None, None) => format!("0/{total}: discovering mods..."),
+                };
             }
             Ok(Step2ScanEvent::Finished {
                 mut bgee_mods,
@@ -49,63 +73,75 @@ pub(in crate::ui::app) fn poll_step2_scan_events(app: &mut WizardApp) {
             }) => {
                 sort_mods_alphabetically(&mut bgee_mods);
                 sort_mods_alphabetically(&mut bg2ee_mods);
-                crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
-                    &app.state.step1,
+                let compat_error = crate::app::compat_logic::apply_step2_compat_rules(
+                    &state.step1,
                     &mut bgee_mods,
                     &mut bg2ee_mods,
                 );
-                app.state.step2.bgee_mods = bgee_mods;
-                app.state.step2.bg2ee_mods = bg2ee_mods;
-                app.state.step2.selected = None;
-                app.state.step2.next_selection_order = 1;
-                app.state.step2.scan_progress_percent = 100;
-                app.state.step2.scan_status = "Done".to_string();
-                app.state.step2.last_scan_report = Some(*report);
-                app.state.step2.is_scanning = false;
-                app.step2_scan_rx = None;
-                app.step2_cancel = None;
-                app.step2_progress_queue.clear();
+                crate::app::mod_update_locks::apply_mod_update_locks(&mut bgee_mods);
+                crate::app::mod_update_locks::apply_mod_update_locks(&mut bg2ee_mods);
+                let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
+                state.step2.bgee_mods = bgee_mods;
+                state.step2.bg2ee_mods = bg2ee_mods;
+                state.step2.selected = None;
+                state.step2.next_selection_order = 1;
+                state.step2.scan_progress_percent = 100;
+                state.step2.scan_status = match (lock_load_error, compat_error) {
+                    (Some(lock_err), Some(compat_err)) => {
+                        format!(
+                            "Done (update lock load failed: {lock_err}; compat rules load failed: {compat_err})"
+                        )
+                    }
+                    (Some(lock_err), None) => format!("Done (update lock load failed: {lock_err})"),
+                    (None, Some(compat_err)) => {
+                        format!("Done (compat rules load failed: {compat_err})")
+                    }
+                    (None, None) => "Done".to_string(),
+                };
+                state.step2.last_scan_report = Some(*report);
+                state.step2.is_scanning = false;
+                *step2_scan_rx = None;
+                *step2_cancel = None;
+                step2_progress_queue.clear();
                 reached_terminal = true;
                 break;
             }
             Ok(Step2ScanEvent::Failed(message)) => {
-                app.state.step2.scan_status = format!("Scan failed: {message}");
-                app.state.step2.last_scan_report = None;
-                app.state.step2.is_scanning = false;
-                app.step2_scan_rx = None;
-                app.step2_cancel = None;
-                app.step2_progress_queue.clear();
+                state.step2.scan_status = format!("Scan failed: {message}");
+                state.step2.last_scan_report = None;
+                state.step2.is_scanning = false;
+                *step2_scan_rx = None;
+                *step2_cancel = None;
+                step2_progress_queue.clear();
                 reached_terminal = true;
                 break;
             }
             Ok(Step2ScanEvent::Canceled) => {
-                app.state.step2.scan_status = "Scan canceled".to_string();
-                app.state.step2.last_scan_report = None;
-                app.state.step2.is_scanning = false;
-                app.step2_scan_rx = None;
-                app.step2_cancel = None;
-                app.step2_progress_queue.clear();
+                state.step2.scan_status = "Scan canceled".to_string();
+                state.step2.last_scan_report = None;
+                state.step2.is_scanning = false;
+                *step2_scan_rx = None;
+                *step2_cancel = None;
+                step2_progress_queue.clear();
                 reached_terminal = true;
                 break;
             }
             Err(TryRecvError::Empty) => break,
             Err(TryRecvError::Disconnected) => {
-                app.state.step2.scan_status = "Scan worker disconnected".to_string();
-                app.state.step2.last_scan_report = None;
-                app.state.step2.is_scanning = false;
-                app.step2_scan_rx = None;
-                app.step2_cancel = None;
-                app.step2_progress_queue.clear();
+                state.step2.scan_status = "Scan worker disconnected".to_string();
+                state.step2.last_scan_report = None;
+                state.step2.is_scanning = false;
+                *step2_scan_rx = None;
+                *step2_cancel = None;
+                step2_progress_queue.clear();
                 reached_terminal = true;
                 break;
             }
         }
     }
-    if !reached_terminal
-        && let Some((current, total, name)) = app.step2_progress_queue.pop_front()
-    {
-        app.state.step2.scan_status = format!("{current}/{total}: {name}");
-        app.state.step2.scan_progress_percent = if total == 0 {
+    if !reached_terminal && let Some((current, total, name)) = step2_progress_queue.pop_front() {
+        state.step2.scan_status = format!("{current}/{total}: {name}");
+        state.step2.scan_progress_percent = if total == 0 {
             0
         } else {
             ((current * 100) / total).min(100) as u8

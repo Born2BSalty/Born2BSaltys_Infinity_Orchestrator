@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 
+use crate::app::state::WizardState;
 use crate::platform_defaults::{resolve_mod_installer_binary, resolve_weidu_binary};
-use crate::ui::state::WizardState;
 
 #[derive(Debug, Clone)]
 pub struct DiagnosticsContext {
@@ -194,10 +194,9 @@ fn push_file_check(
     let target_key = format!("file:{}", path.display());
     if seen.insert(target_key) {
         match probe_file_target(&path) {
-            Ok(true) => summary.lines.push(format!(
-                "OK | {label} target_exists | {}",
-                path.display()
-            )),
+            Ok(true) => summary
+                .lines
+                .push(format!("OK | {label} target_exists | {}", path.display())),
             Ok(false) => summary.lines.push(format!(
                 "FAIL | {label} target_exists | {} | file does not exist",
                 path.display()
@@ -209,11 +208,9 @@ fn push_file_check(
         }
     }
     let Some(parent) = path.parent() else {
-        summary
-            .lines
-            .push(format!(
-                "INFO | {label} parent_writable | {value} | no parent directory"
-            ));
+        summary.lines.push(format!(
+            "INFO | {label} parent_writable | {value} | no parent directory"
+        ));
         return;
     };
     let key = format!("dir:{}", parent.display());

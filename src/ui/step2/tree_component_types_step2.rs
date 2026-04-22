@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::Step2Selection;
-use crate::ui::step2::state_step2::PromptEvalContext;
+use crate::app::state::Step2Selection;
+use crate::parser::prompt_eval_expr::PromptEvalContext;
 
 pub(crate) type CompatPopupTarget = Option<(String, String, String)>;
 pub(crate) type PromptPopupTarget = Option<(String, String)>;

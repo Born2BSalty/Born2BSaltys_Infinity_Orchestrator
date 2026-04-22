@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use super::PromptSummaryIndex;
 use self::model::ParserFlowNode;
+use super::PromptSummaryIndex;
 
 mod map_to_bio;
 mod model;
@@ -58,25 +58,17 @@ pub fn collect_prompt_summary_index(
 
 fn collect_flow_preview(nodes: &[ParserFlowNode], limit: usize) -> Vec<(String, String)> {
     let mut out = Vec::<(String, String)>::new();
-    collect_flow_preview_inner(nodes, limit, &mut out);
-    out
-}
-
-fn collect_flow_preview_inner(
-    nodes: &[ParserFlowNode],
-    limit: usize,
-    out: &mut Vec<(String, String)>,
-) {
-    for node in nodes {
+    let mut stack: Vec<&ParserFlowNode> = nodes.iter().rev().collect();
+    while let Some(node) = stack.pop() {
         if out.len() >= limit {
-            return;
+            break;
         }
         out.push((node.id.clone(), node.label.clone()));
-        collect_flow_preview_inner(&node.children, limit, out);
-        if out.len() >= limit {
-            return;
+        for child in node.children.iter().rev() {
+            stack.push(child);
         }
     }
+    out
 }
 
 fn non_empty(value: &str) -> Option<String> {
@@ -89,12 +81,25 @@ fn non_empty(value: &str) -> Option<String> {
 }
 
 fn count_flow_nodes(nodes: &[ParserFlowNode]) -> usize {
-    nodes.iter().map(|node| 1 + count_flow_nodes(&node.children)).sum()
+    let mut total = 0usize;
+    let mut stack: Vec<&ParserFlowNode> = nodes.iter().collect();
+    while let Some(node) = stack.pop() {
+        total += 1;
+        for child in &node.children {
+            stack.push(child);
+        }
+    }
+    total
 }
 
 fn count_flow_event_refs(nodes: &[ParserFlowNode]) -> usize {
-    nodes
-        .iter()
-        .map(|node| node.event_ids.len() + count_flow_event_refs(&node.children))
-        .sum()
+    let mut total = 0usize;
+    let mut stack: Vec<&ParserFlowNode> = nodes.iter().collect();
+    while let Some(node) = stack.pop() {
+        total += node.event_ids.len();
+        for child in &node.children {
+            stack.push(child);
+        }
+    }
+    total
 }

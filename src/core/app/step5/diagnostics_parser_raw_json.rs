@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
 
 pub(super) fn write_parser_raw_json(
     run_dir: &Path,
@@ -81,7 +81,13 @@ fn parser_raw_file_name(tp2_path: &str) -> String {
         .and_then(|s| s.to_str())
         .unwrap_or("parser")
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>();
     let mut hasher = DefaultHasher::new();
     tp2_path.hash(&mut hasher);

@@ -3,15 +3,12 @@
 
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
-use super::command::run_weidu;
 use super::LanguageEntry;
+use super::command::run_weidu;
 
-pub(super) fn list_languages(
-    weidu_binary: &Path,
-    tp2_path: &Path,
-) -> Result<Vec<LanguageEntry>> {
+pub(super) fn list_languages(weidu_binary: &Path, tp2_path: &Path) -> Result<Vec<LanguageEntry>> {
     let args = vec![
         "--nogame".to_string(),
         "--list-languages".to_string(),

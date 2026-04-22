@@ -3,8 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::app::state::{Step2ModState, Step2ScanReport};
 use crate::parser::PromptSummaryEvent;
-use crate::ui::state::{Step2ModState, Step2ScanReport};
 
 pub mod cache;
 pub mod discovery;

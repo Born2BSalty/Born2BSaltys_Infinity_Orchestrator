@@ -3,9 +3,7 @@
 
 use std::collections::HashMap;
 
-use eframe::egui;
-
-use super::{EmbeddedTerminal, input, scripted_inputs, view};
+use super::{EmbeddedTerminal, input, scripted_inputs};
 
 impl EmbeddedTerminal {
     pub fn has_new_data(&self) -> bool {
@@ -24,22 +22,6 @@ impl EmbeddedTerminal {
         code
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui, size: egui::Vec2) {
-        view::render(self, ui, size);
-    }
-
-    pub fn set_show_important_only(&mut self, enabled: bool) {
-        self.show_important_only = enabled;
-    }
-
-    pub fn set_show_installed_only(&mut self, enabled: bool) {
-        self.show_installed_only = enabled;
-    }
-
-    pub fn set_auto_scroll(&mut self, enabled: bool) {
-        self.stick_to_bottom = enabled;
-    }
-
     pub fn send_line(&mut self, line: &str) {
         self.log_bio_debug(&format!("send_line=\"{}\"", line));
         input::send_line(self, line);
@@ -49,17 +31,14 @@ impl EmbeddedTerminal {
         let shown = if line.is_empty() { "<blank>" } else { line };
         let sent_line = format!("\n[sent] {shown}\n");
         self.append_output(&sent_line);
-        self.important_buffer.push_str(sent_line.trim_start_matches('\n'));
+        self.important_buffer
+            .push_str(sent_line.trim_start_matches('\n'));
         self.prompt_capture_active = false;
         self.prompt_capture_lines = 0;
         self.prompt_capture_after_send = true;
         self.warning_capture_active = false;
         self.warning_capture_lines = 0;
         self.has_new_data = true;
-    }
-
-    pub fn focus(&mut self) {
-        input::focus(self);
     }
 
     pub fn shutdown(&mut self) {

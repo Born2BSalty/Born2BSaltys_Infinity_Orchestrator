@@ -5,11 +5,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 
-use crate::ui::scan::discovery::display_name_from_group_key;
-use crate::ui::scan::parse::dedup_components;
-use crate::ui::scan::readme::find_best_readme;
-use crate::ui::scan::ScannedComponent;
-use crate::ui::state::{Step2ComponentState, Step2HiddenComponentAudit, Step2ModState};
+use crate::app::scan::ScannedComponent;
+use crate::app::scan::discovery::display_name_from_group_key;
+use crate::app::scan::parse::dedup_components;
+use crate::app::scan::readme::find_best_readme;
+use crate::app::state::{Step2ComponentState, Step2HiddenComponentAudit, Step2ModState};
 
 const NESTED_UTILITY_HIDE_REASON: &str = "nested_other_no_log_record_utility";
 
@@ -70,12 +70,11 @@ pub(super) fn to_mod_states(
                     )
                 })
                 .unwrap_or_default();
-            let hidden_prompt_like_component_ids =
-                hidden::detect_hidden_prompt_like_component_ids(
-                    Some(&tp2_path),
-                    tp2_text.as_deref(),
-                    &deduped_components,
-                );
+            let hidden_prompt_like_component_ids = hidden::detect_hidden_prompt_like_component_ids(
+                Some(&tp2_path),
+                tp2_text.as_deref(),
+                &deduped_components,
+            );
             let hidden_components = deduped_components
                 .iter()
                 .filter_map(|component| {
@@ -119,6 +118,9 @@ pub(super) fn to_mod_states(
                 tp2_path,
                 readme_path,
                 web_url: None,
+                package_marker: None,
+                latest_checked_version: None,
+                update_locked: false,
                 mod_prompt_summary,
                 mod_prompt_events,
                 name: display_name,
@@ -168,7 +170,9 @@ pub(super) fn to_mod_states(
 
     let mut counts: HashMap<String, usize> = HashMap::new();
     for mod_state in &mods {
-        *counts.entry(mod_state.name.to_ascii_lowercase()).or_insert(0) += 1;
+        *counts
+            .entry(mod_state.name.to_ascii_lowercase())
+            .or_insert(0) += 1;
     }
     for mod_state in &mut mods {
         if counts
@@ -199,7 +203,7 @@ fn should_drop_hidden_only_utility_mod(mod_state: &Step2ModState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::should_drop_hidden_only_utility_mod;
-    use crate::ui::state::{Step2HiddenComponentAudit, Step2ModState};
+    use crate::app::state::{Step2HiddenComponentAudit, Step2ModState};
 
     #[test]
     fn drops_mod_header_when_only_nested_utility_components_are_hidden() {
@@ -210,6 +214,9 @@ mod tests {
                 .to_string(),
             readme_path: None,
             web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
             mod_prompt_summary: None,
             mod_prompt_events: Vec::new(),
             checked: false,
@@ -233,6 +240,9 @@ mod tests {
             tp2_path: "/mods/SomeMod/SomeMod.tp2".to_string(),
             readme_path: None,
             web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
             mod_prompt_summary: None,
             mod_prompt_events: Vec::new(),
             checked: false,

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use walkdir::WalkDir;
 
-use crate::ui::state::{Step1State, Step2ModState};
+use crate::app::state::{Step1State, Step2ModState};
 
 pub fn resolve_scan_game_dir(step1: &Step1State) -> Option<PathBuf> {
     let mut candidates: Vec<&str> = Vec::new();
@@ -48,18 +48,19 @@ pub fn resolve_scan_game_dir(step1: &Step1State) -> Option<PathBuf> {
     first_existing
 }
 
-pub fn group_tp2s(mod_root: &Path, depth: usize) -> Vec<(String, Vec<PathBuf>)> {
-    let tp2_paths: Vec<PathBuf> = WalkDir::new(mod_root)
-        .follow_links(false)
-        .max_depth(depth)
-        .into_iter()
-        .flatten()
-        .filter(|entry| entry.file_type().is_file())
-        .filter_map(|entry| {
-            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-            name.ends_with(".tp2").then(|| entry.path().to_path_buf())
-        })
-        .collect();
+pub fn group_tp2s(mod_root: &Path, depth: usize) -> Result<Vec<(String, Vec<PathBuf>)>, String> {
+    let mut tp2_paths = Vec::<PathBuf>::new();
+    for entry in WalkDir::new(mod_root).follow_links(false).max_depth(depth) {
+        let entry = entry
+            .map_err(|err| format!("failed to scan mods folder {}: {err}", mod_root.display()))?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if name.ends_with(".tp2") {
+            tp2_paths.push(entry.path().to_path_buf());
+        }
+    }
 
     let tp2_dirs: BTreeSet<PathBuf> = tp2_paths
         .iter()
@@ -71,7 +72,7 @@ pub fn group_tp2s(mod_root: &Path, depth: usize) -> Vec<(String, Vec<PathBuf>)> 
         let group_key = mod_group_key(mod_root, &path, &tp2_dirs);
         grouped.entry(group_key).or_default().push(path);
     }
-    grouped.into_iter().collect()
+    Ok(grouped.into_iter().collect())
 }
 
 pub fn build_preview_mods(grouped: &[(String, Vec<PathBuf>)]) -> Vec<Step2ModState> {
@@ -93,6 +94,9 @@ pub fn build_preview_mods(grouped: &[(String, Vec<PathBuf>)]) -> Vec<Step2ModSta
                 tp2_path,
                 readme_path: None,
                 web_url: None,
+                package_marker: None,
+                latest_checked_version: None,
+                update_locked: false,
                 mod_prompt_summary: None,
                 mod_prompt_events: Vec::new(),
                 checked: false,
@@ -193,9 +197,7 @@ mod tests {
         );
         let tp2_dirs = BTreeSet::from([
             PathBuf::from("/mods/EET"),
-            PathBuf::from(
-                "/mods/EET/other/BGEE_to_EET_mod_checker/BGEE_to_EET_mod_checker",
-            ),
+            PathBuf::from("/mods/EET/other/BGEE_to_EET_mod_checker/BGEE_to_EET_mod_checker"),
         ]);
 
         let group = mod_group_key(&mods_root, &tp2_path, &tp2_dirs);

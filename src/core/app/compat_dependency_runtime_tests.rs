@@ -3,11 +3,11 @@
 
 use std::collections::HashMap;
 
+use super::super::compat_rule_runtime::CompatActiveItem;
 use super::{
     ComponentRequirement, ComponentRequirementCache, ComponentRequirementTarget,
     DependencyEvalMode, scan_dependency_hit,
 };
-use super::super::compat_rule_runtime::CompatActiveItem;
 
 #[test]
 fn reports_missing_dep_for_or_requirement_when_none_selected() {
@@ -83,10 +83,12 @@ fn requirement(raw_line: &str, targets: &[(&str, &str)]) -> ComponentRequirement
         raw_line: raw_line.to_string(),
         targets: targets
             .iter()
-            .map(|(target_mod, target_component_id)| ComponentRequirementTarget {
-                target_mod: (*target_mod).to_string(),
-                target_component_id: (*target_component_id).to_string(),
-            })
+            .map(
+                |(target_mod, target_component_id)| ComponentRequirementTarget {
+                    target_mod: (*target_mod).to_string(),
+                    target_component_id: (*target_component_id).to_string(),
+                },
+            )
             .collect(),
         message: None,
     }

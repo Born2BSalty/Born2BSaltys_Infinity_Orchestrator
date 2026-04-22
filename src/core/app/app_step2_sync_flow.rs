@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step2ModState, Step3ItemState};
+use crate::app::state::{Step2ModState, Step3ItemState, WizardState};
 
-use super::WizardApp;
-
-pub(super) fn sync_step2_from_step3(app: &mut WizardApp) {
-    sync_tab_from_step3(&mut app.state.step2.bgee_mods, &mut app.state.step3.bgee_items);
-    sync_tab_from_step3(&mut app.state.step2.bg2ee_mods, &mut app.state.step3.bg2ee_items);
-    crate::ui::compat_logic::apply_step2_compat_rules(
-        &app.state.step1,
-        &mut app.state.step2.bgee_mods,
-        &mut app.state.step2.bg2ee_mods,
-    );
-    super::step3_sync_flow::sync_step3_from_step2(app);
-    app.last_step2_sync_signature = Some(step2_selection_signature(
-        &app.state.step2.bgee_mods,
-        &app.state.step2.bg2ee_mods,
+pub(crate) fn sync_step2_from_step3(state: &mut WizardState) {
+    sync_tab_from_step3(&mut state.step2.bgee_mods, &mut state.step3.bgee_items);
+    sync_tab_from_step3(&mut state.step2.bg2ee_mods, &mut state.step3.bg2ee_items);
+    if let Some(err) = crate::app::compat_logic::apply_step2_compat_rules(
+        &state.step1,
+        &mut state.step2.bgee_mods,
+        &mut state.step2.bg2ee_mods,
+    ) {
+        state.step2.scan_status = format!("Compat rules load failed: {err}");
+    }
+    super::app_step3_sync_flow::sync_step3_from_step2(state);
+    state.set_last_step2_sync_signature(step2_selection_signature(
+        &state.step2.bgee_mods,
+        &state.step2.bg2ee_mods,
     ));
 }
 
@@ -35,7 +35,11 @@ fn sync_tab_from_step3(mods: &mut [Step2ModState], items: &mut [Step3ItemState])
 
 fn clear_checked_orders(mods: &mut [Step2ModState]) {
     for mod_state in mods {
-        for component in mod_state.components.iter_mut().filter(|component| component.checked) {
+        for component in mod_state
+            .components
+            .iter_mut()
+            .filter(|component| component.checked)
+        {
             component.selected_order = None;
         }
     }
@@ -43,11 +47,18 @@ fn clear_checked_orders(mods: &mut [Step2ModState]) {
 
 fn assign_step2_order(mods: &mut [Step2ModState], tp_file: &str, component_id: &str, order: usize) {
     for mod_state in mods {
-        if !mod_state.tp_file.trim().eq_ignore_ascii_case(tp_file.trim()) {
+        if !mod_state
+            .tp_file
+            .trim()
+            .eq_ignore_ascii_case(tp_file.trim())
+        {
             continue;
         }
         for component in &mut mod_state.components {
-            if component.component_id.trim().eq_ignore_ascii_case(component_id.trim())
+            if component
+                .component_id
+                .trim()
+                .eq_ignore_ascii_case(component_id.trim())
                 && component.checked
             {
                 component.selected_order = Some(order);
@@ -79,7 +90,11 @@ fn step2_selection_signature(bgee_mods: &[Step2ModState], bg2ee_mods: &[Step2Mod
 fn collect_tab_signature(tag: &str, mods: &[Step2ModState], out: &mut Vec<String>) {
     for mod_state in mods {
         let tp = mod_state.tp_file.to_ascii_uppercase();
-        for component in mod_state.components.iter().filter(|component| component.checked) {
+        for component in mod_state
+            .components
+            .iter()
+            .filter(|component| component.checked)
+        {
             out.push(format!(
                 "{tag}|{tp}|{}|{}",
                 component.component_id,

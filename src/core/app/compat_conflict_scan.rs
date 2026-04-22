@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step2ComponentState, Step2ModState};
+use crate::app::state::{Step2ComponentState, Step2ModState};
 
 use super::compat_conflict_runtime::{
-    build_conflict_scan_context, scan_conflict_hit_with_context, ComponentConflictCache, ConflictCompatHit,
+    ComponentConflictCache, ConflictCompatHit, build_conflict_scan_context,
+    scan_conflict_hit_with_context,
 };
-use super::compat_rule_runtime::{active_item_order, collect_step2_active_items, normalize_mod_key};
+use super::compat_rule_runtime::{
+    active_item_order, collect_step2_active_items, normalize_mod_key,
+};
 
 pub(crate) fn apply_step2_scan_conflict(mods: &mut [Step2ModState]) {
     let active_items = collect_step2_active_items(mods);

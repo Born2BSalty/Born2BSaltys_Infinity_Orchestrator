@@ -3,35 +3,36 @@
 
 use std::collections::HashMap;
 
-use crate::ui::controller::step3_sync::{build_step3_items, collect_parent_block_ids};
-use crate::ui::state::Step3ItemState;
+use crate::app::controller::step3_sync::{build_step3_items, collect_parent_block_ids};
+use crate::app::state::{Step3ItemState, WizardState};
 
-use super::WizardApp;
+pub(crate) fn sync_step3_from_step2(state: &mut WizardState) {
+    let bgee_fresh = build_step3_items(&state.step2.bgee_mods);
+    let bg2ee_fresh = build_step3_items(&state.step2.bg2ee_mods);
 
-pub(super) fn sync_step3_from_step2(app: &mut WizardApp) {
-    let bgee_fresh = build_step3_items(&app.state.step2.bgee_mods);
-    let bg2ee_fresh = build_step3_items(&app.state.step2.bg2ee_mods);
-
-    app.state.step3.bgee_items = reconcile_step3_items(&app.state.step3.bgee_items, bgee_fresh);
-    app.state.step3.bg2ee_items = reconcile_step3_items(&app.state.step3.bg2ee_items, bg2ee_fresh);
-    app.state.step3.bgee_collapsed_blocks = collect_parent_block_ids(&app.state.step3.bgee_items);
-    app.state.step3.bg2ee_collapsed_blocks = collect_parent_block_ids(&app.state.step3.bg2ee_items);
-    app.state.step3.bgee_clone_seq = 1;
-    app.state.step3.bg2ee_clone_seq = 1;
-    app.state.step3.bgee_selected.clear();
-    app.state.step3.bg2ee_selected.clear();
-    app.state.step3.bgee_drag_from = None;
-    app.state.step3.bg2ee_drag_from = None;
-    app.state.step3.bgee_drag_over = None;
-    app.state.step3.bg2ee_drag_over = None;
-    app.state.step3.bgee_drag_indices.clear();
-    app.state.step3.bg2ee_drag_indices.clear();
-    app.state.step3.bgee_anchor = None;
-    app.state.step3.bg2ee_anchor = None;
-    app.state.step3.jump_to_selected_requested = false;
+    state.step3.bgee_items = reconcile_step3_items(&state.step3.bgee_items, bgee_fresh);
+    state.step3.bg2ee_items = reconcile_step3_items(&state.step3.bg2ee_items, bg2ee_fresh);
+    state.step3.bgee_collapsed_blocks = collect_parent_block_ids(&state.step3.bgee_items);
+    state.step3.bg2ee_collapsed_blocks = collect_parent_block_ids(&state.step3.bg2ee_items);
+    state.step3.bgee_clone_seq = 1;
+    state.step3.bg2ee_clone_seq = 1;
+    state.step3.bgee_selected.clear();
+    state.step3.bg2ee_selected.clear();
+    state.step3.bgee_drag_from = None;
+    state.step3.bg2ee_drag_from = None;
+    state.step3.bgee_drag_over = None;
+    state.step3.bg2ee_drag_over = None;
+    state.step3.bgee_drag_indices.clear();
+    state.step3.bg2ee_drag_indices.clear();
+    state.step3.bgee_anchor = None;
+    state.step3.bg2ee_anchor = None;
+    state.step3.jump_to_selected_requested = false;
 }
 
-fn reconcile_step3_items(current: &[Step3ItemState], fresh: Vec<Step3ItemState>) -> Vec<Step3ItemState> {
+fn reconcile_step3_items(
+    current: &[Step3ItemState],
+    fresh: Vec<Step3ItemState>,
+) -> Vec<Step3ItemState> {
     let current_order: Vec<String> = current
         .iter()
         .filter(|item| !item.is_parent)

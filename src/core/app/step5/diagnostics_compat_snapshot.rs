@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step2ComponentState, Step2ModState, WizardState};
+use crate::app::state::{Step2ComponentState, Step2ModState, WizardState};
 
 pub(super) fn append_dev_compat_snapshots(state: &WizardState, out: &mut String) {
     out.push_str("\n[Step2 Compatibility Snapshot]\n");
@@ -26,7 +26,11 @@ fn append_step2_compat_snapshot(tab: &str, mods: &[Step2ModState], out: &mut Str
     }
 }
 
-fn append_step2_component(mod_state: &Step2ModState, component: &Step2ComponentState, out: &mut String) {
+fn append_step2_component(
+    mod_state: &Step2ModState,
+    component: &Step2ComponentState,
+    out: &mut String,
+) {
     let kind = component.compat_kind.as_deref().unwrap_or("none");
     out.push_str(&format!(
         "  - {} #{} [{}] {}\n",
@@ -34,7 +38,11 @@ fn append_step2_component(mod_state: &Step2ModState, component: &Step2ComponentS
     ));
     out.push_str(&format!(
         "    state={} checked={}\n",
-        if component.disabled { "disabled" } else { "selectable" },
+        if component.disabled {
+            "disabled"
+        } else {
+            "selectable"
+        },
         if component.checked { "yes" } else { "no" }
     ));
     if let Some(reason) = component.disabled_reason.as_deref()
@@ -48,7 +56,8 @@ fn append_step2_component(mod_state: &Step2ModState, component: &Step2ComponentS
         out.push_str(&format!("    source: {source}\n"));
     }
     if let Some(related_mod) = component.compat_related_mod.as_deref() {
-        let related = if let Some(related_component) = component.compat_related_component.as_deref() {
+        let related = if let Some(related_component) = component.compat_related_component.as_deref()
+        {
             format!("{related_mod} #{related_component}")
         } else {
             related_mod.to_string()

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::sync::{Mutex, OnceLock};
+
 use super::{PromptAnswerEntry, alias, storage};
 
 #[derive(Debug, Clone, Default)]
@@ -61,7 +63,9 @@ pub(super) fn remember_answer_with_context(
         }
         guard.insert(prompt_key.to_string(), entry);
         storage::dedupe_in_place(&mut guard);
-        let _ = storage::save_to_disk(&guard);
+        if let Err(err) = storage::save_to_disk(&guard) {
+            record_persist_error(format!("Save prompt memory failed: {err}"));
+        }
     }
 }
 
@@ -77,26 +81,32 @@ pub(super) fn ensure_prompt_entry(prompt_key: &str, preview: &str) {
                     entry.alias = alias::suggest_alias_from_preview(preview);
                 }
             }
-            let _ = storage::save_to_disk(&guard);
+            if let Err(err) = storage::save_to_disk(&guard) {
+                record_persist_error(format!("Save prompt memory failed: {err}"));
+            }
             return;
         }
-        guard.entry(prompt_key.to_string()).or_insert_with(|| PromptAnswerEntry {
-            alias: alias::suggest_alias_from_preview(preview),
-            answer: String::new(),
-            enabled: false,
-            preview: preview.to_string(),
-            component_key: String::new(),
-            tp2_file: String::new(),
-            component_id: String::new(),
-            component_name: String::new(),
-            prompt_kind: String::new(),
-            source: String::new(),
-            captured_at: 0,
-            last_used_at: 0,
-            hit_count: 0,
-        });
+        guard
+            .entry(prompt_key.to_string())
+            .or_insert_with(|| PromptAnswerEntry {
+                alias: alias::suggest_alias_from_preview(preview),
+                answer: String::new(),
+                enabled: false,
+                preview: preview.to_string(),
+                component_key: String::new(),
+                tp2_file: String::new(),
+                component_id: String::new(),
+                component_name: String::new(),
+                prompt_kind: String::new(),
+                source: String::new(),
+                captured_at: 0,
+                last_used_at: 0,
+                hit_count: 0,
+            });
         storage::dedupe_in_place(&mut guard);
-        let _ = storage::save_to_disk(&guard);
+        if let Err(err) = storage::save_to_disk(&guard) {
+            record_persist_error(format!("Save prompt memory failed: {err}"));
+        }
     }
 }
 
@@ -105,7 +115,9 @@ pub(super) fn set_answer(prompt_key: &str, answer: &str) {
         && let Some(entry) = guard.get_mut(prompt_key)
     {
         entry.answer = answer.to_string();
-        let _ = storage::save_to_disk(&guard);
+        if let Err(err) = storage::save_to_disk(&guard) {
+            record_persist_error(format!("Save prompt memory failed: {err}"));
+        }
     }
 }
 
@@ -114,7 +126,9 @@ pub(super) fn set_enabled(prompt_key: &str, enabled: bool) {
         && let Some(entry) = guard.get_mut(prompt_key)
     {
         entry.enabled = enabled;
-        let _ = storage::save_to_disk(&guard);
+        if let Err(err) = storage::save_to_disk(&guard) {
+            record_persist_error(format!("Save prompt memory failed: {err}"));
+        }
     }
 }
 
@@ -123,7 +137,9 @@ pub(super) fn set_alias(prompt_key: &str, alias_value: &str) {
         && let Some(entry) = guard.get_mut(prompt_key)
     {
         entry.alias = alias_value.trim().to_string();
-        let _ = storage::save_to_disk(&guard);
+        if let Err(err) = storage::save_to_disk(&guard) {
+            record_persist_error(format!("Save prompt memory failed: {err}"));
+        }
     }
 }
 
@@ -159,7 +175,9 @@ pub(super) fn attach_key_to_alias(alias_value: &str, prompt_key: &str, preview: 
                 dst_entry.preview = preview.to_string();
             }
             guard.insert(prompt_key.to_string(), dst_entry);
-            let _ = storage::save_to_disk(&guard);
+            if let Err(err) = storage::save_to_disk(&guard) {
+                record_persist_error(format!("Save prompt memory failed: {err}"));
+            }
             return;
         }
 
@@ -171,7 +189,9 @@ pub(super) fn attach_key_to_alias(alias_value: &str, prompt_key: &str, preview: 
                 existing.preview = preview.to_string();
             }
             storage::dedupe_in_place(&mut guard);
-            let _ = storage::save_to_disk(&guard);
+            if let Err(err) = storage::save_to_disk(&guard) {
+                record_persist_error(format!("Save prompt memory failed: {err}"));
+            }
         }
     }
 }
@@ -179,7 +199,9 @@ pub(super) fn attach_key_to_alias(alias_value: &str, prompt_key: &str, preview: 
 pub(super) fn delete_entry(prompt_key: &str) {
     if let Ok(mut guard) = storage::memory().lock() {
         guard.remove(prompt_key);
-        let _ = storage::save_to_disk(&guard);
+        if let Err(err) = storage::save_to_disk(&guard) {
+            record_persist_error(format!("Save prompt memory failed: {err}"));
+        }
     }
 }
 
@@ -187,7 +209,16 @@ pub(super) fn clear_all() {
     if let Ok(mut guard) = storage::memory().lock() {
         guard.clear();
     }
-    storage::delete_disk_file();
+    if let Err(err) = storage::delete_disk_file() {
+        record_persist_error(format!("Delete prompt memory failed: {err}"));
+    }
+}
+
+pub(super) fn take_last_persist_error() -> Option<String> {
+    persist_error()
+        .lock()
+        .ok()
+        .and_then(|mut guard| guard.take())
 }
 
 fn now_unix_secs() -> u64 {
@@ -196,4 +227,15 @@ fn now_unix_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+fn persist_error() -> &'static Mutex<Option<String>> {
+    static PERSIST_ERROR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    PERSIST_ERROR.get_or_init(|| Mutex::new(None))
+}
+
+fn record_persist_error(message: String) {
+    if let Ok(mut guard) = persist_error().lock() {
+        *guard = Some(message);
+    }
 }

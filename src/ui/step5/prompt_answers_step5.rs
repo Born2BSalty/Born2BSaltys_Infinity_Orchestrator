@@ -3,8 +3,8 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
-use crate::ui::terminal::EmbeddedTerminal;
+use crate::app::state::WizardState;
+use crate::app::terminal::EmbeddedTerminal;
 
 pub(crate) fn render_button(ui: &mut egui::Ui, state: &mut WizardState) {
     if ui
@@ -37,4 +37,10 @@ pub(crate) fn render_window(
         });
 
     state.step5.prompt_answers_window_open = open;
+    if let Some(err) = crate::ui::step5::prompt_memory::take_last_load_error() {
+        state.step5.last_status_text = err;
+    }
+    if let Some(err) = crate::ui::step5::prompt_memory::take_last_persist_error() {
+        state.step5.last_status_text = err;
+    }
 }

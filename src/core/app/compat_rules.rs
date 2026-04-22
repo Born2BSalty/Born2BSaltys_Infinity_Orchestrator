@@ -6,65 +6,14 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
-use serde::Deserialize;
-
+pub(crate) use super::compat_rules_model::{
+    COMPAT_RULES_SCHEMA_VERSION, CompatRule, CompatRulesFile, StringOrMany,
+};
 use crate::platform_defaults::app_config_file;
-
-pub(crate) const COMPAT_RULES_SCHEMA_VERSION: u32 = 1;
 
 const COMPAT_RULES_LEGACY_USER_FILE_NAME: &str = "step2_compat_rules.toml";
 const COMPAT_RULES_USER_FILE_NAME: &str = "step2_compat_rules_user.toml";
 const COMPAT_RULES_DEFAULT_FILE_NAME: &str = "step2_compat_rules_default.toml";
-
-#[derive(Debug, Clone, Default, Deserialize)]
-pub(crate) struct CompatRulesFile {
-    #[serde(default)]
-    pub(crate) schema_version: Option<u32>,
-    #[serde(default)]
-    pub(crate) rules: Vec<CompatRule>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct CompatRule {
-    #[serde(default = "default_true")]
-    pub(crate) enabled: bool,
-    #[serde(default, alias = "mod_name")]
-    pub(crate) r#mod: StringOrMany,
-    #[serde(default)]
-    pub(crate) component: Option<StringOrMany>,
-    #[serde(default)]
-    pub(crate) component_id: Option<StringOrMany>,
-    #[serde(default)]
-    pub(crate) mode: Option<StringOrMany>,
-    #[serde(default)]
-    pub(crate) tab: Option<StringOrMany>,
-    #[serde(default, alias = "issue")]
-    pub(crate) kind: String,
-    #[serde(default, alias = "when_kind")]
-    pub(crate) match_kind: Option<StringOrMany>,
-    #[serde(default)]
-    pub(crate) clear_kinds: Option<StringOrMany>,
-    #[serde(default)]
-    pub(crate) position: Option<String>,
-    #[serde(default)]
-    pub(crate) path_field: Option<String>,
-    #[serde(default)]
-    pub(crate) path_check: Option<String>,
-    #[serde(default)]
-    pub(crate) game_file: Option<String>,
-    #[serde(default)]
-    pub(crate) game_file_check: Option<String>,
-    #[serde(default)]
-    pub(crate) message: String,
-    #[serde(default)]
-    pub(crate) source: Option<String>,
-    #[serde(default)]
-    pub(crate) related_mod: Option<StringOrMany>,
-    #[serde(default)]
-    pub(crate) related_component: Option<StringOrMany>,
-    #[serde(skip)]
-    pub(crate) loaded_from: Option<String>,
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct CompatRulesFileInventory {
@@ -87,45 +36,10 @@ pub(crate) struct CompatRulesInventory {
     pub(crate) files: Vec<CompatRulesFileInventory>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-pub(crate) enum StringOrMany {
-    One(String),
-    Many(Vec<String>),
-}
-
-impl Default for StringOrMany {
-    fn default() -> Self {
-        Self::One(String::new())
-    }
-}
-
-impl StringOrMany {
-    pub(crate) fn trimmed_items(&self) -> Vec<String> {
-        match self {
-            Self::One(value) => {
-                let value = value.trim();
-                if value.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![value.to_string()]
-                }
-            }
-            Self::Many(values) => values
-                .iter()
-                .map(|value| value.trim())
-                .filter(|value| !value.is_empty())
-                .map(ToString::to_string)
-                .collect(),
-        }
-    }
-
-    pub(crate) fn normalized_items(&self) -> Vec<String> {
-        self.trimmed_items()
-            .into_iter()
-            .map(|value| value.to_ascii_uppercase())
-            .collect()
-    }
+#[derive(Debug, Clone)]
+pub(crate) struct CompatRulesLoad {
+    pub(crate) rules: Vec<CompatRule>,
+    pub(crate) error: Option<String>,
 }
 
 pub(crate) fn compat_rules_user_path() -> PathBuf {
@@ -138,6 +52,28 @@ pub(crate) fn compat_rules_legacy_user_path() -> PathBuf {
 
 pub(crate) fn compat_rules_default_path() -> PathBuf {
     app_config_file(COMPAT_RULES_DEFAULT_FILE_NAME, "config")
+}
+
+pub(crate) fn ensure_compat_rules_files() -> std::io::Result<()> {
+    let default_path = compat_rules_default_path();
+    let user_path = compat_rules_user_path();
+    let legacy_user_path = compat_rules_legacy_user_path();
+
+    if let Some(parent) = default_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    write_if_changed(&default_path, default_step2_rules_content())?;
+
+    if !user_path.exists() && legacy_user_path.exists() {
+        fs::copy(&legacy_user_path, &user_path)?;
+    }
+
+    if !user_path.exists() {
+        fs::write(&user_path, user_step2_rules_content())?;
+    }
+
+    Ok(())
 }
 
 pub(crate) fn effective_compat_rules_user_path() -> PathBuf {
@@ -165,7 +101,7 @@ pub(crate) fn rules_files_signature() -> String {
     )
 }
 
-pub(crate) fn load_rules() -> Vec<CompatRule> {
+pub(crate) fn load_rules() -> CompatRulesLoad {
     let default_path = compat_rules_default_path();
     let user_path = effective_compat_rules_user_path();
     let default_stamp = cache_stamp(&default_path);
@@ -179,19 +115,25 @@ pub(crate) fn load_rules() -> Vec<CompatRule> {
         && entry.default_stamp == default_stamp
         && entry.user_stamp == user_stamp
     {
-        return entry.rules.clone();
+        return entry.load.clone();
     }
 
-    let mut rules = load_rules_from_path(&default_path);
-    rules.extend(load_rules_from_path(&user_path));
+    let default_load = load_rules_from_path(&default_path);
+    let user_load = load_rules_from_path(&user_path);
+    let mut rules = default_load.rules;
+    rules.extend(user_load.rules);
+    let load = CompatRulesLoad {
+        rules,
+        error: merge_load_errors(default_load.error, user_load.error),
+    };
     *cache = Some(CachedRules {
         default_path,
         user_path,
         default_stamp,
         user_stamp,
-        rules: rules.clone(),
+        load: load.clone(),
     });
-    rules
+    load
 }
 
 pub(crate) fn inspect_compat_rules_inventory() -> CompatRulesInventory {
@@ -202,7 +144,7 @@ pub(crate) fn inspect_compat_rules_inventory() -> CompatRulesInventory {
     CompatRulesInventory {
         default_path: default_path.display().to_string(),
         user_path: user_path.display().to_string(),
-        total_loaded_rules: loaded_rules.len(),
+        total_loaded_rules: loaded_rules.rules.len(),
         files: vec![
             inspect_rules_file("default", &default_path),
             inspect_rules_file("user", &user_path),
@@ -210,8 +152,19 @@ pub(crate) fn inspect_compat_rules_inventory() -> CompatRulesInventory {
     }
 }
 
-fn default_true() -> bool {
-    true
+fn write_if_changed(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+    match fs::read_to_string(path) {
+        Ok(existing) if existing == content => Ok(()),
+        _ => fs::write(path, content),
+    }
+}
+
+fn default_step2_rules_content() -> &'static str {
+    include_str!("../config/default_step2_compat_rules.toml")
+}
+
+fn user_step2_rules_content() -> &'static str {
+    include_str!("../config/user_step2_compat_rules.toml")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -226,7 +179,7 @@ struct CachedRules {
     user_path: PathBuf,
     default_stamp: FileCacheStamp,
     user_stamp: FileCacheStamp,
-    rules: Vec<CompatRule>,
+    load: CompatRulesLoad,
 }
 
 fn rules_cache() -> &'static Mutex<Option<CachedRules>> {
@@ -257,35 +210,68 @@ fn cache_stamp_signature(path: &PathBuf) -> String {
     format!("{modified}:{}", stamp.len)
 }
 
-fn load_rules_from_path(path: &PathBuf) -> Vec<CompatRule> {
+fn load_rules_from_path(path: &PathBuf) -> CompatRulesLoad {
     let content = match fs::read_to_string(path) {
         Ok(value) => value,
-        Err(_) => return Vec::new(),
+        Err(err) => {
+            return CompatRulesLoad {
+                rules: Vec::new(),
+                error: Some(format!(
+                    "compat rules load failed for {}: {err}",
+                    path.display()
+                )),
+            };
+        }
     };
     let parsed = match toml::from_str::<CompatRulesFile>(&content) {
         Ok(value) => value,
-        Err(_) => return Vec::new(),
+        Err(err) => {
+            return CompatRulesLoad {
+                rules: Vec::new(),
+                error: Some(format!(
+                    "compat rules parse failed for {}: {err}",
+                    path.display()
+                )),
+            };
+        }
     };
     let CompatRulesFile {
         schema_version,
         rules,
     } = parsed;
     let _schema_version = schema_version.unwrap_or(COMPAT_RULES_SCHEMA_VERSION);
-    rules
-        .into_iter()
-        .filter(|rule| rule.enabled && !rule.r#mod.trimmed_items().is_empty() && !rule.kind.trim().is_empty())
-        .map(|mut rule| {
-            rule.loaded_from = Some(path.to_string_lossy().to_string());
-            rule
-        })
-        .collect()
+    CompatRulesLoad {
+        rules: rules
+            .into_iter()
+            .filter(|rule| {
+                rule.enabled
+                    && !rule.r#mod.trimmed_items().is_empty()
+                    && !rule.kind.trim().is_empty()
+            })
+            .map(|mut rule| {
+                rule.loaded_from = Some(path.to_string_lossy().to_string());
+                rule
+            })
+            .collect(),
+        error: None,
+    }
+}
+
+fn merge_load_errors(left: Option<String>, right: Option<String>) -> Option<String> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(format!("{left} | {right}")),
+        (Some(left), None) => Some(left),
+        (None, Some(right)) => Some(right),
+        (None, None) => None,
+    }
 }
 
 pub(crate) fn compat_rule_source_path(rule: &CompatRule) -> String {
-    let fallback = rule
-        .loaded_from
-        .clone()
-        .unwrap_or_else(|| effective_compat_rules_user_path().to_string_lossy().to_string());
+    let fallback = rule.loaded_from.clone().unwrap_or_else(|| {
+        effective_compat_rules_user_path()
+            .to_string_lossy()
+            .to_string()
+    });
     let Some(source) = rule.source.as_deref().map(str::trim) else {
         return fallback;
     };
@@ -358,7 +344,9 @@ fn inspect_rules_file(role: &str, path: &PathBuf) -> CompatRulesFileInventory {
     inventory.loaded_rules = parsed
         .rules
         .iter()
-        .filter(|rule| rule.enabled && !rule.r#mod.trimmed_items().is_empty() && !rule.kind.trim().is_empty())
+        .filter(|rule| {
+            rule.enabled && !rule.r#mod.trimmed_items().is_empty() && !rule.kind.trim().is_empty()
+        })
         .count();
     inventory
 }

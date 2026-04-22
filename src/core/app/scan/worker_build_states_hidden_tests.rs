@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use super::detect_hidden_prompt_like_component_ids;
-use crate::ui::scan::ScannedComponent;
+use crate::app::scan::ScannedComponent;
 
 #[test]
 fn does_not_hide_non_dummy_deprecated_placeholder_label() {
@@ -44,11 +44,8 @@ fn hides_dummy_deprecated_placeholder_by_component_id() {
 BEGIN @100 DESIGNATED 100 DEPRECATED @18
 "#;
 
-    let hidden = detect_hidden_prompt_like_component_ids(
-        None,
-        Some(tp2_text),
-        &[component("100", "dummy")],
-    );
+    let hidden =
+        detect_hidden_prompt_like_component_ids(None, Some(tp2_text), &[component("100", "dummy")]);
 
     assert_eq!(
         hidden.get("100").map(String::as_str),

@@ -3,14 +3,16 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
+use crate::app::step5::install_flow::step3_install_block_reason;
+use crate::app::terminal::EmbeddedTerminal;
 use crate::ui::step5::action_step5::Step5Action;
-use crate::ui::step5::service_install_flow_step5::step3_install_block_reason;
-use crate::ui::terminal::EmbeddedTerminal;
+use crate::ui::step5::state_step5::Step5ConsoleViewState;
 
 pub(crate) fn render_install_row(
     ui: &mut egui::Ui,
     state: &mut WizardState,
+    console_view: &mut Step5ConsoleViewState,
     mut terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
     dev_mode: bool,
@@ -112,27 +114,27 @@ pub(crate) fn render_install_row(
         crate::ui::step5::prompt_answers_step5::render_button(ui, state);
 
         ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
-        let mut general_only = !state.step5.important_only && !state.step5.installed_only;
+        let mut general_only = !console_view.important_only && !console_view.installed_only;
         let general_resp = ui
             .checkbox(&mut general_only, "General")
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_GENERAL_OUTPUT);
         if general_resp.changed() && general_only {
-            state.step5.important_only = false;
-            state.step5.installed_only = false;
+            console_view.important_only = false;
+            console_view.installed_only = false;
         }
         let important_resp = ui
-            .checkbox(&mut state.step5.important_only, "Important Only")
+            .checkbox(&mut console_view.important_only, "Important Only")
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_IMPORTANT_ONLY);
-        if important_resp.changed() && state.step5.important_only {
-            state.step5.installed_only = false;
+        if important_resp.changed() && console_view.important_only {
+            console_view.installed_only = false;
         }
         let installed_resp = ui
-            .checkbox(&mut state.step5.installed_only, "Installed Only")
+            .checkbox(&mut console_view.installed_only, "Installed Only")
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_INSTALLED_ONLY);
-        if installed_resp.changed() && state.step5.installed_only {
-            state.step5.important_only = false;
+        if installed_resp.changed() && console_view.installed_only {
+            console_view.important_only = false;
         }
-        ui.checkbox(&mut state.step5.auto_scroll, "Auto-scroll")
+        ui.checkbox(&mut console_view.auto_scroll, "Auto-scroll")
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_AUTO_SCROLL);
     });
     crate::ui::step5::content_cancel_step5::render_cancel_confirm(ui, state, terminal);

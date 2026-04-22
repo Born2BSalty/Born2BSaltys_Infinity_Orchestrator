@@ -3,9 +3,11 @@
 
 use eframe::egui;
 
-use crate::ui::state::{Step2ComponentState, Step2ModState};
+use crate::app::state::{Step2ComponentState, Step2ModState};
 
-pub(crate) fn compat_colors(kind: Option<&str>) -> Option<(egui::Color32, egui::Color32, &'static str)> {
+pub(crate) fn compat_colors(
+    kind: Option<&str>,
+) -> Option<(egui::Color32, egui::Color32, &'static str)> {
     match kind.unwrap_or_default() {
         "included" | "not_needed" => Some((
             crate::ui::shared::theme_global::included(),
@@ -62,13 +64,11 @@ pub(crate) fn parent_compat_summary(
     let mut conflicts = 0usize;
     let mut order_blocks = 0usize;
     let mut warnings = 0usize;
-    let mut conditional = 0usize;
     for component in &mod_state.components {
         match component.compat_kind.as_deref().unwrap_or_default() {
             "not_compatible" | "conflict" => conflicts = conflicts.saturating_add(1),
             "order_block" => order_blocks = order_blocks.saturating_add(1),
             "warning" => warnings = warnings.saturating_add(1),
-            "conditional" => conditional = conditional.saturating_add(1),
             _ => {}
         }
     }
@@ -76,23 +76,19 @@ pub(crate) fn parent_compat_summary(
         return Some((
             crate::ui::shared::theme_global::conflict_parent(),
             crate::ui::shared::theme_global::conflict_fill(),
-            format!("{conflicts} conflict{}", if conflicts == 1 { "" } else { "s" }),
+            format!(
+                "{conflicts} conflict{}",
+                if conflicts == 1 { "" } else { "s" }
+            ),
         ));
     }
     if order_blocks > 0 {
         return Some((
             crate::ui::shared::theme_global::warning_parent(),
             crate::ui::shared::theme_global::warning_fill(),
-            format!("{order_blocks} order issue{}", if order_blocks == 1 { "" } else { "s" }),
-        ));
-    }
-    if conditional > 0 {
-        return Some((
-            crate::ui::shared::theme_global::conditional_parent(),
-            crate::ui::shared::theme_global::conditional_fill(),
             format!(
-                "{conditional} conditional{}",
-                if conditional == 1 { "" } else { "s" }
+                "{order_blocks} order issue{}",
+                if order_blocks == 1 { "" } else { "s" }
             ),
         ));
     }
@@ -115,12 +111,10 @@ pub(crate) fn parent_compat_target(mod_state: &Step2ModState) -> Option<&Step2Co
         "warning",
     ];
     for kind in priority {
-        let prefer_checked = kind == "conflict"
-            || kind == "order_block"
-            || kind == "not_compatible";
+        let prefer_checked =
+            kind == "conflict" || kind == "order_block" || kind == "not_compatible";
         if let Some(component) = mod_state.components.iter().find(|component| {
-            component.compat_kind.as_deref() == Some(kind)
-                && (!prefer_checked || component.checked)
+            component.compat_kind.as_deref() == Some(kind) && (!prefer_checked || component.checked)
         }) {
             return Some(component);
         }

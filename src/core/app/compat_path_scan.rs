@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step1State, Step2ComponentState, Step2ModState};
+use crate::app::state::{Step1State, Step2ComponentState, Step2ModState};
 
 use super::compat_path_eval::PathRequirementContext;
-use super::compat_path_runtime::{ComponentPathGuardCache, PathRequirementHit, scan_path_requirement_hit};
+use super::compat_path_runtime::{
+    ComponentPathGuardCache, PathRequirementHit, scan_path_requirement_hit,
+};
 use super::compat_rule_runtime::normalize_mod_key;
 
 pub(crate) fn apply_step2_scan_path_requirement(

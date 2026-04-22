@@ -3,8 +3,8 @@
 
 use eframe::egui;
 
+use crate::app::state::WizardState;
 use crate::ui::shared::layout_tokens_global::*;
-use crate::ui::state::WizardState;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::service_list_ops_step2::recompute_selection_counts;
 
@@ -68,7 +68,8 @@ impl egui::Widget for Step2LayoutWidget<'_> {
         y += h_controls + gap;
         let tabs_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, h_tabs));
         y += h_tabs + gap;
-        let content_h = (root_rect.bottom() - margin - h_footer - gap - nav_clearance - y).max(240.0);
+        let content_h =
+            (root_rect.bottom() - margin - h_footer - gap - nav_clearance - y).max(240.0);
         let content_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, content_h));
         y += content_h + gap;
         let footer_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, h_footer));
@@ -77,7 +78,8 @@ impl egui::Widget for Step2LayoutWidget<'_> {
         let left_w = (split_total_w * self.state.step2.left_pane_ratio)
             .clamp(min_left_w, (split_total_w - min_right_w).max(min_left_w));
         let right_w = (split_total_w - left_w).max(min_right_w);
-        let left_rect = egui::Rect::from_min_size(content_rect.min, egui::vec2(left_w, content_rect.height()));
+        let left_rect =
+            egui::Rect::from_min_size(content_rect.min, egui::vec2(left_w, content_rect.height()));
         let splitter_rect = egui::Rect::from_min_size(
             egui::pos2(left_rect.right() + split_gap * 0.5, content_rect.top()),
             egui::vec2(splitter_w, content_rect.height()),
@@ -92,9 +94,12 @@ impl egui::Widget for Step2LayoutWidget<'_> {
         if splitter_resp.hovered() || splitter_resp.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         }
-        if splitter_resp.dragged() && let Some(pointer_pos) = ui.ctx().pointer_latest_pos() {
+        if splitter_resp.dragged()
+            && let Some(pointer_pos) = ui.ctx().pointer_latest_pos()
+        {
             let unclamped = pointer_pos.x - content_rect.left() - (split_gap * 0.5);
-            let new_left = unclamped.clamp(min_left_w, (split_total_w - min_right_w).max(min_left_w));
+            let new_left =
+                unclamped.clamp(min_left_w, (split_total_w - min_right_w).max(min_left_w));
             self.state.step2.left_pane_ratio = (new_left / split_total_w).clamp(0.1, 0.9);
         }
 
@@ -107,11 +112,16 @@ impl egui::Widget for Step2LayoutWidget<'_> {
             self.dev_mode,
             self.exe_fingerprint,
         );
-        crate::ui::step2::content_step2::render_controls(ui, self.state, self.action, controls_rect);
+        crate::ui::step2::content_step2::render_controls(
+            ui,
+            self.state,
+            self.action,
+            controls_rect,
+        );
         crate::ui::step2::content_step2::render_tabs(ui, self.state, self.action, tabs_rect);
         crate::ui::step2::list_pane_step2::render_list_pane(ui, self.state, self.action, left_rect);
-        crate::ui::step2::content_step2::render_details_pane(ui, self.state, self.action, right_rect);
-        crate::ui::step2::content_step2::render_compat_popup(ui, self.state);
+        crate::ui::step2::details_pane_step2::render_pane(ui, self.state, self.action, right_rect);
+        crate::ui::step2::compat_window_step2::render(ui, self.state);
         crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, self.state);
 
         let vis = &ui.visuals().widgets.noninteractive;

@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
 
 pub(crate) struct PhaseInfo {
     pub label: &'static str,

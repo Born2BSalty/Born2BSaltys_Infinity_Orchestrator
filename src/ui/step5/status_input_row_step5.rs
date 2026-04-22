@@ -3,13 +3,14 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
-use crate::ui::step5::prompt_memory;
-use crate::ui::terminal::EmbeddedTerminal;
+use crate::app::state::WizardState;
+use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::step5::state_step5::Step5ConsoleViewState;
 
 pub(crate) fn render_input_row(
     ui: &mut egui::Ui,
     state: &mut WizardState,
+    console_view: &mut Step5ConsoleViewState,
     terminal: Option<&mut EmbeddedTerminal>,
 ) {
     ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
@@ -27,36 +28,18 @@ pub(crate) fn render_input_row(
 
     let enter_pressed = ui.input(|input| input.key_pressed(egui::Key::Enter));
     let send_now = can_send && enter_pressed && (input.has_focus() || input.lost_focus());
+    let should_focus_input = std::mem::take(&mut console_view.request_input_focus);
 
     let mut keep_input_focus = false;
     if send_now {
         if let Some(term) = terminal {
             let reply = state.step5.input_line.clone();
-            if let Some(prompt_info) = term.current_prompt_info() {
-                let ctx = prompt_memory::PromptAnswerContext {
-                    component_key: term.current_scripted_component_key().unwrap_or_default(),
-                    tp2_file: term.current_scripted_component_tp2().unwrap_or_default(),
-                    component_id: term.current_scripted_component_id().unwrap_or_default(),
-                    component_name: term.current_scripted_component_name().unwrap_or_default(),
-                    prompt_kind: term.prompt_kind_name(&prompt_info).to_string(),
-                    source: "manual".to_string(),
-                };
-                prompt_memory::remember_answer_with_context(
-                    &prompt_info.key,
-                    &reply,
-                    &prompt_info.preview_line,
-                    &ctx,
-                );
-                state.step5.last_auto_prompt_key = Some(prompt_info.key);
-            }
-            term.send_line(&reply);
-            term.echo_sent(&reply);
-            term.focus();
+            crate::app::step5::auto_answer::send_manual_input(state, term, &reply);
         }
         state.step5.input_line.clear();
         keep_input_focus = true;
     }
-    if keep_input_focus {
+    if can_send && (keep_input_focus || should_focus_input) {
         input.request_focus();
     }
 }

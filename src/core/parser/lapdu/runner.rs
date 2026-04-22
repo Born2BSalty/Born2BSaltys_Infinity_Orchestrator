@@ -27,10 +27,9 @@ pub(super) fn run_lapdu_parser(
                 raw_json: None,
             }
         })?;
-    let output = serde_json::from_str::<ParserOutput>(&raw_json)
-        .map_err(|e| LapduRunError {
-            message: format!("failed to parse parser JSON output: {e}"),
-            raw_json: Some(raw_json.clone()),
-        })?;
+    let output = serde_json::from_str::<ParserOutput>(&raw_json).map_err(|e| LapduRunError {
+        message: format!("failed to parse parser JSON output: {e}"),
+        raw_json: Some(raw_json.clone()),
+    })?;
     Ok(LapduRun { output, raw_json })
 }

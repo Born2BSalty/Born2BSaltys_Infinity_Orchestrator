@@ -3,12 +3,13 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
+use crate::app::prompt_eval_context::build_prompt_eval_context;
+use crate::app::state::WizardState;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::service_list_ops_step2::mod_matches_filter;
-use crate::ui::step2::state_step2::{active_mods_mut, build_prompt_eval_context};
+use crate::ui::step2::state_step2::active_mods_mut;
 use crate::ui::step2::tree_render_step2::{
-    render_mod_tree, ModTreeRenderContext, ModTreeRenderResult,
+    ModTreeRenderContext, ModTreeRenderResult, render_mod_tree,
 };
 
 pub(crate) fn render_list_pane(
@@ -35,7 +36,7 @@ pub(crate) fn render_list_pane(
                     scroll.bar_inner_margin = 0.0;
                     scroll.bar_outer_margin = 2.0;
                     ui.style_mut().spacing.scroll = scroll;
-                    ui.add_enabled_ui(!state.step2.is_scanning, |ui| {
+                    ui.add_enabled_ui(!state.step1.installs_exactly_from_weidu_logs(), |ui| {
                         egui::ScrollArea::both()
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
@@ -68,9 +69,11 @@ pub(crate) fn render_list_pane(
                                             prompt_eval: &prompt_eval,
                                             collapse_epoch,
                                             collapse_default_open,
-                                            jump_to_selected_requested: &mut jump_to_selected_requested,
+                                            jump_to_selected_requested:
+                                                &mut jump_to_selected_requested,
                                         };
-                                        let maybe_selected = render_mod_tree(ui, &mut render_ctx, mod_state);
+                                        let maybe_selected =
+                                            render_mod_tree(ui, &mut render_ctx, mod_state);
                                         if let Some(ModTreeRenderResult {
                                             selected: new_selected,
                                             open_compat_for_component,
@@ -81,12 +84,13 @@ pub(crate) fn render_list_pane(
                                             if let Some((tp_file, component_id, component_key)) =
                                                 open_compat_for_component
                                             {
-                                                *action = Some(Step2Action::OpenCompatForComponent {
-                                                    game_tab: active_tab.clone(),
-                                                    tp_file,
-                                                    component_id,
-                                                    component_key,
-                                                });
+                                                *action =
+                                                    Some(Step2Action::OpenCompatForComponent {
+                                                        game_tab: active_tab.clone(),
+                                                        tp_file,
+                                                        component_id,
+                                                        component_key,
+                                                    });
                                             }
                                             if let Some((title, text)) = open_prompt_popup {
                                                 prompt_popup = Some((title, text));
@@ -111,12 +115,14 @@ pub(crate) fn render_list_pane(
                 });
             });
     });
-    if selection_before != selection_snapshot(state) {
-        crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
+    if selection_before != selection_snapshot(state)
+        && let Some(err) = crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
             &state.step1,
             &mut state.step2.bgee_mods,
             &mut state.step2.bg2ee_mods,
-        );
+        )
+    {
+        state.step2.scan_status = format!("Compat rules load failed: {err}");
     }
 }
 
@@ -128,7 +134,11 @@ fn selection_snapshot(state: &WizardState) -> Vec<String> {
     out
 }
 
-fn collect_tab_snapshot(tag: &str, mods: &[crate::ui::state::Step2ModState], out: &mut Vec<String>) {
+fn collect_tab_snapshot(
+    tag: &str,
+    mods: &[crate::app::state::Step2ModState],
+    out: &mut Vec<String>,
+) {
     for mod_state in mods {
         for component in &mod_state.components {
             if component.checked {

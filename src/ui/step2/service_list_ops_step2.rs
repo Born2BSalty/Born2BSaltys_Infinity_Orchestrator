@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step2ModState, WizardState};
+use crate::app::state::{Step2ModState, WizardState};
 use crate::ui::step2::tree_selection_rules_step2::{
     enforce_collapsible_group_umbrella_after_bulk, enforce_subcomponent_single_select_keep_first,
     enforce_tp2_same_mod_exclusive_after_bulk,

@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::ui::state::Step2ModState;
+use crate::app::state::Step2ModState;
 use crate::ui::step2::tree_compat_display_step2::compat_colors;
 
 #[derive(Clone)]

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step1State, Step2State, Step3State, Step5State, WizardState};
-use crate::ui::state_validation;
+use super::state::{Step1State, Step2State, Step3State, Step5State, WizardState};
+use super::state_validation;
 
 impl WizardState {
     pub const STEP_COUNT: usize = 5;
@@ -17,6 +17,38 @@ impl WizardState {
 
     pub fn is_step1_valid(&self) -> bool {
         state_validation::is_step1_valid(&self.step1)
+    }
+
+    pub fn run_step1_path_check(&mut self) {
+        self.step1_path_check = Some(state_validation::run_path_check(&self.step1));
+        self.step1_mods_folder_has_tp2 =
+            Some(state_validation::step1_mods_folder_has_tp2(&self.step1));
+    }
+
+    pub fn open_step1_clean_confirm(&mut self) {
+        self.step1_clean_confirm_open = true;
+    }
+
+    pub fn clear_step1_clean_confirm(&mut self) {
+        self.step1_clean_confirm_open = false;
+    }
+
+    pub fn record_step4_save_error(&mut self, msg: String) {
+        self.step5.last_status_text = msg.clone();
+        self.step4_save_error_text = msg;
+        self.step4_save_error_open = true;
+    }
+
+    pub fn dismiss_step4_save_error(&mut self) {
+        self.step4_save_error_open = false;
+    }
+
+    pub fn set_last_step2_sync_signature(&mut self, signature: String) {
+        self.last_step2_sync_signature = Some(signature);
+    }
+
+    pub fn clear_last_step2_sync_signature(&mut self) {
+        self.last_step2_sync_signature = None;
     }
 
     pub fn go_back(&mut self) {
@@ -36,6 +68,14 @@ impl WizardState {
             current_step: 0,
             step1,
             step1_path_check: None,
+            step1_mods_folder_has_tp2: None,
+            github_auth_popup_open: false,
+            github_auth_running: false,
+            github_auth_login: String::new(),
+            github_auth_user_code: String::new(),
+            github_auth_verification_uri: String::new(),
+            github_auth_status_text: String::new(),
+            last_step2_sync_signature: None,
             step1_clean_confirm_open: false,
             step4_save_error_open: false,
             step4_save_error_text: String::new(),
@@ -48,6 +88,14 @@ impl WizardState {
     pub fn reset_workflow_keep_step1(&mut self) {
         self.current_step = 0;
         self.step1_path_check = None;
+        self.step1_mods_folder_has_tp2 = None;
+        self.github_auth_popup_open = false;
+        self.github_auth_running = false;
+        self.github_auth_login.clear();
+        self.github_auth_user_code.clear();
+        self.github_auth_verification_uri.clear();
+        self.github_auth_status_text.clear();
+        self.last_step2_sync_signature = None;
         self.step1_clean_confirm_open = false;
         self.step4_save_error_open = false;
         self.step4_save_error_text.clear();

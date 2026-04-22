@@ -1,27 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step1State, Step2ComponentState, Step2ModState};
+use crate::app::state::{Step1State, Step2ComponentState, Step2ModState};
 
 use super::compat_conflict_scan::apply_step2_scan_conflict;
 use super::compat_deprecated_scan::apply_step2_scan_deprecated;
-use super::compat_missing_dep_scan::apply_step2_scan_missing_dep;
 use super::compat_mismatch_scan::apply_step2_scan_mismatch;
+use super::compat_missing_dep_scan::apply_step2_scan_missing_dep;
 use super::compat_path_scan::apply_step2_scan_path_requirement;
 use super::compat_rule_runtime::{
     active_item_order, clear_kind_matches, collect_step2_active_items, compat_component_matches,
     compat_mod_matches, direct_rule_applies, kind_disables_selection, match_kind_matches,
-    matched_related_target, mode_matches, non_empty, normalize_kind, normalize_mod_key, relation_rule_applies,
-    single_related_target,
-    tab_matches,
+    matched_related_target, mode_matches, non_empty, normalize_kind, normalize_mod_key,
+    relation_rule_applies, single_related_target, tab_matches,
 };
-use super::compat_rules::{compat_rule_source_path, load_rules, CompatRule};
+use super::compat_rules::{CompatRule, compat_rule_source_path, load_rules};
 
 pub(crate) fn apply_step2_compat_rules(
     step1: &Step1State,
     bgee_mods: &mut [Step2ModState],
     bg2ee_mods: &mut [Step2ModState],
-) {
+) -> Option<String> {
     clear_step2_compat_state(bgee_mods);
     clear_step2_compat_state(bg2ee_mods);
 
@@ -36,7 +35,8 @@ pub(crate) fn apply_step2_compat_rules(
     apply_step2_scan_deprecated(bgee_mods);
     apply_step2_scan_deprecated(bg2ee_mods);
 
-    let rules = load_rules();
+    let loaded = load_rules();
+    let rules = loaded.rules;
     if !rules.is_empty() {
         apply_direct_rules_to_tab(step1, "BGEE", &rules, bgee_mods);
         apply_direct_rules_to_tab(step1, "BG2EE", &rules, bg2ee_mods);
@@ -49,6 +49,7 @@ pub(crate) fn apply_step2_compat_rules(
 
     finalize_step2_compat_state(bgee_mods);
     finalize_step2_compat_state(bg2ee_mods);
+    loaded.error
 }
 
 pub(crate) fn clear_step2_compat_state(mods: &mut [Step2ModState]) {
@@ -79,8 +80,7 @@ fn apply_direct_rules_to_tab(
         for component_idx in 0..mod_state.components.len() {
             for rule in rules {
                 let component = &mod_state.components[component_idx];
-                if !rule_selector_matches(rule, step1, tab, &tp_file, &mod_name, component)
-                {
+                if !rule_selector_matches(rule, step1, tab, &tp_file, &mod_name, component) {
                     continue;
                 }
                 let component = &mut mod_state.components[component_idx];
@@ -107,15 +107,13 @@ fn apply_relation_rules_to_tab(
         for component_idx in 0..mod_state.components.len() {
             for rule in rules {
                 let component = &mod_state.components[component_idx];
-                if !rule_selector_matches(rule, step1, tab, &tp_file, &mod_name, component)
-                {
+                if !rule_selector_matches(rule, step1, tab, &tp_file, &mod_name, component) {
                     continue;
                 }
                 if normalize_kind(&rule.kind).eq_ignore_ascii_case("order_block") {
                     continue;
                 }
-                if normalize_kind(&rule.kind).eq_ignore_ascii_case("conflict")
-                    && !component.checked
+                if normalize_kind(&rule.kind).eq_ignore_ascii_case("conflict") && !component.checked
                 {
                     continue;
                 }
@@ -165,9 +163,7 @@ fn rule_selector_matches(
 fn finalize_step2_compat_state(mods: &mut [Step2ModState]) {
     for mod_state in mods {
         for component in &mut mod_state.components {
-            if component.disabled
-                || component_should_disable_selection(component)
-            {
+            if component.disabled || component_should_disable_selection(component) {
                 component.disabled = true;
                 component.checked = false;
                 component.selected_order = None;
@@ -182,14 +178,11 @@ fn component_should_disable_selection(component: &Step2ComponentState) -> bool {
         return false;
     };
     if kind.eq_ignore_ascii_case("conflict")
-        && component
-            .compat_evidence
-            .as_deref()
-            .is_some_and(|raw| {
-                raw.trim_start()
-                    .to_ascii_uppercase()
-                    .starts_with("FORBID_COMPONENT")
-            })
+        && component.compat_evidence.as_deref().is_some_and(|raw| {
+            raw.trim_start()
+                .to_ascii_uppercase()
+                .starts_with("FORBID_COMPONENT")
+        })
     {
         return false;
     }
@@ -223,8 +216,11 @@ fn apply_rule(
     component.disabled = false;
     component.compat_kind = Some(kind.to_string());
     component.compat_source = Some(compat_rule_source_path(rule));
-    component.compat_related_mod = related_target.as_ref().map(|(related_mod, _)| related_mod.clone());
-    component.compat_related_component = related_target.and_then(|(_, related_component)| related_component);
+    component.compat_related_mod = related_target
+        .as_ref()
+        .map(|(related_mod, _)| related_mod.clone());
+    component.compat_related_component =
+        related_target.and_then(|(_, related_component)| related_component);
     component.compat_graph = build_graph(tp_file, component.component_id.as_str(), kind, rule);
     component.compat_evidence = Some(rule_debug_line(rule));
     component.disabled_reason = non_empty(Some(rule.message.as_str()));
@@ -250,12 +246,7 @@ fn clear_component_compat(component: &mut Step2ComponentState) {
     component.disabled_reason = None;
 }
 
-fn build_graph(
-    tp_file: &str,
-    component_id: &str,
-    kind: &str,
-    rule: &CompatRule,
-) -> Option<String> {
+fn build_graph(tp_file: &str, component_id: &str, kind: &str, rule: &CompatRule) -> Option<String> {
     let (related_mod, related_component) = single_related_target(rule)?;
     let left = format!("{} #{}", normalize_mod_key(tp_file), component_id.trim());
     let right = if related_component.as_deref().is_none_or(str::is_empty) {
@@ -289,10 +280,16 @@ fn rule_debug_line(rule: &CompatRule) -> String {
         }
     }
     if let Some(match_kind) = rule.match_kind.as_ref() {
-        parts.push(format!("match_kind={}", match_kind.normalized_items().join(",")));
+        parts.push(format!(
+            "match_kind={}",
+            match_kind.normalized_items().join(",")
+        ));
     }
     if let Some(clear_kinds) = rule.clear_kinds.as_ref() {
-        parts.push(format!("clear_kinds={}", clear_kinds.normalized_items().join(",")));
+        parts.push(format!(
+            "clear_kinds={}",
+            clear_kinds.normalized_items().join(",")
+        ));
     }
     if let Some(position) = non_empty(rule.position.as_deref()) {
         parts.push(format!("position={position}"));

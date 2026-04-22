@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
 
 pub(super) fn write_scan_context_json(
     run_dir: &Path,
@@ -31,6 +31,8 @@ pub(super) fn write_scan_context_json(
                 "tp2_cache_misses": report.tp2_cache_misses,
                 "scan_cache_path": report.scan_cache_path,
                 "scan_cache_source": report.scan_cache_source,
+                "scan_cache_load_status": report.scan_cache_load_status,
+                "scan_cache_load_error": report.scan_cache_load_error,
                 "scan_cache_file_exists": report.scan_cache_file_exists,
                 "scan_cache_file_mtime_secs": report.scan_cache_file_mtime_secs,
                 "scan_cache_file_version": report.scan_cache_file_version,
@@ -38,6 +40,11 @@ pub(super) fn write_scan_context_json(
                 "scan_cache_writer_exe_fingerprint": report.scan_cache_writer_exe_fingerprint,
                 "scan_cache_entry_count": report.scan_cache_entry_count,
                 "scan_cache_version_matches_current_schema": report.scan_cache_version_matches_current_schema,
+                "scan_cache_fallback_path": report.scan_cache_fallback_path,
+                "scan_cache_fallback_source": report.scan_cache_fallback_source,
+                "scan_cache_fallback_load_status": report.scan_cache_fallback_load_status,
+                "scan_cache_fallback_load_error": report.scan_cache_fallback_load_error,
+                "scan_cache_save_error": report.scan_cache_save_error,
                 "scan_cache_writer_matches_current_app_version": report.scan_cache_writer_matches_current_app_version,
                 "scan_cache_writer_matches_current_exe": report.scan_cache_writer_matches_current_exe,
                 "preferred_locale": report.preferred_locale,

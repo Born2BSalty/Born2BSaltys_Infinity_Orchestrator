@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::ui::state::Step1State;
+use crate::app::state::Step1State;
 
 #[derive(Debug, Clone)]
 pub struct SourceLogInfo {

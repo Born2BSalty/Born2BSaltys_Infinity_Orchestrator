@@ -6,7 +6,12 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod compat_dependency_expr;
 pub mod lapdu;
+pub(crate) mod prompt_eval_expr;
+pub(crate) mod prompt_eval_expr_tokens;
+pub(crate) mod weidu_component_line;
+pub(crate) mod weidu_version;
 
 #[derive(Debug, Clone, Default)]
 pub struct PromptSummaryIndex {
@@ -52,4 +57,54 @@ pub fn collect_prompt_summary_index(
     preferred_game: Option<&str>,
 ) -> PromptSummaryIndex {
     lapdu::collect_prompt_summary_index(tp2_path, mods_root, preferred_lang, preferred_game)
+}
+
+pub(crate) fn collect_tp2_component_blocks<'a>(tp2_text: &'a str) -> Vec<(String, Vec<&'a str>)> {
+    let lines: Vec<&'a str> = tp2_text.lines().collect();
+    let mut out = Vec::<(String, Vec<&'a str>)>::new();
+    let mut index = 0usize;
+
+    while index < lines.len() {
+        let line = lines[index].trim_start();
+        if !line.to_ascii_uppercase().starts_with("BEGIN ") {
+            index += 1;
+            continue;
+        }
+
+        let start = index;
+        index += 1;
+        while index < lines.len() {
+            let next = lines[index].trim_start().to_ascii_uppercase();
+            if next.starts_with("BEGIN ") {
+                break;
+            }
+            index += 1;
+        }
+
+        let block = lines[start..index].to_vec();
+        let Some(component_id) = block.iter().find_map(|entry| {
+            let upper_line = entry.to_ascii_uppercase();
+            if upper_line.trim_start().starts_with("//") {
+                return None;
+            }
+            let index = upper_line.find("DESIGNATED")?;
+            let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
+            let digits: String = tail.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+            if digits.is_empty() {
+                return None;
+            }
+            let normalized = digits.trim_start_matches('0');
+            Some(if normalized.is_empty() {
+                "0".to_string()
+            } else {
+                normalized.to_string()
+            })
+        }) else {
+            continue;
+        };
+
+        out.push((component_id, block));
+    }
+
+    out
 }

@@ -4,11 +4,12 @@
 use eframe::egui;
 use std::collections::HashMap;
 
-use crate::ui::state::Step2Selection;
-use crate::ui::state::WizardState;
-use crate::ui::compat_step3_rules::Step3CompatMarker;
+use crate::app::compat_step3_rules::Step3CompatMarker;
+use crate::app::prompt_eval_context::build_prompt_eval_context;
+use crate::app::state::Step2Selection;
+use crate::app::state::WizardState;
 use crate::ui::step3::blocks;
-use crate::ui::step3::list_rows_step3::{render_rows, RowRenderContext};
+use crate::ui::step3::list_rows_step3::{RowRenderContext, render_rows};
 use crate::ui::step3::state_step3;
 
 pub(crate) fn render(
@@ -35,7 +36,7 @@ pub(crate) fn render(
                 .show(ui, |ui| {
                     ui.set_min_width(viewport_w);
                     let tab_id = state.step3.active_game_tab.clone();
-                    let prompt_eval = crate::ui::step2::state_step2::build_prompt_eval_context(state);
+                    let prompt_eval = build_prompt_eval_context(state);
                     let (
                         pending_unchecks,
                         pending_prompt_actions,

@@ -1,31 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::{Mutex, OnceLock};
 
-use crate::ui::state::{Step1State, Step2ModState, Step3ItemState};
-use crate::ui::step2::compat_types_step2::{CompatIssueDisplay, CompatIssueStatusTone};
+use crate::app::compat_issue::CompatIssue;
+use crate::app::state::{Step1State, Step2ModState, Step3ItemState};
 
 use super::compat_conflict_runtime::{
-    build_conflict_scan_context, scan_conflict_hit_with_context, ComponentConflictCache, ConflictCompatHit,
-    ConflictScanContext,
+    ComponentConflictCache, ConflictCompatHit, ConflictScanContext, build_conflict_scan_context,
+    scan_conflict_hit_with_context,
 };
 use super::compat_dependency_runtime::{
     ComponentRequirementCache, DependencyCompatHit, DependencyEvalMode, scan_dependency_hit,
 };
 use super::compat_mismatch_eval::build_mismatch_context;
 use super::compat_mismatch_scan::scan_predicate_guard_hit;
-use super::compat_path_eval::{game_dir_for_tab, PathRequirementContext};
-use super::compat_path_runtime::{ComponentPathGuardCache, PathRequirementHit, scan_path_requirement_hit};
-use super::compat_rule_runtime::{
-    CompatActiveItem, clear_kind_matches, collect_step3_active_items, compat_component_matches, compat_mod_matches,
-    direct_rule_applies, match_kind_matches, non_empty, normalize_kind, normalize_mod_key, relation_rule_applies,
-    mode_matches, single_related_target, tab_matches,
+use super::compat_path_eval::PathRequirementContext;
+use super::compat_path_runtime::{
+    ComponentPathGuardCache, PathRequirementHit, scan_path_requirement_hit,
 };
-use super::compat_rules::{compat_rule_source_path, load_rules, rules_files_signature, CompatRule};
+use super::compat_rule_runtime::{
+    CompatActiveItem, clear_kind_matches, collect_step3_active_items, compat_component_matches,
+    compat_mod_matches, direct_rule_applies, game_dir_for_tab, match_kind_matches, mode_matches,
+    non_empty, normalize_kind, normalize_mod_key, relation_rule_applies, single_related_target,
+    tab_matches,
+};
+use super::compat_rules::{CompatRule, compat_rule_source_path, load_rules, rules_files_signature};
 
 const STEP3_COMPAT_CACHE_LIMIT: usize = 64;
 
@@ -74,7 +77,7 @@ fn collect_step3_compat_markers_uncached(
 ) -> HashMap<String, Step3CompatMarker> {
     let tp2_paths = build_tp2_path_lookup(mods);
     let active_items = collect_step3_active_items(items, &tp2_paths);
-    let rules = load_rules();
+    let rules = load_rules().rules;
     let mut out = HashMap::<String, Step3CompatMarker>::new();
     let mut order = 1usize;
     let mut requirement_cache = ComponentRequirementCache::new();
@@ -87,24 +90,19 @@ fn collect_step3_compat_markers_uncached(
 
     for item in items.iter().filter(|item| !item.is_parent) {
         let key = marker_key(item);
-        let mut marker = scan_path_marker_for_item(item, &tp2_paths, &path_context, &mut path_guard_cache)
-            .or_else(|| {
-                scan_conflict_marker_for_item(
-                    item,
-                    order,
-                    &conflict_context,
-                )
-            })
-            .or_else(|| scan_predicate_marker_for_item(item, &tp2_paths, &predicate_context))
-            .or_else(|| {
-                scan_dependency_marker_for_item(
-                    item,
-                    order,
-                    &tp2_paths,
-                    &active_items,
-                    &mut requirement_cache,
-                )
-            });
+        let mut marker =
+            scan_path_marker_for_item(item, &tp2_paths, &path_context, &mut path_guard_cache)
+                .or_else(|| scan_conflict_marker_for_item(item, order, &conflict_context))
+                .or_else(|| scan_predicate_marker_for_item(item, &tp2_paths, &predicate_context))
+                .or_else(|| {
+                    scan_dependency_marker_for_item(
+                        item,
+                        order,
+                        &tp2_paths,
+                        &active_items,
+                        &mut requirement_cache,
+                    )
+                });
         let component_order = Some(order);
         order += 1;
 
@@ -165,13 +163,13 @@ pub(crate) fn build_tp2_path_lookup(mods: &[Step2ModState]) -> HashMap<String, S
     out
 }
 
-pub(crate) fn marker_issue(marker: &Step3CompatMarker) -> CompatIssueDisplay {
-    CompatIssueDisplay {
+pub(crate) fn marker_issue(marker: &Step3CompatMarker) -> CompatIssue {
+    CompatIssue {
         kind: marker.kind.clone(),
-        code: marker_code(marker.kind.as_str()).to_string(),
-        status_label: popup_issue_status(marker.kind.as_str()).0.to_string(),
-        status_tone: popup_issue_status(marker.kind.as_str()).1,
-        related_mod: marker.related_mod.clone().unwrap_or_else(|| "unknown".to_string()),
+        related_mod: marker
+            .related_mod
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string()),
         related_component: marker
             .related_component
             .as_deref()
@@ -211,7 +209,9 @@ fn apply_rule(rule: &CompatRule, marker: &mut Option<Step3CompatMarker>) {
     *marker = Some(Step3CompatMarker {
         kind: kind.to_string(),
         message: non_empty(Some(rule.message.as_str())),
-        related_mod: related_target.as_ref().map(|(related_mod, _)| related_mod.clone()),
+        related_mod: related_target
+            .as_ref()
+            .map(|(related_mod, _)| related_mod.clone()),
         related_component: related_target.and_then(|(_, related_component)| related_component),
         source: Some(compat_rule_source_path(rule)),
         raw_evidence: None,
@@ -355,7 +355,8 @@ fn tp2_lookup_key(tp_file: &str, mod_name: &str) -> String {
 }
 
 fn step3_compat_cache() -> &'static Mutex<HashMap<u64, HashMap<String, Step3CompatMarker>>> {
-    static CACHE: OnceLock<Mutex<HashMap<u64, HashMap<String, Step3CompatMarker>>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<u64, HashMap<String, Step3CompatMarker>>>> =
+        OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -389,29 +390,4 @@ fn step3_compat_cache_key(
     }
 
     hasher.finish()
-}
-
-fn marker_code(kind: &str) -> &'static str {
-    match kind {
-        "mismatch" => "MISMATCH",
-        "missing_dep" => "REQ_MISSING",
-        "conflict" | "not_compatible" => "RULE_HIT",
-        "included" => "INCLUDED",
-        "order_block" => "ORDER_BLOCK",
-        "conditional" => "CONDITIONAL",
-        "path_requirement" => "PATH_REQUIREMENT",
-        "deprecated" => "DEPRECATED",
-        _ => "RULE_HIT",
-    }
-}
-
-fn popup_issue_status(kind: &str) -> (&'static str, CompatIssueStatusTone) {
-    match kind {
-        "included" => ("Already included", CompatIssueStatusTone::Neutral),
-        "not_needed" => ("Not needed", CompatIssueStatusTone::Neutral),
-        "missing_dep" | "order_block" | "warning" | "deprecated" | "conditional" => {
-            ("Warning only", CompatIssueStatusTone::Warning)
-        }
-        _ => ("Resolve before continuing", CompatIssueStatusTone::Blocking),
-    }
 }

@@ -4,12 +4,12 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use crate::ui::scan::ScannedComponent;
+use crate::app::scan::ScannedComponent;
 
 use super::order::normalize_component_order_label;
 use super::tp2_blocks::{
-    extract_tilde_or_quote_paths, parse_tp2_component_blocks, parse_tp2_component_blocks_in_order,
-    split_subcomponent_display_label, Tp2ComponentBlock,
+    Tp2ComponentBlock, extract_tilde_or_quote_paths, parse_tp2_component_blocks,
+    parse_tp2_component_blocks_in_order, split_subcomponent_display_label,
 };
 
 pub(super) fn detect_hidden_prompt_like_component_ids(
@@ -90,7 +90,10 @@ pub(super) fn detect_hidden_prompt_like_component_ids(
             }
             continue;
         }
-        if family_blocks.iter().all(|block| block_is_asset_choice_only(block)) {
+        if family_blocks
+            .iter()
+            .all(|block| block_is_asset_choice_only(block))
+        {
             for id in component_ids {
                 hidden
                     .entry(id)
@@ -238,7 +241,10 @@ fn block_is_deprecated_dummy_placeholder(block: &Tp2ComponentBlock) -> bool {
             continue;
         }
         let upper = trimmed.to_ascii_uppercase();
-        if upper.starts_with("DEPRECATED") || upper.contains(" DEPRECATED ") || upper.ends_with(" DEPRECATED") {
+        if upper.starts_with("DEPRECATED")
+            || upper.contains(" DEPRECATED ")
+            || upper.ends_with(" DEPRECATED")
+        {
             saw_deprecated = true;
             if upper.starts_with("DEPRECATED") {
                 continue;

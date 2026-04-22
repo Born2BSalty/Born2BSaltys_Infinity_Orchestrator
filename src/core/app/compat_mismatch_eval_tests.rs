@@ -4,10 +4,10 @@
 use std::collections::HashSet;
 
 use super::{
-    RequirementFailureClass, build_mismatch_context, classify_failed_requirement,
-    evaluate_requirement, render_requirement_evidence, TriState,
+    RequirementFailureClass, TriState, build_mismatch_context, classify_failed_requirement,
+    evaluate_requirement, render_requirement_evidence,
 };
-use crate::ui::state::Step1State;
+use crate::app::state::Step1State;
 
 #[test]
 fn evaluates_mod_is_installed_equals_zero_as_true_when_missing() {
@@ -43,8 +43,7 @@ fn evaluates_mod_is_installed_equals_zero_as_false_when_selected() {
 #[test]
 fn renders_comparison_evidence() {
     assert_eq!(
-        render_requirement_evidence(r#"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0"#)
-            .as_deref(),
+        render_requirement_evidence(r#"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0"#).as_deref(),
         Some("(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ ~0~) = 0")
     );
 }

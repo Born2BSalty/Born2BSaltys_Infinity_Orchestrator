@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use wait_timeout::ChildExt;
 
 use crate::config::options::CoreOptions;
@@ -18,9 +18,7 @@ pub fn execute_component(
     options: &CoreOptions,
 ) -> Result<()> {
     if options.weidu_binary.as_os_str().is_empty() {
-        return Err(anyhow!(
-            "--weidu-binary is required to execute installs"
-        ));
+        return Err(anyhow!("--weidu-binary is required to execute installs"));
     }
     let tp2_path = mod_folder_in_game.join(&component.tp_file);
     let args = build_args(&tp2_path, component, options);

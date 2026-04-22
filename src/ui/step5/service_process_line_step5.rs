@@ -3,8 +3,8 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
-use crate::ui::terminal::EmbeddedTerminal;
+use crate::app::state::WizardState;
+use crate::app::terminal::EmbeddedTerminal;
 
 use crate::ui::step5::service_timefmt_step5::{fmt_duration, now_unix_secs};
 
@@ -16,10 +16,14 @@ pub(crate) fn render_process_runtime_inline(
     if let Some(term) = terminal {
         if state.step5.install_running {
             if let Some(pid) = term.process_id() {
-                ui.label(crate::ui::shared::typography_global::mono_weak(format!("| pid={pid}")));
+                ui.label(crate::ui::shared::typography_global::mono_weak(format!(
+                    "| pid={pid}"
+                )));
             }
         } else if let Some(code) = state.step5.last_exit_code {
-            ui.label(crate::ui::shared::typography_global::mono_weak(format!("| exit={code}")));
+            ui.label(crate::ui::shared::typography_global::mono_weak(format!(
+                "| exit={code}"
+            )));
         }
     }
 
@@ -27,19 +31,15 @@ pub(crate) fn render_process_runtime_inline(
         && let Some(start) = state.step5.install_started_unix_secs
     {
         let elapsed = now_unix_secs().saturating_sub(start);
-        ui.label(
-            crate::ui::shared::typography_global::mono_weak(format!(
-                "| elapsed={}",
-                fmt_duration(elapsed)
-            )),
-        );
+        ui.label(crate::ui::shared::typography_global::mono_weak(format!(
+            "| elapsed={}",
+            fmt_duration(elapsed)
+        )));
     } else if let Some(last_runtime) = state.step5.last_runtime_secs {
-        ui.label(
-            crate::ui::shared::typography_global::mono_weak(format!(
-                "| last={}",
-                fmt_duration(last_runtime)
-            )),
-        );
+        ui.label(crate::ui::shared::typography_global::mono_weak(format!(
+            "| last={}",
+            fmt_duration(last_runtime)
+        )));
     }
 }
 

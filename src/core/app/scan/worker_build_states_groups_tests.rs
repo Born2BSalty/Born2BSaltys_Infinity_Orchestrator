@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use super::{detect_derived_collapsible_groups, detect_weidu_groups};
-use crate::ui::scan::ScannedComponent;
+use crate::app::scan::ScannedComponent;
 
 #[test]
 fn deprecated_placeholder_without_group_inherits_surrounding_group() {
@@ -104,7 +104,9 @@ SUBCOMPONENT ~Alter Multi-Class Restrictions~
     let groups = detect_derived_collapsible_groups("setup-cdtweaks.tp2", tp2_text, &components);
 
     for component_id in ["2350", "2351", "2352", "2353", "2357", "2358"] {
-        let group = groups.get(component_id).expect("missing derived collapsible group");
+        let group = groups
+            .get(component_id)
+            .expect("missing derived collapsible group");
         assert_eq!(group.header, "Alter Multi-Class Restrictions");
         assert!(!group.is_umbrella);
     }
@@ -121,14 +123,19 @@ BEGIN @150 DESIGNATED 150 GROUP @1 LABEL Morpheus562sKitpackBattlerager3
 "#;
     let components = vec![
         component("151", "Install Battlerager Kit -> Assign kit to Korgan"),
-        component("152", "Install Battlerager Kit -> Do NOT assign kit to Korgan"),
+        component(
+            "152",
+            "Install Battlerager Kit -> Do NOT assign kit to Korgan",
+        ),
         component("150", "Install Battlerager Kit"),
     ];
 
     let groups =
         detect_derived_collapsible_groups("morpheus562-s-kitpack.tp2", tp2_text, &components);
 
-    let root = groups.get("150").expect("missing root derived collapsible group");
+    let root = groups
+        .get("150")
+        .expect("missing root derived collapsible group");
     assert_eq!(root.header, "Install Battlerager Kit");
     assert!(root.is_umbrella);
 

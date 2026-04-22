@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::compat_step3_rules::collect_step3_compat_markers;
-use crate::ui::state::{Step2ModState, Step3ItemState, WizardState};
+use crate::app::compat_step3_rules::{collect_step3_compat_markers, marker_key};
+use crate::app::state::{Step2ModState, Step3ItemState, WizardState};
 
 pub(super) fn write_step3_issue_snapshot_json(
     run_dir: &Path,
@@ -45,7 +45,7 @@ fn serialize_tab(
         .enumerate()
         .map(|(row_index, item)| {
             let marker = (!item.is_parent)
-                .then(|| markers.get(&crate::ui::compat_step3_rules::marker_key(item)))
+                .then(|| markers.get(&marker_key(item)))
                 .flatten();
             json!({
                 "row_index": row_index,

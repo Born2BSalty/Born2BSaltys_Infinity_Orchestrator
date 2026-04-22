@@ -5,9 +5,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::ui::controller::util::open_in_shell;
-use crate::ui::state::{Step1State, Step5State};
-use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, run_dir_from_id};
+use crate::app::controller::util::open_in_shell;
+use crate::app::state::{Step1State, Step5State};
+
+use super::{current_or_new_run_id, run_dir_from_id};
 
 pub fn open_last_log_file(step1: &Step1State) -> std::io::Result<()> {
     let Some(path) = newest_log_file(step1) else {

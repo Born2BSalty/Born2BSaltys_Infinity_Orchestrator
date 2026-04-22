@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use super::{compat_component_matches, compat_mod_matches};
-use crate::ui::state::Step2ComponentState;
+use crate::app::state::Step2ComponentState;
 
 use super::super::compat_rules::{CompatRule, StringOrMany};
 

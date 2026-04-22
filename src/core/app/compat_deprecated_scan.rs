@@ -6,7 +6,7 @@ use std::fs;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
-use crate::ui::state::{Step2ComponentState, Step2ModState};
+use crate::app::state::{Step2ComponentState, Step2ModState};
 
 use super::compat_rule_runtime::normalize_mod_key;
 

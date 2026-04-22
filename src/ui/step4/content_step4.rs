@@ -3,13 +3,14 @@
 
 use eframe::egui;
 
+use crate::app::state::WizardState;
 use crate::ui::shared::layout_tokens_global::{STEP4_SAVE_BTN_H, STEP4_SAVE_BTN_W};
 use crate::ui::shared::tooltip_global as tt;
 use crate::ui::shared::typography_global as typo;
-use crate::ui::state::WizardState;
 use crate::ui::step4::action_step4::Step4Action;
+use crate::ui::step4::service_step4::read_source_log_lines;
 use crate::ui::step4::state_step4::active_tab_mut;
-use crate::ui::step4::service_step4::{format_step4_item, read_source_log_lines};
+use crate::ui::step5::diagnostics::format_step4_item;
 use crate::ui::step5::service_diagnostics_support_step5::{export_diagnostics, source_log_infos};
 
 pub fn render(
@@ -19,6 +20,11 @@ pub fn render(
     exe_fingerprint: &str,
 ) -> Option<Step4Action> {
     let mut action = None;
+    let exact_log_mode = state.step1.installs_exactly_from_weidu_logs();
+    let step4_busy = state.step2.is_scanning
+        || state.step2.update_selected_check_running
+        || state.step2.update_selected_download_running
+        || state.step2.update_selected_extract_running;
     ui.horizontal(|ui| {
         ui.heading("Step 4: Review");
         if dev_mode {
@@ -38,24 +44,43 @@ pub fn render(
             });
         }
     });
+    if exact_log_mode {
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add_enabled(!step4_busy, egui::Button::new("Check Mod List"))
+                    .clicked()
+                {
+                    action = Some(Step4Action::CheckMissingMods);
+                }
+            });
+        });
+    }
 
-    if state.step1.have_weidu_logs {
+    if exact_log_mode {
         ui.label("Review the source WeiDU log file(s) that will be used for install.");
         ui.label("Next continues to Step 5 without going through Step 2/3.");
+        if step4_busy {
+            ui.add_space(6.0);
+            ui.label(&state.step2.scan_status);
+        }
     } else {
         ui.label("Verify setup and install order before running.");
         ui.label("Next will save weidu.log file(s) and continue to Step 5.");
     }
 
     ui.add_space(12.0);
-    if !state.step1.have_weidu_logs {
+    if !exact_log_mode {
         ui.horizontal(|ui| {
             let label = match state.step1.game_install.as_str() {
                 "EET" => "Save weidu.log's",
                 _ => "Save weidu.log",
             };
             if ui
-                .add_sized([STEP4_SAVE_BTN_W, STEP4_SAVE_BTN_H], egui::Button::new(label))
+                .add_sized(
+                    [STEP4_SAVE_BTN_W, STEP4_SAVE_BTN_H],
+                    egui::Button::new(label),
+                )
                 .on_hover_text(tt::STEP4_SAVE_WEIDU_LOG)
                 .clicked()
             {
@@ -67,13 +92,13 @@ pub fn render(
     ui.add_space(8.0);
     section(
         ui,
-        if state.step1.have_weidu_logs {
+        if exact_log_mode {
             "Source WeiDU Logs"
         } else {
             "Install Order"
         },
         |ui| {
-            if state.step1.have_weidu_logs {
+            if exact_log_mode {
                 render_source_logs(ui, state);
                 return;
             }

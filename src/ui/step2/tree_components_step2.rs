@@ -3,11 +3,11 @@
 
 use eframe::egui;
 
-use crate::ui::state::{Step2ComponentState, Step2ModState, Step2Selection};
+use crate::app::state::{Step2ComponentState, Step2ModState, Step2Selection};
 use crate::ui::step2::tree_component_row_step2::render_component_row;
 use crate::ui::step2::tree_component_types_step2::{
-    reborrow_render_state, CompatPopupTarget, ComponentRenderState, ComponentRowsContext,
-    ComponentRowsResult, PromptPopupTarget,
+    CompatPopupTarget, ComponentRenderState, ComponentRowsContext, ComponentRowsResult,
+    PromptPopupTarget, reborrow_render_state,
 };
 use crate::ui::step2::tree_selection_rules_step2::{
     enforce_collapsible_group_umbrella_rules, enforce_meta_mode_exclusive,
@@ -65,27 +65,29 @@ pub(crate) fn render_component_rows(
                 group_end += 1;
             }
 
-            let group_matches = !ctx.filter.is_empty() && header.to_lowercase().contains(ctx.filter);
+            let group_matches =
+                !ctx.filter.is_empty() && header.to_lowercase().contains(ctx.filter);
             let any_child_visible = (component_idx..group_end).any(|idx| {
                 mod_name_match
                     || group_matches
-                    || mod_state.components[idx].label.to_lowercase().contains(ctx.filter)
+                    || mod_state.components[idx]
+                        .label
+                        .to_lowercase()
+                        .contains(ctx.filter)
             });
             if any_child_visible {
-                let header_id =
-                    egui::Id::new((
-                        "step2_weidu_group",
-                        ctx.collapse_epoch,
-                        ctx.tp_file,
-                        component_idx,
-                        header.as_str(),
-                    ));
-                let mut state =
-                    egui::collapsing_header::CollapsingState::load_with_default_open(
-                        ui.ctx(),
-                        header_id,
-                        ctx.collapse_default_open,
-                    );
+                let header_id = egui::Id::new((
+                    "step2_weidu_group",
+                    ctx.collapse_epoch,
+                    ctx.tp_file,
+                    component_idx,
+                    header.as_str(),
+                ));
+                let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ui.ctx(),
+                    header_id,
+                    ctx.collapse_default_open,
+                );
                 if *ctx.jump_to_selected_requested
                     && selected_component_targets_range(
                         ctx.selected,
@@ -96,10 +98,11 @@ pub(crate) fn render_component_rows(
                 {
                     state.set_open(true);
                 }
-                state.show_header(ui, |ui| {
-                    ui.label(header.as_str());
-                })
-                .body(|ui| {
+                state
+                    .show_header(ui, |ui| {
+                        ui.label(header.as_str());
+                    })
+                    .body(|ui| {
                         let mut render_state = ComponentRenderState {
                             selection: &mut new_selection,
                             compat_popup: &mut open_compat_for_component,
@@ -123,7 +126,9 @@ pub(crate) fn render_component_rows(
         }
 
         let mut group_end = component_idx + 1;
-        while group_end < mod_state.components.len() && mod_state.components[group_end].weidu_group.is_none() {
+        while group_end < mod_state.components.len()
+            && mod_state.components[group_end].weidu_group.is_none()
+        {
             group_end += 1;
         }
         let mut render_state = ComponentRenderState {
@@ -192,11 +197,15 @@ fn render_component_rows_range(
                 group_end += 1;
             }
 
-            let group_matches = !ctx.filter.is_empty() && header.to_lowercase().contains(ctx.filter);
+            let group_matches =
+                !ctx.filter.is_empty() && header.to_lowercase().contains(ctx.filter);
             let any_child_visible = (component_idx..group_end).any(|idx| {
                 mod_name_match
                     || group_matches
-                    || mod_state.components[idx].label.to_lowercase().contains(ctx.filter)
+                    || mod_state.components[idx]
+                        .label
+                        .to_lowercase()
+                        .contains(ctx.filter)
             });
             if any_child_visible {
                 let header_id = egui::Id::new((
@@ -206,12 +215,11 @@ fn render_component_rows_range(
                     component_idx,
                     header.as_str(),
                 ));
-                let mut state =
-                    egui::collapsing_header::CollapsingState::load_with_default_open(
-                        ui.ctx(),
-                        header_id,
-                        ctx.collapse_default_open,
-                    );
+                let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ui.ctx(),
+                    header_id,
+                    ctx.collapse_default_open,
+                );
                 if *ctx.jump_to_selected_requested
                     && selected_component_targets_range(
                         ctx.selected,
@@ -222,14 +230,18 @@ fn render_component_rows_range(
                 {
                     state.set_open(true);
                 }
-                state.show_header(ui, |ui| {
-                    ui.label(header.as_str());
-                })
-                .body(|ui| {
+                state
+                    .show_header(ui, |ui| {
+                        ui.label(header.as_str());
+                    })
+                    .body(|ui| {
                         for idx in component_idx..group_end {
                             let row_visible = mod_name_match
                                 || group_matches
-                                || mod_state.components[idx].label.to_lowercase().contains(ctx.filter);
+                                || mod_state.components[idx]
+                                    .label
+                                    .to_lowercase()
+                                    .contains(ctx.filter);
                             if row_visible {
                                 let mut ui_state = reborrow_render_state(render_state);
                                 render_component_row(
@@ -271,24 +283,25 @@ fn render_component_rows_range(
             let any_child_visible = (component_idx..group_end).any(|idx| {
                 mod_name_match
                     || subgroup_matches
-                    || mod_state.components[idx].label.to_lowercase().contains(ctx.filter)
+                    || mod_state.components[idx]
+                        .label
+                        .to_lowercase()
+                        .contains(ctx.filter)
             });
             if any_child_visible {
                 let subgroup_indent = 0.0;
-                let header_id =
-                    egui::Id::new((
-                        "step2_subgroup",
-                        ctx.collapse_epoch,
-                        ctx.tp_file,
-                        component_idx,
-                        header.as_str(),
-                    ));
-                let mut state =
-                    egui::collapsing_header::CollapsingState::load_with_default_open(
-                        ui.ctx(),
-                        header_id,
-                        ctx.collapse_default_open,
-                    );
+                let header_id = egui::Id::new((
+                    "step2_subgroup",
+                    ctx.collapse_epoch,
+                    ctx.tp_file,
+                    component_idx,
+                    header.as_str(),
+                ));
+                let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ui.ctx(),
+                    header_id,
+                    ctx.collapse_default_open,
+                );
                 if *ctx.jump_to_selected_requested
                     && selected_component_targets_range(
                         ctx.selected,
@@ -299,10 +312,11 @@ fn render_component_rows_range(
                 {
                     state.set_open(true);
                 }
-                state.show_header(ui, |ui| {
-                    ui.label(header.as_str());
-                })
-                .body(|ui| {
+                state
+                    .show_header(ui, |ui| {
+                        ui.label(header.as_str());
+                    })
+                    .body(|ui| {
                         for idx in component_idx..group_end {
                             let row_visible = mod_name_match
                                 || subgroup_matches

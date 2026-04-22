@@ -6,13 +6,16 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::log_files::{
+    DiagnosticLogGroup, copy_diagnostic_origin_logs, current_or_new_run_id, prune_old_diagnostics,
+    run_dir_from_id,
+};
+use crate::app::state::{Step3ItemState, WizardState};
+use crate::app::step5::command_config::build_install_command_config;
+use crate::app::terminal::EmbeddedTerminal;
+use crate::install::step5_command_install::build_install_invocation;
+use crate::platform_defaults::normalize_weidu_like_line;
 use anyhow::Result;
-use crate::ui::state::WizardState;
-use crate::ui::step4::service_step4::build_weidu_export_lines;
-use crate::ui::step5::service_diagnostics_run_step5::{current_or_new_run_id, prune_old_diagnostics, run_dir_from_id};
-use crate::ui::step5::service_step5_command_step5::build_install_invocation;
-use crate::ui::step5::log_files::{copy_diagnostic_origin_logs, DiagnosticLogGroup};
-use crate::ui::terminal::EmbeddedTerminal;
 
 #[path = "diagnostics_appdata_copy.rs"]
 mod appdata_copy;
@@ -28,30 +31,30 @@ mod compat_rule_trace_json;
 mod compat_snapshot;
 #[path = "diagnostics_export_marker_json.rs"]
 mod export_marker_json;
-#[path = "diagnostics_quick_triage.rs"]
-mod quick_triage;
-#[path = "diagnostics_scan_context_json.rs"]
-mod scan_context_json;
-#[path = "diagnostics_step2_render_order_json.rs"]
-mod step2_render_order_json;
-#[path = "diagnostics_step2_component_audit_json.rs"]
-mod step2_component_audit_json;
-#[path = "diagnostics_step2_component_audit_txt.rs"]
-mod step2_component_audit_txt;
-#[path = "diagnostics_prompt_calls_json.rs"]
-mod prompt_calls_json;
 #[path = "diagnostics_parser_events_json.rs"]
 mod parser_events_json;
 #[path = "diagnostics_parser_raw_json.rs"]
 mod parser_raw_json;
+#[path = "diagnostics_prompt_calls_json.rs"]
+mod prompt_calls_json;
+#[path = "diagnostics_quick_triage.rs"]
+mod quick_triage;
+#[path = "diagnostics_runtime_assumptions_json.rs"]
+mod runtime_assumptions_json;
+#[path = "diagnostics_scan_context_json.rs"]
+mod scan_context_json;
+#[path = "diagnostics_step2_component_audit_json.rs"]
+mod step2_component_audit_json;
+#[path = "diagnostics_step2_component_audit_txt.rs"]
+mod step2_component_audit_txt;
+#[path = "diagnostics_step2_render_order_json.rs"]
+mod step2_render_order_json;
+#[path = "diagnostics_step3_issue_snapshot_json.rs"]
+mod step3_issue_snapshot_json;
 #[path = "diagnostics_text.rs"]
 mod text;
 #[path = "diagnostics_tp2_layout.rs"]
 mod tp2_layout;
-#[path = "diagnostics_runtime_assumptions_json.rs"]
-mod runtime_assumptions_json;
-#[path = "diagnostics_step3_issue_snapshot_json.rs"]
-mod step3_issue_snapshot_json;
 #[path = "diagnostics_undefined_detect.rs"]
 mod undefined_detect;
 #[path = "diagnostics_undefined_summary_json.rs"]
@@ -59,7 +62,29 @@ mod undefined_summary_json;
 #[path = "diagnostics_write_checks.rs"]
 mod write_checks;
 
-pub use write_checks::{AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary};
+pub use write_checks::{
+    AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary,
+};
+
+pub(crate) fn build_weidu_export_lines(items: &[Step3ItemState]) -> Vec<String> {
+    items
+        .iter()
+        .filter(|i| !i.is_parent)
+        .map(format_step4_item)
+        .collect()
+}
+
+pub(crate) fn format_step4_item(item: &Step3ItemState) -> String {
+    if !item.raw_line.trim().is_empty() {
+        normalize_weidu_like_line(&item.raw_line)
+    } else {
+        let folder = item.mod_name.replace('/', "\\");
+        format!(
+            "~{}\\{}~ #0 #{} // {}",
+            folder, item.tp_file, item.component_id, item.component_label
+        )
+    }
+}
 
 pub fn export_diagnostics(
     state: &WizardState,
@@ -92,7 +117,8 @@ pub fn export_diagnostics(
     let console_excerpt = terminal
         .map(|t| t.console_excerpt(40_000))
         .unwrap_or_else(|| fallback_console_excerpt(state, 40_000));
-    let (installer_program, installer_args) = build_install_invocation(&state.step1);
+    let install_config = build_install_command_config(&state.step1);
+    let (installer_program, installer_args) = build_install_invocation(&install_config);
 
     let mut text = text::build_base_text(text::BuildBaseTextInput {
         state,
@@ -136,15 +162,24 @@ pub fn export_diagnostics(
     }
     match step2_render_order_json::write_step2_render_order_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("step2_render_order_json_write=FAILED: {err}")),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("step2_render_order_json_write=FAILED: {err}"),
+        ),
     }
     match step2_component_audit_json::write_step2_component_audit_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("step2_component_audit_json_write=FAILED: {err}")),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("step2_component_audit_json_write=FAILED: {err}"),
+        ),
     }
     match step2_component_audit_txt::write_step2_component_audit_txt(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("step2_component_audit_txt_write=FAILED: {err}")),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("step2_component_audit_txt_write=FAILED: {err}"),
+        ),
     }
     match prompt_calls_json::write_prompt_calls_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
@@ -152,7 +187,10 @@ pub fn export_diagnostics(
     }
     match parser_events_json::write_parser_events_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("parser_events_json_write=FAILED: {err}")),
+        Err(err) => append_diag_note(
+            &out_path,
+            &format!("parser_events_json_write=FAILED: {err}"),
+        ),
     }
     match parser_raw_json::write_parser_raw_json(&run_dir, state, ts) {
         Ok(path) => written_paths.push(path),
@@ -202,7 +240,10 @@ pub fn export_diagnostics(
     }
 
     if let Err(err) = export_marker_json::write_export_marker_json(&run_dir, ts, &written_paths) {
-        append_diag_note(&out_path, &format!("export_marker_json_write=FAILED: {err}"));
+        append_diag_note(
+            &out_path,
+            &format!("export_marker_json_write=FAILED: {err}"),
+        );
     }
     Ok(out_path)
 }
@@ -233,7 +274,11 @@ fn write_step4_weidu_log_snapshots(
 
     let groups = match state.step1.game_install.as_str() {
         "EET" => vec![
-            write_group("BGEE", "weidu.log", build_weidu_export_lines(&state.step3.bgee_items))?,
+            write_group(
+                "BGEE",
+                "weidu.log",
+                build_weidu_export_lines(&state.step3.bgee_items),
+            )?,
             write_group(
                 "BG2EE",
                 "weidu.log",

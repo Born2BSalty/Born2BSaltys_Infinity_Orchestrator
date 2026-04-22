@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use super::{
+use crate::parser::compat_dependency_expr::{
     normalize_component_id, parse_mod_is_installed_dependency_targets,
     parse_negated_mod_is_installed_targets, parse_predicate_requirement_line,
     parse_requirement_line, parse_simple_mod_is_installed_predicate,
@@ -9,10 +9,9 @@ use super::{
 
 #[test]
 fn parses_tilde_requirement_component() {
-    let parsed = parse_requirement_line(
-        r#"REQUIRE_COMPONENT ~bg1npc/bg1npc.tp2~ 0 @1004 /* comment */"#,
-    )
-    .expect("requirement should parse");
+    let parsed =
+        parse_requirement_line(r#"REQUIRE_COMPONENT ~bg1npc/bg1npc.tp2~ 0 @1004 /* comment */"#)
+            .expect("requirement should parse");
     assert_eq!(parsed.targets.len(), 1);
     assert_eq!(parsed.targets[0].target_mod, "bg1npc");
     assert_eq!(parsed.targets[0].target_component_id, "0");

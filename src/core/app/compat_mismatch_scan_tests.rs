@@ -3,14 +3,14 @@
 
 use std::collections::HashSet;
 
+use super::super::compat_mismatch_eval::{
+    MismatchContext, TriState, build_mismatch_context, evaluate_requirement,
+};
 use super::{
     RequirementGuard, classify_guard, collect_requirement_guards, preferred_failing_guard,
     preferred_guard_hit,
 };
-use crate::ui::state::Step1State;
-use super::super::compat_mismatch_eval::{
-    MismatchContext, TriState, build_mismatch_context, evaluate_requirement,
-};
+use crate::app::state::Step1State;
 
 #[test]
 fn classifies_positive_game_is_failure_as_mismatch() {
@@ -36,8 +36,10 @@ fn classifies_game_includes_failure_as_conditional() {
 #[test]
 fn classifies_mixed_game_and_mod_checks_as_conditional_when_game_matches() {
     let context = mismatch_context("BGEE", "BGEE", &[("foo", "0")]);
-    let classification =
-        classify_guard(r#"GAME_IS ~BGEE~ AND NOT(MOD_IS_INSTALLED ~foo.tp2~ ~0~)"#, &context);
+    let classification = classify_guard(
+        r#"GAME_IS ~BGEE~ AND NOT(MOD_IS_INSTALLED ~foo.tp2~ ~0~)"#,
+        &context,
+    );
     assert_eq!(classification.kind, "conditional");
 }
 
@@ -117,7 +119,8 @@ fn upgrades_selected_negated_mod_guard_to_conflict() {
 fn keeps_mismatch_precedence_over_selected_negated_mod_guard() {
     let context = mismatch_context("BGEE", "BGEE", &[("foo", "1")]);
     let guards = vec![RequirementGuard {
-        display_line: "REQUIRE_PREDICATE GAME_IS ~BG2EE~ AND NOT(MOD_IS_INSTALLED ~foo.tp2~ ~1~)".to_string(),
+        display_line: "REQUIRE_PREDICATE GAME_IS ~BG2EE~ AND NOT(MOD_IS_INSTALLED ~foo.tp2~ ~1~)"
+            .to_string(),
         eval_text: "GAME_IS ~BG2EE~ AND NOT(MOD_IS_INSTALLED ~foo.tp2~ ~1~)".to_string(),
     }];
 

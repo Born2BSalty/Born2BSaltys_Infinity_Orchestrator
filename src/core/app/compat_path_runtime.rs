@@ -7,7 +7,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
 use super::compat_path_eval::{PathRequirementContext, PathTriState, evaluate_path_requirement};
-use crate::ui::step2::prompt_eval_expr_tokens_step2::{Token, tokenize};
+use crate::parser::collect_tp2_component_blocks;
+use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
 
 pub(crate) type ComponentPathGuardCache = HashMap<String, HashMap<String, Vec<PathGuard>>>;
 
@@ -128,35 +129,8 @@ fn load_component_path_guards_uncached(tp2_path: &str) -> HashMap<String, Vec<Pa
     };
 
     let mut out = HashMap::<String, Vec<PathGuard>>::new();
-    let lines: Vec<&str> = tp2_text.lines().collect();
-    let mut index = 0usize;
-
-    while index < lines.len() {
-        let line = lines[index].trim_start();
-        if !line.to_ascii_uppercase().starts_with("BEGIN ") {
-            index += 1;
-            continue;
-        }
-
-        let start = index;
-        index += 1;
-        while index < lines.len() {
-            let next = lines[index].trim_start().to_ascii_uppercase();
-            if next.starts_with("BEGIN ") {
-                break;
-            }
-            index += 1;
-        }
-
-        let block = &lines[start..index];
-        let Some(component_id) = block
-            .iter()
-            .find_map(|entry| parse_designated_id(&entry.to_ascii_uppercase()))
-        else {
-            continue;
-        };
-
-        let guards = collect_path_guards(block);
+    for (component_id, block) in collect_tp2_component_blocks(&tp2_text) {
+        let guards = collect_path_guards(&block);
         if !guards.is_empty() {
             out.insert(component_id, guards);
         }
@@ -235,7 +209,10 @@ fn collect_path_guards(block: &[&str]) -> Vec<PathGuard> {
         }
 
         if let Some(eval_text) = eval_text.filter(|text| !text.trim().is_empty()) {
-            out.push(PathGuard { raw_line, eval_text });
+            out.push(PathGuard {
+                raw_line,
+                eval_text,
+            });
         }
         index = next;
     }
@@ -348,24 +325,6 @@ fn strip_inline_comments(line: &str) -> String {
     }
 
     out
-}
-
-fn parse_designated_id(upper_line: &str) -> Option<String> {
-    if upper_line.trim_start().starts_with("//") {
-        return None;
-    }
-    let index = upper_line.find("DESIGNATED")?;
-    let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-    let digits: String = tail.chars().take_while(|ch| ch.is_ascii_digit()).collect();
-    if digits.is_empty() {
-        return None;
-    }
-    let normalized = digits.trim_start_matches('0');
-    if normalized.is_empty() {
-        Some("0".to_string())
-    } else {
-        Some(normalized.to_string())
-    }
 }
 
 fn paren_balance(input: &str) -> i32 {

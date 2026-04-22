@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step2ModState, Step3ItemState, WizardState};
+use crate::app::state::{Step2ModState, Step3ItemState, WizardState};
 
-pub(crate) fn apply_component_unchecks(state: &mut WizardState, tab_id: &str, requests: &[(String, String)]) {
+pub(crate) fn apply_component_unchecks(
+    state: &mut WizardState,
+    tab_id: &str,
+    requests: &[(String, String)],
+) {
     if tab_id.eq_ignore_ascii_case("BGEE") {
         for (tp_file, component_id) in requests {
             uncheck_component_in_step2(&mut state.step2.bgee_mods, tp_file, component_id);
@@ -62,7 +66,9 @@ fn remove_component_from_step3_items(
     let block_id = items[component_idx].block_id.clone();
     remove_row_at(items, selected, component_idx);
 
-    let block_has_children = items.iter().any(|it| !it.is_parent && it.block_id == block_id);
+    let block_has_children = items
+        .iter()
+        .any(|it| !it.is_parent && it.block_id == block_id);
     if !block_has_children
         && let Some(parent_idx) = items
             .iter()

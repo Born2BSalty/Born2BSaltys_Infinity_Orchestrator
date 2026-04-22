@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step2ComponentState, Step2ModState};
+use crate::app::state::{Step2ComponentState, Step2ModState};
 
 use super::compat_dependency_runtime::{
     ComponentRequirementCache, DependencyCompatHit, DependencyEvalMode, scan_dependency_hit,
 };
-use super::compat_rule_runtime::{active_item_order, collect_step2_active_items, normalize_mod_key};
+use super::compat_rule_runtime::{
+    active_item_order, collect_step2_active_items, normalize_mod_key,
+};
 
 pub(crate) fn apply_step2_scan_missing_dep(mods: &mut [Step2ModState]) {
     let active_items = collect_step2_active_items(mods);

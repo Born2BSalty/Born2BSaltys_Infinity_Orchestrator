@@ -2,46 +2,33 @@
 // Copyright (c) 2026 Born2BSalty
 
 use eframe::egui;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::ui::step2::compat_types_step2::CompatIssueDisplay;
-use crate::ui::state::Step3ItemState;
-use crate::ui::compat_step3_rules::Step3CompatMarker;
+use crate::app::compat_issue::CompatIssue;
+use crate::app::compat_step3_rules::Step3CompatMarker;
+use crate::app::prompt_eval_summary_step3;
+use crate::app::prompt_popup_text::format_step3_prompt_popup;
+use crate::app::state::Step3ItemState;
+use crate::app::step3_history;
+use crate::app::step3_prompt_edit::PromptActionRequest;
+use crate::parser::prompt_eval_expr::PromptEvalContext;
+use crate::ui::step3::block_selection_step3::{
+    selected_full_main_parent_block_indices, single_child_main_parent_block_indices,
+};
 use crate::ui::step3::blocks;
-use crate::ui::step3::content_step3;
-use crate::ui::step3::prompt_popup_step3;
+use crate::ui::step3::format_step3;
 use crate::ui::step3::service_step3;
-
-#[derive(Debug, Clone)]
-pub(crate) enum PromptActionRequest {
-    SetWlb {
-        tp_file: String,
-        component_id: String,
-        component_label: String,
-        mod_name: String,
-    },
-    EditJson {
-        tp_file: String,
-        component_id: String,
-        component_label: String,
-        mod_name: String,
-    },
-    Clear {
-        tp_file: String,
-        component_id: String,
-    },
-}
 
 pub(crate) struct RowRenderOutcome {
     pub visible_rows: Vec<(usize, egui::Rect)>,
     pub uncheck_requests: Vec<(String, String)>,
     pub prompt_requests: Vec<PromptActionRequest>,
     pub open_prompt_popup: Option<(String, String)>,
-    pub open_compat_popup: Option<(String, String, String, CompatIssueDisplay)>,
+    pub open_compat_popup: Option<(String, String, String, CompatIssue)>,
 }
 
 pub(crate) struct RowRenderContext<'a> {
-    pub prompt_eval: &'a crate::ui::step2::state_step2::PromptEvalContext,
+    pub prompt_eval: &'a PromptEvalContext,
     pub compat_markers: &'a HashMap<String, Step3CompatMarker>,
     pub tab_id: &'a str,
     pub visible_indices: &'a [usize],
@@ -63,79 +50,7 @@ pub(crate) struct RowRenderContext<'a> {
     pub redo_stack: &'a mut Vec<Vec<Step3ItemState>>,
 }
 
-const STEP3_HISTORY_LIMIT: usize = 100;
-
-fn push_undo_snapshot(
-    items: &[Step3ItemState],
-    undo_stack: &mut Vec<Vec<Step3ItemState>>,
-    redo_stack: &mut Vec<Vec<Step3ItemState>>,
-) {
-    undo_stack.push(items.to_vec());
-    if undo_stack.len() > STEP3_HISTORY_LIMIT {
-        undo_stack.remove(0);
-    }
-    redo_stack.clear();
-}
-
-fn single_child_main_parent_block_indices(items: &[Step3ItemState], idx: usize) -> Option<Vec<usize>> {
-    let item = items.get(idx)?;
-    if item.is_parent { return None; }
-    let parent_idx = items
-        .iter()
-        .position(|it| it.is_parent && it.block_id == item.block_id)?;
-    let parent = items.get(parent_idx)?;
-    (!parent.parent_placeholder && blocks::count_children_in_block(items, parent_idx) == 1)
-        .then(|| blocks::block_indices(items, parent_idx))
-}
-
-fn selected_full_main_parent_block_indices(items: &[Step3ItemState], selected: &[usize], idx: usize) -> Option<Vec<usize>> {
-    let item = items.get(idx)?;
-    if !selected.contains(&idx) {
-        return None;
-    }
-    if item.is_parent {
-        let selected_blocks: HashSet<&str> = selected
-            .iter()
-            .filter_map(|selected_idx| items.get(*selected_idx))
-            .map(|selected_item| selected_item.block_id.as_str())
-            .collect();
-        return (selected_blocks.len() > 1).then(|| {
-            items.iter().enumerate().filter_map(|(row_idx, row_item)| {
-                selected_blocks.contains(row_item.block_id.as_str()).then_some(row_idx)
-            }).collect()
-        });
-    }
-    let parent_idx = items
-        .iter()
-        .position(|it| it.is_parent && it.block_id == item.block_id)?;
-    let parent = items.get(parent_idx)?;
-    if parent.parent_placeholder { return None; }
-    let child_indices: Vec<usize> = items
-        .iter()
-        .enumerate()
-        .filter_map(|(row_idx, row_item)| {
-            (!row_item.is_parent && row_item.block_id == item.block_id).then_some(row_idx)
-        })
-        .collect();
-    if child_indices.is_empty() { return None; }
-    let selected_non_parent: HashSet<usize> = selected
-        .iter()
-        .copied()
-        .filter(|selected_idx| items.get(*selected_idx).is_some_and(|selected_item| !selected_item.is_parent))
-        .collect();
-    if selected_non_parent.len() != child_indices.len() {
-        return None;
-    }
-    if !child_indices.iter().all(|child_idx| selected_non_parent.contains(child_idx)) {
-        return None;
-    }
-    Some(blocks::block_indices(items, parent_idx))
-}
-
-pub(crate) fn render_rows(
-    ui: &mut egui::Ui,
-    ctx: &mut RowRenderContext<'_>,
-) -> RowRenderOutcome {
+pub(crate) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> RowRenderOutcome {
     let prompt_eval = ctx.prompt_eval;
     let compat_markers = ctx.compat_markers;
     let tab_id = ctx.tab_id;
@@ -160,7 +75,7 @@ pub(crate) fn render_rows(
     let mut uncheck_requests: Vec<(String, String)> = Vec::new();
     let mut prompt_requests: Vec<PromptActionRequest> = Vec::new();
     let mut open_prompt_popup: Option<(String, String)> = None;
-    let mut open_compat_popup: Option<(String, String, String, CompatIssueDisplay)> = None;
+    let mut open_compat_popup: Option<(String, String, String, CompatIssue)> = None;
 
     for &idx in visible_indices {
         let item = &items[idx];
@@ -191,12 +106,21 @@ pub(crate) fn render_rows(
                         is_locked = true;
                     }
                 }
-                let symbol = if collapsed { "+" } else { "-" };
-                if ui.small_button(symbol).clicked() {
-                    if collapsed {
-                        collapsed_blocks.retain(|value| value != &item.block_id);
-                    } else {
+                let mut collapse_state =
+                    egui::collapsing_header::CollapsingState::load_with_default_open(
+                        ui.ctx(),
+                        egui::Id::new(("step3_parent_toggle", tab_id, &item.block_id)),
+                        !collapsed,
+                    );
+                collapse_state.set_open(!collapsed);
+                collapse_state
+                    .show_toggle_button(ui, egui::collapsing_header::paint_default_icon);
+                let now_collapsed = !collapse_state.is_open();
+                if now_collapsed != collapsed {
+                    if now_collapsed {
                         collapsed_blocks.push(item.block_id.clone());
+                    } else {
+                        collapsed_blocks.retain(|value| value != &item.block_id);
                     }
                 }
                 let title = if item.parent_placeholder {
@@ -219,17 +143,19 @@ pub(crate) fn render_rows(
             resp.on_hover_text(crate::ui::shared::tooltip_global::STEP3_DRAG_PARENT)
         } else {
             let prompt_summary =
-                prompt_popup_step3::evaluate_step3_item_prompt_summary(item, prompt_eval);
+                prompt_eval_summary_step3::evaluate_step3_item_prompt_summary(item, prompt_eval);
             let compat_marker =
-                compat_markers.get(&crate::ui::compat_step3_rules::marker_key(item));
+                compat_markers.get(&crate::app::compat_step3_rules::marker_key(item));
             ui.horizontal(|ui| {
                 ui.add_space(25.0);
-                let text = content_step3::format_step3_item(item);
-                let row_text = content_step3::weidu_colored_widget_text(ui, &text);
+                let text = format_step3::format_step3_item(item);
+                let row_text = format_step3::weidu_colored_widget_text(ui, &text);
                 let resp = ui.selectable_label(selected.contains(&idx), row_text);
                 if let Some(marker) = compat_marker
                     && let Some((pill_text_color, pill_bg, pill_label)) =
-                        crate::ui::step2::tree_compat_display_step2::compat_colors(Some(&marker.kind))
+                        crate::ui::step2::tree_compat_display_step2::compat_colors(Some(
+                            &marker.kind,
+                        ))
                 {
                     ui.add_space(6.0);
                     let pill_text = crate::ui::shared::typography_global::strong(pill_label)
@@ -255,7 +181,7 @@ pub(crate) fn render_rows(
                             item.tp_file.clone(),
                             item.component_id.clone(),
                             item.raw_line.clone(),
-                            crate::ui::compat_step3_rules::marker_issue(marker),
+                            crate::app::compat_step3_rules::marker_issue(marker),
                         ));
                     }
                 }
@@ -277,9 +203,7 @@ pub(crate) fn render_rows(
                         )
                         .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
                     if prompt_response.clicked() {
-                        row_prompt_popup = Some(
-                            prompt_popup_step3::format_step3_prompt_popup(item, &prompt_summary),
-                        );
+                        row_prompt_popup = Some(format_step3_prompt_popup(item, &prompt_summary));
                     }
                 }
                 resp
@@ -291,11 +215,12 @@ pub(crate) fn render_rows(
             open_prompt_popup = row_prompt_popup;
         }
         let drag_id = ui.make_persistent_id(("step3_drag_row", tab_id, idx));
-        let drag_response = ui.interact(label_response.rect, drag_id, egui::Sense::click_and_drag());
+        let drag_response =
+            ui.interact(label_response.rect, drag_id, egui::Sense::click_and_drag());
         if items[idx].is_parent {
             drag_response.context_menu(|ui| {
                 if ui.button("Clone Parent (empty split target)").clicked() {
-                    push_undo_snapshot(items, undo_stack, redo_stack);
+                    step3_history::push_undo_snapshot(items, undo_stack, redo_stack);
                     blocks::clone_parent_empty_block(items, idx, clone_seq);
                     ui.close_menu();
                 }
@@ -344,7 +269,14 @@ pub(crate) fn render_rows(
         }
         if label_response.clicked() || drag_response.clicked() {
             let modifiers = ui.input(|input| input.modifiers);
-            service_step3::apply_row_selection(selected, anchor, items, visible_indices, idx, modifiers);
+            service_step3::apply_row_selection(
+                selected,
+                anchor,
+                items,
+                visible_indices,
+                idx,
+                modifiers,
+            );
         }
         if drag_response.drag_started() {
             if locked_blocks.contains(&items[idx].block_id) {
@@ -352,9 +284,11 @@ pub(crate) fn render_rows(
                 drag_indices.clear();
                 continue;
             }
-            push_undo_snapshot(items, undo_stack, redo_stack);
+            step3_history::push_undo_snapshot(items, undo_stack, redo_stack);
             *drag_from = Some(idx);
-            if let Some(block_indices) = selected_full_main_parent_block_indices(items, selected, idx) {
+            if let Some(block_indices) =
+                selected_full_main_parent_block_indices(items, selected, idx)
+            {
                 *drag_indices = block_indices;
             } else if items[idx].is_parent {
                 *drag_indices = blocks::block_indices(items, idx);
@@ -375,7 +309,8 @@ pub(crate) fn render_rows(
             sorted.dedup();
             *drag_grab_pos_in_block = sorted.iter().position(|value| *value == idx).unwrap_or(0);
             if let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
-                && let Some((_, grabbed_rect)) = visible_rows.iter().find(|(row_idx, _)| *row_idx == idx)
+                && let Some((_, grabbed_rect)) =
+                    visible_rows.iter().find(|(row_idx, _)| *row_idx == idx)
             {
                 *drag_grab_offset = pointer.y - grabbed_rect.top();
                 let row_pitch = grabbed_rect.height() + ui.spacing().item_spacing.y.max(0.0);

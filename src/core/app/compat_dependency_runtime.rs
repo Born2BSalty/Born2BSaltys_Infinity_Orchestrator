@@ -8,7 +8,8 @@ use super::compat_dependency_parse::{
 };
 use super::compat_rule_runtime::{CompatActiveItem, normalize_mod_key};
 
-pub(crate) type ComponentRequirementCache = HashMap<String, HashMap<String, Vec<ComponentRequirement>>>;
+pub(crate) type ComponentRequirementCache =
+    HashMap<String, HashMap<String, Vec<ComponentRequirement>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DependencyEvalMode {
@@ -68,7 +69,10 @@ pub(crate) fn scan_dependency_hit(
         let component_order = component_order?;
         if let Some((requirement, target)) = requirements.iter().find_map(|requirement| {
             let selected = selected_targets(active_items, requirement);
-            if selected.is_empty() || selected.iter().any(|(_, target_order)| component_order >= *target_order)
+            if selected.is_empty()
+                || selected
+                    .iter()
+                    .any(|(_, target_order)| component_order >= *target_order)
             {
                 return None;
             }

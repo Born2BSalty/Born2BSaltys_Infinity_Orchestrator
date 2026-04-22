@@ -3,15 +3,15 @@
 
 use eframe::egui;
 
-use crate::ui::state::{Step2ComponentState, Step2Selection};
+use crate::app::prompt_eval_summary::evaluate_component_prompt_summary;
+use crate::app::prompt_popup_text::format_component_prompt_popup_text_with_body;
+use crate::app::state::{Step2ComponentState, Step2Selection};
 use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
     format_component_row_label_with_display,
 };
-use crate::ui::step2::prompt_eval_step2::evaluate_component_prompt_summary;
 use crate::ui::step2::tree_compat_display_step2::compat_colors;
 use crate::ui::step2::tree_component_types_step2::{ComponentRenderState, ComponentRowsContext};
-use crate::ui::step2::tree_parent_step2::format_component_prompt_popup_text_with_body;
 use crate::ui::step2::tree_selection_rules_step2::set_component_checked_state;
 
 pub(crate) fn render_component_row(

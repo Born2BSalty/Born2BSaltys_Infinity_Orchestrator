@@ -28,7 +28,9 @@ pub(crate) fn render_selection_grid(
         row_h,
         value_chars,
     };
-    ui.label(crate::ui::shared::typography_global::small_strong("Selection"));
+    ui.label(crate::ui::shared::typography_global::small_strong(
+        "Selection",
+    ));
     egui::Grid::new("step2_details_selection_grid")
         .num_columns(3)
         .spacing([8.0, 4.0])
@@ -42,7 +44,15 @@ pub(crate) fn render_selection_grid(
                 None,
                 action,
             );
-            render_value_row(ui, &layout, "ID", details.component_id.as_deref(), true, None, action);
+            render_value_row(
+                ui,
+                &layout,
+                "ID",
+                details.component_id.as_deref(),
+                true,
+                None,
+                action,
+            );
             render_checked_row(ui, details, label_w, value_w, row_h);
             render_state_row(ui, details, label_w, value_w, row_h);
             if details.compat_kind.is_some() {
@@ -53,15 +63,6 @@ pub(crate) fn render_selection_grid(
                 &layout,
                 "Language",
                 details.component_lang.as_deref(),
-                true,
-                None,
-                action,
-            );
-            render_value_row(
-                ui,
-                &layout,
-                "Version",
-                details.component_version.as_deref(),
                 true,
                 None,
                 action,
@@ -96,15 +97,7 @@ pub(crate) fn render_selection_grid(
                 action,
             );
             let raw_count = details.raw_component_count.map(|n| n.to_string());
-            render_value_row(
-                ui,
-                &layout,
-                "Raw",
-                raw_count.as_deref(),
-                true,
-                None,
-                action,
-            );
+            render_value_row(ui, &layout, "Raw", raw_count.as_deref(), true, None, action);
             let selected_order = details.selected_order.map(|n| n.to_string());
             render_value_row(
                 ui,
@@ -332,9 +325,9 @@ fn render_origin_row(
         .unwrap_or("step2_compat_rules_user.toml");
     ui.add_sized(
         [value_w, row_h],
-        egui::Label::new(crate::ui::shared::typography_global::monospace(ellipsize_end(
-            origin, value_chars,
-        ))),
+        egui::Label::new(crate::ui::shared::typography_global::monospace(
+            ellipsize_end(origin, value_chars),
+        )),
     )
     .on_hover_text(origin);
     if ui
@@ -365,9 +358,9 @@ fn render_optional_monospace_row(
     );
     ui.add_sized(
         [value_w, row_h],
-        egui::Label::new(crate::ui::shared::typography_global::monospace(ellipsize_end(
-            raw, value_chars,
-        ))),
+        egui::Label::new(crate::ui::shared::typography_global::monospace(
+            ellipsize_end(raw, value_chars),
+        )),
     )
     .on_hover_text(raw);
     if ui

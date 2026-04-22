@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::compat_rules::inspect_compat_rules_inventory;
+use crate::app::compat_rules::inspect_compat_rules_inventory;
 
 pub(super) fn write_compat_rule_inventory_json(
     run_dir: &Path,

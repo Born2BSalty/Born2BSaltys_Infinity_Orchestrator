@@ -3,17 +3,31 @@
 
 use eframe::egui;
 
+use crate::app::state::WizardState;
 use crate::ui::layout::SECTION_GAP;
-use crate::ui::state::WizardState;
 use crate::ui::step1::action_step1::Step1Action;
 use crate::ui::step1::frame_step1::{render_bottom, render_top};
+use crate::ui::step1::service_step1::{split_path_check_lines, sync_install_mode, sync_weidu_log_mode};
 use crate::ui::step1::state_step1::clear_path_check_if_step1_changed;
-use crate::ui::step1::service_step1::{split_path_check_lines, sync_weidu_log_mode};
 use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool, exe_fingerprint: &str) {
+pub fn render(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    dev_mode: bool,
+    exe_fingerprint: &str,
+) -> Option<Step1Action> {
+    sync_install_mode(&mut state.step1);
     let before = state.step1.clone();
     sync_weidu_log_mode(&mut state.step1);
+    let mut step1_action = None;
+    let github_button_label = if state.github_auth_running {
+        "GitHub: Waiting...".to_string()
+    } else if state.github_auth_login.trim().is_empty() {
+        "Connect GitHub".to_string()
+    } else {
+        format!("GitHub: {}", state.github_auth_login.trim())
+    };
 
     ui.horizontal(|ui| {
         ui.heading("Step 1: Setup");
@@ -57,15 +71,24 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool, exe_fi
     ui.add_space(SECTION_GAP);
 
     egui::ScrollArea::vertical().show(ui, |ui| {
-        render_top(ui, &mut state.step1, dev_mode);
+        render_top(
+            ui,
+            &mut state.step1,
+            dev_mode,
+            github_button_label.as_str(),
+            &mut step1_action,
+        );
         ui.add_space(SECTION_GAP);
         render_bottom(ui, &mut state.step1);
     });
 
-    let step1_action = if state.step1 != before {
+    let step1_changed = state.step1 != before;
+    clear_path_check_if_step1_changed(state, step1_changed);
+    if step1_action.is_some() {
+        step1_action
+    } else if step1_changed {
         Some(Step1Action::PathsChanged)
     } else {
         None
-    };
-    clear_path_check_if_step1_changed(state, step1_action.is_some());
+    }
 }

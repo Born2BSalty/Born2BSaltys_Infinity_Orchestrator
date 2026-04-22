@@ -1,0 +1,2717 @@
+# BIO may replace the AppData copy of this file when you update BIO.
+# Add personal overrides to mod_downloads_user.toml instead.
+
+#////////////////////////////////////////////////#
+#//                 GitHub                     //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "DLC Merger"
+tp2 = "DlcMerger"
+url = "https://github.com/Argent77/A7-DlcMerger"
+github = "Argent77/A7-DlcMerger"
+pkg_windows = "w64zip,w32zip"
+pkg_linux = "lin"
+pkg_macos = "macarmzip,macx64zip"
+
+[[mods]]
+name = "EE Fixpack"
+tp2 = "eefixpack"
+url = "https://github.com/gibberlings3/ee_fixpack"
+github = "gibberlings3/ee_fixpack"
+channel = "pre"
+pkg = "zip"
+pkg_linux = "lin"
+pkg_macos = "mac"
+
+[[mods]]
+name = "BG1 Unfinished Business"
+tp2 = "bg1ub"
+url = "https://github.com/Pocket-Plane-Group/bg1ub"
+github = "Pocket-Plane-Group/bg1ub"
+
+[[mods]]
+name = "The Drizzt Saga"
+tp2 = "DrizztSaga"
+url = "https://github.com/MattyGroove/DrizztSaga"
+github = "MattyGroove/DrizztSaga"
+
+[[mods]]
+name = "T'Was a Slow Boat from Kara-Tur"
+tp2 = "karatur"
+url = "https://github.com/The-Gate-Project/Kara-Tur"
+github = "The-Gate-Project/Kara-Tur"
+pkg_windows = "wzp"
+pkg_linux = "lin"
+pkg_macos = "mac"
+
+[[mods]]
+name = "Baldur's Gate: Enhanced Edition Trilogy"
+tp2 = "eet"
+url = "https://github.com/Gibberlings3/EET"
+github = "K4thos/EET"
+
+[[mods]]
+name = "EEex"
+tp2 = "eeex"
+url = "https://github.com/Bubb13/EEex"
+github = "Bubb13/EEex"
+channel = "pre"
+pkg = "zip"
+
+[[mods]]
+name = "Lefreut's Enhanced UI (SoD skin)"
+tp2 = "LeUI-SoD"
+url = "https://github.com/r-e-d/LeUI-SoD"
+github = "r-e-d/LeUI-SoD"
+
+[[mods]]
+name = "EE UI Tweaks"
+tp2 = "eeuitweaks"
+url = "https://github.com/r-e-d/EEUITweaks"
+github = "r-e-d/EEUITweaks"
+
+[[mods]]
+name = "Portrait Gender Separator"
+tp2 = "D2-PORTRAIT-SEPARATOR"
+url = "https://github.com/D2-mods/Portrait-Gender-Separator-for-IE-games"
+github = "D2-mods/Portrait-Gender-Separator-for-IE-games"
+
+[[mods]]
+name = "Bubb's Spell Menu Extended"
+tp2 = "bubb_spell_menu_extended"
+url = "https://github.com/Bubb13/Bubbs-Spell-Menu-Extended"
+github = "Bubb13/Bubbs-Spell-Menu-Extended"
+
+[[mods]]
+name = "Infinity Innovations: Key Names"
+tp2 = "iiKeyNames"
+url = "https://github.com/btigi/iiKeyNames"
+github = "btigi/iiKeyNames"
+
+[[mods]]
+name = "Achievements!"
+tp2 = "A7-ACHIEVEMENTS"
+url = "https://github.com/Argent77/A7-Achievements"
+github = "Argent77/A7-Achievements"
+pkg_windows = "wzp"
+pkg_linux = "lin"
+pkg_macos = "mac"
+
+[[mods]]
+name = "Reveal Hidden Gameplay Options"
+tp2 = "a7-hiddengameplayoptions"
+url = "https://github.com/Argent77/A7-HiddenGameplayOptions"
+github = "Argent77/A7-HiddenGameplayOptions"
+pkg_windows = "wzp"
+pkg_linux = "lin"
+pkg_macos = "mac"
+
+[[mods]]
+name = "BG:EE Classic Movies"
+tp2 = "BGEEClassicMovies"
+url = "https://github.com/Sampsca/BGEE-Classic-Movies"
+github = "Sampsca/BGEE-Classic-Movies"
+
+[[mods]]
+name = "Baldur's Gate Graphics Overhaul"
+tp2 = "BGGO"
+url = "https://github.com/Spellhold-Studios/Baldurs-Gate-Graphical-Overhaul"
+github = "Spellhold-Studios/Baldurs-Gate-Graphical-Overhaul"
+channel = "stable"
+pkg = "zip"
+
+[[mods]]
+name = "Jaheira Recast"
+tp2 = "jaheirarecast"
+url = "https://github.com/The-Gate-Project/JaheiraRecast"
+github = "The-Gate-Project/JaheiraRecast"
+
+[[mods]]
+name = "Nostalgia Pack"
+tp2 = "NostalgiaPack"
+url = "https://github.com/SpellholdStudios/Nostalgia-Pack"
+github = "SpellholdStudios/Nostalgia-Pack"
+
+[[mods]]
+name = "Remastered Spell Icons"
+tp2 = "remastered_spell_icons"
+url = "https://github.com/Renegade0/RemasteredSpellIcons"
+github = "Renegade0/RemasteredSpellIcons"
+
+[[mods]]
+name = "EE Cosmetic Enhancements"
+tp2 = "ee_cosmetic_enhancements"
+url = "https://github.com/DaerosTrollkiller/EE_Cosmetic_Item_Enhancement"
+github = "DaerosTrollkiller/EE_Cosmetic_Item_Enhancement"
+
+[[mods]]
+name = "Lighting Pack"
+tp2 = "LightingPack"
+url = "https://github.com/Argent77/A7-LightingPackEE"
+github = "Argent77/A7-LightingPackEE"
+pkg_windows = "wzp"
+pkg_linux = "lin"
+pkg_macos = "mac"
+
+[[mods]]
+name = "Made in Heaven: Fixes & Restorations"
+tp2 = "mih_fr"
+url = "https://github.com/AngelGryph/MadeInHeaven_FixesAndRestorations"
+github = "AngelGryph/MadeInHeaven_FixesAndRestorations"
+
+[[mods]]
+name = "Endless BG1 Mod"
+tp2 = "c#endlessbg1"
+url = "https://github.com/Gibberlings3/EndlessBG1"
+github = "Gibberlings3/EndlessBG1"
+
+[[mods]]
+name = "Another Fine Hell"
+tp2 = "c#anotherfinehell"
+url = "https://github.com/Gibberlings3/Another_Fine_Hell"
+github = "Gibberlings3/Another_Fine_Hell"
+
+[[mods]]
+name = "Jastey's Tweaks"
+tp2 = "c#sodtweaks"
+url = "https://github.com/Gibberlings3/Jasteys_SoD_Tweakpack"
+github = "Gibberlings3/Jasteys_SoD_Tweakpack"
+
+[[mods]]
+name = "The Boareskyr Bridge Scene"
+tp2 = "c#sodboabri"
+url = "https://github.com/Gibberlings3/The_Boareskyr_Bridge_Scene"
+github = "Gibberlings3/The_Boareskyr_Bridge_Scene"
+
+[[mods]]
+name = "Imoen 4 Ever"
+tp2 = "imoen_forever"
+url = "https://github.com/Gibberlings3/Imoen4Ever"
+github = "Gibberlings3/Imoen4Ever"
+
+[[mods]]
+name = "Bonus Pack in Baldur's Gate"
+tp2 = "BP_in_BG"
+url = "https://github.com/UnearthedArcana/BP_in_BG"
+github = "UnearthedArcana/BP_in_BG"
+
+[[mods]]
+name = "Baldur's Gate Mini Quests and Encounters Modification"
+tp2 = "bgqe"
+url = "https://github.com/Gibberlings3/BG_Quests_And_Encounters"
+github = "Gibberlings3/BG_Quests_And_Encounters"
+
+[[mods]]
+name = "Ascalon's Questpack"
+tp2 = "AC_QUEST"
+url = "https://github.com/Gitjas/Ascalons_Questpack"
+github = "Gitjas/Ascalons_Questpack"
+
+[[mods]]
+name = "Extra Enhanced Expanded Encounters!"
+tp2 = "ExtraExpandedEnhancedEncounters"
+url = "https://github.com/GraionDilach/ExtraExpandedEnhancedEncounters"
+github = "GraionDilach/ExtraExpandedEnhancedEncounters"
+
+[[mods]]
+name = "The BG1NPC Project"
+tp2 = "BG1NPC"
+url = "https://github.com/Gibberlings3/BG1NPC"
+github = "Gibberlings3/BG1NPC"
+
+[[mods]]
+name = "BG1 NPC Music"
+tp2 = "bg1npcmusic"
+url = "https://github.com/Gibberlings3/bg1npcmusic"
+github = "Gibberlings3/bg1npcmusic"
+pkg = "zip"
+
+[[mods]]
+name = "Ajantis BG1 Expansion Modification"
+tp2 = "ajantisbg1"
+url = "https://github.com/Gibberlings3/Ajantis_BG1_Expansion"
+github = "Gibberlings3/Ajantis_BG1_Expansion"
+
+[[mods]]
+name = "Coran's BG Extended Friendship Talks"
+tp2 = "coranbgfriend"
+url = "https://github.com/Gibberlings3/CoranBGFriend"
+github = "Gibberlings3/CoranBGFriend"
+
+[[mods]]
+name = "Xan's Friendship Path"
+tp2 = "XanBG1Friend"
+url = "https://github.com/Pocket-Plane-Group/Xan_BG1_Friendship"
+github = "Pocket-Plane-Group/Xan_BG1_Friendship"
+
+[[mods]]
+name = "Aerie in BG:EE"
+tp2 = "BG1Aerie"
+url = "https://github.com/The-Gate-Project/AerieBG1"
+github = "The-Gate-Project/AerieBG1"
+
+[[mods]]
+name = "Balduran's Seatower"
+tp2 = "bst"
+url = "https://github.com/Gibberlings3/BS_Baldurans_Seatower"
+github = "Gibberlings3/BS_Baldurans_Seatower"
+
+[[mods]]
+name = "Gorgon"
+tp2 = "gorgon"
+url = "https://github.com/TotalMilk90/gorgon"
+github = "TotalMilk90/gorgon"
+
+[[mods]]
+name = "Blackhearts"
+tp2 = "Blackhearts"
+url = "https://github.com/A-Wizard-Did-It/Black-Hearts-EET"
+github = "A-Wizard-Did-It/Black-Hearts-EET"
+
+[[mods]]
+name = "Dark Side of the Sword Coast"
+tp2 = "DSotSC"
+url = "https://github.com/Spellhold-Studios/DSotSC"
+github = "Spellhold-Studios/DSotSC"
+
+[[mods]]
+name = "Northern Tales of the Sword Coast"
+tp2 = "ntotsc"
+url = "https://github.com/Spellhold-Studios/NTotSC"
+github = "Spellhold-Studios/NTotSC"
+
+[[mods]]
+name = "Dark Horizons BG:EE"
+tp2 = "darkhorizonsbgee"
+url = "https://github.com/The-Gate-Project/DarkHorizons"
+github = "The-Gate-Project/DarkHorizons"
+pkg_windows = "wzp"'
+pkg_linux = "lin"
+pkg_macos = "mac"
+
+[[mods]]
+name = "The Darkest Day"
+tp2 = "TDDZ"
+url = "https://github.com/Spellhold-Studios/TDDz"
+github = "Spellhold-Studios/TDDz"
+
+[[mods]]
+name = "Loron's Return"
+tp2 = "AJOCMOD"
+url = "https://github.com/RoxanneSHS/AjocMod"
+github = "RoxanneSHS/AjocMod"
+
+[[mods]]
+name = "The Vault"
+tp2 = "VAULTEET"
+url = "https://github.com/RoxanneSHS/VaultEE"
+github = "RoxanneSHS/VaultEE"
+
+[[mods]]
+name = "Bank of Baldur's Gate"
+tp2 = "bank_of_baldurs_gate"
+url = "https://github.com/SpellholdStudios/Bank_of_Baldurs_Gate"
+github = "SpellholdStudios/Bank_of_Baldurs_Gate"
+
+[[mods]]
+name = "Secret of Bonehill"
+tp2 = "BONEHILLEET"
+url = "https://github.com/RoxanneSHS/BoneHill"
+github = "RoxanneSHS/BoneHill"
+
+[[mods]]
+name = "The Undying"
+tp2 = "TheUndying"
+url = "https://github.com/Endarire/The-Undying-Mod-for-BG2EE-EET"
+github = "Endarire/The-Undying-Mod-for-BG2EE-EET"
+
+[[mods]]
+name = "Drow Library"
+tp2 = "DROWLIB"
+url = "https://github.com/RoxanneSHS/DrowLibrary"
+github = "RoxanneSHS/DrowLibrary"
+
+[[mods]]
+name = "Candlekeep Memories"
+tp2 = "CANDLEMEM"
+url = "https://github.com/RoxanneSHS/CandlekeepMemories"
+github = "RoxanneSHS/CandlekeepMemories"
+
+[[mods]]
+name = "Civil Disobedience"
+tp2 = "DISOBEDIENCE"
+url = "https://github.com/RoxanneSHS/CivilDisobedience"
+github = "RoxanneSHS/CivilDisobedience"
+
+[[mods]]
+name = "Out, Brief Candlekeep!"
+tp2 = "OUT, BRIEF CANDLEKEEP!"
+url = "https://github.com/Endarire/Out-Brief-Candlekeep-for-BG1EE-EET"
+github = "Endarire/Out-Brief-Candlekeep-for-BG1EE-EET"
+
+[[mods]]
+name = "The Sword of Noober"
+tp2 = "tnoober"
+url = "https://github.com/SpellholdStudios/TheSwordofNoober"
+github = "SpellholdStudios/TheSwordofNoober"
+
+[[mods]]
+name = "The Grey Clan Episode One"
+tp2 = "TGC1e"
+url = "https://github.com/K4thos/TGC1e"
+github = "K4thos/TGC1e"
+
+[[mods]]
+name = "Transitions"
+tp2 = "transitions"
+url = "https://github.com/Gibberlings3/transitions"
+github = "Gibberlings3/transitions"
+
+[[mods]]
+name = "The Stone of Askavar"
+tp2 = "soa"
+url = "https://github.com/red-carnelian/The-Stone-of-Askavar"
+github = "red-carnelian/The-Stone-of-Askavar"
+
+[[mods]]
+name = "Blood and Faith"
+tp2 = "BLOODFAITH"
+url = "https://github.com/Glittergear/BloodAndFaith"
+github = "Glittergear/BloodAndFaith"
+
+[[mods]]
+name = "Unfinished Business"
+tp2 = "ub"
+url = "https://github.com/Pocket-Plane-Group/UnfinishedBusiness/releases"
+github = "Pocket-Plane-Group/UnfinishedBusiness"
+
+[[mods]]
+name = "Almateria's Restoration Project"
+tp2 = "arestorationp"
+url = "https://github.com/SpellholdStudios/Almaterias_Restoration_Project/releases/tag/v10.0"
+github = "SpellholdStudios/Almaterias_Restoration_Project"
+
+[[mods]]
+name = "Quest Pack"
+tp2 = "setup-questpack.tp2"
+url = "https://github.com/Pocket-Plane-Group/QuestPack"
+github = "Pocket-Plane-Group/QuestPack"
+
+[[mods]]
+name = "Hidden Adventures"
+tp2 = "hiddenadventure"
+url = "https://github.com/Gitjas/hiddenadventure/releases"
+github = "Gitjas/hiddenadventure"
+
+[[mods]]
+name = "Restored Rhynn Lanthorn"
+tp2 = "dw_lanthorn"
+url = "https://github.com/Gibberlings3/Restored-Rhynn-Lanthorn"
+github = "Gibberlings3/Restored-Rhynn-Lanthorn"
+
+[[mods]]
+name = "Adalon's Blood"
+tp2 = "setup-c#sb_silber.tp2"
+url = "https://github.com/Gitjas/Adalons_Blood"
+github = "Gitjas/Adalons_Blood"
+
+[[mods]]
+name = "Alternatives"
+tp2 = "Alternatives"
+url = "https://github.com/Gibberlings3/Alternatives/releases"
+github = "Gibberlings3/Alternatives"
+
+[[mods]]
+name = "Expanded Thief Stronghold"
+tp2 = "gbthfkp"
+url = "https://github.com/SpellholdStudios/Expanded_Thief_Stronghold/releases"
+github = "SpellholdStudios/Expanded_Thief_Stronghold"
+
+[[mods]]
+name = "Lucy the Wyvern"
+tp2 = "lucy"
+url = "https://github.com/SpellholdStudios/Lucy_the_Wyvern/releases"
+github = "SpellholdStudios/Lucy_the_Wyvern"
+
+[[mods]]
+name = "The Minotaur and Lilacor"
+tp2 = "slandor"
+url = "https://github.com/SpellholdStudios/The_Minotaur_and_Lilacor"
+github = "SpellholdStudios/The_Minotaur_and_Lilacor"
+
+[[mods]]
+name = "Alcool"
+tp2 = "ALCOOL"
+url = "https://github.com/The-Gate-Project/Alcool"
+github = "The-Gate-Project/Alcool"
+
+[[mods]]
+name = "CoM Encounters"
+tp2 = "com_encounters"
+url = "https://github.com/The-Gate-Project/Com_encounters/blob/main/Readme.md"
+github = "The-Gate-Project/Com_encounters"
+
+[[mods]]
+name = "Tower of Deception"
+tp2 = "TOD"
+url = "https://github.com/InfinityMods/TowerOfDeception/releases"
+github = "InfinityMods/TowerOfDeception"
+
+[[mods]]
+name = "Test Your Mettle!"
+tp2 = "A7-TestYourMettle"
+url = "https://github.com/Argent77/A7-TestYourMettle/releases"
+github = "Argent77/A7-TestYourMettle"
+
+[[mods]]
+name = "Assassinations"
+tp2 = "Assassinations"
+url = "https://github.com/Pocket-Plane-Group/Assassinations/releases/tag/v19"
+github = "Pocket-Plane-Group/Assassinations"
+
+[[mods]]
+name = "The Sellswords"
+tp2 = "Sellswords"
+url = "https://github.com/Pocket-Plane-Group/Sellswords/releases"
+github = "Pocket-Plane-Group/Sellswords"
+
+[[mods]]
+name = "Back to Brynnlaw"
+tp2 = "BackBrynnlaw"
+url = "https://github.com/Pocket-Plane-Group/Back_to_Brynnlaw/releases"
+github = "Pocket-Plane-Group/Back_to_Brynnlaw"
+
+[[mods]]
+name = "Dungeon Crawl"
+tp2 = "DC"
+url = "https://github.com/Pocket-Plane-Group/Dungeon_Crawl/releases"
+github = "Pocket-Plane-Group/Dungeon_Crawl"
+
+[[mods]]
+name = "Fading Promises"
+tp2 = "fadingpromises"
+url = "https://github.com/SpellholdStudios/Fading_Promises/releases"
+github = "SpellholdStudios/Fading_Promises"
+
+[[mods]]
+name = "Derat's Ogre"
+tp2 = "Derats_Ogre"
+url = "https://github.com/Deratiseur/Ogre"
+github = "Deratiseur/Ogre"
+
+[[mods]]
+name = "Romantic Encounters"
+tp2 = "RE"
+url = "https://github.com/Gibberlings3/Romantic_Encounters_BG2/releases"
+github = "Gibberlings3/Romantic_Encounters_BG2"
+
+[[mods]]
+name = "Fowl Wish"
+tp2 = "FowlWish"
+url = "https://github.com/Glittergear"
+
+[[mods]]
+name = "Gone Nuts"
+tp2 = "GoneNuts"
+url = "https://github.com/Glittergear/GoneNuts"
+github = "Glittergear/GoneNuts"
+
+[[mods]]
+name = "Dead Gardens"
+tp2 = "DeadGardens"
+url = "https://github.com/Glittergear/DeadGardens"
+github = "Glittergear/DeadGardens"
+
+[[mods]]
+name = "Heroes Thieves and Moneylenders"
+tp2 = "HerThiMoney"
+url = "https://github.com/Austin-BG/HTaM"
+github = "Austin-BG/HTaM"
+
+[[mods]]
+name = "Imnesvale"
+tp2 = "imnesvale"
+url = "https://github.com/Spellhold-Studios/Duality_Odd_Quest_Mod"
+github = "Spellhold-Studios/Duality_Odd_Quest_Mod"
+
+[[mods]]
+name = "Region of Terror"
+tp2 = "RoT"
+url = "https://github.com/Spellhold-Studios/Region-of-Terror"
+github = "Spellhold-Studios/Region-of-Terror"
+
+[[mods]]
+name = "Shards of Ice"
+tp2 = "shardsofice"
+url = "https://github.com/Gibberlings3/Shards_of_Ice"
+github = "Gibberlings3/Shards_of_Ice"
+
+[[mods]]
+name = "Throne of the Mad God"
+tp2 = "ThroneoftheMadGod"
+url = "https://github.com/AciferBG/Throne-of-the-Mad-God"
+github = "AciferBG/Throne-of-the-Mad-God"
+
+[[mods]]
+name = "Of Elves and Artefacts"
+tp2 = "MALTESE"
+url = "https://github.com/RoxanneSHS/MalteseArtefact"
+github = "RoxanneSHS/MalteseArtefact"
+
+[[mods]]
+name = "Expanded Mage Stronghold"
+tp2 = "MAGESTRONGHOLD_EET"
+url = "https://github.com/RoxanneSHS/Magestronghold"
+github = "RoxanneSHS/Magestronghold"
+
+[[mods]]
+name = "Azengaard Encounter"
+tp2 = "AZENGAARD"
+url = "https://github.com/RoxanneSHS/AzengaardEE"
+github = "RoxanneSHS/AzengaardEE"
+
+[[mods]]
+name = "Tales of Anegh"
+tp2 = "TOA"
+url = "https://github.com/Gitjas/ToA"
+github = "Gitjas/ToA"
+
+[[mods]]
+name = "Improved Asylum"
+tp2 = "impasylum"
+url = "https://github.com/RoxanneSHS/Asylum"
+github = "RoxanneSHS/Asylum"
+
+[[mods]]
+name = "The Broken Lanthorn"
+tp2 = "LENSHUNT"
+url = "https://github.com/RoxanneSHS/LensHunt"
+github = "RoxanneSHS/LensHunt"
+
+[[mods]]
+name = "Shadows Over Soubar"
+tp2 = "SOS"
+url = "https://github.com/RoxanneSHS/SoS-EE"
+github = "RoxanneSHS/SoS-EE"
+
+[[mods]]
+name = "Tortured Souls Lite"
+tp2 = "TORTUREDSOULSLITE"
+url = "https://github.com/Black-Wyrm-Lair/TorturedSoulsLite"
+github = "Black-Wyrm-Lair/TorturedSoulsLite"
+
+[[mods]]
+name = "Autumn's Twilight"
+tp2 = "AUTUMNS_TWILIGHT"
+url = "https://github.com/evancauteren/bg2-autumns-twilight-mod"
+github = "evancauteren/bg2-autumns-twilight-mod"
+
+[[mods]]
+name = "Ascension"
+tp2 = "ascension"
+url = "https://github.com/InfinityMods/Ascension/releases"
+github = "InfinityMods/Ascension"
+
+[[mods]]
+name = "Turnabout"
+tp2 = "Turnabout"
+url = "https://github.com/Pocket-Plane-Group/Turnabout"
+github = "Pocket-Plane-Group/Turnabout"
+
+[[mods]]
+name = "The Longer Road"
+tp2 = "LongerRoad"
+url = "https://github.com/InfinityMods/LongerRoadEE"
+github = "InfinityMods/LongerRoadEE"
+
+[[mods]]
+name = "Wheels of Prophecy"
+tp2 = "wheels"
+url = "https://github.com/Gibberlings3/WheelsOfProphecy/releases"
+github = "Gibberlings3/WheelsOfProphecy"
+
+[[mods]]
+name = "The Reunion"
+tp2 = "Reunion"
+url = "https://github.com/Pocket-Plane-Group/Reunion/releases"
+github = "Pocket-Plane-Group/Reunion"
+
+[[mods]]
+name = "The Slithering Menace"
+tp2 = "snakes"
+url = "https://github.com/SpellholdStudios/TheSlitheringMenace"
+github = "SpellholdStudios/TheSlitheringMenace"
+
+[[mods]]
+name = "Artisans Caravans"
+tp2 = "ArtisansCaravans"
+url = "https://github.com/TheArtisanBG/Caravans-of-Faerun"
+github = "TheArtisanBG/Caravans-of-Faerun"
+channel = "master"
+
+[[mods]]
+name = "Ehlastra ToB"
+tp2 = "EHLASTRA"
+url = "https://github.com/RoxanneSHS/Ehlastra"
+github = "RoxanneSHS/Ehlastra"
+
+[[mods]]
+name = "Throne of Bhaal Revisited"
+tp2 = "tobr"
+url = "https://github.com/Endarire/Throne-of-Bhaal-Revisited"
+github = "Endarire/Throne-of-Bhaal-Revisited"
+
+[[mods]]
+name = "Lichdom"
+tp2 = "LICHDOM"
+url = "https://github.com/LCA-EET/Lichdom"
+github = "LCA-EET/Lichdom"
+
+[[mods]]
+name = "Sirene NPC"
+tp2 = "Sirene"
+url = "https://github.com/ArtemiusI/Sirene-BG1"
+github = "ArtemiusI/Sirene-BG1"
+
+[[mods]]
+name = "Drake NPC"
+tp2 = "Drake"
+url = "https://github.com/ArtemiusI/Drake"
+github = "ArtemiusI/Drake"
+
+[[mods]]
+name = "Isra NPC for BG"
+tp2 = "Isra"
+url = "https://github.com/SpellholdStudios/Isra_NPC"
+github = "SpellholdStudios/Isra_NPC"
+
+[[mods]]
+name = "Emily"
+tp2 = "Emily"
+url = "https://github.com/Skitia/Emily-BG1"
+github = "Skitia/Emily-BG1"
+
+[[mods]]
+name = "Kale"
+tp2 = "Kale"
+url = "https://github.com/Skitia/Kale-BG1"
+github = "Skitia/Kale-BG1"
+
+[[mods]]
+name = "Helga"
+tp2 = "Helga"
+url = "https://github.com/Skitia/Helga-BG1"
+github = "Skitia/Helga-BG1"
+
+[[mods]]
+name = "Recorder"
+tp2 = "Recorder"
+url = "https://github.com/Skitia/Recorder-BG1"
+github = "Skitia/Recorder-BG1"
+
+[[mods]]
+name = "Alora NPC"
+tp2 = "Alora"
+url = "https://github.com/GwendolyneFreddy/Alora-NPC-for-BG2/releases"
+github = "GwendolyneFreddy/Alora-NPC-for-BG2"
+
+[[mods]]
+name = "Coran NPC"
+tp2 = "coran"
+url = "https://github.com/Pocket-Plane-Group/Coran_for_BGII"
+github = "Pocket-Plane-Group/Coran_for_BGII"
+
+[[mods]]
+name = "Xan NPC"
+tp2 = "Xan"
+url = "https://github.com/Pocket-Plane-Group/Xan_for_BGII/releases"
+github = "Pocket-Plane-Group/Xan_for_BGII"
+
+[[mods]]
+name = "Yeslick NPC"
+tp2 = "yeslicknpc"
+url = "https://github.com/SpellholdStudios/Yeslick_NPC/releases"
+github = "SpellholdStudios/Yeslick_NPC"
+
+[[mods]]
+name = "Beyond the Law"
+tp2 = "btl"
+url = "https://github.com/SpellholdStudios/Beyond_the_Law"
+github = "SpellholdStudios/Beyond_the_Law"
+
+[[mods]]
+name = "Sarah NPC Romance"
+tp2 = "sarahtob"
+url = "https://github.com/Gibberlings3/Sarah"
+github = "Gibberlings3/Sarah"
+
+[[mods]]
+name = "Vampire Tales"
+tp2 = "vampiretales"
+url = "https://github.com/The-Gate-Project/VampireTales"
+github = "The-Gate-Project/VampireTales"
+
+[[mods]]
+name = "Haldamir"
+tp2 = "haldamir"
+url = "https://github.com/Gibberlings3/Haldamir/releases"
+github = "Gibberlings3/Haldamir"
+
+[[mods]]
+name = "Arath NPC"
+tp2 = "arath"
+url = "https://github.com/SpellholdStudios/Arath_NPC/releases"
+github = "SpellholdStudios/Arath_NPC"
+
+[[mods]]
+name = "Dace"
+tp2 = "Dace"
+url = "https://github.com/SpellholdStudios/Dace_NPC/releases"
+github = "SpellholdStudios/Dace_NPC"
+
+[[mods]]
+name = "Kelsey NPC"
+tp2 = "kelsey"
+url = "https://github.com/Pocket-Plane-Group/Kelsey/releases"
+github = "Pocket-Plane-Group/Kelsey"
+
+[[mods]]
+name = "Keto NPC"
+tp2 = "keto"
+url = "https://github.com/Pocket-Plane-Group/Keto/releases"
+github = "Pocket-Plane-Group/Keto"
+
+[[mods]]
+name = "Nephele NPC"
+tp2 = "NEPHELE"
+url = "https://github.com/SpellholdStudios/Nephele_NPC"
+github = "SpellholdStudios/Nephele_NPC"
+
+[[mods]]
+name = "Fade NPC"
+tp2 = "Fade"
+url = "https://github.com/SpellholdStudios/Fade_NPC"
+github = "SpellholdStudios/Fade_NPC"
+
+[[mods]]
+name = "Adrian NPC"
+tp2 = "Adrian"
+url = "https://github.com/SpellholdStudios/Adrian_NPC/releases"
+github = "SpellholdStudios/Adrian_NPC"
+
+[[mods]]
+name = "Isra NPC"
+tp2 = "isra_bg2"
+url = "https://github.com/SpellholdStudios/Isra_NPC_BG2"
+github = "SpellholdStudios/Isra_NPC_BG2"
+
+[[mods]]
+name = "Saradas Magic"
+tp2 = "saradas_magic"
+url = "https://github.com/The-Gate-Project/Saradas_Magic_for_BGEE"
+github = "The-Gate-Project/Saradas_Magic_for_BGEE"
+
+[[mods]]
+name = "Skitia NPCs"
+tp2 = "SkitiaNPCs"
+url = "https://github.com/Skitia/SkitiaNPCs"
+github = "Skitia/SkitiaNPCs"
+
+[[mods]]
+name = "Sirene NPC"
+tp2 = "Sirene_BG2"
+url = "https://github.com/ArtemiusI/Sirene-NPC-for-BG2-EE"
+github = "ArtemiusI/Sirene-NPC-for-BG2-EE"
+
+[[mods]]
+name = "Pai'Na NPC"
+tp2 = "paina"
+url = "https://github.com/ArtemiusI/Pai-Na-NPC-mod-for-BG2-EE"
+github = "ArtemiusI/Pai-Na-NPC-mod-for-BG2-EE"
+
+[[mods]]
+name = "Brandock the Mage"
+tp2 = "BrandockTheMage"
+url = "https://github.com/Gitjas/Brandock_the_Mage"
+github = "Gitjas/Brandock_the_Mage"
+
+[[mods]]
+name = "Branwen BG2 NPC"
+tp2 = "branwen"
+url = "https://github.com/Pocket-Plane-Group/Branwen_for_BGII"
+github = "Pocket-Plane-Group/Branwen_for_BGII"
+
+[[mods]]
+name = "Tiax NPC"
+tp2 = "Tiax"
+url = "https://github.com/Pocket-Plane-Group/Tiax_for_BGII"
+github = "Pocket-Plane-Group/Tiax_for_BGII"
+
+[[mods]]
+name = "Baeloth"
+tp2 = "BAEBG2"
+url = "https://github.com/dark0dave/BaeBG2"
+github = "dark0dave/BaeBG2"
+
+[[mods]]
+name = "Tashia NPC"
+tp2 = "tashia"
+url = "https://github.com/Spellhold-Studios/Tashia-NPC"
+github = "Spellhold-Studios/Tashia-NPC"
+
+[[mods]]
+name = "Darian NPC"
+tp2 = "Darian"
+url = "https://github.com/Spellhold-Studios/Darian-NPC"
+github = "Spellhold-Studios/Darian-NPC"
+
+[[mods]]
+name = "Alassa NPC"
+tp2 = "alassa"
+url = "https://github.com/Plutonium-X/1D_NPC_Alassa"
+github = "Plutonium-X/1D_NPC_Alassa"
+
+[[mods]]
+name = "Ryberg NPC (Speak with the Dead)"
+tp2 = "RYBERG"
+url = "https://github.com/RoxanneSHS/SpeakDead"
+github = "RoxanneSHS/SpeakDead"
+
+[[mods]]
+name = "Melynda the Mute"
+tp2 = "MELYNDA"
+url = "https://github.com/RoxanneSHS/MelyndaMute"
+github = "RoxanneSHS/MelyndaMute"
+
+[[mods]]
+name = "Holly the Elf"
+tp2 = "HOLLYELF"
+url = "https://github.com/RoxanneSHS/HollytheElf"
+github = "RoxanneSHS/HollytheElf"
+
+[[mods]]
+name = "Tsujatha NPC"
+tp2 = "Tsujatha"
+url = "https://github.com/RoxanneSHS/Tsujatha"
+github = "RoxanneSHS/Tsujatha"
+
+[[mods]]
+name = "Valen NPC"
+tp2 = "valen"
+url = "https://github.com/RoxanneSHS/ValenEE"
+github = "RoxanneSHS/ValenEE"
+
+[[mods]]
+name = "Yasraena NPC"
+tp2 = "YASRAENA"
+url = "https://github.com/RoxanneSHS/YasraenaEET"
+github = "RoxanneSHS/YasraenaEET"
+
+[[mods]]
+name = "Nathaniel NPC"
+tp2 = "Nathaniel"
+url = "https://github.com/Spellhold-Studios/Nathaniel-NPC"
+github = "Spellhold-Studios/Nathaniel-NPC"
+
+[[mods]]
+name = "Ariena NPC"
+tp2 = "ARIENA"
+url = "https://github.com/RoxanneSHS/ArienaEE"
+github = "RoxanneSHS/ArienaEE"
+
+[[mods]]
+name = "Corwin NPC"
+tp2 = "CORWINEET"
+url = "https://github.com/RoxanneSHS/Corwin"
+github = "RoxanneSHS/Corwin"
+
+[[mods]]
+name = "Chloe NPC"
+tp2 = "chloe"
+url = "https://github.com/RoxanneSHS/ChloeEET"
+github = "RoxanneSHS/ChloeEET"
+
+[[mods]]
+name = "Faren NPC"
+tp2 = "FAREN"
+url = "https://github.com/Spellhold-Studios/Faren-NPC"
+github = "Spellhold-Studios/Faren-NPC"
+
+[[mods]]
+name = "Kido the Jester"
+tp2 = "KIDO"
+url = "https://github.com/RoxanneSHS/KidoEE"
+github = "RoxanneSHS/KidoEE"
+
+[[mods]]
+name = "Kim NPC"
+tp2 = "kimnpc"
+url = "https://github.com/RoxanneSHS/Kim_Pirate"
+github = "RoxanneSHS/Kim_Pirate"
+
+[[mods]]
+name = "Kindrek NPC"
+tp2 = "KINDREK"
+url = "https://github.com/RoxanneSHS/Kindrek"
+github = "RoxanneSHS/Kindrek"
+
+[[mods]]
+name = "Orelios NPC"
+tp2 = "ORELIOS"
+url = "https://github.com/PaulaMigrate/Orelios"
+github = "PaulaMigrate/Orelios"
+
+[[mods]]
+name = "Rose NPC"
+tp2 = "ROSERE"
+url = "https://github.com/RoxanneSHS/RoseRE"
+github = "RoxanneSHS/RoseRE"
+
+[[mods]]
+name = "Saerileth NPC"
+tp2 = "Saerileth"
+url = "https://github.com/PaulaMigrate/Saerileth"
+github = "PaulaMigrate/Saerileth"
+
+[[mods]]
+name = "Silver Star NPC"
+tp2 = "STAR"
+url = "https://github.com/SpellholdStudios/Silver_Star_NPC"
+github = "SpellholdStudios/Silver_Star_NPC"
+
+[[mods]]
+name = "Touch the Moon NPC"
+tp2 = "TOUCHED"
+url = "https://github.com/RoxanneSHS/Touchstone"
+github = "RoxanneSHS/Touchstone"
+
+[[mods]]
+name = "Uldar NPC"
+tp2 = "ULDAR"
+url = "https://github.com/PaulaMigrate/Uldar"
+github = "PaulaMigrate/Uldar"
+
+[[mods]]
+name = "Kivan of Shilmista"
+tp2 = "Kivan"
+url = "https://github.com/Gibberlings3/Kivan_and_Deheriana"
+github = "Gibberlings3/Kivan_and_Deheriana"
+
+[[mods]]
+name = "Angelo NPC"
+tp2 = "Angelo"
+url = "https://github.com/Gibberlings3/Angelo"
+github = "Gibberlings3/Angelo"
+
+[[mods]]
+name = "Anishai NPC"
+tp2 = "Anishai"
+url = "https://github.com/Gibberlings3/Anishai"
+github = "Gibberlings3/Anishai"
+
+[[mods]]
+name = "Aran Whitehand"
+tp2 = "aranw"
+url = "https://github.com/Gibberlings3/Aran-Whitehand"
+github = "Gibberlings3/Aran-Whitehand"
+
+[[mods]]
+name = "Finch NPC"
+tp2 = "finchnpc"
+url = "https://github.com/RoxanneSHS/Finch"
+github = "RoxanneSHS/Finch"
+
+[[mods]]
+name = "Gavin NPC"
+tp2 = "gavin_bg2"
+url = "https://github.com/Gibberlings3/Gavin_BG2"
+github = "Gibberlings3/Gavin_BG2"
+
+[[mods]]
+name = "Saradas Magic 2"
+tp2 = "saradas_magic_2"
+url = "https://github.com/SpellholdStudios/Saradas_Magic_for_BG2"
+github = "SpellholdStudios/Saradas_Magic_for_BG2"
+
+[[mods]]
+name = "Chaos Knight & Jacob NPC"
+tp2 = "CHAOSKNIGHT"
+url = "https://github.com/The-Gate-Project/Askaria-Quest_ChaosKnight-kit"
+github = "The-Gate-Project/Askaria-Quest_ChaosKnight-kit"
+
+[[mods]]
+name = "Askaria Quest"
+tp2 = "ASKARIA"
+url = "https://github.com/The-Gate-Project/Askaria-Quest_ChaosKnight-kit"
+github = "The-Gate-Project/Askaria-Quest_ChaosKnight-kit"
+
+[[mods]]
+name = "Dusk NPC"
+tp2 = "DUSK"
+url = "https://github.com/RamosPabloA/NPC_Dusk_MOD"
+github = "RamosPabloA/NPC_Dusk_MOD"
+
+[[mods]]
+name = "Lena NPC"
+tp2 = "LENA"
+url = "https://github.com/gungorenu/bg2-npcmod-lena"
+github = "gungorenu/bg2-npcmod-lena"
+
+[[mods]]
+name = "Mur'Neth NPC"
+tp2 = "mur'neth"
+url = "https://github.com/Gibberlings3/Murneth"
+github = "Gibberlings3/Murneth"
+
+[[mods]]
+name = "Zelink NPC"
+tp2 = "ZELINK"
+url = "https://github.com/Endarire/Zelink-Zelda-Link-Mod-for-BG2"
+github = "Endarire/Zelink-Zelda-Link-Mod-for-BG2"
+
+[[mods]]
+name = "Grey the Dog NPC"
+tp2 = "c#greythedog"
+url = "https://github.com/Gibberlings3/Grey_The_Dog"
+github = "Gibberlings3/Grey_The_Dog"
+
+[[mods]]
+name = "Chatty Imoen"
+tp2 = "ChattyImoen"
+url = "https://github.com/The-Gate-Project/ChattyImoen"
+github = "The-Gate-Project/ChattyImoen"
+
+[[mods]]
+name = "Neera Expansion"
+tp2 = "Neera"
+url = "https://github.com/SpellholdStudios/Neera_Expansion/releases/tag/v1.3.1"
+github = "SpellholdStudios/Neera_Expansion"
+
+[[mods]]
+name = "Neera Banters"
+tp2 = "NeeraBanters"
+url = "https://github.com/The-Gate-Project/NeeraBanters"
+github = "The-Gate-Project/NeeraBanters"
+
+[[mods]]
+name = "Wings"
+tp2 = "Wings"
+url = "https://github.com/Skitia/Wings/releases"
+github = "Skitia/Wings"
+
+[[mods]]
+name = "Cernd Friendship"
+tp2 = "cernd"
+url = "https://github.com/SpellholdStudios/CerndFriendship/releases"
+github = "SpellholdStudios/CerndFriendship"
+
+[[mods]]
+name = "Edwin Romance"
+tp2 = "edwinromance"
+url = "https://github.com/SpellholdStudios/Edwin_Romance/releases"
+github = "SpellholdStudios/Edwin_Romance"
+
+[[mods]]
+name = "Haer'dalis Friendship"
+tp2 = "haerdalis_friendship"
+url = "https://github.com/SpellholdStudios/HaerdalisFriendship/releases"
+github = "SpellholdStudios/HaerdalisFriendship"
+
+[[mods]]
+name = "Imoen Friendship"
+tp2 = "imoenfriendship"
+url = "https://github.com/SpellholdStudios/ImoenFriendship/releases"
+github = "SpellholdStudios/ImoenFriendship"
+
+[[mods]]
+name = "Berelinde's Keldorn Romance"
+tp2 = "keldorn_rom"
+url = "https://github.com/Gibberlings3/Keldorn_Romance/releases"
+github = "Gibberlings3/Keldorn_Romance"
+
+[[mods]]
+name = "Korgan Friendship"
+tp2 = "korganfriendship"
+url = "https://github.com/SpellholdStudios/KorganFriendship/releases"
+github = "SpellholdStudios/KorganFriendship"
+
+[[mods]]
+name = "Korgan's Redemption"
+tp2 = "Korgan"
+url = "https://github.com/SpellholdStudios/KorgansRedemption/releases"
+github = "SpellholdStudios/KorgansRedemption"
+
+[[mods]]
+name = "Mazzy Friendship"
+tp2 = "Mazzy"
+url = "https://github.com/SpellholdStudios/MazzyFriendship/releases"
+github = "SpellholdStudios/MazzyFriendship"
+
+[[mods]]
+name = "Minsc Friendship"
+tp2 = "minscfriendship"
+url = "https://github.com/SpellholdStudios/MinscFriendship/releases"
+github = "SpellholdStudios/MinscFriendship"
+
+[[mods]]
+name = "De'Arnise Romance"
+tp2 = "deArnise"
+url = "https://github.com/Pocket-Plane-Group/deArnise_Romance/releases"
+github = "Pocket-Plane-Group/deArnise_Romance"
+
+[[mods]]
+name = "Nalia at Last"
+tp2 = "Nalia_at_Last"
+url = "https://github.com/Skitia/Nalia_At_Last"
+github = "Skitia/Nalia_At_Last"
+
+[[mods]]
+name = "Sarevok Friendship"
+tp2 = "sarevokfriendship"
+url = "https://github.com/SpellholdStudios/SarevokFriendship/releases"
+github = "SpellholdStudios/SarevokFriendship"
+
+[[mods]]
+name = "Valygar Friendship"
+tp2 = "valygarfriendship"
+url = "https://github.com/SpellholdStudios/ValygarFriendship/releases"
+github = "SpellholdStudios/ValygarFriendship"
+
+[[mods]]
+name = "Viconia Friendship"
+tp2 = "viconia"
+url = "https://github.com/SpellholdStudios/ViconiaFriendship/releases"
+github = "SpellholdStudios/ViconiaFriendship"
+
+[[mods]]
+name = "Yoshimo Friendship"
+tp2 = "yoshimo"
+url = "https://github.com/SpellholdStudios/YoshimoFriendship/releases"
+github = "SpellholdStudios/YoshimoFriendship"
+
+[[mods]]
+name = "Dorn Friendship"
+tp2 = "DornFriendship"
+url = "https://github.com/SpellholdStudios/Dorn-Friendship/releases"
+github = "SpellholdStudios/Dorn-Friendship"
+
+[[mods]]
+name = "Hexxat Friendship"
+tp2 = "HexxatFriendship"
+url = "https://github.com/SpellholdStudios/Hexxat-Friendship/releases"
+github = "SpellholdStudios/Hexxat-Friendship"
+
+[[mods]]
+name = "Convenient Enhanced Edition NPCs"
+tp2 = "A7-ConvenientEENPCs"
+url = "https://github.com/Argent77/A7-NoEENPCs"
+github = "Argent77/A7-NoEENPCs"
+
+[[mods]]
+name = "Road to Discovery"
+tp2 = "sodrtd"
+url = "https://github.com/Gibberlings3/Road_To_Discovery_for_SoD/releases"
+github = "Gibberlings3/Road_To_Discovery_for_SoD"
+
+[[mods]]
+name = "SoD Dialog Banters"
+tp2 = "SoDDialogBanters"
+url = "https://github.com/The-Gate-Project/SoD-Dialog-Banters"
+github = "The-Gate-Project/SoD-Dialog-Banters"
+
+[[mods]]
+name = "Bioware NPC Flirt Packs"
+tp2 = "npcflirt"
+url = "https://github.com/Pocket-Plane-Group/NPC_Flirt_Packs/releases"
+github = "Pocket-Plane-Group/NPC_Flirt_Packs"
+
+[[mods]]
+name = "All Things Mazzy"
+tp2 = "AllThingsMazzy"
+url = "https://github.com/Ratatoskr589/All-Things-Mazzy"
+github = "Ratatoskr589/All-Things-Mazzy"
+
+[[mods]]
+name = "Jaheira Friendship"
+tp2 = "JaheiraFriendship"
+url = "https://github.com/Spellhold-Studios/Jaheira-Friendship"
+github = "Spellhold-Studios/Jaheira-Friendship"
+
+[[mods]]
+name = "Jini Romance"
+tp2 = "Jini"
+url = "https://github.com/Black-Wyrm-Lair/Jini-Romance"
+github = "Black-Wyrm-Lair/Jini-Romance"
+
+[[mods]]
+name = "Rjali NPC"
+tp2 = "RJALI"
+url = "https://github.com/Black-Wyrm-Lair/Rjali-Romance"
+github = "Black-Wyrm-Lair/Rjali-Romance"
+
+[[mods]]
+name = "Shine on Caelar"
+tp2 = "SHINEONCAELAR"
+url = "https://github.com/RoxanneSHS/Caelar/releases"
+github = "RoxanneSHS/Caelar"
+
+[[mods]]
+name = "Banter Packs"
+tp2 = "banterpack"
+url = "https://github.com/Pocket-Plane-Group/Banter_Pack/releases"
+github = "Pocket-Plane-Group/Banter_Pack"
+
+[[mods]]
+name = "IEP Extended Banters"
+tp2 = "iepbanters"
+url = "https://github.com/SpellholdStudios/IEP_Extended_Banter/releases"
+github = "SpellholdStudios/IEP_Extended_Banter"
+
+[[mods]]
+name = "Crossmod Banter Pack"
+tp2 = "crossmodbg2"
+url = "https://github.com/Gibberlings3/Crossmod_Banter_Pack_for_Baldurs_Gate_II"
+github = "Gibberlings3/Crossmod_Banter_Pack_for_Baldurs_Gate_II"
+
+[[mods]]
+name = "Banter Accelerator for Enhanced Edition"
+tp2 = "A7-BANTERACCELERATOR"
+url = "https://github.com/Argent77/A7-BanterAccelerator"
+github = "Argent77/A7-BanterAccelerator"
+
+[[mods]]
+name = "SoD Banter Restoration"
+tp2 = "SODBANTER"
+url = "https://github.com/RoxanneSHS/SoDBanterEET"
+github = "RoxanneSHS/SoDBanterEET"
+
+[[mods]]
+name = "Made in Heaven: Encounters & Quests"
+tp2 = "mih_eq"
+url = "https://github.com/AngelGryph/MadeInHeaven_EncountersAndQuests/releases"
+github = "AngelGryph/MadeInHeaven_EncountersAndQuests"
+
+[[mods]]
+name = "Cowled Menace"
+tp2 = "CowledMenace"
+url = "https://github.com/Gibberlings3/CowledMenace/releases"
+github = "Gibberlings3/CowledMenace"
+pkg_windows = "wzp,zip"
+
+[[mods]]
+name = "Super Firkraag"
+tp2 = "firkraag"
+url = "https://github.com/SpellholdStudios/Super_Firkraag"
+github = "SpellholdStudios/Super_Firkraag"
+
+[[mods]]
+name = "BGEE Leveling Spawns"
+tp2 = "bgeespawn"
+url = "https://github.com/GraionDilach/BGEESpawn"
+github = "GraionDilach/BGEESpawn"
+
+[[mods]]
+name = "Trollkiller's Items, Spells, and Kitpack"
+tp2 = "k0_iskp"
+url = "https://github.com/DaerosTrollkiller/Trollkillers-Item-Spell-Kitpack"
+github = "DaerosTrollkiller/Trollkillers-Item-Spell-Kitpack"
+
+[[mods]]
+name = "Made in Heaven: Item Pack"
+tp2 = "mih_ip"
+url = "https://github.com/AngelGryph/MadeInHeaven_ItemPack/releases"
+github = "AngelGryph/MadeInHeaven_ItemPack"
+
+[[mods]]
+name = "Derat's Todd"
+tp2 = "Derats_Todd"
+url = "https://github.com/Deratiseur/Todd"
+github = "Deratiseur/Todd"
+
+[[mods]]
+name = "Derat's Illo"
+tp2 = "Derats_Illo"
+url = "https://github.com/Deratiseur/Tatoos"
+github = "Deratiseur/Tatoos"
+
+[[mods]]
+name = "Derat's Archery"
+tp2 = "Derats_Archery"
+url = "https://github.com/Deratiseur/Archery"
+github = "Deratiseur/Archery"
+
+[[mods]]
+name = "D2 Weapon"
+tp2 = "D2-WEAPON"
+url = "https://github.com/D2-mods/D2-Weapon"
+github = "D2-mods/D2-Weapon"
+
+[[mods]]
+name = "Wares of the Planes"
+tp2 = "A7-WaresOfThePlanes"
+url = "https://github.com/Argent77/A7-WaresOfThePlanes"
+github = "Argent77/A7-WaresOfThePlanes"
+
+[[mods]]
+name = "Thalantyr Item Upgrade"
+tp2 = "thalan"
+url = "https://github.com/CrevsDaak/thalan/releases"
+github = "CrevsDaak/thalan"
+
+[[mods]]
+name = "Thalantyr Extended"
+tp2 = "mod-thalantyr-ex"
+url = "https://github.com/BardezAnAvatar/BGEE-Thalantyr-Ex/"
+github = "BardezAnAvatar/BGEE-Thalantyr-Ex"
+
+[[mods]]
+name = "Customs"
+tp2 = "customs"
+url = "https://github.com/cgordon/customs"
+github = "cgordon/customs"
+
+[[mods]]
+name = "Stuff of the Magi"
+tp2 = "stuffofthemagi"
+url = "https://github.com/SpellholdStudios/StuffofTheMagi/releases"
+github = "SpellholdStudios/StuffofTheMagi"
+
+[[mods]]
+name = "IWD Item Pack"
+tp2 = "malek-iwditempack"
+url = "https://github.com/The-Gate-Project/IWD_Item-Pack"
+github = "The-Gate-Project/IWD_Item-Pack"
+
+[[mods]]
+name = "Under-Represented Items"
+tp2 = "underrep"
+url = "https://github.com/Pocket-Plane-Group/Under-Respresented_Items/releases"
+github = "Pocket-Plane-Group/Under-Respresented_Items"
+pkg_windows = "wzp,zip"
+
+[[mods]]
+name = "Sir Renal"
+tp2 = "sir_renal"
+url = "https://github.com/The-Gate-Project/Sir_Renal"
+github = "The-Gate-Project/Sir_Renal"
+
+[[mods]]
+name = "Item Upgrade"
+tp2 = "itemupgrade"
+url = "https://github.com/Pocket-Plane-Group/Item_Upgrade"
+github = "Pocket-Plane-Group/Item_Upgrade"
+pkg_windows = "wzp,zip"
+
+[[mods]]
+name = "Infinity Innovations: Items"
+tp2 = "iiItemMod"
+url = "https://github.com/btigi/iiItem"
+github = "btigi/iiItem"
+
+[[mods]]
+name = "More Style for Mages"
+tp2 = "msfm"
+url = "https://github.com/Renegade0/msfm/releases"
+github = "Renegade0/msfm"
+
+[[mods]]
+name = "Item Revisions"
+tp2 = "item_rev"
+url = "https://github.com/Gibberlings3/ItemRevisions/releases"
+github = "Gibberlings3/ItemRevisions"
+pkg = "zip"
+
+[[mods]]
+name = "Unusual Oddities Shop"
+tp2 = "abystore"
+url = "https://github.com/Spellhold-Studios/Unusual-Oddities-Shop"
+github = "Spellhold-Studios/Unusual-Oddities-Shop"
+
+[[mods]]
+name = "Jan's Alchemy"
+tp2 = "alchemy"
+url = "https://github.com/SpellholdStudios/JansAlchemy"
+github = "SpellholdStudios/JansAlchemy"
+
+[[mods]]
+name = "Bolsa Merchant"
+tp2 = "Bolsa"
+url = "https://github.com/Spellhold-Studios/Bolsa"
+github = "Spellhold-Studios/Bolsa"
+
+[[mods]]
+name = "Darron the Vendor"
+tp2 = "Darron"
+url = "https://github.com/Spellhold-Studios/Darron"
+github = "Spellhold-Studios/Darron"
+
+[[mods]]
+name = "Heart of the Wood"
+tp2 = "heartwood"
+url = "https://github.com/Spellhold-Studios/HeartOfTheWood"
+github = "Spellhold-Studios/HeartOfTheWood"
+
+[[mods]]
+name = "Rolles Safyer"
+tp2 = "Rolles"
+url = "https://github.com/Spellhold-Studios/Rolles"
+github = "Spellhold-Studios/Rolles"
+
+[[mods]]
+name = "Ruad Ro'fhessa"
+tp2 = "ruad"
+url = "https://github.com/Spellhold-Studios/Ruad-Rofhessa-Item-Upgrade"
+github = "Spellhold-Studios/Ruad-Rofhessa-Item-Upgrade"
+
+[[mods]]
+name = "Rupert the Dye Merchant"
+tp2 = "rupert"
+url = "https://github.com/Spellhold-Studios/Rupert-the-Dye-Merchant"
+github = "Spellhold-Studios/Rupert-the-Dye-Merchant"
+
+[[mods]]
+name = "SoD to BG2 Item Upgrade"
+tp2 = "sod2bg2_iu"
+url = "https://github.com/Gibberlings3/SoD-to-BG2EE-Item-Upgrade"
+github = "Gibberlings3/SoD-to-BG2EE-Item-Upgrade"
+
+[[mods]]
+name = "Improved Horns of Valhalla"
+tp2 = "valhorn"
+url = "https://github.com/Gibberlings3/Improved_Horns_of_Valhalla"
+github = "Gibberlings3/Improved_Horns_of_Valhalla"
+pkg = "zip"
+
+[[mods]]
+name = "Big Metal Unit"
+tp2 = "D2-MIRA"
+url = "https://github.com/D2-mods/D2-Mira"
+github = "D2-mods/D2-Mira"
+
+[[mods]]
+name = "Improved Volcano! Pack"
+tp2 = "VOLCANO"
+url = "https://github.com/Black-Wyrm-Lair/Volcano_Pack"
+github = "Black-Wyrm-Lair/Volcano_Pack"
+
+[[mods]]
+name = "DGItems"
+tp2 = "DGITEMS"
+url = "https://github.com/The-Gate-Project/DGItems"
+github = "The-Gate-Project/DGItems"
+
+[[mods]]
+name = "Return to Trademeet: Item Pack"
+tp2 = "RTTITEMPACK"
+url = "https://github.com/The-Gate-Project/RTT-ItemPack"
+github = "The-Gate-Project/RTT-ItemPack"
+
+[[mods]]
+name = "Consumables"
+tp2 = "ZS_Consumables"
+url = "https://github.com/szaumoor/ZS_Consumables"
+github = "szaumoor/ZS_Consumables"
+
+[[mods]]
+name = "Spell Revisions"
+tp2 = "spell_rev"
+url = "https://github.com/Gibberlings3/SpellRevisions/releases"
+github = "Gibberlings3/SpellRevisions"
+
+[[mods]]
+name = "IWDification"
+tp2 = "iwdification"
+url = "https://github.com/Gibberlings3/iwdification/releases"
+github = "Gibberlings3/iwdification"
+pkg_windows = "wzp,zip"
+
+[[mods]]
+name = "Made in Heaven: Spell Pack"
+tp2 = "mih_sp"
+url = "https://github.com/AngelGryph/MadeInHeaven_SpellPack/releases"
+github = "AngelGryph/MadeInHeaven_SpellPack"
+
+[[mods]]
+name = "Shadow Magic"
+tp2 = "shadowadept"
+url = "https://github.com/ArtemiusI/Shadow-Magic"
+github = "ArtemiusI/Shadow-Magic"
+
+[[mods]]
+name = "Demon Summoning Ritual"
+tp2 = "dsr"
+url = "https://github.com/SpellholdStudios/DemonSummoningRitual/releases"
+github = "SpellholdStudios/DemonSummoningRitual"
+
+[[mods]]
+name = "Golem Construction for Spellcasters"
+tp2 = "A7-GolemConstruction"
+url = "https://github.com/Argent77/A7-GolemConstruction/releases/tag/v6.1"
+github = "Argent77/A7-GolemConstruction"
+
+[[mods]]
+name = "Hammers"
+tp2 = "hammers"
+url = "https://github.com/Sampsca/ThrownHammers/releases"
+github = "Sampsca/ThrownHammers"
+
+[[mods]]
+name = "SubtleD's Spell Tweaks"
+tp2 = "SubtleD_Spell_Tweaks"
+url = "https://github.com/subtledoctor/SubtleD_Spell_Tweaks/releases"
+github = "subtledoctor/SubtleD_Spell_Tweaks"
+
+[[mods]]
+name = "Shadowdancer Overhaul"
+tp2 = "ZS_ShadowdancerOverhaul"
+url = "https://github.com/szaumoor/ZS_ShadowdancerOverhaul"
+github = "szaumoor/ZS_ShadowdancerOverhaul"
+
+[[mods]]
+name = "Improved Archer Kit"
+tp2 = "A7#ImprovedArcher"
+url = "https://github.com/Argent77/A7-ImprovedArcher/releases"
+github = "Argent77/A7-ImprovedArcher"
+
+[[mods]]
+name = "Bardic Wonders"
+tp2 = "BardicWonders"
+url = "https://github.com/ArtemiusI/Bardic-Wonders"
+github = "ArtemiusI/Bardic-Wonders"
+
+[[mods]]
+name = "Tome and Blood"
+tp2 = "TomeAndBlood"
+url = "https://github.com/UnearthedArcana/TomeAndBlood"
+github = "UnearthedArcana/TomeAndBlood"
+
+[[mods]]
+name = "Rogue Rebalancing"
+tp2 = "RR"
+url = "https://github.com/TotoR115/rr"
+github = "TotoR115/rr"
+
+[[mods]]
+name = "Will to Power"
+tp2 = "Will_to_Power"
+url = "https://github.com/UnearthedArcana/Will_to_Power/releases/tag/2.3.3"
+github = "UnearthedArcana/Will_to_Power"
+
+[[mods]]
+name = "Might & Guile"
+tp2 = "might_and_guile"
+url = "https://github.com/UnearthedArcana/Might_and_Guile"
+github = "UnearthedArcana/Might_and_Guile"
+
+[[mods]]
+name = "Faiths and Powers"
+tp2 = "Faiths_and_Powers"
+url = "https://github.com/UnearthedArcana/Faiths_and_Powers"
+github = "UnearthedArcana/Faiths_and_Powers"
+
+[[mods]]
+name = "Song and Silence"
+tp2 = "song_and_silence"
+url = "https://github.com/Gibberlings3/SongAndSilence"
+github = "Gibberlings3/SongAndSilence"
+
+[[mods]]
+name = "D2 Workshop Kits"
+tp2 = "d2-workshopkits"
+url = "https://github.com/D2-mods/The-Workshop-Kitpack"
+github = "D2-mods/The-Workshop-Kitpack"
+
+[[mods]]
+name = "Kit Mule"
+tp2 = "KITMULE"
+url = "https://github.com/D2-mods/Kit-Mule-kit-for-IE-games-"
+github = "D2-mods/Kit-Mule-kit-for-IE-games-"
+
+[[mods]]
+name = "Talents of Faerun"
+tp2 = "dw_talents"
+url = "https://github.com/Gibberlings3/TalentsOfFaerun"
+github = "Gibberlings3/TalentsOfFaerun"
+
+[[mods]]
+name = "Improved Shamanic Dance"
+tp2 = "a7-improved_shamanic_dance"
+url = "https://github.com/Argent77/A7-ImprovedShamanicDance/releases"
+github = "Argent77/A7-ImprovedShamanicDance"
+
+[[mods]]
+name = "ME Tweaks"
+tp2 = "METweaks"
+url = "https://github.com/OlvynChuru/Olvyn-Tweaks"
+github = "OlvynChuru/Olvyn-Tweaks"
+
+[[mods]]
+name = "The Tweaks Anthology"
+tp2 = "cdtweaks"
+url = "https://github.com/Gibberlings3/Tweaks-Anthology/releases"
+github = "Gibberlings3/Tweaks-Anthology"
+pkg_windows = "wzp,zip"
+
+[[mods]]
+name = "AionZ's House   Rules"
+tp2 = "HouseTweaks"
+url = "https://github.com/ArtemiusI/House-Rule-Tweaks/releases"
+github = "ArtemiusI/House-Rule-Tweaks"
+
+[[mods]]
+name = "SubtleD's Item Tweaks"
+tp2 = "SubtleD_Item_Tweaks"
+url = "https://github.com/subtledoctor/SubtleD_Item_Tweaks/releases"
+github = "subtledoctor/SubtleD_Item_Tweaks"
+
+[[mods]]
+name = "Olvyn Spells"
+tp2 = "MESpells"
+url = "https://github.com/OlvynChuru/OlvynSpells"
+github = "OlvynChuru/OlvynSpells"
+
+[[mods]]
+name = "Klatu Tweaks and Fixes"
+tp2 = "klatu"
+url = "https://github.com/The-Gate-Project/klatu-tweaks-and-fixes"
+github = "The-Gate-Project/klatu-tweaks-and-fixes"
+
+[[mods]]
+name = "Lore From Learning"
+tp2 = "cdlore"
+url = "https://github.com/Gibberlings3/Lore_From_Learning"
+github = "Gibberlings3/Lore_From_Learning"
+
+[[mods]]
+name = "aTweaks (Your PnP Tweak Pack)"
+tp2 = "aTweaks"
+url = "https://github.com/FredrikLindgren/aTweaks"
+github = "FredrikLindgren/aTweaks"
+exact_github = ["CamDawg/aTweaks"]
+
+[[mods]]
+name = "5E Spellcasting"
+tp2 = "d5_5e_casting"
+url = "https://github.com/UnearthedArcana/5E_spellcasting/releases"
+github = "UnearthedArcana/5E_spellcasting"
+
+[[mods]]
+name = "Magic Store of Vergadain"
+tp2 = "A7-MagicStore"
+url = "https://github.com/Argent77/A7-MagicStore"
+github = "Argent77/A7-MagicStore"
+
+[[mods]]
+name = "Made in Heaven: Tweaks"
+tp2 = "mih_tweaks"
+url = "https://github.com/AngelGryph/MadeInHeaven_Tweaks/releases"
+github = "AngelGryph/MadeInHeaven_Tweaks"
+
+[[mods]]
+name = "Unique Artifacts"
+tp2 = "UA"
+url = "https://github.com/BGforgeNet/bg2-uniqueartifacts/releases"
+github = "BGforgeNet/bg2-uniqueartifacts"
+
+[[mods]]
+name = "NPC Tweak"
+tp2 = "npc_tweak"
+url = "https://github.com/Gibberlings3/NPCTweak/releases"
+github = "Gibberlings3/NPCTweak"
+
+[[mods]]
+name = "Skitia Romance Tweak"
+tp2 = "SkitiaRomanceTweak"
+url = "https://github.com/Skitia/SkitiaBG2RomanceTweaks"
+github = "Skitia/SkitiaBG2RomanceTweaks"
+
+[[mods]]
+name = "BuTcHeRy"
+tp2 = "butchery"
+url = "https://github.com/GwendolyneFreddy/butchery/releases"
+github = "GwendolyneFreddy/butchery"
+
+[[mods]]
+name = "Sword Coast Stratagems"
+tp2 = "stratagems"
+url = "https://github.com/Gibberlings3/SwordCoastStratagems/releases"
+github = "Gibberlings3/SwordCoastStratagems"
+pkg_windows = "wzp,zip"
+
+[[mods]]
+name = "Baldur's Gate: Enhanced Edition Trilogy Tweaks (EET Tweaks)"
+tp2 = "EET_Tweaks"
+url = "https://github.com/K4thos/EET_Tweaks/releases"
+github = "K4thos/EET_Tweaks"
+
+[[mods]]
+name = "SubtleD's Stat Overhauls"
+tp2 = "SubtleD_Stat_Overhauls"
+url = "https://github.com/subtledoctor/SubtleD_Stat_Overhauls/releases"
+github = "subtledoctor/SubtleD_Stat_Overhauls"
+
+[[mods]]
+name = "Jimfix"
+tp2 = "jimfix"
+url = "https://github.com/Banananaut/Jimfix"
+github = "Banananaut/Jimfix"
+
+[[mods]]
+name = "Bart Tweaks"
+tp2 = "Bart_Tweaks"
+url = "https://github.com/BartyMae/Bart_Tweaks"
+github = "BartyMae/Bart_Tweaks"
+
+[[mods]]
+name = "Tweaks and Tricks"
+tp2 = "tnt"
+url = "https://github.com/BGforgeNet/bg2-tweaks-and-tricks/releases"
+github = "BGforgeNet/bg2-tweaks-and-tricks"
+
+[[mods]]
+name = "Epic Thieving"
+tp2 = "EpicThieving"
+url = "https://github.com/OlvynChuru/Epic-Thieving"
+github = "OlvynChuru/Epic-Thieving"
+
+[[mods]]
+name = "ZG Tweaks"
+tp2 = "zgtweaks"
+url = "https://github.com/GraionDilach/RandomGraionTweaks/releases"
+github = "GraionDilach/RandomGraionTweaks"
+
+[[mods]]
+name = "M7 Tweaks"
+tp2 = "m7tweaks"
+url = "https://github.com/flamewing/m7tweaks"
+github = "flamewing/m7tweaks"
+
+[[mods]]
+name = "Themed Tweaks"
+tp2 = "themed_tweaks"
+url = "https://github.com/lzenner/themed_tweaks"
+github = "lzenner/themed_tweaks"
+
+[[mods]]
+name = "NPC Enhanced Edition Adjustments"
+tp2 = "npc_ee"
+url = "https://github.com/UnearthedArcana/NPC_EE/releases"
+github = "UnearthedArcana/NPC_EE"
+
+[[mods]]
+name = "ZG BG Voices"
+tp2 = "zg_bg_voices"
+url = "https://github.com/GraionDilach/Baldurs-Gate-II-Voice-Pack-for-EE-2.6/releases"
+github = "GraionDilach/Baldurs-Gate-II-Voice-Pack-for-EE-2.6"
+
+[[mods]]
+name = "ZG BG2 Voices"
+tp2 = "zg_bg2_voices"
+url = "https://github.com/GraionDilach/Baldurs-Gate-Voice-Pack-for-EE-2.6/releases"
+github = "GraionDilach/Baldurs-Gate-Voice-Pack-for-EE-2.6"
+
+[[mods]]
+name = "ZG BG NPC Voices"
+tp2 = "zg_bgnpc_voices"
+url = "https://github.com/GraionDilach/Baldurs-Gate-NPC-Voice-Pack-for-EE-2.6/releases"
+github = "GraionDilach/Baldurs-Gate-NPC-Voice-Pack-for-EE-2.6"
+
+[[mods]]
+name = "ZG IWD Voices"
+tp2 = "zg_iwd_voices"
+url = "https://github.com/GraionDilach/Icewind-Dale-Voice-Pack-For-EE-2.6/releases"
+github = "GraionDilach/Icewind-Dale-Voice-Pack-For-EE-2.6"
+
+[[mods]]
+name = "ZG IWD2 Voices"
+tp2 = "zg_iwd2_voices"
+url = "https://github.com/GraionDilach/Icewind-Dale-II-Voice-Pack-For-EE-2.6/releases"
+github = "GraionDilach/Icewind-Dale-II-Voice-Pack-For-EE-2.6"
+
+[[mods]]
+name = "ZG NWN Voices"
+tp2 = "zg_nwn_voices"
+url = "https://github.com/GraionDilach/Neverwinter-Nights-Voice-Pack-for-EE-2.6/releases"
+github = "GraionDilach/Neverwinter-Nights-Voice-Pack-for-EE-2.6"
+
+[[mods]]
+name = "NWN2 Soundsets"
+tp2 = "NWN2SOUNDSETS"
+url = "https://github.com/The-Gate-Project/NWN2SoundSets"
+github = "The-Gate-Project/NWN2SoundSets"
+
+[[mods]]
+name = "AW PF Soundsets"
+tp2 = "AW_PF_SOUNDSETS"
+url = "https://github.com/Arvendor/PathfinderVoices_for_EE"
+github = "Arvendor/PathfinderVoices_for_EE"
+
+[[mods]]
+name = "High Quality Soundclips"
+tp2 = "HQ_SoundClips_BG2EE"
+url = "https://github.com/Argent77/HQ-SoundClips-BG2EE/releases"
+github = "Argent77/HQ-SoundClips-BG2EE"
+
+[[mods]]
+name = "Infinity Sounds"
+tp2 = "infinitysounds"
+url = "https://github.com/Spellhold-Studios/Infinity-Sounds"
+github = "Spellhold-Studios/Infinity-Sounds"
+
+[[mods]]
+name = "The Picture Standard"
+tp2 = "thepicturestandard"
+url = "https://github.com/MattyGroove/ThePictureStandard"
+github = "MattyGroove/ThePictureStandard"
+
+[[mods]]
+name = "Portraits Portraits Everywhere"
+tp2 = "PPE"
+url = "https://github.com/smeagolheart/Portraits-Portraits-Everywhere"
+github = "smeagolheart/Portraits-Portraits-Everywhere"
+
+[[mods]]
+name = "Infinity Collection Portrait Pack"
+tp2 = "cd_icpp"
+url = "https://github.com/Gibberlings3/Infinity_Collection_Portrait_Pack"
+github = "Gibberlings3/Infinity_Collection_Portrait_Pack"
+
+[[mods]]
+name = "Made in Heaven: Meta-Mod"
+tp2 = "mih_metamod"
+url = "https://github.com/AngelGryph/MadeIn_Heaven_Meta-Mod"
+github = "AngelGryph/MadeIn_Heaven_Meta-Mod"
+
+[[mods]]
+name = "Worldmap"
+tp2 = "bp-bgt-worldmap"
+url = "https://github.com/SpellholdStudios/BP-BGT-Worldmap"
+github = "SpellholdStudios/BP-BGT-Worldmap"
+
+[[mods]]
+name = "Enhanced Edition Trilogy (End)"
+tp2 = "EET_END"
+url = "https://github.com/K4thos/EET/releases"
+github = "K4thos/EET"
+
+[[mods]]
+name = "Enhanced Powergaming Scripts"
+tp2 = "enhanced-powergaming-scripts"
+url = "https://github.com/SarahG-579462/Enhanced-Powergaming-Scripts"
+github = "SarahG-579462/Enhanced-Powergaming-Scripts"
+
+[[mods]]
+name = "Dual to Kit"
+tp2 = "DUAL_TO_KIT"
+url = "https://github.com/mleduque/kjeron_DUAL_TO_KIT"
+github = "mleduque/kjeron_DUAL_TO_KIT"
+
+[[mods]]
+name = "New Travel System Between BG City Areas"
+tp2 = "BG_Travel"
+url = "https://github.com/zed-nocear/BG_Travel-MOD-for-BG1-BGEE-BGT-Tutu-EET"
+github = "zed-nocear/BG_Travel-MOD-for-BG1-BGEE-BGT-Tutu-EET"
+
+[[mods]]
+name = "Reduce Save Compression"
+tp2 = "B3-ReduceSaveCompression"
+url = "https://github.com/Bubb13/B3-ReduceSaveCompression"
+github = "Bubb13/B3-ReduceSaveCompression"
+
+[[mods]]
+name = "The Artisan's Kitpack"
+tp2 = "ArtisansKitpack"
+url = "https://github.com/TheArtisanBG/The-Artisan-s-Kitpack"
+github = "TheArtisanBG/The-Artisan-s-Kitpack"
+channel = "master"
+
+[[mods]]
+name = "The Artisan's Kitpack NPC"
+tp2 = "ArtisansKitpack_npc"
+url = "https://github.com/TheArtisanBG/The-Artisan-s-Kitpack"
+github = "TheArtisanBG/The-Artisan-s-Kitpack"
+channel = "master"
+
+[[mods]]
+name = "The Artisan's Kitpack Tweak"
+tp2 = "ArtisansKitpack_tweak"
+url = "https://github.com/TheArtisanBG/The-Artisan-s-Kitpack"
+github = "TheArtisanBG/The-Artisan-s-Kitpack"
+channel = "master"
+
+[[mods]]
+name = "A7 MultiKits"
+tp2 = "A7-MultiKits"
+url = "https://github.com/Argent77/A7-MultiKits"
+github = "Argent77/A7-MultiKits"
+
+[[mods]]
+name = "Aura BG1 BG2 EET"
+tp2 = "Aura_BG1_2_EET"
+url = "https://github.com/TheArtisanBG/Aura_BG1_BG2_EET"
+github = "TheArtisanBG/Aura_BG1_BG2_EET"
+channel = "master"
+
+[[mods]]
+name = "Revert Pathfinding"
+tp2 = "bubb_revert_pathfinding"
+url = "https://github.com/Bubb13/IE-Snippets"
+github = "Bubb13/IE-Snippets"
+channel = "master"
+
+[[mods]]
+name = "BuffBot"
+tp2 = "buffbot"
+url = "https://github.com/Chrizhermann/bg-eeex-buffbot"
+github = "Chrizhermann/bg-eeex-buffbot"
+
+[[mods]]
+name = "Warlock"
+tp2 = "C0Warlock"
+url = "https://github.com/TheArtisanBG/Warlock"
+github = "TheArtisanBG/Warlock"
+channel = "master"
+
+[[mods]]
+name = "Candlekeep Revisited"
+tp2 = "candlekeep_revisited"
+url = "https://github.com/TheArtisanBG/Candlekeep-Revisited"
+github = "TheArtisanBG/Candlekeep-Revisited"
+channel = "master"
+
+[[mods]]
+name = "Dark Horizons"
+tp2 = "DarkHorizons"
+url = "https://github.com/The-Gate-Project/DarkHorizons"
+github = "The-Gate-Project/DarkHorizons"
+
+[[mods]]
+name = "Call of the Lost Goddess"
+tp2 = "Godcall"
+url = "https://github.com/AciferBG/Call-of-the-Lost-Goddess"
+github = "AciferBG/Call-of-the-Lost-Goddess"
+
+[[mods]]
+name = "Reveal Hidden Gameplay Options"
+tp2 = "HiddenGameplayOptions"
+url = "https://github.com/Argent77/A7-HiddenGameplayOptions"
+github = "Argent77/A7-HiddenGameplayOptions"
+
+[[mods]]
+name = "Indira NPC"
+tp2 = "IndiNPC"
+url = "https://github.com/Pocket-Plane-Group/Indira_NPC"
+github = "Pocket-Plane-Group/Indira_NPC"
+
+[[mods]]
+name = "Indira NPC"
+tp2 = "IndiraNPC"
+url = "https://github.com/Pocket-Plane-Group/Indira_NPC"
+github = "Pocket-Plane-Group/Indira_NPC"
+
+[[mods]]
+name = "Infinity UI++"
+tp2 = "infinity_ui"
+url = "https://github.com/Renegade0/InfinityUI"
+github = "Renegade0/InfinityUI"
+
+[[mods]]
+name = "Unofficial Item Pack"
+tp2 = "Item_Pack"
+url = "https://github.com/Dau1makan/Item-Pack"
+github = "Dau1makan/Item-Pack"
+
+[[mods]]
+name = "Kvel BG1"
+tp2 = "Kvel_BG1"
+url = "https://github.com/TheArtisanBG/Kvel-BG1"
+github = "TheArtisanBG/Kvel-BG1"
+channel = "master"
+
+[[mods]]
+name = "LeUI"
+tp2 = "LeUI"
+url = "https://github.com/r-e-d/LeUI"
+github = "r-e-d/LeUI"
+
+[[mods]]
+name = "Loretakers"
+tp2 = "Loretakers"
+url = "https://github.com/AciferBG/Loretakers"
+github = "AciferBG/Loretakers"
+
+[[mods]]
+name = "Ophysia BG1"
+tp2 = "OphysiaBG1"
+url = "https://github.com/Llewren/OphysiaBG1"
+github = "Llewren/OphysiaBG1"
+
+[[mods]]
+name = "Randomiser"
+tp2 = "randomiser"
+url = "https://github.com/FredrikLindgren/randomiser"
+github = "FredrikLindgren/randomiser"
+channel = "master"
+
+[[mods]]
+name = "The Lure of the Sirine's Call"
+tp2 = "SirinesCall"
+url = "https://github.com/Pocket-Plane-Group/Lure_Of_Sirines_Call"
+github = "Pocket-Plane-Group/Lure_Of_Sirines_Call"
+
+[[mods]]
+name = "SoA Extended"
+tp2 = "SoAExtended"
+url = "https://github.com/TheArtisanBG/SoAExtended"
+github = "TheArtisanBG/SoAExtended"
+channel = "master"
+
+[[mods]]
+name = "The Calling"
+tp2 = "thecalling"
+url = "https://github.com/Gibberlings3/The_Calling"
+github = "Gibberlings3/The_Calling"
+pkg_windows = "wzp,zip"
+
+[[mods]]
+name = "Tidings"
+tp2 = "Tidings"
+url = "https://github.com/AciferBG/Dark-Tidings"
+github = "AciferBG/Dark-Tidings"
+
+[[mods]]
+name = "Vienxay"
+tp2 = "Vienxay"
+url = "https://github.com/Skitia/Vienxay-BG1"
+github = "Skitia/Vienxay-BG1"
+
+[[mods]]
+name = "Wild Mage Additions"
+tp2 = "wildmage"
+url = "https://github.com/BGforgeNet/bg2-wildmage"
+github = "BGforgeNet/bg2-wildmage"
+
+[[mods]]
+name = "Planescape Torment Voice Pack for EE 2.6"
+tp2 = "zg_pst_voices"
+url = "https://github.com/GraionDilach/Planescape-Torment-Voice-Pack-for-EE-2.6"
+github = "GraionDilach/Planescape-Torment-Voice-Pack-for-EE-2.6"
+
+[[mods]]
+name = "Can I Stab You"
+tp2 = "ZS_CanIStabYou"
+url = "https://github.com/szaumoor/ZS_CanIStabYou-Mod"
+github = "szaumoor/ZS_CanIStabYou-Mod"
+
+[[mods]]
+name = "ZSTweaks"
+tp2 = "ZSTweaks"
+url = "https://github.com/szaumoor/ZSTweaks"
+github = "szaumoor/ZSTweaks"
+
+[[mods]]
+name = "Arcane Treasury"
+tp2 = "AL_ITEM_PACK"
+url = "https://github.com/Alexander12-creator/Arcane-Treasury-mod"
+github = "Alexander12-creator/Arcane-Treasury-mod"
+
+[[mods]]
+name = "Druid Grove Makeover"
+tp2 = "DRUIDGROVEMAKEOVER"
+url = "https://github.com/thisisulb/DruidGroveMakeover"
+github = "thisisulb/DruidGroveMakeover"
+
+[[mods]]
+name = "Red Dragon Summoning Spell"
+tp2 = "DRAGONSUMMON"
+url = "https://github.com/SpellholdStudios/Red_Dragon_Summoning_Spell"
+github = "SpellholdStudios/Red_Dragon_Summoning_Spell"
+
+[[mods]]
+name = "JA Adventure Pack"
+tp2 = "JA#BGT_ADVPACK"
+url = "https://github.com/Gitjas/JA-AdventurePack"
+github = "Gitjas/JA-AdventurePack"
+
+[[mods]]
+name = "G3 Anniversary"
+tp2 = "G3ANNIVERSARY"
+url = "https://github.com/Gibberlings3/g3anniversary"
+github = "Gibberlings3/g3anniversary"
+
+[[mods]]
+name = "Solaufein"
+tp2 = "SOLAUFEIN"
+url = "https://github.com/RoxanneSHS/Solaufein"
+github = "RoxanneSHS/Solaufein"
+
+[[mods]]
+name = "IWD Item Pack"
+tp2 = "IWDITEMPACK"
+url = "https://github.com/The-Gate-Project/IWD_Item-Pack"
+github = "The-Gate-Project/IWD_Item-Pack"
+
+[[mods]]
+name = "SP Collection"
+tp2 = "SPSTUFF"
+url = "https://github.com/Gibberlings3/SP_Collection"
+github = "Gibberlings3/SP_Collection"
+
+[[mods]]
+name = "G3 Community Item Pack"
+tp2 = "G3CIP"
+url = "https://github.com/Gibberlings3/G3_Community_Item_Pack"
+github = "Gibberlings3/G3_Community_Item_Pack"
+
+[[mods]]
+name = "Pocket Wardrobe"
+tp2 = "POCKETWARDROBE"
+url = "https://github.com/TheArtisanBG/Pocket-Wardrobe"
+github = "TheArtisanBG/Pocket-Wardrobe"
+
+[[mods]]
+name = "ZS Item Pack"
+tp2 = "ZS_ITEMPACK"
+url = "https://github.com/szaumoor/ZS_ItemPack"
+github = "szaumoor/ZS_ItemPack"
+
+#////////////////////////////////////////////////#
+#//             Direct Archives                //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Tenya Thermidor"
+tp2 = "TenyaThermidor"
+url = "https://coutelier.org.uk/Files/BGEETenya15c.rar"
+
+#////////////////////////////////////////////////#
+#//               Weaselmods                   //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Verr'Sza"
+tp2 = "VERRSZA"
+url = "https://downloads.weaselmods.net/download/verrsza-bg1ee/"
+
+[[mods]]
+name = "White"
+tp2 = "White"
+url = "https://downloads.weaselmods.net/download/white-npc/"
+
+[[mods]]
+name = "Sir Arkanis for SoD"
+tp2 = "ArkanisSoD"
+url = "https://downloads.weaselmods.net/download/sir-arkanis-for-sod/"
+
+[[mods]]
+name = "Shades of the Sword Coast"
+tp2 = "SotSC"
+url = "https://downloads.weaselmods.net/download/shades-of-the-sword-coast/"
+
+[[mods]]
+name = "The Vanishing of Skie Silvershield"
+tp2 = "TheVanishingOfSkieSilvershield"
+url = "https://downloads.weaselmods.net/download/the-vanishing-of-skie-silvershield/"
+
+[[mods]]
+name = "Colours of Infinity: Tales of the Deep Gardens"
+tp2 = "TotDG"
+url = "https://downloads.weaselmods.net/download/tales-of-the-deep-gardens/"
+
+[[mods]]
+name = "Colours of Infinity: The White Queen"
+tp2 = "WhiteQueen"
+url = "https://downloads.weaselmods.net/download/the-white-queen/"
+
+[[mods]]
+name = "Colours of Infinity: I Shall Never Forget"
+tp2 = "l#isnf"
+url = "https://downloads.weaselmods.net/download/i-shall-never-forget/"
+
+[[mods]]
+name = "Eilistraee's Song"
+tp2 = "eilistraee"
+url = "https://downloads.weaselmods.net/download/eilistraees-song/"
+
+[[mods]]
+name = "Athkatlan Grounds: Southern Edge"
+tp2 = "SouthernEdge"
+url = "https://downloads.weaselmods.net/download/southern-edge/"
+
+[[mods]]
+name = "Athkatlan Grounds: The Ooze's Lounge"
+tp2 = "Ooze"
+url = "https://downloads.weaselmods.net/download/oozes-lounge/"
+
+[[mods]]
+name = "Athkatlan Grounds: The Tangled Oak Isle"
+tp2 = "TangledIsle"
+url = "https://downloads.weaselmods.net/download/tangled-oak-isle/"
+
+[[mods]]
+name = "Athkatlan Grounds: Bridge's Block"
+tp2 = "BridgesBlock"
+url = "https://downloads.weaselmods.net/download/bridges-block/"
+
+[[mods]]
+name = "Athkatlan Grounds: Alabaster Sands"
+tp2 = "AlabasterSands"
+url = "https://downloads.weaselmods.net/download/alabaster-sands/"
+
+[[mods]]
+name = "The Journey to the Whin Hill"
+tp2 = "WhinHill"
+url = "https://downloads.weaselmods.net/download/the-journey-to-the-whin-hill/"
+
+[[mods]]
+name = "The Dreadful Tales: The Bloodied Stings of Barovia"
+tp2 = "BloodiedStingsOfBarovia"
+url = "https://downloads.weaselmods.net/download/the-bloodied-stings-of-barovia/"
+
+[[mods]]
+name = "The Dreadful Tales: In Love, Undeath"
+tp2 = "InLoveUndeath"
+url = "https://downloads.weaselmods.net/download/in-love-undeath/"
+
+[[mods]]
+name = "The Dreadful Tales: Juniper and the Stone Leech"
+tp2 = "l#juniperstone"
+url = "https://downloads.weaselmods.net/download/juniper-and-the-stone-leech/"
+
+[[mods]]
+name = "Bristlelick BG1EE NPC"
+tp2 = "Bristlelick"
+url = "https://downloads.weaselmods.net/download/bristlelick/"
+
+[[mods]]
+name = "Faldorn"
+tp2 = "FALDORNBG2"
+url = "https://downloads.weaselmods.net/download/faldorn-bg2ee/"
+
+[[mods]]
+name = "Skie: The Cost of One Girl's Soul"
+tp2 = "SkieCost"
+url = "https://downloads.weaselmods.net/download/skie-the-cost-of-one-girls-soul/"
+
+[[mods]]
+name = "Colours of Infinity: Yvette Romance"
+tp2 = "l#coi-yvette"
+url = "https://downloads.weaselmods.net/download/yvette-romance/"
+
+[[mods]]
+name = "Dvaradime BG2EE NPC"
+tp2 = "l#dvaradime"
+url = "https://downloads.weaselmods.net/download/dvaradime/"
+
+[[mods]]
+name = "Fhaugy"
+tp2 = "l#fhaugy"
+url = "https://downloads.weaselmods.net/download/fhaugy/"
+
+[[mods]]
+name = "Gahesh"
+tp2 = "GAHESH"
+url = "https://downloads.weaselmods.net/download/gahesh/"
+
+[[mods]]
+name = "Petsy NPC"
+tp2 = "Petsy"
+url = "https://downloads.weaselmods.net/download/petsy/"
+
+[[mods]]
+name = "Varshoon"
+tp2 = "l#varshoon"
+url = "https://downloads.weaselmods.net/download/varshoon/"
+
+[[mods]]
+name = "Verr'Sza"
+tp2 = "l#verrszabg2"
+url = "https://downloads.weaselmods.net/download/verrsza-bg2ee/"
+
+[[mods]]
+name = "Walahnan"
+tp2 = "l#walahnanbg2"
+url = "https://downloads.weaselmods.net/download/walahnan-bg2ee/"
+
+[[mods]]
+name = "Will of the Wisp"
+tp2 = "willowisp"
+url = "https://downloads.weaselmods.net/download/will-of-the-wisps/"
+
+[[mods]]
+name = "Dynaheir"
+tp2 = "DYNBG2"
+url = "https://downloads.weaselmods.net/download/dynaheir-bg2ee/"
+
+[[mods]]
+name = "Return of Xzar and Montaron"
+tp2 = "XZARMONT"
+url = "https://downloads.weaselmods.net/download/the-return-of-xzar-and-montaron/"
+
+[[mods]]
+name = "Yoshimo Romance"
+tp2 = "YoshimoRomance"
+url = "https://downloads.weaselmods.net/download/yoshimo-romance/"
+
+[[mods]]
+name = "Wilson Chronicles"
+tp2 = "l#wilson"
+url = "https://downloads.weaselmods.net/download/wilson-chronicles/"
+
+[[mods]]
+name = "Cernd Romance"
+tp2 = "CerndRomance"
+url = "https://downloads.weaselmods.net/download/cernd-romance/"
+
+[[mods]]
+name = "Weasels!"
+tp2 = "Weasels!"
+url = "https://downloads.weaselmods.net/download/weasels/"
+
+[[mods]]
+name = "Of Heirlooms and Classes"
+tp2 = "OfHeirloomsAndClasses"
+url = "https://downloads.weaselmods.net/download/of-heirlooms-and-classes/"
+
+[[mods]]
+name = "Hephernaan BG2"
+tp2 = "hephernaanbg2"
+url = "https://downloads.weaselmods.net/download/hephernaan-bg2/"
+
+[[mods]]
+name = "Dvaradime"
+tp2 = "Dvaradime"
+url = "https://downloads.weaselmods.net/download/dvaradime/"
+
+[[mods]]
+name = "Innershade"
+tp2 = "Innershade"
+url = "https://downloads.weaselmods.net/download/innershade/"
+
+[[mods]]
+name = "I Shall Never Forget"
+tp2 = "ISNF"
+url = "https://downloads.weaselmods.net/download/i-shall-never-forget/"
+
+[[mods]]
+name = "Juniper and the Stone Leech"
+tp2 = "JuniperAndTheStoneLeech"
+url = "https://downloads.weaselmods.net/download/juniper-and-the-stone-leech/"
+
+[[mods]]
+name = "Khalid BG2"
+tp2 = "KhalidBG2"
+url = "https://downloads.weaselmods.net/download/khalid-bg2/"
+
+[[mods]]
+name = "Walahnan"
+tp2 = "l#walahnanbg1ee"
+url = "https://downloads.weaselmods.net/download/walahnan-bg1ee/"
+
+#////////////////////////////////////////////////#
+#//              Morpheus-Mart                 //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Fight the Heavens"
+tp2 = "fight-the-heavens"
+url = "https://www.morpheus-mart.com/fight-the-heavens"
+
+[[mods]]
+name = "Crucible"
+tp2 = "crucible.tp2"
+url = "https://www.morpheus-mart.com/crucible"
+
+[[mods]]
+name = "Forgotten Armament"
+tp2 = "forgotten-armament"
+url = "https://www.morpheus-mart.com/forgotten-armament"
+
+[[mods]]
+name = "morpheus562's Kitpack"
+tp2 = "morpheus562-s-kitpack"
+url = "https://www.morpheus-mart.com/morpheus562s-kitpack"
+
+[[mods]]
+name = "Skills and Abilities"
+tp2 = "skills-and-abilities"
+url = "https://www.morpheus-mart.com/skills-and-abilities"
+
+[[mods]]
+name = "Tactics Remix"
+tp2 = "tactics-remix"
+url = "https://www.morpheus-mart.com/tactics-remix"
+
+[[mods]]
+name = "Continuous NPCs"
+tp2 = "continuous-npcs.tp2"
+url = "https://www.morpheus-mart.com/continuous-npcs"
+
+#////////////////////////////////////////////////#
+#//               Sentrizeal                   //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Sentrizeal Animation Pack"
+tp2 = "Sentrizeal_AA_Pack"
+url = "https://www.sentrizeal.com/downloaditm5"
+
+#////////////////////////////////////////////////#
+#//          Forum and Manual Pages            //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Auto Loot"
+tp2 = "AutoLoot"
+url = "https://forums.beamdog.com/discussion/69899"
+
+[[mods]]
+name = "SpellFix Visual Effects"
+tp2 = "SpellFix_Visual_Effects"
+url = "https://www.shsforums.net/files/file/1271-spellfix-visual-effects/"
+
+[[mods]]
+name = "Brage's Redemption"
+tp2 = "c#brage"
+url = "https://www.baldurs-gate.de/index.php?resources/brages-redemption.42/"
+
+[[mods]]
+name = "Baldur's Gate Romantic Encounters Modification (BG1RE)"
+tp2 = "bg1re"
+url = "https://www.gibberlings3.net/mods/npcs/bg-romantic-encounters/"
+
+[[mods]]
+name = "Cliffette's History"
+tp2 = "cliffhistory"
+url = "https://www.gibberlings3.net/mods/quests/cliffette/"
+
+[[mods]]
+name = "Cliffette's Keyring"
+tp2 = "CLIFFKEY"
+url = "https://www.gibberlings3.net/mods/quests/cliffette/"
+
+[[mods]]
+name = "Every Mod and Dog"
+tp2 = "emad"
+url = "https://www.gibberlings3.net/files/file/707-every-mod-and-dog/"
+
+[[mods]]
+name = "Fishing for Trouble"
+tp2 = "FishingForTrouble"
+url = "http://www.shsforums.net/files/file/1084-fishing-for-trouble/"
+
+[[mods]]
+name = "Mercenaries of the Sword Coast"
+tp2 = "mercenaries"
+url = "https://www.shsforums.net/topic/59496-mod-mercenaries-of-sword-coast-for-eet/"
+
+[[mods]]
+name = "Freedom's Reign"
+tp2 = "FR_ROV"
+url = "https://www.shsforums.net/files/file/121-freedoms-reign-reign-of-virtue/"
+
+[[mods]]
+name = "TeamBG's Armours for EET"
+tp2 = "BGeeARWe"
+url = "https://forums.beamdog.com/discussion/13314/mod-teambgs-armor-pack-for-bg-ee-bg2ee-bgt-amp-tutu"
+
+[[mods]]
+name = "Fix Wheels of Prophecy"
+tp2 = "c7-fixwheels"
+url = "https://www.gibberlings3.net/forums/topic/30323-wheels-of-prophecy-updated-to-83/page/3/#findComment-333983"
+
+[[mods]]
+name = "Valerie NPC for BG"
+tp2 = "valerie"
+url = "http://www.shsforums.net/files/file/1041-valerie/"
+
+[[mods]]
+name = "Glam NPC Pack"
+tp2 = "glamnpcpack"
+url = "https://www.gibberlings3.net/mods/npcs/glam-npc-pack/"
+
+[[mods]]
+name = "Solaufein's Rescue"
+tp2 = "jasteys_solaufein"
+url = "https://www.baldurs-gate.de/index.php?resources/jasteys-solaufein-npc-mod-for-bgii-solaufeins-rescue.13/"
+
+[[mods]]
+name = "Sir Ajantis NPC"
+tp2 = "ajantisbg2"
+url = "https://www.gibberlings3.net/mods/npcs/ajantis-bg2/"
+
+[[mods]]
+name = "Amber"
+tp2 = "amber"
+url = "https://www.gibberlings3.net/mods/npcs/amber/"
+
+[[mods]]
+name = "Auren Aseph NPC"
+tp2 = "aurenaseph"
+url = "https://www.gibberlings3.net/mods/npcs/auren/"
+
+[[mods]]
+name = "Tyris Flare NPC"
+tp2 = "tyrisflare"
+url = "https://www.gibberlings3.net/mods/npcs/tyris/"
+
+[[mods]]
+name = "Sheena"
+tp2 = "Sheena"
+url = "https://forums.beamdog.com/discussion/60784/npc-mod-sheena-the-half-dragon-tale/"
+
+[[mods]]
+name = "Evandra"
+tp2 = "evandra"
+url = "https://www.gibberlings3.net/mods/npcs/evandra/"
+
+[[mods]]
+name = "Zakrion"
+tp2 = "Zakrion_BG2"
+url = "https://www.gibberlings3.net/mods/npcs/zakrion_bg2/"
+
+[[mods]]
+name = "Afaaq, the Djinni Companion"
+tp2 = "a7-djinnicompanion"
+url = "http://www.shsforums.net/forum/651-djinni-companion/"
+
+[[mods]]
+name = "Neh'taniel NPC"
+tp2 = "Neh'taniel"
+url = "https://www.nexusmods.com/baldursgate2ee/mods/60"
+
+[[mods]]
+name = "Calin NPC"
+tp2 = "calin"
+url = "https://www.gibberlings3.net/mods/npcs/calin/"
+
+[[mods]]
+name = "Navarra NPC"
+tp2 = "navarra"
+url = "https://www.gibberlings3.net/mods/npcs/navarra/"
+
+[[mods]]
+name = "Haer'Dalis Romance"
+tp2 = "haerdalisromance"
+url = "http://www.shsforums.net/files/file/984-haerdalis-romance/"
+
+[[mods]]
+name = "The Beaurin Legacy"
+tp2 = "TheBeaurinLegacy"
+url = "https://www.gibberlings3.net/files/file/998-beaurin-legacy/"
+
+[[mods]]
+name = "Jan Quest"
+tp2 = "JanQuest"
+url = "https://akadis.baldursgateworld.fr/Jan/JansQuestEn.html"
+
+[[mods]]
+name = "Sarevok Romance"
+tp2 = "sarevokromance"
+url = "http://www.shsforums.net/files/file/810-sarevok-romance/"
+
+[[mods]]
+name = "Yoshimo's Remorse"
+tp2 = "yoshimosremorse"
+url = "https://www.gibberlings3.net/mods/npcs/yoshimos-remorse/"
+
+[[mods]]
+name = "BG2 Romance Expanded"
+tp2 = "OWRomanceExpanded"
+url = "https://www.gibberlings3.net/forums/topic/37854-v106-viconia-romance-expanded-"
+
+[[mods]]
+name = "Garrick's Infatuation"
+tp2 = "garrick_flirt"
+url = "https://www.gibberlings3.net/mods/npcs/garrick/"
+
+[[mods]]
+name = "G-Minion"
+tp2 = "gminion"
+url = "https://www.gibberlings3.net/files/file/717-gminion/"
+
+[[mods]]
+name = "Disrupting Torch"
+tp2 = "DisruptingTorch"
+url = "https://forums.beamdog.com/discussion/comment/1156843/#Comment_1156843"
+
+[[mods]]
+name = "Improved Rods"
+tp2 = "IMPROVEDRODS"
+url = "https://forums.beamdog.com/discussion/comment/1170437/#Comment_1170437"
+
+[[mods]]
+name = "Trials of the Luremaster"
+tp2 = "A7-TotLM-BG2EE"
+url = "http://www.shsforums.net/files/file/1251-trials-of-the-luremaster-for-bg2ee/"
+
+[[mods]]
+name = "Seducer Kit"
+tp2 = "SEDUCERKIT"
+url = "https://forums.beamdog.com/discussion/63566/seducer-kit-for-thieves-v1-21"
+
+[[mods]]
+name = "Bardic Appraisal"
+tp2 = "cd_bardic_appraisal"
+url = "https://www.gibberlings3.net/mods/tweaks/appraisal/"
+
+[[mods]]
+name = "Pathfinder Hit Dice"
+tp2 = "PathfinderHitDice"
+url = "https://gitlab.com/InfinityEngineGames/BaldursGate/RulesandTweaks/PathfinderHitDice"
+
+[[mods]]
+name = "TB Tweaks"
+tp2 = "tb#tweaks"
+url = "http://www.shsforums.net/topic/60984-help-with-"
+
+[[mods]]
+name = "JTweaks"
+tp2 = "jtweaks"
+url = "https://forums.beamdog.com/discussion/83360/mod-jmerrys-tweak-collection"
+
+[[mods]]
+name = "Ultravision"
+tp2 = "Ultravision"
+url = "https://www.gibberlings3.net/forums/topic/31265-ultravision-mod-probably-for-ee/"
+
+[[mods]]
+name = "Allow Stacking Potions"
+tp2 = "Allow_Stacking_Potions"
+url = "https://forums.beamdog.com/discussion/comment/1164166/#Comment_1164166"
+
+[[mods]]
+name = "Trap Overhaul"
+tp2 = "Trap_Overhaul"
+url = "https://forums.beamdog.com/discussion/71763/trap-detection-recovery-evasion/p1"
+
+[[mods]]
+name = "AC Miscellaneous Tweaks"
+tp2 = "ac-miscellaneous"
+url = "https://www.shsforums.net/files/file/1282-acs-miscellaneous-tweaks/"
+
+[[mods]]
+name = "Sequencer Colored Text"
+tp2 = "Sequencer_ColoredText"
+url = "https://www.shsforums.net/files/file/1273-sequencer-coloredtext/"
+
+[[mods]]
+name = "Blink Dogs and Phase Spiders"
+tp2 = "BLINK DOGS AND PHASE SPIDERS"
+url = "https://www.gibberlings3.net/forums/topic/34944-blink-dogs-and-phase-spiders-mod/"
+
+[[mods]]
+name = "Purist Demiliches (Polylich)"
+tp2 = "polylich"
+url = "https://www.gibberlings3.net/forums/topic/34370-purist-demiliches/"
+
+[[mods]]
+name = "PaintBG Portrait Pack"
+tp2 = "PaintBG"
+url = "http://www.spellholdstudios.net/ie/portraits"
+
+[[mods]]
+name = "House Rules"
+tp2 = "wl_HouseRules"
+url = "https://www.nexusmods.com/baldursgate2ee/mods/110?tab=files&file_id=339"

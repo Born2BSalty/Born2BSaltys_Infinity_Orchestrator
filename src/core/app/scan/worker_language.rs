@@ -5,8 +5,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::app::state::Step1State;
 use crate::install::weidu_scan;
-use crate::ui::state::Step1State;
 
 #[derive(Debug, Clone)]
 pub(super) struct PreferredLocaleInfo {
@@ -52,15 +52,23 @@ pub(super) fn candidate_language_ids(
     game_dir: &Path,
     work_dir: &Path,
     preferred_locale: &str,
-) -> Vec<String> {
-    let mut langs = weidu_scan::list_languages_for_game(weidu, tp2, game_dir, work_dir)
-        .unwrap_or_default();
-    if langs.is_empty() {
-        langs = weidu_scan::list_languages(weidu, tp2).unwrap_or_default();
-    }
+) -> Result<Vec<String>, String> {
+    let langs = match weidu_scan::list_languages_for_game(weidu, tp2, game_dir, work_dir) {
+        Ok(langs) if !langs.is_empty() => langs,
+        Ok(_) => weidu_scan::list_languages(weidu, tp2)
+            .map_err(|err| format!("failed to list languages for {}: {err}", tp2.display()))?,
+        Err(game_err) => {
+            weidu_scan::list_languages(weidu, tp2).map_err(|fallback_err| {
+                format!(
+                    "failed to list languages for {} with game context ({game_err}) and without game context ({fallback_err})",
+                    tp2.display()
+                )
+            })?
+        }
+    };
 
     if langs.is_empty() {
-        return vec!["0".to_string()];
+        return Ok(vec!["0".to_string()]);
     }
 
     let locale = preferred_locale.to_ascii_lowercase();
@@ -79,8 +87,7 @@ pub(super) fn candidate_language_ids(
     for entry in langs {
         let id = entry.id;
         let label = entry.label.to_ascii_lowercase();
-        let locale_matches_label =
-            !wants_english && matches_locale_token(&label, &locale_key);
+        let locale_matches_label = !wants_english && matches_locale_token(&label, &locale_key);
         if !wants_english && (contains_any_hint(&label, &preferred_hints) || locale_matches_label) {
             preferred.push(id);
         } else if contains_any_hint(&label, &english_hints) {
@@ -111,7 +118,7 @@ pub(super) fn candidate_language_ids(
     if preferred.is_empty() {
         preferred.push("0".to_string());
     }
-    preferred
+    Ok(preferred)
 }
 
 fn contains_any_hint(text: &str, hints: &[&str]) -> bool {

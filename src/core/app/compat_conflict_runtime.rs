@@ -124,11 +124,13 @@ fn is_direct_reciprocal(
     current_key: &str,
     adjacency: &HashMap<String, Vec<ConflictEdge>>,
 ) -> bool {
-    adjacency.get(&edge.target_key).is_some_and(|reverse_edges| {
-        reverse_edges
-            .iter()
-            .any(|reverse| reverse.target_key == current_key)
-    })
+    adjacency
+        .get(&edge.target_key)
+        .is_some_and(|reverse_edges| {
+            reverse_edges
+                .iter()
+                .any(|reverse| reverse.target_key == current_key)
+        })
 }
 
 fn path_reaches(
@@ -144,7 +146,9 @@ fn path_reaches(
         return false;
     }
     adjacency.get(start).is_some_and(|edges| {
-        edges.iter().any(|edge| path_reaches(&edge.target_key, target, adjacency, visited))
+        edges
+            .iter()
+            .any(|edge| path_reaches(&edge.target_key, target, adjacency, visited))
     })
 }
 

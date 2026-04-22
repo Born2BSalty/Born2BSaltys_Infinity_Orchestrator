@@ -6,8 +6,10 @@ use std::fs;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
-use super::compat_setup_tra::load_tp2_setup_tra_map;
+use crate::parser::collect_tp2_component_blocks;
+
 use super::compat_rule_runtime::normalize_mod_key;
+use super::compat_setup_tra::load_tp2_setup_tra_map;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ComponentConflict {
@@ -17,9 +19,7 @@ pub(crate) struct ComponentConflict {
     pub(crate) message: Option<String>,
 }
 
-pub(crate) fn load_component_conflicts(
-    tp2_path: &str,
-) -> HashMap<String, Vec<ComponentConflict>> {
+pub(crate) fn load_component_conflicts(tp2_path: &str) -> HashMap<String, Vec<ComponentConflict>> {
     if tp2_path.trim().is_empty() {
         return HashMap::new();
     }
@@ -44,44 +44,15 @@ pub(crate) fn load_component_conflicts(
     conflicts
 }
 
-fn load_component_conflicts_uncached(
-    tp2_path: &str,
-) -> HashMap<String, Vec<ComponentConflict>> {
+fn load_component_conflicts_uncached(tp2_path: &str) -> HashMap<String, Vec<ComponentConflict>> {
     let Ok(tp2_text) = fs::read_to_string(tp2_path) else {
         return HashMap::new();
     };
     let tra_map = load_tp2_setup_tra_map(std::path::Path::new(tp2_path));
 
     let mut out = HashMap::<String, Vec<ComponentConflict>>::new();
-    let lines: Vec<&str> = tp2_text.lines().collect();
-    let mut index = 0usize;
-
-    while index < lines.len() {
-        let line = lines[index].trim_start();
-        if !line.to_ascii_uppercase().starts_with("BEGIN ") {
-            index += 1;
-            continue;
-        }
-
-        let start = index;
-        index += 1;
-        while index < lines.len() {
-            let next = lines[index].trim_start().to_ascii_uppercase();
-            if next.starts_with("BEGIN ") {
-                break;
-            }
-            index += 1;
-        }
-
-        let block = &lines[start..index];
-        let Some(component_id) = block
-            .iter()
-            .find_map(|entry| parse_designated_id(&entry.to_ascii_uppercase()))
-        else {
-            continue;
-        };
-
-        let conflicts = collect_component_conflicts(block, &tra_map);
+    for (component_id, block) in collect_tp2_component_blocks(&tp2_text) {
+        let conflicts = collect_component_conflicts(&block, &tra_map);
         if !conflicts.is_empty() {
             out.insert(component_id, conflicts);
         }
@@ -131,10 +102,7 @@ fn collect_component_conflicts(
     out
 }
 
-fn parse_conflict_line(
-    line: &str,
-    tra_map: &HashMap<String, String>,
-) -> Vec<ComponentConflict> {
+fn parse_conflict_line(line: &str, tra_map: &HashMap<String, String>) -> Vec<ComponentConflict> {
     let stripped = strip_inline_comments(line);
     let trimmed = stripped.trim();
     if trimmed.is_empty() {
@@ -250,7 +218,10 @@ fn normalize_component_id(value: &str) -> Option<String> {
     let trimmed = value
         .trim()
         .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
-    let digits: String = trimmed.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+    let digits: String = trimmed
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect();
     if digits.is_empty() {
         return None;
     }
@@ -262,10 +233,7 @@ fn normalize_component_id(value: &str) -> Option<String> {
     }
 }
 
-fn resolve_message_token(
-    value: &str,
-    tra_map: &HashMap<String, String>,
-) -> Option<String> {
+fn resolve_message_token(value: &str, tra_map: &HashMap<String, String>) -> Option<String> {
     let trimmed = value
         .trim()
         .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
@@ -276,22 +244,4 @@ fn resolve_message_token(
         return tra_map.get(trimmed).cloned();
     }
     Some(trimmed.to_string())
-}
-
-fn parse_designated_id(upper_line: &str) -> Option<String> {
-    if upper_line.trim_start().starts_with("//") {
-        return None;
-    }
-    let index = upper_line.find("DESIGNATED")?;
-    let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-    let digits: String = tail.chars().take_while(|ch| ch.is_ascii_digit()).collect();
-    if digits.is_empty() {
-        return None;
-    }
-    let normalized = digits.trim_start_matches('0');
-    if normalized.is_empty() {
-        Some("0".to_string())
-    } else {
-        Some(normalized.to_string())
-    }
 }

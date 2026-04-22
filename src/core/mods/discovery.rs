@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use anyhow::{Result, anyhow};
 use walkdir::WalkDir;
 
 use crate::mods::component::Component;
@@ -14,14 +15,12 @@ pub struct DiscoveryIndex {
 }
 
 impl DiscoveryIndex {
-    pub fn build(mod_root: &Path, depth: usize) -> Self {
+    pub fn build(mod_root: &Path, depth: usize) -> Result<Self> {
         let mut by_component = HashMap::new();
-        for entry in WalkDir::new(mod_root)
-            .follow_links(true)
-            .max_depth(depth)
-            .into_iter()
-            .flatten()
-        {
+        for entry in WalkDir::new(mod_root).follow_links(true).max_depth(depth) {
+            let entry = entry.map_err(|err| {
+                anyhow!("failed to scan mods folder {}: {err}", mod_root.display())
+            })?;
             if !entry.file_type().is_file() {
                 continue;
             }
@@ -39,7 +38,7 @@ impl DiscoveryIndex {
                 .entry((normalize(&mod_name), normalize(&file_name)))
                 .or_insert_with(|| parent.to_path_buf());
         }
-        Self { by_component }
+        Ok(Self { by_component })
     }
 
     pub fn find_folder(&self, component: &Component) -> Option<&Path> {
@@ -79,7 +78,7 @@ mod tests {
         fs::create_dir_all(&mod_dir).expect("should create mod dir");
         fs::write(mod_dir.join("BG1UB.TP2"), b"// tp2").expect("should create tp2");
 
-        let index = DiscoveryIndex::build(&root, 5);
+        let index = DiscoveryIndex::build(&root, 5).expect("discovery should succeed");
         let component = Component {
             tp_file: "BG1UB.TP2".to_string(),
             name: "BG1UB".to_string(),

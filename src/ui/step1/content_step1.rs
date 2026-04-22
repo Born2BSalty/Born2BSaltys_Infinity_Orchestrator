@@ -4,14 +4,15 @@
 use eframe::egui;
 use rfd::FileDialog;
 
+use crate::app::state::Step1State;
 use crate::ui::layout::{
     BROWSE_BUTTON_WIDTH, PATH_FIELD_MIN_WIDTH, PATH_INPUT_HEIGHT, PATH_LABEL_WIDTH,
     PATH_ROW_INNER_GAP,
 };
 use crate::ui::shared::tooltip_global as tt;
 use crate::ui::shared::typography_global as typo;
-use crate::ui::state::Step1State;
-use crate::ui::step1::service_step1::sync_weidu_log_mode;
+use crate::ui::step1::action_step1::Step1Action;
+use crate::ui::step1::service_step1::{sync_install_mode, sync_weidu_log_mode};
 
 pub fn render_game_selection_content(ui: &mut egui::Ui, s: &mut Step1State) {
     section_title(ui, "Game Selection");
@@ -117,8 +118,14 @@ pub fn render_advanced_options_content(ui: &mut egui::Ui, s: &mut Step1State, de
     }
 }
 
-pub fn render_options_content(ui: &mut egui::Ui, s: &mut Step1State) {
+pub fn render_options_content(
+    ui: &mut egui::Ui,
+    s: &mut Step1State,
+    github_button_label: &str,
+    action: &mut Option<Step1Action>,
+) {
     section_title(ui, "Options");
+    sync_install_mode(s);
     let prompt_help = "Copies: // @wlb-inputs:\n\
 \n\
 What it does\n\
@@ -158,18 +165,49 @@ Prompt sequence with blank input\n\
     if copy_resp.clicked() {
         ui.ctx().copy_text("// @wlb-inputs:".to_string());
     }
+    if ui
+        .button(github_button_label)
+        .on_hover_text("Connect BIO to GitHub using browser-based authorization.")
+        .clicked()
+    {
+        *action = Some(Step1Action::ConnectGitHub);
+    }
+    ui.horizontal(|ui| {
+        ui.add_space(100.0);
+        ui.label(typo::strong("Install Mode"));
+    });
+    egui::ComboBox::from_id_salt("install_mode")
+        .selected_text(install_mode_label(&s.install_mode))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(
+                &mut s.install_mode,
+                Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string(),
+                "Build from scanned mods",
+            );
+            ui.selectable_value(
+                &mut s.install_mode,
+                Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string(),
+                "Install exactly from WeiDU logs",
+            );
+            ui.selectable_value(
+                &mut s.install_mode,
+                Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT.to_string(),
+                "Start from WeiDU logs, then review/edit",
+            );
+        });
+    sync_install_mode(s);
     ui.checkbox(
-        &mut s.have_weidu_logs,
-        "Install from Weidu Logs (With No Changes)?",
+        &mut s.weidu_log_mode_enabled,
+        "Enable WeiDU Logging Options (-u)",
     )
-        .on_hover_text(tt::STEP1_HAVE_WEIDU_LOGS);
-    ui.checkbox(&mut s.weidu_log_mode_enabled, "Enable WeiDU Logging Options (-u)")
-        .on_hover_text(tt::STEP1_WEIDU_LOG_MODE);
+    .on_hover_text(tt::STEP1_WEIDU_LOG_MODE);
     ui.checkbox(
         &mut s.prompt_required_sound_enabled,
         "Sound cue when prompt input is required",
     )
     .on_hover_text(tt::STEP1_PROMPT_REQUIRED_SOUND);
+    ui.checkbox(&mut s.download_archive, "Download Missing Mods and Keep Archives")
+        .on_hover_text(tt::STEP1_DOWNLOAD_ARCHIVE);
 
     ui.horizontal(|ui| {
         ui.checkbox(&mut s.lookback_enabled, "Prompt context lookback")
@@ -213,8 +251,11 @@ pub fn render_flags_content(ui: &mut egui::Ui, s: &mut Step1State) {
     ui.checkbox(&mut s.check_last_installed, "-c Check last installed")
         .on_hover_text(tt::STEP1_CHECK_LAST_INSTALLED);
     if s.game_install == "EET" {
-        ui.checkbox(&mut s.new_pre_eet_dir_enabled, "-p Clone BGEE -> Pre-EET target")
-            .on_hover_text(tt::STEP1_CLONE_BGEE_PRE_EET);
+        ui.checkbox(
+            &mut s.new_pre_eet_dir_enabled,
+            "-p Clone BGEE -> Pre-EET target",
+        )
+        .on_hover_text(tt::STEP1_CLONE_BGEE_PRE_EET);
     } else {
         s.new_pre_eet_dir_enabled = false;
     }
@@ -254,6 +295,11 @@ pub fn render_tools_content(ui: &mut egui::Ui, s: &mut Step1State) {
     path_row_file(ui, "mod_installer Binary", &mut s.mod_installer_binary);
 }
 
+pub fn render_mods_archive_content(ui: &mut egui::Ui, s: &mut Step1State) {
+    section_title(ui, "Mods Archive");
+    path_row_dir(ui, "Mods Archive", &mut s.mods_archive_folder);
+}
+
 pub fn render_install_paths_content(ui: &mut egui::Ui, s: &mut Step1State, _max_height: f32) {
     let title = match s.game_install.as_str() {
         "BG2EE" => "Install Paths BG2EE:",
@@ -291,9 +337,9 @@ fn render_bg2ee_paths(ui: &mut egui::Ui, s: &mut Step1State) {
         ui.label(typo::weak("Using -g: source + generated target."));
     }
     path_row_dir(ui, "BG2EE Game Folder", &mut s.bg2ee_game_folder);
-    if s.have_weidu_logs {
+    if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BG2EE WeiDU Log File", &mut s.bg2ee_log_file);
-    } else {
+    } else if !s.bootstraps_from_weidu_logs() {
         path_row_dir(ui, "BG2EE WeiDU Log Folder", &mut s.bg2ee_log_folder);
     }
     if s.generate_directory_enabled {
@@ -309,9 +355,9 @@ fn render_eet_paths(ui: &mut egui::Ui, s: &mut Step1State) {
     } else {
         path_row_dir(ui, "BGEE Game Folder", &mut s.eet_bgee_game_folder);
     }
-    if s.have_weidu_logs {
+    if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BGEE WeiDU Log File", &mut s.bgee_log_file);
-    } else {
+    } else if !s.bootstraps_from_weidu_logs() {
         path_row_dir(ui, "BGEE WeiDU Log Folder", &mut s.eet_bgee_log_folder);
     }
     if s.new_eet_dir_enabled {
@@ -321,9 +367,9 @@ fn render_eet_paths(ui: &mut egui::Ui, s: &mut Step1State) {
     } else {
         path_row_dir(ui, "BG2EE Game Folder", &mut s.eet_bg2ee_game_folder);
     }
-    if s.have_weidu_logs {
+    if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BG2EE WeiDU Log File", &mut s.bg2ee_log_file);
-    } else {
+    } else if !s.bootstraps_from_weidu_logs() {
         path_row_dir(ui, "BG2EE WeiDU Log Folder", &mut s.eet_bg2ee_log_folder);
     }
 }
@@ -333,9 +379,9 @@ fn render_bgee_paths(ui: &mut egui::Ui, s: &mut Step1State) {
         ui.label(typo::weak("Using -g: source + generated target."));
     }
     path_row_dir(ui, "BGEE Game Folder", &mut s.bgee_game_folder);
-    if s.have_weidu_logs {
+    if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BGEE WeiDU Log File", &mut s.bgee_log_file);
-    } else {
+    } else if !s.bootstraps_from_weidu_logs() {
         path_row_dir(ui, "BGEE WeiDU Log Folder", &mut s.bgee_log_folder);
     }
     if s.generate_directory_enabled {
@@ -345,6 +391,16 @@ fn render_bgee_paths(ui: &mut egui::Ui, s: &mut Step1State) {
 
 fn section_title(ui: &mut egui::Ui, text: &str) {
     ui.label(crate::ui::shared::typography_global::section_title(text));
+}
+
+fn install_mode_label(value: &str) -> &'static str {
+    match value {
+        Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS => "Install exactly from WeiDU logs",
+        Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT => {
+            "Start from WeiDU logs, then review/edit"
+        }
+        _ => "Build from scanned mods",
+    }
 }
 
 fn path_row_dir(ui: &mut egui::Ui, label: &str, value: &mut String) {

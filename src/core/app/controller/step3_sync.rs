@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step1State, Step3ItemState};
+use crate::app::state::{Step1State, Step2ModState, Step3ItemState};
 
-pub fn build_step3_items(mods: &[crate::ui::state::Step2ModState]) -> Vec<Step3ItemState> {
+pub fn build_step3_items(mods: &[Step2ModState]) -> Vec<Step3ItemState> {
     #[derive(Clone)]
     struct SelectedComponent {
         tp_file: String,

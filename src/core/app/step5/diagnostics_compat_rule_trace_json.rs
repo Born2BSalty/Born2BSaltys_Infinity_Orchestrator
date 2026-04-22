@@ -7,15 +7,16 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::compat_logic::apply_step2_compat_rules;
-use crate::ui::compat_rule_runtime::{
+use crate::app::compat_logic::apply_step2_compat_rules;
+use crate::app::compat_rule_runtime::CompatActiveItem;
+use crate::app::compat_rule_runtime::{
     active_item_order, collect_step2_active_items, compat_component_matches, compat_mod_matches,
     direct_rule_applies, match_kind_matches, mode_matches, relation_rule_applies, tab_matches,
 };
-use crate::ui::compat_rules::{
-    compat_rule_source_bucket, compat_rule_source_path, load_rules,
+use crate::app::compat_rules::{
+    CompatRule, compat_rule_source_bucket, compat_rule_source_path, load_rules,
 };
-use crate::ui::state::{Step2ComponentState, Step2ModState, WizardState};
+use crate::app::state::{Step2ComponentState, Step2ModState, WizardState};
 
 pub(super) fn write_compat_rule_trace_json(
     run_dir: &Path,
@@ -23,21 +24,36 @@ pub(super) fn write_compat_rule_trace_json(
     timestamp_unix_secs: u64,
 ) -> Result<PathBuf> {
     let out_path = run_dir.join("compat_rule_trace.json");
-    let rules = load_rules();
+    let loaded = load_rules();
+    let load_error = loaded.error.clone();
+    let rules = loaded.rules;
 
     let mut bgee_recomputed = state.step2.bgee_mods.clone();
     let mut bg2ee_recomputed = state.step2.bg2ee_mods.clone();
-    apply_step2_compat_rules(&state.step1, &mut bgee_recomputed, &mut bg2ee_recomputed);
+    let _ = apply_step2_compat_rules(&state.step1, &mut bgee_recomputed, &mut bg2ee_recomputed);
 
     let rows = vec![
-        trace_tab("BGEE", state, &state.step2.bgee_mods, &bgee_recomputed, &rules),
-        trace_tab("BG2EE", state, &state.step2.bg2ee_mods, &bg2ee_recomputed, &rules),
+        trace_tab(
+            "BGEE",
+            state,
+            &state.step2.bgee_mods,
+            &bgee_recomputed,
+            &rules,
+        ),
+        trace_tab(
+            "BG2EE",
+            state,
+            &state.step2.bg2ee_mods,
+            &bg2ee_recomputed,
+            &rules,
+        ),
     ];
 
     let payload = json!({
         "schema_version": 1,
         "generated_at_unix": timestamp_unix_secs,
         "rule_count": rules.len(),
+        "load_error": load_error,
         "tabs": rows,
     });
 
@@ -50,7 +66,7 @@ fn trace_tab(
     state: &WizardState,
     actual_mods: &[Step2ModState],
     recomputed_mods: &[Step2ModState],
-    rules: &[crate::ui::compat_rules::CompatRule],
+    rules: &[CompatRule],
 ) -> serde_json::Value {
     let active_items = collect_step2_active_items(actual_mods);
     let mut components = Vec::<serde_json::Value>::new();
@@ -76,7 +92,10 @@ fn trace_tab(
                 active_order,
             );
             let actual_kind = actual_component.compat_kind.as_deref().unwrap_or_default();
-            let recomputed_kind = recomputed_component.compat_kind.as_deref().unwrap_or_default();
+            let recomputed_kind = recomputed_component
+                .compat_kind
+                .as_deref()
+                .unwrap_or_default();
             let has_difference = actual_kind != recomputed_kind
                 || actual_component.disabled != recomputed_component.disabled
                 || actual_component.disabled_reason != recomputed_component.disabled_reason;
@@ -122,8 +141,8 @@ fn build_rule_matches(
     tab: &str,
     mod_state: &Step2ModState,
     component: &Step2ComponentState,
-    rules: &[crate::ui::compat_rules::CompatRule],
-    active_items: &[crate::ui::compat_rule_runtime::CompatActiveItem],
+    rules: &[CompatRule],
+    active_items: &[CompatActiveItem],
     active_order: Option<usize>,
 ) -> Vec<serde_json::Value> {
     let mut out = Vec::<serde_json::Value>::new();
@@ -131,7 +150,8 @@ fn build_rule_matches(
     for (rule_index, rule) in rules.iter().enumerate() {
         let mode_match = mode_matches(rule, &state.step1.game_install);
         let tab_match = tab_matches(rule, tab);
-        let kind_match = match_kind_matches(rule.match_kind.as_ref(), component.compat_kind.as_deref());
+        let kind_match =
+            match_kind_matches(rule.match_kind.as_ref(), component.compat_kind.as_deref());
         let mod_match = compat_mod_matches(rule, &mod_state.tp_file, &mod_state.name);
         let component_match = compat_component_matches(
             rule,

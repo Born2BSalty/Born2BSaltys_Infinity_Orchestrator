@@ -1,160 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::HashSet;
-
-use crate::ui::state::{Step2ModState, Step2State, WizardState};
-
-#[derive(Debug, Clone, Default)]
-pub struct PromptEvalContext {
-    pub active_games: HashSet<String>,
-    pub active_engines: HashSet<String>,
-    pub game_dir: Option<String>,
-    pub checked_components: HashSet<(String, String)>,
-    pub signature: String,
-}
-
-pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
-    let mut checked_components = HashSet::<(String, String)>::new();
-    collect_checked_components(&state.step2.bgee_mods, &mut checked_components);
-    collect_checked_components(&state.step2.bg2ee_mods, &mut checked_components);
-
-    let active_games = build_active_games(state, &checked_components);
-    let active_engines = build_active_engines(state);
-
-    let game_dir = match state.step2.active_game_tab.as_str() {
-        "BGEE" => {
-            if state.step1.game_install.eq_ignore_ascii_case("EET") {
-                if state.step1.new_pre_eet_dir_enabled && !state.step1.eet_pre_dir.trim().is_empty() {
-                    Some(state.step1.eet_pre_dir.clone())
-                } else {
-                    Some(state.step1.eet_bgee_game_folder.clone())
-                }
-            } else if state.step1.generate_directory_enabled
-                && !state.step1.generate_directory.trim().is_empty()
-            {
-                Some(state.step1.generate_directory.clone())
-            } else {
-                Some(state.step1.bgee_game_folder.clone())
-            }
-        }
-        _ => {
-            if state.step1.game_install.eq_ignore_ascii_case("EET") {
-                if state.step1.new_eet_dir_enabled && !state.step1.eet_new_dir.trim().is_empty() {
-                    Some(state.step1.eet_new_dir.clone())
-                } else {
-                    Some(state.step1.eet_bg2ee_game_folder.clone())
-                }
-            } else if state.step1.generate_directory_enabled
-                && !state.step1.generate_directory.trim().is_empty()
-            {
-                Some(state.step1.generate_directory.clone())
-            } else {
-                Some(state.step1.bg2ee_game_folder.clone())
-            }
-        }
-    }
-    .filter(|v| !v.trim().is_empty());
-
-    let signature = build_prompt_eval_signature(
-        &active_games,
-        &active_engines,
-        game_dir.as_deref(),
-        &checked_components,
-    );
-
-    PromptEvalContext {
-        active_games,
-        active_engines,
-        game_dir,
-        checked_components,
-        signature,
-    }
-}
-
-fn build_prompt_eval_signature(
-    active_games: &HashSet<String>,
-    active_engines: &HashSet<String>,
-    game_dir: Option<&str>,
-    checked_components: &HashSet<(String, String)>,
-) -> String {
-    let mut games = active_games.iter().cloned().collect::<Vec<_>>();
-    games.sort_unstable();
-    let mut engines = active_engines.iter().cloned().collect::<Vec<_>>();
-    engines.sort_unstable();
-
-    let mut checked = checked_components
-        .iter()
-        .map(|(mod_key, component_id)| format!("{mod_key}|{component_id}"))
-        .collect::<Vec<_>>();
-    checked.sort_unstable();
-
-    format!(
-        "games={};engines={};dir={};checked={}",
-        games.join(","),
-        engines.join(","),
-        game_dir.unwrap_or(""),
-        checked.join(";")
-    )
-}
-
-fn collect_checked_components(
-    mods: &[Step2ModState],
-    checked_components: &mut HashSet<(String, String)>,
-) {
-    for mod_state in mods {
-        let mod_key = normalize_tp2_stem(&mod_state.tp_file);
-        for component in &mod_state.components {
-            if component.checked {
-                checked_components.insert((mod_key.clone(), component.component_id.trim().to_string()));
-            }
-        }
-    }
-}
-
-fn build_active_games(
-    state: &WizardState,
-    checked_components: &HashSet<(String, String)>,
-) -> HashSet<String> {
-    let mut active_games = HashSet::<String>::new();
-    match state.step2.active_game_tab.as_str() {
-        "BGEE" => {
-            active_games.insert("bgee".to_string());
-        }
-        _ => {
-            if is_eet_core_selected(checked_components) {
-                active_games.insert("eet".to_string());
-            } else {
-                active_games.insert("bg2ee".to_string());
-            }
-        }
-    }
-    active_games
-}
-
-fn build_active_engines(state: &WizardState) -> HashSet<String> {
-    let mut active_engines = HashSet::<String>::new();
-    match state.step2.active_game_tab.as_str() {
-        "BGEE" => {
-            active_engines.insert("bgee".to_string());
-        }
-        _ => {
-            active_engines.insert("bg2ee".to_string());
-        }
-    }
-    active_engines
-}
-
-fn is_eet_core_selected(checked_components: &HashSet<(String, String)>) -> bool {
-    checked_components.contains(&("eet".to_string(), "0".to_string()))
-}
-
-pub fn normalize_tp2_stem(value: &str) -> String {
-    let lower = value.replace('\\', "/").to_ascii_lowercase();
-    let file = lower.rsplit('/').next().unwrap_or(&lower);
-    let no_ext = file.strip_suffix(".tp2").unwrap_or(file);
-    no_ext.strip_prefix("setup-").unwrap_or(no_ext).to_string()
-}
+use crate::app::state::{Step2ModState, Step2State, WizardState};
 
 #[derive(Debug, Clone, Default)]
 pub struct Step2Details {
@@ -174,8 +21,6 @@ pub struct Step2Details {
     pub compat_code: Option<String>,
     pub disabled_reason: Option<String>,
     pub compat_source: Option<String>,
-    pub compat_related_mod: Option<String>,
-    pub compat_related_component: Option<String>,
     pub compat_related_target: Option<String>,
     pub compat_graph: Option<String>,
     pub compat_evidence: Option<String>,
@@ -186,14 +31,20 @@ pub struct Step2Details {
     pub tp2_path: Option<String>,
     pub readme_path: Option<String>,
     pub web_url: Option<String>,
+    pub package_source_status: Option<String>,
+    pub package_source_name: Option<String>,
+    pub package_latest_version: Option<String>,
+    pub package_source_url: Option<String>,
+    pub package_source_github: Option<String>,
+    pub package_update_locked: Option<bool>,
+    pub package_can_check_updates: bool,
 }
 
 pub fn normalize_active_tab(state: &mut WizardState) {
     let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
     let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let active_is_visible =
-        (state.step2.active_game_tab == "BGEE" && show_bgee)
-            || (state.step2.active_game_tab == "BG2EE" && show_bg2ee);
+    let active_is_visible = (state.step2.active_game_tab == "BGEE" && show_bgee)
+        || (state.step2.active_game_tab == "BG2EE" && show_bg2ee);
     if active_is_visible {
         return;
     }
@@ -210,6 +61,22 @@ pub fn active_mods_mut(step2: &mut Step2State) -> &mut Vec<Step2ModState> {
     } else {
         &mut step2.bg2ee_mods
     }
+}
+
+pub fn review_edit_waiting_for_first_scan(state: &WizardState) -> bool {
+    state.step1.bootstraps_from_weidu_logs() && state.step2.last_scan_report.is_none()
+}
+
+pub fn review_edit_scan_complete(state: &WizardState) -> bool {
+    state.step1.bootstraps_from_weidu_logs() && state.step2.last_scan_report.is_some()
+}
+
+pub fn review_edit_any_log_applied(state: &WizardState) -> bool {
+    state.step2.review_edit_bgee_log_applied || state.step2.review_edit_bg2ee_log_applied
+}
+
+pub fn non_scan_controls_locked(state: &WizardState) -> bool {
+    state.step2.is_scanning || review_edit_waiting_for_first_scan(state)
 }
 
 #[cfg(test)]

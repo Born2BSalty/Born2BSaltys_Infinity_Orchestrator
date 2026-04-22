@@ -147,14 +147,9 @@ pub fn conflict_parent() -> egui::Color32 {
     egui::Color32::from_rgb(220, 122, 122)
 }
 
-pub fn conditional_parent() -> egui::Color32 {
-    egui::Color32::from_rgb(170, 198, 218)
-}
-
 pub fn warning_parent() -> egui::Color32 {
     egui::Color32::from_rgb(222, 182, 92)
 }
-
 
 // Step 5 phase/state
 pub fn status_running() -> egui::Color32 {

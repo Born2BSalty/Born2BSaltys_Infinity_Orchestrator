@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use anyhow::Result;
 use crate::config::options::AppCommandConfig;
+use anyhow::Result;
 use tracing::info;
 
 use super::{eet, normal, scan_components, scan_languages};
@@ -11,7 +11,11 @@ pub fn run(command: &AppCommandConfig) -> Result<()> {
     info!("BIO started");
     info!("command = {:?}", command);
     match command {
-        AppCommandConfig::Gui { dev_mode } => crate::ui::run(*dev_mode)?,
+        AppCommandConfig::Gui { .. } => {
+            return Err(anyhow::anyhow!(
+                "GUI dispatch must be handled from main before calling app::dispatch::run"
+            ));
+        }
         AppCommandConfig::Normal(config) => normal::run(config)?,
         AppCommandConfig::Eet(config) => eet::run(config)?,
         AppCommandConfig::Scan(scan) => match scan {

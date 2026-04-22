@@ -3,11 +3,12 @@
 
 use eframe::egui;
 
-use crate::ui::state::{Step2ModState, Step2Selection};
+use crate::app::state::{Step2ModState, Step2Selection};
+use crate::parser::prompt_eval_expr::PromptEvalContext;
 use crate::ui::step2::service_list_ops_step2::mod_matches_filter;
 use crate::ui::step2::tree_component_types_step2::ComponentRowsContext;
 use crate::ui::step2::tree_components_step2::render_component_rows;
-use crate::ui::step2::tree_parent_step2::{render_parent_row, ParentRowResult};
+use crate::ui::step2::tree_parent_step2::{ParentRowResult, render_parent_row};
 
 pub struct ModTreeRenderResult {
     pub selected: Step2Selection,
@@ -20,7 +21,7 @@ pub struct ModTreeRenderContext<'a> {
     pub active_tab: &'a str,
     pub selected: &'a Option<Step2Selection>,
     pub next_selection_order: &'a mut usize,
-    pub prompt_eval: &'a crate::ui::step2::state_step2::PromptEvalContext,
+    pub prompt_eval: &'a PromptEvalContext,
     pub collapse_epoch: u64,
     pub collapse_default_open: bool,
     pub jump_to_selected_requested: &'a mut bool,
@@ -142,9 +143,10 @@ fn selection_targets_mod(
     tp_file: &str,
 ) -> bool {
     match selected {
-        Some(Step2Selection::Mod { game_tab, tp_file: selected_tp }) => {
-            game_tab == active_tab && selected_tp == tp_file
-        }
+        Some(Step2Selection::Mod {
+            game_tab,
+            tp_file: selected_tp,
+        }) => game_tab == active_tab && selected_tp == tp_file,
         Some(Step2Selection::Component {
             game_tab,
             tp_file: selected_tp,

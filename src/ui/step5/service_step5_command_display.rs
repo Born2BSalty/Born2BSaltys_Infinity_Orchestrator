@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::Step1State;
+use crate::app::state::Step1State;
 
 use super::text::build_install_command;
 

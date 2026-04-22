@@ -135,10 +135,22 @@ pub(super) fn resolve_group_token_label(
         return tra_map.get(trimmed).cloned();
     }
     if let Some(rest) = trimmed.strip_prefix('~') {
-        return Some(rest.split('~').next().unwrap_or_default().trim().to_string());
+        return Some(
+            rest.split('~')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+        );
     }
     if let Some(rest) = trimmed.strip_prefix('"') {
-        return Some(rest.split('"').next().unwrap_or_default().trim().to_string());
+        return Some(
+            rest.split('"')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+        );
     }
     Some(trimmed.to_string())
 }
@@ -180,9 +192,17 @@ fn parse_tra_string_map(text: &str) -> HashMap<String, String> {
         let key = key.trim().to_string();
         let rhs = rhs.trim();
         let value = if let Some(rest) = rhs.strip_prefix('~') {
-            rest.split('~').next().unwrap_or_default().trim().to_string()
+            rest.split('~')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_string()
         } else if let Some(rest) = rhs.strip_prefix('"') {
-            rest.split('"').next().unwrap_or_default().trim().to_string()
+            rest.split('"')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_string()
         } else {
             continue;
         };

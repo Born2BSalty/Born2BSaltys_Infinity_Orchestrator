@@ -6,6 +6,7 @@ use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binar
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step1State {
     pub game_install: String,
+    pub install_mode: String,
     pub have_weidu_logs: bool,
     pub rust_log_debug: bool,
     pub rust_log_trace: bool,
@@ -56,6 +57,9 @@ pub struct Step1State {
     pub weidu_log_mode: String,
     pub strict_matching: bool,
     pub download: bool,
+    pub download_archive: bool,
+    pub mods_archive_folder: String,
+    pub mods_backup_folder: String,
     pub overwrite: bool,
     pub check_last_installed: bool,
     pub tick: u64,
@@ -64,10 +68,64 @@ pub struct Step1State {
     pub backup_targets_before_eet_copy: bool,
 }
 
+impl Step1State {
+    pub const INSTALL_MODE_BUILD_FROM_SCANNED_MODS: &str = "build_from_scanned_mods";
+    pub const INSTALL_MODE_EXACT_WEIDU_LOGS: &str = "install_exactly_from_weidu_logs";
+    pub const INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT: &str =
+        "start_from_weidu_logs_then_review_edit";
+
+    pub fn derive_install_mode_from_legacy(
+        have_weidu_logs: bool,
+        download_archive: bool,
+    ) -> String {
+        if !have_weidu_logs {
+            Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string()
+        } else if download_archive {
+            Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT.to_string()
+        } else {
+            Self::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string()
+        }
+    }
+
+    pub fn normalize_install_mode(value: &str) -> &'static str {
+        match value {
+            Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS => {
+                Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS
+            }
+            Self::INSTALL_MODE_EXACT_WEIDU_LOGS => Self::INSTALL_MODE_EXACT_WEIDU_LOGS,
+            Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT => {
+                Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
+            }
+            _ => Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS,
+        }
+    }
+
+    pub fn uses_source_weidu_logs(&self) -> bool {
+        matches!(
+            self.install_mode.as_str(),
+            Self::INSTALL_MODE_EXACT_WEIDU_LOGS | Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
+        )
+    }
+
+    pub fn installs_exactly_from_weidu_logs(&self) -> bool {
+        self.install_mode == Self::INSTALL_MODE_EXACT_WEIDU_LOGS
+    }
+
+    pub fn bootstraps_from_weidu_logs(&self) -> bool {
+        self.install_mode == Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
+    }
+
+    pub fn sync_install_mode_flags(&mut self) {
+        self.install_mode = Self::normalize_install_mode(&self.install_mode).to_string();
+        self.have_weidu_logs = self.uses_source_weidu_logs();
+    }
+}
+
 impl Default for Step1State {
     fn default() -> Self {
         Self {
             game_install: "BGEE".to_string(),
+            install_mode: Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string(),
             have_weidu_logs: false,
             rust_log_debug: false,
             rust_log_trace: false,
@@ -118,6 +176,9 @@ impl Default for Step1State {
             weidu_log_mode: "autolog,logapp,log-extern".to_string(),
             strict_matching: false,
             download: true,
+            download_archive: false,
+            mods_archive_folder: String::new(),
+            mods_backup_folder: String::new(),
             overwrite: false,
             check_last_installed: true,
             tick: 500,

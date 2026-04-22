@@ -9,6 +9,7 @@ use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binar
 #[serde(default)]
 pub struct Step1Settings {
     pub game_install: String,
+    pub install_mode: String,
     pub have_weidu_logs: bool,
     pub rust_log_debug: bool,
     pub rust_log_trace: bool,
@@ -59,6 +60,9 @@ pub struct Step1Settings {
     pub weidu_log_mode: String,
     pub strict_matching: bool,
     pub download: bool,
+    pub download_archive: bool,
+    pub mods_archive_folder: String,
+    pub mods_backup_folder: String,
     pub overwrite: bool,
     pub check_last_installed: bool,
     pub tick: u64,
@@ -71,6 +75,7 @@ impl Default for Step1Settings {
     fn default() -> Self {
         Self {
             game_install: "BGEE".to_string(),
+            install_mode: "build_from_scanned_mods".to_string(),
             have_weidu_logs: false,
             rust_log_debug: false,
             rust_log_trace: false,
@@ -121,6 +126,9 @@ impl Default for Step1Settings {
             weidu_log_mode: "autolog,logapp,log-extern".to_string(),
             strict_matching: false,
             download: true,
+            download_archive: false,
+            mods_archive_folder: String::new(),
+            mods_backup_folder: String::new(),
             overwrite: false,
             check_last_installed: true,
             tick: 500,

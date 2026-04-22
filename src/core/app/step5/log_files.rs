@@ -5,19 +5,20 @@
 mod diagnostics_logs;
 #[path = "log_files_open.rs"]
 mod log_open;
+#[path = "log_files_validators.rs"]
+mod path_validators;
 #[path = "log_files_source_logs.rs"]
 mod source_logs;
 #[path = "log_files_target_prep.rs"]
 mod target_prep;
-#[path = "log_files_validators.rs"]
-mod path_validators;
 
-pub use diagnostics_logs::{copy_diagnostic_origin_logs, DiagnosticLogGroup};
+pub use diagnostics_logs::{
+    DiagnosticLogGroup, begin_new_run, copy_diagnostic_origin_logs,
+    copy_weidu_logs_for_diagnostics, current_or_new_run_id, prune_old_diagnostics, run_dir_from_id,
+};
 pub use log_open::{open_console_logs_folder, open_last_log_file, save_console_log};
 pub use path_validators::{
     validate_resume_paths, validate_runtime_prep_paths, verify_targets_prepared,
 };
-pub use source_logs::{
-    copy_saved_weidu_logs, copy_source_weidu_logs, source_log_infos, SourceLogInfo,
-};
-pub use target_prep::{prepare_target_dirs_before_install, TargetPrepResult};
+pub use source_logs::{SourceLogInfo, source_log_infos};
+pub use target_prep::{TargetPrepResult, prepare_target_dirs_before_install};

@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
 
 pub(crate) fn render_dev_header(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool) {
     ui.heading("Step 5: Install, Logs, Diagnostics");

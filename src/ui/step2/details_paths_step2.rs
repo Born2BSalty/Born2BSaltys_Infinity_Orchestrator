@@ -28,7 +28,9 @@ pub(crate) fn render_paths_grid(
         row_h,
         value_chars,
     };
-    ui.label(crate::ui::shared::typography_global::small_strong("Paths / Links"));
+    ui.label(crate::ui::shared::typography_global::small_strong(
+        "Paths / Links",
+    ));
     egui::Grid::new("step2_details_paths_grid")
         .num_columns(3)
         .spacing([8.0, 4.0])
@@ -60,7 +62,10 @@ pub(crate) fn render_paths_grid(
                 "Readme",
                 details.readme_path.as_deref(),
                 true,
-                details.readme_path.clone().map(Step2Action::OpenSelectedReadme),
+                details
+                    .readme_path
+                    .clone()
+                    .map(Step2Action::OpenSelectedReadme),
             );
             if details.web_url.is_some() {
                 render_path_row(
@@ -74,6 +79,126 @@ pub(crate) fn render_paths_grid(
                 );
             }
         });
+    ui.add_space(6.0);
+    render_package_grid(ui, details, action, &layout);
+}
+
+fn render_package_grid(
+    ui: &mut egui::Ui,
+    details: &Step2Details,
+    action: &mut Option<Step2Action>,
+    layout: &PathsGridLayout,
+) {
+    let Some(source_status) = details.package_source_status.as_deref() else {
+        return;
+    };
+    ui.label(crate::ui::shared::typography_global::small_strong(
+        "Package",
+    ));
+    let can_add_source = details.package_source_url.is_none();
+    egui::Grid::new("step2_details_package_grid")
+        .num_columns(3)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            render_text_row(ui, layout, "Source", source_status, false);
+            if let Some(name) = details.package_source_name.as_deref() {
+                render_text_row(ui, layout, "Name", name, false);
+            }
+            if let Some(version) = details.package_latest_version.as_deref() {
+                render_text_row(ui, layout, "Latest Version", version, false);
+            }
+            if let Some(url) = details.package_source_url.as_deref() {
+                render_path_row(
+                    ui,
+                    action,
+                    layout,
+                    "URL",
+                    Some(url),
+                    false,
+                    Some(Step2Action::OpenSelectedWeb(url.to_string())),
+                );
+            }
+            if let Some(github) = details.package_source_github.as_deref() {
+                render_path_row(
+                    ui,
+                    action,
+                    layout,
+                    "GitHub",
+                    Some(github),
+                    false,
+                    Some(Step2Action::OpenSelectedWeb(github_repo_url(github))),
+                );
+            }
+        });
+    if can_add_source {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            if ui
+                .button("Add Source")
+                .on_hover_text("Open mod_downloads_user.toml")
+                .clicked()
+            {
+                *action = Some(Step2Action::OpenModDownloadsUserSource);
+            }
+            if ui
+                .button("Reload Sources")
+                .on_hover_text("Reload mod_downloads_default.toml and mod_downloads_user.toml")
+                .clicked()
+            {
+                *action = Some(Step2Action::ReloadModDownloadSources);
+            }
+        });
+    }
+    if let Some(locked) = details.package_update_locked {
+        ui.add_space(4.0);
+        let label = if locked {
+            "Unlock Updates"
+        } else {
+            "Lock Updates"
+        };
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(
+                    details.package_can_check_updates,
+                    egui::Button::new("Check This Mod"),
+                )
+                .on_hover_text("Check updates only for the selected mod.")
+                .clicked()
+            {
+                *action = Some(Step2Action::PreviewUpdateSelectedMod);
+            }
+            if ui
+                .button(label)
+                .on_hover_text("Skip or allow this mod when checking updates in this session.")
+                .clicked()
+            {
+                *action = Some(Step2Action::SetSelectedModUpdateLocked(!locked));
+            }
+        });
+    }
+}
+
+fn render_text_row(
+    ui: &mut egui::Ui,
+    layout: &PathsGridLayout,
+    label: &str,
+    value: &str,
+    monospace: bool,
+) {
+    ui.add_sized(
+        [layout.label_w, layout.row_h],
+        egui::Label::new(crate::ui::shared::typography_global::strong(label)),
+    );
+    let display = ellipsize_end(value, layout.value_chars);
+    let text = if monospace {
+        crate::ui::shared::typography_global::monospace(display)
+    } else {
+        crate::ui::shared::typography_global::plain(display)
+    };
+    ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
+        .on_hover_text(value);
+    ui.label("");
+    ui.end_row();
 }
 
 fn render_open_only_row(
@@ -207,4 +332,13 @@ fn ellipsize_end(value: &str, max_chars: usize) -> String {
     let keep = max_chars.saturating_sub(3);
     let prefix: String = value.chars().take(keep).collect();
     format!("{prefix}...")
+}
+
+fn github_repo_url(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("https://github.com/{}", trimmed.trim_start_matches('/'))
+    }
 }

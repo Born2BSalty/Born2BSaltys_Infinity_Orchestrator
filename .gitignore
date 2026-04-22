@@ -1,11 +1,17 @@
 /target
 /backup/
 /TODO.md
+/diagnostics/
+/vendor/lapdu-parser-rust-master/tests/
+
+.vscode/
+.idea/
+
 .DS_Store
 Thumbs.db
 *.log
-.vscode/
-.idea/
-/diagnostics/
-/vendor/lapdu-parser-rust-master/tests/
-Push\ Github.bat 
+*.tmp
+*.bak
+*~
+
+Push\ Github.bat

@@ -2,17 +2,16 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
 
-use crate::ui::compat_conflict_parse::load_component_conflicts;
-use crate::ui::compat_dependency_parse::load_component_requirements;
-use crate::ui::scan::worker::scan_impl;
-use crate::ui::state::Step2ModState;
-use crate::ui::state::Step1State;
+use crate::app::compat_conflict_parse::load_component_conflicts;
+use crate::app::compat_dependency_parse::load_component_requirements;
+use crate::app::scan::worker::scan_impl;
+use crate::app::state::{Step1State, Step2ModState};
 
-pub use crate::ui::scan::Step2ScanEvent;
+pub use crate::app::scan::Step2ScanEvent;
 
 pub fn run_scan(step1: Step1State, sender: Sender<Step2ScanEvent>, cancel: Arc<AtomicBool>) {
     match scan_impl(&step1, &sender, &cancel) {

@@ -1,0 +1,14 @@
+# User-added BIO mod download sources. Entries here override mod_downloads_default.toml by tp2.
+
+# Example:
+# [[mods]]
+# name = "Example Mod"
+# tp2 = "example"
+# url = "https://example.com/example-mod.zip"
+
+[[mods]]
+name = "aTweaks (Your PnP Tweak Pack)"
+tp2 = "aTweaks"
+url = "https://github.com/FredrikLindgren/aTweaks"
+github = "FredrikLindgren/aTweaks"
+exact_github = ["CamDawg/aTweaks"]

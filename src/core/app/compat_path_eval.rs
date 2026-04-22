@@ -3,8 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::ui::state::Step1State;
-use crate::ui::step2::prompt_eval_expr_tokens_step2::{Token, tokenize};
+use super::compat_rule_runtime::game_dir_for_tab as shared_game_dir_for_tab;
+use crate::app::state::Step1State;
+use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PathRequirementContext {
@@ -61,7 +62,7 @@ impl PathTriState {
 impl PathRequirementContext {
     pub(crate) fn for_tab(step1: &Step1State, tab: &str) -> Self {
         Self {
-            game_dir: game_dir_for_tab(step1, tab).map(ToString::to_string),
+            game_dir: shared_game_dir_for_tab(step1, tab).map(ToString::to_string),
         }
     }
 
@@ -95,38 +96,6 @@ pub(crate) fn evaluate_path_requirement(
     PathEvalOutcome {
         value,
         used_supported_predicate: parser.used_supported_predicate,
-    }
-}
-
-pub(crate) fn game_dir_for_tab<'a>(step1: &'a Step1State, tab: &str) -> Option<&'a str> {
-    let value = if tab.eq_ignore_ascii_case("BGEE") {
-        if step1.game_install.eq_ignore_ascii_case("EET") {
-            if step1.new_pre_eet_dir_enabled && !step1.eet_pre_dir.trim().is_empty() {
-                step1.eet_pre_dir.trim()
-            } else {
-                step1.eet_bgee_game_folder.trim()
-            }
-        } else if step1.generate_directory_enabled && !step1.generate_directory.trim().is_empty() {
-            step1.generate_directory.trim()
-        } else {
-            step1.bgee_game_folder.trim()
-        }
-    } else if step1.game_install.eq_ignore_ascii_case("EET") {
-        if step1.new_eet_dir_enabled && !step1.eet_new_dir.trim().is_empty() {
-            step1.eet_new_dir.trim()
-        } else {
-            step1.eet_bg2ee_game_folder.trim()
-        }
-    } else if step1.generate_directory_enabled && !step1.generate_directory.trim().is_empty() {
-        step1.generate_directory.trim()
-    } else {
-        step1.bg2ee_game_folder.trim()
-    };
-
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
     }
 }
 
@@ -284,13 +253,14 @@ fn looks_like_windows_absolute(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{PathRequirementContext, evaluate_path_requirement};
     use super::PathTriState;
+    use super::{PathRequirementContext, evaluate_path_requirement};
 
     #[test]
     fn skips_variable_paths() {
         let context = PathRequirementContext::default();
-        let outcome = evaluate_path_requirement(r#"DIRECTORY_EXISTS ~%MOD_FOLDER%/base~"#, &context);
+        let outcome =
+            evaluate_path_requirement(r#"DIRECTORY_EXISTS ~%MOD_FOLDER%/base~"#, &context);
         assert_eq!(outcome.value, PathTriState::Unknown);
         assert!(outcome.used_supported_predicate);
     }

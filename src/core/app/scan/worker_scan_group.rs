@@ -5,12 +5,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::parser;
+use crate::app::scan::ScannedComponent;
+use crate::app::scan::cache::{ScanCache, cache_get, cache_put};
+use crate::app::scan::parse::{normalize_tp_file, parse_component_line};
+use crate::app::state::Step2Tp2ProbeReport;
 use crate::install::weidu_scan;
-use crate::ui::scan::ScannedComponent;
-use crate::ui::scan::cache::{ScanCache, cache_get, cache_put};
-use crate::ui::scan::parse::{normalize_tp_file, parse_component_line};
-use crate::ui::state::Step2Tp2ProbeReport;
+use crate::parser;
 
 use super::language::candidate_language_ids;
 
@@ -28,7 +28,7 @@ pub(super) struct ScanGroupContext<'a> {
 pub(super) fn scan_tp2_group(
     scan_ctx: &ScanGroupContext<'_>,
     tp2_paths: &[std::path::PathBuf],
-) -> (Vec<ScannedComponent>, Vec<Step2Tp2ProbeReport>) {
+) -> Result<(Vec<ScannedComponent>, Vec<Step2Tp2ProbeReport>), String> {
     let mut entries = Vec::<ScannedComponent>::new();
     let mut reports = Vec::<Step2Tp2ProbeReport>::new();
     for tp2 in tp2_paths {
@@ -78,7 +78,7 @@ pub(super) fn scan_tp2_group(
             scan_ctx.game_dir,
             &work_dir,
             scan_ctx.preferred_locale,
-        );
+        )?;
         probe.language_ids_tried = language_ids.clone();
 
         for lang_id in language_ids {
@@ -89,7 +89,13 @@ pub(super) fn scan_tp2_group(
                 tp2,
                 &lang_id,
             )
-            .unwrap_or_default();
+            .map_err(|err| {
+                format!(
+                    "failed to list components for {} (language {}): {err}",
+                    tp2.display(),
+                    lang_id
+                )
+            })?;
             let parsed_for_tp2 = parse_lines_for_tp2(tp2, &expected_tp2, lines);
             if parsed_for_tp2.is_empty() {
                 continue;
@@ -118,12 +124,17 @@ pub(super) fn scan_tp2_group(
             let fallback_components = apply_prompt_index(fallback_components, &prompt_index);
             probe.parsed_count = fallback_components.len();
             probe.undefined_count = count_undefined_components(&fallback_components);
-            cache_put(scan_ctx.cache, scan_ctx.ctx, tp2, fallback_components.clone());
+            cache_put(
+                scan_ctx.cache,
+                scan_ctx.ctx,
+                tp2,
+                fallback_components.clone(),
+            );
             entries.extend(fallback_components);
         }
         reports.push(probe);
     }
-    (entries, reports)
+    Ok((entries, reports))
 }
 
 fn apply_prompt_index(
@@ -136,7 +147,10 @@ fn apply_prompt_index(
 
     let mut has_component_prompt = false;
     for component in &mut components {
-        if let Some(summary) = prompt_index.by_component_id.get(component.component_id.trim()) {
+        if let Some(summary) = prompt_index
+            .by_component_id
+            .get(component.component_id.trim())
+        {
             component.prompt_summary = Some(summary.clone());
             has_component_prompt = true;
         }
@@ -194,7 +208,8 @@ fn apply_parser_probe_meta(
     probe.parser_flow_event_ref_count = prompt_index.parser_flow_event_ref_count;
     probe.parser_event_with_parent_count = prompt_index.parser_event_with_parent_count;
     probe.parser_event_with_path_count = prompt_index.parser_event_with_path_count;
-    probe.parser_option_component_binding_count = prompt_index.parser_option_component_binding_count;
+    probe.parser_option_component_binding_count =
+        prompt_index.parser_option_component_binding_count;
     probe.parser_flow_preview = prompt_index.parser_flow_preview.clone();
 }
 

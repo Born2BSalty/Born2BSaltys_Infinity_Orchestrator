@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::state::{Step2ComponentState, Step2ModState};
+use crate::app::state::{Step2ComponentState, Step2ModState};
 
-pub(crate) fn enforce_subcomponent_single_select(mod_state: &mut Step2ModState, changed_idx: usize) {
+pub(crate) fn enforce_subcomponent_single_select(
+    mod_state: &mut Step2ModState,
+    changed_idx: usize,
+) {
     let Some(base_key) = subcomponent_base_key(&mod_state.components[changed_idx].label) else {
         return;
     };
@@ -180,10 +183,18 @@ pub(crate) fn enforce_tp2_same_mod_exclusive_after_bulk(mod_state: &mut Step2Mod
         .enumerate()
         .filter_map(|(idx, comp)| comp.checked.then_some(idx))
         .collect();
-    checked_indices.sort_by_key(|idx| mod_state.components[*idx].selected_order.unwrap_or(usize::MAX));
+    checked_indices.sort_by_key(|idx| {
+        mod_state.components[*idx]
+            .selected_order
+            .unwrap_or(usize::MAX)
+    });
 
     for idx in checked_indices {
-        if !mod_state.components.get(idx).is_some_and(|component| component.checked) {
+        if !mod_state
+            .components
+            .get(idx)
+            .is_some_and(|component| component.checked)
+        {
             continue;
         }
         enforce_tp2_same_mod_exclusive_on_select(mod_state, idx);

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::ui::scan::ScannedComponent;
+use crate::app::scan::ScannedComponent;
 
 use super::tp2_blocks::parse_tp2_component_blocks_in_order;
 use super::tra::{load_tp2_setup_tra_map, resolve_group_token_label};
@@ -204,7 +204,7 @@ pub(super) fn normalize_component_order_label(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::reorder_components_by_tp2_order;
-    use crate::ui::scan::ScannedComponent;
+    use crate::app::scan::ScannedComponent;
     use std::fs;
     use std::path::PathBuf;
     use std::process;
@@ -246,10 +246,7 @@ mod tests {
         )
         .expect("write temp tra");
 
-        let mut components = vec![
-            component("100", "Epic Traps"),
-            component("0", "Epic Locks"),
-        ];
+        let mut components = vec![component("100", "Epic Traps"), component("0", "Epic Locks")];
 
         reorder_components_by_tp2_order(
             &mut components,
