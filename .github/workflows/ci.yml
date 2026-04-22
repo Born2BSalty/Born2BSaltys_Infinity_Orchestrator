@@ -7,7 +7,7 @@ on:
 
 jobs:
   check:
-    name: Rust check (${{ matrix.os }})
+    name: Rust build/test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -31,5 +31,33 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
 
-      - name: Cargo check
-        run: cargo check --all-targets --locked
+      - name: Cargo test
+        run: cargo test --all-targets --locked
+
+  clippy:
+    name: Rust fmt/clippy (ubuntu-latest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Install dbus
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Cargo fmt
+        run: cargo fmt -- --check
+
+      - name: Cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
