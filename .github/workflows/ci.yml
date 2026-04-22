@@ -27,5 +27,9 @@ jobs:
           workspaces: |
             . -> target
 
+      - name: Install dbus
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
       - name: Cargo check
         run: cargo check --all-targets --locked
