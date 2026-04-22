@@ -286,7 +286,7 @@ name = "Dark Horizons BG:EE"
 tp2 = "darkhorizonsbgee"
 url = "https://github.com/The-Gate-Project/DarkHorizons"
 github = "The-Gate-Project/DarkHorizons"
-pkg_windows = "wzp"'
+pkg_windows = "wzp"
 pkg_linux = "lin"
 pkg_macos = "mac"
 
