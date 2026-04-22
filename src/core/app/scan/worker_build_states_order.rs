@@ -69,7 +69,7 @@ pub(super) fn reorder_components_by_tp2_order(
         })
         .collect();
     keyed_components.sort_by_key(|(sort_key, original_index, _)| (*sort_key, *original_index));
-    for (dst, (_, _, component)) in components.iter_mut().zip(keyed_components.into_iter()) {
+    for (dst, (_, _, component)) in components.iter_mut().zip(keyed_components) {
         *dst = component;
     }
 }

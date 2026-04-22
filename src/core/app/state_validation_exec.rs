@@ -44,7 +44,10 @@ fn is_command_on_path(command: &str) -> bool {
     let Some(path_var) = env::var_os("PATH") else {
         return false;
     };
+    #[cfg(target_os = "windows")]
     let mut candidates: Vec<OsString> = vec![OsString::from(command)];
+    #[cfg(not(target_os = "windows"))]
+    let candidates: Vec<OsString> = vec![OsString::from(command)];
     #[cfg(target_os = "windows")]
     {
         let has_ext = Path::new(command).extension().is_some();

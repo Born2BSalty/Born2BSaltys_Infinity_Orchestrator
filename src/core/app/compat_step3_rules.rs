@@ -79,7 +79,6 @@ fn collect_step3_compat_markers_uncached(
     let active_items = collect_step3_active_items(items, &tp2_paths);
     let rules = load_rules().rules;
     let mut out = HashMap::<String, Step3CompatMarker>::new();
-    let mut order = 1usize;
     let mut requirement_cache = ComponentRequirementCache::new();
     let mut conflict_cache = ComponentConflictCache::new();
     let mut path_guard_cache = ComponentPathGuardCache::new();
@@ -88,7 +87,7 @@ fn collect_step3_compat_markers_uncached(
     let predicate_context =
         build_mismatch_context(step1, tab, collect_checked_components(&active_items));
 
-    for item in items.iter().filter(|item| !item.is_parent) {
+    for (order, item) in (1usize..).zip(items.iter().filter(|item| !item.is_parent)) {
         let key = marker_key(item);
         let mut marker =
             scan_path_marker_for_item(item, &tp2_paths, &path_context, &mut path_guard_cache)
@@ -104,7 +103,6 @@ fn collect_step3_compat_markers_uncached(
                     )
                 });
         let component_order = Some(order);
-        order += 1;
 
         for rule in &rules {
             let current_kind = marker.as_ref().map(|value| value.kind.as_str());

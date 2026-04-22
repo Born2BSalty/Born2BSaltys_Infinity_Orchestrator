@@ -145,10 +145,10 @@ pub(super) fn poll_step2_scan_events(
     }
     if !reached_terminal && let Some((current, total, name)) = step2_progress_queue.pop_front() {
         state.step2.scan_status = format!("{current}/{total}: {name}");
-        state.step2.scan_progress_percent = if total == 0 {
-            0
-        } else {
-            ((current * 100) / total).min(100) as u8
-        };
+        state.step2.scan_progress_percent = current
+            .checked_mul(100)
+            .and_then(|value| value.checked_div(total))
+            .map(|value| value.min(100) as u8)
+            .unwrap_or(0);
     }
 }

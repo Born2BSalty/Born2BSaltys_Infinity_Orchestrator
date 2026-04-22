@@ -51,8 +51,7 @@ pub(crate) fn collect_step3_active_items(
     tp2_paths: &HashMap<String, String>,
 ) -> Vec<CompatActiveItem> {
     let mut out = Vec::<CompatActiveItem>::new();
-    let mut order = 1usize;
-    for item in items.iter().filter(|item| !item.is_parent) {
+    for (order, item) in (1usize..).zip(items.iter().filter(|item| !item.is_parent)) {
         let tp2_path = tp2_paths
             .get(&format!(
                 "{}|{}",
@@ -68,7 +67,6 @@ pub(crate) fn collect_step3_active_items(
             component_id: item.component_id.clone(),
             order: Some(order),
         });
-        order += 1;
     }
     out
 }

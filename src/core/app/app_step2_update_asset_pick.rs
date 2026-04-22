@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use crate::app::platform_asset_target;
 
 pub(super) fn pick_release_asset_for_current_os(
@@ -196,6 +197,7 @@ fn platform_score(name: &str, preferred: &[&str], avoided: &[&str]) -> i32 {
     score
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn arch_score(name: &str, preferred: &[&str], avoided: &[&str]) -> i32 {
     let mut score = 0;
     if contains_any(name, preferred) {
