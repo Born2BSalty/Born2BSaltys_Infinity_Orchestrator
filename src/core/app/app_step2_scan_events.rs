@@ -87,10 +87,11 @@ pub(super) fn poll_step2_scan_events(
                 let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
                 state.step2.bgee_mods = bgee_mods;
                 state.step2.bg2ee_mods = bg2ee_mods;
+                let installed_refs_cleanup_error = prune_stale_installed_refs(state);
                 state.step2.selected = None;
                 state.step2.next_selection_order = 1;
                 state.step2.scan_progress_percent = 100;
-                state.step2.scan_status = match (lock_load_error, compat_error) {
+                let mut scan_status = match (lock_load_error, compat_error) {
                     (Some(lock_err), Some(compat_err)) => {
                         format!(
                             "Done (update lock load failed: {lock_err}; compat rules load failed: {compat_err})"
@@ -102,6 +103,10 @@ pub(super) fn poll_step2_scan_events(
                     }
                     (None, None) => "Done".to_string(),
                 };
+                if let Some(err) = installed_refs_cleanup_error {
+                    scan_status.push_str(&format!(" (installed refs cleanup failed: {err})"));
+                }
+                state.step2.scan_status = scan_status;
                 state.step2.last_scan_report = Some(*report);
                 state.step2.is_scanning = false;
                 *step2_scan_rx = None;
@@ -151,4 +156,17 @@ pub(super) fn poll_step2_scan_events(
             .map(|value| value.min(100) as u8)
             .unwrap_or(0);
     }
+}
+
+fn prune_stale_installed_refs(state: &WizardState) -> Option<String> {
+    let present_tp2s = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .map(|mod_state| mod_state.tp_file.as_str());
+
+    crate::app::app_step2_update_source_refs::prune_installed_source_refs(present_tp2s)
+        .err()
+        .map(|err| err.to_string())
 }

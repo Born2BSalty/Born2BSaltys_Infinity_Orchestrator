@@ -5,12 +5,13 @@ use std::collections::{HashMap, HashSet};
 
 use super::log_apply_keys::{
     find_mods_by_tp2_filename, find_unique_mod_by_tp2_stem, log_lookup_keys,
-    mod_lookup_keys_for_mod,
+    mod_lookup_keys_for_mod, tp2_lookup_keys,
 };
 use super::log_apply_match::{
     installed_component_display_name, is_allowed_tp2, normalize_component_name,
     parse_component_tp2_from_raw, tp2_compatible, try_apply_eet_end_fallback,
 };
+use crate::app::mod_downloads;
 use crate::app::state::{Step2ComponentState, Step2ModState};
 use crate::mods::log_file::LogFile;
 
@@ -32,8 +33,9 @@ pub fn apply_log_to_mods(
     }
 
     let mut mod_lookup: HashMap<String, Vec<usize>> = HashMap::new();
+    let mod_download_sources = mod_downloads::load_mod_download_sources();
     for (idx, mod_state) in mods.iter().enumerate() {
-        for key in mod_lookup_keys_for_mod(mod_state) {
+        for key in mod_lookup_keys_for_mod_with_aliases(mod_state, &mod_download_sources) {
             mod_lookup.entry(key).or_default().push(idx);
         }
     }
@@ -139,6 +141,23 @@ pub fn apply_log_to_mods(
     }
 
     matched
+}
+
+fn mod_lookup_keys_for_mod_with_aliases(
+    mod_state: &Step2ModState,
+    sources: &mod_downloads::ModDownloadsLoad,
+) -> Vec<String> {
+    let mut keys = mod_lookup_keys_for_mod(mod_state);
+    for source in sources.find_sources(&mod_state.tp_file) {
+        keys.extend(tp2_lookup_keys(&source.tp2));
+        for alias in source.aliases {
+            keys.extend(tp2_lookup_keys(&alias));
+        }
+    }
+    let mut seen = HashSet::new();
+    keys.into_iter()
+        .filter(|key| !key.is_empty() && seen.insert(key.clone()))
+        .collect()
 }
 
 fn check_component(component: &mut Step2ComponentState, next_order: &mut usize) {

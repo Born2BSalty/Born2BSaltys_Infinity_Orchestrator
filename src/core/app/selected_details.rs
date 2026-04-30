@@ -42,6 +42,7 @@ pub(crate) struct SelectedDetailsData {
     pub(crate) tp_file: Option<String>,
     pub(crate) tp2_folder: Option<String>,
     pub(crate) tp2_path: Option<String>,
+    pub(crate) ini_path: Option<String>,
     pub(crate) readme_path: Option<String>,
     pub(crate) web_url: Option<String>,
     pub(crate) package_source_status: Option<String>,
@@ -120,6 +121,7 @@ fn build_mod_details(mod_state: &crate::app::state::Step2ModState) -> SelectedDe
         tp_file: Some(tp2_file_name(&mod_state.tp_file)),
         tp2_folder: details_parent_folder(&mod_state.tp2_path),
         tp2_path: (!mod_state.tp2_path.is_empty()).then_some(mod_state.tp2_path.clone()),
+        ini_path: mod_state.ini_path.clone(),
         readme_path: mod_state.readme_path.clone(),
         web_url: mod_state.web_url.clone(),
         package_latest_version: mod_state.latest_checked_version.clone(),
@@ -180,6 +182,7 @@ fn build_component_details(
         tp_file: Some(tp2_file_name(&component_tp2)),
         tp2_folder: details_parent_folder(&mod_state.tp2_path),
         tp2_path: (!mod_state.tp2_path.is_empty()).then_some(mod_state.tp2_path.clone()),
+        ini_path: mod_state.ini_path.clone(),
         readme_path: mod_state.readme_path.clone(),
         web_url: mod_state.web_url.clone(),
         ..SelectedDetailsData::default()

@@ -34,6 +34,8 @@ pub(crate) fn handle_step2_action(
         ),
         Step2Action::CancelScan => super::app_step2_scan::cancel_step2_scan(state, step2_cancel),
         Step2Action::OpenUpdatePopup => {
+            state.step2.update_selected_target_game_tab = None;
+            state.step2.update_selected_target_tp_file = None;
             state.step2.update_selected_popup_open = true;
         }
         Step2Action::CheckExactLogModList => {
@@ -60,10 +62,14 @@ pub(crate) fn handle_step2_action(
                         game_tab: request.game_tab.clone(),
                         tp_file: request.tp_file.clone(),
                         label: request.label.clone(),
+                        source_id: request.source_id.clone(),
                         repo: request.repo.clone(),
                         exact_github: Vec::new(),
                         source_url: request.source_url.clone(),
                         channel: request.channel.clone(),
+                        tag: request.tag.clone(),
+                        branch: request.branch.clone(),
+                        asset: request.asset.clone(),
                         pkg: request.pkg.clone(),
                         requested_version: None,
                     },
@@ -96,7 +102,7 @@ pub(crate) fn handle_step2_action(
             super::app_step2_update_preview::preview_update_selected(
                 state,
                 step2_update_check_rx,
-                &loaded.sources,
+                &loaded,
             );
         }
         Step2Action::PreviewUpdateSelectedMod => {
@@ -104,7 +110,7 @@ pub(crate) fn handle_step2_action(
             super::app_step2_update_preview::preview_update_selected_mod(
                 state,
                 step2_update_check_rx,
-                &loaded.sources,
+                &loaded,
             );
         }
         Step2Action::SetSelectedModUpdateLocked(locked) => {
@@ -113,6 +119,7 @@ pub(crate) fn handle_step2_action(
         Step2Action::OpenSelectedReadme(path)
         | Step2Action::OpenSelectedTp2Folder(path)
         | Step2Action::OpenSelectedTp2(path)
+        | Step2Action::OpenSelectedIni(path)
         | Step2Action::OpenSelectedWeb(path) => {
             if let Err(err) = open_in_shell(&path) {
                 state.step2.scan_status = format!("Open failed: {err}");
@@ -140,6 +147,56 @@ pub(crate) fn handle_step2_action(
                 state.step2.scan_status =
                     format!("Reloaded mod download sources: {}", loaded.sources.len());
             }
+        }
+        Step2Action::OpenModDownloadSourceEditor {
+            tp2,
+            label,
+            source_id,
+        } => {
+            match mod_downloads::load_user_mod_download_source_block(&tp2, &label, &source_id) {
+                Ok(text) => {
+                    state.step2.mod_download_source_editor_open = true;
+                    state.step2.mod_download_source_editor_tp2 = tp2;
+                    state.step2.mod_download_source_editor_label = label;
+                    state.step2.mod_download_source_editor_source_id = source_id;
+                    state.step2.mod_download_source_editor_text = text;
+                    state.step2.mod_download_source_editor_error = None;
+                }
+                Err(err) => {
+                    state.step2.scan_status = format!("Open source editor failed: {err}");
+                }
+            }
+        }
+        Step2Action::SaveModDownloadSourceEditor => {
+            let tp2 = state.step2.mod_download_source_editor_tp2.clone();
+            let label = state.step2.mod_download_source_editor_label.clone();
+            let source_id = state.step2.mod_download_source_editor_source_id.clone();
+            let text = state.step2.mod_download_source_editor_text.clone();
+            match mod_downloads::save_user_mod_download_source_block(
+                &tp2,
+                &label,
+                &source_id,
+                &text,
+            ) {
+                Ok(()) => {
+                    state.step2.mod_download_source_editor_open = false;
+                    state.step2.mod_download_source_editor_error = None;
+                    invalidate_update_selected_results(state);
+                    let loaded = mod_downloads::load_mod_download_sources();
+                    if let Some(err) = loaded.error.as_ref() {
+                        state.step2.scan_status = format!("Source saved but reload failed: {err}");
+                    } else {
+                        state.step2.scan_status = format!("Saved source entry for {tp2}");
+                    }
+                }
+                Err(err) => {
+                    state.step2.mod_download_source_editor_error = Some(err.clone());
+                    state.step2.scan_status = format!("Save source entry failed: {err}");
+                }
+            }
+        }
+        Step2Action::SetModDownloadSource { tp2, source_id } => {
+            set_mod_download_source(state, &tp2, &source_id)
         }
         Step2Action::OpenCompatForComponent {
             game_tab,
@@ -195,6 +252,86 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
     sync_cached_popup_update_lock(state, &game_tab, &tp_file, update_entry.as_deref(), locked);
     let verb = if locked { "Locked" } else { "Unlocked" };
     state.step2.scan_status = format!("{verb} updates for {mod_name}");
+}
+
+fn set_mod_download_source(state: &mut WizardState, tp2: &str, source_id: &str) {
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(tp2);
+    let source_id = source_id.trim();
+    if tp2_key.is_empty() || source_id.is_empty() {
+        return;
+    }
+    if state
+        .step2
+        .selected_source_ids
+        .get(&tp2_key)
+        .map(String::as_str)
+        == Some(source_id)
+    {
+        return;
+    }
+    state
+        .step2
+        .selected_source_ids
+        .insert(tp2_key.clone(), source_id.to_string());
+    invalidate_update_selected_results(state);
+    let label = selected_source_label(state, &tp2_key).unwrap_or(tp2_key);
+    state.step2.scan_status = format!("Source changed for {label}. Run Check Updates again.");
+}
+
+fn invalidate_update_selected_results(state: &mut WizardState) {
+    state.step2.update_selected_has_run = false;
+    state.step2.update_selected_last_selection_signature = None;
+    state.step2.update_selected_last_was_full_selection = false;
+    state.step2.update_selected_check_done_count = 0;
+    state.step2.update_selected_check_total_count = 0;
+    state.step2.update_selected_update_assets.clear();
+    state.step2.update_selected_update_sources.clear();
+    state.step2.update_selected_locked_update_assets.clear();
+    state.step2.update_selected_locked_update_sources.clear();
+    state.step2.update_selected_missing_sources.clear();
+    state.step2.update_selected_downloaded_sources.clear();
+    state.step2.update_selected_download_failed_sources.clear();
+    state.step2.update_selected_extracted_sources.clear();
+    state.step2.update_selected_extract_failed_sources.clear();
+    state.step2.update_selected_known_sources.clear();
+    state.step2.update_selected_manual_sources.clear();
+    state.step2.update_selected_unknown_sources.clear();
+    state
+        .step2
+        .update_selected_exact_version_failed_sources
+        .clear();
+    state.step2.update_selected_failed_sources.clear();
+    state.step2.update_selected_check_requests.clear();
+    state
+        .step2
+        .update_selected_exact_version_retry_requests
+        .clear();
+    state.step2.update_selected_confirm_latest_fallback_open = false;
+    state.step2.update_selected_merge_latest_fallback = false;
+    state.step2.exact_log_mod_list_checked = false;
+}
+
+fn selected_source_label(state: &WizardState, tp2_key: &str) -> Option<String> {
+    for mod_state in state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+    {
+        if mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == tp2_key {
+            return Some(if mod_state.name.trim().is_empty() {
+                mod_state.tp_file.clone()
+            } else {
+                mod_state.name.clone()
+            });
+        }
+    }
+    state
+        .step2
+        .log_pending_downloads
+        .iter()
+        .find(|pending| mod_downloads::normalize_mod_download_tp2(&pending.tp_file) == tp2_key)
+        .map(|pending| pending.label.clone())
 }
 
 fn sync_cached_popup_update_lock(

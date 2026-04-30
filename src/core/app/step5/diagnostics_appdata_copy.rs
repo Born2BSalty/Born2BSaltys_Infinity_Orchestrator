@@ -10,7 +10,7 @@ use super::AppDataCopySummary;
 
 pub(super) fn copy_appdata_configs(run_dir: &Path) -> AppDataCopySummary {
     let mut summary = AppDataCopySummary::default();
-    let appdata_out_dir = run_dir.join("appdata");
+    let appdata_out_dir = run_dir.join("appdata_snapshot");
     let _ = fs::create_dir_all(&appdata_out_dir);
     let Some(bio_dir) = app_config_dir() else {
         summary

@@ -75,6 +75,7 @@ fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
         .resizable(true)
         .default_size(egui::vec2(760.0, 520.0))
         .show(ui.ctx(), |ui| {
+            ui.set_min_size(ui.available_size());
             ui.label(format!(
                 "{} #{}",
                 state.step3.prompt_edit_mod_name, state.step3.prompt_edit_component_id

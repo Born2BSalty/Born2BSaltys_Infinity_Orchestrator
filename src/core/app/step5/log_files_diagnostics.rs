@@ -49,9 +49,9 @@ pub fn copy_weidu_logs_for_diagnostics(step1: &Step1State, run_id: &str) {
         return;
     }
     let run_dir = run_dir_from_id(run_id);
-    let source_logs_dir = run_dir.join("source_logs");
+    let source_logs_dir = run_dir.join("logs").join("source_logs");
     let _ = copy_source_weidu_logs(step1, &source_logs_dir, "original");
-    let saved_logs_dir = run_dir.join("saved_logs");
+    let saved_logs_dir = run_dir.join("logs").join("saved_logs");
     let _ = copy_saved_weidu_logs(step1, &saved_logs_dir, "original");
 }
 

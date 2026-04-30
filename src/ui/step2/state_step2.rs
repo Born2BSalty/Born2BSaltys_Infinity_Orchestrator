@@ -29,6 +29,7 @@ pub struct Step2Details {
     pub tp_file: Option<String>,
     pub tp2_folder: Option<String>,
     pub tp2_path: Option<String>,
+    pub ini_path: Option<String>,
     pub readme_path: Option<String>,
     pub web_url: Option<String>,
     pub package_source_status: Option<String>,

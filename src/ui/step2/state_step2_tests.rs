@@ -42,6 +42,7 @@ fn eet_core_mod(checked: bool) -> Step2ModState {
         tp_file: "EET.TP2".to_string(),
         tp2_path: String::new(),
         readme_path: None,
+        ini_path: None,
         web_url: None,
         package_marker: None,
         latest_checked_version: None,

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-#[path = "state_step1.rs"]
+#[path = "state/state_step1.rs"]
 mod state_step1;
-#[path = "state_step2.rs"]
+#[path = "state/state_step2.rs"]
 mod state_step2;
-#[path = "state_step3.rs"]
+#[path = "state/state_step3.rs"]
 mod state_step3;
-#[path = "state_step5.rs"]
+#[path = "state/state_step5.rs"]
 mod state_step5;
-#[path = "state_wizard.rs"]
+#[path = "state/state_wizard.rs"]
 mod state_wizard;
 
 pub use state_step1::Step1State;

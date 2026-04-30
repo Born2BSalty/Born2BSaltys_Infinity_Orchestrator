@@ -66,7 +66,7 @@ pub(crate) fn advance_pending_saved_log_flow(
             super::app_step2_update_preview::preview_update_selected(
                 state,
                 step2_update_check_rx,
-                &loaded.sources,
+                &loaded,
             );
         }
     }

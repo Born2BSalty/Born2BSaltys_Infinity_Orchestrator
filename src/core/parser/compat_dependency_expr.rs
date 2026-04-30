@@ -95,6 +95,11 @@ pub(crate) fn parse_mod_is_installed_dependency_targets(
     input: &str,
 ) -> Option<Vec<ParsedDependencyTarget>> {
     let tokens = tokenize(input);
+    parse_mod_is_installed_or_chain(&tokens)
+        .or_else(|| parse_mod_is_installed_with_int_marker(&tokens))
+}
+
+fn parse_mod_is_installed_or_chain(tokens: &[Token]) -> Option<Vec<ParsedDependencyTarget>> {
     let mut index = 0usize;
     let mut out = Vec::<ParsedDependencyTarget>::new();
 
@@ -156,6 +161,76 @@ pub(crate) fn parse_mod_is_installed_dependency_targets(
     }
 
     Some(out)
+}
+
+fn parse_mod_is_installed_with_int_marker(tokens: &[Token]) -> Option<Vec<ParsedDependencyTarget>> {
+    let has_int_marker = tokens
+        .iter()
+        .enumerate()
+        .any(|(index, token)| {
+            matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("IS_AN_INT"))
+                && tokens[..index].iter().any(|token| matches!(token, Token::Or))
+        });
+    if !has_int_marker {
+        return None;
+    }
+
+    let mut out = Vec::<ParsedDependencyTarget>::new();
+    for (index, token) in tokens.iter().enumerate() {
+        let Token::Ident(name) = token else {
+            continue;
+        };
+        if !name.eq_ignore_ascii_case("MOD_IS_INSTALLED")
+            || is_negated_call_context(tokens, index)
+        {
+            continue;
+        }
+        let Some(target) = parse_mod_is_installed_call_at(tokens, index) else {
+            continue;
+        };
+        if !out.iter().any(|existing| {
+            existing.target_mod == target.target_mod
+                && existing.target_component_id == target.target_component_id
+        }) {
+            out.push(target);
+        }
+    }
+
+    if out.is_empty() { None } else { Some(out) }
+}
+
+fn parse_mod_is_installed_call_at(
+    tokens: &[Token],
+    index: usize,
+) -> Option<ParsedDependencyTarget> {
+    let mut cursor = index + 1;
+    let opened = matches!(tokens.get(cursor), Some(Token::LParen));
+    if opened {
+        cursor += 1;
+    }
+    let target_mod = normalize_mod_key(&token_value(tokens.get(cursor)?)?);
+    cursor += 1;
+    let target_component_id = normalize_component_id(&token_value(tokens.get(cursor)?)?)?;
+    if target_mod.is_empty() {
+        return None;
+    }
+    Some(ParsedDependencyTarget {
+        target_mod,
+        target_component_id,
+    })
+}
+
+fn is_negated_call_context(tokens: &[Token], index: usize) -> bool {
+    let mut cursor = index;
+    while cursor > 0 {
+        cursor -= 1;
+        match tokens.get(cursor) {
+            Some(Token::LParen) => continue,
+            Some(Token::Bang | Token::Not) => return true,
+            _ => return false,
+        }
+    }
+    false
 }
 
 pub(crate) fn parse_negated_mod_is_installed_targets(

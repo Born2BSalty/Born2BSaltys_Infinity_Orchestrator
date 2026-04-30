@@ -31,12 +31,13 @@ mod config {
             let diagnostics_dir = run_id
                 .map(run_dir_from_id)
                 .unwrap_or_else(|| PathBuf::from("diagnostics"));
+            let logs_dir = diagnostics_dir.join("logs");
             self.raw_log_path = if step1.log_raw_output_dev {
                 let ts = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
-                Some(diagnostics_dir.join(format!("raw_output_{ts}.log")))
+                Some(logs_dir.join(format!("raw_output_{ts}.log")))
             } else {
                 None
             };
@@ -45,7 +46,7 @@ mod config {
                     .duration_since(UNIX_EPOCH)
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
-                Some(diagnostics_dir.join(format!("bio_full_debug_{ts}.log")))
+                Some(logs_dir.join(format!("bio_full_debug_{ts}.log")))
             } else {
                 None
             };
