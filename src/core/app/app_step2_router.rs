@@ -152,31 +152,26 @@ pub(crate) fn handle_step2_action(
             tp2,
             label,
             source_id,
-        } => {
-            match mod_downloads::load_user_mod_download_source_block(&tp2, &label, &source_id) {
-                Ok(text) => {
-                    state.step2.mod_download_source_editor_open = true;
-                    state.step2.mod_download_source_editor_tp2 = tp2;
-                    state.step2.mod_download_source_editor_label = label;
-                    state.step2.mod_download_source_editor_source_id = source_id;
-                    state.step2.mod_download_source_editor_text = text;
-                    state.step2.mod_download_source_editor_error = None;
-                }
-                Err(err) => {
-                    state.step2.scan_status = format!("Open source editor failed: {err}");
-                }
+        } => match mod_downloads::load_user_mod_download_source_block(&tp2, &label, &source_id) {
+            Ok(text) => {
+                state.step2.mod_download_source_editor_open = true;
+                state.step2.mod_download_source_editor_tp2 = tp2;
+                state.step2.mod_download_source_editor_label = label;
+                state.step2.mod_download_source_editor_source_id = source_id;
+                state.step2.mod_download_source_editor_text = text;
+                state.step2.mod_download_source_editor_error = None;
             }
-        }
+            Err(err) => {
+                state.step2.scan_status = format!("Open source editor failed: {err}");
+            }
+        },
         Step2Action::SaveModDownloadSourceEditor => {
             let tp2 = state.step2.mod_download_source_editor_tp2.clone();
             let label = state.step2.mod_download_source_editor_label.clone();
             let source_id = state.step2.mod_download_source_editor_source_id.clone();
             let text = state.step2.mod_download_source_editor_text.clone();
             match mod_downloads::save_user_mod_download_source_block(
-                &tp2,
-                &label,
-                &source_id,
-                &text,
+                &tp2, &label, &source_id, &text,
             ) {
                 Ok(()) => {
                     state.step2.mod_download_source_editor_open = false;

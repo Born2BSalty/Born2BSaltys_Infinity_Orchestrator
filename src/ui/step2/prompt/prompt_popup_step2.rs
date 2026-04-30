@@ -132,34 +132,39 @@ fn render_prompt_toolbar_popup(ui: &mut egui::Ui, state: &mut WizardState) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                for entry in &entries {
-                    let header = format!("{} ({})", entry.mod_name, entry.component_ids.len());
-                    egui::CollapsingHeader::new(header)
-                        .default_open(false)
-                        .show(ui, |ui| {
-                            ui.horizontal_wrapped(|ui| {
-                                for component_id in &entry.component_ids {
-                                    let button_text =
-                                        crate::ui::shared::typography_global::monospace(
-                                            component_id.to_string(),
-                                        )
-                                        .color(crate::ui::shared::theme_global::accent_numbers());
-                                    if ui
-                                        .add(
-                                            egui::Button::new(button_text)
-                                                .min_size(egui::vec2(42.0, 22.0))
-                                                .fill(ui.visuals().widgets.inactive.bg_fill)
-                                                .stroke(ui.visuals().widgets.inactive.bg_stroke),
-                                        )
-                                        .clicked()
-                                    {
-                                        jump_target = Some((entry.tp_file.clone(), *component_id));
+                    for entry in &entries {
+                        let header = format!("{} ({})", entry.mod_name, entry.component_ids.len());
+                        egui::CollapsingHeader::new(header)
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    for component_id in &entry.component_ids {
+                                        let button_text =
+                                            crate::ui::shared::typography_global::monospace(
+                                                component_id.to_string(),
+                                            )
+                                            .color(
+                                                crate::ui::shared::theme_global::accent_numbers(),
+                                            );
+                                        if ui
+                                            .add(
+                                                egui::Button::new(button_text)
+                                                    .min_size(egui::vec2(42.0, 22.0))
+                                                    .fill(ui.visuals().widgets.inactive.bg_fill)
+                                                    .stroke(
+                                                        ui.visuals().widgets.inactive.bg_stroke,
+                                                    ),
+                                            )
+                                            .clicked()
+                                        {
+                                            jump_target =
+                                                Some((entry.tp_file.clone(), *component_id));
+                                        }
                                     }
-                                }
+                                });
                             });
-                        });
-                }
-            });
+                    }
+                });
         });
     state.step2.prompt_popup_open = open;
     if let Some((mod_ref, component_id)) = jump_target {

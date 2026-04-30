@@ -164,13 +164,12 @@ fn parse_mod_is_installed_or_chain(tokens: &[Token]) -> Option<Vec<ParsedDepende
 }
 
 fn parse_mod_is_installed_with_int_marker(tokens: &[Token]) -> Option<Vec<ParsedDependencyTarget>> {
-    let has_int_marker = tokens
-        .iter()
-        .enumerate()
-        .any(|(index, token)| {
-            matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("IS_AN_INT"))
-                && tokens[..index].iter().any(|token| matches!(token, Token::Or))
-        });
+    let has_int_marker = tokens.iter().enumerate().any(|(index, token)| {
+        matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("IS_AN_INT"))
+            && tokens[..index]
+                .iter()
+                .any(|token| matches!(token, Token::Or))
+    });
     if !has_int_marker {
         return None;
     }
@@ -180,8 +179,7 @@ fn parse_mod_is_installed_with_int_marker(tokens: &[Token]) -> Option<Vec<Parsed
         let Token::Ident(name) = token else {
             continue;
         };
-        if !name.eq_ignore_ascii_case("MOD_IS_INSTALLED")
-            || is_negated_call_context(tokens, index)
+        if !name.eq_ignore_ascii_case("MOD_IS_INSTALLED") || is_negated_call_context(tokens, index)
         {
             continue;
         }

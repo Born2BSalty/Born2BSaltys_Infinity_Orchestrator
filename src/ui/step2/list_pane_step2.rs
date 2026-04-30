@@ -37,10 +37,9 @@ pub(crate) fn render_list_pane(
                     scroll.bar_outer_margin = 2.0;
                     ui.style_mut().spacing.scroll = scroll;
                     ui.add_enabled_ui(
-                        !state.step1.installs_exactly_from_weidu_logs()
-                            && !state.step2.is_scanning,
+                        !state.step1.installs_exactly_from_weidu_logs() && !state.step2.is_scanning,
                         |ui| {
-                        egui::ScrollArea::both()
+                            egui::ScrollArea::both()
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
                                 let filter = state.step2.search_query.trim().to_lowercase();

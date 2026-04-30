@@ -50,7 +50,9 @@ pub(super) fn build_extract_jobs(
         }
         let source = resolve_selected_source(state, &source_load, &asset.tp_file);
         let tp2_rename = source.as_ref().and_then(|source| source.tp2_rename.clone());
-        let subdir_require = source.as_ref().and_then(|source| source.subdir_require.clone());
+        let subdir_require = source
+            .as_ref()
+            .and_then(|source| source.subdir_require.clone());
         jobs.push(Step2UpdateExtractJob {
             label: asset.label.clone(),
             tp_file: asset.tp_file.clone(),

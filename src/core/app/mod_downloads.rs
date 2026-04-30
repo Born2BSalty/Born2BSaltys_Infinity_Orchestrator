@@ -300,7 +300,8 @@ fn replace_or_append_source_block(
     for (start, end) in mod_block_ranges(content) {
         let block = &content[start..end];
         if block_tp2_matches(block, &target) {
-            let updated_block = replace_or_append_source_in_mod_block(block, source_id, source_block);
+            let updated_block =
+                replace_or_append_source_in_mod_block(block, source_id, source_block);
             let mut updated = String::new();
             updated.push_str(content[..start].trim_end());
             updated.push_str("\n\n");
@@ -789,7 +790,9 @@ fn clear_other_source_defaults(
     }
 }
 
-fn flatten_mod_overlay_entries(mod_overlay: ModDownloadModOverlay) -> Vec<ModDownloadSourceOverlay> {
+fn flatten_mod_overlay_entries(
+    mod_overlay: ModDownloadModOverlay,
+) -> Vec<ModDownloadSourceOverlay> {
     if mod_overlay.sources.is_empty() {
         let mut overlay = mod_overlay.source;
         if overlay.source_id.is_none() {

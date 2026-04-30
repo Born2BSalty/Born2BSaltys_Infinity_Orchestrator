@@ -254,7 +254,10 @@ fn find_tp2_rename_source(extracted_root: &Path, from: &str) -> Option<PathBuf> 
     if expected.is_empty() {
         return None;
     }
-    for entry in WalkDir::new(extracted_root).into_iter().filter_map(Result::ok) {
+    for entry in WalkDir::new(extracted_root)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
         let path = entry.path();
         if !path.is_file() {
             continue;

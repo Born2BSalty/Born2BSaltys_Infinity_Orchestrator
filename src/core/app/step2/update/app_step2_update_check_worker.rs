@@ -112,8 +112,8 @@ fn group_update_check_requests(
             grouped.insert(
                 key,
                 Step2UpdateCheckRequestGroup {
-                canonical: request.clone(),
-                targets: vec![request],
+                    canonical: request.clone(),
+                    targets: vec![request],
                 },
             );
         }
@@ -136,11 +136,36 @@ fn update_check_request_key(request: &Step2UpdateCheckRequest) -> String {
         "{}|{}|{}|{}|{}|{}|{}|{}|{}",
         request.repo.trim().to_ascii_lowercase(),
         request.source_url.trim().to_ascii_lowercase(),
-        request.channel.as_deref().unwrap_or("").trim().to_ascii_lowercase(),
-        request.tag.as_deref().unwrap_or("").trim().to_ascii_lowercase(),
-        request.branch.as_deref().unwrap_or("").trim().to_ascii_lowercase(),
-        request.asset.as_deref().unwrap_or("").trim().to_ascii_lowercase(),
-        request.pkg.as_deref().unwrap_or("").trim().to_ascii_lowercase(),
+        request
+            .channel
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase(),
+        request
+            .tag
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase(),
+        request
+            .branch
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase(),
+        request
+            .asset
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase(),
+        request
+            .pkg
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase(),
         request
             .requested_version
             .as_deref()

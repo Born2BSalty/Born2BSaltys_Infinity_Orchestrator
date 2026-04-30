@@ -386,18 +386,12 @@ fn tag_source_outcome(
         return failed_outcome(request.clone(), "GitHub tag is empty");
     }
     let Ok(tags) = fetch_github_tags(agent, &request.repo) else {
-        return failed_outcome(
-            request.clone(),
-            &format!("GitHub tag not found: {tag}"),
-        );
+        return failed_outcome(request.clone(), &format!("GitHub tag not found: {tag}"));
     };
     if let Some(found) = tags.iter().find(|found| found.name == tag) {
         return tagged_tag_source_outcome(request, found);
     }
-    failed_outcome(
-        request.clone(),
-        &format!("GitHub tag not found: {tag}"),
-    )
+    failed_outcome(request.clone(), &format!("GitHub tag not found: {tag}"))
 }
 
 fn tagged_tag_source_outcome(

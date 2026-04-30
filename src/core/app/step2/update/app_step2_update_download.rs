@@ -169,7 +169,9 @@ fn tp2_archive_name(tp_file: &str) -> String {
 
 fn archive_extension(name: &str) -> String {
     let lower = name.to_ascii_lowercase();
-    for ext in [".tar.gz", ".tar.bz2", ".tar.xz", ".zip", ".7z", ".rar", ".tgz", ".tbz2", ".txz"] {
+    for ext in [
+        ".tar.gz", ".tar.bz2", ".tar.xz", ".zip", ".7z", ".rar", ".tgz", ".tbz2", ".txz",
+    ] {
         if lower.ends_with(ext) {
             return ext.to_string();
         }
