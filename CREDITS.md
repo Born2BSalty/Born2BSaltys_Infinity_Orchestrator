@@ -9,3 +9,4 @@ Special thanks to the following people for testing, feedback, and improvement id
 - **Madzak**
 - **Albro** — Early prototype and project spark that helped kick off this tool
 - **Podcherk**
+- **olimikrib**
