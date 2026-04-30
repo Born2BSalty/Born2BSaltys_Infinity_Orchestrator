@@ -109,9 +109,23 @@ fn render_package_grid(
         .num_columns(3)
         .spacing([8.0, 4.0])
         .show(ui, |ui| {
-            render_text_row(ui, layout, "Source", source_status, false);
+            render_text_row(
+                ui,
+                layout,
+                "Installed Source",
+                details
+                    .package_installed_source_name
+                    .as_deref()
+                    .unwrap_or("Unknown"),
+                false,
+            );
             if let Some(name) = details.package_source_name.as_deref() {
-                render_text_row(ui, layout, "Name", name, false);
+                let update_source = if source_status == "Selected" {
+                    format!("{name} (selected)")
+                } else {
+                    format!("{name} (default)")
+                };
+                render_text_row(ui, layout, "Update Source", &update_source, false);
             }
             if let Some(version) = details.package_latest_version.as_deref() {
                 render_text_row(ui, layout, "Latest Version", version, false);

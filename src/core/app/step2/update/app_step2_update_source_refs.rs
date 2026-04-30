@@ -16,6 +16,8 @@ const MOD_SOURCE_REFS_FILE_NAME: &str = "mod_installed_refs.toml";
 struct ModSourceRefsFile {
     #[serde(default)]
     refs: BTreeMap<String, String>,
+    #[serde(default)]
+    sources: BTreeMap<String, String>,
 }
 
 pub(super) fn load_installed_source_ref(tp2: &str) -> Option<String> {
@@ -41,6 +43,32 @@ pub(super) fn save_installed_source_ref(tp2: &str, source_ref: &str) -> io::Resu
     fs::write(path, content)
 }
 
+pub(super) fn load_installed_source_id(tp2: &str) -> Option<String> {
+    let content = fs::read_to_string(mod_source_refs_path()).ok()?;
+    let parsed = toml::from_str::<ModSourceRefsFile>(&content).ok()?;
+    parsed
+        .sources
+        .get(&normalize_mod_download_tp2(tp2))
+        .cloned()
+}
+
+pub(super) fn save_installed_source_id(tp2: &str, source_id: &str) -> io::Result<()> {
+    let path = mod_source_refs_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut refs = match fs::read_to_string(&path) {
+        Ok(value) => toml::from_str::<ModSourceRefsFile>(&value).unwrap_or_default(),
+        Err(_) => ModSourceRefsFile::default(),
+    };
+    refs.sources.insert(
+        normalize_mod_download_tp2(tp2),
+        source_id.trim().to_string(),
+    );
+    let content = toml::to_string_pretty(&refs).map_err(io::Error::other)?;
+    fs::write(path, content)
+}
+
 pub(super) fn prune_installed_source_refs<I, S>(present_tp2s: I) -> io::Result<usize>
 where
     I: IntoIterator<Item = S>,
@@ -59,7 +87,10 @@ where
 
     let before = refs.refs.len();
     refs.refs.retain(|tp2, _| present_tp2s.contains(tp2));
-    let removed = before.saturating_sub(refs.refs.len());
+    let before_sources = refs.sources.len();
+    refs.sources.retain(|tp2, _| present_tp2s.contains(tp2));
+    let removed =
+        before.saturating_sub(refs.refs.len()) + before_sources.saturating_sub(refs.sources.len());
     if removed == 0 {
         return Ok(0);
     }

@@ -32,6 +32,7 @@ pub struct Step2Details {
     pub ini_path: Option<String>,
     pub readme_path: Option<String>,
     pub web_url: Option<String>,
+    pub package_installed_source_name: Option<String>,
     pub package_source_status: Option<String>,
     pub package_source_name: Option<String>,
     pub package_latest_version: Option<String>,

@@ -45,6 +45,7 @@ pub(crate) struct SelectedDetailsData {
     pub(crate) ini_path: Option<String>,
     pub(crate) readme_path: Option<String>,
     pub(crate) web_url: Option<String>,
+    pub(crate) package_installed_source_name: Option<String>,
     pub(crate) package_source_status: Option<String>,
     pub(crate) package_source_name: Option<String>,
     pub(crate) package_latest_version: Option<String>,
@@ -71,7 +72,7 @@ pub(crate) fn selected_details_data(state: &WizardState) -> SelectedDetailsData 
         Step2Selection::Mod { tp_file, .. } => mods
             .iter()
             .find(|mod_state| &mod_state.tp_file == tp_file)
-            .map(build_mod_details)
+            .map(|mod_state| build_mod_details(state, mod_state))
             .unwrap_or_default(),
         Step2Selection::Component {
             tp_file,
@@ -111,7 +112,10 @@ pub(crate) fn selected_source_reference(state: &WizardState) -> Option<String> {
     selected_details_data(state).compat_source
 }
 
-fn build_mod_details(mod_state: &crate::app::state::Step2ModState) -> SelectedDetailsData {
+fn build_mod_details(
+    state: &WizardState,
+    mod_state: &crate::app::state::Step2ModState,
+) -> SelectedDetailsData {
     let mut details = SelectedDetailsData {
         mod_name: Some(mod_state.name.clone()),
         component_version: details_mod_version(mod_state),
@@ -128,7 +132,14 @@ fn build_mod_details(mod_state: &crate::app::state::Step2ModState) -> SelectedDe
         package_update_locked: Some(mod_state.update_locked),
         ..SelectedDetailsData::default()
     };
-    attach_package_source(&mut details, &mod_state.tp_file);
+    let selected_source_id = state
+        .step2
+        .selected_source_ids
+        .get(&crate::app::mod_downloads::normalize_mod_download_tp2(
+            &mod_state.tp_file,
+        ))
+        .map(String::as_str);
+    attach_package_source(&mut details, &mod_state.tp_file, selected_source_id);
     details
 }
 
@@ -189,14 +200,38 @@ fn build_component_details(
     }
 }
 
-fn attach_package_source(details: &mut SelectedDetailsData, tp2: &str) {
+fn attach_package_source(
+    details: &mut SelectedDetailsData,
+    tp2: &str,
+    selected_source_id: Option<&str>,
+) {
     details.package_source_status = Some("Unknown".to_string());
     let loaded = crate::app::mod_downloads::load_mod_download_sources();
-    let Some(source) = loaded.find_source(tp2) else {
+    if let Some(installed_source_id) =
+        crate::app::app_step2_update_source_refs::load_installed_source_id(tp2)
+        && let Some(source) = loaded.resolve_source(tp2, Some(&installed_source_id))
+    {
+        details.package_installed_source_name =
+            (!source.source_label.is_empty()).then_some(source.source_label);
+    }
+    if let Some(selected_source_id) = selected_source_id
+        && let Some(source) = loaded.resolve_source(tp2, Some(selected_source_id))
+    {
+        details.package_source_status = Some("Selected".to_string());
+        attach_package_source_details(details, source);
+        return;
+    }
+    let Some(source) = loaded.default_source(tp2) else {
         return;
     };
-    details.package_source_status = Some("Known".to_string());
-    details.package_source_name = (!source.name.is_empty()).then_some(source.name);
+    attach_package_source_details(details, source);
+}
+
+fn attach_package_source_details(
+    details: &mut SelectedDetailsData,
+    source: crate::app::mod_downloads::ModDownloadSource,
+) {
+    details.package_source_name = (!source.source_label.is_empty()).then_some(source.source_label);
     details.package_source_url = Some(source.url);
     details.package_source_github = source.github;
 }

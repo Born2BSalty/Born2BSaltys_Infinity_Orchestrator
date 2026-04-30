@@ -21,6 +21,7 @@ pub(super) struct Step2UpdateExtractJob {
     pub(super) target_root: Option<PathBuf>,
     pub(super) backup_version_tag: String,
     pub(super) installed_source_ref: Option<String>,
+    pub(super) installed_source_id: Option<String>,
 }
 
 pub(super) fn build_extract_jobs(
@@ -49,6 +50,7 @@ pub(super) fn build_extract_jobs(
             continue;
         }
         let source = resolve_selected_source(state, &source_load, &asset.tp_file);
+        let installed_source_id = source.as_ref().map(|source| source.source_id.clone());
         let tp2_rename = source.as_ref().and_then(|source| source.tp2_rename.clone());
         let subdir_require = source
             .as_ref()
@@ -68,6 +70,7 @@ pub(super) fn build_extract_jobs(
             target_root: current_mod_root(state, &asset.game_tab, &asset.tp_file),
             backup_version_tag: asset.tag.clone(),
             installed_source_ref: extract_source_ref(asset),
+            installed_source_id,
         });
     }
     jobs

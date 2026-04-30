@@ -72,6 +72,13 @@ fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
             )
             .map_err(|err| err.to_string())?;
         }
+        if let Some(source_id) = &job.installed_source_id {
+            super::super::app_step2_update_source_refs::save_installed_source_id(
+                &job.tp_file,
+                source_id,
+            )
+            .map_err(|err| err.to_string())?;
+        }
         Ok(target_root)
     })();
 

@@ -33,6 +33,7 @@ pub(crate) fn map_selected_details(data: SelectedDetailsData) -> Step2Details {
         ini_path: data.ini_path,
         readme_path: data.readme_path,
         web_url: data.web_url,
+        package_installed_source_name: data.package_installed_source_name,
         package_source_status: data.package_source_status,
         package_source_name: data.package_source_name,
         package_latest_version: data.package_latest_version,

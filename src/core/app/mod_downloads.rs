@@ -131,8 +131,13 @@ struct ModDownloadsOverlayLoad {
 }
 
 impl ModDownloadsLoad {
-    pub(crate) fn find_source(&self, tp2: &str) -> Option<ModDownloadSource> {
-        self.resolve_source(tp2, None)
+    pub(crate) fn default_source(&self, tp2: &str) -> Option<ModDownloadSource> {
+        let sources = self.find_sources(tp2);
+        sources
+            .iter()
+            .find(|source| source.source_default)
+            .cloned()
+            .or_else(|| sources.into_iter().next())
     }
 
     pub(crate) fn find_sources(&self, tp2: &str) -> Vec<ModDownloadSource> {
