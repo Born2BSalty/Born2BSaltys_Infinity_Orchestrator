@@ -2600,6 +2600,14 @@ name = "BG1 Unfinished Business"
 tp2 = "bg1ub"
 
   [[mods.sources]]
+  id = "isaya"
+  label = "Isaya"
+  type = "github"
+  url = "https://github.com/Isaya/bg1ub"
+  repo = "Isaya/bg1ub"
+  branch = "master"
+
+  [[mods.sources]]
   id = "pocket-plane-group"
   label = "Pocket Plane Group"
   type = "github"
@@ -2647,6 +2655,14 @@ tp2 = "bg1ub"
   type = "github"
   url = "https://github.com/MephistoSatanDevil/bg1ub"
   repo = "MephistoSatanDevil/bg1ub"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "omegazeroxiii"
+  label = "OmegaZeroXIII"
+  type = "github"
+  url = "https://github.com/OmegaZeroXIII/bg1ub"
+  repo = "OmegaZeroXIII/bg1ub"
   branch = "master"
 
   [[mods.sources]]
@@ -4973,6 +4989,16 @@ name = "Dark Side of the Sword Coast"
 tp2 = "DSotSC"
 
   [[mods.sources]]
+  id = "spellholdstudios"
+  label = "SpellholdStudios"
+  type = "github"
+  url = "https://github.com/SpellholdStudios/DSotSC"
+  repo = "SpellholdStudios/DSotSC"
+  pkg_windows = "wzp,zip"
+  pkg_linux = "lin,zip"
+  pkg_macos = "mac,zip"
+
+  [[mods.sources]]
   id = "spellhold-studios"
   label = "Spellhold-Studios"
   type = "github"
@@ -4981,6 +5007,46 @@ tp2 = "DSotSC"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
+
+  [[mods.sources]]
+  id = "chrysocyonvirulentus"
+  label = "ChrysocyonVirulentus"
+  type = "github"
+  url = "https://github.com/ChrysocyonVirulentus/DSotSC"
+  repo = "ChrysocyonVirulentus/DSotSC"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "gitjas"
+  label = "Gitjas"
+  type = "github"
+  url = "https://github.com/Gitjas/DSotSC"
+  repo = "Gitjas/DSotSC"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "lzw104522773"
+  label = "Lzw104522773"
+  type = "github"
+  url = "https://github.com/Lzw104522773/DSotSC"
+  repo = "Lzw104522773/DSotSC"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "mercurier"
+  label = "mercurier"
+  type = "github"
+  url = "https://github.com/mercurier/DSotSC"
+  repo = "mercurier/DSotSC"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "roxanneshs"
+  label = "RoxanneSHS"
+  type = "github"
+  url = "https://github.com/RoxanneSHS/DSotSC"
+  repo = "RoxanneSHS/DSotSC"
+  branch = "master"
 
 [[mods]]
 name = "Edwin Romance"
