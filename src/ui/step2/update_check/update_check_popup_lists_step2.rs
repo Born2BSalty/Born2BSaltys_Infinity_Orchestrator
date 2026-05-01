@@ -30,7 +30,7 @@ pub(super) fn render_source_choices(
     render_section_header(ui, "Source Choices");
     let layout = source_choice_layout(ui, source_choices);
     egui::Grid::new("step2-update-source-choices")
-        .num_columns(4)
+        .num_columns(5)
         .spacing([UPDATE_CHECK_GRID_SPACING_X, 4.0])
         .striped(true)
         .show(ui, |ui| {
@@ -72,6 +72,17 @@ pub(super) fn render_source_choices(
                         label: choice.label.clone(),
                         source_id: "new-source".to_string(),
                     });
+                }
+                if ui
+                    .add_enabled(
+                        !popup_busy && choice.selected_source_url.is_some(),
+                        egui::Button::new("Open Source"),
+                    )
+                    .clicked()
+                    && action.is_none()
+                    && let Some(url) = choice.selected_source_url.as_ref()
+                {
+                    *action = Some(Step2Action::OpenSelectedWeb(url.clone()));
                 }
                 ui.end_row();
 
@@ -285,6 +296,7 @@ pub(super) struct SourceChoiceRow {
     label: String,
     selected_source_id: String,
     selected_label: String,
+    selected_source_url: Option<String>,
     options: Vec<SourceChoiceOption>,
 }
 
@@ -365,11 +377,13 @@ pub(super) fn collect_source_choices(
                     .map(String::as_str),
             )
             .unwrap_or_else(|| sources[0].clone());
+        let selected_source_url = source_open_url(&selected_source);
         rows.push(SourceChoiceRow {
             tp2_key,
             label,
             selected_source_id: selected_source.source_id.clone(),
             selected_label: selected_source.source_label.clone(),
+            selected_source_url,
             options: sources
                 .into_iter()
                 .map(|source| SourceChoiceOption {
@@ -380,6 +394,26 @@ pub(super) fn collect_source_choices(
         });
     }
     rows
+}
+
+fn source_open_url(source: &mod_downloads::ModDownloadSource) -> Option<String> {
+    let url = source.url.trim();
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return Some(url.to_string());
+    }
+    let github = source.github.as_deref()?.trim();
+    if github.starts_with("http://") || github.starts_with("https://") {
+        return Some(github.to_string());
+    }
+    let repo = github.trim_matches('/');
+    let mut parts = repo.split('/');
+    if matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty()
+    ) {
+        return Some(format!("https://github.com/{repo}"));
+    }
+    None
 }
 
 pub(super) fn single_mod_popup_target(state: &WizardState) -> Option<(String, String)> {
