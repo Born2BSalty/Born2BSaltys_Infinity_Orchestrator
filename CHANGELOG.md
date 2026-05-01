@@ -1,3 +1,89 @@
+## Beta 18
+
+- Added a full Step 2 mod download source system.
+- Added `default_mod_downloads.toml` with GitHub, direct archive, Weaselmods, Morpheus-Mart, Nexus/page, and other source entries.
+- Added `mod_downloads_user.toml` support for personal source overrides.
+- Added source dropdowns in Check Updates so each mod can use a selected source/fork.
+- Added Edit Source and Add Source tools for mod download entries.
+- Added Open Source button for opening the selected source page/repository.
+- Added source grouping, source sorting, and default/main source resolution.
+- Added update source display in Step 2 Details.
+- Added installed source provenance tracking after successful extraction.
+- Added Installed Source / Update Source fields in Step 2 Details.
+- Added GitHub update checking for releases, pre-releases, tags, branches, assets, and platform packages.
+- Added GitHub authentication support in Step 1.
+- Added GitHub HTTP/ref helper modules for update checks.
+- Added download/extract pipeline for Step 2 updates.
+- Added archive extraction support for zip, tar.gz, 7z, and rar packages.
+- Added source refs tracking for installed/extracted mods.
+- Added update preview, asset picking, update locks, and platform asset targeting.
+- Added Weaselmods update handling.
+- Added Morpheus-Mart update handling.
+- Added direct URL/archive handling for non-GitHub mods.
+- Added missing mods from applied WeiDU log handling in Check Updates.
+- Added source editor popup for missing/applied-log mods.
+- Added better Check Updates popup layout, section headers, colors, resizing behavior, and source-choice alignment.
+- Added Step 2 compatibility rule config files in core config.
+- Moved compatibility rules from UI-local files into core config.
+- Expanded compatibility parsing, matching, runtime evaluation, and diagnostics.
+- Added compatibility issue text, popup targets, popup navigation, and rule model modules.
+- Added dependency expression parser support.
+- Added prompt evaluation parser/runtime support for conditions, variables, values, and summaries.
+- Added prompt jump target support.
+- Added prompt popup navigation/text helpers.
+- Added Step 2 saved-log flow support.
+- Improved Step 2 scanning, component parsing, language scanning, hidden component handling, group handling, and render-order tracking.
+- Improved Step 2 Details panel with package/source metadata.
+- Reorganized Step 2 UI into compat, details, prompt, services, toolbar, tree, and update_check folders.
+- Added Step 2 default mod-download service.
+- Added Step 2 tree header markers and improved tree rendering/selection structure.
+- Improved Start From WeiDU Logs flow.
+- Step 1 now shows/requires WeiDU log output folders for log-based modes.
+- Added Step 1 archive backup UI support.
+- Added Step 1 GitHub auth popup.
+- Added Step 4 flow module.
+- Added Step 4 WeiDU log export support.
+- Improved Step 4 service/state/action handling.
+- Added Step 5 install flow module.
+- Added Step 5 readiness checks.
+- Added Step 5 command config handling.
+- Added Step 5 command generation modules in core install.
+- Added Step 5 resume command support.
+- Added Step 5 scripted install support.
+- Added Step 5 auto-answer support.
+- Added Step 5 runtime status tracking.
+- Reorganized Step 5 UI into content, prompts, services, and status folders.
+- Improved Step 5 prompt answers UI.
+- Improved Step 5 status bar, console, input row, and phase display structure.
+- Expanded Step 5 diagnostics exports.
+- Added mod download diagnostics export.
+- Added compatibility rule inventory, trace, matches summary, decisions, and snapshot diagnostics.
+- Added parser raw/events diagnostics.
+- Added prompt call diagnostics.
+- Added runtime assumptions diagnostics.
+- Added scan context diagnostics.
+- Added Step 2 component audit and render-order diagnostics.
+- Added Step 3 issue snapshot diagnostics.
+- Added undefined-variable detection/summary diagnostics.
+- Improved source-log and target-prep log handling.
+- Improved appdata diagnostic copy support.
+- Improved terminal processing, scripted terminal input, prompt block analysis, and output handling.
+- Added WeiDU version parsing.
+- Added WeiDU component line parsing.
+- Improved mod discovery and component metadata handling.
+- Reorganized core app state into separate state modules.
+- Reorganized core app navigation into dedicated navigation modules.
+- Reorganized core Step 2 scan/update code into dedicated folders.
+- Reorganized core Step 5 install/diagnostics/log code into smaller modules.
+- Moved UI app lifecycle/bootstrap/update-loop files into UI layer.
+- Added shared layout tokens.
+- Updated shared theme, typography, and tooltip helpers.
+- Updated release workflow to build pull request artifacts without publishing a GitHub Release.
+- Added Linux release-build system dependency installation.
+- Kept GitHub Release publishing limited to version tags.
+- Updated CI workflow.
+- Updated Cargo dependencies and lockfile.
+
 ## Beta 17
 - Fixed more WeiDU predicate checks:
   - GAME_IS on EET now works like WeiDU
