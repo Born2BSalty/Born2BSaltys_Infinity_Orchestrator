@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::ui::step5::log_files::DiagnosticLogGroup;
-use crate::ui::state::WizardState;
-use crate::ui::step5::diagnostics::{
-    AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary,
-};
+use crate::app::state::WizardState;
+
+use super::super::log_files::DiagnosticLogGroup;
+use super::{AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary};
 
 #[path = "diagnostics_text_step2.rs"]
 mod step2;
@@ -31,7 +30,12 @@ pub(super) fn build_base_text(input: BuildBaseTextInput<'_>) -> String {
     let mut text = String::new();
     text.push_str("BIO Diagnostics\n");
     text.push_str("====================\n\n");
-    append_run_metadata(&mut text, input.diagnostics_run_id, input.timestamp_unix_secs, input.diag_ctx);
+    append_run_metadata(
+        &mut text,
+        input.diagnostics_run_id,
+        input.timestamp_unix_secs,
+        input.diag_ctx,
+    );
     append_validation_summary(&mut text, input.state);
     append_step1_snapshot(&mut text, input.state);
     append_effective_installer_args(&mut text, input.installer_program, input.installer_args);
@@ -46,9 +50,18 @@ pub(super) fn build_base_text(input: BuildBaseTextInput<'_>) -> String {
         text.push('\n');
     }
     text.push_str("\n[Step5 Status]\n");
-    text.push_str(&format!("install_running={}\n", input.state.step5.install_running));
-    text.push_str(&format!("last_status={}\n", input.state.step5.last_status_text));
-    text.push_str(&format!("last_exit_code={:?}\n", input.state.step5.last_exit_code));
+    text.push_str(&format!(
+        "install_running={}\n",
+        input.state.step5.install_running
+    ));
+    text.push_str(&format!(
+        "last_status={}\n",
+        input.state.step5.last_status_text
+    ));
+    text.push_str(&format!(
+        "last_exit_code={:?}\n",
+        input.state.step5.last_exit_code
+    ));
     append_step5_runtime_summary(&mut text, input.state);
     append_weidu_log_groups(&mut text, input.log_groups);
     text.push_str("\n[Console Excerpt]\n");
@@ -112,7 +125,9 @@ fn append_runtime_snapshot(out: &mut String, state: &WizardState, console_excerp
         "raw_output_log_enabled={}\n",
         state.step1.log_raw_output_dev
     ));
-    out.push_str("note=This snapshot contains UI/runtime output captured before or during install.\n");
+    out.push_str(
+        "note=This snapshot contains UI/runtime output captured before or during install.\n",
+    );
 }
 
 fn append_step5_runtime_summary(out: &mut String, state: &WizardState) {
@@ -299,7 +314,10 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
         s.weidu_log_log_component
     ));
     out.push_str(&format!("weidu_log_folder={}\n", s.weidu_log_folder));
-    out.push_str(&format!("mod_installer_binary={}\n", s.mod_installer_binary));
+    out.push_str(&format!(
+        "mod_installer_binary={}\n",
+        s.mod_installer_binary
+    ));
     out.push_str(&format!("bgee_game_folder={}\n", s.bgee_game_folder));
     out.push_str(&format!("bgee_log_folder={}\n", s.bgee_log_folder));
     out.push_str(&format!("bgee_log_file={}\n", s.bgee_log_file));
@@ -310,10 +328,7 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
         "eet_bgee_game_folder={}\n",
         s.eet_bgee_game_folder
     ));
-    out.push_str(&format!(
-        "eet_bgee_log_folder={}\n",
-        s.eet_bgee_log_folder
-    ));
+    out.push_str(&format!("eet_bgee_log_folder={}\n", s.eet_bgee_log_folder));
     out.push_str(&format!(
         "eet_bg2ee_game_folder={}\n",
         s.eet_bg2ee_game_folder
@@ -345,8 +360,14 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
     out.push_str(&format!("weidu_log_mode={}\n", s.weidu_log_mode));
     out.push_str(&format!("strict_matching={}\n", s.strict_matching));
     out.push_str(&format!("download={}\n", s.download));
+    out.push_str(&format!("download_archive={}\n", s.download_archive));
+    out.push_str(&format!("mods_archive_folder={}\n", s.mods_archive_folder));
+    out.push_str(&format!("mods_backup_folder={}\n", s.mods_backup_folder));
     out.push_str(&format!("overwrite={}\n", s.overwrite));
-    out.push_str(&format!("check_last_installed={}\n", s.check_last_installed));
+    out.push_str(&format!(
+        "check_last_installed={}\n",
+        s.check_last_installed
+    ));
     out.push_str(&format!("tick={}\n", s.tick));
     out.push_str(&format!("lookback={}\n", s.lookback));
     out.push_str(&format!("casefold={}\n", s.casefold));
@@ -356,7 +377,11 @@ fn append_step1_snapshot(out: &mut String, state: &WizardState) {
     ));
 }
 
-fn append_effective_installer_args(out: &mut String, installer_program: &str, installer_args: &[String]) {
+fn append_effective_installer_args(
+    out: &mut String,
+    installer_program: &str,
+    installer_args: &[String],
+) {
     out.push_str("[Effective Installer Args]\n");
     out.push_str(&format!("program={installer_program}\n"));
     if installer_args.is_empty() {

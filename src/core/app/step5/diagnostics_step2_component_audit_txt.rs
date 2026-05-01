@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::ui::state::{Step2ModState, WizardState};
+use crate::app::state::{Step2ModState, WizardState};
 
 pub(super) fn write_step2_component_audit_txt(
     run_dir: &Path,
@@ -53,8 +53,7 @@ fn append_tab(text: &mut String, tab_name: &str, mods: &[Step2ModState]) {
                 let _ = writeln!(
                     text,
                     "    - #{} {}",
-                    component.component_id,
-                    component.label
+                    component.component_id, component.label
                 );
             }
         }
@@ -66,9 +65,7 @@ fn append_tab(text: &mut String, tab_name: &str, mods: &[Step2ModState]) {
                 let _ = writeln!(
                     text,
                     "    - #{} {} [{}]",
-                    component.component_id,
-                    component.label,
-                    component.reason
+                    component.component_id, component.label, component.reason
                 );
             }
         }

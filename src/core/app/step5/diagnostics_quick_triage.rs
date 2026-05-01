@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::ui::state::{Step2ModState, WizardState};
+use crate::app::state::{Step2ModState, WizardState};
 
 use super::write_checks::WriteCheckSummary;
 
@@ -73,7 +73,10 @@ fn detect_first_failure(state: &WizardState, write_check_summary: &WriteCheckSum
     if step2_status.contains("scan failed") {
         return format!("step2_scan_failed: {}", state.step2.scan_status.trim());
     }
-    if !state.step1.have_weidu_logs && state.current_step > 1 && state.step2.last_scan_report.is_none() {
+    if !state.step1.have_weidu_logs
+        && state.current_step > 1
+        && state.step2.last_scan_report.is_none()
+    {
         return "step2_scan_report_missing".to_string();
     }
     if let Some(conflict) = first_step2_conflict(state) {
@@ -82,8 +85,7 @@ fn detect_first_failure(state: &WizardState, write_check_summary: &WriteCheckSum
     if state.step3.bgee_has_conflict || state.step3.bg2ee_has_conflict {
         return format!(
             "step3_conflict_present: BGEE={} BG2EE={}",
-            state.step3.bgee_has_conflict,
-            state.step3.bg2ee_has_conflict
+            state.step3.bgee_has_conflict, state.step3.bg2ee_has_conflict
         );
     }
     if let Some(code) = state.step5.last_exit_code
@@ -103,7 +105,10 @@ fn first_write_failure(summary: &WriteCheckSummary) -> Option<String> {
 }
 
 fn first_step2_conflict(state: &WizardState) -> Option<String> {
-    for (tab, mods) in [("BGEE", &state.step2.bgee_mods), ("BG2EE", &state.step2.bg2ee_mods)] {
+    for (tab, mods) in [
+        ("BGEE", &state.step2.bgee_mods),
+        ("BG2EE", &state.step2.bg2ee_mods),
+    ] {
         if let Some(hit) = first_conflict_in_mods(mods) {
             return Some(format!("step2_compat_conflict: {tab} | {hit}"));
         }

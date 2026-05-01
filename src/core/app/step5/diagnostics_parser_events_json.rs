@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::{Step2ModState, WizardState};
+use crate::app::state::{Step2ModState, WizardState};
 
 pub(super) fn write_parser_events_json(
     run_dir: &Path,
@@ -125,7 +125,10 @@ fn append_mapped_for_tab(
                 "prompt_events": &c.prompt_events,
             }));
         }
-        if mod_summary.is_none() && mod_state.mod_prompt_events.is_empty() && component_rows.is_empty() {
+        if mod_summary.is_none()
+            && mod_state.mod_prompt_events.is_empty()
+            && component_rows.is_empty()
+        {
             continue;
         }
         let key = normalize_path(&mod_state.tp2_path);

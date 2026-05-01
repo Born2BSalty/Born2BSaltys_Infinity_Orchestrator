@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::{Step2ModState, Step2ScanReport, WizardState};
+use crate::app::state::{Step2ModState, Step2ScanReport, WizardState};
 
 pub(super) fn write_prompt_calls_json(
     run_dir: &Path,
@@ -26,7 +26,12 @@ pub(super) fn write_prompt_calls_json(
 
     let mut groups = Vec::<serde_json::Value>::new();
     append_groups_for_tab("BGEE", &state.step2.bgee_mods, &report_by_tp2, &mut groups);
-    append_groups_for_tab("BG2EE", &state.step2.bg2ee_mods, &report_by_tp2, &mut groups);
+    append_groups_for_tab(
+        "BG2EE",
+        &state.step2.bg2ee_mods,
+        &report_by_tp2,
+        &mut groups,
+    );
 
     let payload = json!({
         "schema_version": 1,
@@ -94,7 +99,10 @@ fn append_groups_for_tab(
             }));
         }
 
-        if mod_summary.is_none() && mod_state.mod_prompt_events.is_empty() && component_calls.is_empty() {
+        if mod_summary.is_none()
+            && mod_state.mod_prompt_events.is_empty()
+            && component_calls.is_empty()
+        {
             continue;
         }
 

@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use crate::mods::component::Component;
 
@@ -35,7 +35,11 @@ pub(super) fn list_components(
 
     let text = String::from_utf8_lossy(&output.stdout);
     let mut out = Vec::new();
-    for line in text.lines().map(str::trim).filter(|line| line.starts_with('~')) {
+    for line in text
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with('~'))
+    {
         out.push(Component::parse_weidu_line(line)?);
     }
     Ok(out)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Component {
@@ -42,11 +42,14 @@ impl Component {
             .unwrap_or_default()
             .replace('#', "");
 
-        let mut details = tail.next().unwrap_or_default().split(':');
-        let mut names = details.next().unwrap_or_default().split("->");
+        let details = tail.next().unwrap_or_default().trim();
+        let (names_text, version) = details
+            .rsplit_once(':')
+            .map(|(names, version)| (names.trim_end(), version.trim().to_string()))
+            .unwrap_or((details, String::new()));
+        let mut names = names_text.split("->");
         let component_name = names.next().unwrap_or_default().trim().to_string();
         let sub_component = names.next().unwrap_or_default().trim().to_string();
-        let version = details.next().unwrap_or_default().trim().to_string();
 
         Ok(Self {
             tp_file: tp_file.to_string(),
@@ -134,6 +137,29 @@ mod tests {
         };
         assert!(a.key_eq(&b));
         assert!(!a.strict_eq(&b));
+    }
+
+    #[test]
+    fn parse_component_name_with_colon_before_version() {
+        let line = r"~BG1AERIE\SETUP-BG1AERIE.TP2~ #0 #5000 // Aerie for BG:EE: 2.5";
+        let c = Component::parse_weidu_line(line).expect("parse should succeed");
+        assert_eq!(c.component_name, "Aerie for BG:EE");
+        assert_eq!(c.version, "2.5");
+    }
+
+    #[test]
+    fn parse_subcomponent_with_colons_before_version() {
+        let line = r"~SOA\SETUP-SOA.TP2~ #0 #0 // The Stone of Askavar for TotSC/Tutu/BGT/BGEE -> Default version: areas connected by travel triggers: 2.8";
+        let c = Component::parse_weidu_line(line).expect("parse should succeed");
+        assert_eq!(
+            c.component_name,
+            "The Stone of Askavar for TotSC/Tutu/BGT/BGEE"
+        );
+        assert_eq!(
+            c.sub_component,
+            "Default version: areas connected by travel triggers"
+        );
+        assert_eq!(c.version, "2.8");
     }
 
     #[test]

@@ -18,14 +18,13 @@ mod install;
 mod logging;
 #[path = "core/mods/mod.rs"]
 mod mods;
-#[path = "core/platform_defaults.rs"]
-mod platform_defaults;
 #[path = "core/parser/mod.rs"]
 mod parser;
+#[path = "core/platform_defaults.rs"]
+mod platform_defaults;
 mod settings;
 mod ui;
 
-use app::dispatch::run;
 use cli::args::{Cli, Command};
 use config::options;
 use logging::setup;
@@ -37,7 +36,10 @@ fn main() -> Result<()> {
     }
     setup::init(&cli.log_level)?;
     if let Some(command) = options::from_cli(&cli) {
-        run(&command)?;
+        match &command {
+            options::AppCommandConfig::Gui { dev_mode } => ui::run(*dev_mode)?,
+            _ => app::dispatch::run(&command)?,
+        }
     }
     Ok(())
 }

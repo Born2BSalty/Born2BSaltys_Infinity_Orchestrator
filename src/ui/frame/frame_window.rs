@@ -5,7 +5,10 @@ use eframe::{NativeOptions, egui};
 
 use crate::ui::layout::{WINDOW_HEIGHT, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_WIDTH};
 
-pub const APP_TITLE: &str = "Born2BSalty's Infinity Orchestrator (BIO)";
+pub const APP_TITLE: &str = concat!(
+    "Born2BSalty's Infinity Orchestrator (BIO) v",
+    env!("CARGO_PKG_VERSION")
+);
 
 pub fn native_options() -> NativeOptions {
     NativeOptions {

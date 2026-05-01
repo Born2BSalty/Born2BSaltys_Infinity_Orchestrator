@@ -5,10 +5,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use crate::app::state::Step1State;
+use crate::app::step5::command_config::build_install_command_config;
+use crate::install::step5_command_log_paths::{resolve_bg2_log_file, resolve_bgee_log_file};
 use crate::platform_defaults::compose_component_key;
-use crate::ui::state::Step1State;
-use crate::ui::step5::prompt_memory;
-use crate::ui::step5::service_step5_command_step5::{resolve_bg2_log_file, resolve_bgee_log_file};
+
+use super::prompt_memory;
 
 pub fn load_from_step1(step1: &Step1State) -> HashMap<String, Vec<String>> {
     let mut out: HashMap<String, Vec<String>> = HashMap::new();
@@ -30,15 +32,16 @@ fn merge_from_prompt_memory(dst: &mut HashMap<String, Vec<String>>) {
 }
 
 fn source_log_paths(step1: &Step1State) -> Vec<String> {
-    if step1.game_install == "EET" {
+    let install_config = build_install_command_config(step1);
+    if install_config.game_install == "EET" {
         vec![
-            resolve_bgee_log_file(step1),
-            resolve_bg2_log_file(step1),
+            resolve_bgee_log_file(&install_config),
+            resolve_bg2_log_file(&install_config),
         ]
-    } else if step1.game_install == "BG2EE" {
-        vec![resolve_bg2_log_file(step1)]
+    } else if install_config.game_install == "BG2EE" {
+        vec![resolve_bg2_log_file(&install_config)]
     } else {
-        vec![resolve_bgee_log_file(step1)]
+        vec![resolve_bgee_log_file(&install_config)]
     }
 }
 
@@ -89,4 +92,3 @@ fn parse_line(line: &str) -> Option<(String, Vec<String>)> {
 fn parse_inputs(spec: &str) -> Vec<String> {
     spec.split(',').map(|p| p.trim().to_string()).collect()
 }
-

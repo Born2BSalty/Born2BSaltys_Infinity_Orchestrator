@@ -1,0 +1,93 @@
+# BIO mod download user file
+#
+# This file is for your own download overrides.
+# You can use it to add a new mod, add another source/fork, or replace a broken source.
+# Only edit values inside quotes unless you know what the field does.
+
+[[mods]]
+name = "Example Mod"
+tp2 = "examplemod"
+
+  [[mods.sources]]
+  id = "main"
+  label = "Main Download"
+  type = "github"
+  url = "https://github.com/ExampleUser/ExampleMod"
+  repo = "ExampleUser/ExampleMod"
+  default = true
+  channel = "releases"
+  pkg_windows = "wzp,zip"
+  pkg_linux = "lin,zip"
+  pkg_macos = "mac,zip"
+
+# BIO download cheat sheet
+
+# Release mode:
+# Use channel/pkg_* when GitHub has real uploaded mod files under Assets.
+# Do not use package fields for GitHub auto files:
+# Source code (zip)
+# Source code (tar.gz)
+
+# channel = "releases"    # Use normal releases
+# channel = "pre-release" # Use prereleases only
+
+# asset = "ModName-v1.0.zip" # Pick this exact uploaded release asset
+
+# pkg_windows = "wzp,zip" # On Windows: try win-*.zip first, then normal uploaded .zip
+# pkg_linux = "lin,zip"   # On Linux: try lin-*.zip first, then normal uploaded .zip
+# pkg_macos = "mac,zip"   # On macOS: try mac-*.zip/osx-*.zip first, then normal uploaded .zip
+
+# pkg_windows = "w64zip,w32zip"     # Pick 64-bit Windows zip first, then 32-bit
+# pkg_macos = "macarmzip,macx64zip" # Pick Apple Silicon mac zip first, then Intel mac zip
+
+# Source tag mode:
+# Use tag when you want source code from one fixed GitHub tag.
+# tag overrides branch/channel/pkg_*/asset.
+
+# tag = "v1.1" # Use source from exact tag v1.1
+
+# Source branch mode:
+# Use branch when you want source code from a branch.
+# Do not combine branch with pkg_*/asset.
+
+# branch = "main"   # Use source from the main branch
+# branch = "master" # Use source from the master branch
+# branch = "devel"  # Use source from the devel branch
+# branch = "dev"    # Use source from the dev branch
+# branch = "beta"   # Use source from the beta branch, only if it exists
+
+# Extraction narrowing:
+# Use only when an archive/source contains multiple matching TP2s and BIO may pick the wrong one.
+
+# subdir_require = "v2.6" # Only accept matching TP2 paths containing this text
+
+# Aliases and TP2 rename:
+# Use aliases when the same mod can appear under old/new TP2 names.
+# Aliases help BIO match logs and scanned mods.
+# Aliases do not rename files or folders.
+
+# tp2 = "questpack"           # Main TP2 name BIO should use
+# aliases = ["d0questpack"]   # Other TP2 names BIO should also recognize
+
+# This means BIO treats these as the same mod:
+# questpack
+# d0questpack
+# setup-questpack.tp2
+# setup-d0questpack.tp2
+
+# TP2 rename:
+# Use only when the archive has a TP2 filename you want BIO to rename after extraction.
+# This physically renames the TP2 file, not the mod folder.
+
+# tp2_rename = { from = "setup-d0questpack.tp2", to = "questpack.tp2" }
+
+# Important:
+# BIO does not support folder_rename.
+# Renaming folders can break mods because TP2 files often contain hardcoded folder paths.
+
+# Priority:
+# 1. tag
+# 2. branch
+# 3. asset
+# 4. pkg_windows/pkg_linux/pkg_macos
+# 5. channel

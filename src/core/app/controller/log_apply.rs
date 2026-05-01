@@ -3,17 +3,20 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::mods::log_file::LogFile;
-use crate::ui::controller::log_apply_keys::{
-    find_mods_by_tp2_filename, find_unique_mod_by_tp2_stem, log_lookup_keys, mod_lookup_keys_for_mod,
+use super::log_apply_keys::{
+    find_mods_by_tp2_filename, find_unique_mod_by_tp2_stem, log_lookup_keys,
+    mod_lookup_keys_for_mod, tp2_lookup_keys,
 };
-use crate::ui::controller::log_apply_match::{
+use super::log_apply_match::{
     installed_component_display_name, is_allowed_tp2, normalize_component_name,
     parse_component_tp2_from_raw, tp2_compatible, try_apply_eet_end_fallback,
 };
+use crate::app::mod_downloads;
+use crate::app::state::{Step2ComponentState, Step2ModState};
+use crate::mods::log_file::LogFile;
 
 pub fn apply_log_to_mods(
-    mods: &mut [crate::ui::state::Step2ModState],
+    mods: &mut [Step2ModState],
     log: &LogFile,
     tp2_allow: Option<&HashSet<String>>,
     reset_before_apply: bool,
@@ -30,8 +33,9 @@ pub fn apply_log_to_mods(
     }
 
     let mut mod_lookup: HashMap<String, Vec<usize>> = HashMap::new();
+    let mod_download_sources = mod_downloads::load_mod_download_sources();
     for (idx, mod_state) in mods.iter().enumerate() {
-        for key in mod_lookup_keys_for_mod(mod_state) {
+        for key in mod_lookup_keys_for_mod_with_aliases(mod_state, &mod_download_sources) {
             mod_lookup.entry(key).or_default().push(idx);
         }
     }
@@ -79,7 +83,8 @@ pub fn apply_log_to_mods(
             continue;
         }
 
-        let target_name = normalize_component_name(installed_component_display_name(installed).as_str());
+        let target_name =
+            normalize_component_name(installed_component_display_name(installed).as_str());
         let mut matched_this_line = false;
         for mod_idx in target_mods {
             let mod_state = &mut mods[mod_idx];
@@ -103,7 +108,8 @@ pub fn apply_log_to_mods(
 
             if !picked && !target_name.is_empty() {
                 for component in &mut mod_state.components {
-                    if let Some(child_tp2) = parse_component_tp2_from_raw(component.raw_line.as_str())
+                    if let Some(child_tp2) =
+                        parse_component_tp2_from_raw(component.raw_line.as_str())
                         && !tp2_compatible(child_tp2.as_str(), target_tp2_norm.as_str())
                     {
                         continue;
@@ -137,7 +143,24 @@ pub fn apply_log_to_mods(
     matched
 }
 
-fn check_component(component: &mut crate::ui::state::Step2ComponentState, next_order: &mut usize) {
+fn mod_lookup_keys_for_mod_with_aliases(
+    mod_state: &Step2ModState,
+    sources: &mod_downloads::ModDownloadsLoad,
+) -> Vec<String> {
+    let mut keys = mod_lookup_keys_for_mod(mod_state);
+    for source in sources.find_sources(&mod_state.tp_file) {
+        keys.extend(tp2_lookup_keys(&source.tp2));
+        for alias in source.aliases {
+            keys.extend(tp2_lookup_keys(&alias));
+        }
+    }
+    let mut seen = HashSet::new();
+    keys.into_iter()
+        .filter(|key| !key.is_empty() && seen.insert(key.clone()))
+        .collect()
+}
+
+fn check_component(component: &mut Step2ComponentState, next_order: &mut usize) {
     if component.disabled {
         component.checked = false;
         component.selected_order = None;
@@ -150,7 +173,7 @@ fn check_component(component: &mut crate::ui::state::Step2ComponentState, next_o
     }
 }
 
-fn apply_wlb_inputs(component: &mut crate::ui::state::Step2ComponentState, wlb_inputs: Option<&str>) {
+fn apply_wlb_inputs(component: &mut Step2ComponentState, wlb_inputs: Option<&str>) {
     let Some(inputs) = wlb_inputs.map(str::trim).filter(|v| !v.is_empty()) else {
         return;
     };
@@ -178,4 +201,4 @@ fn strip_wlb_marker(raw_line: &str) -> String {
     }
 }
 
-pub use crate::ui::controller::log_apply_keys::normalize_path_key;
+pub use super::log_apply_keys::normalize_path_key;

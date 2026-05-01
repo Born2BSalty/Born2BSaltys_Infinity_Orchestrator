@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::state::Step3ItemState;
 use eframe::egui;
-use crate::ui::state::Step3ItemState;
 
 pub fn apply_row_selection(
     selected: &mut Vec<usize>,

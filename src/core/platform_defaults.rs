@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::PathBuf;
 use std::path::Path;
+use std::path::PathBuf;
 
 #[cfg(target_os = "windows")]
 const DEFAULT_WEIDU_BINARY: &str = "weidu.exe";
@@ -47,7 +47,8 @@ fn normalize_binary_for_platform(value: &str) -> String {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        if !value.contains('/') && !value.contains('\\')
+        if !value.contains('/')
+            && !value.contains('\\')
             && let Some(stripped) = value.strip_suffix(".exe")
             && !stripped.is_empty()
         {

@@ -3,19 +3,23 @@
 
 use std::path::Path;
 
-use anyhow::{bail, Result};
+use crate::app::state_validation_exec as exec_validation;
+use crate::app::state_validation_fs as fs_validation;
 use crate::config::options::EetConfig;
 use crate::install::plan::InstallPlan;
 use crate::install::runner;
 use crate::mods::log_file::LogFile;
+use anyhow::{Result, bail};
 use tracing::info;
 
 pub fn run(config: &EetConfig) -> Result<()> {
     info!("command=eet {:?}", config);
     ensure_existing_file(&config.bg1_log_file)?;
-    ensure_existing_dir(&config.bg1_game_directory)?;
+    ensure_game_directory("BG1 Game Directory", &config.bg1_game_directory)?;
     ensure_existing_file(&config.bg2_log_file)?;
-    ensure_existing_dir(&config.bg2_game_directory)?;
+    ensure_game_directory("BG2 Game Directory", &config.bg2_game_directory)?;
+    ensure_binary("WeiDU binary", &config.options.weidu_binary)?;
+    ensure_existing_dir(&config.options.mod_directories)?;
 
     let bg1_plan = build_plan(
         &config.bg1_log_file,
@@ -51,7 +55,7 @@ fn build_plan(
     let pre_filter_count = plan.components.len();
     let installed_log_path = game_directory.join("weidu.log");
 
-    let installed_log = LogFile::from_path(&installed_log_path).ok();
+    let installed_log = load_installed_log(&installed_log_path)?;
     if let Some(installed) = installed_log.as_ref() {
         plan.filter_installed(installed, skip_installed, strict_matching);
         info!(
@@ -66,7 +70,10 @@ fn build_plan(
             installed_log_path.display()
         );
     }
-    info!("{label} install plan contains {} component(s)", plan.components.len());
+    info!(
+        "{label} install plan contains {} component(s)",
+        plan.components.len()
+    );
     Ok(plan)
 }
 
@@ -82,4 +89,41 @@ fn ensure_existing_dir(path: &Path) -> Result<()> {
         bail!("expected directory does not exist: {}", path.display());
     }
     Ok(())
+}
+
+fn ensure_binary(label: &str, path: &Path) -> Result<()> {
+    let value = path.to_string_lossy();
+    if value.trim().is_empty() {
+        bail!("{label} is required");
+    }
+    let mut checked = 0usize;
+    let mut errors = Vec::new();
+    exec_validation::check_file(label, value.as_ref(), &mut checked, &mut errors);
+    ensure_validation_passed(errors)
+}
+
+fn ensure_game_directory(label: &str, path: &Path) -> Result<()> {
+    let value = path.to_string_lossy();
+    if value.trim().is_empty() {
+        bail!("{label} is required");
+    }
+    let mut checked = 0usize;
+    let mut errors = Vec::new();
+    fs_validation::check_game_dir(label, value.as_ref(), &mut checked, &mut errors);
+    ensure_validation_passed(errors)
+}
+
+fn ensure_validation_passed(errors: Vec<String>) -> Result<()> {
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        bail!("{}", errors.join(" | "))
+    }
+}
+
+fn load_installed_log(path: &Path) -> Result<Option<LogFile>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    Ok(Some(LogFile::from_path(path)?))
 }

@@ -3,5 +3,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step1Action {
+    ConnectGitHub,
+    ReconnectGitHub,
+    DisconnectGitHub,
     PathsChanged,
 }

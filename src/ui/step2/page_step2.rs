@@ -3,8 +3,7 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
-
+use crate::app::state::WizardState;
 
 pub use crate::ui::step2::action_step2::Step2Action;
 

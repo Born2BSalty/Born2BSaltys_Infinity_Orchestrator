@@ -1,6 +1,6 @@
 [package]
 name = "bio"
-version = "0.1.0"
+version = "0.1.0-beta.17"
 edition = "2024"
 build = "build.rs"
 authors = ["Born2BSalty"]
@@ -18,9 +18,16 @@ clap = { version = "4.5.58", features = ["derive", "env"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 toml = "0.8"
+ureq = { version = "2.12", features = ["json", "native-tls"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
+flate2 = "1.1.5"
+tar = "0.4.44"
+native-tls = "0.2"
+sevenz-rust2 = "0.20"
+unrar = "0.5.8"
 walkdir = "2.5.0"
+zip = "2.4.2"
 wait-timeout = "0.2.1"
 eframe = "0.31.1"
 rfd = "0.15.2"
@@ -29,6 +36,15 @@ lapdu_parser_rust = { package = "lapdu-parser-rust", path = "vendor/lapdu-parser
 
 [patch.crates-io]
 egui_term = { path = "third_party/egui_term" }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

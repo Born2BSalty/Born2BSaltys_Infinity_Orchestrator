@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::WizardState;
+use crate::app::state::{Step2ModState, Step2Selection, WizardState};
 
 pub(super) fn write_step2_render_order_json(
     run_dir: &Path,
@@ -16,7 +16,7 @@ pub(super) fn write_step2_render_order_json(
 ) -> Result<PathBuf> {
     let out_path = run_dir.join("step2_render_order.json");
 
-    let serialize_tab = |tab_name: &str, mods: &[crate::ui::state::Step2ModState]| {
+    let serialize_tab = |tab_name: &str, mods: &[Step2ModState]| {
         mods.iter()
             .enumerate()
             .map(|(mod_index, mod_state)| {
@@ -52,12 +52,12 @@ pub(super) fn write_step2_render_order_json(
         "active_tab": state.step2.active_game_tab,
         "search_query": state.step2.search_query,
         "selected": match &state.step2.selected {
-            Some(crate::ui::state::Step2Selection::Mod { game_tab, tp_file }) => json!({
+            Some(Step2Selection::Mod { game_tab, tp_file }) => json!({
                 "kind": "mod",
                 "game_tab": game_tab,
                 "tp_file": tp_file,
             }),
-            Some(crate::ui::state::Step2Selection::Component { game_tab, tp_file, component_id, component_key }) => json!({
+            Some(Step2Selection::Component { game_tab, tp_file, component_id, component_key }) => json!({
                 "kind": "component",
                 "game_tab": game_tab,
                 "tp_file": tp_file,

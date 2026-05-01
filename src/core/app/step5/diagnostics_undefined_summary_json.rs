@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
 
 use super::undefined_detect::looks_like_undefined_signal;
 
@@ -33,7 +33,11 @@ pub(super) fn write_undefined_summary_json(
                 })
             })
             .collect::<Vec<_>>();
-        let total_undefined = report.tp2_reports.iter().map(|r| r.undefined_count).sum::<usize>();
+        let total_undefined = report
+            .tp2_reports
+            .iter()
+            .map(|r| r.undefined_count)
+            .sum::<usize>();
         json!({
             "schema_version": 1,
             "generated_at_unix": timestamp_unix_secs,

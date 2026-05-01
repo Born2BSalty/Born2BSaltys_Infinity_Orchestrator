@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::process::{Child, ChildStdin};
 use std::sync::mpsc::Receiver;
-use std::{collections::{HashMap, VecDeque}};
 
 use anyhow::Result;
-use eframe::egui;
 
 mod analyze;
 mod api;
@@ -16,7 +15,6 @@ mod input;
 mod output;
 mod process;
 mod scripted_inputs;
-mod view;
 
 pub struct EmbeddedTerminal {
     pub(super) child: Option<Child>,
@@ -45,18 +43,14 @@ pub struct EmbeddedTerminal {
     raw_log_file: Option<File>,
     bio_debug_log_path: Option<std::path::PathBuf>,
     bio_debug_log_file: Option<File>,
-    pub(super) show_important_only: bool,
-    pub(super) show_installed_only: bool,
-    pub(super) stick_to_bottom: bool,
-    pub(super) active: bool,
-    pub(super) request_focus: bool,
     has_new_data: bool,
     saw_exit_event: bool,
     last_exit_code: Option<i32>,
+    last_runtime_error: Option<String>,
 }
 
 impl EmbeddedTerminal {
-    pub fn new(_ctx: &egui::Context) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         Ok(Self {
             child: None,
             stdin: None,
@@ -84,14 +78,10 @@ impl EmbeddedTerminal {
             raw_log_file: None,
             bio_debug_log_path: None,
             bio_debug_log_file: None,
-            show_important_only: false,
-            show_installed_only: false,
-            stick_to_bottom: true,
-            active: false,
-            request_focus: true,
             has_new_data: false,
             saw_exit_event: false,
             last_exit_code: None,
+            last_runtime_error: None,
         })
     }
 }

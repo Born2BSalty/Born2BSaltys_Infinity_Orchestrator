@@ -108,7 +108,11 @@ pub struct CommonOptions {
     pub abort_on_warnings: bool,
     #[arg(long, env = "TIMEOUT", default_value_t = 3600)]
     pub timeout: usize,
-    #[arg(long, env = "WEIDU_LOG_MODE", default_value = "autolog,logapp,log-extern")]
+    #[arg(
+        long,
+        env = "WEIDU_LOG_MODE",
+        default_value = "autolog,logapp,log-extern"
+    )]
     pub weidu_log_mode: String,
     #[arg(
         long,
@@ -199,6 +203,8 @@ pub struct ScanComponentsArgs {
 pub struct ScanLanguagesArgs {
     #[arg(long, action = ArgAction::Help)]
     pub help: Option<bool>,
+    #[arg(long)]
+    pub game_directory: String,
     #[arg(long, default_value = "english")]
     pub filter_by_selected_language: String,
     #[command(flatten)]

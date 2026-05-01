@@ -1,96 +1,121 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
-use crate::ui::step4::action_step4::Step4Action;
-use crate::ui::step4::service_step4::build_weidu_export_lines;
-use crate::ui::terminal::EmbeddedTerminal;
+use crate::app::state::WizardState;
+use crate::app::step5::install_flow::{
+    PendingInstallStart, apply_completed_prep, prepare_start_request, spawn_target_prep_worker,
+    start_install_process,
+};
+use crate::app::step5::log_files::TargetPrepResult;
+use crate::app::terminal::EmbeddedTerminal;
 
-use super::WizardApp;
-
-pub(super) fn ensure_step5_terminal(app: &mut WizardApp, ctx: &eframe::egui::Context) {
-    if app.step5_terminal.is_some() || app.step5_terminal_error.is_some() {
+pub(crate) fn ensure_step5_terminal(
+    step5_terminal: &mut Option<EmbeddedTerminal>,
+    step5_terminal_error: &mut Option<String>,
+) {
+    if step5_terminal.is_some() || step5_terminal_error.is_some() {
         return;
     }
-    match EmbeddedTerminal::new(ctx) {
+    match EmbeddedTerminal::new() {
         Ok(term) => {
-            app.step5_terminal = Some(term);
+            *step5_terminal = Some(term);
         }
         Err(err) => {
-            app.step5_terminal_error = Some(err.to_string());
+            *step5_terminal_error = Some(err.to_string());
         }
     }
 }
 
-pub(super) fn handle_step4_action(
-    app: &mut WizardApp,
-    _ctx: &eframe::egui::Context,
-    action: Step4Action,
-) {
-    match action {
-        Step4Action::SaveWeiduLog => {
-            let _ = auto_save_step4_weidu_logs(app);
-        }
-    }
-}
-
-fn save_weidu_logs_from_step4(app: &WizardApp) -> anyhow::Result<()> {
-    let game = app.state.step1.game_install.as_str();
-    let header = [
-        "// Log of Currently Installed WeiDU Mods",
-        "// The top of the file is the 'oldest' mod",
-        "// ~TP2_File~ #language_number #component_number // [Subcomponent Name -> ] Component Name [ : Version]",
-    ];
-
-    let write_target = |folder: &str, lines: Vec<String>| -> anyhow::Result<()> {
-        let folder = folder.trim();
-        if folder.is_empty() {
-            return Ok(());
-        }
-        let dir = PathBuf::from(folder);
-        std::fs::create_dir_all(&dir)?;
-        let path = dir.join("weidu.log");
-        let mut out: Vec<String> = header.iter().map(|s| s.to_string()).collect();
-        out.extend(lines);
-        std::fs::write(path, out.join("\n"))?;
-        Ok(())
+pub(crate) fn poll_step5_prep(
+    state: &mut WizardState,
+    step5_prep_rx: &mut Option<Receiver<Result<TargetPrepResult, String>>>,
+    step5_terminal: &mut Option<EmbeddedTerminal>,
+    step5_terminal_error: &mut Option<String>,
+    step5_pending_start: &mut Option<PendingInstallStart>,
+) -> bool {
+    let Some(rx) = step5_prep_rx.as_ref() else {
+        return false;
     };
 
-    match game {
-        "EET" => {
-            let bgee_lines = build_weidu_export_lines(&app.state.step3.bgee_items);
-            let bg2_lines = build_weidu_export_lines(&app.state.step3.bg2ee_items);
-            write_target(&app.state.step1.eet_bgee_log_folder, bgee_lines)?;
-            write_target(&app.state.step1.eet_bg2ee_log_folder, bg2_lines)?;
+    let result = match rx.try_recv() {
+        Ok(result) => Some(result),
+        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Disconnected) => Some(Err("Target prep worker disconnected".to_string())),
+    };
+    let Some(result) = result else {
+        return false;
+    };
+
+    *step5_prep_rx = None;
+    state.step5.prep_running = false;
+    ensure_step5_terminal(step5_terminal, step5_terminal_error);
+    let Some(term) = step5_terminal.as_mut() else {
+        *step5_pending_start = None;
+        state.step5.last_status_text =
+            "Target prep finished, but terminal is unavailable".to_string();
+        return false;
+    };
+
+    if apply_completed_prep(state, term, result) {
+        if let Some(pending) = step5_pending_start.take() {
+            start_install_process(state, term, pending);
         }
-        "BG2EE" => {
-            let lines = build_weidu_export_lines(&app.state.step3.bg2ee_items);
-            write_target(&app.state.step1.bg2ee_log_folder, lines)?;
-        }
-        _ => {
-            let lines = build_weidu_export_lines(&app.state.step3.bgee_items);
-            write_target(&app.state.step1.bgee_log_folder, lines)?;
-        }
+    } else {
+        *step5_pending_start = None;
     }
-    Ok(())
+    true
 }
 
-pub(super) fn auto_save_step4_weidu_logs(app: &mut WizardApp) -> Result<(), String> {
-    if app.state.step1.have_weidu_logs {
-        app.state.step2.scan_status = "Using source WeiDU log file(s) from Step 1".to_string();
-        return Ok(());
+pub(crate) fn start_if_requested(
+    state: &mut WizardState,
+    step5_terminal: &mut Option<EmbeddedTerminal>,
+    step5_terminal_error: &mut Option<String>,
+    step5_prep_rx: &mut Option<Receiver<Result<TargetPrepResult, String>>>,
+    step5_pending_start: &mut Option<PendingInstallStart>,
+) -> bool {
+    if !state.step5.start_install_requested || state.step5.prep_running {
+        return false;
     }
-    match save_weidu_logs_from_step4(app) {
-        Ok(()) => {
-            app.state.step2.scan_status = "Saved weidu.log file(s)".to_string();
-            Ok(())
-        }
-        Err(err) => {
-            let msg = format!("Save weidu.log failed: {err}");
-            app.state.step2.scan_status = msg.clone();
-            app.state.step5.last_status_text = msg.clone();
-            Err(msg)
-        }
+
+    ensure_step5_terminal(step5_terminal, step5_terminal_error);
+    let Some(term) = step5_terminal.as_mut() else {
+        state.step5.start_install_requested = false;
+        state.step5.last_status_text = "Install start failed: terminal unavailable".to_string();
+        return false;
+    };
+
+    let Some((pending, needs_prep)) = prepare_start_request(state, term) else {
+        return false;
+    };
+
+    if needs_prep {
+        state.step5.prep_running = true;
+        state.step5.last_status_text = "Target prep in progress...".to_string();
+        term.append_marker("Target prep started");
+        *step5_pending_start = Some(pending);
+        *step5_prep_rx = Some(spawn_target_prep_worker(state.step1.clone()));
+        true
+    } else {
+        start_install_process(state, term, pending);
+        true
+    }
+}
+
+pub(crate) fn poll_step5_terminal(
+    state: &mut WizardState,
+    step5_terminal: &mut Option<EmbeddedTerminal>,
+    step5_terminal_error: &mut Option<String>,
+) -> bool {
+    ensure_step5_terminal(step5_terminal, step5_terminal_error);
+    if let Some(term) = step5_terminal.as_mut() {
+        term.poll_output();
+        let needs_repaint = term.has_new_data();
+        crate::app::step5_runtime_status::process_graceful_cancel(&mut state.step5, term);
+        crate::app::step5_runtime_status::process_exit_event(&mut state.step5, term);
+        needs_repaint
+    } else {
+        false
     }
 }

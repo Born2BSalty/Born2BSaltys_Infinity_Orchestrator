@@ -3,11 +3,11 @@
 
 use eframe::egui;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
+use crate::app::terminal::EmbeddedTerminal;
 use crate::ui::step5::service_diagnostics_support_step5::{
     export_diagnostics, open_console_logs_folder, open_last_log_file, save_console_log,
 };
-use crate::ui::terminal::EmbeddedTerminal;
 
 pub(crate) fn render_actions_menu(
     ui: &mut egui::Ui,
@@ -59,9 +59,7 @@ pub(crate) fn render_actions_menu(
             }
             ui.close_menu();
         }
-        if state.step5.last_install_failed
-            && ui.button("Open last log file").clicked()
-        {
+        if state.step5.last_install_failed && ui.button("Open last log file").clicked() {
             let _ = open_last_log_file(&state.step1);
             ui.close_menu();
         }

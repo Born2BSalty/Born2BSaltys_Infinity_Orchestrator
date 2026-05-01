@@ -10,7 +10,7 @@ use super::AppDataCopySummary;
 
 pub(super) fn copy_appdata_configs(run_dir: &Path) -> AppDataCopySummary {
     let mut summary = AppDataCopySummary::default();
-    let appdata_out_dir = run_dir.join("appdata");
+    let appdata_out_dir = run_dir.join("appdata_snapshot");
     let _ = fs::create_dir_all(&appdata_out_dir);
     let Some(bio_dir) = app_config_dir() else {
         summary
@@ -109,7 +109,10 @@ fn copy_appdata_tree_filtered(
             .and_then(|e| e.to_str())
             .map(|e| e.to_ascii_lowercase())
             .unwrap_or_default();
-        if !matches!(ext.as_str(), "json" | "toml" | "yaml" | "yml" | "log" | "txt") {
+        if !matches!(
+            ext.as_str(),
+            "json" | "toml" | "yaml" | "yml" | "log" | "txt"
+        ) {
             continue;
         }
 

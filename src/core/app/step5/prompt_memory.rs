@@ -80,6 +80,14 @@ pub fn clear_all() {
     mutate::clear_all();
 }
 
+pub fn take_last_persist_error() -> Option<String> {
+    mutate::take_last_persist_error()
+}
+
+pub fn take_last_load_error() -> Option<String> {
+    storage::take_last_load_error()
+}
+
 pub fn export_json(path: &Path) -> std::io::Result<usize> {
     io_ops::export_json(path)
 }

@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::ui::state::Step1State;
+use crate::app::state::Step1State;
 
 pub struct TargetPrepResult {
     pub backups: Vec<PathBuf>,
@@ -58,7 +58,8 @@ pub(super) fn paths_point_to_same_dir(a: &Path, b: &Path) -> bool {
     let bc = fs::canonicalize(b).unwrap_or_else(|_| b.to_path_buf());
     #[cfg(target_os = "windows")]
     {
-        ac.to_string_lossy().eq_ignore_ascii_case(&bc.to_string_lossy())
+        ac.to_string_lossy()
+            .eq_ignore_ascii_case(&bc.to_string_lossy())
     }
     #[cfg(not(target_os = "windows"))]
     {

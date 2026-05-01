@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use super::build_prompt_eval_context;
-use crate::ui::state::{Step2ComponentState, Step2ModState, WizardState};
+use crate::app::prompt_eval_context::build_prompt_eval_context;
+use crate::app::state::{Step2ComponentState, Step2ModState, WizardState};
 
 #[test]
 fn bg2ee_tab_only_counts_as_eet_after_eet_core_is_checked() {
@@ -42,7 +42,11 @@ fn eet_core_mod(checked: bool) -> Step2ModState {
         tp_file: "EET.TP2".to_string(),
         tp2_path: String::new(),
         readme_path: None,
+        ini_path: None,
         web_url: None,
+        package_marker: None,
+        latest_checked_version: None,
+        update_locked: false,
         mod_prompt_summary: None,
         mod_prompt_events: Vec::new(),
         checked,

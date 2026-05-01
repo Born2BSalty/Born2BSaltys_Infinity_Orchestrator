@@ -42,6 +42,7 @@ pub enum ScanConfig {
         options: CoreOptions,
     },
     Languages {
+        game_directory: PathBuf,
         filter_by_selected_language: String,
         options: CoreOptions,
     },
@@ -80,6 +81,7 @@ pub fn from_cli(cli: &Cli) -> Option<AppCommandConfig> {
                 options: map_common(&args.options),
             })),
             ScanCommand::Languages(args) => Some(AppCommandConfig::Scan(ScanConfig::Languages {
+                game_directory: PathBuf::from(&args.game_directory),
                 filter_by_selected_language: args.filter_by_selected_language.clone(),
                 options: map_common(&args.options),
             })),

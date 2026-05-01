@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::json;
 
-use crate::ui::state::WizardState;
+use crate::app::state::WizardState;
 
 pub(super) fn write_runtime_assumptions_json(
     run_dir: &Path,

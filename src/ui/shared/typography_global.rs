@@ -51,7 +51,9 @@ pub fn configure_typography(ctx: &egui::Context) {
         "/usr/share/fonts/truetype/firacode/FiraCode-Regular.ttf",
         "/usr/share/fonts/TTF/FiraCode-Regular.ttf",
     ];
-    let ui_bytes = ui_candidates.iter().find_map(|p| fs::read(Path::new(p)).ok());
+    let ui_bytes = ui_candidates
+        .iter()
+        .find_map(|p| fs::read(Path::new(p)).ok());
     let terminal_bytes = terminal_candidates
         .iter()
         .find_map(|p| fs::read(Path::new(p)).ok());

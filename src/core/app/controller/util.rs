@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::state::Step2ModState;
+
 pub fn current_exe_fingerprint() -> String {
     let Ok(path) = std::env::current_exe() else {
         return "unknown".to_string();
@@ -78,7 +80,7 @@ fn try_open_candidates(candidates: &[(&str, &[&str])]) -> std::io::Result<()> {
     Err(last_err.unwrap_or_else(|| std::io::Error::other("no opener command found")))
 }
 
-pub fn sort_mods_alphabetically(mods: &mut [crate::ui::state::Step2ModState]) {
+pub fn sort_mods_alphabetically(mods: &mut [Step2ModState]) {
     mods.sort_by(|a, b| {
         let an = a.name.to_ascii_lowercase();
         let bn = b.name.to_ascii_lowercase();
