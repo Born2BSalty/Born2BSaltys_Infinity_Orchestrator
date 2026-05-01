@@ -123,7 +123,7 @@ pub(super) fn step1_validation_messages(s: &Step1State) -> Vec<String> {
                 if !has_value(&s.bg2ee_log_file) {
                     out.push("BG2EE WeiDU Log File is required".to_string());
                 }
-            } else if !s.bootstraps_from_weidu_logs() && !has_value(&s.bg2ee_log_folder) {
+            } else if !has_value(&s.bg2ee_log_folder) {
                 out.push("BG2EE WeiDU Log Folder is required".to_string());
             }
         }
@@ -155,7 +155,7 @@ pub(super) fn step1_validation_messages(s: &Step1State) -> Vec<String> {
                 if !has_value(&s.bg2ee_log_file) {
                     out.push("BG2EE WeiDU Log File is required for EET".to_string());
                 }
-            } else if !s.bootstraps_from_weidu_logs() {
+            } else {
                 if !has_value(&s.eet_bgee_log_folder) {
                     out.push("BGEE WeiDU Log Folder is required for EET".to_string());
                 }
@@ -172,7 +172,7 @@ pub(super) fn step1_validation_messages(s: &Step1State) -> Vec<String> {
                 if !has_value(&s.bgee_log_file) {
                     out.push("BGEE WeiDU Log File is required".to_string());
                 }
-            } else if !s.bootstraps_from_weidu_logs() && !has_value(&s.bgee_log_folder) {
+            } else if !has_value(&s.bgee_log_folder) {
                 out.push("BGEE WeiDU Log Folder is required".to_string());
             }
         }

@@ -342,7 +342,7 @@ fn render_bg2ee_paths(ui: &mut egui::Ui, s: &mut Step1State) {
     path_row_dir(ui, "BG2EE Game Folder", &mut s.bg2ee_game_folder);
     if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BG2EE WeiDU Log File", &mut s.bg2ee_log_file);
-    } else if !s.bootstraps_from_weidu_logs() {
+    } else {
         path_row_dir(ui, "BG2EE WeiDU Log Folder", &mut s.bg2ee_log_folder);
     }
     if s.generate_directory_enabled {
@@ -360,7 +360,7 @@ fn render_eet_paths(ui: &mut egui::Ui, s: &mut Step1State) {
     }
     if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BGEE WeiDU Log File", &mut s.bgee_log_file);
-    } else if !s.bootstraps_from_weidu_logs() {
+    } else {
         path_row_dir(ui, "BGEE WeiDU Log Folder", &mut s.eet_bgee_log_folder);
     }
     if s.new_eet_dir_enabled {
@@ -372,7 +372,7 @@ fn render_eet_paths(ui: &mut egui::Ui, s: &mut Step1State) {
     }
     if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BG2EE WeiDU Log File", &mut s.bg2ee_log_file);
-    } else if !s.bootstraps_from_weidu_logs() {
+    } else {
         path_row_dir(ui, "BG2EE WeiDU Log Folder", &mut s.eet_bg2ee_log_folder);
     }
 }
@@ -384,7 +384,7 @@ fn render_bgee_paths(ui: &mut egui::Ui, s: &mut Step1State) {
     path_row_dir(ui, "BGEE Game Folder", &mut s.bgee_game_folder);
     if s.installs_exactly_from_weidu_logs() {
         path_row_file(ui, "BGEE WeiDU Log File", &mut s.bgee_log_file);
-    } else if !s.bootstraps_from_weidu_logs() {
+    } else {
         path_row_dir(ui, "BGEE WeiDU Log Folder", &mut s.bgee_log_folder);
     }
     if s.generate_directory_enabled {

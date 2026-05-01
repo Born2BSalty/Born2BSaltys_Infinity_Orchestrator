@@ -43,6 +43,15 @@ jobs:
           workspaces: |
             . -> target
 
+      - name: Set package name
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BIO_PACKAGE_NAME=BIO-pr-${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
+          else
+            echo "BIO_PACKAGE_NAME=BIO-${{ github.ref_name }}" >> "$GITHUB_ENV"
+          fi
+
       - name: Build release
         run: cargo build --release --locked
 
@@ -56,7 +65,7 @@ jobs:
           if (Test-Path LICENSE) { Copy-Item LICENSE dist/LICENSE }
           if (Test-Path NOTICE) { Copy-Item NOTICE dist/NOTICE }
           if (Test-Path CREDITS.md) { Copy-Item CREDITS.md dist/CREDITS.md }
-          Compress-Archive -Path dist/* -DestinationPath "BIO-${{ github.ref_name }}-${{ matrix.asset_suffix }}.zip" -Force
+          Compress-Archive -Path dist/* -DestinationPath "${{ env.BIO_PACKAGE_NAME }}-${{ matrix.asset_suffix }}.zip" -Force
 
       - name: Package (Linux/macOS)
         if: runner.os != 'Windows'
@@ -69,14 +78,14 @@ jobs:
           [ -f LICENSE ] && cp LICENSE dist/LICENSE || true
           [ -f NOTICE ] && cp NOTICE dist/NOTICE || true
           [ -f CREDITS.md ] && cp CREDITS.md dist/CREDITS.md || true
-          tar -czf "BIO-${{ github.ref_name }}-${{ matrix.asset_suffix }}.tar.gz" -C dist .
+          tar -czf "${{ env.BIO_PACKAGE_NAME }}-${{ matrix.asset_suffix }}.tar.gz" -C dist .
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
         with:
           name: BIO-${{ matrix.asset_suffix }}
           path: |
-            BIO-${{ github.ref_name }}-${{ matrix.asset_suffix }}.${{ matrix.archive_ext }}
+            ${{ env.BIO_PACKAGE_NAME }}-${{ matrix.asset_suffix }}.${{ matrix.archive_ext }}
 
   publish:
     name: Publish GitHub Release
