@@ -292,13 +292,14 @@ fn queue_source_request(
             source_url: String::new(),
             channel: source.channel.clone(),
             tag: source.tag.clone(),
+            commit: source.commit.clone(),
             branch: source.branch.clone(),
-            asset: if source.tag.is_none() && source.branch.is_none() {
+            asset: if source.commit.is_none() && source.tag.is_none() && source.branch.is_none() {
                 source.asset.clone()
             } else {
                 None
             },
-            pkg: if source.tag.is_none() && source.branch.is_none() {
+            pkg: if source.commit.is_none() && source.tag.is_none() && source.branch.is_none() {
                 mod_downloads::preferred_pkg_for_current_platform(source)
             } else {
                 None
@@ -319,6 +320,7 @@ fn queue_source_request(
             source_url: source.url.clone(),
             channel: None,
             tag: None,
+            commit: None,
             branch: None,
             asset: None,
             pkg: None,
@@ -338,6 +340,7 @@ fn queue_source_request(
             source_url: source.url.clone(),
             channel: None,
             tag: None,
+            commit: None,
             branch: None,
             asset: None,
             pkg: None,
@@ -357,6 +360,7 @@ fn queue_source_request(
             source_url: source.url.clone(),
             channel: None,
             tag: None,
+            commit: None,
             branch: None,
             asset: None,
             pkg: None,

@@ -6,7 +6,8 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
 use crate::ui::step5::service_diagnostics_support_step5::{
-    export_diagnostics, open_console_logs_folder, open_last_log_file, save_console_log,
+    export_diagnostics, open_console_logs_folder, open_last_log_file, restart_app_with_diagnostics,
+    save_console_log,
 };
 
 pub(crate) fn render_actions_menu(
@@ -74,6 +75,9 @@ pub(crate) fn render_diagnostics_menu(
     exe_fingerprint: &str,
 ) {
     if !dev_mode {
+        if ui.button("Restart App With Diagnostics").clicked() {
+            restart_app_with_diagnostics(state);
+        }
         return;
     }
     state.step1.bio_full_debug = true;

@@ -69,5 +69,5 @@ fn append_text(
 }
 
 fn normalize_weidu_like_line(raw: &str) -> String {
-    raw.replace('\t', " ").trim().to_string()
+    crate::platform_defaults::normalize_weidu_like_line(raw)
 }

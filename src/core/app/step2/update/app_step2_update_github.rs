@@ -15,6 +15,9 @@ pub(super) fn check_github_download_page(
     agent: &ureq::Agent,
     request: &Step2UpdateCheckRequest,
 ) -> Step2UpdateCheckOutcome {
+    if let Some(commit) = request.commit.as_deref() {
+        return commit_source_outcome(request, commit);
+    }
     if let Some(tag) = request.tag.as_deref() {
         return tag_source_outcome(agent, request, tag);
     }
@@ -270,6 +273,7 @@ fn release_asset_outcome(
         label: request.label.clone(),
         source_id: request.source_id.clone(),
         tag: Some(release.tag_name.clone()),
+        source_ref: None,
         asset_name: Some(asset_name),
         asset_url: Some(asset_url),
         error: None,
@@ -295,6 +299,7 @@ fn packaged_release_outcome(
         label: request.label.clone(),
         source_id: request.source_id.clone(),
         tag: Some(release.tag_name.clone()),
+        source_ref: None,
         asset_name: Some(asset_name),
         asset_url: Some(asset_url),
         error: None,
@@ -320,6 +325,7 @@ fn named_release_asset_outcome(
         label: request.label.clone(),
         source_id: request.source_id.clone(),
         tag: Some(release.tag_name.clone()),
+        source_ref: None,
         asset_name: Some(asset_name),
         asset_url: Some(asset_url),
         error: None,
@@ -343,6 +349,7 @@ fn tagged_source_outcome(
         label: request.label.clone(),
         source_id: request.source_id.clone(),
         tag: Some(release.tag_name.clone()),
+        source_ref: None,
         asset_name: Some(format!("{repo_name}-{}-source.zip", release.tag_name)),
         asset_url: Some(release.zipball_url.clone()),
         error: None,
@@ -364,6 +371,7 @@ fn branch_source_outcome(
             label: request.label.clone(),
             source_id: request.source_id.clone(),
             tag: Some(source_ref),
+            source_ref: None,
             asset_name: Some(asset_name),
             asset_url: Some(asset_url),
             error: None,
@@ -374,6 +382,39 @@ fn branch_source_outcome(
         request.clone(),
         &format!("GitHub branch not found: {}", branch.trim()),
     )
+}
+
+fn commit_source_outcome(
+    request: &Step2UpdateCheckRequest,
+    commit: &str,
+) -> Step2UpdateCheckOutcome {
+    let commit = commit.trim().trim_matches('/');
+    if commit.is_empty() {
+        return failed_outcome(request.clone(), "GitHub commit is empty");
+    }
+    let repo_name = request
+        .repo
+        .rsplit('/')
+        .next()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("source");
+    let short = commit.chars().take(7).collect::<String>();
+    Step2UpdateCheckOutcome {
+        game_tab: request.game_tab.clone(),
+        tp_file: request.tp_file.clone(),
+        label: request.label.clone(),
+        source_id: request.source_id.clone(),
+        tag: Some(format!("commit-{short}")),
+        source_ref: Some(format!("commit@{commit}")),
+        asset_name: Some(format!("{repo_name}-commit-{short}-source.zip")),
+        asset_url: Some(format!(
+            "https://github.com/{}/archive/{}.zip",
+            request.repo.trim(),
+            commit
+        )),
+        error: None,
+        package_kind: Step2PackageKind::SourceSnapshot,
+    }
 }
 
 fn tag_source_outcome(
@@ -410,6 +451,7 @@ fn tagged_tag_source_outcome(
         label: request.label.clone(),
         source_id: request.source_id.clone(),
         tag: Some(tag.name.clone()),
+        source_ref: None,
         asset_name: Some(format!("{repo_name}-{}-source.zip", tag.name)),
         asset_url: Some(format!(
             "https://github.com/{}/archive/refs/tags/{}.zip",
@@ -434,6 +476,7 @@ fn repo_source_outcome(
         label: request.label.clone(),
         source_id: request.source_id.clone(),
         tag: Some(tag),
+        source_ref: None,
         asset_name: Some(asset_name),
         asset_url: Some(asset_url),
         error: None,
@@ -605,6 +648,7 @@ fn request_for_repo(request: &Step2UpdateCheckRequest, repo: &str) -> Step2Updat
     let mut cloned = request.clone();
     cloned.repo = repo.trim().to_string();
     cloned.exact_github.clear();
+    cloned.commit = None;
     cloned
 }
 

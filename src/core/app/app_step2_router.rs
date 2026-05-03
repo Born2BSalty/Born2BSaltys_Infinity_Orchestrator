@@ -68,6 +68,7 @@ pub(crate) fn handle_step2_action(
                         source_url: request.source_url.clone(),
                         channel: request.channel.clone(),
                         tag: request.tag.clone(),
+                        commit: request.commit.clone(),
                         branch: request.branch.clone(),
                         asset: request.asset.clone(),
                         pkg: request.pkg.clone(),

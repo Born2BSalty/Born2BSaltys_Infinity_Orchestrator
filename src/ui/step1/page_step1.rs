@@ -11,7 +11,9 @@ use crate::ui::step1::service_step1::{
     split_path_check_lines, sync_install_mode, sync_weidu_log_mode,
 };
 use crate::ui::step1::state_step1::clear_path_check_if_step1_changed;
-use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
+use crate::ui::step5::service_diagnostics_support_step5::{
+    export_diagnostics, restart_app_with_diagnostics,
+};
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -33,8 +35,8 @@ pub fn render(
 
     ui.horizontal(|ui| {
         ui.heading("Step 1: Setup");
-        if dev_mode {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if dev_mode {
                 if ui.button("Export diagnostics").clicked() {
                     match export_diagnostics(state, None, dev_mode, exe_fingerprint) {
                         Ok(path) => {
@@ -47,8 +49,10 @@ pub fn render(
                         }
                     }
                 }
-            });
-        }
+            } else if ui.button("Restart App With Diagnostics").clicked() {
+                restart_app_with_diagnostics(state);
+            }
+        });
     });
     ui.label("Choose game mode, paths, and installer options.");
     if let Some((ok, msg)) = state.step1_path_check.clone() {

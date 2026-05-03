@@ -43,6 +43,7 @@ struct ModDownloadSourceOverlay {
     pub(crate) exact_github: Option<Vec<String>>,
     pub(crate) channel: Option<String>,
     pub(crate) tag: Option<String>,
+    pub(crate) commit: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) asset: Option<String>,
     pub(crate) subdir_require: Option<String>,
@@ -64,6 +65,7 @@ struct ModDownloadSourceVariantOverlay {
     pub(crate) exact_github: Option<Vec<String>>,
     pub(crate) channel: Option<String>,
     pub(crate) tag: Option<String>,
+    pub(crate) commit: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) asset: Option<String>,
     pub(crate) subdir_require: Option<String>,
@@ -104,6 +106,8 @@ pub(crate) struct ModDownloadSource {
     pub(crate) channel: Option<String>,
     #[serde(default)]
     pub(crate) tag: Option<String>,
+    #[serde(default)]
+    pub(crate) commit: Option<String>,
     #[serde(default)]
     pub(crate) branch: Option<String>,
     #[serde(default)]
@@ -513,6 +517,7 @@ const SOURCE_BLOCK_FIELD_ORDER: &[&str] = &[
     "exact_github",
     "channel",
     "tag",
+    "commit",
     "branch",
     "asset",
     "subdir_require",
@@ -763,6 +768,9 @@ fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSour
     if let Some(tag) = overlay.tag {
         target.tag = Some(tag);
     }
+    if let Some(commit) = overlay.commit {
+        target.commit = Some(commit);
+    }
     if let Some(branch) = overlay.branch {
         target.branch = Some(branch);
     }
@@ -851,6 +859,7 @@ fn apply_source_variant_overlay(
         exact_github,
         channel,
         tag,
+        commit,
         branch,
         asset,
         subdir_require,
@@ -895,6 +904,9 @@ fn apply_source_variant_overlay(
     }
     if let Some(tag) = tag {
         target.tag = Some(tag);
+    }
+    if let Some(commit) = commit {
+        target.commit = Some(commit);
     }
     if let Some(branch) = branch {
         target.branch = Some(branch);
@@ -966,6 +978,11 @@ fn normalize_source(source: &mut ModDownloadSource) {
         .take()
         .map(|tag| tag.trim().to_string())
         .filter(|tag| !tag.is_empty());
+    source.commit = source
+        .commit
+        .take()
+        .map(|commit| commit.trim().to_string())
+        .filter(|commit| !commit.is_empty());
     source.branch = source
         .branch
         .take()
@@ -981,6 +998,16 @@ fn normalize_source(source: &mut ModDownloadSource) {
         .take()
         .map(|subdir_require| subdir_require.trim().to_string())
         .filter(|subdir_require| !subdir_require.is_empty());
+    if source.commit.is_some() {
+        source.channel = None;
+        source.tag = None;
+        source.branch = None;
+        source.asset = None;
+        source.pkg_windows = None;
+        source.pkg_linux = None;
+        source.pkg_macos = None;
+        return;
+    }
     if source.tag.is_some() {
         source.channel = None;
         source.branch = None;

@@ -304,6 +304,7 @@ fn retry_request_json(request: &Step2UpdateRetryRequest) -> serde_json::Value {
         "source_url": request.source_url,
         "channel": request.channel,
         "tag": request.tag,
+        "commit": request.commit,
         "branch": request.branch,
         "asset": request.asset,
         "chosen_pkg_for_current_os": request.pkg,

@@ -56,6 +56,9 @@ tp2 = "examplemod"
 # branch = "dev"    # Use source from the dev branch
 # branch = "beta"   # Use source from the beta branch, only if it exists
 
+# Use commit when you want one exact GitHub snapshot.
+# commit = "742f4ddac864fe04eead322e63f1c208c248d2d2"
+
 # Extraction narrowing:
 # Use only when an archive/source contains multiple matching TP2s and BIO may pick the wrong one.
 

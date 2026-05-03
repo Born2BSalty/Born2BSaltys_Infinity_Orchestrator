@@ -182,6 +182,7 @@ pub struct Step2UpdateRetryRequest {
     pub source_url: String,
     pub channel: Option<String>,
     pub tag: Option<String>,
+    pub commit: Option<String>,
     pub branch: Option<String>,
     pub asset: Option<String>,
     pub pkg: Option<String>,

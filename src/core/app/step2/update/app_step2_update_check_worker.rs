@@ -133,7 +133,7 @@ fn update_check_request_key(request: &Step2UpdateCheckRequest) -> String {
             .join(",")
     };
     format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         request.repo.trim().to_ascii_lowercase(),
         request.source_url.trim().to_ascii_lowercase(),
         request
@@ -144,6 +144,12 @@ fn update_check_request_key(request: &Step2UpdateCheckRequest) -> String {
             .to_ascii_lowercase(),
         request
             .tag
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase(),
+        request
+            .commit
             .as_deref()
             .unwrap_or("")
             .trim()

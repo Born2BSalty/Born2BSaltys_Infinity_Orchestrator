@@ -20,6 +20,7 @@ pub(crate) struct Step2UpdateCheckRequest {
     pub(crate) source_url: String,
     pub(crate) channel: Option<String>,
     pub(crate) tag: Option<String>,
+    pub(crate) commit: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) asset: Option<String>,
     pub(crate) pkg: Option<String>,
@@ -38,6 +39,7 @@ pub(crate) struct Step2UpdateCheckOutcome {
     pub(crate) label: String,
     pub(crate) source_id: String,
     pub(crate) tag: Option<String>,
+    pub(crate) source_ref: Option<String>,
     pub(crate) asset_name: Option<String>,
     pub(crate) asset_url: Option<String>,
     pub(crate) error: Option<String>,
@@ -61,6 +63,7 @@ pub(crate) fn start_step2_update_check(
             source_url: request.source_url.clone(),
             channel: request.channel.clone(),
             tag: request.tag.clone(),
+            commit: request.commit.clone(),
             branch: request.branch.clone(),
             asset: request.asset.clone(),
             pkg: request.pkg.clone(),
@@ -154,6 +157,7 @@ pub(crate) fn poll_step2_update_check(
                     || state.step1.bootstraps_from_weidu_logs());
             let uses_source_snapshot =
                 matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot);
+            let source_ref = outcome.source_ref.clone().unwrap_or_else(|| tag.clone());
             if uses_source_snapshot && let Some(err) = sources.error.as_ref() {
                 push_update_check_failure(
                     state,
@@ -166,12 +170,12 @@ pub(crate) fn poll_step2_update_check(
                 continue;
             }
             let allow_source_ref_update =
-                uses_source_snapshot && source_ref_is_update(&outcome.tp_file, &tag);
+                uses_source_snapshot && source_ref_is_update(&outcome.tp_file, &source_ref);
             let allow_snapshot_install = uses_source_snapshot
                 && !has_current_version
                 && state.step1.have_weidu_logs
                 && state.step1.download_archive
-                && !source_ref_matches(&outcome.tp_file, &tag);
+                && !source_ref_matches(&outcome.tp_file, &source_ref);
             if matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot)
                 && !allow_source_ref_update
                 && !allow_snapshot_install
@@ -200,7 +204,7 @@ pub(crate) fn poll_step2_update_check(
                         tag: tag.clone(),
                         asset_name,
                         asset_url,
-                        installed_source_ref: uses_source_snapshot.then(|| tag.clone()),
+                        installed_source_ref: uses_source_snapshot.then_some(source_ref),
                     });
             }
             let entry = format!("{} ({tag})", outcome.label);
@@ -286,6 +290,7 @@ pub(super) fn failed_outcome(
         label: request.label,
         source_id: request.source_id,
         tag: None,
+        source_ref: None,
         asset_name: None,
         asset_url: None,
         error: Some(error.to_string()),
