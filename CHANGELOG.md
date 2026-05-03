@@ -11,6 +11,7 @@
 - Added installed source provenance tracking after successful extraction.
 - Added Installed Source / Update Source fields in Step 2 Details.
 - Added GitHub update checking for releases, pre-releases, tags, branches, assets, and platform packages.
+- Added GitHub commit pin support for exact source snapshots.
 - Added GitHub authentication support in Step 1.
 - Added GitHub HTTP/ref helper modules for update checks.
 - Added download/extract pipeline for Step 2 updates.
@@ -34,6 +35,7 @@
 - Added Step 2 saved-log flow support.
 - Improved Step 2 scanning, component parsing, language scanning, hidden component handling, group handling, and render-order tracking.
 - Improved Step 2 Details panel with package/source metadata.
+- Fixed Step 2 Jump to Selected being cleared by toolbar clicks.
 - Reorganized Step 2 UI into compat, details, prompt, services, toolbar, tree, and update_check folders.
 - Added Step 2 default mod-download service.
 - Added Step 2 tree header markers and improved tree rendering/selection structure.
@@ -56,6 +58,7 @@
 - Improved Step 5 prompt answers UI.
 - Improved Step 5 status bar, console, input row, and phase display structure.
 - Expanded Step 5 diagnostics exports.
+- Added Restart App With Diagnostics button for normal mode troubleshooting.
 - Added mod download diagnostics export.
 - Added compatibility rule inventory, trace, matches summary, decisions, and snapshot diagnostics.
 - Added parser raw/events diagnostics.
@@ -64,6 +67,7 @@
 - Added scan context diagnostics.
 - Added Step 2 component audit and render-order diagnostics.
 - Added Step 3 issue snapshot diagnostics.
+- Fixed Step 3 WeiDU-style row display showing full local paths.
 - Added undefined-variable detection/summary diagnostics.
 - Improved source-log and target-prep log handling.
 - Improved appdata diagnostic copy support.
@@ -77,6 +81,7 @@
 - Reorganized core Step 5 install/diagnostics/log code into smaller modules.
 - Moved UI app lifecycle/bootstrap/update-loop files into UI layer.
 - Added shared layout tokens.
+- Added runtime window/taskbar icon support.
 - Updated shared theme, typography, and tooltip helpers.
 - Updated release workflow to build pull request artifacts without publishing a GitHub Release.
 - Added Linux release-build system dependency installation.
