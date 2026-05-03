@@ -14,7 +14,13 @@ pub fn native_options() -> NativeOptions {
     NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
-            .with_min_inner_size([WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT]),
+            .with_min_inner_size([WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT])
+            .with_icon(app_icon()),
         ..Default::default()
     }
+}
+
+fn app_icon() -> egui::IconData {
+    eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
+        .expect("assets/icon.png must be a valid PNG icon")
 }

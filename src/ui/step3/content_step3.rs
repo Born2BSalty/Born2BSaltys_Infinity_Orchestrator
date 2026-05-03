@@ -174,17 +174,20 @@ fn render_toolbar(
             } else {
                 !state.step3.bg2ee_redo_stack.is_empty()
             };
-            if dev_mode
-                && ui
+            if dev_mode {
+                if ui
                     .button("Export diagnostics")
                     .on_hover_text(crate::ui::shared::tooltip_global::STEP3_EXPORT_DIAGNOSTICS)
                     .clicked()
-            {
-                toolbar_support_step3::export_diagnostics_from_step3(
-                    state,
-                    dev_mode,
-                    exe_fingerprint,
-                );
+                {
+                    toolbar_support_step3::export_diagnostics_from_step3(
+                        state,
+                        dev_mode,
+                        exe_fingerprint,
+                    );
+                }
+            } else if ui.button("Restart App With Diagnostics").clicked() {
+                toolbar_support_step3::restart_app_with_diagnostics_from_step3(state);
             }
             if ui
                 .button("Expand All")

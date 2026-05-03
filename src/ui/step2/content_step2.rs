@@ -60,8 +60,8 @@ pub fn render_header(
     ui.scope_builder(egui::UiBuilder::new().max_rect(title_rect), |ui| {
         ui.horizontal(|ui| {
             title_text_rect = Some(ui.heading("Step2: Scan and Select").rect);
-            if dev_mode {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if dev_mode {
                     let export_response = ui.button("Export diagnostics");
                     export_button_rect = Some(export_response.rect);
                     if export_response.clicked() {
@@ -71,8 +71,14 @@ pub fn render_header(
                             exe_fingerprint,
                         );
                     }
-                });
-            }
+                } else {
+                    let restart_response = ui.button("Restart App With Diagnostics");
+                    export_button_rect = Some(restart_response.rect);
+                    if restart_response.clicked() {
+                        toolbar_actions_step2::restart_app_with_diagnostics_from_step2(state);
+                    }
+                }
+            });
         });
     });
     clear_selection_from_empty_header_space(
@@ -197,17 +203,22 @@ pub fn render_controls(
             {
                 toolbar_actions_step2::expand_all(state);
             }
-            if ui
+            let jump_response = ui
                 .add_enabled(
                     state.step2.selected.is_some() && !ui_locked,
                     egui::Button::new("Jump to Selected").min_size(egui::vec2(132.0, STEP2_BTN_H)),
                 )
-                .on_hover_text(crate::ui::shared::tooltip_global::STEP2_JUMP_SELECTED)
-                .clicked()
-            {
+                .on_hover_text(crate::ui::shared::tooltip_global::STEP2_JUMP_SELECTED);
+            if jump_response.clicked() {
                 state.step2.jump_to_selected_requested = true;
             }
-            clear_selection_from_empty_header_space(ui, state, controls_rect, None, None);
+            clear_selection_from_empty_header_space(
+                ui,
+                state,
+                controls_rect,
+                Some(jump_response.rect),
+                None,
+            );
         });
     });
 }

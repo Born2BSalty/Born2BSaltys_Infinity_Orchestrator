@@ -6,7 +6,9 @@ use crate::ui::step2::prompt_popup_step2::open_toolbar_prompt_popup;
 use crate::ui::step2::service_list_ops_step2::{clear_all, select_visible};
 use crate::ui::step2::state_step2::active_mods_mut;
 use crate::ui::step2::toolbar_compat_step2::{Step2ToolbarCompatSummary, Step2ToolbarIssueTarget};
-use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
+use crate::ui::step5::service_diagnostics_support_step5::{
+    export_diagnostics, restart_app_with_diagnostics,
+};
 
 pub(crate) fn export_diagnostics_from_step2(
     state: &mut WizardState,
@@ -21,6 +23,10 @@ pub(crate) fn export_diagnostics_from_step2(
             state.step5.last_status_text = format!("Diagnostics export failed: {err}");
         }
     }
+}
+
+pub(crate) fn restart_app_with_diagnostics_from_step2(state: &mut WizardState) {
+    restart_app_with_diagnostics(state);
 }
 
 pub(crate) fn clear_all_and_refresh_compat(state: &mut WizardState) {

@@ -1809,6 +1809,80 @@ tp2 = "item_rev"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
+  [[mods.sources]]
+  id = "subtledoctor"
+  label = "subtledoctor"
+  type = "github"
+  url = "https://github.com/subtledoctor/ItemRevisions"
+  repo = "subtledoctor/ItemRevisions"
+  pkg_windows = "wzp,zip"
+  pkg_linux = "lin,zip"
+  pkg_macos = "mac,zip"
+
+  [[mods.sources]]
+  id = "selphira"
+  label = "Selphira"
+  type = "github"
+  url = "https://github.com/Selphira/ItemRevisions"
+  repo = "Selphira/ItemRevisions"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "ardanis"
+  label = "Ardanis"
+  type = "github"
+  url = "https://github.com/Ardanis/ItemRevisions"
+  repo = "Ardanis/ItemRevisions"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "k4thos"
+  label = "K4thos"
+  type = "github"
+  url = "https://github.com/K4thos/ItemRevisions"
+  repo = "K4thos/ItemRevisions"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "kreso123"
+  label = "kreso123"
+  type = "github"
+  url = "https://github.com/kreso123/ItemRevisions"
+  repo = "kreso123/ItemRevisions"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "mercurier"
+  label = "mercurier"
+  type = "github"
+  url = "https://github.com/mercurier/ItemRevisions"
+  repo = "mercurier/ItemRevisions"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "mike1072"
+  label = "mike1072"
+  type = "github"
+  url = "https://github.com/mike1072/ItemRevisions"
+  repo = "mike1072/ItemRevisions"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "mleduque"
+  label = "mleduque"
+  type = "github"
+  url = "https://github.com/mleduque/ItemRevisions"
+  repo = "mleduque/ItemRevisions"
+  branch = "master"
+
+  [[mods.sources]]
+  id = "vbigiani"
+  label = "vbigiani"
+  type = "github"
+  url = "https://github.com/vbigiani/ItemRevisions"
+  repo = "vbigiani/ItemRevisions"
+  branch = "master"
+
 [[mods]]
 name = "IWDification"
 tp2 = "iwdification"

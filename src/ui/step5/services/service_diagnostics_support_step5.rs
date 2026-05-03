@@ -32,6 +32,23 @@ pub(crate) fn export_diagnostics(
     crate::ui::step5::diagnostics::export_diagnostics(state, terminal, &ctx)
 }
 
+pub(crate) fn restart_app_with_diagnostics(state: &mut WizardState) {
+    match restart_with_diagnostics() {
+        Ok(()) => std::process::exit(0),
+        Err(err) => {
+            state.step5.last_status_text = format!("Restart with diagnostics failed: {err}");
+        }
+    }
+}
+
+fn restart_with_diagnostics() -> anyhow::Result<()> {
+    let exe = std::env::current_exe()?;
+    std::process::Command::new(exe)
+        .args(["-d", "gui"])
+        .spawn()?;
+    Ok(())
+}
+
 pub(crate) fn source_log_infos(
     step1: &Step1State,
 ) -> Vec<crate::ui::step5::log_files::SourceLogInfo> {
