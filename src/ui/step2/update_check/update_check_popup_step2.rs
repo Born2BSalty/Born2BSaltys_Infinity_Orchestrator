@@ -9,7 +9,7 @@ use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::review_edit_any_log_applied;
 use crate::ui::step2::update_check_popup_lists_step2::{
     collect_source_choices, collect_source_edit_rows, pending_log_labels, render_list,
-    render_source_choices, single_mod_popup_target,
+    render_section_header, render_source_choices, single_mod_popup_target,
 };
 use crate::ui::step2::update_check_popup_report_step2::build_popup_report;
 use crate::ui::step2::update_check_popup_source_editor_step2::render_source_editor_popup;
@@ -67,7 +67,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
     .collapsible(false)
     .resizable(true)
     .movable(true)
-    .default_size(egui::vec2(420.0, 320.0))
+    .default_size(egui::vec2(560.0, 320.0))
     .min_width(320.0)
     .min_height(180.0)
     .show(ctx, |ui| {
@@ -520,6 +520,35 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                     Step2Action::PreviewUpdateSelected
                 });
             }
+            let add_source_target = single_mod_popup_target
+                .as_ref()
+                .map(|(_, tp_file)| {
+                    (
+                        mod_downloads::normalize_mod_download_tp2(tp_file),
+                        tp_file.clone(),
+                    )
+                })
+                .or_else(|| {
+                    (source_choices.len() == 1).then(|| {
+                        (
+                            source_choices[0].tp2_key.clone(),
+                            source_choices[0].label.clone(),
+                        )
+                    })
+                });
+            if ui
+                .add_enabled(add_source_target.is_some(), egui::Button::new("Add Source"))
+                .clicked()
+                && action.is_none()
+                && let Some((tp2, label)) = add_source_target
+            {
+                *action = Some(Step2Action::OpenModDownloadSourceEditor {
+                    tp2,
+                    label,
+                    source_id: "new-source".to_string(),
+                    allow_source_id_change: true,
+                });
+            }
             if ui
                 .add_enabled(can_copy_report, egui::Button::new("Copy Report"))
                 .clicked()
@@ -586,4 +615,71 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
             confirm_open && state.step2.update_selected_confirm_latest_fallback_open;
     }
     render_source_editor_popup(ctx, state, action);
+    render_forks_popup(ctx, state, action);
+}
+
+fn render_forks_popup(
+    ctx: &egui::Context,
+    state: &mut WizardState,
+    action: &mut Option<Step2Action>,
+) {
+    if !state.step2.mod_download_forks_popup_open {
+        return;
+    }
+    let mut open = state.step2.mod_download_forks_popup_open;
+    egui::Window::new(state.step2.mod_download_forks_popup_title.clone())
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(true)
+        .movable(true)
+        .default_size(egui::vec2(620.0, 420.0))
+        .show(ctx, |ui| {
+            render_section_header(ui, &state.step2.mod_download_forks_popup_label);
+            ui.add_space(8.0);
+            if let Some(err) = state.step2.mod_download_forks_popup_error.as_ref() {
+                ui.label(err);
+                ui.add_space(8.0);
+            }
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    egui::Grid::new("step2-discovered-forks")
+                        .num_columns(5)
+                        .spacing([8.0, 4.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label(crate::ui::shared::typography_global::strong("Repo"));
+                            ui.label(crate::ui::shared::typography_global::strong("Branch"));
+                            ui.label(crate::ui::shared::typography_global::strong("Updated"));
+                            ui.label("");
+                            ui.label("");
+                            ui.end_row();
+                            for fork in &state.step2.mod_download_forks {
+                                let updated_date = fork
+                                    .updated_at
+                                    .split('T')
+                                    .next()
+                                    .unwrap_or(&fork.updated_at);
+                                ui.label(&fork.full_name);
+                                ui.label(&fork.default_branch);
+                                ui.label(updated_date);
+                                if ui.button("Open").clicked() && action.is_none() {
+                                    *action =
+                                        Some(Step2Action::OpenSelectedWeb(fork.html_url.clone()));
+                                }
+                                if ui.button("Add Source").clicked() && action.is_none() {
+                                    *action = Some(Step2Action::AddDiscoveredModDownloadFork {
+                                        tp2: state.step2.mod_download_forks_popup_tp2.clone(),
+                                        label: state.step2.mod_download_forks_popup_label.clone(),
+                                        full_name: fork.full_name.clone(),
+                                        owner_login: fork.owner_login.clone(),
+                                        default_branch: fork.default_branch.clone(),
+                                    });
+                                }
+                                ui.end_row();
+                            }
+                        });
+                });
+        });
+    state.step2.mod_download_forks_popup_open = open;
 }

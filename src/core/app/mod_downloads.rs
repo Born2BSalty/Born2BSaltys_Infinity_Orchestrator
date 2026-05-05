@@ -204,6 +204,7 @@ pub(crate) fn load_user_mod_download_source_block(
     tp2: &str,
     label: &str,
     source_id: &str,
+    allow_source_id_change: bool,
 ) -> Result<String, String> {
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
     let path = mod_downloads_user_path();
@@ -213,18 +214,42 @@ pub(crate) fn load_user_mod_download_source_block(
     {
         return Ok(source_block);
     }
-    Ok(template_source_block(tp2, label, source_id))
+    if allow_source_id_change {
+        Ok(template_source_block(label, source_id))
+    } else {
+        Ok(load_mod_download_sources()
+            .resolve_source(tp2, Some(source_id))
+            .map(|source| source_to_editor_block(&source))
+            .unwrap_or_else(|| template_source_block(label, source_id)))
+    }
 }
 
 pub(crate) fn save_user_mod_download_source_block(
     tp2: &str,
     label: &str,
     source_id: &str,
+    allow_source_id_change: bool,
     source_block: &str,
 ) -> Result<(), String> {
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
     let path = mod_downloads_user_path();
     let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    if source_block.trim().is_empty() {
+        let updated = remove_source_block(&content, tp2, source_id);
+        toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
+        fs::write(&path, updated).map_err(|err| err.to_string())?;
+        return Ok(());
+    }
+    if !allow_source_id_change
+        && let Some(edited_source_id) = source_block.lines().find_map(source_id_from_line)
+        && normalize_source_id(&edited_source_id) != normalize_source_id(source_id)
+    {
+        return Err(format!(
+            "Source id cannot be changed from \"{}\" to \"{}\" in Edit Source",
+            source_id.trim(),
+            edited_source_id.trim()
+        ));
+    }
     let updated = replace_or_append_source_block(&content, tp2, label, source_id, source_block);
     toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
     fs::write(&path, updated).map_err(|err| err.to_string())
@@ -329,6 +354,50 @@ fn replace_or_append_source_block(
     updated.push_str(&normalize_source_block_indent(source_block));
     updated.push('\n');
     updated
+}
+
+fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
+    let target = normalize_mod_download_tp2(tp2);
+    for (start, end) in mod_block_ranges(content) {
+        let block = &content[start..end];
+        if block_tp2_matches(block, &target) {
+            let mut updated = String::new();
+            updated.push_str(content[..start].trim_end());
+            if let Some(updated_block) = remove_source_from_mod_block(block, source_id) {
+                if !updated.is_empty() {
+                    updated.push_str("\n\n");
+                }
+                updated.push_str(updated_block.trim());
+            }
+            let tail = content[end..].trim_start();
+            if !tail.is_empty() {
+                if !updated.is_empty() {
+                    updated.push_str("\n\n");
+                }
+                updated.push_str(tail);
+            }
+            return updated.trim_end().to_string() + "\n";
+        }
+    }
+    content.trim_end().to_string() + "\n"
+}
+
+fn remove_source_from_mod_block(mod_block: &str, source_id: &str) -> Option<String> {
+    let target = normalize_source_id(source_id);
+    let mut updated = String::new();
+    let mut cursor = 0usize;
+    let mut kept_source = false;
+    for (start, end) in source_block_ranges(mod_block) {
+        if source_block_id_matches(&mod_block[start..end], &target) {
+            updated.push_str(mod_block[cursor..start].trim_end());
+        } else {
+            updated.push_str(&mod_block[cursor..end]);
+            kept_source = true;
+        }
+        cursor = end;
+    }
+    updated.push_str(&mod_block[cursor..]);
+    kept_source.then(|| updated.trim_end().to_string())
 }
 
 fn mod_block_ranges(content: &str) -> Vec<(usize, usize)> {
@@ -572,13 +641,78 @@ fn template_mod_header(tp2: &str, label: &str) -> String {
     )
 }
 
-fn template_source_block(tp2: &str, _label: &str, source_id: &str) -> String {
-    if let Some(source) = load_mod_download_sources().resolve_source(tp2, Some(source_id)) {
-        return format!(
-            "[[mods.sources]]\nid = \"{}\"",
-            escape_toml_string(&source.source_id)
-        );
+fn source_to_editor_block(source: &ModDownloadSource) -> String {
+    let mut lines = vec![
+        "[[mods.sources]]".to_string(),
+        format!("id = \"{}\"", escape_toml_string(&source.source_id)),
+        format!("label = \"{}\"", escape_toml_string(&source.source_label)),
+        "type = \"github\"".to_string(),
+        format!("url = \"{}\"", escape_toml_string(&source.url)),
+    ];
+    if let Some(github) = source.github.as_ref() {
+        lines.push(format!("repo = \"{}\"", escape_toml_string(github)));
     }
+    for exact_github in &source.exact_github {
+        lines.push(format!(
+            "exact_github = \"{}\"",
+            escape_toml_string(exact_github)
+        ));
+    }
+    if let Some(channel) = source.channel.as_ref() {
+        lines.push(format!("channel = \"{}\"", escape_toml_string(channel)));
+    }
+    if let Some(tag) = source.tag.as_ref() {
+        lines.push(format!("tag = \"{}\"", escape_toml_string(tag)));
+    }
+    if let Some(commit) = source.commit.as_ref() {
+        lines.push(format!("commit = \"{}\"", escape_toml_string(commit)));
+    }
+    if let Some(branch) = source.branch.as_ref() {
+        lines.push(format!("branch = \"{}\"", escape_toml_string(branch)));
+    }
+    if let Some(asset) = source.asset.as_ref() {
+        lines.push(format!("asset = \"{}\"", escape_toml_string(asset)));
+    }
+    if let Some(subdir_require) = source.subdir_require.as_ref() {
+        lines.push(format!(
+            "subdir_require = \"{}\"",
+            escape_toml_string(subdir_require)
+        ));
+    }
+    if !source.aliases.is_empty() {
+        lines.push(format!(
+            "aliases = [{}]",
+            source
+                .aliases
+                .iter()
+                .map(|alias| format!("\"{}\"", escape_toml_string(alias)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if let Some(tp2_rename) = source.tp2_rename.as_ref() {
+        lines.push(format!(
+            "tp2_rename = {{ from = \"{}\", to = \"{}\" }}",
+            escape_toml_string(&tp2_rename.from),
+            escape_toml_string(&tp2_rename.to)
+        ));
+    }
+    if let Some(pkg_windows) = source.pkg_windows.as_ref() {
+        lines.push(format!(
+            "pkg_windows = \"{}\"",
+            escape_toml_string(pkg_windows)
+        ));
+    }
+    if let Some(pkg_linux) = source.pkg_linux.as_ref() {
+        lines.push(format!("pkg_linux = \"{}\"", escape_toml_string(pkg_linux)));
+    }
+    if let Some(pkg_macos) = source.pkg_macos.as_ref() {
+        lines.push(format!("pkg_macos = \"{}\"", escape_toml_string(pkg_macos)));
+    }
+    lines.join("\n")
+}
+
+fn template_source_block(_label: &str, source_id: &str) -> String {
     format!(
         "[[mods.sources]]\nid = \"{}\"\nlabel = \"GitHub\"\ntype = \"github\"\nurl = \"https://github.com/OWNER/REPO\"\nrepo = \"OWNER/REPO\"\ndefault = true",
         escape_toml_string(source_id.trim())

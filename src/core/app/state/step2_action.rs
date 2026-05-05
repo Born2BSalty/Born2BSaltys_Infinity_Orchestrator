@@ -24,6 +24,19 @@ pub enum Step2Action {
         tp2: String,
         label: String,
         source_id: String,
+        allow_source_id_change: bool,
+    },
+    DiscoverModDownloadForks {
+        tp2: String,
+        label: String,
+        repo: String,
+    },
+    AddDiscoveredModDownloadFork {
+        tp2: String,
+        label: String,
+        full_name: String,
+        owner_login: String,
+        default_branch: String,
     },
     SaveModDownloadSourceEditor,
     SetModDownloadSource {

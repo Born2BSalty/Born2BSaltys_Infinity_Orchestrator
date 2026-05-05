@@ -27,6 +27,8 @@ pub mod app_step2_update_extract;
 pub mod app_step2_update_github;
 #[path = "step2/update/app_step2_update_github_auth.rs"]
 pub mod app_step2_update_github_auth;
+#[path = "step2/update/app_step2_update_github_forks.rs"]
+pub mod app_step2_update_github_forks;
 #[path = "step2/update/app_step2_update_github_http.rs"]
 pub mod app_step2_update_github_http;
 #[path = "step2/update/app_step2_update_github_ref.rs"]

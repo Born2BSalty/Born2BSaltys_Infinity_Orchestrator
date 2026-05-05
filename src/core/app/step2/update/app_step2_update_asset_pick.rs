@@ -132,6 +132,7 @@ fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
                 && !lower.starts_with("wzp-")
                 && !lower.contains("source code")
         }
+        "rar" => lower.ends_with(".rar"),
         "iemod" => lower.ends_with(".iemod"),
         _ => false,
     }

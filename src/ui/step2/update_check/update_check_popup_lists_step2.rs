@@ -60,17 +60,7 @@ pub(super) fn render_source_choices(
                         tp2: choice.tp2_key.clone(),
                         label: choice.label.clone(),
                         source_id: choice.selected_source_id.clone(),
-                    });
-                }
-                if ui
-                    .add_enabled(!popup_busy, egui::Button::new("Add Source"))
-                    .clicked()
-                    && action.is_none()
-                {
-                    *action = Some(Step2Action::OpenModDownloadSourceEditor {
-                        tp2: choice.tp2_key.clone(),
-                        label: choice.label.clone(),
-                        source_id: "new-source".to_string(),
+                        allow_source_id_change: false,
                     });
                 }
                 if ui
@@ -83,6 +73,21 @@ pub(super) fn render_source_choices(
                     && let Some(url) = choice.selected_source_url.as_ref()
                 {
                     *action = Some(Step2Action::OpenSelectedWeb(url.clone()));
+                }
+                if ui
+                    .add_enabled(
+                        !popup_busy && choice.selected_source_repo.is_some(),
+                        egui::Button::new("Discover Forks"),
+                    )
+                    .clicked()
+                    && action.is_none()
+                    && let Some(repo) = choice.selected_source_repo.as_ref()
+                {
+                    *action = Some(Step2Action::DiscoverModDownloadForks {
+                        tp2: choice.tp2_key.clone(),
+                        label: choice.label.clone(),
+                        repo: repo.clone(),
+                    });
                 }
                 ui.end_row();
 
@@ -185,6 +190,7 @@ pub(super) fn render_list(
                                 tp2: row.tp2.clone(),
                                 label: row.label.clone(),
                                 source_id: row.source_id.clone(),
+                                allow_source_id_change: add_mod,
                             });
                         }
                     } else {
@@ -196,7 +202,7 @@ pub(super) fn render_list(
     }
 }
 
-fn render_section_header(ui: &mut egui::Ui, title: &str) {
+pub(super) fn render_section_header(ui: &mut egui::Ui, title: &str) {
     let text = crate::ui::shared::typography_global::strong(title)
         .color(crate::ui::shared::theme_global::text_primary());
     egui::Frame::group(ui.style())
@@ -292,11 +298,12 @@ pub(super) fn pending_log_labels(state: &WizardState) -> Vec<String> {
 
 #[derive(Debug, Clone)]
 pub(super) struct SourceChoiceRow {
-    tp2_key: String,
-    label: String,
+    pub(super) tp2_key: String,
+    pub(super) label: String,
     selected_source_id: String,
     selected_label: String,
     selected_source_url: Option<String>,
+    selected_source_repo: Option<String>,
     options: Vec<SourceChoiceOption>,
 }
 
@@ -364,7 +371,7 @@ pub(super) fn collect_source_choices(
     let mut rows = Vec::<SourceChoiceRow>::new();
     for (tp2_key, label) in targets {
         let sources = source_load.find_sources(&tp2_key);
-        if sources.len() <= 1 {
+        if sources.is_empty() {
             continue;
         }
         let selected_source = source_load
@@ -378,12 +385,14 @@ pub(super) fn collect_source_choices(
             )
             .unwrap_or_else(|| sources[0].clone());
         let selected_source_url = source_open_url(&selected_source);
+        let selected_source_repo = selected_source.github.clone();
         rows.push(SourceChoiceRow {
             tp2_key,
             label,
             selected_source_id: selected_source.source_id.clone(),
             selected_label: selected_source.source_label.clone(),
             selected_source_url,
+            selected_source_repo,
             options: sources
                 .into_iter()
                 .map(|source| SourceChoiceOption {

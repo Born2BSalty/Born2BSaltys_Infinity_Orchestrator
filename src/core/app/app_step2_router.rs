@@ -126,6 +126,54 @@ pub(crate) fn handle_step2_action(
                 state.step2.scan_status = format!("Open failed: {err}");
             }
         }
+        Step2Action::DiscoverModDownloadForks { tp2, label, repo } => {
+            state.step2.mod_download_forks_popup_open = true;
+            state.step2.mod_download_forks_popup_title = format!("Forks for {label}");
+            state.step2.mod_download_forks_popup_tp2 = tp2;
+            state.step2.mod_download_forks_popup_label = label;
+            state.step2.mod_download_forks.clear();
+            match super::app_step2_update_github_forks::fetch_github_forks(&repo) {
+                Ok(forks) => {
+                    state.step2.mod_download_forks_popup_error = None;
+                    state.step2.mod_download_forks = forks;
+                    state.step2.scan_status = format!(
+                        "Found {} fork(s) for {repo}",
+                        state.step2.mod_download_forks.len()
+                    );
+                }
+                Err(err) => {
+                    state.step2.mod_download_forks_popup_error = Some(err.clone());
+                    state.step2.scan_status = format!("Discover forks failed: {err}");
+                }
+            }
+        }
+        Step2Action::AddDiscoveredModDownloadFork {
+            tp2,
+            label,
+            full_name,
+            owner_login,
+            default_branch,
+        } => {
+            let source_id = owner_login.trim().to_ascii_lowercase();
+            let source_block = format!(
+                "[[mods.sources]]\nid = \"{}\"\nlabel = \"{}\"\ntype = \"github\"\nurl = \"https://github.com/{}\"\nrepo = \"{}\"\nbranch = \"{}\"",
+                source_id,
+                owner_login.trim(),
+                full_name.trim(),
+                full_name.trim(),
+                default_branch.trim()
+            );
+            state.step2.mod_download_source_editor_open = true;
+            state.step2.mod_download_source_editor_tp2 = tp2;
+            state.step2.mod_download_source_editor_label = label;
+            state.step2.mod_download_source_editor_source_id = source_id;
+            state
+                .step2
+                .mod_download_source_editor_allow_source_id_change = true;
+            state.step2.mod_download_source_editor_text = source_block;
+            state.step2.mod_download_source_editor_error = None;
+            state.step2.scan_status = format!("Review fork source {full_name}");
+        }
         Step2Action::OpenModDownloadsUserSource => {
             if let Err(err) = mod_downloads::ensure_mod_downloads_files() {
                 state.step2.scan_status = format!("Open failed: {err}");
@@ -153,12 +201,21 @@ pub(crate) fn handle_step2_action(
             tp2,
             label,
             source_id,
-        } => match mod_downloads::load_user_mod_download_source_block(&tp2, &label, &source_id) {
+            allow_source_id_change,
+        } => match mod_downloads::load_user_mod_download_source_block(
+            &tp2,
+            &label,
+            &source_id,
+            allow_source_id_change,
+        ) {
             Ok(text) => {
                 state.step2.mod_download_source_editor_open = true;
                 state.step2.mod_download_source_editor_tp2 = tp2;
                 state.step2.mod_download_source_editor_label = label;
                 state.step2.mod_download_source_editor_source_id = source_id;
+                state
+                    .step2
+                    .mod_download_source_editor_allow_source_id_change = allow_source_id_change;
                 state.step2.mod_download_source_editor_text = text;
                 state.step2.mod_download_source_editor_error = None;
             }
@@ -170,9 +227,16 @@ pub(crate) fn handle_step2_action(
             let tp2 = state.step2.mod_download_source_editor_tp2.clone();
             let label = state.step2.mod_download_source_editor_label.clone();
             let source_id = state.step2.mod_download_source_editor_source_id.clone();
+            let allow_source_id_change = state
+                .step2
+                .mod_download_source_editor_allow_source_id_change;
             let text = state.step2.mod_download_source_editor_text.clone();
             match mod_downloads::save_user_mod_download_source_block(
-                &tp2, &label, &source_id, &text,
+                &tp2,
+                &label,
+                &source_id,
+                allow_source_id_change,
+                &text,
             ) {
                 Ok(()) => {
                     state.step2.mod_download_source_editor_open = false;
