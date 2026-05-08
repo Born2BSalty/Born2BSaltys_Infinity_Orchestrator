@@ -195,6 +195,7 @@ pub(crate) fn preview_update_selected_mod(
     let mut manual = Vec::new();
     let mut unknown = Vec::new();
     let mut update_requests = Vec::new();
+    let mut target_label = None::<String>;
 
     for mod_state in mods.iter_mut() {
         if mod_state.tp_file != tp_file {
@@ -206,6 +207,7 @@ pub(crate) fn preview_update_selected_mod(
         } else {
             mod_state.name.clone()
         };
+        target_label = Some(label.clone());
         if mod_state.update_locked {
             break;
         }
@@ -232,26 +234,57 @@ pub(crate) fn preview_update_selected_mod(
         break;
     }
 
-    state.step2.update_selected_known_sources = known;
-    state.step2.update_selected_manual_sources = manual;
-    state.step2.update_selected_unknown_sources = unknown;
-    state.step2.update_selected_update_assets.clear();
-    state.step2.update_selected_update_sources.clear();
-    state.step2.update_selected_locked_update_assets.clear();
-    state.step2.update_selected_locked_update_sources.clear();
-    state.step2.update_selected_missing_sources.clear();
-    state.step2.update_selected_downloaded_sources.clear();
-    state.step2.update_selected_download_failed_sources.clear();
-    state
-        .step2
-        .update_selected_exact_version_failed_sources
-        .clear();
-    state.step2.update_selected_failed_sources.clear();
-    state.step2.update_selected_check_requests.clear();
-    state
-        .step2
-        .update_selected_exact_version_retry_requests
-        .clear();
+    if target_label.is_none() {
+        for pending in &state.step2.log_pending_downloads {
+            if pending.game_tab != game_tab
+                || mod_downloads::normalize_mod_download_tp2(&pending.tp_file)
+                    != mod_downloads::normalize_mod_download_tp2(&tp_file)
+            {
+                continue;
+            }
+            let source = resolve_selected_source(sources, &selected_source_ids, &pending.tp_file);
+            if let Some(source) = source {
+                if mod_downloads::source_is_auto_resolvable(&source) {
+                    queue_source_request(
+                        &pending.game_tab,
+                        &pending.tp_file,
+                        &pending.label,
+                        if state.step1.installs_exactly_from_weidu_logs() {
+                            pending.requested_version.as_deref()
+                        } else {
+                            None
+                        },
+                        &source,
+                        &mut update_requests,
+                    );
+                    known.push(pending.label.clone());
+                } else {
+                    manual.push(pending.label.clone());
+                }
+            } else {
+                unknown.push(pending.label.clone());
+            }
+            target_label = Some(pending.label.clone());
+            break;
+        }
+    }
+
+    if let Some(label) = target_label.as_deref() {
+        replace_label_entries(&mut state.step2.update_selected_known_sources, label, known);
+        replace_label_entries(
+            &mut state.step2.update_selected_manual_sources,
+            label,
+            manual,
+        );
+        replace_label_entries(
+            &mut state.step2.update_selected_unknown_sources,
+            label,
+            unknown,
+        );
+        super::app_step2_update_check::clear_update_check_result_for_mod(
+            state, &game_tab, &tp_file, label,
+        );
+    }
     state.step2.update_selected_confirm_latest_fallback_open = false;
     state.step2.update_selected_merge_latest_fallback = false;
     state.step2.update_selected_check_done_count = 0;
@@ -271,6 +304,11 @@ pub(crate) fn preview_update_selected_mod(
         state.step2.update_selected_check_running = false;
         *step2_update_check_rx = None;
     }
+}
+
+fn replace_label_entries(target: &mut Vec<String>, label: &str, replacement: Vec<String>) {
+    target.retain(|entry| entry != label);
+    target.extend(replacement);
 }
 
 fn queue_source_request(

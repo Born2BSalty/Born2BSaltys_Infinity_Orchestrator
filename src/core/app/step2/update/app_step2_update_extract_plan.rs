@@ -69,7 +69,7 @@ pub(super) fn build_extract_jobs(
             backup_root: PathBuf::from(state.step1.mods_backup_folder.trim()),
             target_root: current_mod_root(state, &asset.game_tab, &asset.tp_file),
             backup_version_tag: asset.tag.clone(),
-            installed_source_ref: extract_source_ref(asset),
+            installed_source_ref: extract_source_ref(asset, source.as_ref()),
             installed_source_id,
         });
     }
@@ -92,8 +92,17 @@ fn resolve_selected_source(
     )
 }
 
-fn extract_source_ref(asset: &Step2UpdateAsset) -> Option<String> {
+fn extract_source_ref(
+    asset: &Step2UpdateAsset,
+    source: Option<&mod_downloads::ModDownloadSource>,
+) -> Option<String> {
     asset.installed_source_ref.clone().or_else(|| {
+        if source
+            .and_then(|source| source.asset.as_ref())
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            return Some(asset.tag.clone());
+        }
         let asset_name = asset.asset_name.trim().to_ascii_lowercase();
         if asset_name.ends_with("-source.zip")
             || asset_name.ends_with("-source.tar.gz")

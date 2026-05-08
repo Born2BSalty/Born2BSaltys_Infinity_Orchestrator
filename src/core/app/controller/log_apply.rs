@@ -88,11 +88,17 @@ pub fn apply_log_to_mods(
         let mut matched_this_line = false;
         for mod_idx in target_mods {
             let mod_state = &mut mods[mod_idx];
+            let mod_tp_file = mod_state.tp_file.clone();
             let mut picked = false;
 
             for component in &mut mod_state.components {
                 if let Some(child_tp2) = parse_component_tp2_from_raw(component.raw_line.as_str())
-                    && !tp2_compatible(child_tp2.as_str(), target_tp2_norm.as_str())
+                    && !tp2_compatible_with_mod_aliases(
+                        child_tp2.as_str(),
+                        target_tp2_norm.as_str(),
+                        &mod_tp_file,
+                        &mod_download_sources,
+                    )
                 {
                     continue;
                 }
@@ -110,7 +116,12 @@ pub fn apply_log_to_mods(
                 for component in &mut mod_state.components {
                     if let Some(child_tp2) =
                         parse_component_tp2_from_raw(component.raw_line.as_str())
-                        && !tp2_compatible(child_tp2.as_str(), target_tp2_norm.as_str())
+                        && !tp2_compatible_with_mod_aliases(
+                            child_tp2.as_str(),
+                            target_tp2_norm.as_str(),
+                            &mod_tp_file,
+                            &mod_download_sources,
+                        )
                     {
                         continue;
                     }
@@ -158,6 +169,24 @@ fn mod_lookup_keys_for_mod_with_aliases(
     keys.into_iter()
         .filter(|key| !key.is_empty() && seen.insert(key.clone()))
         .collect()
+}
+
+fn tp2_compatible_with_mod_aliases(
+    child_tp2: &str,
+    target_tp2: &str,
+    mod_tp_file: &str,
+    sources: &mod_downloads::ModDownloadsLoad,
+) -> bool {
+    if tp2_compatible(child_tp2, target_tp2) {
+        return true;
+    }
+    sources.find_sources(mod_tp_file).into_iter().any(|source| {
+        tp2_compatible(child_tp2, &source.tp2)
+            || source
+                .aliases
+                .iter()
+                .any(|alias| tp2_compatible(child_tp2, alias))
+    })
 }
 
 fn check_component(component: &mut Step2ComponentState, next_order: &mut usize) {

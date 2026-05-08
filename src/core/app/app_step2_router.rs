@@ -21,7 +21,7 @@ pub(crate) fn handle_step2_action(
         Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
     >,
     step2_update_download_rx: &mut Option<
-        Receiver<super::app_step2_update_download::Step2UpdateDownloadResult>,
+        Receiver<super::app_step2_update_download::Step2UpdateDownloadEvent>,
     >,
     action: Step2Action,
 ) {
@@ -36,6 +36,8 @@ pub(crate) fn handle_step2_action(
         Step2Action::OpenUpdatePopup => {
             state.step2.update_selected_target_game_tab = None;
             state.step2.update_selected_target_tp_file = None;
+            state.step2.update_selected_refresh_target_game_tab = None;
+            state.step2.update_selected_refresh_target_tp_file = None;
             state.step2.update_selected_popup_open = true;
         }
         Step2Action::CheckExactLogModList => {
@@ -241,11 +243,22 @@ pub(crate) fn handle_step2_action(
                 Ok(()) => {
                     state.step2.mod_download_source_editor_open = false;
                     state.step2.mod_download_source_editor_error = None;
-                    invalidate_update_selected_results(state);
                     let loaded = mod_downloads::load_mod_download_sources();
                     if let Some(err) = loaded.error.as_ref() {
+                        invalidate_update_selected_results(state);
                         state.step2.scan_status = format!("Source saved but reload failed: {err}");
+                    } else if state.step2.update_selected_has_run
+                        && refresh_update_result_for_tp2(
+                            state,
+                            step2_update_check_rx,
+                            &loaded,
+                            &tp2,
+                        )
+                    {
+                        state.step2.scan_status =
+                            format!("Saved source entry for {tp2}; refreshing update result");
                     } else {
+                        invalidate_update_selected_results(state);
                         state.step2.scan_status = format!("Saved source entry for {tp2}");
                     }
                 }
@@ -256,7 +269,7 @@ pub(crate) fn handle_step2_action(
             }
         }
         Step2Action::SetModDownloadSource { tp2, source_id } => {
-            set_mod_download_source(state, &tp2, &source_id)
+            set_mod_download_source(state, step2_update_check_rx, &tp2, &source_id)
         }
         Step2Action::OpenCompatForComponent {
             game_tab,
@@ -314,7 +327,14 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
     state.step2.scan_status = format!("{verb} updates for {mod_name}");
 }
 
-fn set_mod_download_source(state: &mut WizardState, tp2: &str, source_id: &str) {
+fn set_mod_download_source(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+    tp2: &str,
+    source_id: &str,
+) {
     let tp2_key = mod_downloads::normalize_mod_download_tp2(tp2);
     let source_id = source_id.trim();
     if tp2_key.is_empty() || source_id.is_empty() {
@@ -333,9 +353,16 @@ fn set_mod_download_source(state: &mut WizardState, tp2: &str, source_id: &str) 
         .step2
         .selected_source_ids
         .insert(tp2_key.clone(), source_id.to_string());
-    invalidate_update_selected_results(state);
     let label = selected_source_label(state, &tp2_key).unwrap_or(tp2_key);
-    state.step2.scan_status = format!("Source changed for {label}. Run Check Updates again.");
+    let loaded = mod_downloads::load_mod_download_sources();
+    if state.step2.update_selected_has_run
+        && refresh_update_result_for_tp2(state, step2_update_check_rx, &loaded, tp2)
+    {
+        state.step2.scan_status = format!("Source changed for {label}; refreshing update result");
+    } else {
+        invalidate_update_selected_results(state);
+        state.step2.scan_status = format!("Source changed for {label}. Run Check Updates again.");
+    }
 }
 
 fn invalidate_update_selected_results(state: &mut WizardState) {
@@ -368,7 +395,59 @@ fn invalidate_update_selected_results(state: &mut WizardState) {
         .clear();
     state.step2.update_selected_confirm_latest_fallback_open = false;
     state.step2.update_selected_merge_latest_fallback = false;
+    state.step2.update_selected_refresh_target_game_tab = None;
+    state.step2.update_selected_refresh_target_tp_file = None;
     state.step2.exact_log_mod_list_checked = false;
+}
+
+fn refresh_update_result_for_tp2(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+    sources: &mod_downloads::ModDownloadsLoad,
+    tp2: &str,
+) -> bool {
+    let Some((game_tab, tp_file)) = update_target_for_tp2(state, tp2) else {
+        return false;
+    };
+    state.step2.update_selected_refresh_target_game_tab = Some(game_tab.clone());
+    state.step2.update_selected_refresh_target_tp_file = Some(tp_file.clone());
+    let previous_target_game_tab = state.step2.update_selected_target_game_tab.clone();
+    let previous_target_tp_file = state.step2.update_selected_target_tp_file.clone();
+    state.step2.update_selected_target_game_tab = Some(game_tab);
+    state.step2.update_selected_target_tp_file = Some(tp_file);
+    super::app_step2_update_preview::preview_update_selected_mod(
+        state,
+        step2_update_check_rx,
+        sources,
+    );
+    state.step2.update_selected_target_game_tab = previous_target_game_tab;
+    state.step2.update_selected_target_tp_file = previous_target_tp_file;
+    true
+}
+
+fn update_target_for_tp2(state: &WizardState, tp2: &str) -> Option<(String, String)> {
+    let target = mod_downloads::normalize_mod_download_tp2(tp2);
+    if target.is_empty() {
+        return None;
+    }
+    for (game_tab, mods) in [
+        ("BGEE", state.step2.bgee_mods.as_slice()),
+        ("BG2EE", state.step2.bg2ee_mods.as_slice()),
+    ] {
+        for mod_state in mods {
+            if mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == target {
+                return Some((game_tab.to_string(), mod_state.tp_file.clone()));
+            }
+        }
+    }
+    for pending in &state.step2.log_pending_downloads {
+        if mod_downloads::normalize_mod_download_tp2(&pending.tp_file) == target {
+            return Some((pending.game_tab.clone(), pending.tp_file.clone()));
+        }
+    }
+    None
 }
 
 fn selected_source_label(state: &WizardState, tp2_key: &str) -> Option<String> {

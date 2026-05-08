@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
@@ -17,9 +17,14 @@ pub(crate) struct Step2UpdateDownloadResult {
     pub(crate) failed: Vec<String>,
 }
 
+pub(crate) enum Step2UpdateDownloadEvent {
+    Progress { completed: usize, total: usize },
+    Finished(Step2UpdateDownloadResult),
+}
+
 pub(crate) fn start_step2_update_download(
     state: &mut WizardState,
-    step2_update_download_rx: &mut Option<Receiver<Step2UpdateDownloadResult>>,
+    step2_update_download_rx: &mut Option<Receiver<Step2UpdateDownloadEvent>>,
 ) {
     if state.step2.update_selected_download_running {
         return;
@@ -40,7 +45,7 @@ pub(crate) fn start_step2_update_download(
     }
 
     let archive_dir = PathBuf::from(archive_dir);
-    let (tx, rx) = mpsc::channel::<Step2UpdateDownloadResult>();
+    let (tx, rx) = mpsc::channel::<Step2UpdateDownloadEvent>();
     *step2_update_download_rx = Some(rx);
     state.step2.update_selected_download_running = true;
     state.step2.update_selected_extract_running = false;
@@ -48,26 +53,26 @@ pub(crate) fn start_step2_update_download(
     state.step2.update_selected_download_failed_sources.clear();
     state.step2.update_selected_extracted_sources.clear();
     state.step2.update_selected_extract_failed_sources.clear();
-    state.step2.scan_status = format!("Downloading updates: {}", assets.len());
+    state.step2.scan_status = format!("Downloading updates: 0/{}", assets.len());
 
     thread::spawn(move || {
-        let result = download_update_assets(&archive_dir, &assets);
-        let _ = tx.send(result);
+        let result = download_update_assets(&archive_dir, &assets, &tx);
+        let _ = tx.send(Step2UpdateDownloadEvent::Finished(result));
     });
 }
 
 pub(crate) fn poll_step2_update_download(
     state: &mut WizardState,
-    step2_update_download_rx: &mut Option<Receiver<Step2UpdateDownloadResult>>,
+    step2_update_download_rx: &mut Option<Receiver<Step2UpdateDownloadEvent>>,
     step2_update_extract_rx: &mut Option<
-        Receiver<super::app_step2_update_extract::Step2UpdateExtractResult>,
+        Receiver<super::app_step2_update_extract::Step2UpdateExtractEvent>,
     >,
 ) {
     let Some(rx) = step2_update_download_rx.as_ref() else {
         return;
     };
-    let result = match rx.try_recv() {
-        Ok(result) => Some(result),
+    let event = match rx.try_recv() {
+        Ok(event) => Some(event),
         Err(TryRecvError::Empty) => None,
         Err(TryRecvError::Disconnected) => {
             state.step2.update_selected_download_running = false;
@@ -76,7 +81,13 @@ pub(crate) fn poll_step2_update_download(
             return;
         }
     };
-    let Some(result) = result else {
+    let Some(event) = event else {
+        return;
+    };
+    let Step2UpdateDownloadEvent::Finished(result) = event else {
+        if let Step2UpdateDownloadEvent::Progress { completed, total } = event {
+            state.step2.scan_status = format!("Downloading updates: {completed}/{total}");
+        }
         return;
     };
 
@@ -94,6 +105,7 @@ pub(crate) fn poll_step2_update_download(
 fn download_update_assets(
     archive_dir: &Path,
     assets: &[Step2UpdateAsset],
+    tx: &Sender<Step2UpdateDownloadEvent>,
 ) -> Step2UpdateDownloadResult {
     let mut result = Step2UpdateDownloadResult {
         downloaded: Vec::new(),
@@ -109,7 +121,8 @@ fn download_update_assets(
         .timeout_read(Duration::from_secs(120))
         .build();
     let mut cached_results = BTreeMap::<String, Result<(), String>>::new();
-    for asset in assets {
+    let total = assets.len();
+    for (index, asset) in assets.iter().enumerate() {
         let file_name = archive_file_name(asset);
         let destination = archive_dir.join(file_name);
         let cache_key = format!("{}|{}", destination.display(), asset.asset_url);
@@ -128,6 +141,10 @@ fn download_update_assets(
             }
             Err(err) => result.failed.push(format!("{}: {err}", asset.label)),
         }
+        let _ = tx.send(Step2UpdateDownloadEvent::Progress {
+            completed: index + 1,
+            total,
+        });
     }
     result
 }
@@ -148,7 +165,7 @@ fn download_one_asset(
     Ok(())
 }
 
-pub(super) fn archive_file_name(asset: &Step2UpdateAsset) -> String {
+pub(crate) fn archive_file_name(asset: &Step2UpdateAsset) -> String {
     let tp2 = safe_archive_segment(&tp2_archive_name(&asset.tp_file));
     let source = safe_archive_segment(&asset.source_id);
     let tag = safe_archive_segment(&asset.tag);
@@ -159,12 +176,9 @@ pub(super) fn archive_file_name(asset: &Step2UpdateAsset) -> String {
 fn tp2_archive_name(tp_file: &str) -> String {
     let replaced = tp_file.replace('\\', "/");
     let file = replaced.rsplit('/').next().unwrap_or(&replaced).trim();
-    let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
-    without_ext
-        .strip_prefix("setup-")
-        .or_else(|| without_ext.strip_prefix("setup_"))
-        .unwrap_or(without_ext)
-        .to_string()
+    let lower = file.to_ascii_lowercase();
+    let without_ext = lower.strip_suffix(".tp2").unwrap_or(&lower);
+    without_ext.to_string()
 }
 
 fn archive_extension(name: &str) -> String {

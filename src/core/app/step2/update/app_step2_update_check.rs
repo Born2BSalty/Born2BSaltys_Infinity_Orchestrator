@@ -129,19 +129,25 @@ pub(crate) fn poll_step2_update_check(
     let existing_actionable = state.step2.update_selected_update_sources.len()
         + state.step2.update_selected_missing_sources.len();
     if !merge_latest_fallback {
-        state.step2.update_selected_update_assets.clear();
-        state.step2.update_selected_update_sources.clear();
-        state.step2.update_selected_missing_sources.clear();
-        state
-            .step2
-            .update_selected_exact_version_failed_sources
-            .clear();
-        state.step2.update_selected_failed_sources.clear();
-        state
-            .step2
-            .update_selected_exact_version_retry_requests
-            .clear();
+        if state.step2.update_selected_refresh_target_tp_file.is_some() {
+            clear_targeted_update_check_results(state, &outcomes);
+        } else {
+            state.step2.update_selected_update_assets.clear();
+            state.step2.update_selected_update_sources.clear();
+            state.step2.update_selected_missing_sources.clear();
+            state
+                .step2
+                .update_selected_exact_version_failed_sources
+                .clear();
+            state.step2.update_selected_failed_sources.clear();
+            state
+                .step2
+                .update_selected_exact_version_retry_requests
+                .clear();
+        }
     }
+    state.step2.update_selected_refresh_target_game_tab = None;
+    state.step2.update_selected_refresh_target_tp_file = None;
     state.step2.update_selected_check_done_count = state.step2.update_selected_check_total_count;
     let sources = mod_downloads::load_mod_download_sources();
 
@@ -158,6 +164,9 @@ pub(crate) fn poll_step2_update_check(
             let uses_source_snapshot =
                 matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot);
             let source_ref = outcome.source_ref.clone().unwrap_or_else(|| tag.clone());
+            if source_ref_matches(&outcome.tp_file, &outcome.source_id, &source_ref) {
+                continue;
+            }
             if uses_source_snapshot && let Some(err) = sources.error.as_ref() {
                 push_update_check_failure(
                     state,
@@ -169,13 +178,13 @@ pub(crate) fn poll_step2_update_check(
                 );
                 continue;
             }
-            let allow_source_ref_update =
-                uses_source_snapshot && source_ref_is_update(&outcome.tp_file, &source_ref);
+            let allow_source_ref_update = uses_source_snapshot
+                && source_ref_is_update(&outcome.tp_file, &outcome.source_id, &source_ref);
             let allow_snapshot_install = uses_source_snapshot
                 && !has_current_version
                 && state.step1.have_weidu_logs
                 && state.step1.download_archive
-                && !source_ref_matches(&outcome.tp_file, &source_ref);
+                && !source_ref_matches(&outcome.tp_file, &outcome.source_id, &source_ref);
             if matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot)
                 && !allow_source_ref_update
                 && !allow_snapshot_install
@@ -296,6 +305,72 @@ pub(super) fn failed_outcome(
         error: Some(error.to_string()),
         package_kind,
     }
+}
+
+fn clear_targeted_update_check_results(
+    state: &mut WizardState,
+    outcomes: &[Step2UpdateCheckOutcome],
+) {
+    for outcome in outcomes {
+        clear_update_check_result_for_mod(
+            state,
+            &outcome.game_tab,
+            &outcome.tp_file,
+            &outcome.label,
+        );
+    }
+}
+
+pub(crate) fn clear_update_check_result_for_mod(
+    state: &mut WizardState,
+    game_tab: &str,
+    tp_file: &str,
+    label: &str,
+) {
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(tp_file);
+    state.step2.update_selected_update_assets.retain(|asset| {
+        asset.game_tab != game_tab
+            || mod_downloads::normalize_mod_download_tp2(&asset.tp_file) != tp2_key
+    });
+    state
+        .step2
+        .update_selected_update_sources
+        .retain(|entry| !entry.starts_with(&format!("{label} (")));
+    state
+        .step2
+        .update_selected_missing_sources
+        .retain(|entry| !entry.starts_with(&format!("{label} (")));
+    state
+        .step2
+        .update_selected_exact_version_failed_sources
+        .retain(|entry| !entry.starts_with(&format!("{label}:")));
+    state
+        .step2
+        .update_selected_failed_sources
+        .retain(|entry| !entry.starts_with(&format!("{label}:")));
+    state
+        .step2
+        .update_selected_exact_version_retry_requests
+        .retain(|request| {
+            request.game_tab != game_tab
+                || mod_downloads::normalize_mod_download_tp2(&request.tp_file) != tp2_key
+        });
+    state
+        .step2
+        .update_selected_downloaded_sources
+        .retain(|entry| !entry.starts_with(label));
+    state
+        .step2
+        .update_selected_download_failed_sources
+        .retain(|entry| !entry.starts_with(&format!("{label}:")));
+    state
+        .step2
+        .update_selected_extracted_sources
+        .retain(|entry| !entry.starts_with(label));
+    state
+        .step2
+        .update_selected_extract_failed_sources
+        .retain(|entry| !entry.starts_with(&format!("{label}:")));
 }
 
 fn store_latest_checked_version(state: &mut WizardState, game_tab: &str, tp_file: &str, tag: &str) {

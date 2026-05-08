@@ -75,4 +75,17 @@ pub(crate) fn render_phase(ui: &mut egui::Ui, state: &WizardState, phase: &Phase
     if let Some(tip) = status_tooltip.as_deref() {
         phase_resp.on_hover_text(tip);
     }
+    if let Some(status_text) = status_tooltip.as_deref() {
+        ui.label(crate::ui::shared::typography_global::mono_weak("|"));
+        let status_color = if status_text.starts_with("Install start failed:")
+            || status_text.contains("os error")
+        {
+            crate::ui::shared::theme_global::error()
+        } else {
+            crate::ui::shared::theme_global::text_muted()
+        };
+        ui.label(
+            crate::ui::shared::typography_global::weak(status_text.to_string()).color(status_color),
+        );
+    }
 }

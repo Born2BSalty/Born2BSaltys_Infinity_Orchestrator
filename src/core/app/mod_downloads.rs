@@ -33,11 +33,14 @@ struct ModDownloadSourceOverlay {
     pub(crate) name: Option<String>,
     pub(crate) tp2: Option<String>,
     pub(crate) aliases: Option<Vec<String>>,
+    pub(crate) config_files: Option<Vec<String>>,
     pub(crate) tp2_rename: Option<ModDownloadTp2Rename>,
     pub(crate) source_id: Option<String>,
     pub(crate) source_label: Option<String>,
     #[serde(default)]
     pub(crate) source_default: bool,
+    #[serde(skip)]
+    pub(crate) source_default_explicit: bool,
     pub(crate) url: Option<String>,
     pub(crate) github: Option<String>,
     pub(crate) exact_github: Option<Vec<String>>,
@@ -59,6 +62,7 @@ struct ModDownloadSourceVariantOverlay {
     #[serde(default)]
     pub(crate) default: bool,
     pub(crate) aliases: Option<Vec<String>>,
+    pub(crate) config_files: Option<Vec<String>>,
     pub(crate) tp2_rename: Option<ModDownloadTp2Rename>,
     pub(crate) url: Option<String>,
     pub(crate) repo: Option<String>,
@@ -88,6 +92,8 @@ pub(crate) struct ModDownloadSource {
     pub(crate) tp2: String,
     #[serde(default)]
     pub(crate) aliases: Vec<String>,
+    #[serde(default)]
+    pub(crate) config_files: Vec<String>,
     #[serde(default)]
     pub(crate) tp2_rename: Option<ModDownloadTp2Rename>,
     #[serde(default)]
@@ -250,7 +256,27 @@ pub(crate) fn save_user_mod_download_source_block(
             edited_source_id.trim()
         ));
     }
-    let updated = replace_or_append_source_block(&content, tp2, label, source_id, source_block);
+    let source_input = normalize_source_save_input(tp2, label, source_block)?;
+    let target_mod_exists = find_mod_block(&content, &source_input.tp2).is_some()
+        || !load_mod_download_sources()
+            .find_sources(&source_input.tp2)
+            .is_empty();
+    if !target_mod_exists {
+        if !source_input.has_mod_parent {
+            return Err(new_source_parent_error());
+        }
+        let updated = append_mod_block(&content, source_block);
+        toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
+        fs::write(&path, updated).map_err(|err| err.to_string())?;
+        return Ok(());
+    }
+    let updated = replace_or_append_source_block(
+        &content,
+        &source_input.tp2,
+        &source_input.label,
+        source_id,
+        &source_input.source_block,
+    );
     toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
     fs::write(&path, updated).map_err(|err| err.to_string())
 }
@@ -274,12 +300,17 @@ pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
             by_source.insert(key, source);
         }
     }
-    for overlay in user_load.sources {
+    for mut overlay in user_load.sources {
         let key = overlay_source_key(&overlay);
         if key.is_empty() {
             continue;
         }
-        let user_default_tp2 = overlay.source_default.then(|| overlay_tp2_key(&overlay));
+        let user_default_tp2 = overlay
+            .source_default_explicit
+            .then(|| overlay_tp2_key(&overlay));
+        if !overlay.source_default_explicit {
+            overlay.source_default = false;
+        }
         let mut source = by_source.remove(&key).unwrap_or_default();
         apply_source_overlay(&mut source, overlay);
         normalize_source(&mut source);
@@ -354,6 +385,98 @@ fn replace_or_append_source_block(
     updated.push_str(&normalize_source_block_indent(source_block));
     updated.push('\n');
     updated
+}
+
+fn append_mod_block(content: &str, mod_block: &str) -> String {
+    let mut updated = content.trim_end().to_string();
+    if !updated.is_empty() {
+        updated.push_str("\n\n");
+    }
+    updated.push_str(mod_block.trim());
+    updated.push('\n');
+    updated
+}
+
+struct SourceSaveInput {
+    tp2: String,
+    label: String,
+    source_block: String,
+    has_mod_parent: bool,
+}
+
+fn normalize_source_save_input(
+    tp2: &str,
+    label: &str,
+    source_block: &str,
+) -> Result<SourceSaveInput, String> {
+    let Ok(parsed) = toml::from_str::<ModDownloadsFile>(source_block) else {
+        return Ok(SourceSaveInput {
+            tp2: tp2.to_string(),
+            label: label.to_string(),
+            source_block: source_block.to_string(),
+            has_mod_parent: false,
+        });
+    };
+    let Some(mod_overlay) = parsed.mods.first() else {
+        return Ok(SourceSaveInput {
+            tp2: tp2.to_string(),
+            label: label.to_string(),
+            source_block: source_block.to_string(),
+            has_mod_parent: false,
+        });
+    };
+    let Some(parsed_tp2) = mod_overlay.source.tp2.as_deref() else {
+        return Ok(SourceSaveInput {
+            tp2: tp2.to_string(),
+            label: label.to_string(),
+            source_block: source_block.to_string(),
+            has_mod_parent: false,
+        });
+    };
+    let Some(parsed_label) = mod_overlay.source.name.as_deref() else {
+        return Ok(SourceSaveInput {
+            tp2: tp2.to_string(),
+            label: label.to_string(),
+            source_block: source_block.to_string(),
+            has_mod_parent: false,
+        });
+    };
+    let Some((source_start, source_end)) = source_block_ranges(source_block).first().copied()
+    else {
+        return Ok(SourceSaveInput {
+            tp2: parsed_tp2.trim().to_string(),
+            label: parsed_label.trim().to_string(),
+            source_block: source_block.to_string(),
+            has_mod_parent: false,
+        });
+    };
+    if parsed_tp2.trim().is_empty() || parsed_label.trim().is_empty() {
+        return Ok(SourceSaveInput {
+            tp2: tp2.to_string(),
+            label: label.to_string(),
+            source_block: source_block.to_string(),
+            has_mod_parent: false,
+        });
+    }
+    if mod_overlay.sources.is_empty() {
+        return Ok(SourceSaveInput {
+            tp2: parsed_tp2.trim().to_string(),
+            label: parsed_label.trim().to_string(),
+            source_block: source_block.to_string(),
+            has_mod_parent: false,
+        });
+    }
+    Ok(SourceSaveInput {
+        tp2: parsed_tp2.trim().to_string(),
+        label: parsed_label.trim().to_string(),
+        source_block: source_block[source_start..source_end].trim().to_string(),
+        has_mod_parent: true,
+    })
+}
+
+fn new_source_parent_error() -> String {
+    "New source entry must include a [[mods]] block with name and tp2.\n\nExample:\n\n[[mods]]\nname = \"My Mod\"\ntp2 = \"mymod\"\n\n  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/OWNER/REPO\"\n  repo = \"OWNER/REPO\""
+        .to_string()
 }
 
 fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
@@ -875,6 +998,9 @@ fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSour
     if let Some(aliases) = overlay.aliases {
         target.aliases = aliases;
     }
+    if let Some(config_files) = overlay.config_files {
+        target.config_files = config_files;
+    }
     if let Some(tp2_rename) = overlay.tp2_rename {
         target.tp2_rename = Some(tp2_rename);
     }
@@ -942,6 +1068,7 @@ fn flatten_mod_overlay_entries(
 ) -> Vec<ModDownloadSourceOverlay> {
     if mod_overlay.sources.is_empty() {
         let mut overlay = mod_overlay.source;
+        overlay.source_default_explicit = overlay.source_default;
         if overlay.source_id.is_none() {
             overlay.source_id = Some("primary".to_string());
         }
@@ -958,8 +1085,11 @@ fn flatten_mod_overlay_entries(
         .into_iter()
         .enumerate()
         .map(|(index, source_overlay)| {
+            let source_default_explicit =
+                mod_overlay.source.source_default || source_overlay.default;
             let mut overlay = mod_overlay.source.clone();
             apply_source_variant_overlay(&mut overlay, source_overlay);
+            overlay.source_default_explicit = source_default_explicit;
             if overlay.source_id.is_none() {
                 overlay.source_id = Some(if index == 0 {
                     "primary".to_string()
@@ -987,6 +1117,7 @@ fn apply_source_variant_overlay(
         label,
         default,
         aliases,
+        config_files,
         tp2_rename,
         url,
         repo,
@@ -1013,6 +1144,9 @@ fn apply_source_variant_overlay(
     }
     if let Some(aliases) = aliases {
         target.aliases = Some(aliases);
+    }
+    if let Some(config_files) = config_files {
+        target.config_files = Some(config_files);
     }
     if let Some(tp2_rename) = tp2_rename {
         target.tp2_rename = Some(tp2_rename);
@@ -1072,6 +1206,14 @@ fn normalize_source(source: &mut ModDownloadSource) {
         .filter(|alias| !alias.is_empty())
         .collect();
     source.aliases.dedup();
+    source.config_files = source
+        .config_files
+        .iter()
+        .map(|config_file| config_file.trim().to_string())
+        .filter(|config_file| !config_file.is_empty())
+        .collect();
+    source.config_files.sort();
+    source.config_files.dedup();
     source.tp2_rename = source.tp2_rename.take().and_then(|rename| {
         let from = rename.from.trim().to_string();
         let to = rename.to.trim().to_string();

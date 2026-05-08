@@ -75,7 +75,7 @@ pub(crate) fn apply_back_action(state: &mut WizardState, action: BackAction) {
             state.current_step = 0;
         }
     }
-    if prev_step == 1 && state.current_step == 0 {
+    if prev_step != 0 && state.current_step == 0 {
         state.step1_path_check = None;
     }
 }

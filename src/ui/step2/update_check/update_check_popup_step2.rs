@@ -271,9 +271,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                         },
                         &source_edit_rows,
                         popup_busy,
-                        hybrid_source_check_not_run
-                            .then_some(source_choice_prefix_width)
-                            .flatten(),
+                        source_choice_prefix_width,
                         action,
                     );
                     if exact_log_mode {
@@ -284,7 +282,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_known_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                         ui.add_space(8.0);
@@ -294,7 +292,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_manual_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                         ui.add_space(8.0);
@@ -304,7 +302,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_unknown_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                     } else if hybrid_missing_mode {
@@ -316,7 +314,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                                 &state.step2.update_selected_update_sources,
                                 &source_edit_rows,
                                 popup_busy,
-                                None,
+                                source_choice_prefix_width,
                                 action,
                             );
                         }
@@ -328,7 +326,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                                 &state.step2.update_selected_manual_sources,
                                 &source_edit_rows,
                                 popup_busy,
-                                None,
+                                source_choice_prefix_width,
                                 action,
                             );
                         }
@@ -340,7 +338,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                                 &state.step2.update_selected_unknown_sources,
                                 &source_edit_rows,
                                 popup_busy,
-                                None,
+                                source_choice_prefix_width,
                                 action,
                             );
                         }
@@ -353,7 +351,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                                 &state.step2.update_selected_manual_sources,
                                 &source_edit_rows,
                                 popup_busy,
-                                None,
+                                source_choice_prefix_width,
                                 action,
                             );
                         }
@@ -365,7 +363,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                                 &state.step2.update_selected_unknown_sources,
                                 &source_edit_rows,
                                 popup_busy,
-                                None,
+                                source_choice_prefix_width,
                                 action,
                             );
                         }
@@ -383,7 +381,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_exact_version_failed_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                     }
@@ -399,7 +397,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_failed_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                     }
@@ -411,7 +409,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_downloaded_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                     }
@@ -427,7 +425,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_download_failed_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                     }
@@ -439,7 +437,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_extracted_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                     }
@@ -455,7 +453,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                             &state.step2.update_selected_extract_failed_sources,
                             &source_edit_rows,
                             popup_busy,
-                            None,
+                            source_choice_prefix_width,
                             action,
                         );
                     }
@@ -536,12 +534,9 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                         )
                     })
                 });
-            if ui
-                .add_enabled(add_source_target.is_some(), egui::Button::new("Add Source"))
-                .clicked()
-                && action.is_none()
-                && let Some((tp2, label)) = add_source_target
-            {
+            if ui.button("Add Source").clicked() && action.is_none() {
+                let (tp2, label) = add_source_target
+                    .unwrap_or_else(|| ("newmod".to_string(), "New Mod".to_string()));
                 *action = Some(Step2Action::OpenModDownloadSourceEditor {
                     tp2,
                     label,
@@ -566,6 +561,10 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
                 *action = Some(Step2Action::DownloadUpdates);
             }
             if exact_log_mode
+                && !state
+                    .step2
+                    .update_selected_exact_version_retry_requests
+                    .is_empty()
                 && ui
                     .add_enabled(
                         can_retry_latest,

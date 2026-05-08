@@ -4,6 +4,7 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Local;
@@ -11,8 +12,8 @@ use walkdir::WalkDir;
 
 use crate::app::mod_downloads;
 
-use super::Step2UpdateExtractResult;
 use super::plan::Step2UpdateExtractJob;
+use super::{Step2UpdateExtractEvent, Step2UpdateExtractResult};
 
 #[path = "app_step2_update_extract_archive/rar_extract.rs"]
 mod rar_extract;
@@ -23,12 +24,16 @@ mod tar_gz_extract;
 #[path = "app_step2_update_extract_archive/zip_extract.rs"]
 mod zip_extract;
 
-pub(super) fn extract_update_archives(jobs: &[Step2UpdateExtractJob]) -> Step2UpdateExtractResult {
+pub(super) fn extract_update_archives(
+    jobs: &[Step2UpdateExtractJob],
+    tx: &Sender<Step2UpdateExtractEvent>,
+) -> Step2UpdateExtractResult {
     let mut result = Step2UpdateExtractResult {
         extracted: Vec::new(),
         failed: Vec::new(),
     };
-    for job in jobs {
+    let total = jobs.len();
+    for (index, job) in jobs.iter().enumerate() {
         match extract_one_archive(job) {
             Ok(target_root) => {
                 result
@@ -37,6 +42,10 @@ pub(super) fn extract_update_archives(jobs: &[Step2UpdateExtractJob]) -> Step2Up
             }
             Err(err) => result.failed.push(format!("{}: {err}", job.label)),
         }
+        let _ = tx.send(Step2UpdateExtractEvent::Progress {
+            completed: index + 1,
+            total,
+        });
     }
     result
 }
@@ -64,6 +73,12 @@ fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
             &extracted_root,
             &job.backup_root,
             &job.backup_version_tag,
+        )?;
+        crate::app::modlist_config_files::restore_pending_mod_configs_for_mod(
+            &job.tp_file,
+            job.installed_source_id.as_deref().unwrap_or_default(),
+            &job.aliases,
+            &target_root,
         )?;
         if let Some(source_ref) = &job.installed_source_ref {
             super::super::app_step2_update_source_refs::save_installed_source_ref(
@@ -160,8 +175,13 @@ fn find_extracted_mod_root(
             .iter()
             .any(|expected| mod_downloads::normalize_mod_download_tp2(name) == *expected)
         {
-            matched_tp2 = Some(path.to_path_buf());
-            break;
+            if tp2_parent_matches(path, &accepted) {
+                matched_tp2 = Some(path.to_path_buf());
+                break;
+            }
+            if matched_tp2.is_none() {
+                matched_tp2 = Some(path.to_path_buf());
+            }
         }
     }
     let tp2_path = matched_tp2.ok_or_else(|| {
@@ -195,6 +215,17 @@ fn find_extracted_mod_root(
         fs::rename(&tp2_path, &destination).map_err(|err| err.to_string())?;
     }
     Ok(mod_dir)
+}
+
+fn tp2_parent_matches(path: &Path, accepted: &[String]) -> bool {
+    path.parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| {
+            accepted
+                .iter()
+                .any(|expected| mod_downloads::normalize_mod_download_tp2(value) == *expected)
+        })
 }
 
 fn accepted_tp2_names(tp_file: &str, aliases: &[String]) -> Vec<String> {

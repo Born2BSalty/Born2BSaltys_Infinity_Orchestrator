@@ -133,10 +133,25 @@ fn build_log_pending_downloads(
     } else {
         &state.step2.bg2ee_mods
     };
-    let installed_tp2 = mods
-        .iter()
-        .map(|mod_state| crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file))
-        .collect::<HashSet<_>>();
+    let mod_download_sources = crate::app::mod_downloads::load_mod_download_sources();
+    let mut installed_tp2 = HashSet::new();
+    for mod_state in mods {
+        let tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
+        if tp2.is_empty() {
+            continue;
+        }
+        installed_tp2.insert(tp2.clone());
+        for source in mod_download_sources.find_sources(&tp2) {
+            installed_tp2.insert(crate::app::mod_downloads::normalize_mod_download_tp2(
+                &source.tp2,
+            ));
+            for alias in source.aliases {
+                installed_tp2.insert(crate::app::mod_downloads::normalize_mod_download_tp2(
+                    &alias,
+                ));
+            }
+        }
+    }
     let mut pending = Vec::new();
     let mut seen = HashSet::new();
     for component in log.components() {

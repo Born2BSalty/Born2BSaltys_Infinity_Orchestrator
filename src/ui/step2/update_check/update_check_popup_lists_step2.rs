@@ -165,7 +165,9 @@ pub(super) fn render_list(
             .spacing([8.0, 4.0])
             .striped(true)
             .show(ui, |ui| {
-                for value in values {
+                let mut sorted_values = values.iter().collect::<Vec<_>>();
+                sorted_values.sort_by_key(|value| value.to_ascii_lowercase());
+                for value in sorted_values {
                     if let Some(width) = prefix_width {
                         ui.scope(|ui| {
                             ui.set_min_width(width);
@@ -402,6 +404,7 @@ pub(super) fn collect_source_choices(
                 .collect(),
         });
     }
+    rows.sort_by_key(|row| row.label.to_ascii_lowercase());
     rows
 }
 
