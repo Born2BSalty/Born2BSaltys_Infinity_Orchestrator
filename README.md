@@ -1,15 +1,26 @@
-# Born2BSalty's Infinity Orchestrator (BIO) - BGEE / BG2EE / EET WeiDU Mod Installer
+Born2BSalty's Infinity Orchestrator (BIO) - BGEE / BG2EE / EET WeiDU Mod Installer
 
 BIO is a WeiDU mod installer and install-order orchestrator for BGEE, BG2EE, and EET.
 
-If you are looking for a Baldur's Gate mod manager, BGEE WeiDU installer, or EET mod installer, this project is built
-for that.
+If you are looking for a Baldur's Gate mod manager, BGEE WeiDU installer, or EET mod installer, this project is built for that.
 
-## What BIO Does
-- Scans WeiDU mods for BGEE, BG2EE, and EET
-- Builds install order from TP2 component structure
-- Checks compatibility, dependencies, and install-order problems
-- Installs WeiDU mod setups in a guided workflow
+Community & Support
+
+Join the BIO Discord for:
+
+installation help
+test builds
+bug reports
+modlist sharing
+development discussion
+
+[(https://discord.gg/QqZtzvHDG5)]
+
+What BIO Does
+Scans WeiDU mods for BGEE, BG2EE, and EET
+Builds install order from TP2 component structure
+Checks compatibility, dependencies, and install-order problems
+Installs WeiDU mod setups in a guided workflow
   
 ## Supported targets:
 - BGEE
