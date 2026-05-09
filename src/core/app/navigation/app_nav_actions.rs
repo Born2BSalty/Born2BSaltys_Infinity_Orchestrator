@@ -131,6 +131,7 @@ fn advance_after_next(
     let action = super::app_nav::decide_next_action(state);
     match &action {
         NextAction::Blocked => return,
+        NextAction::OpenModlistImport => {}
         NextAction::ApplySavedLogAndAdvance => {}
         NextAction::JumpToInstallStep => {}
         NextAction::SyncStep3AndAdvance { signature } => {

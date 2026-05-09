@@ -27,7 +27,7 @@ pub fn is_step1_valid(s: &Step1State) -> bool {
             }
             if s.installs_exactly_from_weidu_logs() {
                 has_value(&s.bg2ee_log_file)
-            } else if s.bootstraps_from_weidu_logs() {
+            } else if s.bootstraps_from_weidu_logs() || s.imports_modlist() {
                 true
             } else {
                 has_value(&s.bg2ee_log_folder)
@@ -51,7 +51,7 @@ pub fn is_step1_valid(s: &Step1State) -> bool {
             }
             if s.installs_exactly_from_weidu_logs() {
                 has_value(&s.bgee_log_file) && has_value(&s.bg2ee_log_file)
-            } else if s.bootstraps_from_weidu_logs() {
+            } else if s.bootstraps_from_weidu_logs() || s.imports_modlist() {
                 true
             } else {
                 has_value(&s.eet_bgee_log_folder) && has_value(&s.eet_bg2ee_log_folder)
@@ -63,7 +63,7 @@ pub fn is_step1_valid(s: &Step1State) -> bool {
             }
             if s.installs_exactly_from_weidu_logs() {
                 has_value(&s.bgee_log_file)
-            } else if s.bootstraps_from_weidu_logs() {
+            } else if s.bootstraps_from_weidu_logs() || s.imports_modlist() {
                 true
             } else {
                 has_value(&s.bgee_log_folder)
@@ -123,7 +123,7 @@ pub(super) fn step1_validation_messages(s: &Step1State) -> Vec<String> {
                 if !has_value(&s.bg2ee_log_file) {
                     out.push("BG2EE WeiDU Log File is required".to_string());
                 }
-            } else if !has_value(&s.bg2ee_log_folder) {
+            } else if !s.imports_modlist() && !has_value(&s.bg2ee_log_folder) {
                 out.push("BG2EE WeiDU Log Folder is required".to_string());
             }
         }
@@ -155,7 +155,7 @@ pub(super) fn step1_validation_messages(s: &Step1State) -> Vec<String> {
                 if !has_value(&s.bg2ee_log_file) {
                     out.push("BG2EE WeiDU Log File is required for EET".to_string());
                 }
-            } else {
+            } else if !s.imports_modlist() {
                 if !has_value(&s.eet_bgee_log_folder) {
                     out.push("BGEE WeiDU Log Folder is required for EET".to_string());
                 }
@@ -172,7 +172,7 @@ pub(super) fn step1_validation_messages(s: &Step1State) -> Vec<String> {
                 if !has_value(&s.bgee_log_file) {
                     out.push("BGEE WeiDU Log File is required".to_string());
                 }
-            } else if !has_value(&s.bgee_log_folder) {
+            } else if !s.imports_modlist() && !has_value(&s.bgee_log_folder) {
                 out.push("BGEE WeiDU Log Folder is required".to_string());
             }
         }

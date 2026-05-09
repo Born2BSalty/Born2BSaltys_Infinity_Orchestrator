@@ -25,7 +25,8 @@ pub(super) fn run_path_check(s: &Step1State) -> (bool, String) {
         if mods_path.is_dir() {
             let depth = if s.custom_scan_depth { s.depth } else { 5 };
             if !(fs_checks::has_tp2_within_depth(mods_path, depth)
-                || (s.have_weidu_logs && s.download_archive))
+                || (s.have_weidu_logs && s.download_archive)
+                || s.imports_modlist())
             {
                 errors.push(format!(
                     "Mods Folder has no .tp2 files within scan depth {}",

@@ -11,7 +11,7 @@ pub(crate) fn run_mode_checks(s: &Step1State, checked: &mut usize, errors: &mut 
             fs_checks::check_game_dir("BG2EE Game Folder", &s.bg2ee_game_folder, checked, errors);
             if s.installs_exactly_from_weidu_logs() {
                 exec::check_file("BG2EE WeiDU Log File", &s.bg2ee_log_file, checked, errors);
-            } else if !s.bootstraps_from_weidu_logs() {
+            } else if !s.bootstraps_from_weidu_logs() && !s.imports_modlist() {
                 fs_checks::check_dir(
                     "BG2EE WeiDU Log Folder",
                     &s.bg2ee_log_folder,
@@ -58,7 +58,7 @@ pub(crate) fn run_mode_checks(s: &Step1State, checked: &mut usize, errors: &mut 
             if s.installs_exactly_from_weidu_logs() {
                 exec::check_file("BGEE WeiDU Log File", &s.bgee_log_file, checked, errors);
                 exec::check_file("BG2EE WeiDU Log File", &s.bg2ee_log_file, checked, errors);
-            } else if !s.bootstraps_from_weidu_logs() {
+            } else if !s.bootstraps_from_weidu_logs() && !s.imports_modlist() {
                 fs_checks::check_dir(
                     "BGEE WeiDU Log Folder",
                     &s.eet_bgee_log_folder,
@@ -77,7 +77,7 @@ pub(crate) fn run_mode_checks(s: &Step1State, checked: &mut usize, errors: &mut 
             fs_checks::check_game_dir("BGEE Game Folder", &s.bgee_game_folder, checked, errors);
             if s.installs_exactly_from_weidu_logs() {
                 exec::check_file("BGEE WeiDU Log File", &s.bgee_log_file, checked, errors);
-            } else if !s.bootstraps_from_weidu_logs() {
+            } else if !s.bootstraps_from_weidu_logs() && !s.imports_modlist() {
                 fs_checks::check_dir("BGEE WeiDU Log Folder", &s.bgee_log_folder, checked, errors);
             }
         }

@@ -4,9 +4,17 @@
 use eframe::egui;
 
 use crate::app::state::WizardState;
+use crate::app::terminal::EmbeddedTerminal;
 
-pub(crate) fn render_dev_header(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool) {
-    ui.heading("Step 5: Install, Logs, Diagnostics");
+const STEP5_TITLE: &str = "Step 5: Install, Logs, Diagnostics";
+
+pub(crate) fn render_dev_header(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    terminal: Option<&EmbeddedTerminal>,
+    dev_mode: bool,
+) {
+    ui.heading(step5_title(state, terminal));
     ui.label("Final execution view.");
     if dev_mode {
         let has_rust_log = state.step1.rust_log_debug || state.step1.rust_log_trace;
@@ -31,4 +39,51 @@ pub(crate) fn render_dev_header(ui: &mut egui::Ui, state: &mut WizardState, dev_
         ui.label(crate::ui::shared::typography_global::strong(msg).color(color));
     }
     ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_LG);
+}
+
+fn step5_title(state: &WizardState, terminal: Option<&EmbeddedTerminal>) -> String {
+    if !state.step5.install_running {
+        return STEP5_TITLE.to_string();
+    }
+    let Some(current_tp2) = terminal.and_then(|term| term.current_scripted_component_tp2()) else {
+        return STEP5_TITLE.to_string();
+    };
+    let current_tp2 = crate::platform_defaults::normalize_tp2_filename(&current_tp2);
+    if current_tp2.trim().is_empty() {
+        return STEP5_TITLE.to_string();
+    }
+
+    let bgee_progress = mod_progress_for_items(&current_tp2, &state.step3.bgee_items);
+    let bg2ee_progress = mod_progress_for_items(&current_tp2, &state.step3.bg2ee_items);
+    match (bgee_progress, bg2ee_progress) {
+        (Some((index, total)), None) => {
+            format!("{STEP5_TITLE} — Installing BGEE mod {index}/{total}")
+        }
+        (None, Some((index, total))) => {
+            format!("{STEP5_TITLE} — Installing BG2EE mod {index}/{total}")
+        }
+        _ => STEP5_TITLE.to_string(),
+    }
+}
+
+fn mod_progress_for_items(
+    current_tp2: &str,
+    items: &[crate::app::state::Step3ItemState],
+) -> Option<(usize, usize)> {
+    let mut ordered_tp2s = Vec::<String>::new();
+    for item in items.iter().filter(|item| !item.is_parent) {
+        let tp2 = crate::platform_defaults::normalize_tp2_filename(&item.tp_file);
+        if !tp2.trim().is_empty()
+            && !ordered_tp2s
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&tp2))
+        {
+            ordered_tp2s.push(tp2);
+        }
+    }
+
+    ordered_tp2s
+        .iter()
+        .position(|tp2| tp2.eq_ignore_ascii_case(current_tp2))
+        .map(|index| (index + 1, ordered_tp2s.len()))
 }

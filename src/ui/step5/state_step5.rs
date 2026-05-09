@@ -9,6 +9,7 @@ pub struct Step5ConsoleViewState {
     pub installed_only: bool,
     pub auto_scroll: bool,
     pub request_input_focus: bool,
+    pub last_selected_console_text_len: usize,
 }
 
 impl Default for Step5ConsoleViewState {
@@ -18,6 +19,7 @@ impl Default for Step5ConsoleViewState {
             installed_only: false,
             auto_scroll: true,
             request_input_focus: false,
+            last_selected_console_text_len: 0,
         }
     }
 }

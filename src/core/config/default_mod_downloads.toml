@@ -438,6 +438,7 @@ tp2 = "cdlore"
 [[mods]]
 name = "The Tweaks Anthology"
 tp2 = "cdtweaks"
+config_files = ["cdtweaks.ini", "desktop.ini", "gttweaks.ini"]
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -831,6 +832,7 @@ tp2 = "SPSTUFF"
 [[mods]]
 name = "Sword Coast Stratagems"
 tp2 = "stratagems"
+config_files = ["stratagems.ini"]
 
   [[mods.sources]]
   id = "gibberlings3"

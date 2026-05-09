@@ -14,6 +14,7 @@ pub(crate) enum BackAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum NextAction {
     Blocked,
+    OpenModlistImport,
     ApplySavedLogAndAdvance,
     JumpToInstallStep,
     SyncStep3AndAdvance { signature: String },
@@ -50,6 +51,7 @@ pub(crate) fn should_show_step1_clean_confirm(state: &WizardState) -> bool {
         state.step1.generate_directory_enabled
     };
     state.current_step == 0
+        && !state.step1.imports_modlist()
         && uses_fresh_target
         && state.step1.prepare_target_dirs_before_install
         && !state.step1.backup_targets_before_eet_copy
@@ -84,6 +86,9 @@ pub(crate) fn decide_next_action(state: &WizardState) -> NextAction {
     if !can_advance_from_current_step(state) {
         return NextAction::Blocked;
     }
+    if state.current_step == 0 && state.step1.imports_modlist() {
+        return NextAction::OpenModlistImport;
+    }
     if state.current_step == 0 && state.step1.bootstraps_from_weidu_logs() {
         return NextAction::ApplySavedLogAndAdvance;
     }
@@ -111,6 +116,11 @@ pub(crate) fn decide_next_action(state: &WizardState) -> NextAction {
 pub(crate) fn apply_next_action(state: &mut WizardState, action: &NextAction) {
     match action {
         NextAction::Blocked => {}
+        NextAction::OpenModlistImport => {
+            state.modlist_import_window_open = true;
+            state.modlist_import_preview_mode = false;
+            state.modlist_import_ready = false;
+        }
         NextAction::JumpToInstallStep => state.current_step = 4,
         NextAction::ApplySavedLogAndAdvance
         | NextAction::SyncStep3AndAdvance { .. }

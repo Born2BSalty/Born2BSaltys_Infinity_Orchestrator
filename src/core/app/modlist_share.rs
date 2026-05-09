@@ -256,9 +256,11 @@ fn write_imported_weidu_logs(
                 payload.weidu_logs.bgee.as_deref(),
                 import_log_target_path(step1, true)?,
             )?;
+            let rewritten_bg2ee =
+                rewrite_imported_eet_bg2ee_wlb_paths(step1, payload.weidu_logs.bg2ee.as_deref())?;
             write_imported_log(
                 "BG2EE",
-                payload.weidu_logs.bg2ee.as_deref(),
+                rewritten_bg2ee.as_deref(),
                 import_log_target_path(step1, false)?,
             )
         }
@@ -272,6 +274,79 @@ fn write_imported_weidu_logs(
             payload.weidu_logs.bgee.as_deref(),
             import_log_target_path(step1, true)?,
         ),
+    }
+}
+
+fn rewrite_imported_eet_bg2ee_wlb_paths(
+    step1: &crate::app::state::Step1State,
+    text: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(text) = text else {
+        return Ok(None);
+    };
+    let marker = "@wlb-inputs:";
+    let mut changed = false;
+    let mut out = Vec::<String>::new();
+    let local_bg1_path = local_eet_bg1_source_path(step1);
+    for line in text.lines() {
+        let Some(marker_pos) = line.to_ascii_lowercase().find(marker) else {
+            out.push(line.to_string());
+            continue;
+        };
+        let spec_start = marker_pos + marker.len();
+        let (head, spec) = line.split_at(spec_start);
+        let mut tokens = Vec::<String>::new();
+        for token in spec.trim().split(',') {
+            if wlb_token_is_path_like(token) {
+                if local_bg1_path.is_empty() {
+                    return Err(
+                        "Imported EET WLB input requires local BGEE/BG1 path. Set BGEE game path before importing."
+                            .to_string(),
+                    );
+                }
+                changed = true;
+                tokens.push(requote_like(token, local_bg1_path));
+            } else {
+                tokens.push(token.trim().to_string());
+            }
+        }
+        out.push(format!("{head} {}", tokens.join(",")));
+    }
+    if changed {
+        Ok(Some(out.join("\n")))
+    } else {
+        Ok(Some(text.to_string()))
+    }
+}
+
+fn local_eet_bg1_source_path(step1: &crate::app::state::Step1State) -> &str {
+    if step1.new_pre_eet_dir_enabled {
+        step1.eet_pre_dir.trim()
+    } else {
+        step1.eet_bgee_game_folder.trim()
+    }
+}
+
+fn wlb_token_is_path_like(token: &str) -> bool {
+    let token = token.trim().trim_matches('"').trim_matches('\'');
+    if token.starts_with('/') {
+        return true;
+    }
+    let mut chars = token.chars();
+    matches!(
+        (chars.next(), chars.next()),
+        (Some(drive), Some(':')) if drive.is_ascii_alphabetic()
+    )
+}
+
+fn requote_like(original: &str, value: &str) -> String {
+    let trimmed = original.trim();
+    if trimmed.starts_with('"') && trimmed.ends_with('"') {
+        format!("\"{value}\"")
+    } else if trimmed.starts_with('\'') && trimmed.ends_with('\'') {
+        format!("'{value}'")
+    } else {
+        value.to_string()
     }
 }
 

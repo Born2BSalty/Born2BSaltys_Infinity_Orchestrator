@@ -52,18 +52,6 @@ pub fn render(
             } else if ui.button("Restart App With Diagnostics").clicked() {
                 restart_app_with_diagnostics(state);
             }
-            let paths_checked = matches!(state.step1_path_check, Some((true, _)));
-            let import_response =
-                ui.add_enabled(paths_checked, egui::Button::new("Import Modlist…"));
-            if !paths_checked {
-                import_response.on_hover_text("Run Test Paths first.");
-                ui.label(crate::ui::shared::typography_global::weak(
-                    "Run Test Paths first.",
-                ));
-            } else if import_response.clicked() {
-                state.modlist_import_window_open = true;
-                state.modlist_import_preview_mode = false;
-            }
         });
     });
     ui.label("Choose game mode, paths, and installer options.");

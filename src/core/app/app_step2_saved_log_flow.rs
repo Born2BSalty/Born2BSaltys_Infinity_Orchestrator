@@ -147,6 +147,9 @@ fn stop_auto_build(state: &mut WizardState, reason: String) {
 fn start_auto_build_install(state: &mut WizardState) {
     state.modlist_auto_build_active = false;
     state.modlist_auto_build_waiting_for_install = false;
+    state.step2.update_selected_popup_open = false;
+    state.step2.update_selected_confirm_latest_fallback_open = false;
+    state.step2.mod_download_forks_popup_open = false;
     state.current_step = 4;
     state.step5.start_install_requested = true;
     state.step5.last_status_text = "Auto Build: starting install".to_string();

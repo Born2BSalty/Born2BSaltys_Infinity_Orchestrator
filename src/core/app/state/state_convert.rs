@@ -19,7 +19,11 @@ mod step1_settings_to_state {
             } else {
                 Step1State::normalize_install_mode(&value.install_mode).to_string()
             };
-            let have_weidu_logs = install_mode != Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS;
+            let have_weidu_logs = matches!(
+                install_mode.as_str(),
+                Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS
+                    | Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
+            );
             Self {
                 game_install: value.game_install,
                 install_mode,

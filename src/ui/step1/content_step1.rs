@@ -194,6 +194,11 @@ Prompt sequence with blank input\n\
                 Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT.to_string(),
                 "Start from WeiDU logs, then review/edit",
             );
+            ui.selectable_value(
+                &mut s.install_mode,
+                Step1State::INSTALL_MODE_IMPORT_MODLIST.to_string(),
+                "Import Modlist",
+            );
         });
     sync_install_mode(s);
     ui.checkbox(
@@ -402,6 +407,7 @@ fn install_mode_label(value: &str) -> &'static str {
         Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT => {
             "Start from WeiDU logs, then review/edit"
         }
+        Step1State::INSTALL_MODE_IMPORT_MODLIST => "Import Modlist",
         _ => "Build from scanned mods",
     }
 }
