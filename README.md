@@ -1,4 +1,4 @@
-# Born2BSalty's Infinity Orchestrator (BIO) - BGEE / BG2EE / EET WeiDU Mod Installer
+Born2BSalty's Infinity Orchestrator (BIO) - BGEE / BG2EE / EET WeiDU Mod Installer
 
 BIO is a WeiDU mod installer and install-order orchestrator for BGEE, BG2EE, and EET.
 
