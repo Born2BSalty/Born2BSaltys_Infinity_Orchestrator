@@ -14,7 +14,7 @@ bug reports
 modlist sharing
 development discussion
 
-https://discord.gg/QqZtzvHDG5
+[![Discord](https://img.shields.io/badge/Discord-Join%20BIO-5865F2?logo=discord&logoColor=white)](https://discord.gg/QqZtzvHDG5)
 
 What BIO Does
 Scans WeiDU mods for BGEE, BG2EE, and EET

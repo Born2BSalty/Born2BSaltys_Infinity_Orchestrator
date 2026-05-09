@@ -28,7 +28,7 @@ pub fn render(
 
     let _running = install_in_progress(state);
 
-    render_dev_header(ui, state, dev_mode);
+    render_dev_header(ui, state, terminal.as_deref(), dev_mode);
 
     top_panels::render(ui, state);
 

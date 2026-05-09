@@ -63,11 +63,20 @@ pub struct Step2State {
     pub mod_download_source_editor_tp2: String,
     pub mod_download_source_editor_label: String,
     pub mod_download_source_editor_source_id: String,
+    pub mod_download_source_editor_allow_source_id_change: bool,
     pub mod_download_source_editor_text: String,
     pub mod_download_source_editor_error: Option<String>,
+    pub mod_download_forks_popup_open: bool,
+    pub mod_download_forks_popup_title: String,
+    pub mod_download_forks_popup_tp2: String,
+    pub mod_download_forks_popup_label: String,
+    pub mod_download_forks_popup_error: Option<String>,
+    pub mod_download_forks: Vec<Step2DiscoveredFork>,
     pub selected_source_ids: BTreeMap<String, String>,
     pub update_selected_target_game_tab: Option<String>,
     pub update_selected_target_tp_file: Option<String>,
+    pub update_selected_refresh_target_game_tab: Option<String>,
+    pub update_selected_refresh_target_tp_file: Option<String>,
     pub log_pending_downloads: Vec<Step2LogPendingDownload>,
     pub exact_log_mod_list_checked: bool,
     pub pending_saved_log_apply: bool,
@@ -134,11 +143,20 @@ impl Default for Step2State {
             mod_download_source_editor_tp2: String::new(),
             mod_download_source_editor_label: String::new(),
             mod_download_source_editor_source_id: String::new(),
+            mod_download_source_editor_allow_source_id_change: false,
             mod_download_source_editor_text: String::new(),
             mod_download_source_editor_error: None,
+            mod_download_forks_popup_open: false,
+            mod_download_forks_popup_title: String::new(),
+            mod_download_forks_popup_tp2: String::new(),
+            mod_download_forks_popup_label: String::new(),
+            mod_download_forks_popup_error: None,
+            mod_download_forks: Vec::new(),
             selected_source_ids: BTreeMap::new(),
             update_selected_target_game_tab: None,
             update_selected_target_tp_file: None,
+            update_selected_refresh_target_game_tab: None,
+            update_selected_refresh_target_tp_file: None,
             log_pending_downloads: Vec::new(),
             exact_log_mod_list_checked: false,
             pending_saved_log_apply: false,
@@ -150,6 +168,15 @@ impl Default for Step2State {
             last_scan_report: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step2DiscoveredFork {
+    pub full_name: String,
+    pub html_url: String,
+    pub owner_login: String,
+    pub default_branch: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -23,30 +23,6 @@ tp2 = "A7#ImprovedArcher"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/A7-ImprovedArcher"
-  repo = "Lzw104522773/A7-ImprovedArcher"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/A7-ImprovedArcher"
-  repo = "mleduque/A7-ImprovedArcher"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/A7-ImprovedArcher"
-  repo = "yoshimo0417/A7-ImprovedArcher"
-  branch = "devel"
-
 [[mods]]
 name = "Achievements!"
 tp2 = "A7-Achievements"
@@ -60,14 +36,6 @@ tp2 = "A7-Achievements"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/A7-Achievements"
-  repo = "MephistoSatanDevil/A7-Achievements"
-  branch = "devel"
 
 [[mods]]
 name = "Banter Accelerator for Enhanced Edition"
@@ -97,22 +65,6 @@ tp2 = "A7-ConvenientEENPCs"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "esceen-cn"
-  label = "Esceen-cn"
-  type = "github"
-  url = "https://github.com/Esceen-cn/A7-NoEENPCs"
-  repo = "Esceen-cn/A7-NoEENPCs"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "realapxu"
-  label = "RealApxu"
-  type = "github"
-  url = "https://github.com/RealApxu/A7-NoEENPCs"
-  repo = "RealApxu/A7-NoEENPCs"
-  branch = "master"
-
 [[mods]]
 name = "Golem Construction for Spellcasters"
 tp2 = "A7-GolemConstruction"
@@ -126,22 +78,6 @@ tp2 = "A7-GolemConstruction"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/A7-GolemConstruction"
-  repo = "Lzw104522773/A7-GolemConstruction"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/A7-GolemConstruction"
-  repo = "yoshimo0417/A7-GolemConstruction"
-  branch = "devel"
 
 [[mods]]
 name = "Improved Shamanic Dance"
@@ -157,14 +93,6 @@ tp2 = "A7#ImprovedShamanicDance"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "endarire"
-  label = "Endarire"
-  type = "github"
-  url = "https://github.com/Endarire/A7-ImprovedShamanicDanceEE"
-  repo = "Endarire/A7-ImprovedShamanicDanceEE"
-  branch = "master"
-
 [[mods]]
 name = "Magic Store of Vergadain"
 tp2 = "A7-MagicStore"
@@ -179,17 +107,10 @@ tp2 = "A7-MagicStore"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/A7-MagicStore"
-  repo = "Lzw104522773/A7-MagicStore"
-  branch = "devel"
-
 [[mods]]
 name = "A7 MultiKits"
 tp2 = "A7-MultiKits"
+config_files = ["A7-MultiKits.ini"]
 
   [[mods.sources]]
   id = "argent77"
@@ -200,14 +121,6 @@ tp2 = "A7-MultiKits"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "eva2000as"
-  label = "eva2000as"
-  type = "github"
-  url = "https://github.com/eva2000as/A7-MultiKits"
-  repo = "eva2000as/A7-MultiKits"
-  branch = "devel"
 
 [[mods]]
 name = "Test Your Mettle!"
@@ -222,30 +135,6 @@ tp2 = "A7-TestYourMettle"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/A7-TestYourMettle"
-  repo = "Lzw104522773/A7-TestYourMettle"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "mysummertimemy"
-  label = "mysummertimemy"
-  type = "github"
-  url = "https://github.com/mysummertimemy/A7-TestYourMettle"
-  repo = "mysummertimemy/A7-TestYourMettle"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/A7-TestYourMettle"
-  repo = "yoshimo0417/A7-TestYourMettle"
-  branch = "devel"
 
 [[mods]]
 name = "Wares Of The Planes"
@@ -275,30 +164,6 @@ tp2 = "DlcMerger"
   pkg_linux = "lin,zip"
   pkg_macos = "macarmzip,macx64zip,zip"
 
-  [[mods.sources]]
-  id = "felipefpl"
-  label = "Felipefpl"
-  type = "github"
-  url = "https://github.com/Felipefpl/A7-DlcMerger"
-  repo = "Felipefpl/A7-DlcMerger"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "friendlyarminnregulars"
-  label = "FriendlyArmInnRegulars"
-  type = "github"
-  url = "https://github.com/FriendlyArmInnRegulars/A7-DlcMerger"
-  repo = "FriendlyArmInnRegulars/A7-DlcMerger"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "theodesp"
-  label = "theodesp"
-  type = "github"
-  url = "https://github.com/theodesp/A7-DlcMerger"
-  repo = "theodesp/A7-DlcMerger"
-  branch = "devel"
-
 [[mods]]
 name = "Reveal Hidden Gameplay Options"
 tp2 = "HiddenGameplayOptions"
@@ -312,22 +177,6 @@ tp2 = "HiddenGameplayOptions"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/A7-HiddenGameplayOptions"
-  repo = "Lzw104522773/A7-HiddenGameplayOptions"
-  branch = "devel"
-
-  [[mods.sources]]
-  id = "renegade0"
-  label = "Renegade0"
-  type = "github"
-  url = "https://github.com/Renegade0/A7-HiddenGameplayOptions"
-  repo = "Renegade0/A7-HiddenGameplayOptions"
-  branch = "devel"
 
 [[mods]]
 name = "High Quality Soundclips"
@@ -374,30 +223,6 @@ tp2 = "ajantisbg1"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/Ajantis_BG1_Expansion"
-  repo = "Gitjas/Ajantis_BG1_Expansion"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Ajantis_BG1_Expansion"
-  repo = "Ychap/Ajantis_BG1_Expansion"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Ajantis_BG1_Expansion"
-  repo = "yoshimo0417/Ajantis_BG1_Expansion"
-  branch = "master"
 
 [[mods]]
 name = "Alternatives"
@@ -470,94 +295,6 @@ tp2 = "BG1NPC"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/BG1NPC"
-  repo = "abalabokhin/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "azdul"
-  label = "Azdul"
-  type = "github"
-  url = "https://github.com/Azdul/BG1NPC"
-  repo = "Azdul/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "bngunn"
-  label = "bngunn"
-  type = "github"
-  url = "https://github.com/bngunn/BG1NPC"
-  repo = "bngunn/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "chrizhermann"
-  label = "Chrizhermann"
-  type = "github"
-  url = "https://github.com/Chrizhermann/BG1NPC"
-  repo = "Chrizhermann/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/BG1NPC"
-  repo = "Gitjas/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/BG1NPC"
-  repo = "MephistoSatanDevil/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/BG1NPC"
-  repo = "mleduque/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "skhoroshavin"
-  label = "skhoroshavin"
-  type = "github"
-  url = "https://github.com/skhoroshavin/BG1NPC"
-  repo = "skhoroshavin/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "vnebelung"
-  label = "vnebelung"
-  type = "github"
-  url = "https://github.com/vnebelung/BG1NPC"
-  repo = "vnebelung/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "weigo87"
-  label = "weigo87"
-  type = "github"
-  url = "https://github.com/weigo87/BG1NPC"
-  repo = "weigo87/BG1NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/BG1NPC"
-  repo = "Ychap/BG1NPC"
-  branch = "master"
-
 [[mods]]
 name = "BG1 NPC Music"
 tp2 = "bg1npcmusic"
@@ -586,46 +323,6 @@ tp2 = "bgqe"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/BG_Quests_And_Encounters"
-  repo = "Gitjas/BG_Quests_And_Encounters"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/BG_Quests_And_Encounters"
-  repo = "abalabokhin/BG_Quests_And_Encounters"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "angelgryph"
-  label = "AngelGryph"
-  type = "github"
-  url = "https://github.com/AngelGryph/BG_Quests_And_Encounters"
-  repo = "AngelGryph/BG_Quests_And_Encounters"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/BG_Quests_And_Encounters"
-  repo = "Ychap/BG_Quests_And_Encounters"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/BG_Quests_And_Encounters"
-  repo = "yoshimo0417/BG_Quests_And_Encounters"
-  branch = "master"
-
 [[mods]]
 name = "Balduran's Seatower"
 tp2 = "bst"
@@ -639,30 +336,6 @@ tp2 = "bst"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/BS_Baldurans_Seatower"
-  repo = "abalabokhin/BS_Baldurans_Seatower"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "vnebelung"
-  label = "vnebelung"
-  type = "github"
-  url = "https://github.com/vnebelung/BS_Baldurans_Seatower"
-  repo = "vnebelung/BS_Baldurans_Seatower"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "weigo87"
-  label = "weigo87"
-  type = "github"
-  url = "https://github.com/weigo87/BS_Baldurans_Seatower"
-  repo = "weigo87/BS_Baldurans_Seatower"
-  branch = "main"
 
 [[mods]]
 name = "Another Fine Hell"
@@ -692,38 +365,6 @@ tp2 = "c#endlessbg1"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/EndlessBG1"
-  repo = "Gitjas/EndlessBG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/EndlessBG1"
-  repo = "Lzw104522773/EndlessBG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/EndlessBG1"
-  repo = "visionok/EndlessBG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/EndlessBG1"
-  repo = "Ychap/EndlessBG1"
-  branch = "master"
-
 [[mods]]
 name = "Grey the Dog NPC"
 tp2 = "c#greythedog"
@@ -737,38 +378,6 @@ tp2 = "c#greythedog"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Grey_The_Dog"
-  repo = "abalabokhin/Grey_The_Dog"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/Grey_The_Dog"
-  repo = "Gitjas/Grey_The_Dog"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Grey_The_Dog"
-  repo = "szaumoor/Grey_The_Dog"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Grey_The_Dog"
-  repo = "visionok/Grey_The_Dog"
-  branch = "master"
 
 [[mods]]
 name = "The Boareskyr Bridge Scene"
@@ -784,30 +393,6 @@ tp2 = "c#sodboabri"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/The_Boareskyr_Bridge_Scene"
-  repo = "Gitjas/The_Boareskyr_Bridge_Scene"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "virginviolet"
-  label = "virginviolet"
-  type = "github"
-  url = "https://github.com/virginviolet/The_Boareskyr_Bridge_Scene"
-  repo = "virginviolet/The_Boareskyr_Bridge_Scene"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/The_Boareskyr_Bridge_Scene"
-  repo = "yoshimo0417/The_Boareskyr_Bridge_Scene"
-  branch = "main"
-
 [[mods]]
 name = "Jastey's Tweaks"
 tp2 = "c#sodtweaks"
@@ -821,62 +406,6 @@ tp2 = "c#sodtweaks"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/Jasteys_SoD_Tweakpack"
-  repo = "Gitjas/Jasteys_SoD_Tweakpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/Jasteys_SoD_Tweakpack"
-  repo = "11jo/Jasteys_SoD_Tweakpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Jasteys_SoD_Tweakpack"
-  repo = "abalabokhin/Jasteys_SoD_Tweakpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Jasteys_SoD_Tweakpack"
-  repo = "Lzw104522773/Jasteys_SoD_Tweakpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Jasteys_SoD_Tweakpack"
-  repo = "MephistoSatanDevil/Jasteys_SoD_Tweakpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Jasteys_SoD_Tweakpack"
-  repo = "mleduque/Jasteys_SoD_Tweakpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "virginviolet"
-  label = "virginviolet"
-  type = "github"
-  url = "https://github.com/virginviolet/Jasteys_SoD_Tweakpack"
-  repo = "virginviolet/Jasteys_SoD_Tweakpack"
-  branch = "master"
 
 [[mods]]
 name = "Infinity Collection Portrait Pack"
@@ -892,14 +421,6 @@ tp2 = "cd_icpp"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "gwendolynefreddy"
-  label = "GwendolyneFreddy"
-  type = "github"
-  url = "https://github.com/GwendolyneFreddy/Infinity_Collection_Portrait_Pack"
-  repo = "GwendolyneFreddy/Infinity_Collection_Portrait_Pack"
-  branch = "master"
-
 [[mods]]
 name = "Lore From Learning"
 tp2 = "cdlore"
@@ -914,25 +435,10 @@ tp2 = "cdlore"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "hai20l"
-  label = "HaI20l"
-  type = "github"
-  url = "https://github.com/HaI20l/Lore_From_LearningES"
-  repo = "HaI20l/Lore_From_LearningES"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mikex1234"
-  label = "MikeX1234"
-  type = "github"
-  url = "https://github.com/MikeX1234/Lore_From_Learning"
-  repo = "MikeX1234/Lore_From_Learning"
-  branch = "master"
-
 [[mods]]
 name = "The Tweaks Anthology"
 tp2 = "cdtweaks"
+config_files = ["cdtweaks.ini", "desktop.ini", "gttweaks.ini"]
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -943,150 +449,6 @@ tp2 = "cdtweaks"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "sometroglodyte"
-  label = "SomeTroglodyte"
-  type = "github"
-  url = "https://github.com/SomeTroglodyte/Tweaks-Anthology"
-  repo = "SomeTroglodyte/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "argent77"
-  label = "Argent77"
-  type = "github"
-  url = "https://github.com/Argent77/Tweaks-Anthology"
-  repo = "Argent77/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Tweaks-Anthology"
-  repo = "Ychap/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Tweaks-Anthology"
-  repo = "szaumoor/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/Tweaks-Anthology"
-  repo = "Selphira/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Tweaks-Anthology"
-  repo = "mleduque/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mercurier"
-  label = "mercurier"
-  type = "github"
-  url = "https://github.com/mercurier/Tweaks-Anthology"
-  repo = "mercurier/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Tweaks-Anthology"
-  repo = "MephistoSatanDevil/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "majcosta"
-  label = "majcosta"
-  type = "github"
-  url = "https://github.com/majcosta/Tweaks-Anthology"
-  repo = "majcosta/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "m-architek"
-  label = "m-architek"
-  type = "github"
-  url = "https://github.com/m-architek/Tweaks-Anthology"
-  repo = "m-architek/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Tweaks-Anthology"
-  repo = "Lzw104522773/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "konrad-slusarczyk"
-  label = "konrad-slusarczyk"
-  type = "github"
-  url = "https://github.com/konrad-slusarczyk/Tweaks-Anthology"
-  repo = "konrad-slusarczyk/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "k4thos"
-  label = "K4thos"
-  type = "github"
-  url = "https://github.com/K4thos/Tweaks-Anthology"
-  repo = "K4thos/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "jazira33"
-  label = "Jazira33"
-  type = "github"
-  url = "https://github.com/Jazira33/Tweaks-Anthology"
-  repo = "Jazira33/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/Tweaks-Anthology"
-  repo = "dark0dave/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Tweaks-Anthology"
-  repo = "abalabokhin/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "4luke4"
-  label = "4Luke4"
-  type = "github"
-  url = "https://github.com/4Luke4/Tweaks-Anthology"
-  repo = "4Luke4/Tweaks-Anthology"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/Tweaks-Anthology"
-  repo = "11jo/Tweaks-Anthology"
-  branch = "master"
 
 [[mods]]
 name = "Coran's BG Extended Friendship Talks"
@@ -1116,46 +478,6 @@ tp2 = "CowledMenace"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/CowledMenace"
-  repo = "Lzw104522773/CowledMenace"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "totor115"
-  label = "TotoR115"
-  type = "github"
-  url = "https://github.com/TotoR115/CowledMenace"
-  repo = "TotoR115/CowledMenace"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "maltodaxtrin"
-  label = "Maltodaxtrin"
-  type = "github"
-  url = "https://github.com/Maltodaxtrin/CowledMenace"
-  repo = "Maltodaxtrin/CowledMenace"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mysummertimemy"
-  label = "mysummertimemy"
-  type = "github"
-  url = "https://github.com/mysummertimemy/CowledMenace"
-  repo = "mysummertimemy/CowledMenace"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "threetimesdavey"
-  label = "threetimesdavey"
-  type = "github"
-  url = "https://github.com/threetimesdavey/CowledMenace"
-  repo = "threetimesdavey/CowledMenace"
-  branch = "master"
-
 [[mods]]
 name = "Crossmod Banter Pack"
 tp2 = "crossmodbg2"
@@ -1169,22 +491,6 @@ tp2 = "crossmodbg2"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/Crossmod_Banter_Pack_for_Baldurs_Gate_II"
-  repo = "Gitjas/Crossmod_Banter_Pack_for_Baldurs_Gate_II"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Crossmod_Banter_Pack_for_Baldurs_Gate_II"
-  repo = "yoshimo0417/Crossmod_Banter_Pack_for_Baldurs_Gate_II"
-  branch = "master"
 
 [[mods]]
 name = "Restored Rhynn Lanthorn"
@@ -1200,22 +506,6 @@ tp2 = "dw_lanthorn"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/Restored-Rhynn-Lanthorn"
-  repo = "OmegaZeroXIII/Restored-Rhynn-Lanthorn"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Restored-Rhynn-Lanthorn"
-  repo = "Ychap/Restored-Rhynn-Lanthorn"
-  branch = "master"
-
 [[mods]]
 name = "Talents of Faerun"
 tp2 = "dw_talents"
@@ -1229,38 +519,6 @@ tp2 = "dw_talents"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/TalentsOfFaerun"
-  repo = "CamDawg/TalentsOfFaerun"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/TalentsOfFaerun"
-  repo = "mleduque/TalentsOfFaerun"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "sarahg-579462"
-  label = "SarahG-579462"
-  type = "github"
-  url = "https://github.com/SarahG-579462/TalentsOfFaerun"
-  repo = "SarahG-579462/TalentsOfFaerun"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "vbigiani"
-  label = "vbigiani"
-  type = "github"
-  url = "https://github.com/vbigiani/TalentsOfFaerun"
-  repo = "vbigiani/TalentsOfFaerun"
-  branch = "master"
 
 [[mods]]
 name = "EE Fixpack"
@@ -1277,94 +535,6 @@ tp2 = "eefixpack"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "argent77"
-  label = "Argent77"
-  type = "github"
-  url = "https://github.com/Argent77/EE_Fixpack"
-  repo = "Argent77/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/EE_Fixpack"
-  repo = "CamDawg/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "4luke4"
-  label = "4Luke4"
-  type = "github"
-  url = "https://github.com/4Luke4/EE_Fixpack"
-  repo = "4Luke4/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "angelgryph"
-  label = "AngelGryph"
-  type = "github"
-  url = "https://github.com/AngelGryph/EE_Fixpack"
-  repo = "AngelGryph/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "friendlyarminnregulars"
-  label = "FriendlyArmInnRegulars"
-  type = "github"
-  url = "https://github.com/FriendlyArmInnRegulars/EE_Fixpack"
-  repo = "FriendlyArmInnRegulars/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "graiondilach"
-  label = "GraionDilach"
-  type = "github"
-  url = "https://github.com/GraionDilach/EE_Fixpack"
-  repo = "GraionDilach/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/EE_Fixpack"
-  repo = "MephistoSatanDevil/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/EE_Fixpack"
-  repo = "mleduque/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/EE_Fixpack"
-  repo = "Selphira/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/EE_Fixpack"
-  repo = "szaumoor/EE_Fixpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/EE_Fixpack"
-  repo = "Ychap/EE_Fixpack"
-  branch = "master"
-
 [[mods]]
 name = "Baldur's Gate: Enhanced Edition Trilogy"
 tp2 = "eet"
@@ -1378,144 +548,6 @@ tp2 = "eet"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "argent77"
-  label = "Argent77"
-  type = "github"
-  url = "https://github.com/Argent77/EET"
-  repo = "Argent77/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "subtledoctor"
-  label = "subtledoctor"
-  type = "github"
-  url = "https://github.com/subtledoctor/EET"
-  repo = "subtledoctor/EET"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/EET"
-  repo = "Ychap/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "weigo87"
-  label = "weigo87"
-  type = "github"
-  url = "https://github.com/weigo87/EET"
-  repo = "weigo87/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "totalmilk90"
-  label = "TotalMilk90"
-  type = "github"
-  url = "https://github.com/TotalMilk90/EET"
-  repo = "TotalMilk90/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "saurimxxm"
-  label = "Saurimxxm"
-  type = "github"
-  url = "https://github.com/Saurimxxm/EET"
-  repo = "Saurimxxm/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/EET"
-  repo = "RoxanneSHS/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/EET"
-  repo = "mleduque/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/EET"
-  repo = "MephistoSatanDevil/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lizardmwk"
-  label = "LizardMWK"
-  type = "github"
-  url = "https://github.com/LizardMWK/EET"
-  repo = "LizardMWK/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "jazira33"
-  label = "Jazira33"
-  type = "github"
-  url = "https://github.com/Jazira33/EET"
-  repo = "Jazira33/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "graiondilach"
-  label = "GraionDilach"
-  type = "github"
-  url = "https://github.com/GraionDilach/EET"
-  repo = "GraionDilach/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "graf-zero"
-  label = "graf-zero"
-  type = "github"
-  url = "https://github.com/graf-zero/EET"
-  repo = "graf-zero/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "friendlyarminnregulars"
-  label = "FriendlyArmInnRegulars"
-  type = "github"
-  url = "https://github.com/FriendlyArmInnRegulars/EET"
-  repo = "FriendlyArmInnRegulars/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/EET"
-  repo = "dark0dave/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/EET"
-  repo = "CamDawg/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/EET"
-  repo = "abalabokhin/EET"
-  branch = "master"
 
 [[mods]]
 name = "Enhanced Edition Trilogy (End)"
@@ -1531,144 +563,6 @@ tp2 = "EET_END"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "argent77"
-  label = "Argent77"
-  type = "github"
-  url = "https://github.com/Argent77/EET"
-  repo = "Argent77/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "subtledoctor"
-  label = "subtledoctor"
-  type = "github"
-  url = "https://github.com/subtledoctor/EET"
-  repo = "subtledoctor/EET"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/EET"
-  repo = "Ychap/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "weigo87"
-  label = "weigo87"
-  type = "github"
-  url = "https://github.com/weigo87/EET"
-  repo = "weigo87/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "totalmilk90"
-  label = "TotalMilk90"
-  type = "github"
-  url = "https://github.com/TotalMilk90/EET"
-  repo = "TotalMilk90/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "saurimxxm"
-  label = "Saurimxxm"
-  type = "github"
-  url = "https://github.com/Saurimxxm/EET"
-  repo = "Saurimxxm/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/EET"
-  repo = "RoxanneSHS/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/EET"
-  repo = "mleduque/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/EET"
-  repo = "MephistoSatanDevil/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lizardmwk"
-  label = "LizardMWK"
-  type = "github"
-  url = "https://github.com/LizardMWK/EET"
-  repo = "LizardMWK/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "jazira33"
-  label = "Jazira33"
-  type = "github"
-  url = "https://github.com/Jazira33/EET"
-  repo = "Jazira33/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "graiondilach"
-  label = "GraionDilach"
-  type = "github"
-  url = "https://github.com/GraionDilach/EET"
-  repo = "GraionDilach/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "graf-zero"
-  label = "graf-zero"
-  type = "github"
-  url = "https://github.com/graf-zero/EET"
-  repo = "graf-zero/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "friendlyarminnregulars"
-  label = "FriendlyArmInnRegulars"
-  type = "github"
-  url = "https://github.com/FriendlyArmInnRegulars/EET"
-  repo = "FriendlyArmInnRegulars/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/EET"
-  repo = "dark0dave/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/EET"
-  repo = "CamDawg/EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/EET"
-  repo = "abalabokhin/EET"
-  branch = "master"
-
 [[mods]]
 name = "G3 Anniversary"
 tp2 = "G3ANNIVERSARY"
@@ -1682,14 +576,6 @@ tp2 = "G3ANNIVERSARY"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mysummertimemy"
-  label = "mysummertimemy"
-  type = "github"
-  url = "https://github.com/mysummertimemy/g3anniversary"
-  repo = "mysummertimemy/g3anniversary"
-  branch = "master"
 
 [[mods]]
 name = "G3 Community Item Pack"
@@ -1705,22 +591,6 @@ tp2 = "G3CIP"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/G3_Community_Item_Pack"
-  repo = "szaumoor/G3_Community_Item_Pack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "zenblack"
-  label = "zenblack"
-  type = "github"
-  url = "https://github.com/zenblack/G3_Community_Item_Pack"
-  repo = "zenblack/G3_Community_Item_Pack"
-  branch = "master"
-
 [[mods]]
 name = "Gavin NPC"
 tp2 = "gavin_bg2"
@@ -1734,14 +604,6 @@ tp2 = "gavin_bg2"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "austin-bg"
-  label = "Austin-BG"
-  type = "github"
-  url = "https://github.com/Austin-BG/Gavin_BG2"
-  repo = "Austin-BG/Gavin_BG2"
-  branch = "master"
 
 [[mods]]
 name = "Haldamir"
@@ -1771,30 +633,6 @@ tp2 = "imoen_forever"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/Imoen4Ever"
-  repo = "Gitjas/Imoen4Ever"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Imoen4Ever"
-  repo = "Lzw104522773/Imoen4Ever"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "realapxu"
-  label = "RealApxu"
-  type = "github"
-  url = "https://github.com/RealApxu/Imoen4Ever"
-  repo = "RealApxu/Imoen4Ever"
-  branch = "master"
-
 [[mods]]
 name = "Item Revisions"
 tp2 = "item_rev"
@@ -1809,80 +647,6 @@ tp2 = "item_rev"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "subtledoctor"
-  label = "subtledoctor"
-  type = "github"
-  url = "https://github.com/subtledoctor/ItemRevisions"
-  repo = "subtledoctor/ItemRevisions"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/ItemRevisions"
-  repo = "Selphira/ItemRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ardanis"
-  label = "Ardanis"
-  type = "github"
-  url = "https://github.com/Ardanis/ItemRevisions"
-  repo = "Ardanis/ItemRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "k4thos"
-  label = "K4thos"
-  type = "github"
-  url = "https://github.com/K4thos/ItemRevisions"
-  repo = "K4thos/ItemRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "kreso123"
-  label = "kreso123"
-  type = "github"
-  url = "https://github.com/kreso123/ItemRevisions"
-  repo = "kreso123/ItemRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mercurier"
-  label = "mercurier"
-  type = "github"
-  url = "https://github.com/mercurier/ItemRevisions"
-  repo = "mercurier/ItemRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mike1072"
-  label = "mike1072"
-  type = "github"
-  url = "https://github.com/mike1072/ItemRevisions"
-  repo = "mike1072/ItemRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/ItemRevisions"
-  repo = "mleduque/ItemRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "vbigiani"
-  label = "vbigiani"
-  type = "github"
-  url = "https://github.com/vbigiani/ItemRevisions"
-  repo = "vbigiani/ItemRevisions"
-  branch = "master"
-
 [[mods]]
 name = "IWDification"
 tp2 = "iwdification"
@@ -1896,38 +660,6 @@ tp2 = "iwdification"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "angelgryph"
-  label = "AngelGryph"
-  type = "github"
-  url = "https://github.com/AngelGryph/iwdification"
-  repo = "AngelGryph/iwdification"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/iwdification"
-  repo = "Lzw104522773/iwdification"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/iwdification"
-  repo = "MephistoSatanDevil/iwdification"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/iwdification"
-  repo = "mleduque/iwdification"
-  branch = "master"
 
 [[mods]]
 name = "Berelinde's Keldorn Romance"
@@ -1956,22 +688,6 @@ tp2 = "Kivan"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Kivan_and_Deheriana"
-  repo = "abalabokhin/Kivan_and_Deheriana"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/Kivan_and_Deheriana"
-  repo = "dark0dave/Kivan_and_Deheriana"
-  branch = "master"
 
 [[mods]]
 name = "Mur'Neth NPC"
@@ -2015,22 +731,6 @@ tp2 = "RE"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Romantic_Encounters_BG2"
-  repo = "MephistoSatanDevil/Romantic_Encounters_BG2"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Romantic_Encounters_BG2"
-  repo = "visionok/Romantic_Encounters_BG2"
-  branch = "master"
-
 [[mods]]
 name = "Sarah NPC Romance"
 tp2 = "sarahtob"
@@ -2044,30 +744,6 @@ tp2 = "sarahtob"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Sarah"
-  repo = "abalabokhin/Sarah"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/Sarah"
-  repo = "dark0dave/Sarah"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "halmylyseas"
-  label = "HalmyLyseas"
-  type = "github"
-  url = "https://github.com/HalmyLyseas/Sarah-Voices"
-  repo = "HalmyLyseas/Sarah-Voices"
-  branch = "master"
 
 [[mods]]
 name = "Shards of Ice"
@@ -2097,22 +773,6 @@ tp2 = "sod2bg2_iu"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/SoD-to-BG2EE-Item-Upgrade"
-  repo = "CamDawg/SoD-to-BG2EE-Item-Upgrade"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/SoD-to-BG2EE-Item-Upgrade"
-  repo = "MephistoSatanDevil/SoD-to-BG2EE-Item-Upgrade"
-  branch = "master"
-
 [[mods]]
 name = "Road to Discovery"
 tp2 = "sodrtd"
@@ -2126,30 +786,6 @@ tp2 = "sodrtd"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/Road_To_Discovery_for_SoD"
-  repo = "Gitjas/Road_To_Discovery_for_SoD"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Road_To_Discovery_for_SoD"
-  repo = "mleduque/Road_To_Discovery_for_SoD"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Road_To_Discovery_for_SoD"
-  repo = "yoshimo0417/Road_To_Discovery_for_SoD"
-  branch = "main"
 
 [[mods]]
 name = "Song and Silence"
@@ -2165,30 +801,6 @@ tp2 = "song_and_silence"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/SongAndSilence"
-  repo = "abalabokhin/SongAndSilence"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "graiondilach"
-  label = "GraionDilach"
-  type = "github"
-  url = "https://github.com/GraionDilach/SongAndSilence"
-  repo = "GraionDilach/SongAndSilence"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/SongAndSilence"
-  repo = "Lzw104522773/SongAndSilence"
-  branch = "master"
-
 [[mods]]
 name = "Spell Revisions"
 tp2 = "spell_rev"
@@ -2202,62 +814,6 @@ tp2 = "spell_rev"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "arnaudpourbaix"
-  label = "arnaudpourbaix"
-  type = "github"
-  url = "https://github.com/arnaudpourbaix/SpellRevisions"
-  repo = "arnaudpourbaix/SpellRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "konrad-slusarczyk"
-  label = "konrad-slusarczyk"
-  type = "github"
-  url = "https://github.com/konrad-slusarczyk/SpellRevisions"
-  repo = "konrad-slusarczyk/SpellRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lambda-dom"
-  label = "lambda-dom"
-  type = "github"
-  url = "https://github.com/lambda-dom/SpellRevisions"
-  repo = "lambda-dom/SpellRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "long-168"
-  label = "long-168"
-  type = "github"
-  url = "https://github.com/long-168/SpellRevisions"
-  repo = "long-168/SpellRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/SpellRevisions"
-  repo = "mleduque/SpellRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "skhoroshavin"
-  label = "skhoroshavin"
-  type = "github"
-  url = "https://github.com/skhoroshavin/SpellRevisions"
-  repo = "skhoroshavin/SpellRevisions"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/SpellRevisions"
-  repo = "visionok/SpellRevisions"
-  branch = "master"
 
 [[mods]]
 name = "SP Collection"
@@ -2276,6 +832,7 @@ tp2 = "SPSTUFF"
 [[mods]]
 name = "Sword Coast Stratagems"
 tp2 = "stratagems"
+config_files = ["stratagems.ini"]
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -2286,182 +843,6 @@ tp2 = "stratagems"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/SwordCoastStratagems"
-  repo = "11jo/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "angelgryph"
-  label = "AngelGryph"
-  type = "github"
-  url = "https://github.com/AngelGryph/SwordCoastStratagems"
-  repo = "AngelGryph/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/SwordCoastStratagems"
-  repo = "CamDawg/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/SwordCoastStratagems"
-  repo = "dark0dave/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "hai20l"
-  label = "HaI20l"
-  type = "github"
-  url = "https://github.com/HaI20l/SwordCoastStratagemsES"
-  repo = "HaI20l/SwordCoastStratagemsES"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "jazira33"
-  label = "Jazira33"
-  type = "github"
-  url = "https://github.com/Jazira33/SwordCoastStratagems"
-  repo = "Jazira33/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "jonpoveda"
-  label = "jonpoveda"
-  type = "github"
-  url = "https://github.com/jonpoveda/SwordCoastStratagems"
-  repo = "jonpoveda/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "krabator"
-  label = "Krabator"
-  type = "github"
-  url = "https://github.com/Krabator/SwordCoastStratagems"
-  repo = "Krabator/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/SwordCoastStratagems"
-  repo = "Lzw104522773/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "m3-ra"
-  label = "m3-ra"
-  type = "github"
-  url = "https://github.com/m3-ra/SwordCoastStratagems"
-  repo = "m3-ra/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "majcosta"
-  label = "majcosta"
-  type = "github"
-  url = "https://github.com/majcosta/SwordCoastStratagems"
-  repo = "majcosta/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/SwordCoastStratagems"
-  repo = "MephistoSatanDevil/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mercurier"
-  label = "mercurier"
-  type = "github"
-  url = "https://github.com/mercurier/SwordCoastStratagems"
-  repo = "mercurier/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/SwordCoastStratagems"
-  repo = "mleduque/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/SwordCoastStratagems"
-  repo = "OmegaZeroXIII/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "otikscypi"
-  label = "otikscypi"
-  type = "github"
-  url = "https://github.com/otikscypi/SwordCoastStratagems"
-  repo = "otikscypi/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "realapxu"
-  label = "RealApxu"
-  type = "github"
-  url = "https://github.com/RealApxu/SwordCoastStratagems"
-  repo = "RealApxu/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/SwordCoastStratagems"
-  repo = "abalabokhin/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/SwordCoastStratagems"
-  repo = "Selphira/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "skhoroshavin"
-  label = "skhoroshavin"
-  type = "github"
-  url = "https://github.com/skhoroshavin/SwordCoastStratagems"
-  repo = "skhoroshavin/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "streetwraith"
-  label = "streetwraith"
-  type = "github"
-  url = "https://github.com/streetwraith/SwordCoastStratagems"
-  repo = "streetwraith/SwordCoastStratagems"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/SwordCoastStratagems"
-  repo = "Ychap/SwordCoastStratagems"
-  branch = "master"
 
 [[mods]]
 name = "The Calling"
@@ -2477,54 +858,6 @@ tp2 = "thecalling"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/The_Calling"
-  repo = "CamDawg/The_Calling"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/The_Calling"
-  repo = "mleduque/The_Calling"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "weigo87"
-  label = "weigo87"
-  type = "github"
-  url = "https://github.com/weigo87/The_Calling"
-  repo = "weigo87/The_Calling"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/The_Calling"
-  repo = "abalabokhin/The_Calling"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gwendolynefreddy"
-  label = "GwendolyneFreddy"
-  type = "github"
-  url = "https://github.com/GwendolyneFreddy/The_Calling"
-  repo = "GwendolyneFreddy/The_Calling"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/The_Calling"
-  repo = "Lzw104522773/The_Calling"
-  branch = "master"
-
 [[mods]]
 name = "Transitions"
 tp2 = "transitions"
@@ -2538,14 +871,6 @@ tp2 = "transitions"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/transitions"
-  repo = "MephistoSatanDevil/transitions"
-  branch = "master"
 
 [[mods]]
 name = "Improved Horns of Valhalla"
@@ -2575,14 +900,6 @@ tp2 = "wheels"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/WheelsOfProphecy"
-  repo = "yoshimo0417/WheelsOfProphecy"
-  branch = "master"
-
 #////////////////////////////////////////////////#
 #//             Pocket-Plane-Group             //#
 #////////////////////////////////////////////////#
@@ -2601,22 +918,6 @@ tp2 = "assassinations"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Assassinations"
-  repo = "yoshimo0417/Assassinations"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "roberciiik"
-  label = "Roberciiik"
-  type = "github"
-  url = "https://github.com/Roberciiik/Assassinations"
-  repo = "Roberciiik/Assassinations"
-  branch = "master"
-
 [[mods]]
 name = "Back to Brynnlaw"
 tp2 = "BackBrynnlaw"
@@ -2630,22 +931,6 @@ tp2 = "BackBrynnlaw"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Back_to_Brynnlaw"
-  repo = "yoshimo0417/Back_to_Brynnlaw"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Back_to_Brynnlaw"
-  repo = "visionok/Back_to_Brynnlaw"
-  branch = "master"
 
 [[mods]]
 name = "Banter Packs"
@@ -2661,14 +946,6 @@ tp2 = "banterpack"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Banter_Pack"
-  repo = "MephistoSatanDevil/Banter_Pack"
-  branch = "master"
-
 [[mods]]
 name = "BG1 Unfinished Business"
 tp2 = "bg1ub"
@@ -2679,72 +956,6 @@ tp2 = "bg1ub"
   type = "github"
   url = "https://github.com/Isaya/bg1ub"
   repo = "Isaya/bg1ub"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "pocket-plane-group"
-  label = "Pocket Plane Group"
-  type = "github"
-  url = "https://github.com/Pocket-Plane-Group/bg1ub"
-  repo = "Pocket-Plane-Group/bg1ub"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/bg1ub"
-  repo = "CamDawg/bg1ub"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "frenzgyn"
-  label = "Frenzgyn"
-  type = "github"
-  url = "https://github.com/Frenzgyn/bg1ub"
-  repo = "Frenzgyn/bg1ub"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/bg1ub"
-  repo = "Gitjas/bg1ub"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "hai20l"
-  label = "HaI20l"
-  type = "github"
-  url = "https://github.com/HaI20l/bg1ubES"
-  repo = "HaI20l/bg1ubES"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/bg1ub"
-  repo = "MephistoSatanDevil/bg1ub"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/bg1ub"
-  repo = "OmegaZeroXIII/bg1ub"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/bg1ub"
-  repo = "Ychap/bg1ub"
   branch = "master"
 
 [[mods]]
@@ -2761,14 +972,6 @@ tp2 = "branwen"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Branwen_for_BGII"
-  repo = "yoshimo0417/Branwen_for_BGII"
-  branch = "master"
-
 [[mods]]
 name = "Coran NPC"
 tp2 = "coran"
@@ -2782,14 +985,6 @@ tp2 = "coran"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Coran_for_BGII"
-  repo = "yoshimo0417/Coran_for_BGII"
-  branch = "master"
 
 [[mods]]
 name = "Dungeon Crawl"
@@ -2805,14 +1000,6 @@ tp2 = "DC"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Dungeon_Crawl"
-  repo = "yoshimo0417/Dungeon_Crawl"
-  branch = "master"
-
 [[mods]]
 name = "De'Arnise Romance"
 tp2 = "deArnise"
@@ -2826,14 +1013,6 @@ tp2 = "deArnise"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/deArnise_Romance"
-  repo = "MephistoSatanDevil/deArnise_Romance"
-  branch = "master"
 
 [[mods]]
 name = "Indira NPC"
@@ -2849,22 +1028,6 @@ tp2 = "IndiNPC"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Indira_NPC"
-  repo = "abalabokhin/Indira_NPC"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Indira_NPC"
-  repo = "visionok/Indira_NPC"
-  branch = "main"
-
 [[mods]]
 name = "Item Upgrade"
 tp2 = "itemupgrade"
@@ -2879,38 +1042,6 @@ tp2 = "itemupgrade"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "roberciiik"
-  label = "Roberciiik"
-  type = "github"
-  url = "https://github.com/Roberciiik/Item_Upgrade"
-  repo = "Roberciiik/Item_Upgrade"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/Item_Upgrade"
-  repo = "Selphira/Item_Upgrade"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Item_Upgrade"
-  repo = "szaumoor/Item_Upgrade"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Item_Upgrade"
-  repo = "Ychap/Item_Upgrade"
-  branch = "master"
-
 [[mods]]
 name = "Kelsey NPC"
 tp2 = "kelsey"
@@ -2924,14 +1055,6 @@ tp2 = "kelsey"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Kelsey"
-  repo = "MephistoSatanDevil/Kelsey"
-  branch = "master"
 
 [[mods]]
 name = "Keto NPC"
@@ -2961,14 +1084,6 @@ tp2 = "npcflirt"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "trow"
-  label = "trow"
-  type = "github"
-  url = "https://github.com/trow/NPC_Flirt_Packs"
-  repo = "trow/NPC_Flirt_Packs"
-  branch = "master"
-
 [[mods]]
 name = "Quest Pack"
 tp2 = "questpack"
@@ -2980,30 +1095,6 @@ aliases = ["d0questpack"]
   type = "github"
   url = "https://github.com/Pocket-Plane-Group/QuestPack"
   repo = "Pocket-Plane-Group/QuestPack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/QuestPack"
-  repo = "Lzw104522773/QuestPack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "totor115"
-  label = "TotoR115"
-  type = "github"
-  url = "https://github.com/TotoR115/QuestPack"
-  repo = "TotoR115/QuestPack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/QuestPack"
-  repo = "Ychap/QuestPack"
   branch = "master"
 
 [[mods]]
@@ -3020,14 +1111,6 @@ tp2 = "Reunion"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Reunion"
-  repo = "yoshimo0417/Reunion"
-  branch = "master"
-
 [[mods]]
 name = "The Sellswords"
 tp2 = "Sellswords"
@@ -3041,30 +1124,6 @@ tp2 = "Sellswords"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Sellswords"
-  repo = "yoshimo0417/Sellswords"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/Sellswords"
-  repo = "dark0dave/Sellswords"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Sellswords"
-  repo = "Ychap/Sellswords"
-  branch = "master"
 
 [[mods]]
 name = "The Lure of the Sirine's Call"
@@ -3080,46 +1139,6 @@ tp2 = "SirinesCall"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "suy"
-  label = "suy"
-  type = "github"
-  url = "https://github.com/suy/Lure_Of_Sirines_Call"
-  repo = "suy/Lure_Of_Sirines_Call"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Lure_Of_Sirines_Call"
-  repo = "szaumoor/Lure_Of_Sirines_Call"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Lure_Of_Sirines_Call"
-  repo = "Lzw104522773/Lure_Of_Sirines_Call"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "weigo87"
-  label = "weigo87"
-  type = "github"
-  url = "https://github.com/weigo87/Lure_Of_Sirines_Call"
-  repo = "weigo87/Lure_Of_Sirines_Call"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Lure_Of_Sirines_Call"
-  repo = "yoshimo0417/Lure_Of_Sirines_Call"
-  branch = "master"
-
 [[mods]]
 name = "Tiax NPC"
 tp2 = "Tiax"
@@ -3133,14 +1152,6 @@ tp2 = "Tiax"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Tiax_for_BGII"
-  repo = "yoshimo0417/Tiax_for_BGII"
-  branch = "master"
 
 [[mods]]
 name = "Turnabout"
@@ -3170,62 +1181,6 @@ tp2 = "ub"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "angelgryph"
-  label = "AngelGryph"
-  type = "github"
-  url = "https://github.com/AngelGryph/UnfinishedBusiness"
-  repo = "AngelGryph/UnfinishedBusiness"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "frenzgyn"
-  label = "Frenzgyn"
-  type = "github"
-  url = "https://github.com/Frenzgyn/UnfinishedBusiness"
-  repo = "Frenzgyn/UnfinishedBusiness"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "magnus-isu"
-  label = "magnus-ISU"
-  type = "github"
-  url = "https://github.com/magnus-ISU/UnfinishedBusiness"
-  repo = "magnus-ISU/UnfinishedBusiness"
-  branch = "master-PPG"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/UnfinishedBusiness"
-  repo = "MephistoSatanDevil/UnfinishedBusiness"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/UnfinishedBusiness"
-  repo = "Selphira/UnfinishedBusiness"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/UnfinishedBusiness"
-  repo = "Ychap/UnfinishedBusiness"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/UnfinishedBusiness"
-  repo = "yoshimo0417/UnfinishedBusiness"
-  branch = "master"
-
 [[mods]]
 name = "Under-Represented Items"
 tp2 = "underrep"
@@ -3253,14 +1208,6 @@ tp2 = "Xan"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Xan_for_BGII"
-  repo = "yoshimo0417/Xan_for_BGII"
-  branch = "master"
 
 [[mods]]
 name = "Xan's Friendship Path"
@@ -3326,14 +1273,6 @@ tp2 = "ALCOOL"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Alcool"
-  repo = "Ychap/Alcool"
-  branch = "main"
-
 [[mods]]
 name = "Askaria Quest"
 tp2 = "ASKARIA"
@@ -3347,14 +1286,6 @@ tp2 = "ASKARIA"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Askaria-Quest_ChaosKnight-kit"
-  repo = "MephistoSatanDevil/Askaria-Quest_ChaosKnight-kit"
-  branch = "main"
 
 [[mods]]
 name = "Aerie in BG:EE"
@@ -3370,14 +1301,6 @@ tp2 = "BG1Aerie"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/AerieBG1"
-  repo = "mleduque/AerieBG1"
-  branch = "main"
-
 [[mods]]
 name = "Chaos Knight & Jacob NPC"
 tp2 = "CHAOSKNIGHT"
@@ -3391,14 +1314,6 @@ tp2 = "CHAOSKNIGHT"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Askaria-Quest_ChaosKnight-kit"
-  repo = "MephistoSatanDevil/Askaria-Quest_ChaosKnight-kit"
-  branch = "main"
 
 [[mods]]
 name = "Chatty Imoen"
@@ -3442,30 +1357,6 @@ tp2 = "DarkHorizons"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/DarkHorizons"
-  repo = "abalabokhin/DarkHorizons"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/DarkHorizons"
-  repo = "Lzw104522773/DarkHorizons"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/DarkHorizons"
-  repo = "visionok/DarkHorizons"
-  branch = "main"
-
 [[mods]]
 name = "Dark Horizons BG:EE"
 tp2 = "darkhorizonsbgee"
@@ -3479,30 +1370,6 @@ tp2 = "darkhorizonsbgee"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/DarkHorizons"
-  repo = "abalabokhin/DarkHorizons"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/DarkHorizons"
-  repo = "Lzw104522773/DarkHorizons"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/DarkHorizons"
-  repo = "visionok/DarkHorizons"
-  branch = "main"
 
 [[mods]]
 name = "DGItems"
@@ -3546,14 +1413,6 @@ tp2 = "jaheirarecast"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/JaheiraRecast"
-  repo = "Lzw104522773/JaheiraRecast"
-  branch = "main"
-
 [[mods]]
 name = "T'Was a Slow Boat from Kara-Tur"
 tp2 = "karatur"
@@ -3568,22 +1427,6 @@ tp2 = "karatur"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Kara-Tur"
-  repo = "MephistoSatanDevil/Kara-Tur"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mysummertimemy"
-  label = "mysummertimemy"
-  type = "github"
-  url = "https://github.com/mysummertimemy/Kara-Tur"
-  repo = "mysummertimemy/Kara-Tur"
-  branch = "main"
-
 [[mods]]
 name = "Klatu Tweaks and Fixes"
 tp2 = "klatu"
@@ -3597,22 +1440,6 @@ tp2 = "klatu"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "crevsdaak"
-  label = "CrevsDaak"
-  type = "github"
-  url = "https://github.com/CrevsDaak/klatu-tweaks-and-fixes"
-  repo = "CrevsDaak/klatu-tweaks-and-fixes"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/klatu-tweaks-and-fixes"
-  repo = "Ychap/klatu-tweaks-and-fixes"
-  branch = "master"
 
 [[mods]]
 name = "IWD Item Pack"
@@ -3655,14 +1482,6 @@ tp2 = "RTTITEMPACK"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "eva2000as"
-  label = "eva2000as"
-  type = "github"
-  url = "https://github.com/eva2000as/RTT-ItemPack"
-  repo = "eva2000as/RTT-ItemPack"
-  branch = "main"
 
 [[mods]]
 name = "Saradas Magic"
@@ -3718,22 +1537,6 @@ tp2 = "vampiretales"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/VampireTales"
-  repo = "Lzw104522773/VampireTales"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/VampireTales"
-  repo = "abalabokhin/VampireTales"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                   Bubb13                   //#
 #////////////////////////////////////////////////#
@@ -3780,22 +1583,6 @@ tp2 = "bubb_spell_menu_extended"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "esceen-cn"
-  label = "Esceen-cn"
-  type = "github"
-  url = "https://github.com/Esceen-cn/Bubbs-Spell-Menu-Extended"
-  repo = "Esceen-cn/Bubbs-Spell-Menu-Extended"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "renegade0"
-  label = "Renegade0"
-  type = "github"
-  url = "https://github.com/Renegade0/Bubbs-Spell-Menu-Extended"
-  repo = "Renegade0/Bubbs-Spell-Menu-Extended"
-  branch = "master"
-
 [[mods]]
 name = "EEex"
 tp2 = "eeex"
@@ -3810,30 +1597,6 @@ tp2 = "eeex"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "4luke4"
-  label = "4Luke4"
-  type = "github"
-  url = "https://github.com/4Luke4/EEex"
-  repo = "4Luke4/EEex"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/EEex"
-  repo = "MephistoSatanDevil/EEex"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "renegade0"
-  label = "Renegade0"
-  type = "github"
-  url = "https://github.com/Renegade0/EEex"
-  repo = "Renegade0/EEex"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                   r-e-d                    //#
@@ -3876,16 +1639,6 @@ name = "EE UI Tweaks"
 tp2 = "eeuitweaks"
 
   [[mods.sources]]
-  id = "ancientcowboy"
-  label = "AncientCowboy"
-  type = "github"
-  url = "https://github.com/AncientCowboy/EEUITweaks"
-  repo = "AncientCowboy/EEUITweaks"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
   id = "r-e-d"
   label = "r-e-d"
   type = "github"
@@ -3894,14 +1647,6 @@ tp2 = "eeuitweaks"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/EEUITweaks"
-  repo = "mleduque/EEUITweaks"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                  D2-mods                   //#
@@ -3962,14 +1707,6 @@ tp2 = "d2-workshopkits"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/The-Workshop-Kitpack"
-  repo = "11jo/The-Workshop-Kitpack"
-  branch = "main"
 
 [[mods]]
 name = "Kit Mule"
@@ -4067,24 +1804,6 @@ tp2 = "abystore"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/The_Unusual_Oddities_Shop"
-  repo = "Lzw104522773/The_Unusual_Oddities_Shop"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Unusual-Oddities-Shop"
-  repo = "Spellhold-Studios/Unusual-Oddities-Shop"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
 [[mods]]
 name = "Jan's Alchemy"
 tp2 = "alchemy"
@@ -4127,16 +1846,6 @@ tp2 = "bank_of_baldurs_gate"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Bank-of-Baldurs-Gate"
-  repo = "Spellhold-Studios/Bank-of-Baldurs-Gate"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
 [[mods]]
 name = "Baldur's Gate Graphics Overhaul"
 tp2 = "BGGO"
@@ -4147,16 +1856,6 @@ tp2 = "BGGO"
   type = "github"
   url = "https://github.com/SpellholdStudios/BGGOEET"
   repo = "SpellholdStudios/BGGOEET"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Baldurs-Gate-Graphical-Overhaul"
-  repo = "Spellhold-Studios/Baldurs-Gate-Graphical-Overhaul"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
@@ -4175,32 +1874,6 @@ tp2 = "Bolsa"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Bolsa"
-  repo = "Lzw104522773/Bolsa"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Bolsa"
-  repo = "Spellhold-Studios/Bolsa"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Bolsa"
-  repo = "MephistoSatanDevil/Bolsa"
-  branch = "master"
-
 [[mods]]
 name = "Worldmap"
 tp2 = "bp-bgt-worldmap"
@@ -4214,40 +1887,6 @@ tp2 = "bp-bgt-worldmap"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/BP-BGT-Worldmap"
-  repo = "Spellhold-Studios/BP-BGT-Worldmap"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/BP-BGT-Worldmap"
-  repo = "MephistoSatanDevil/BP-BGT-Worldmap"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/BP-BGT-Worldmap"
-  repo = "dark0dave/BP-BGT-Worldmap"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/BP-BGT-Worldmap"
-  repo = "abalabokhin/BP-BGT-Worldmap"
-  branch = "master"
 
 [[mods]]
 name = "Beyond the Law"
@@ -4291,32 +1930,6 @@ tp2 = "Darron"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Darron"
-  repo = "Lzw104522773/Darron"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Darron"
-  repo = "Spellhold-Studios/Darron"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Darron"
-  repo = "MephistoSatanDevil/Darron"
-  branch = "master"
-
 [[mods]]
 name = "Red Dragon Summoning Spell"
 tp2 = "DRAGONSUMMON"
@@ -4327,16 +1940,6 @@ tp2 = "DRAGONSUMMON"
   type = "github"
   url = "https://github.com/SpellholdStudios/Red_Dragon_Summoning_Spell"
   repo = "SpellholdStudios/Red_Dragon_Summoning_Spell"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "endarire"
-  label = "Endarire"
-  type = "github"
-  url = "https://github.com/Endarire/Red_Dragon_Summoning_Spell"
-  repo = "Endarire/Red_Dragon_Summoning_Spell"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
@@ -4355,14 +1958,6 @@ tp2 = "dsr"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/DemonSummoningRitual"
-  repo = "Lzw104522773/DemonSummoningRitual"
-  branch = "master"
-
 [[mods]]
 name = "Fade NPC"
 tp2 = "Fade"
@@ -4376,30 +1971,6 @@ tp2 = "Fade"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "m3-ra"
-  label = "m3-ra"
-  type = "github"
-  url = "https://github.com/m3-ra/Fade-NPC"
-  repo = "m3-ra/Fade-NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Fade-NPC"
-  repo = "szaumoor/Fade-NPC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "trow"
-  label = "trow"
-  type = "github"
-  url = "https://github.com/trow/Fade-NPC"
-  repo = "trow/Fade-NPC"
-  branch = "master"
 
 [[mods]]
 name = "Super Firkraag"
@@ -4429,14 +2000,6 @@ tp2 = "gbthfkp"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Expanded_Thief_Stronghold"
-  repo = "Lzw104522773/Expanded_Thief_Stronghold"
-  branch = "master"
-
 [[mods]]
 name = "Haer'dalis Friendship"
 tp2 = "haerdalis_friendship"
@@ -4465,24 +2028,6 @@ tp2 = "heartwood"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/HeartOfTheWood"
-  repo = "Spellhold-Studios/HeartOfTheWood"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Heart-of-the-Wood"
-  repo = "MephistoSatanDevil/Heart-of-the-Wood"
-  branch = "master"
-
 [[mods]]
 name = "IEP Extended Banters"
 tp2 = "iepbanters"
@@ -4507,17 +2052,6 @@ tp2 = "imnesvale"
   type = "github"
   url = "https://github.com/SpellholdStudios/Duality_Odd_Quest_Mod"
   repo = "SpellholdStudios/Duality_Odd_Quest_Mod"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Duality-Odd-Quest-Mod"
-  repo = "Spellhold-Studios/Duality-Odd-Quest-Mod"
-  channel = "pre-release"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
@@ -4606,14 +2140,6 @@ tp2 = "lucy"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Lucy_the_Wyvern"
-  repo = "Lzw104522773/Lucy_the_Wyvern"
-  branch = "master"
-
 [[mods]]
 name = "Mazzy Friendship"
 tp2 = "Mazzy"
@@ -4684,32 +2210,6 @@ tp2 = "RoT"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Region-of-Terror"
-  repo = "Spellhold-Studios/Region-of-Terror"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Region_of_Terror"
-  repo = "Lzw104522773/Region_of_Terror"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Region-of-Terror"
-  repo = "MephistoSatanDevil/Region-of-Terror"
-  branch = "master"
-
 [[mods]]
 name = "Ruad Ro'fhessa"
 tp2 = "ruad"
@@ -4724,32 +2224,6 @@ tp2 = "ruad"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/RuadRofhessaItemUpgrade"
-  repo = "Lzw104522773/RuadRofhessaItemUpgrade"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Ruad-Rofhessa-Item-Upgrade"
-  repo = "Spellhold-Studios/Ruad-Rofhessa-Item-Upgrade"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Ruad-Rofhessa-Item-Upgrade"
-  repo = "MephistoSatanDevil/Ruad-Rofhessa-Item-Upgrade"
-  branch = "master"
-
 [[mods]]
 name = "Rupert the Dye Merchant"
 tp2 = "rupert"
@@ -4760,16 +2234,6 @@ tp2 = "rupert"
   type = "github"
   url = "https://github.com/SpellholdStudios/Rupert_the_Dye_Merchant"
   repo = "SpellholdStudios/Rupert_the_Dye_Merchant"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Rupert-the-Dye-Merchant"
-  repo = "Spellhold-Studios/Rupert-the-Dye-Merchant"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
@@ -4787,14 +2251,6 @@ tp2 = "saradas_magic_2"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "roberciiik"
-  label = "Roberciiik"
-  type = "github"
-  url = "https://github.com/Roberciiik/Saradas_Magic_for_BG2"
-  repo = "Roberciiik/Saradas_Magic_for_BG2"
-  branch = "master"
 
 [[mods]]
 name = "Sarevok Friendship"
@@ -4823,14 +2279,6 @@ tp2 = "slandor"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/The_Minotaur_and_Lilacor"
-  repo = "Lzw104522773/The_Minotaur_and_Lilacor"
-  branch = "master"
 
 [[mods]]
 name = "The Slithering Menace"
@@ -4887,14 +2335,6 @@ tp2 = "tnoober"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "eva2000as"
-  label = "eva2000as"
-  type = "github"
-  url = "https://github.com/eva2000as/TheSwordofNoober"
-  repo = "eva2000as/TheSwordofNoober"
-  branch = "master"
 
 [[mods]]
 name = "Valygar Friendship"
@@ -4970,14 +2410,6 @@ tp2 = "Adrian"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Adrian-NPC"
-  repo = "MephistoSatanDevil/Adrian-NPC"
-  branch = "master"
-
 [[mods]]
 name = "Almateria's Restoration Project"
 tp2 = "arestorationp"
@@ -4991,22 +2423,6 @@ tp2 = "arestorationp"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Almateria-Restoration-Project"
-  repo = "MephistoSatanDevil/Almateria-Restoration-Project"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Almaterias_Restoration_Project"
-  repo = "Ychap/Almaterias_Restoration_Project"
-  branch = "main"
 
 [[mods]]
 name = "Dace"
@@ -5050,14 +2466,6 @@ tp2 = "DornFriendship"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Dorn-Friendship"
-  repo = "abalabokhin/Dorn-Friendship"
-  branch = "main"
-
 [[mods]]
 name = "Dark Side of the Sword Coast"
 tp2 = "DSotSC"
@@ -5071,56 +2479,6 @@ tp2 = "DSotSC"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/DSotSC"
-  repo = "Spellhold-Studios/DSotSC"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "chrysocyonvirulentus"
-  label = "ChrysocyonVirulentus"
-  type = "github"
-  url = "https://github.com/ChrysocyonVirulentus/DSotSC"
-  repo = "ChrysocyonVirulentus/DSotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/DSotSC"
-  repo = "Gitjas/DSotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/DSotSC"
-  repo = "Lzw104522773/DSotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mercurier"
-  label = "mercurier"
-  type = "github"
-  url = "https://github.com/mercurier/DSotSC"
-  repo = "mercurier/DSotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/DSotSC"
-  repo = "RoxanneSHS/DSotSC"
-  branch = "master"
 
 [[mods]]
 name = "Edwin Romance"
@@ -5136,14 +2494,6 @@ tp2 = "edwinromance"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Edwin-Romance"
-  repo = "MephistoSatanDevil/Edwin-Romance"
-  branch = "master"
-
 [[mods]]
 name = "Fading Promises"
 tp2 = "fadingpromises"
@@ -5157,22 +2507,6 @@ tp2 = "fadingpromises"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Fading_Promises"
-  repo = "Lzw104522773/Fading_Promises"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Fading-Promises"
-  repo = "yoshimo0417/Fading-Promises"
-  branch = "master"
 
 [[mods]]
 name = "Faren NPC"
@@ -5202,14 +2536,6 @@ tp2 = "HexxatFriendship"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Hexxat-Friendship"
-  repo = "abalabokhin/Hexxat-Friendship"
-  branch = "main"
-
 [[mods]]
 name = "Infinity Sounds"
 tp2 = "infinitysounds"
@@ -5223,22 +2549,6 @@ tp2 = "infinitysounds"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/Infinity-Sounds"
-  repo = "Selphira/Infinity-Sounds"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/infinity-sounds"
-  repo = "Ychap/infinity-sounds"
-  branch = "main"
 
 [[mods]]
 name = "Jaheira Friendship"
@@ -5267,30 +2577,6 @@ tp2 = "LongerRoad"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/LongerRoadEE"
-  repo = "RoxanneSHS/LongerRoadEE"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/LongerRoad"
-  repo = "CamDawg/LongerRoad"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/LongerRoad"
-  repo = "yoshimo0417/LongerRoad"
-  branch = "master"
 
 [[mods]]
 name = "Nathaniel NPC"
@@ -5334,70 +2620,6 @@ tp2 = "ntotsc"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "angelgryph"
-  label = "AngelGryph"
-  type = "github"
-  url = "https://github.com/AngelGryph/NTotSC"
-  repo = "AngelGryph/NTotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/NTotSC"
-  repo = "11jo/NTotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/NTotSC"
-  repo = "Gitjas/NTotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "graiondilach"
-  label = "GraionDilach"
-  type = "github"
-  url = "https://github.com/GraionDilach/NTotSC"
-  repo = "GraionDilach/NTotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/NTotSC"
-  repo = "Lzw104522773/NTotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/NTotSC"
-  repo = "mleduque/NTotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "plutonium-x"
-  label = "Plutonium-X"
-  type = "github"
-  url = "https://github.com/Plutonium-X/NTotSC"
-  repo = "Plutonium-X/NTotSC"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/NTotSC"
-  repo = "yoshimo0417/NTotSC"
-  branch = "master"
-
 [[mods]]
 name = "Rolles Safyer"
 tp2 = "Rolles"
@@ -5411,22 +2633,6 @@ tp2 = "Rolles"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Rolles"
-  repo = "Lzw104522773/Rolles"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Rolles"
-  repo = "MephistoSatanDevil/Rolles"
-  branch = "master"
 
 [[mods]]
 name = "Tashia NPC"
@@ -5442,22 +2648,6 @@ tp2 = "tashia"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/Tashia-NPC"
-  repo = "11jo/Tashia-NPC"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "eva2000as"
-  label = "eva2000as"
-  type = "github"
-  url = "https://github.com/eva2000as/Tashia-NPC"
-  repo = "eva2000as/Tashia-NPC"
-  branch = "main"
-
 [[mods]]
 name = "The Darkest Day"
 tp2 = "TDDZ"
@@ -5471,22 +2661,6 @@ tp2 = "TDDZ"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/TDDz"
-  repo = "Lzw104522773/TDDz"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "roberciiik"
-  label = "Roberciiik"
-  type = "github"
-  url = "https://github.com/Roberciiik/TDDz"
-  repo = "Roberciiik/TDDz"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                 Renegade0                  //#
@@ -5505,94 +2679,6 @@ tp2 = "infinity_ui"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "bubb13"
-  label = "Bubb13"
-  type = "github"
-  url = "https://github.com/Bubb13/InfinityUI"
-  repo = "Bubb13/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/InfinityUI"
-  repo = "abalabokhin/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/InfinityUI"
-  repo = "dark0dave/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/InfinityUI"
-  repo = "Lzw104522773/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/InfinityUI"
-  repo = "MephistoSatanDevil/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "nyamnyami1234"
-  label = "nyamnyami1234"
-  type = "github"
-  url = "https://github.com/nyamnyami1234/InfinityUI-kor-"
-  repo = "nyamnyami1234/InfinityUI-kor-"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "otikscypi"
-  label = "otikscypi"
-  type = "github"
-  url = "https://github.com/otikscypi/InfinityUI"
-  repo = "otikscypi/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "rogerpaladin"
-  label = "RogerPaladin"
-  type = "github"
-  url = "https://github.com/RogerPaladin/InfinityUI"
-  repo = "RogerPaladin/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "shadowcop"
-  label = "ShadowCop"
-  type = "github"
-  url = "https://github.com/ShadowCop/InfinityUI"
-  repo = "ShadowCop/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "snaphat"
-  label = "snaphat"
-  type = "github"
-  url = "https://github.com/snaphat/InfinityUI"
-  repo = "snaphat/InfinityUI"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "veiller"
-  label = "veiller"
-  type = "github"
-  url = "https://github.com/veiller/InfinityUI"
-  repo = "veiller/InfinityUI"
-  branch = "main"
 
 [[mods]]
 name = "More Style for Mages"
@@ -5621,14 +2707,6 @@ tp2 = "remastered_spell_icons"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/RemasteredSpellIcons"
-  repo = "Selphira/RemasteredSpellIcons"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//             DaerosTrollkiller              //#
@@ -5681,22 +2759,6 @@ tp2 = "mih_eq"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "jarnomikkola1"
-  label = "jarnomikkola1"
-  type = "github"
-  url = "https://github.com/jarnomikkola1/MadeInHeaven_EncountersAndQuests"
-  repo = "jarnomikkola1/MadeInHeaven_EncountersAndQuests"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/MadeInHeaven_EncountersAndQuests"
-  repo = "mleduque/MadeInHeaven_EncountersAndQuests"
-  branch = "main"
-
 [[mods]]
 name = "Made in Heaven: Fixes & Restorations"
 tp2 = "mih_fr"
@@ -5707,22 +2769,6 @@ tp2 = "mih_fr"
   type = "github"
   url = "https://github.com/AngelGryph/MadeInHeaven_FixesAndRestorations"
   repo = "AngelGryph/MadeInHeaven_FixesAndRestorations"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/MadeInHeaven_FixesAndRestorations"
-  repo = "mleduque/MadeInHeaven_FixesAndRestorations"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/MadeInHeaven_FixesAndRestorations"
-  repo = "Ychap/MadeInHeaven_FixesAndRestorations"
   branch = "main"
 
 [[mods]]
@@ -5738,22 +2784,6 @@ tp2 = "mih_ip"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/MadeInHeaven_ItemPack"
-  repo = "CamDawg/MadeInHeaven_ItemPack"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/MadeInHeaven_ItemPack"
-  repo = "mleduque/MadeInHeaven_ItemPack"
-  branch = "main"
 
 [[mods]]
 name = "Made in Heaven: Meta-Mod"
@@ -5783,22 +2813,6 @@ tp2 = "mih_sp"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "grammarsalad"
-  label = "Grammarsalad"
-  type = "github"
-  url = "https://github.com/Grammarsalad/MadeInHeaven_SpellPack"
-  repo = "Grammarsalad/MadeInHeaven_SpellPack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/MadeInHeaven_SpellPack"
-  repo = "mleduque/MadeInHeaven_SpellPack"
-  branch = "main"
 
 [[mods]]
 name = "Made in Heaven: Tweaks"
@@ -5832,22 +2846,6 @@ tp2 = "BP_in_BG"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/BP_in_BG"
-  repo = "Lzw104522773/BP_in_BG"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/BP_in_BG"
-  repo = "dark0dave/BP_in_BG"
-  branch = "master"
-
 [[mods]]
 name = "5E Spellcasting"
 tp2 = "d5_5e_casting"
@@ -5861,14 +2859,6 @@ tp2 = "d5_5e_casting"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/5E_spellcasting"
-  repo = "mleduque/5E_spellcasting"
-  branch = "master"
 
 [[mods]]
 name = "Faiths and Powers"
@@ -5884,22 +2874,6 @@ tp2 = "Faiths_and_Powers"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "majesticsloth"
-  label = "MajesticSloth"
-  type = "github"
-  url = "https://github.com/MajesticSloth/Faiths_and_Powers"
-  repo = "MajesticSloth/Faiths_and_Powers"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Faiths_and_Powers"
-  repo = "mleduque/Faiths_and_Powers"
-  branch = "master"
-
 [[mods]]
 name = "Might & Guile"
 tp2 = "might_and_guile"
@@ -5913,22 +2887,6 @@ tp2 = "might_and_guile"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "jedah85"
-  label = "Jedah85"
-  type = "github"
-  url = "https://github.com/Jedah85/Might_and_Guile"
-  repo = "Jedah85/Might_and_Guile"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Might_and_Guile"
-  repo = "mleduque/Might_and_Guile"
-  branch = "master"
 
 [[mods]]
 name = "NPC Enhanced Edition Adjustments"
@@ -5944,30 +2902,6 @@ tp2 = "npc_ee"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "esceen-cn"
-  label = "Esceen-cn"
-  type = "github"
-  url = "https://github.com/Esceen-cn/NPC_EE"
-  repo = "Esceen-cn/NPC_EE"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/NPC_EE"
-  repo = "mleduque/NPC_EE"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/NPC_EE"
-  repo = "Selphira/NPC_EE"
-  branch = "master"
-
 [[mods]]
 name = "Will to Power"
 tp2 = "Will_to_Power"
@@ -5981,22 +2915,6 @@ tp2 = "Will_to_Power"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "hai20l"
-  label = "HaI20l"
-  type = "github"
-  url = "https://github.com/HaI20l/Will_to_PowerES"
-  repo = "HaI20l/Will_to_PowerES"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Will_to_Power"
-  repo = "mleduque/Will_to_Power"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                   Gitjas                   //#
@@ -6016,46 +2934,6 @@ tp2 = "AC_QUEST"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "huma628-design"
-  label = "huma628-design"
-  type = "github"
-  url = "https://github.com/huma628-design/Ascalons_Questpack"
-  repo = "huma628-design/Ascalons_Questpack"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mysummertimemy"
-  label = "mysummertimemy"
-  type = "github"
-  url = "https://github.com/mysummertimemy/Ascalons_Questpack"
-  repo = "mysummertimemy/Ascalons_Questpack"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Ascalons_Questpack"
-  repo = "visionok/Ascalons_Questpack"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Ascalons_Questpack"
-  repo = "Ychap/Ascalons_Questpack"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Ascalons_Questpack"
-  repo = "yoshimo0417/Ascalons_Questpack"
-  branch = "main"
-
 [[mods]]
 name = "Brandock the Mage"
 tp2 = "BrandockTheMage"
@@ -6070,14 +2948,6 @@ tp2 = "BrandockTheMage"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Brandock_the_Mage"
-  repo = "Lzw104522773/Brandock_the_Mage"
-  branch = "master"
-
 [[mods]]
 name = "Adalon's Blood"
 tp2 = "c#sb_silber"
@@ -6091,22 +2961,6 @@ tp2 = "c#sb_silber"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Adalons_Blood"
-  repo = "Lzw104522773/Adalons_Blood"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Adalons_Blood"
-  repo = "Ychap/Adalons_Blood"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                GraionDilach                //#
@@ -6139,22 +2993,6 @@ tp2 = "ExtraExpandedEnhancedEncounters"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/ExtraExpandedEnhancedEncounters"
-  repo = "Lzw104522773/ExtraExpandedEnhancedEncounters"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/ExtraExpandedEnhancedEncounters"
-  repo = "visionok/ExtraExpandedEnhancedEncounters"
-  branch = "master"
 
 [[mods]]
 name = "ZG BG2 Voices"
@@ -6268,14 +3106,6 @@ tp2 = "zgtweaks"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/RandomGraionTweaks"
-  repo = "mleduque/RandomGraionTweaks"
-  branch = "master"
-
 #////////////////////////////////////////////////#
 #//                TotalMilk90                 //#
 #////////////////////////////////////////////////#
@@ -6293,22 +3123,6 @@ tp2 = "gorgon"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/gorgon"
-  repo = "Lzw104522773/gorgon"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/gorgon"
-  repo = "11jo/gorgon"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//              A-Wizard-Did-It               //#
@@ -6328,46 +3142,6 @@ tp2 = "Blackhearts"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/Black-Hearts"
-  repo = "11jo/Black-Hearts"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Black-Hearts"
-  repo = "Lzw104522773/Black-Hearts"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Black-Hearts-EET"
-  repo = "mleduque/Black-Hearts-EET"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Black-Hearts"
-  repo = "visionok/Black-Hearts"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Black-Hearts"
-  repo = "yoshimo0417/Black-Hearts"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                 RoxanneSHS                 //#
 #////////////////////////////////////////////////#
@@ -6385,14 +3159,6 @@ tp2 = "AJOCMOD"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/LoronsReturn"
-  repo = "MephistoSatanDevil/LoronsReturn"
-  branch = "master"
 
 [[mods]]
 name = "Ariena NPC"
@@ -6436,38 +3202,6 @@ tp2 = "BONEHILLEET"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/BoneHill"
-  repo = "abalabokhin/BoneHill"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/BoneHill"
-  repo = "Lzw104522773/BoneHill"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "riwspy"
-  label = "RiwsPy"
-  type = "github"
-  url = "https://github.com/RiwsPy/BoneHill"
-  repo = "RiwsPy/BoneHill"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/BoneHill"
-  repo = "yoshimo0417/BoneHill"
-  branch = "master"
-
 [[mods]]
 name = "Candlekeep Memories"
 tp2 = "CANDLEMEM"
@@ -6509,14 +3243,6 @@ tp2 = "CORWINEET"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Corwin"
-  repo = "yoshimo0417/Corwin"
-  branch = "master"
 
 [[mods]]
 name = "Civil Disobedience"
@@ -6737,14 +3463,6 @@ tp2 = "SHINEONCAELAR"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Caelar"
-  repo = "yoshimo0417/Caelar"
-  branch = "master"
-
 [[mods]]
 name = "SoD Banter Restoration"
 tp2 = "SODBANTER"
@@ -6769,22 +3487,6 @@ tp2 = "SOLAUFEIN"
   type = "github"
   url = "https://github.com/RoxanneSHS/Solaufein"
   repo = "RoxanneSHS/Solaufein"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "evalcony"
-  label = "evalcony"
-  type = "github"
-  url = "https://github.com/evalcony/Solaufein"
-  repo = "evalcony/Solaufein"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Solaufein"
-  repo = "yoshimo0417/Solaufein"
   branch = "master"
 
 [[mods]]
@@ -6843,22 +3545,6 @@ tp2 = "valen"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "roberciiik"
-  label = "Roberciiik"
-  type = "github"
-  url = "https://github.com/Roberciiik/ValenEE"
-  repo = "Roberciiik/ValenEE"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/ValenEE"
-  repo = "yoshimo0417/ValenEE"
-  branch = "master"
-
 [[mods]]
 name = "The Vault"
 tp2 = "VAULTEET"
@@ -6873,14 +3559,6 @@ tp2 = "VAULTEET"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/VaultEE"
-  repo = "abalabokhin/VaultEE"
-  branch = "master"
-
 [[mods]]
 name = "Yasraena NPC"
 tp2 = "YASRAENA"
@@ -6894,22 +3572,6 @@ tp2 = "YASRAENA"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/YasraenaEET"
-  repo = "abalabokhin/YasraenaEET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "eva2000as"
-  label = "eva2000as"
-  type = "github"
-  url = "https://github.com/eva2000as/YasraenaEET"
-  repo = "eva2000as/YasraenaEET"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                  Endarire                  //#
@@ -6987,14 +3649,6 @@ tp2 = "Jini"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Jini-Romance"
-  repo = "MephistoSatanDevil/Jini-Romance"
-  branch = "main"
-
 [[mods]]
 name = "Rjali NPC"
 tp2 = "RJALI"
@@ -7009,14 +3663,6 @@ tp2 = "RJALI"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Rjali-Romance"
-  repo = "MephistoSatanDevil/Rjali-Romance"
-  branch = "main"
-
 [[mods]]
 name = "The Grey Clan Episode One"
 tp2 = "TGC1e"
@@ -7027,22 +3673,6 @@ tp2 = "TGC1e"
   type = "github"
   url = "https://github.com/Black-Wyrm-Lair/The-Gray-Clan-Episode-1"
   repo = "Black-Wyrm-Lair/The-Gray-Clan-Episode-1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/The-Gray-Clan-Episode-1"
-  repo = "Ychap/The-Gray-Clan-Episode-1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/TGC1e"
-  repo = "yoshimo0417/TGC1e"
   branch = "master"
 
 [[mods]]
@@ -7059,22 +3689,6 @@ tp2 = "TOD"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/TowerOfDeception"
-  repo = "Ychap/TowerOfDeception"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/TowerOfDeception"
-  repo = "yoshimo0417/TowerOfDeception"
-  branch = "master"
-
 [[mods]]
 name = "Tortured Souls Lite"
 tp2 = "TORTUREDSOULSLITE"
@@ -7088,14 +3702,6 @@ tp2 = "TORTUREDSOULSLITE"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/TorturedSoulsLite"
-  repo = "MephistoSatanDevil/TorturedSoulsLite"
-  branch = "main"
 
 [[mods]]
 name = "Improved Volcano! Pack"
@@ -7129,22 +3735,6 @@ tp2 = "soa"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/The-Stone-of-Askavar"
-  repo = "abalabokhin/The-Stone-of-Askavar"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/The-Stone-of-Askavar"
-  repo = "Ychap/The-Stone-of-Askavar"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                Glittergear                 //#
 #////////////////////////////////////////////////#
@@ -7163,54 +3753,6 @@ tp2 = "BLOODFAITH"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/BloodAndFaith"
-  repo = "abalabokhin/BloodAndFaith"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "graiondilach"
-  label = "GraionDilach"
-  type = "github"
-  url = "https://github.com/GraionDilach/BloodAndFaith"
-  repo = "GraionDilach/BloodAndFaith"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/BloodAndFaith"
-  repo = "Lzw104522773/BloodAndFaith"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/BloodAndFaith"
-  repo = "mleduque/BloodAndFaith"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mysummertimemy"
-  label = "mysummertimemy"
-  type = "github"
-  url = "https://github.com/mysummertimemy/BloodAndFaith"
-  repo = "mysummertimemy/BloodAndFaith"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/BloodAndFaith"
-  repo = "yoshimo0417/BloodAndFaith"
-  branch = "main"
-
 [[mods]]
 name = "Dead Gardens"
 tp2 = "DeadGardens"
@@ -7224,14 +3766,6 @@ tp2 = "DeadGardens"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/DeadGardens"
-  repo = "mleduque/DeadGardens"
-  branch = "main"
 
 [[mods]]
 name = "Fowl Wish"
@@ -7247,14 +3781,6 @@ tp2 = "FowlWish"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/A-Fowl-Wish"
-  repo = "mleduque/A-Fowl-Wish"
-  branch = "main"
-
 [[mods]]
 name = "Gone Nuts"
 tp2 = "GoneNuts"
@@ -7268,14 +3794,6 @@ tp2 = "GoneNuts"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/GoneNuts"
-  repo = "mleduque/GoneNuts"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                 whiteagnus                 //#
@@ -7295,32 +3813,6 @@ tp2 = "ascension"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "gibberlings3"
-  label = "Gibberlings3"
-  type = "github"
-  url = "https://github.com/Gibberlings3/Ascension"
-  repo = "Gibberlings3/Ascension"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/Ascension"
-  repo = "CamDawg/Ascension"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Ascension"
-  repo = "yoshimo0417/Ascension"
-  branch = "master"
-
 [[mods]]
 name = "Hidden Adventures"
 tp2 = "hiddenadventure"
@@ -7333,48 +3825,6 @@ tp2 = "hiddenadventure"
   repo = "whiteagnus/hiddenadventure"
   branch = "master"
 
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/hiddenadventure"
-  repo = "Gitjas/hiddenadventure"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/hiddenadventure"
-  repo = "Lzw104522773/hiddenadventure"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/hiddenadventure"
-  repo = "dark0dave/hiddenadventure"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/hiddenadventure"
-  repo = "MephistoSatanDevil/hiddenadventure"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/hiddenadventure"
-  repo = "Ychap/hiddenadventure"
-  branch = "master"
-
 [[mods]]
 name = "Tales of Anegh"
 tp2 = "TOA"
@@ -7385,22 +3835,6 @@ tp2 = "TOA"
   type = "github"
   url = "https://github.com/whiteagnus/ToA"
   repo = "whiteagnus/ToA"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/ToA"
-  repo = "Gitjas/ToA"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/ToA26"
-  repo = "yoshimo0417/ToA26"
   branch = "master"
 
 #////////////////////////////////////////////////#
@@ -7481,22 +3915,6 @@ tp2 = "HerThiMoney"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/HTaM"
-  repo = "mleduque/HTaM"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/HTaM"
-  repo = "yoshimo0417/HTaM"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                  AciferBG                  //#
 #////////////////////////////////////////////////#
@@ -7515,38 +3933,6 @@ tp2 = "Godcall"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Call-of-the-Lost-Goddess"
-  repo = "abalabokhin/Call-of-the-Lost-Goddess"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Call-of-the-Lost-Goddess"
-  repo = "Lzw104522773/Call-of-the-Lost-Goddess"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Call-of-the-Lost-Goddess"
-  repo = "visionok/Call-of-the-Lost-Goddess"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Call-of-the-Lost-Goddess"
-  repo = "yoshimo0417/Call-of-the-Lost-Goddess"
-  branch = "main"
-
 [[mods]]
 name = "Loretakers"
 tp2 = "Loretakers"
@@ -7560,38 +3946,6 @@ tp2 = "Loretakers"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Loretakers"
-  repo = "abalabokhin/Loretakers"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "origanum8"
-  label = "Origanum8"
-  type = "github"
-  url = "https://github.com/Origanum8/Loretakers"
-  repo = "Origanum8/Loretakers"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Loretakers"
-  repo = "Ychap/Loretakers"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Loretakers"
-  repo = "yoshimo0417/Loretakers"
-  branch = "main"
 
 [[mods]]
 name = "Throne of the Mad God"
@@ -7607,30 +3961,6 @@ tp2 = "ThroneoftheMadGod"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Throne-of-the-Mad-God"
-  repo = "abalabokhin/Throne-of-the-Mad-God"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "abdel-613"
-  label = "Abdel-613"
-  type = "github"
-  url = "https://github.com/Abdel-613/Throne-of-the-Mad-God"
-  repo = "Abdel-613/Throne-of-the-Mad-God"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Throne-of-the-Mad-God"
-  repo = "yoshimo0417/Throne-of-the-Mad-God"
-  branch = "main"
-
 [[mods]]
 name = "Tidings"
 tp2 = "Tidings"
@@ -7644,46 +3974,6 @@ tp2 = "Tidings"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Dark-Tidings"
-  repo = "abalabokhin/Dark-Tidings"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "esceen-cn"
-  label = "Esceen-cn"
-  type = "github"
-  url = "https://github.com/Esceen-cn/Dark-Tidings"
-  repo = "Esceen-cn/Dark-Tidings"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/Dark-Tidings"
-  repo = "OmegaZeroXIII/Dark-Tidings"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/Dark-Tidings"
-  repo = "Ychap/Dark-Tidings"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Dark-Tidings"
-  repo = "yoshimo0417/Dark-Tidings"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                evancauteren                //#
@@ -7702,38 +3992,6 @@ tp2 = "AUTUMNS_TWILIGHT"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "hbedmoon"
-  label = "hbedmoon"
-  type = "github"
-  url = "https://github.com/hbedmoon/bg2-autumns-twilight-mod"
-  repo = "hbedmoon/bg2-autumns-twilight-mod"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/bg2-autumns-twilight-mod"
-  repo = "mleduque/bg2-autumns-twilight-mod"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/bg2-autumns-twilight-mod"
-  repo = "OmegaZeroXIII/bg2-autumns-twilight-mod"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/bg2-autumns-twilight-mod"
-  repo = "yoshimo0417/bg2-autumns-twilight-mod"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                TheArtisanBG                //#
@@ -7761,67 +4019,10 @@ tp2 = "ArtisansKitpack"
   type = "github"
   url = "https://github.com/TheArtisanBG/The-Artisan-s-Kitpack"
   repo = "TheArtisanBG/The-Artisan-s-Kitpack"
+  branch = "master"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "chrizhermann"
-  label = "Chrizhermann"
-  type = "github"
-  url = "https://github.com/Chrizhermann/The-Artisan-s-Kitpack-Chriz-Balance-Patch"
-  repo = "Chrizhermann/The-Artisan-s-Kitpack-Chriz-Balance-Patch"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "frenzgyn"
-  label = "Frenzgyn"
-  type = "github"
-  url = "https://github.com/Frenzgyn/The-Artisan-s-Kitpack"
-  repo = "Frenzgyn/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/The-Artisan-s-Kitpack"
-  repo = "mleduque/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/The-Artisan-s-Kitpack"
-  repo = "OmegaZeroXIII/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "sarahg-579462"
-  label = "SarahG-579462"
-  type = "github"
-  url = "https://github.com/SarahG-579462/The-Artisan-s-Kitpack"
-  repo = "SarahG-579462/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "stewelement"
-  label = "stewelement"
-  type = "github"
-  url = "https://github.com/stewelement/The-Artisan-s-Kitpack"
-  repo = "stewelement/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "suy"
-  label = "suy"
-  type = "github"
-  url = "https://github.com/suy/The-Artisan-s-Kitpack"
-  repo = "suy/The-Artisan-s-Kitpack"
-  branch = "master"
 
 [[mods]]
 name = "The Artisan's Kitpack NPC"
@@ -7833,67 +4034,10 @@ tp2 = "ArtisansKitpack_npc"
   type = "github"
   url = "https://github.com/TheArtisanBG/The-Artisan-s-Kitpack"
   repo = "TheArtisanBG/The-Artisan-s-Kitpack"
+  branch = "master"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "chrizhermann"
-  label = "Chrizhermann"
-  type = "github"
-  url = "https://github.com/Chrizhermann/The-Artisan-s-Kitpack-Chriz-Balance-Patch"
-  repo = "Chrizhermann/The-Artisan-s-Kitpack-Chriz-Balance-Patch"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "frenzgyn"
-  label = "Frenzgyn"
-  type = "github"
-  url = "https://github.com/Frenzgyn/The-Artisan-s-Kitpack"
-  repo = "Frenzgyn/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/The-Artisan-s-Kitpack"
-  repo = "mleduque/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/The-Artisan-s-Kitpack"
-  repo = "OmegaZeroXIII/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "sarahg-579462"
-  label = "SarahG-579462"
-  type = "github"
-  url = "https://github.com/SarahG-579462/The-Artisan-s-Kitpack"
-  repo = "SarahG-579462/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "stewelement"
-  label = "stewelement"
-  type = "github"
-  url = "https://github.com/stewelement/The-Artisan-s-Kitpack"
-  repo = "stewelement/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "suy"
-  label = "suy"
-  type = "github"
-  url = "https://github.com/suy/The-Artisan-s-Kitpack"
-  repo = "suy/The-Artisan-s-Kitpack"
-  branch = "master"
 
 [[mods]]
 name = "The Artisan's Kitpack Tweak"
@@ -7905,67 +4049,11 @@ tp2 = "ArtisansKitpack_tweak"
   type = "github"
   url = "https://github.com/TheArtisanBG/The-Artisan-s-Kitpack"
   repo = "TheArtisanBG/The-Artisan-s-Kitpack"
+  branch = "master"
+  subdir_require = "ArtisansKitpack_tweak"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "chrizhermann"
-  label = "Chrizhermann"
-  type = "github"
-  url = "https://github.com/Chrizhermann/The-Artisan-s-Kitpack-Chriz-Balance-Patch"
-  repo = "Chrizhermann/The-Artisan-s-Kitpack-Chriz-Balance-Patch"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "frenzgyn"
-  label = "Frenzgyn"
-  type = "github"
-  url = "https://github.com/Frenzgyn/The-Artisan-s-Kitpack"
-  repo = "Frenzgyn/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/The-Artisan-s-Kitpack"
-  repo = "mleduque/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/The-Artisan-s-Kitpack"
-  repo = "OmegaZeroXIII/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "sarahg-579462"
-  label = "SarahG-579462"
-  type = "github"
-  url = "https://github.com/SarahG-579462/The-Artisan-s-Kitpack"
-  repo = "SarahG-579462/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "stewelement"
-  label = "stewelement"
-  type = "github"
-  url = "https://github.com/stewelement/The-Artisan-s-Kitpack"
-  repo = "stewelement/The-Artisan-s-Kitpack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "suy"
-  label = "suy"
-  type = "github"
-  url = "https://github.com/suy/The-Artisan-s-Kitpack"
-  repo = "suy/The-Artisan-s-Kitpack"
-  branch = "master"
 
 [[mods]]
 name = "Aura BG1 BG2 EET"
@@ -7977,14 +4065,6 @@ tp2 = "Aura_BG1_2_EET"
   type = "github"
   url = "https://github.com/TheArtisanBG/Aura_BG1_BG2_EET"
   repo = "TheArtisanBG/Aura_BG1_BG2_EET"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "chrizhermann"
-  label = "Chrizhermann"
-  type = "github"
-  url = "https://github.com/Chrizhermann/Aura_BG1_BG2_EET-Chriz-Balance-Patch"
-  repo = "Chrizhermann/Aura_BG1_BG2_EET-Chriz-Balance-Patch"
   branch = "main"
 
 [[mods]]
@@ -8002,14 +4082,6 @@ tp2 = "BardicWonders"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "chrizhermann"
-  label = "Chrizhermann"
-  type = "github"
-  url = "https://github.com/Chrizhermann/Bardic-Wonders-Chriz-Balance-Patch"
-  repo = "Chrizhermann/Bardic-Wonders-Chriz-Balance-Patch"
-  branch = "master"
-
 [[mods]]
 name = "Warlock"
 tp2 = "C0Warlock"
@@ -8020,25 +4092,10 @@ tp2 = "C0Warlock"
   type = "github"
   url = "https://github.com/TheArtisanBG/Warlock"
   repo = "TheArtisanBG/Warlock"
+  branch = "master"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Warlock"
-  repo = "Lzw104522773/Warlock"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "zzdxzhangzhi"
-  label = "zzdxzhangzhi"
-  type = "github"
-  url = "https://github.com/zzdxzhangzhi/Warlock"
-  repo = "zzdxzhangzhi/Warlock"
-  branch = "master"
 
 [[mods]]
 name = "Candlekeep Revisited"
@@ -8050,14 +4107,6 @@ tp2 = "candlekeep_revisited"
   type = "github"
   url = "https://github.com/TheArtisanBG/Candlekeep-Revisited"
   repo = "TheArtisanBG/Candlekeep-Revisited"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "sarahg-579462"
-  label = "SarahG-579462"
-  type = "github"
-  url = "https://github.com/SarahG-579462/Candlekeep-Revisited"
-  repo = "SarahG-579462/Candlekeep-Revisited"
   branch = "main"
 
 [[mods]]
@@ -8082,49 +4131,10 @@ tp2 = "HouseTweaks"
   type = "github"
   url = "https://github.com/TheArtisanBG/House-Rule-Tweaks"
   repo = "TheArtisanBG/House-Rule-Tweaks"
+  branch = "master"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/House-Rule-Tweaks"
-  repo = "abalabokhin/House-Rule-Tweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "m1l0sh"
-  label = "m1l0sh"
-  type = "github"
-  url = "https://github.com/m1l0sh/House-Rule-Tweaks"
-  repo = "m1l0sh/House-Rule-Tweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/House-Rule-Tweaks"
-  repo = "mleduque/House-Rule-Tweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "omegazeroxiii"
-  label = "OmegaZeroXIII"
-  type = "github"
-  url = "https://github.com/OmegaZeroXIII/House-Rule-Tweaks"
-  repo = "OmegaZeroXIII/House-Rule-Tweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "streetwraith"
-  label = "streetwraith"
-  type = "github"
-  url = "https://github.com/streetwraith/House-Rule-Tweaks"
-  repo = "streetwraith/House-Rule-Tweaks"
-  branch = "master"
 
 [[mods]]
 name = "Kvel BG1"
@@ -8180,14 +4190,6 @@ tp2 = "shadowadept"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "irendie"
-  label = "irendie"
-  type = "github"
-  url = "https://github.com/irendie/ArtemiusI-Shadow-Magic"
-  repo = "irendie/ArtemiusI-Shadow-Magic"
-  branch = "master"
-
 [[mods]]
 name = "Sirene NPC"
 tp2 = "Sirene"
@@ -8215,30 +4217,6 @@ tp2 = "Sirene_BG2"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "frenzgyn"
-  label = "Frenzgyn"
-  type = "github"
-  url = "https://github.com/Frenzgyn/SireneNPC-BG2EE-Frenzgyn"
-  repo = "Frenzgyn/SireneNPC-BG2EE-Frenzgyn"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Sirene-NPC-for-BG2-EE"
-  repo = "mleduque/Sirene-NPC-for-BG2-EE"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "visionok"
-  label = "visionok"
-  type = "github"
-  url = "https://github.com/visionok/Sirene-NPC-for-BG2-EE"
-  repo = "visionok/Sirene-NPC-for-BG2-EE"
-  branch = "master"
-
 [[mods]]
 name = "SoA Extended"
 tp2 = "SoAExtended"
@@ -8249,7 +4227,7 @@ tp2 = "SoAExtended"
   type = "github"
   url = "https://github.com/TheArtisanBG/SoAExtended"
   repo = "TheArtisanBG/SoAExtended"
-  branch = "master"
+  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                  LCA-EET                   //#
@@ -8269,22 +4247,6 @@ tp2 = "LICHDOM"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/Lichdom"
-  repo = "MephistoSatanDevil/Lichdom"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mogui45"
-  label = "mogui45"
-  type = "github"
-  url = "https://github.com/mogui45/Lichdom"
-  repo = "mogui45/Lichdom"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                   Skitia                   //#
 #////////////////////////////////////////////////#
@@ -8303,22 +4265,6 @@ tp2 = "Emily"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Emily-BG1"
-  repo = "szaumoor/Emily-BG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Emily-BG1"
-  repo = "mleduque/Emily-BG1"
-  branch = "master"
-
 [[mods]]
 name = "Helga"
 tp2 = "Helga"
@@ -8329,22 +4275,6 @@ tp2 = "Helga"
   type = "github"
   url = "https://github.com/Skitia/Helga-BG1"
   repo = "Skitia/Helga-BG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Helga-BG1"
-  repo = "mleduque/Helga-BG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Helga-BG1"
-  repo = "szaumoor/Helga-BG1"
   branch = "master"
 
 [[mods]]
@@ -8360,22 +4290,6 @@ tp2 = "Kale"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Kale-BG1"
-  repo = "mleduque/Kale-BG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Kale-BG1"
-  repo = "szaumoor/Kale-BG1"
-  branch = "master"
 
 [[mods]]
 name = "Nalia at Last"
@@ -8401,14 +4315,6 @@ tp2 = "Recorder"
   type = "github"
   url = "https://github.com/Skitia/Recorder-BG1"
   repo = "Skitia/Recorder-BG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Recorder-BG1"
-  repo = "mleduque/Recorder-BG1"
   branch = "master"
 
 [[mods]]
@@ -8450,25 +4356,10 @@ tp2 = "Vienxay"
   type = "github"
   url = "https://github.com/Skitia/Vienxay-BG1"
   repo = "Skitia/Vienxay-BG1"
+  branch = "master"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/Vienxay-BG1"
-  repo = "szaumoor/Vienxay-BG1"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Vienxay-BG1"
-  repo = "mleduque/Vienxay-BG1"
-  branch = "master"
 
 [[mods]]
 name = "Wings"
@@ -8483,22 +4374,6 @@ tp2 = "Wings"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/Wings"
-  repo = "Lzw104522773/Wings"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "yoshimo0417"
-  label = "yoshimo0417"
-  type = "github"
-  url = "https://github.com/yoshimo0417/Wings"
-  repo = "yoshimo0417/Wings"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//              GwendolyneFreddy              //#
@@ -8518,32 +4393,6 @@ tp2 = "Alora"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "the-gate-project"
-  label = "The-Gate-Project"
-  type = "github"
-  url = "https://github.com/The-Gate-Project/Alora-NPC-for-BG2"
-  repo = "The-Gate-Project/Alora-NPC-for-BG2"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/Alora-NPC-for-BG2"
-  repo = "abalabokhin/Alora-NPC-for-BG2"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "klichko86"
-  label = "klichko86"
-  type = "github"
-  url = "https://github.com/klichko86/Alora-NPC-for-BG2"
-  repo = "klichko86/Alora-NPC-for-BG2"
-  branch = "main"
-
 [[mods]]
 name = "BuTcHeRy"
 tp2 = "butchery"
@@ -8557,24 +4406,6 @@ tp2 = "butchery"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "the-gate-project"
-  label = "The-Gate-Project"
-  type = "github"
-  url = "https://github.com/The-Gate-Project/BuTcheRy"
-  repo = "The-Gate-Project/BuTcheRy"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzenner"
-  label = "lzenner"
-  type = "github"
-  url = "https://github.com/lzenner/butchery"
-  repo = "lzenner/butchery"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                 dark0dave                  //#
@@ -8593,14 +4424,6 @@ tp2 = "BAEBG2"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/BaeBG2"
-  repo = "MephistoSatanDevil/BaeBG2"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                Plutonium-X                 //#
@@ -8723,16 +4546,6 @@ tp2 = "NeeraBanters"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "the-gate-project"
-  label = "The-Gate-Project"
-  type = "github"
-  url = "https://github.com/The-Gate-Project/NeeraBanters"
-  repo = "The-Gate-Project/NeeraBanters"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
 #////////////////////////////////////////////////#
 #//                Ratatoskr589                //#
 #////////////////////////////////////////////////#
@@ -8750,14 +4563,6 @@ tp2 = "AllThingsMazzy"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/All-Things-Mazzy"
-  repo = "Lzw104522773/All-Things-Mazzy"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                 CrevsDaak                  //#
@@ -8777,14 +4582,6 @@ tp2 = "thalan"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/thalan"
-  repo = "Lzw104522773/thalan"
-  branch = "master"
-
 #////////////////////////////////////////////////#
 #//               BardezAnAvatar               //#
 #////////////////////////////////////////////////#
@@ -8803,22 +4600,6 @@ tp2 = "mod-thalantyr-ex"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/BGEE-Thalantyr-Ex"
-  repo = "abalabokhin/BGEE-Thalantyr-Ex"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/BGEE-Thalantyr-Ex"
-  repo = "mleduque/BGEE-Thalantyr-Ex"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                  cgordon                   //#
 #////////////////////////////////////////////////#
@@ -8836,22 +4617,6 @@ tp2 = "customs"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/customs"
-  repo = "11jo/customs"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/cgordon-customs"
-  repo = "mleduque/cgordon-customs"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                  szaumoor                  //#
@@ -8885,14 +4650,6 @@ tp2 = "ZS_Consumables"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "eva2000as"
-  label = "eva2000as"
-  type = "github"
-  url = "https://github.com/eva2000as/ZS_Consumables"
-  repo = "eva2000as/ZS_Consumables"
-  branch = "main"
-
 [[mods]]
 name = "ZS Item Pack"
 tp2 = "ZS_ITEMPACK"
@@ -8906,14 +4663,6 @@ tp2 = "ZS_ITEMPACK"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "llewren"
-  label = "Llewren"
-  type = "github"
-  url = "https://github.com/Llewren/ZS_ItemPack"
-  repo = "Llewren/ZS_ItemPack"
-  branch = "main"
 
 [[mods]]
 name = "Shadowdancer Overhaul"
@@ -8943,30 +4692,6 @@ tp2 = "ZSTweaks"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/ZSTweaks"
-  repo = "CamDawg/ZSTweaks"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "dark0dave"
-  label = "dark0dave"
-  type = "github"
-  url = "https://github.com/dark0dave/ZSTweaks"
-  repo = "dark0dave/ZSTweaks"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/ZSTweaks"
-  repo = "mleduque/ZSTweaks"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                subtledoctor                //#
 #////////////////////////////////////////////////#
@@ -8985,14 +4710,6 @@ tp2 = "SubtleD_Item_Tweaks"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/SubtleD_Item_Tweaks"
-  repo = "mleduque/SubtleD_Item_Tweaks"
-  branch = "master"
-
 [[mods]]
 name = "SubtleD's Spell Tweaks"
 tp2 = "SubtleD_Spell_Tweaks"
@@ -9007,14 +4724,6 @@ tp2 = "SubtleD_Spell_Tweaks"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/SubtleD_Spell_Tweaks"
-  repo = "mleduque/SubtleD_Spell_Tweaks"
-  branch = "master"
-
 [[mods]]
 name = "SubtleD's Stat Overhauls"
 tp2 = "SubtleD_Stat_Overhauls"
@@ -9028,30 +4737,6 @@ tp2 = "SubtleD_Stat_Overhauls"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/SubtleD_Stat_Overhauls"
-  repo = "MephistoSatanDevil/SubtleD_Stat_Overhauls"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/SubtleD_Stat_Overhauls"
-  repo = "mleduque/SubtleD_Stat_Overhauls"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "streetwraith"
-  label = "streetwraith"
-  type = "github"
-  url = "https://github.com/streetwraith/SubtleD_Stat_Overhauls"
-  repo = "streetwraith/SubtleD_Stat_Overhauls"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                 aquadrizzt                 //#
@@ -9070,40 +4755,6 @@ tp2 = "TomeAndBlood"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/TomeAndBlood"
-  repo = "mleduque/TomeAndBlood"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "unearthedarcana"
-  label = "UnearthedArcana"
-  type = "github"
-  url = "https://github.com/UnearthedArcana/TomeAndBlood"
-  repo = "UnearthedArcana/TomeAndBlood"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/TomeAndBlood"
-  repo = "Lzw104522773/TomeAndBlood"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/TomeAndBlood"
-  repo = "MephistoSatanDevil/TomeAndBlood"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//              FredrikLindgren               //#
@@ -9124,56 +4775,6 @@ tp2 = "aTweaks"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "totor115"
-  label = "TotoR115"
-  type = "github"
-  url = "https://github.com/TotoR115/aTweaks"
-  repo = "TotoR115/aTweaks"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/aTweaks"
-  repo = "Lzw104522773/aTweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/aTweaks"
-  repo = "Selphira/aTweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/aTweaks"
-  repo = "CamDawg/aTweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "arnaudpourbaix"
-  label = "arnaudpourbaix"
-  type = "github"
-  url = "https://github.com/arnaudpourbaix/aTweaks"
-  repo = "arnaudpourbaix/aTweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "bgforgenet"
-  label = "BGforgeNet"
-  type = "github"
-  url = "https://github.com/BGforgeNet/aTweaks"
-  repo = "BGforgeNet/aTweaks"
-  branch = "master"
-
 [[mods]]
 name = "Randomiser"
 tp2 = "randomiser"
@@ -9187,22 +4788,6 @@ tp2 = "randomiser"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "m-architek"
-  label = "m-architek"
-  type = "github"
-  url = "https://github.com/m-architek/randomiser"
-  repo = "m-architek/randomiser"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "streetwraith"
-  label = "streetwraith"
-  type = "github"
-  url = "https://github.com/streetwraith/randomiser"
-  repo = "streetwraith/randomiser"
-  branch = "devel"
 
 [[mods]]
 name = "Rogue Rebalancing"
@@ -9218,70 +4803,6 @@ tp2 = "RR"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/rr"
-  repo = "CamDawg/rr"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "angelgryph"
-  label = "AngelGryph"
-  type = "github"
-  url = "https://github.com/AngelGryph/rr"
-  repo = "AngelGryph/rr"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/rr"
-  repo = "szaumoor/rr"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/rr"
-  repo = "Lzw104522773/rr"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "totor115"
-  label = "TotoR115"
-  type = "github"
-  url = "https://github.com/TotoR115/rr"
-  repo = "TotoR115/rr"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/rr-totoR115"
-  repo = "mleduque/rr-totoR115"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/rr"
-  repo = "abalabokhin/rr"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/rr"
-  repo = "Selphira/rr"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                 OlvynChuru                 //#
@@ -9302,14 +4823,6 @@ tp2 = "EpicThieving"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "esceen-cn"
-  label = "Esceen-cn"
-  type = "github"
-  url = "https://github.com/Esceen-cn/Epic-Thieving"
-  repo = "Esceen-cn/Epic-Thieving"
-  branch = "master"
-
 [[mods]]
 name = "Olvyn Spells"
 tp2 = "MESpells"
@@ -9325,30 +4838,6 @@ tp2 = "MESpells"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "grammarsalad"
-  label = "Grammarsalad"
-  type = "github"
-  url = "https://github.com/Grammarsalad/OlvynSpells"
-  repo = "Grammarsalad/OlvynSpells"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/OlvynSpells"
-  repo = "mleduque/OlvynSpells"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "sarahg-579462"
-  label = "SarahG-579462"
-  type = "github"
-  url = "https://github.com/SarahG-579462/OlvynSpells"
-  repo = "SarahG-579462/OlvynSpells"
-  branch = "master"
-
 [[mods]]
 name = "ME Tweaks"
 tp2 = "METweaks"
@@ -9362,14 +4851,6 @@ tp2 = "METweaks"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/Olvyn-Tweaks"
-  repo = "Selphira/Olvyn-Tweaks"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                 BGforgeNet                 //#
@@ -9388,38 +4869,6 @@ tp2 = "tnt"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/bg2-tweaks-and-tricks"
-  repo = "abalabokhin/bg2-tweaks-and-tricks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "eyre-j"
-  label = "eyre-j"
-  type = "github"
-  url = "https://github.com/eyre-j/bg2-tweaks-and-tricks"
-  repo = "eyre-j/bg2-tweaks-and-tricks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "tygyh"
-  label = "tygyh"
-  type = "github"
-  url = "https://github.com/tygyh/bg2-tweaks-and-tricks"
-  repo = "tygyh/bg2-tweaks-and-tricks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/bg2-tweaks-and-tricks"
-  repo = "Ychap/bg2-tweaks-and-tricks"
-  branch = "master"
 
 [[mods]]
 name = "Unique Artifacts"
@@ -9449,14 +4898,6 @@ tp2 = "wildmage"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "lzw104522773"
-  label = "Lzw104522773"
-  type = "github"
-  url = "https://github.com/Lzw104522773/bg2-wildmage"
-  repo = "Lzw104522773/bg2-wildmage"
-  branch = "master"
-
 #////////////////////////////////////////////////#
 #//                   K4thos                   //#
 #////////////////////////////////////////////////#
@@ -9475,40 +4916,6 @@ tp2 = "EET_Tweaks"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/EET_Tweaks"
-  repo = "abalabokhin/EET_Tweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "argent77"
-  label = "Argent77"
-  type = "github"
-  url = "https://github.com/Argent77/EET_Tweaks"
-  repo = "Argent77/EET_Tweaks"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/EET_Tweaks"
-  repo = "mleduque/EET_Tweaks"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/EET_Tweaks"
-  repo = "Ychap/EET_Tweaks"
-  branch = "master"
-
 #////////////////////////////////////////////////#
 #//                AnotherDole                 //#
 #////////////////////////////////////////////////#
@@ -9526,24 +4933,6 @@ tp2 = "jimfix"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "banananaut"
-  label = "Banananaut"
-  type = "github"
-  url = "https://github.com/Banananaut/Jimfix"
-  repo = "Banananaut/Jimfix"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Jimfix"
-  repo = "mleduque/Jimfix"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                  BartyMae                  //#
@@ -9600,38 +4989,6 @@ tp2 = "themed_tweaks"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
 
-  [[mods.sources]]
-  id = "11jo"
-  label = "11jo"
-  type = "github"
-  url = "https://github.com/11jo/themed_tweaks"
-  repo = "11jo/themed_tweaks"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/themed_tweaks"
-  repo = "Gitjas/themed_tweaks"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/themed_tweaks"
-  repo = "mleduque/themed_tweaks"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "selphira"
-  label = "Selphira"
-  type = "github"
-  url = "https://github.com/Selphira/themed_tweaks"
-  repo = "Selphira/themed_tweaks"
-  branch = "main"
-
 #////////////////////////////////////////////////#
 #//                  Arvendor                  //#
 #////////////////////////////////////////////////#
@@ -9669,30 +5026,6 @@ tp2 = "PPE"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "dafthunk"
-  label = "DaftHunk"
-  type = "github"
-  url = "https://github.com/DaftHunk/Portraits-Portraits-Everywhere"
-  repo = "DaftHunk/Portraits-Portraits-Everywhere"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "jascmm"
-  label = "jascmm"
-  type = "github"
-  url = "https://github.com/jascmm/Portraits-Portraits-Everywhere"
-  repo = "jascmm/Portraits-Portraits-Everywhere"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mleduque"
-  label = "mleduque"
-  type = "github"
-  url = "https://github.com/mleduque/Portraits-Portraits-Everywhere"
-  repo = "mleduque/Portraits-Portraits-Everywhere"
-  branch = "master"
 
 #////////////////////////////////////////////////#
 #//                  mleduque                  //#
@@ -9744,6 +5077,7 @@ tp2 = "buffbot"
   type = "github"
   url = "https://github.com/Chrizhermann/bg-eeex-buffbot"
   repo = "Chrizhermann/bg-eeex-buffbot"
+  channel = "pre-release"
 
 #////////////////////////////////////////////////#
 #//                 Dau1makan                  //#
@@ -9780,22 +5114,6 @@ tp2 = "OphysiaBG1"
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
-  type = "github"
-  url = "https://github.com/CamDawg/OphysiaBG1"
-  repo = "CamDawg/OphysiaBG1"
-  branch = "main"
-
-  [[mods.sources]]
-  id = "szaumoor"
-  label = "szaumoor"
-  type = "github"
-  url = "https://github.com/szaumoor/OphysiaBG1"
-  repo = "szaumoor/OphysiaBG1"
-  branch = "main"
 
 #////////////////////////////////////////////////#
 #//                   Xgatt                    //#
@@ -9880,48 +5198,6 @@ tp2 = "JA#BGT_ADVPACK"
   type = "github"
   url = "https://github.com/weigo87/JA-AdventurePack"
   repo = "weigo87/JA-AdventurePack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "gitjas"
-  label = "Gitjas"
-  type = "github"
-  url = "https://github.com/Gitjas/JA-AdventurePack"
-  repo = "Gitjas/JA-AdventurePack"
-  pkg_windows = "wzp,zip"
-  pkg_linux = "lin,zip"
-  pkg_macos = "mac,zip"
-
-  [[mods.sources]]
-  id = "ychap"
-  label = "Ychap"
-  type = "github"
-  url = "https://github.com/Ychap/JA-AdventurePack"
-  repo = "Ychap/JA-AdventurePack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "abalabokhin"
-  label = "abalabokhin"
-  type = "github"
-  url = "https://github.com/abalabokhin/JA-AdventurePack"
-  repo = "abalabokhin/JA-AdventurePack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "mephistosatandevil"
-  label = "MephistoSatanDevil"
-  type = "github"
-  url = "https://github.com/MephistoSatanDevil/JA-AdventurePack"
-  repo = "MephistoSatanDevil/JA-AdventurePack"
-  branch = "master"
-
-  [[mods.sources]]
-  id = "totor115"
-  label = "TotoR115"
-  type = "github"
-  url = "https://github.com/TotoR115/JA-AdventurePack"
-  repo = "TotoR115/JA-AdventurePack"
   branch = "master"
 
 #/////////////////////////////////////////////////////////////////////////////////////////#
@@ -10465,6 +5741,16 @@ tp2 = "enhanced-powergaming-scripts"
   label = "Morpheus-Mart"
   type = "page"
   url = "https://www.morpheus-mart.com/enhanced-powergaming-scripts"
+
+[[mods]]
+name = "Continuous NPCs"
+tp2 = "continuous-npcs"
+
+  [[mods.sources]]
+  id = "morpheus-mart"
+  label = "Morpheus-Mart"
+  type = "page"
+  url = "https://www.morpheus-mart.com/continuous-npcs"
 
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                                  Source Pages                                       //#

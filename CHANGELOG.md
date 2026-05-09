@@ -1,3 +1,37 @@
+## Beta 19
+
+- Added Import Modlist mode to Step 1.
+- Moved Import Modlist into the Step 1 install-mode dropdown.
+- Added BIO Modlist Share Code export/import flow.
+- Added Import Modlist preview tabs for Summary, BGEE WeiDU, BG2EE WeiDU, User Downloads, Installed Refs, and Mod Configs.
+- Added Auto Build flow after importing a modlist.
+- Added pending mod config file support for imported modlists.
+- Added whitelisted mod config export/import metadata via `config_files`.
+- Added pending mod config restore after successful mod extraction.
+- Added EET WLB input path rewriting for imported modlists.
+- Improved Import Modlist handling for `-p`, `-n`, and `-g` clone path workflows.
+- Added GitHub fork discovery for mod download sources.
+- Added fork review flow before saving discovered forks as user sources.
+- Moved Add Source into the Check Updates bottom controls.
+- Improved Edit Source behavior with source-id protection and effective source templates.
+- Added empty Edit Source save behavior to remove matching user source overrides.
+- Added `.rar` release asset selection support.
+- Removed unsafe `.exe` and `.iemod` asset selection behavior.
+- Improved update source refresh so changing a source can refresh only the affected mod.
+- Improved installed source/ref matching so source id and ref must both match.
+- Improved installed refs pruning so aliases and configured source TP2 names are preserved.
+- Improved archive naming for downloaded mods.
+- Improved update/download/extract list cleanup after successful extraction.
+- Improved alphabetical sorting and alignment for update popup source/result lists.
+- Added download/extract progress count text.
+- Improved Step 5 install status display with inline start-failure text.
+- Hid Export Modlist until install finishes successfully.
+- Added Step 5 install title progress text for the current BGEE/BG2EE mod when unambiguous.
+- Improved Step 5 console scrolling behavior when auto-scroll is disabled.
+- Improved Linux/SteamOS console stability by avoiding wrapped console line reflow.
+- Updated Discord badge in README.
+- Bumped version to `0.1.0-beta.19`.
+
 ## Beta 18
 
 - Added a full Step 2 mod download source system.

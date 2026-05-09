@@ -20,14 +20,22 @@ struct ModSourceRefsFile {
     sources: BTreeMap<String, String>,
 }
 
-pub(super) fn load_installed_source_ref(tp2: &str) -> Option<String> {
-    let content = fs::read_to_string(mod_source_refs_path()).ok()?;
+pub(crate) fn installed_source_refs_path() -> std::path::PathBuf {
+    app_config_file(MOD_SOURCE_REFS_FILE_NAME, "config")
+}
+
+pub(super) fn load_installed_source_id_and_ref(tp2: &str) -> Option<(String, String)> {
+    let content = fs::read_to_string(installed_source_refs_path()).ok()?;
     let parsed = toml::from_str::<ModSourceRefsFile>(&content).ok()?;
-    parsed.refs.get(&normalize_mod_download_tp2(tp2)).cloned()
+    let tp2 = normalize_mod_download_tp2(tp2);
+    Some((
+        parsed.sources.get(&tp2)?.clone(),
+        parsed.refs.get(&tp2)?.clone(),
+    ))
 }
 
 pub(super) fn save_installed_source_ref(tp2: &str, source_ref: &str) -> io::Result<()> {
-    let path = mod_source_refs_path();
+    let path = installed_source_refs_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -44,7 +52,7 @@ pub(super) fn save_installed_source_ref(tp2: &str, source_ref: &str) -> io::Resu
 }
 
 pub(super) fn load_installed_source_id(tp2: &str) -> Option<String> {
-    let content = fs::read_to_string(mod_source_refs_path()).ok()?;
+    let content = fs::read_to_string(installed_source_refs_path()).ok()?;
     let parsed = toml::from_str::<ModSourceRefsFile>(&content).ok()?;
     parsed
         .sources
@@ -52,8 +60,22 @@ pub(super) fn load_installed_source_id(tp2: &str) -> Option<String> {
         .cloned()
 }
 
+pub(crate) fn load_installed_source_ids() -> BTreeMap<String, String> {
+    let content = match fs::read_to_string(installed_source_refs_path()) {
+        Ok(content) => content,
+        Err(_) => return BTreeMap::new(),
+    };
+    let parsed = toml::from_str::<ModSourceRefsFile>(&content).unwrap_or_default();
+    parsed
+        .sources
+        .into_iter()
+        .map(|(tp2, source_id)| (normalize_mod_download_tp2(&tp2), source_id))
+        .filter(|(tp2, source_id)| !tp2.is_empty() && !source_id.trim().is_empty())
+        .collect()
+}
+
 pub(super) fn save_installed_source_id(tp2: &str, source_id: &str) -> io::Result<()> {
-    let path = mod_source_refs_path();
+    let path = installed_source_refs_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -74,7 +96,7 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    let path = mod_source_refs_path();
+    let path = installed_source_refs_path();
     let Ok(content) = fs::read_to_string(&path) else {
         return Ok(0);
     };
@@ -98,8 +120,4 @@ where
     let content = toml::to_string_pretty(&refs).map_err(io::Error::other)?;
     fs::write(path, content)?;
     Ok(removed)
-}
-
-fn mod_source_refs_path() -> std::path::PathBuf {
-    app_config_file(MOD_SOURCE_REFS_FILE_NAME, "config")
 }

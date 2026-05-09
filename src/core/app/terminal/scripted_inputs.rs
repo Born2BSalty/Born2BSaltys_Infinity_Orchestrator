@@ -65,10 +65,11 @@ pub(super) fn peek_next_scripted_input_for_current(term: &EmbeddedTerminal) -> O
 
 fn parse_component_key_from_installer_line(line: &str) -> Option<ComponentContext> {
     let upper = line.to_ascii_uppercase();
-    if !upper.contains("MOD_INSTALLER::INSTALLERS")
-        || !(upper.contains("INSTALLING MOD COMPONENT")
-            || upper.contains("INSTALLED MOD COMPONENT"))
-    {
+    let is_install_component_line = upper.contains("INSTALLING MOD COMPONENT")
+        || upper.contains("INSTALLED MOD COMPONENT")
+        || upper.contains("INSTALLING MOD WEIDUBATCHEDCOMPONENTS")
+        || upper.contains("INSTALLED MOD WEIDUBATCHEDCOMPONENTS");
+    if !upper.contains("MOD_INSTALLER::INSTALLERS") || !is_install_component_line {
         return None;
     }
     let tp_file = extract_field(line, "tp_file")?;

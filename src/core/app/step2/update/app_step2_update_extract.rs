@@ -22,9 +22,14 @@ pub(crate) struct Step2UpdateExtractResult {
     pub(crate) failed: Vec<String>,
 }
 
+pub(crate) enum Step2UpdateExtractEvent {
+    Progress { completed: usize, total: usize },
+    Finished(Step2UpdateExtractResult),
+}
+
 pub(crate) fn start_step2_update_extract(
     state: &mut WizardState,
-    step2_update_extract_rx: &mut Option<Receiver<Step2UpdateExtractResult>>,
+    step2_update_extract_rx: &mut Option<Receiver<Step2UpdateExtractEvent>>,
 ) {
     if state.step2.update_selected_extract_running {
         return;
@@ -44,20 +49,20 @@ pub(crate) fn start_step2_update_extract(
         return;
     }
 
-    let (tx, rx) = mpsc::channel::<Step2UpdateExtractResult>();
+    let (tx, rx) = mpsc::channel::<Step2UpdateExtractEvent>();
     *step2_update_extract_rx = Some(rx);
     state.step2.update_selected_extract_running = true;
-    state.step2.scan_status = format!("Extracting updates: {}", jobs.len());
+    state.step2.scan_status = format!("Extracting updates: 0/{}", jobs.len());
 
     thread::spawn(move || {
-        let result = archive::extract_update_archives(&jobs);
-        let _ = tx.send(result);
+        let result = archive::extract_update_archives(&jobs, &tx);
+        let _ = tx.send(Step2UpdateExtractEvent::Finished(result));
     });
 }
 
 pub(crate) fn poll_step2_update_extract(
     state: &mut WizardState,
-    step2_update_extract_rx: &mut Option<Receiver<Step2UpdateExtractResult>>,
+    step2_update_extract_rx: &mut Option<Receiver<Step2UpdateExtractEvent>>,
     step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
     step2_cancel: &mut Option<Arc<AtomicBool>>,
     step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
@@ -65,8 +70,8 @@ pub(crate) fn poll_step2_update_extract(
     let Some(rx) = step2_update_extract_rx.as_ref() else {
         return;
     };
-    let result = match rx.try_recv() {
-        Ok(result) => Some(result),
+    let event = match rx.try_recv() {
+        Ok(event) => Some(event),
         Err(TryRecvError::Empty) => None,
         Err(TryRecvError::Disconnected) => {
             state.step2.update_selected_extract_running = false;
@@ -75,13 +80,20 @@ pub(crate) fn poll_step2_update_extract(
             return;
         }
     };
-    let Some(result) = result else {
+    let Some(event) = event else {
+        return;
+    };
+    let Step2UpdateExtractEvent::Finished(result) = event else {
+        if let Step2UpdateExtractEvent::Progress { completed, total } = event {
+            state.step2.scan_status = format!("Extracting updates: {completed}/{total}");
+        }
         return;
     };
 
     *step2_update_extract_rx = None;
     state.step2.update_selected_extract_running = false;
     state.step2.update_selected_extracted_sources = result.extracted;
+    remove_extracted_update_entries(state);
     state
         .step2
         .update_selected_extract_failed_sources
@@ -103,4 +115,32 @@ pub(crate) fn poll_step2_update_extract(
         state.step2.scan_status =
             format!("Extract updates finished: {extracted} updated, {failed} failed");
     }
+}
+
+fn remove_extracted_update_entries(state: &mut WizardState) {
+    let extracted_labels = state
+        .step2
+        .update_selected_extracted_sources
+        .iter()
+        .filter_map(|entry| entry.split_once(" -> ").map(|(label, _)| label.trim()))
+        .filter(|label| !label.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if extracted_labels.is_empty() {
+        return;
+    }
+    state.step2.update_selected_missing_sources.retain(|entry| {
+        !extracted_labels
+            .iter()
+            .any(|label| entry.starts_with(&format!("{label} (")))
+    });
+    state.step2.update_selected_update_sources.retain(|entry| {
+        !extracted_labels
+            .iter()
+            .any(|label| entry.starts_with(&format!("{label} (")))
+    });
+    state
+        .step2
+        .update_selected_update_assets
+        .retain(|asset| !extracted_labels.contains(&asset.label));
 }

@@ -60,6 +60,9 @@ pub struct Step5State {
     pub prompt_ready_first_seen_unix_ms: Option<u64>,
     pub prompt_required_sound_latched: bool,
     pub prompt_answers_window_open: bool,
+    pub modlist_share_window_open: bool,
+    pub modlist_share_code: String,
+    pub modlist_share_error: String,
 }
 
 impl Default for Step5State {
@@ -115,6 +118,9 @@ impl Default for Step5State {
             prompt_ready_first_seen_unix_ms: None,
             prompt_required_sound_latched: false,
             prompt_answers_window_open: false,
+            modlist_share_window_open: false,
+            modlist_share_code: String::new(),
+            modlist_share_error: String::new(),
         }
     }
 }

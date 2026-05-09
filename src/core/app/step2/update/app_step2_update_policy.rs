@@ -19,14 +19,24 @@ pub(crate) fn mark_update_available(state: &mut WizardState, game_tab: &str, tp_
     }
 }
 
-pub(crate) fn source_ref_is_update(tp_file: &str, latest_ref: &str) -> bool {
-    super::app_step2_update_source_refs::load_installed_source_ref(tp_file)
-        .is_some_and(|installed_ref| installed_ref.trim() != latest_ref.trim())
+pub(crate) fn source_ref_is_update(tp_file: &str, source_id: &str, latest_ref: &str) -> bool {
+    let source_id = source_id.trim().to_ascii_lowercase();
+    super::app_step2_update_source_refs::load_installed_source_id_and_ref(tp_file).is_some_and(
+        |(installed_source_id, installed_ref)| {
+            installed_source_id.trim().to_ascii_lowercase() == source_id
+                && installed_ref.trim() != latest_ref.trim()
+        },
+    )
 }
 
-pub(crate) fn source_ref_matches(tp_file: &str, latest_ref: &str) -> bool {
-    super::app_step2_update_source_refs::load_installed_source_ref(tp_file)
-        .is_some_and(|installed_ref| installed_ref.trim() == latest_ref.trim())
+pub(crate) fn source_ref_matches(tp_file: &str, source_id: &str, latest_ref: &str) -> bool {
+    let source_id = source_id.trim().to_ascii_lowercase();
+    super::app_step2_update_source_refs::load_installed_source_id_and_ref(tp_file).is_some_and(
+        |(installed_source_id, installed_ref)| {
+            installed_source_id.trim().to_ascii_lowercase() == source_id
+                && installed_ref.trim() == latest_ref.trim()
+        },
+    )
 }
 
 pub(crate) fn mod_has_current_version(state: &WizardState, game_tab: &str, tp_file: &str) -> bool {

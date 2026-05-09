@@ -64,7 +64,13 @@ fn strip_version_prefix(value: &str) -> (&str, bool) {
 fn collapse_version_separators(value: &str) -> String {
     value
         .chars()
-        .filter(|ch| !matches!(ch, ' ' | '_' | '-'))
+        .map(|ch| {
+            if matches!(ch, ' ' | '_' | '-') {
+                '.'
+            } else {
+                ch
+            }
+        })
         .collect()
 }
 
@@ -81,6 +87,14 @@ mod tests {
         assert_eq!(
             normalize_version_text("Alpha 3"),
             normalize_version_text("Alpha-3")
+        );
+        assert_eq!(
+            normalize_version_text("v4.2"),
+            normalize_version_text("v4-2")
+        );
+        assert_ne!(
+            normalize_version_text("v1.10"),
+            normalize_version_text("v11.0")
         );
     }
 }

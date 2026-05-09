@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Receiver;
@@ -159,12 +159,30 @@ pub(super) fn poll_step2_scan_events(
 }
 
 fn prune_stale_installed_refs(state: &WizardState) -> Option<String> {
-    let present_tp2s = state
+    let sources = crate::app::mod_downloads::load_mod_download_sources();
+    let mut present_tp2s = BTreeSet::new();
+
+    for mod_state in state
         .step2
         .bgee_mods
         .iter()
         .chain(state.step2.bg2ee_mods.iter())
-        .map(|mod_state| mod_state.tp_file.as_str());
+    {
+        present_tp2s.insert(crate::app::mod_downloads::normalize_mod_download_tp2(
+            &mod_state.tp_file,
+        ));
+
+        for source in sources.find_sources(&mod_state.tp_file) {
+            present_tp2s.insert(crate::app::mod_downloads::normalize_mod_download_tp2(
+                &source.tp2,
+            ));
+            for alias in source.aliases {
+                present_tp2s.insert(crate::app::mod_downloads::normalize_mod_download_tp2(
+                    &alias,
+                ));
+            }
+        }
+    }
 
     crate::app::app_step2_update_source_refs::prune_installed_source_refs(present_tp2s)
         .err()

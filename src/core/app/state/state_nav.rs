@@ -75,6 +75,20 @@ impl WizardState {
             github_auth_user_code: String::new(),
             github_auth_verification_uri: String::new(),
             github_auth_status_text: String::new(),
+            modlist_import_window_open: false,
+            modlist_import_code: String::new(),
+            modlist_import_preview: String::new(),
+            modlist_import_error: String::new(),
+            modlist_import_ready: false,
+            modlist_import_preview_mode: false,
+            modlist_import_preview_tab: "Summary".to_string(),
+            modlist_import_preview_bgee_log: String::new(),
+            modlist_import_preview_bg2ee_log: String::new(),
+            modlist_import_preview_source_overrides: String::new(),
+            modlist_import_preview_installed_refs: String::new(),
+            modlist_import_preview_mod_configs: String::new(),
+            modlist_auto_build_active: false,
+            modlist_auto_build_waiting_for_install: false,
             last_step2_sync_signature: None,
             step1_clean_confirm_open: false,
             step4_save_error_open: false,
@@ -95,6 +109,20 @@ impl WizardState {
         self.github_auth_user_code.clear();
         self.github_auth_verification_uri.clear();
         self.github_auth_status_text.clear();
+        self.modlist_import_window_open = false;
+        self.modlist_import_code.clear();
+        self.modlist_import_preview.clear();
+        self.modlist_import_error.clear();
+        self.modlist_import_ready = false;
+        self.modlist_import_preview_mode = false;
+        self.modlist_import_preview_tab = "Summary".to_string();
+        self.modlist_import_preview_bgee_log.clear();
+        self.modlist_import_preview_bg2ee_log.clear();
+        self.modlist_import_preview_source_overrides.clear();
+        self.modlist_import_preview_installed_refs.clear();
+        self.modlist_import_preview_mod_configs.clear();
+        self.modlist_auto_build_active = false;
+        self.modlist_auto_build_waiting_for_install = false;
         self.last_step2_sync_signature = None;
         self.step1_clean_confirm_open = false;
         self.step4_save_error_open = false;

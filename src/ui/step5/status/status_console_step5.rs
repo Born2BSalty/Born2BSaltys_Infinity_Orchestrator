@@ -92,7 +92,7 @@ fn render_styled_line(ui: &mut egui::Ui, line: &str) {
         ui.label(egui::RichText::new(" ").monospace().strong());
         return;
     }
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         for token in split_chunks_preserve_quotes(line) {
             let n = normalized_token(&token);
@@ -133,6 +133,11 @@ pub(crate) fn render_console_panel(
             if response.clicked() {
                 console_view.request_input_focus = true;
             }
+            let selected_text = selected_console_text(term, console_view);
+            let selected_text_len = selected_text.len();
+            let should_auto_scroll = console_view.auto_scroll
+                && selected_text_len > console_view.last_selected_console_text_len;
+            console_view.last_selected_console_text_len = selected_text_len;
             ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
                 ui.scope(|ui| {
                     let mut scroll = egui::style::ScrollStyle::solid();
@@ -140,16 +145,15 @@ pub(crate) fn render_console_panel(
                     scroll.bar_inner_margin = 0.0;
                     scroll.bar_outer_margin = 2.0;
                     ui.style_mut().spacing.scroll = scroll;
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                     let out = egui::ScrollArea::vertical()
                         .id_salt("step5_console_scroll")
                         .auto_shrink([false, false])
-                        .stick_to_bottom(console_view.auto_scroll)
                         .show(ui, |ui| {
-                            for line in selected_console_text(term, console_view).split('\n') {
+                            for line in selected_text.split('\n') {
                                 render_styled_line(ui, line);
                             }
-                            if console_view.auto_scroll {
+                            if should_auto_scroll {
                                 ui.add_space(0.0);
                                 ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
                             }
