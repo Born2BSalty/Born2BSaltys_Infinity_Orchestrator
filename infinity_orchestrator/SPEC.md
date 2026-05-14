@@ -1112,26 +1112,40 @@ The error message in `Warning`/`Error` describes the specific problem (`× not a
 
 ### 11.3 Tools
 
-Single section: `executable paths · auto-detected when possible`.
+Single section: `executable paths · auto-detected when possible`. Two row variants by use:
 
-- `weidu.exe` — with hint showing detected version (e.g., `v249 ✓`).
-- `mod_installer.exe`
-- `7z executable` — with hint like `system ✓` if a system install was found.
-- `Git executable` — with hint showing detected version (e.g., `2.45.0 ✓`).
+**Writable PathRow** — for tools that have a `Step1Settings` backing field and that the user can override with a custom path. Same two-line layout as the Paths tab (label + input + browse on top; status text below the input column). The validator treats absolute paths as filesystem checks (`is_file`) and bare names as `$PATH` lookups: a bare name that resolves on `$PATH` shows `ok · <resolved absolute path>` so the user sees exactly which binary will run; a bare name that does NOT resolve shows `× not on $PATH — install or specify the full path` in danger tone.
 
-Same PathRow structure as Paths.
+- **WeiDU binary** → `Step1Settings::weidu_binary`. Hint shows detected version when available (e.g., `v249`).
+- **Mod installer** → `Step1Settings::mod_installer_binary`.
+
+**Detection-only row** — for tools we never let the user override because there's no `Step1Settings` field for them and the install runner only ever shells out to the system install. No input box, no browse button — just label + one line of status text.
+
+- **7-Zip executable** — found on `$PATH` at startup? show `found at <path>` in success-soft; otherwise `not installed — needed for archive extraction during install` in warning-soft.
+- **Git executable** — same pattern; not-installed line reads `needed for git-based mod updates`.
+
+Detection for the detection-only rows runs once in `OrchestratorApp::new` via the same `validate_now::resolve_on_path` helper that drives bare-name resolution for the writable rows, and is cached on `OrchestratorApp::tool_version_cache.{sevenzip,git}_path`.
 
 ### 11.4 Accounts
 
-Cards listing connected services:
+Cards listing connected services. Each card is a single horizontal row inside a redesign Box (per wireframe `screens.jsx::AccountCard` line 3884–3917):
 
-- **GitHub** — initials `GH`. Connected (default in wireframe) `as <name>`. **`disconnect`** action.
-- **Nexus Mods** — initials `NX`. Not connected. **`connect`** primary.
-- **Mega** — initials `M`. Not connected. **`connect`** primary.
+```
+[36×36 avatar] [Service Name] [optional "as @user" when connected]   …push right…   [pill] [Btn]
+```
 
-Each card has the service initials in a square avatar, the service name, the connection state Pill (`connected` info-tone or `not connected` neutral), and the appropriate primary/secondary action button on the right.
+- **Avatar** — shell-bg fill, sketchy 1.5px border, 2×2 drop shadow, initials in `poppins_bold`. (Neutral notebook-card treatment — not an accent-filled tile, which would visually conflict with the active rail item.)
+- **"as @user" label** — faint hand-style text, only rendered when the service is connected. Sits between the service name and the right-anchored cluster. The widget always prepends `@` to the supplied user label and strips any duplicate leading `@`, so callers can pass either `Xgatt` or `@Xgatt` and the rendered string is always `as @Xgatt`.
+- **Pill** — small chip, no border, just the tone-matched fill with rounded ends (matches wireframe `Pill` line 745: 10px font, ~7px radius, `pill_text` dark slate on tinted fill). Connected: `connected` in info tone. Not connected: `not connected` in neutral tone. The pill states the connection — the user identity lives in the separate `"as @user"` label.
+- **Btn** — primary fill (accent + drop shadow) when the action is the call to action — i.e. when NOT connected (`connect`). Non-primary (shell-bg) when connected (`disconnect`). Small variant.
 
-GitHub connection runs the OAuth device flow today's BIO already implements (see [§13.2 GitHub OAuth](#132-github-oauth)). Nexus Mods and Mega connections are visual stubs per [A.17](#a17-nexus-mods--mega-account-connections) — no underlying BIO integration today.
+Services:
+
+- **GitHub** (`GH`) — fully wired via `oauth_glue`. Connect runs the OAuth device flow today's BIO already implements (see [§13.2 GitHub OAuth](#132-github-oauth)). Disconnect clears the stored token.
+- **Nexus Mods** (`NX`) — visual stub. The `connect` button is rendered **disabled** (50% alpha, click-suppressed) with a `coming soon` hover tooltip. No stub-hint banner — the disabled state speaks for itself.
+- **Mega** (`M`) — same disabled-stub treatment as Nexus Mods.
+
+Disabling the unimplemented services (rather than letting the user click and showing an inline "not yet implemented" hint) is a deviation from the wireframe — both buttons are enabled in the wireframe mock — but matches the user-facing behavior we ship: visibly disabled affordances are clearer than buttons that lie to you. See [A.17](#a17-nexus-mods--mega-account-connections) for the underlying integration deferral.
 
 ### 11.5 Advanced
 

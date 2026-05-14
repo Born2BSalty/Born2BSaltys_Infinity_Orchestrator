@@ -3,24 +3,23 @@
 //
 // `tab_accounts` — Accounts sub-tab renderer.
 //
-// Per Phase 4 P4.T5: three service cards.
-//   - GitHub        — `connect` opens BIO's OAuth flow via `oauth_glue::start_github_flow`.
-//                     `disconnect` clears the token via `oauth_glue::disconnect_github`.
-//   - Nexus Mods    — `connect` shows a "not yet implemented" hint inline.
-//   - Mega          — same as Nexus Mods.
+// Per SPEC §11.4: three service cards.
+//   - GitHub     — `connect` opens BIO's OAuth flow via `oauth_glue::start_github_flow`;
+//                  `disconnect` clears the token via `oauth_glue::disconnect_github`.
+//   - Nexus Mods — `disabled` (not yet wired). Hover tooltip explains.
+//   - Mega       — same as Nexus Mods.
 
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::oauth_glue;
 use crate::ui::settings::widgets::account_card::{self, CardState};
-use crate::ui::shared::redesign_tokens::redesign_text_faint;
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
     let login = orchestrator.wizard_state.github_auth_login.clone();
 
-    // GitHub.
+    // GitHub — fully wired.
     let gh_state = if login.trim().is_empty() {
         CardState::NotConnected
     } else {
@@ -36,6 +35,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         gh_state,
         "connect",
         "disconnect",
+        false, // not disabled
     );
     if gh_clicked {
         if login.trim().is_empty() {
@@ -45,8 +45,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         }
     }
 
-    // Nexus Mods (stub).
-    let nx_clicked = account_card::render(
+    // Nexus Mods — coming later; button is non-clickable.
+    let _ = account_card::render(
         ui,
         palette,
         "NX",
@@ -54,14 +54,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         CardState::NotConnected,
         "connect",
         "disconnect",
+        true, // disabled
     );
-    if nx_clicked {
-        orchestrator.accounts_stub_hint =
-            Some("Nexus Mods OAuth is coming in a future release.".to_string());
-    }
 
-    // Mega (stub).
-    let mg_clicked = account_card::render(
+    // Mega — coming later; button is non-clickable.
+    let _ = account_card::render(
         ui,
         palette,
         "M",
@@ -69,19 +66,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         CardState::NotConnected,
         "connect",
         "disconnect",
+        true, // disabled
     );
-    if mg_clicked {
-        orchestrator.accounts_stub_hint =
-            Some("Mega OAuth is coming in a future release.".to_string());
-    }
-
-    if let Some(hint) = orchestrator.accounts_stub_hint.clone() {
-        ui.add_space(8.0);
-        ui.label(
-            egui::RichText::new(hint)
-                .size(12.0)
-                .family(egui::FontFamily::Proportional)
-                .color(redesign_text_faint(palette)),
-        );
-    }
 }

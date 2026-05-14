@@ -190,15 +190,49 @@ fn check_working_folder(value: &str) -> PathStatus {
 fn check_binary(value: &str) -> PathStatus {
     let path = Path::new(value);
     if path.is_absolute() {
-        if path.exists() {
+        if path.is_file() {
             PathStatus::Ok { detail: None }
         } else {
             PathStatus::Error {
-                reason: "binary not found".to_string(),
+                reason: "binary not found at that path".to_string(),
             }
         }
     } else {
-        // Bare name — assume the install-time PATH lookup will succeed.
-        PathStatus::Ok { detail: None }
+        // Bare name — actually scan $PATH so we don't lie to the user with a
+        // green "ok" when nothing is installed system-wide. If the user
+        // typed `weidu` but `weidu` isn't on PATH, the install will fail —
+        // surface that here.
+        match resolve_on_path(value) {
+            Some(resolved) => PathStatus::Ok {
+                detail: Some(resolved.display().to_string()),
+            },
+            None => PathStatus::Error {
+                reason: "not on $PATH — install or specify the full path".to_string(),
+            },
+        }
     }
+}
+
+/// Search `$PATH` for an executable named `name`. On Windows also tries
+/// `<name>.exe`. Returns the first matching absolute path, or `None`.
+pub fn resolve_on_path(name: &str) -> Option<std::path::PathBuf> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let path_var = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_var) {
+        let direct = dir.join(trimmed);
+        if direct.is_file() {
+            return Some(direct);
+        }
+        #[cfg(windows)]
+        {
+            let exe = dir.join(format!("{trimmed}.exe"));
+            if exe.is_file() {
+                return Some(exe);
+            }
+        }
+    }
+    None
 }

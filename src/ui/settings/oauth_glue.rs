@@ -26,7 +26,6 @@
 // SPEC: §11.4, §13.2.
 
 use eframe::egui;
-use tracing::warn;
 
 use crate::app::app_step1_github_oauth as oauth;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
@@ -125,17 +124,11 @@ pub fn render_github_popup_if_open(orchestrator: &mut OrchestratorApp, ctx: &egu
     }
 }
 
-/// Load the stored GitHub token (if any) and populate `state.github_auth_login`
-/// with the resolved user name. Called once at orchestrator startup from
-/// `OrchestratorApp::new` (Phase 4 wires this).
-pub fn load_persisted_login(orchestrator: &mut OrchestratorApp) {
-    match oauth::load_github_login_from_stored_token() {
-        Ok(Some(login)) => {
-            orchestrator.wizard_state.github_auth_login = login;
-        }
-        Ok(None) => {}
-        Err(err) => {
-            warn!(target = "orchestrator", "github login load failed: {err}");
-        }
-    }
-}
+// Intentionally no public `load_persisted_login` helper here. BIO's
+// `app_bootstrap_init::initialize` already calls
+// `oauth::load_github_login_from_stored_token` once on startup and the
+// resolved login lands on `wizard_state.github_auth_login`. Adding a second
+// orchestrator-side load would touch the OS keychain again, which on macOS
+// triggers a fresh authorization prompt for unsigned binaries (re-builds
+// invalidate the keychain ACL's signature trust). One load per launch is
+// enough — see the comment in `OrchestratorApp::new`.

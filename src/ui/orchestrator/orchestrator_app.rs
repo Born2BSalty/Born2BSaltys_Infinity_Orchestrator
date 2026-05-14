@@ -103,6 +103,13 @@ const BIO_SETTINGS_DEBOUNCE_MS: u64 = 1000;
 pub struct ToolVersionCache {
     pub weidu_version: Option<String>,
     pub mod_installer_version: Option<String>,
+    /// Resolved path to `7z` on `$PATH` at app startup, or `None` if not
+    /// installed system-wide. 7z is used by BIO's install runner for archive
+    /// extraction; there's no `Step1Settings` backing field — system PATH is
+    /// the only source.
+    pub sevenzip_path: Option<std::path::PathBuf>,
+    /// Resolved path to `git` on `$PATH` at app startup, or `None`.
+    pub git_path: Option<std::path::PathBuf>,
 }
 
 pub struct OrchestratorApp {
@@ -246,8 +253,15 @@ impl OrchestratorApp {
             bio_settings_last_dirty_at: None,
         };
 
-        // Try to surface the persisted GitHub login (no-op if no token).
-        oauth_glue::load_persisted_login(&mut app);
+        // NOTE: do NOT call `oauth_glue::load_persisted_login` here.
+        // `app_bootstrap_init::initialize` (above) already reads the GitHub
+        // token from the OS keychain once and the resolved login is already
+        // in `bootstrap.github_auth_login` → `wizard_state.github_auth_login`.
+        // A second `keyring::Entry::get_password()` triggers a SECOND macOS
+        // keychain authorization prompt for unsigned binaries (rebuilds
+        // invalidate the keychain ACL's signature trust each time), which
+        // shows up to the user as the keychain prompt firing in a loop on
+        // startup. One bootstrap-time read is enough.
 
         // Run per-field validation once at startup so any prefilled paths
         // (loaded from bio_settings.json) show their inline status the moment
@@ -255,6 +269,14 @@ impl OrchestratorApp {
         // edit to seed `path_validation_results.fields`.
         app.settings_screen_state.path_validation_results =
             crate::ui::settings::validate_now::run_now(&app.wizard_state.step1);
+
+        // Detect system-wide 7z and git once at startup so the Tools tab's
+        // detection-only rows can render their actual state instead of a
+        // hardcoded placeholder.
+        app.tool_version_cache.sevenzip_path =
+            crate::ui::settings::validate_now::resolve_on_path("7z");
+        app.tool_version_cache.git_path =
+            crate::ui::settings::validate_now::resolve_on_path("git");
 
         app
     }
