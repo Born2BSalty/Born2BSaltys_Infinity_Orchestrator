@@ -26,6 +26,7 @@ use crate::ui::settings::state_settings::{PathStatus, ValidationReport};
 
 pub const FIELD_BGEE_GAME_FOLDER: &str = "bgee_game_folder";
 pub const FIELD_BG2EE_GAME_FOLDER: &str = "bg2ee_game_folder";
+pub const FIELD_IWDEE_GAME_FOLDER: &str = "iwdee_game_folder";
 pub const FIELD_EET_BGEE_GAME_FOLDER: &str = "eet_bgee_game_folder";
 pub const FIELD_EET_BG2EE_GAME_FOLDER: &str = "eet_bg2ee_game_folder";
 pub const FIELD_MODS_FOLDER: &str = "mods_folder";
@@ -52,6 +53,7 @@ fn field_role(field: &str) -> FieldRole {
     match field {
         FIELD_BGEE_GAME_FOLDER
         | FIELD_BG2EE_GAME_FOLDER
+        | FIELD_IWDEE_GAME_FOLDER
         | FIELD_EET_BGEE_GAME_FOLDER
         | FIELD_EET_BG2EE_GAME_FOLDER => FieldRole::Game,
         FIELD_MODS_FOLDER
@@ -69,9 +71,10 @@ fn field_role(field: &str) -> FieldRole {
 pub fn run_now(step1: &Step1State) -> ValidationReport {
     let mut report = ValidationReport::default();
 
-    let folder_fields: [(&'static str, &str); 8] = [
+    let folder_fields: [(&'static str, &str); 9] = [
         (FIELD_BGEE_GAME_FOLDER, &step1.bgee_game_folder),
         (FIELD_BG2EE_GAME_FOLDER, &step1.bg2ee_game_folder),
+        (FIELD_IWDEE_GAME_FOLDER, &step1.iwdee_game_folder),
         (FIELD_EET_BGEE_GAME_FOLDER, &step1.eet_bgee_game_folder),
         (FIELD_EET_BG2EE_GAME_FOLDER, &step1.eet_bg2ee_game_folder),
         (FIELD_MODS_FOLDER, &step1.mods_folder),
@@ -114,6 +117,7 @@ pub fn run_for_field(step1: &Step1State, field: &'static str) -> PathStatus {
     let value = match field {
         FIELD_BGEE_GAME_FOLDER => &step1.bgee_game_folder,
         FIELD_BG2EE_GAME_FOLDER => &step1.bg2ee_game_folder,
+        FIELD_IWDEE_GAME_FOLDER => &step1.iwdee_game_folder,
         FIELD_EET_BGEE_GAME_FOLDER => &step1.eet_bgee_game_folder,
         FIELD_EET_BG2EE_GAME_FOLDER => &step1.eet_bg2ee_game_folder,
         FIELD_MODS_FOLDER => &step1.mods_folder,

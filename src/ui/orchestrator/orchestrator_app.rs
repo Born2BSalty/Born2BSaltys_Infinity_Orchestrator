@@ -40,8 +40,8 @@
 //   - `dev_mode_cli_flag` — raw CLI dev_mode (without the OR'd persisted
 //     toggle) — preserved so that toggling Diagnostic mode off in Settings
 //     doesn't disable dev mode if the user launched with `-d`.
-//   - `validate_paths_on_startup` — General-tab toggle, in-memory only for
-//     v1 alpha (no persistent backing).
+//   - `validate_paths_on_startup` lives on `RedesignSettings` and gates the
+//     startup `validate_now::run_now` seeding pass.
 //   - `accounts_stub_hint` — last status string shown under Nexus/Mega
 //     stub cards.
 //
@@ -145,7 +145,6 @@ pub struct OrchestratorApp {
     pub settings_screen_state: SettingsScreenState,
     pub(crate) github_auth_rx: Option<Receiver<GitHubOAuthFlowResult>>,
     pub tool_version_cache: ToolVersionCache,
-    pub validate_paths_on_startup: bool,
     pub accounts_stub_hint: Option<String>,
     /// BIO `bio_settings.json` snapshot + debounce timestamp. The
     /// orchestrator persists Step1 settings whenever the in-memory copy
@@ -240,7 +239,6 @@ impl OrchestratorApp {
             settings_screen_state: SettingsScreenState::default(),
             github_auth_rx: None,
             tool_version_cache: ToolVersionCache::default(),
-            validate_paths_on_startup: true,
             accounts_stub_hint: None,
             bio_settings_last_saved: bio_settings_snapshot,
             bio_settings_last_dirty_at: None,
@@ -258,10 +256,14 @@ impl OrchestratorApp {
 
         // Run per-field validation once at startup so any prefilled paths
         // (loaded from bio_settings.json) show their inline status the moment
-        // the user opens Settings → Paths — instead of waiting for the first
-        // edit to seed `path_validation_results.fields`.
-        app.settings_screen_state.path_validation_results =
-            crate::ui::settings::validate_now::run_now(&app.wizard_state.step1);
+        // the user opens Settings → Paths. Gated on the persisted
+        // `validate_paths_on_startup` toggle (SPEC §11.1 / §11.2): when off,
+        // the seeding pass is skipped and inline status only appears once
+        // the user edits a field (which kicks off the debounce cycle).
+        if app.redesign_settings.validate_paths_on_startup {
+            app.settings_screen_state.path_validation_results =
+                crate::ui::settings::validate_now::run_now(&app.wizard_state.step1);
+        }
 
         app
     }

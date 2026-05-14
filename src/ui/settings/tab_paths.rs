@@ -48,10 +48,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         palette,
         orchestrator,
         "IWDEE game folder",
-        // No dedicated IWDEE field in `Step1Settings` yet (alpha caveat per
-        // HANDOFF.md). Bind to the EET bgee slot as a placeholder so the row
-        // reads/writes a real backing field.
-        validate_now::FIELD_EET_BGEE_GAME_FOLDER,
+        validate_now::FIELD_IWDEE_GAME_FOLDER,
     );
 
     ui.add_space(12.0);
@@ -137,6 +134,7 @@ fn field_mut<'a>(
     match field {
         f if f == validate_now::FIELD_BGEE_GAME_FOLDER => Some(&mut step1.bgee_game_folder),
         f if f == validate_now::FIELD_BG2EE_GAME_FOLDER => Some(&mut step1.bg2ee_game_folder),
+        f if f == validate_now::FIELD_IWDEE_GAME_FOLDER => Some(&mut step1.iwdee_game_folder),
         f if f == validate_now::FIELD_EET_BGEE_GAME_FOLDER => Some(&mut step1.eet_bgee_game_folder),
         f if f == validate_now::FIELD_EET_BG2EE_GAME_FOLDER => {
             Some(&mut step1.eet_bg2ee_game_folder)

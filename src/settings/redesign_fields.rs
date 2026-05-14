@@ -89,7 +89,7 @@ impl UiLanguage {
 
 /// All redesign-only persistent fields. Sibling to BIO's `AppSettings`;
 /// **never** merged into `AppSettings`.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RedesignSettings {
     /// User display name — feeds the share-code author field (SPEC §11.1) and
@@ -102,6 +102,32 @@ pub struct RedesignSettings {
     /// Persistent Diagnostic-mode toggle. OR'd with the CLI `-d` flag at app
     /// launch per M12.
     pub diagnostic_mode: bool,
+    /// Whether path validation runs automatically at app launch.
+    ///
+    /// `true` (default): `OrchestratorApp::new` seeds
+    /// `settings_screen_state.path_validation_results` with a synchronous
+    /// `validate_now::run_now` pass so prefilled paths show their inline
+    /// status the moment the user opens Settings → Paths.
+    /// `false`: the seeding pass is skipped; validation runs only in response
+    /// to user edits via the debounce cycle.
+    #[serde(default = "default_true")]
+    pub validate_paths_on_startup: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for RedesignSettings {
+    fn default() -> Self {
+        Self {
+            user_name: String::new(),
+            theme_palette: ThemeChoice::default(),
+            language: UiLanguage::default(),
+            diagnostic_mode: false,
+            validate_paths_on_startup: true,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -124,6 +150,7 @@ mod tests {
         assert_eq!(s.theme_palette, ThemeChoice::Dark);
         assert_eq!(s.language, UiLanguage::English);
         assert!(!s.diagnostic_mode);
+        assert!(s.validate_paths_on_startup);
     }
 
     #[test]
@@ -133,6 +160,7 @@ mod tests {
             theme_palette: ThemeChoice::Light,
             language: UiLanguage::French,
             diagnostic_mode: true,
+            validate_paths_on_startup: false,
         };
         let raw = serde_json::to_string_pretty(&s).expect("serialize");
         let s2: RedesignSettings = serde_json::from_str(&raw).expect("deserialize");

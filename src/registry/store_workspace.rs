@@ -8,21 +8,18 @@
 //   - `new_for_id(id)`           → resolves the per-modlist path inside the
 //                                  platform config dir.
 //   - `load()`                   → returns `Err(Corrupt)` for unparseable
-//                                  workspace files. Returns `Err(Io)` for
-//                                  permission / disk failures. **Missing file**
-//                                  returns `Ok(default)` for first-write
-//                                  callers; the registry-entry-says-file-exists
-//                                  callers must check existence themselves.
-//                                  Phase 3's `dev_seed` is fine with `Ok(default)`
-//                                  because it always saves immediately afterwards.
+//                                  files **and** for missing files. The
+//                                  registry is the source of truth for
+//                                  "this modlist exists"; if the registry
+//                                  has an entry but `workspace.json` is gone,
+//                                  the workspace is unusable per SPEC §13.14
+//                                  (terminal-error policy). Returns `Err(Io)`
+//                                  for permission / disk failures.
 //   - `save(&state)`             → atomic via temp file + rename; creates the
 //                                  `modlists/<id>/` parent dir on first write.
-//
-// **Decision tree per P3.T3 spec note:** "if the registry has no entry for
-// this id, the workspace store should not be queried (caller bug)." We keep
-// `load()` permissive — returning `Ok(default)` for missing files — so the
-// caller can decide what to do (treat missing as fresh, or report an error).
-// The registry holds the source of truth for "this modlist exists."
+//                                  `dev_seed` and any other "first write"
+//                                  caller goes directly through `save`,
+//                                  never `load`.
 //
 // SPEC: §13.1, §13.14.
 
@@ -68,14 +65,17 @@ impl WorkspaceStore {
 
     /// Load the workspace state.
     ///
-    /// - Missing file → `Ok(ModlistWorkspaceState::default())`.
+    /// - Missing file → `Err(Corrupt)` (per SPEC §13.14 terminal-error policy).
     /// - Present-but-unreadable → `Err(Corrupt)`.
     /// - IO failure → `Err(Io)`.
     pub fn load(&self) -> Result<ModlistWorkspaceState, RegistryError> {
         let raw = match std::fs::read_to_string(&self.path) {
             Ok(s) => s,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(ModlistWorkspaceState::default());
+                return Err(RegistryError::corrupt(
+                    self.path.clone(),
+                    "workspace file is missing".to_string(),
+                ));
             }
             Err(err) => return Err(RegistryError::Io(err)),
         };
@@ -138,12 +138,14 @@ mod tests {
     }
 
     #[test]
-    fn missing_workspace_returns_default() {
+    fn missing_workspace_returns_corrupt_error() {
         let root = temp_root("missing");
         let path = root.join("modlists/MISSING/workspace.json");
         let store = WorkspaceStore::new_with_path(&path);
-        let state = store.load().expect("ok on missing");
-        assert!(state.is_empty());
+        match store.load() {
+            Err(RegistryError::Corrupt { .. }) => {}
+            other => panic!("expected Corrupt for missing file, got {other:?}"),
+        }
     }
 
     #[test]

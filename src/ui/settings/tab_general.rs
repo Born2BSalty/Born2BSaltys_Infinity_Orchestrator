@@ -119,14 +119,26 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         settings_row(
             &mut cols[0],
             palette,
-            "Validate on startup",
-            "run path checks at launch",
+            "Validate all paths on startup",
+            "warns if game folders moved",
             |ui| {
-                let mut on = orchestrator.validate_paths_on_startup;
+                let mut on = orchestrator.redesign_settings.validate_paths_on_startup;
                 let mut changed = false;
                 toggle_row::render(ui, palette, "", &mut on, None, || changed = true);
                 if changed {
-                    orchestrator.validate_paths_on_startup = on;
+                    orchestrator.redesign_settings.validate_paths_on_startup = on;
+                    orchestrator.redesign_settings_dirty = true;
+                    // Reflect the toggle's new state immediately rather than
+                    // waiting for the next app launch: on → seed the inline
+                    // status with a fresh pass; off → clear it so rows go
+                    // neutral until the user edits.
+                    orchestrator.settings_screen_state.path_validation_results = if on {
+                        crate::ui::settings::validate_now::run_now(
+                            &orchestrator.wizard_state.step1,
+                        )
+                    } else {
+                        Default::default()
+                    };
                 }
             },
         );
