@@ -57,15 +57,15 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             &mut cols[0],
             palette,
             "Theme",
-            "match the rest of your desktop",
+            "light parchment or warm dark",
             |ui| {
                 let current = orchestrator.redesign_settings.theme_palette;
                 let clicked = segmented_toggle::render(
                     ui,
                     palette,
                     [
-                        ("Light", current == ThemeChoice::Light),
-                        ("Dark", current == ThemeChoice::Dark),
+                        ("light", current == ThemeChoice::Light),
+                        ("dark", current == ThemeChoice::Dark),
                     ],
                 );
                 if let Some(i) = clicked {
@@ -90,8 +90,10 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             &mut cols[1],
             palette,
             "Language",
-            "visual only \u{2014} i18n is coming",
+            "language used across the BIO app",
             |ui| {
+                // ComboBox pinned to right edge (right_to_left layout in the
+                // settings_row control slot).
                 let current_lang = orchestrator.redesign_settings.language;
                 let mut new_lang = current_lang;
                 egui::ComboBox::from_id_salt("settings_general_language")
@@ -110,6 +112,17 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
                     orchestrator.redesign_settings.language = new_lang;
                     orchestrator.redesign_settings_dirty = true;
                 }
+                // Status indicator: the picker persists but BIO ships
+                // Latin-only Poppins + has no i18n layer yet, so non-English
+                // selections currently have no visible effect (SPEC §11.1
+                // notes this is a v1-alpha visual stub).
+                ui.add_space(8.0);
+                ui.label(
+                    egui::RichText::new("(coming soon)")
+                        .size(11.0)
+                        .family(egui::FontFamily::Proportional)
+                        .color(redesign_text_faint(palette)),
+                );
             },
         );
     });
@@ -147,7 +160,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             &mut cols[1],
             palette,
             "Diagnostic mode",
-            "extra logs and dev-only buttons",
+            "extra logging for bug reports",
             |ui| {
                 let mut on = orchestrator.redesign_settings.diagnostic_mode;
                 let mut changed = false;

@@ -1049,7 +1049,7 @@ A `NameRow` at the top, then a 2-column grid of four settings:
 #### Other rows (2-col grid)
 
 - **Theme** — segmented `light` / `dark` (primary indicates active). Hint: "light parchment or warm dark".
-- **Language** — dropdown (egui `ComboBox`) of UI languages: `English` (default), `German`, `French`, `Spanish`, `Italian`, `Polish`, `Portuguese`, `Czech`, `Turkish`, `Ukrainian`. Hint: "language used across the BIO app". (This is distinct from the **install language** used by WeiDU; see [§11.5](#115-advanced).)
+- **Language** — dropdown (egui `ComboBox`) of UI languages: `English` (default), `German`, `French`, `Spanish`, `Italian`, `Polish`, `Portuguese`, `Czech`, `Turkish`, `Ukrainian`. Hint: "language used across the BIO app". A faint `(coming soon)` label sits to the left of the ComboBox indicating that the selection persists but doesn't yet drive rendering (v1 alpha ships Latin-only Poppins and no i18n surface; the picker stays writable so the user's eventual choice survives the i18n rollout). (This is distinct from the **install language** used by WeiDU; see [§11.5](#115-advanced).)
 - **Validate all paths on startup** — Toggle, default on. Hint: "warns if game folders moved".
 - **Diagnostic mode** — Toggle, default off. Hint: "extra logging for bug reports".
 
