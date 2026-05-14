@@ -21,8 +21,7 @@ infinity_orchestrator/wireframe-preview/node_modules/
 /Infinity Orchestrator Wireframe*.html
 /infinity_orchestrator.zip
 
-# AI assistant config + per-dir notes (local-only, not part of the project)
+# AI harness local config — machine-specific (permissions, paths).
+# Per-dir CLAUDE.md / AGENTS.md context files ARE tracked on this private
+# fork so the orientation notes travel with the repo across dev machines.
 .claude/
-CLAUDE.md
-AGENTS.md
-AGENT.md
