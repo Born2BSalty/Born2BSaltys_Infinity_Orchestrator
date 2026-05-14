@@ -1112,19 +1112,10 @@ The error message in `Warning`/`Error` describes the specific problem (`× not a
 
 ### 11.3 Tools
 
-Single section: `executable paths · auto-detected when possible`. Two row variants by use:
-
-**Writable PathRow** — for tools that have a `Step1Settings` backing field and that the user can override with a custom path. Same two-line layout as the Paths tab (label + input + browse on top; status text below the input column). The validator treats absolute paths as filesystem checks (`is_file`) and bare names as `$PATH` lookups: a bare name that resolves on `$PATH` shows `ok · <resolved absolute path>` so the user sees exactly which binary will run; a bare name that does NOT resolve shows `× not on $PATH — install or specify the full path` in danger tone.
+Two writable PathRows backed by `Step1Settings`, one per binary BIO's install runner actually invokes. Same two-line layout as the Paths tab (label + input + browse on top; status text below the input column). The validator treats absolute paths as filesystem checks (`is_file`) and bare names as `$PATH` lookups: a bare name that resolves on `$PATH` shows `ok · <resolved absolute path>` so the user sees exactly which binary will run; a bare name that does NOT resolve shows `× not on $PATH — install or specify the full path` in danger tone.
 
 - **WeiDU binary** → `Step1Settings::weidu_binary`. Hint shows detected version when available (e.g., `v249`).
 - **Mod installer** → `Step1Settings::mod_installer_binary`.
-
-**Detection-only row** — for tools we never let the user override because there's no `Step1Settings` field for them and the install runner only ever shells out to the system install. No input box, no browse button — just label + one line of status text.
-
-- **7-Zip executable** — found on `$PATH` at startup? show `found at <path>` in success-soft; otherwise `not installed — needed for archive extraction during install` in warning-soft.
-- **Git executable** — same pattern; not-installed line reads `needed for git-based mod updates`.
-
-Detection for the detection-only rows runs once in `OrchestratorApp::new` via the same `validate_now::resolve_on_path` helper that drives bare-name resolution for the writable rows, and is cached on `OrchestratorApp::tool_version_cache.{sevenzip,git}_path`.
 
 ### 11.4 Accounts
 
@@ -1149,31 +1140,30 @@ Disabling the unimplemented services (rather than letting the user click and sho
 
 ### 11.5 Advanced
 
-A 2-column grid.
+A 2-column grid (`ui.columns(2, ...)` → exactly 50 / 50 split per the wireframe's `gridTemplateColumns: "1fr 1fr"`). Each row uses an end-capped layout: label left-aligned, optional unit hint to its right, input / toggle flush-right at the column edge. The control stops at the column boundary regardless of label or hint length so a long hint never pushes adjacent rows.
 
-**Gate-absorbed value fields.** Every ValueRow in this section follows the absorb-the-gate pattern: today's BIO pairs each value with a boolean "enable" gate; the redesign drops the boolean. An **empty / cleared** value field means "use BIO's hard-coded default"; a **filled** value field means "override with this value". Same expressive power, half the controls. See [Appendix A.15](#a15-bio-step-1-toggles-not-in-the-wireframes-advanced-tab) for the dropped gates.
+**Gate-absorbed value fields.** Every ValueRow in this section follows the absorb-the-gate pattern: today's BIO pairs each value with a boolean "enable" gate; the redesign drops the boolean. An **empty / cleared** value field means "use BIO's hard-coded default" (shown in the input's placeholder text, e.g. `default 5`); a **filled** value field means "override with this value". Same expressive power, half the controls. See [Appendix A.15](#a15-bio-step-1-toggles-not-in-the-wireframes-advanced-tab) for the dropped gates.
 
 **Left column — Timing & limits** (ValueRow components):
 
-- `Custom scan depth` (placeholder `3`)
-- `Mod install timeout` (placeholder `7200`, hint `sec`)
-- `Mod install timeout (per mod)` (placeholder `—`, hint `sec · experimental`) — per-mod override of the global timeout; absorbed gate
-- `Auto-answer initial delay` (placeholder `4000`, hint `ms`)
-- `Auto-answer post-send delay` (placeholder `5000`, hint `ms`)
-- `Tick (dev)` (placeholder `500`, hint `ms`)
-- `Prompt context lookback` (placeholder `1007`)
+- `Custom scan depth` (placeholder `default 5`)
+- `Mod install timeout` (placeholder `default 3600`, hint `sec`)
+- `Auto-answer initial delay` (placeholder `default 2000`, hint `ms`)
+- `Auto-answer post-send delay` (placeholder `default 5000`, hint `ms`)
+- `Tick (dev)` (placeholder `default 500`, hint `ms`)
+- `Prompt context lookback` (placeholder `default 10`)
 
 **Right column — Install behavior** (ToggleRow components):
 
-- `Sound cue when prompt input is required` (default on)
-- `Download missing mods and keep archives` (default on)
-- `Case-insensitive component matching` (`casefold`, default off) — useful when importing a `weidu.log` from a different OS
+- `Prompt sound cue` (hint `beep when a prompt needs you`, default on)
+- `Download missing mods` (hint `fetch GitHub/Weasel/Morpheus during install`, default on)
+- `Casefold filename matching` (hint `ASCII case-insensitive lookups`, default off) — useful when importing a `weidu.log` from a different OS
 
 **Right column — WeiDU command-line flags** (ToggleRow components):
 
-- `-a   Abort on warnings` (default off)
-- `-x   Strict matching` (default off)
-- `-o   Overwrite mod folder` (default off)
+- `-a  abort on warnings` (default off)
+- `-x  strict matching` (default off) — bound to `Step1Settings::strict_matching`. The `-s` (skip installed) flag is **not** a user-visible toggle here; it's controlled by the Install Modlist `continue partial install` workflow per [§13.12](#1312-automatic-flag-policies) #1.
+- `-o  overwrite` (default off)
 
 ### 11.6 Removed from Settings (intentionally)
 

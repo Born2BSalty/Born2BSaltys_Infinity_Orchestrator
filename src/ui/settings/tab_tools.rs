@@ -3,17 +3,13 @@
 //
 // `tab_tools` — Tools sub-tab renderer.
 //
-// Per SPEC §11.3:
-//   - `weidu`         → `Step1Settings::weidu_binary` (writable, validated)
-//   - `mod_installer` → `Step1Settings::mod_installer_binary` (writable, validated)
-//   - `7-Zip executable` → detection-only (no Step1Settings backing field;
-//     system PATH is the only source)
-//   - `git executable`   → detection-only (same)
+// Per SPEC §11.3, two writable binary rows backed by `Step1Settings`:
+//   - `weidu`         → `Step1Settings::weidu_binary`
+//   - `mod_installer` → `Step1Settings::mod_installer_binary`
 //
-// Detection runs once in `OrchestratorApp::new` via `validate_now::resolve_on_path`
-// and is cached on `tool_version_cache.{sevenzip,git}_path`.
-
-use std::path::Path;
+// Validation runs in `validate_now::check_binary`: absolute paths are checked
+// with `is_file`; bare names are resolved against `$PATH` so the row tells
+// the truth about which binary will actually run.
 
 use eframe::egui;
 
@@ -22,10 +18,7 @@ use crate::ui::settings::state_settings::{PathStatus, PathStatusTone};
 use crate::ui::settings::validate_debounce;
 use crate::ui::settings::validate_now;
 use crate::ui::settings::widgets::path_row::{self, PathRowMode};
-use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_pill_danger, redesign_success_soft, redesign_text_faint,
-    redesign_text_primary, redesign_warning_soft,
-};
+use crate::ui::shared::redesign_tokens::ThemePalette;
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
@@ -52,27 +45,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             .tool_version_cache
             .mod_installer_version
             .clone(),
-    );
-
-    ui.add_space(8.0);
-
-    // Detection-only rows — no input, no browse, since these don't have
-    // backing fields in Step1Settings. They show system-wide install status
-    // so the user knows whether archive extraction (7z) and git-based mod
-    // updates will work.
-    detection_row(
-        ui,
-        palette,
-        "7-Zip executable",
-        orchestrator.tool_version_cache.sevenzip_path.as_deref(),
-        "needed for archive extraction during install",
-    );
-    detection_row(
-        ui,
-        palette,
-        "Git executable",
-        orchestrator.tool_version_cache.git_path.as_deref(),
-        "needed for git-based mod updates",
     );
 }
 
@@ -132,55 +104,4 @@ fn field_mut<'a>(
         f if f == validate_now::FIELD_MOD_INSTALLER_BINARY => Some(&mut step1.mod_installer_binary),
         _ => None,
     }
-}
-
-/// Read-only detection row for tools we don't allow the user to override
-/// (no Step1Settings backing field). Renders the label + a single line of
-/// status text indicating whether the tool was found on `$PATH` at startup.
-fn detection_row(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    label: &str,
-    resolved: Option<&Path>,
-    purpose: &str,
-) {
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
-            // Label column (same fixed width as the binary rows so the two
-            // sections line up visually).
-            let (label_rect, _) = ui.allocate_exact_size(
-                egui::vec2(160.0, 24.0),
-                egui::Sense::hover(),
-            );
-            ui.painter().text(
-                egui::pos2(label_rect.left(), label_rect.center().y),
-                egui::Align2::LEFT_CENTER,
-                label,
-                egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into())),
-                redesign_text_primary(palette),
-            );
-
-            let (text, color) = match resolved {
-                Some(path) => (
-                    format!("found at {}", path.display()),
-                    redesign_success_soft(palette),
-                ),
-                None => (
-                    format!("not installed \u{2014} {purpose}"),
-                    redesign_warning_soft(palette),
-                ),
-            };
-            ui.label(
-                egui::RichText::new(text)
-                    .size(12.0)
-                    .family(egui::FontFamily::Proportional)
-                    .color(color),
-            );
-        });
-    });
-    ui.add_space(6.0);
-    // Suppress unused warning for danger token — reserved for a future
-    // "found but broken" state once we shell out to `7z --help` / `git --version`.
-    let _ = redesign_pill_danger;
-    let _ = redesign_text_faint;
 }

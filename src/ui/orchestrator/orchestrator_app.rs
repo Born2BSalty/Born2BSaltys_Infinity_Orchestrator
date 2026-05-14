@@ -103,13 +103,6 @@ const BIO_SETTINGS_DEBOUNCE_MS: u64 = 1000;
 pub struct ToolVersionCache {
     pub weidu_version: Option<String>,
     pub mod_installer_version: Option<String>,
-    /// Resolved path to `7z` on `$PATH` at app startup, or `None` if not
-    /// installed system-wide. 7z is used by BIO's install runner for archive
-    /// extraction; there's no `Step1Settings` backing field — system PATH is
-    /// the only source.
-    pub sevenzip_path: Option<std::path::PathBuf>,
-    /// Resolved path to `git` on `$PATH` at app startup, or `None`.
-    pub git_path: Option<std::path::PathBuf>,
 }
 
 pub struct OrchestratorApp {
@@ -269,14 +262,6 @@ impl OrchestratorApp {
         // edit to seed `path_validation_results.fields`.
         app.settings_screen_state.path_validation_results =
             crate::ui::settings::validate_now::run_now(&app.wizard_state.step1);
-
-        // Detect system-wide 7z and git once at startup so the Tools tab's
-        // detection-only rows can render their actual state instead of a
-        // hardcoded placeholder.
-        app.tool_version_cache.sevenzip_path =
-            crate::ui::settings::validate_now::resolve_on_path("7z");
-        app.tool_version_cache.git_path =
-            crate::ui::settings::validate_now::resolve_on_path("git");
 
         app
     }
