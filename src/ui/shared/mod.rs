@@ -5,3 +5,8 @@ pub mod layout_tokens_global;
 pub mod theme_global;
 pub mod tooltip_global;
 pub mod typography_global;
+
+// Redesign modules (Infinity Orchestrator) — additive registration per
+// CRITICAL DIRECTIVE carve-out #3 companion provision.
+pub mod redesign_fonts;
+pub mod redesign_tokens;

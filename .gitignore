@@ -15,3 +15,14 @@ Thumbs.db
 *~
 
 Push\ Github.bat
+
+# Infinity Orchestrator redesign — generated / regenerable / archive artifacts
+infinity_orchestrator/wireframe-preview/node_modules/
+/Infinity Orchestrator Wireframe*.html
+/infinity_orchestrator.zip
+
+# AI assistant config + per-dir notes (local-only, not part of the project)
+.claude/
+CLAUDE.md
+AGENTS.md
+AGENT.md

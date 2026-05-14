@@ -1,0 +1,487 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 Born2BSalty
+//
+// `OrchestratorApp` — standalone `eframe::App` impl powering the new
+// `infinity_orchestrator` binary.
+//
+// Phase 2 fields (per P2.T3):
+//   - `nav` — active destination
+//   - `wizard_state` — orchestrator-owned `bio::app::state::WizardState`
+//     (constructed directly; field is `pub` and all step substates are `pub`)
+//   - `settings_store` — orchestrator-owned `bio::settings::SettingsStore`
+//   - `dev_mode` — CLI flag passthrough (OR'd with persisted toggle per M12)
+//   - `exe_fingerprint` — populated by bootstrap_init
+//   - `path_validation` — derived per frame from `wizard_state.step1`
+//   - `theme_palette` — H3: theme state lives on the app, NOT in a global
+//     atomic. Read once per frame, passed into render code explicitly.
+//
+// Phase 3 fields (per P3.T7):
+//   - `registry`, `registry_store`, `registry_error`, `registry_backup_path`,
+//     `persistence_cycle`, `workspace_state`, `workspace_stores`,
+//     `home_stub_state` — see field comments.
+//
+// Phase 4 fields:
+//   - `redesign_settings` + `redesign_settings_store` — sibling
+//     `bio_redesign_settings.json` persistence per P4.T10.
+//   - `redesign_settings_dirty` — flag flipped by tab_general / tab_paths /
+//     tab_advanced edits; settings are persisted on a 1s debounce.
+//   - `redesign_settings_last_dirty_at` — debounce timestamp for the
+//     redesign settings file.
+//   - `redesign_settings_last_saved` — snapshot for change detection.
+//   - `settings_screen_state` — per-screen UI state (active tab, name-row
+//     edit toggle, debounce timestamps, last validation report).
+//   - `github_auth_rx` — owned channel receiver for the GitHub OAuth device
+//     flow. Replicates the surface of `WizardApp::step1_github_auth_rx` (per
+//     C2 audit, `handle_step1_action` was disqualified from the carve-out
+//     because it mutates this field on the WizardApp side).
+//   - `tool_version_cache` — `weidu --help` / `mod_installer --version`
+//     parsed strings. Phase 4 ships an empty cache; Phase 7 wires the live
+//     detection.
+//   - `dev_mode_cli_flag` — raw CLI dev_mode (without the OR'd persisted
+//     toggle) — preserved so that toggling Diagnostic mode off in Settings
+//     doesn't disable dev mode if the user launched with `-d`.
+//   - `validate_paths_on_startup` — General-tab toggle, in-memory only for
+//     v1 alpha (no persistent backing).
+//   - `accounts_stub_hint` — last status string shown under Nexus/Mega
+//     stub cards.
+//
+// `OrchestratorApp::new(dev_mode)` per H5: calls
+// `bio::app::app_bootstrap_init::initialize(dev_mode)` directly (no inline
+// duplicated logic).
+//
+// **H4 — Persistence on exit.** `eframe::App::on_exit` is the **primary**
+// hook (called before `Drop` on normal shutdown). `Drop for OrchestratorApp`
+// is the **fallback** (catches panic-unwind / hard exit edge cases). Both
+// call `flush_all_now`, which is idempotent.
+//
+// SPEC: §2.1, §11, §13.1, §13.14, overview "Architecture" section.
+
+use std::collections::HashMap;
+use std::sync::mpsc::Receiver;
+use std::time::{Duration, Instant};
+
+use eframe::egui;
+use tracing::warn;
+
+use crate::app::app_bootstrap_init;
+use crate::app::app_step1_github_oauth::GitHubOAuthFlowResult;
+use crate::app::state::WizardState;
+use crate::registry::errors::RegistryError;
+use crate::registry::model::ModlistRegistry;
+use crate::registry::persistence_cycle::RegistryPersistenceCycle;
+use crate::registry::store::RegistryStore;
+use crate::registry::store_workspace::WorkspaceStore;
+use crate::registry::workspace_model::ModlistWorkspaceState;
+use crate::settings::model::AppSettings;
+use crate::settings::redesign_fields::{RedesignSettings, ThemeChoice};
+use crate::settings::redesign_store::RedesignSettingsStore;
+use crate::settings::store::SettingsStore;
+use crate::ui::orchestrator::left_rail;
+use crate::ui::orchestrator::nav_destination::NavDestination;
+use crate::ui::orchestrator::nav_status::{
+    PathValidationKind, PathValidationSummary, compute_path_validation_summary,
+};
+use crate::ui::orchestrator::page_router;
+use crate::ui::orchestrator::stubs::home_stub::HomeStubState;
+use crate::ui::settings::oauth_glue;
+use crate::ui::settings::state_settings::SettingsScreenState;
+use crate::ui::settings::validate_debounce;
+use crate::ui::shared::redesign_tokens::{REDESIGN_NAV_WIDTH_PX, ThemePalette};
+use crate::ui::shell::shell_chrome;
+
+/// 1-second debounce on the redesign settings file (matches Phase 3's
+/// registry cycle cadence).
+const REDESIGN_SETTINGS_DEBOUNCE_MS: u64 = 1000;
+/// 1-second debounce on the BIO `bio_settings.json` writes (mirrors BIO's
+/// existing `app_update_cycle::persist_step1_if_needed` cadence).
+const BIO_SETTINGS_DEBOUNCE_MS: u64 = 1000;
+
+/// Cached detected versions for the Tools sub-tab. Phase 4 ships an empty
+/// cache; the Tools tab renders blank hints until Phase 7 wires the live
+/// detection.
+#[derive(Debug, Clone, Default)]
+pub struct ToolVersionCache {
+    pub weidu_version: Option<String>,
+    pub mod_installer_version: Option<String>,
+}
+
+pub struct OrchestratorApp {
+    /// Active destination router.
+    pub nav: NavDestination,
+    /// Orchestrator-owned `WizardState`. Independent of `WizardApp`'s state.
+    pub wizard_state: WizardState,
+    /// Persistence store for `bio_settings.json`. Owned per-process; the
+    /// orchestrator instantiates its own.
+    pub settings_store: SettingsStore,
+    /// Dev-mode toggle (OR of CLI flag + Settings → General toggle).
+    pub dev_mode: bool,
+    /// Raw CLI dev-mode flag — held so we can OR with the persisted toggle
+    /// across runtime updates without losing the launch-time enable.
+    pub dev_mode_cli_flag: bool,
+    /// Executable fingerprint produced by bootstrap_init.
+    pub exe_fingerprint: String,
+    /// Per-frame cached path-validation summary used by the left rail's
+    /// bottom status row.
+    pub path_validation: PathValidationSummary,
+    /// Active theme palette. H3: per-frame propagation, NOT a global atomic.
+    pub theme_palette: ThemePalette,
+
+    // ---------- Phase 3 fields ----------
+    pub registry: ModlistRegistry,
+    pub registry_store: RegistryStore,
+    pub registry_error: Option<RegistryError>,
+    pub registry_backup_path: Option<std::path::PathBuf>,
+    pub persistence_cycle: RegistryPersistenceCycle,
+    pub workspace_state: HashMap<String, ModlistWorkspaceState>,
+    pub workspace_stores: HashMap<String, WorkspaceStore>,
+    pub home_stub_state: HomeStubState,
+
+    // ---------- Phase 4 fields ----------
+    pub redesign_settings: RedesignSettings,
+    pub redesign_settings_store: RedesignSettingsStore,
+    pub redesign_settings_dirty: bool,
+    pub redesign_settings_last_dirty_at: Option<Instant>,
+    pub redesign_settings_last_saved: RedesignSettings,
+    pub settings_screen_state: SettingsScreenState,
+    pub(crate) github_auth_rx: Option<Receiver<GitHubOAuthFlowResult>>,
+    pub tool_version_cache: ToolVersionCache,
+    pub validate_paths_on_startup: bool,
+    pub accounts_stub_hint: Option<String>,
+    /// BIO `bio_settings.json` snapshot + debounce timestamp. The
+    /// orchestrator persists Step1 settings whenever the in-memory copy
+    /// drifts from the on-disk snapshot.
+    pub bio_settings_last_saved: AppSettings,
+    pub bio_settings_last_dirty_at: Option<Instant>,
+}
+
+impl OrchestratorApp {
+    /// Construct an orchestrator app instance.
+    pub fn new(dev_mode: bool) -> Self {
+        let bootstrap = app_bootstrap_init::initialize(dev_mode);
+
+        let mut wizard_state = WizardState::default();
+        wizard_state.step1 = bootstrap.step1.clone();
+        wizard_state.github_auth_login = bootstrap.github_auth_login;
+
+        let path_validation = compute_path_validation_summary(&wizard_state);
+
+        // ---------- Registry init ----------
+        let registry_store = RegistryStore::new_default();
+        let mut registry_error: Option<RegistryError> = None;
+        let mut registry_backup_path: Option<std::path::PathBuf> = None;
+        let registry = match registry_store.load() {
+            Ok(reg) => reg,
+            Err(err) => {
+                warn!(
+                    target = "orchestrator",
+                    "modlists.json load failed: {err}; backing up and entering terminal-error state"
+                );
+                match registry_store.backup_corrupt_file() {
+                    Ok(new_path) => registry_backup_path = Some(new_path),
+                    Err(backup_err) => warn!(
+                        target = "orchestrator",
+                        "backup_corrupt_file failed: {backup_err}"
+                    ),
+                }
+                registry_error = Some(err);
+                ModlistRegistry::default()
+            }
+        };
+
+        let persistence_cycle =
+            RegistryPersistenceCycle::new_with_baseline(registry.clone());
+
+        // ---------- Redesign settings init (Phase 4) ----------
+        let redesign_settings_store = RedesignSettingsStore::new_default();
+        let redesign_settings = match redesign_settings_store.load() {
+            Ok(s) => s,
+            Err(err) => {
+                warn!(
+                    target = "orchestrator",
+                    "bio_redesign_settings.json load failed: {err}; using defaults"
+                );
+                RedesignSettings::default()
+            }
+        };
+        let theme_palette = match redesign_settings.theme_palette {
+            ThemeChoice::Light => ThemePalette::Light,
+            ThemeChoice::Dark => ThemePalette::Dark,
+        };
+        let effective_dev_mode = dev_mode || redesign_settings.diagnostic_mode;
+        let bio_settings_snapshot = AppSettings {
+            exe_fingerprint: bootstrap.exe_fingerprint.clone(),
+            step1: bootstrap.step1.clone().into(),
+        };
+
+        let mut app = Self {
+            nav: NavDestination::default(),
+            wizard_state,
+            settings_store: bootstrap.settings_store,
+            dev_mode: effective_dev_mode,
+            dev_mode_cli_flag: dev_mode,
+            exe_fingerprint: bootstrap.exe_fingerprint,
+            path_validation,
+            theme_palette,
+
+            registry,
+            registry_store,
+            registry_error,
+            registry_backup_path,
+            persistence_cycle,
+            workspace_state: HashMap::new(),
+            workspace_stores: HashMap::new(),
+            home_stub_state: HomeStubState::default(),
+
+            redesign_settings_last_saved: redesign_settings.clone(),
+            redesign_settings,
+            redesign_settings_store,
+            redesign_settings_dirty: false,
+            redesign_settings_last_dirty_at: None,
+            settings_screen_state: SettingsScreenState::default(),
+            github_auth_rx: None,
+            tool_version_cache: ToolVersionCache::default(),
+            validate_paths_on_startup: true,
+            accounts_stub_hint: None,
+            bio_settings_last_saved: bio_settings_snapshot,
+            bio_settings_last_dirty_at: None,
+        };
+
+        // Try to surface the persisted GitHub login (no-op if no token).
+        oauth_glue::load_persisted_login(&mut app);
+
+        // Run per-field validation once at startup so any prefilled paths
+        // (loaded from bio_settings.json) show their inline status the moment
+        // the user opens Settings → Paths — instead of waiting for the first
+        // edit to seed `path_validation_results.fields`.
+        app.settings_screen_state.path_validation_results =
+            crate::ui::settings::validate_now::run_now(&app.wizard_state.step1);
+
+        app
+    }
+
+    /// Per-frame poll: try to flush pending registry / workspace writes if
+    /// their debounce has elapsed.
+    fn tick_persistence(&mut self) {
+        if self.registry_error.is_some() {
+            return;
+        }
+        let now = Instant::now();
+        if let Err(err) =
+            self.persistence_cycle
+                .persist_registry_if_needed(&self.registry, &self.registry_store, now)
+        {
+            warn!(target = "orchestrator", "persist_registry_if_needed failed: {err}");
+        }
+        for (id, ws) in self.workspace_state.iter() {
+            let Some(store) = self.workspace_stores.get(id) else {
+                continue;
+            };
+            if let Err(err) =
+                self.persistence_cycle
+                    .persist_workspace_if_needed(id, ws, store, now)
+            {
+                warn!(
+                    target = "orchestrator",
+                    "persist_workspace_if_needed({id}) failed: {err}"
+                );
+            }
+        }
+
+        // Redesign settings debounce.
+        if self.redesign_settings_dirty
+            && self.redesign_settings != self.redesign_settings_last_saved
+        {
+            self.redesign_settings_last_dirty_at.get_or_insert(now);
+            if let Some(at) = self.redesign_settings_last_dirty_at
+                && now.saturating_duration_since(at)
+                    >= Duration::from_millis(REDESIGN_SETTINGS_DEBOUNCE_MS)
+            {
+                match self.redesign_settings_store.save(&self.redesign_settings) {
+                    Ok(()) => {
+                        self.redesign_settings_last_saved = self.redesign_settings.clone();
+                        self.redesign_settings_dirty = false;
+                        self.redesign_settings_last_dirty_at = None;
+                    }
+                    Err(err) => {
+                        warn!(target = "orchestrator", "redesign settings save failed: {err}");
+                    }
+                }
+            }
+        }
+
+        // BIO settings debounce — persists Step1 edits made via the Settings
+        // → Paths / Tools / Advanced tabs.
+        self.tick_bio_settings(now);
+    }
+
+    fn tick_bio_settings(&mut self, now: Instant) {
+        let snapshot = AppSettings {
+            exe_fingerprint: self.exe_fingerprint.clone(),
+            step1: self.wizard_state.step1.clone().into(),
+        };
+        if snapshot == self.bio_settings_last_saved {
+            self.bio_settings_last_dirty_at = None;
+            return;
+        }
+        self.bio_settings_last_dirty_at.get_or_insert(now);
+        if let Some(at) = self.bio_settings_last_dirty_at
+            && now.saturating_duration_since(at)
+                >= Duration::from_millis(BIO_SETTINGS_DEBOUNCE_MS)
+        {
+            match self.settings_store.save(&snapshot) {
+                Ok(()) => {
+                    self.bio_settings_last_saved = snapshot;
+                    self.bio_settings_last_dirty_at = None;
+                }
+                Err(err) => {
+                    warn!(target = "orchestrator", "bio_settings save failed: {err}");
+                }
+            }
+        }
+    }
+
+    /// Synchronous full flush. Called from both `on_exit` (primary) and
+    /// `Drop` (fallback). Idempotent.
+    fn flush_all_now(&mut self) {
+        if self.registry_error.is_some() {
+            return;
+        }
+        let errs = self.persistence_cycle.flush_all(
+            &self.registry,
+            &self.registry_store,
+            &self.workspace_state,
+            &self.workspace_stores,
+        );
+        for err in errs {
+            warn!(target = "orchestrator", "flush_all error: {err}");
+        }
+        if self.redesign_settings != self.redesign_settings_last_saved {
+            if let Err(err) = self.redesign_settings_store.save(&self.redesign_settings) {
+                warn!(target = "orchestrator", "redesign settings flush failed: {err}");
+            } else {
+                self.redesign_settings_last_saved = self.redesign_settings.clone();
+            }
+        }
+        let bio_snapshot = AppSettings {
+            exe_fingerprint: self.exe_fingerprint.clone(),
+            step1: self.wizard_state.step1.clone().into(),
+        };
+        if bio_snapshot != self.bio_settings_last_saved {
+            if let Err(err) = self.settings_store.save(&bio_snapshot) {
+                warn!(target = "orchestrator", "bio_settings flush failed: {err}");
+            } else {
+                self.bio_settings_last_saved = bio_snapshot;
+            }
+        }
+    }
+}
+
+impl eframe::App for OrchestratorApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let palette = self.theme_palette;
+
+        // Phase 4 P4.T11b — per-edit debounced path validation. Runs once per
+        // frame; fields whose debounce window has elapsed get re-validated.
+        validate_debounce::tick(self, Instant::now());
+        // egui paints lazily — without an explicit repaint request, the tick
+        // wouldn't fire again until the next user event, so a debounce set
+        // during typing could hang for several seconds before the user moves
+        // the mouse. Request a frame exactly when the soonest pending
+        // debounce window will elapse.
+        if let Some(next_due_in) = next_debounce_due_in(self) {
+            ctx.request_repaint_after(next_due_in);
+        }
+
+        // Drive the OAuth flow's receiver (if any). Mutates wizard_state
+        // (`github_auth_*` fields) per BIO's existing `poll_github_oauth_flow`.
+        oauth_glue::poll_github_oauth_flow(self);
+
+        // Per-frame path validation summary (left rail bottom).
+        self.path_validation = compute_path_validation_summary(&self.wizard_state);
+        // If the screen's last full-validation report disagrees with the live
+        // state, layer that into the rail summary so the rail reflects the
+        // most recent edit.
+        if self.settings_screen_state.path_validation_results.issue_count > 0
+            && self.path_validation.kind == PathValidationKind::Ok
+        {
+            self.path_validation = PathValidationSummary {
+                kind: PathValidationKind::Err(
+                    self.settings_screen_state.path_validation_results.issue_count,
+                ),
+                text: format!(
+                    "\u{00D7} {} path issues",
+                    self.settings_screen_state.path_validation_results.issue_count
+                ),
+            };
+        }
+
+        let modlist_count = self.registry.entries.len();
+        let jobs_running = 0usize;
+
+        shell_chrome::render_shell(ctx, palette, modlist_count, jobs_running, |ui| {
+            egui::SidePanel::left("orchestrator_left_rail")
+                .exact_width(REDESIGN_NAV_WIDTH_PX)
+                .resizable(false)
+                .show_separator_line(false)
+                .frame(egui::Frame::NONE)
+                .show_inside(ui, |ui| {
+                    left_rail::render(
+                        ui,
+                        palette,
+                        &mut self.nav,
+                        self.dev_mode,
+                        &self.path_validation,
+                        None,
+                    );
+                });
+
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+                    left: 28,
+                    right: 28,
+                    top: 24,
+                    bottom: 24,
+                }))
+                .show_inside(ui, |ui| {
+                    page_router::render(ui, self, ctx);
+                });
+        });
+
+        // Phase 4 P4.T9 — overlay the OAuth popup over the active destination
+        // when the wizard state has it open. Must run **after** the shell so
+        // the popup floats above the rail / page chrome.
+        oauth_glue::render_github_popup_if_open(self, ctx);
+
+        // Per-frame persistence tick.
+        self.tick_persistence();
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.flush_all_now();
+    }
+}
+
+impl Drop for OrchestratorApp {
+    fn drop(&mut self) {
+        self.flush_all_now();
+    }
+}
+
+/// Returns the soonest `Duration` from now at which any field's debounce
+/// window will elapse, or `None` if no field is currently pending. Used to
+/// request a precisely-timed repaint so the next `validate_debounce::tick`
+/// runs even without intervening user input.
+fn next_debounce_due_in(app: &OrchestratorApp) -> Option<std::time::Duration> {
+    let threshold = std::time::Duration::from_millis(
+        crate::ui::settings::validate_debounce::DEBOUNCE_MS,
+    );
+    let now = Instant::now();
+    app.settings_screen_state
+        .path_edit_debounce
+        .values()
+        .map(|at| {
+            let elapsed = now.saturating_duration_since(*at);
+            threshold.saturating_sub(elapsed)
+        })
+        .min()
+}

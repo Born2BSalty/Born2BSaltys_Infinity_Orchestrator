@@ -1,0 +1,323 @@
+# Phase 7 — Step 5 install runtime + Reinstall + import-code auto-write + install concurrency + rail-nav lock
+
+## Summary
+
+Wrap the existing BIO Step 5 install runtime in the new workspace chrome. The runtime itself — `bio::app::app_step5_flow`, the embedded terminal (`bio::app::terminal::EmbeddedTerminal`), the WeiDU child-process spawn, prompt detection, auto-answer engine (`prompt_answers.json`), diagnostics bundle writer, Actions/Diagnostics menus, Prompt Answers window — stays exactly as today's BIO. The new chrome **calls `bio::ui::step5::page_step5::render` directly** (the public top-level renderer with the verified signature `pub fn render(ui, &mut WizardState, &mut Step5ConsoleViewState, Option<&mut EmbeddedTerminal>, Option<&str>, dev_mode, exe_fingerprint) -> Option<Step5Action>`) and wraps the new chrome **around** that embedded panel — in sibling rows above and below — rather than reaching inside the existing Step 5 module tree.
+
+The redesign adds (as net-new components per the CRITICAL DIRECTIVE): the pre-install chrome row (success banner placeholder, command-card / summary-card row when no install is running yet), the post-install chrome row (success banner, post-install action row with `Share import code`, `Return to Home`, `Open install folder`), the workspace nav lock once Install is clicked, the `in-progress` → `installed` registry transition, the install concurrency policy gate, the **rail-navigation lock during an in-flight install (per C5)**, the Install Modlist stage 4 wiring, the Reinstall flow, and the `modlist-import-code.txt` auto-write on install start. The Step 5 action returned by the embedded panel (currently only `Step5Action::StartInstall`) is dispatched via the **same `bio::app::*` public functions BIO's existing `handle_step5_action` calls** (`state.step5.start_install_requested = true`).
+
+**Clean-exit definition (per C3, replaces every `errors_detected` reference).** BIO's `Step5State` (verified at `src/core/app/state/state_step5.rs:12-66`) has no `errors_detected` field. The canonical "clean install" gate used by BIO's own Export Modlist button (`src/ui/step5/content/content_install_row_step5.rs:115-117`) is `state.step5.has_run_once && !state.step5.install_running && state.step5.last_exit_code == Some(0)`. For Phase 7's success-banner gate, registry transition trigger, and post-install action row visibility, this plan uses the equivalent triple:
+
+```
+state.step5.install_running == false
+    && state.step5.last_exit_code == Some(0)
+    && state.step5.last_install_failed == false
+```
+
+Each field is `pub` per `state_step5.rs:17-19`. `last_install_failed` is set from `term.likely_failure_visible()` at `src/core/app/step5_runtime_status.rs:72` on every exit; `last_exit_code` is set on the same line at `:73`; `install_running` is toggled false at `:74`. The triple supersedes every occurrence of `errors_detected == 0` in earlier drafts of this plan.
+
+## What ships after this phase
+
+- `cargo build --bin infinity_orchestrator --release` succeeds.
+- Inside the Workspace, Step 5 renders the real pre-install layout:
+  - New chrome row **above** the embedded panel: workspace title row plus an empty banner slot (visible only post-install).
+  - Embedded panel: `bio::ui::step5::page_step5::render` produces BIO's existing Step 5 view (Command card preview, Summary card, Actions/Diagnostics menus, Prompt Answers, console-filter labels, Auto-scroll, console box embedding `EmbeddedTerminal`, prompt input row).
+  - New chrome row **below** the embedded panel: post-install action row (hidden pre-install).
+- Clicking `Install`:
+  - The action returned from the embedded `page_step5::render` is `Step5Action::StartInstall`; the orchestrator dispatches it the same way BIO does (flip `state.step5.start_install_requested = true`). BIO's `bio::app::app_update_cycle::start_after_render` then kicks off the install on the next poll, exactly as in the legacy wizard.
+  - The console streams `mod_installer` output live (BIO's existing terminal + status renderers handle this — orchestrator does not duplicate them).
+  - Prompts auto-answer from `prompt_answers.json` + `@wlb-inputs` (BIO's existing engine).
+  - The `← Previous` nav button becomes disabled with tooltip "Disabled while install is running or after a successful install".
+  - The statusbar shows `1 job running · <modlist> · <elapsed>`.
+- On clean exit (the C3 triple: `state.step5.install_running == false && state.step5.last_exit_code == Some(0) && state.step5.last_install_failed == false`):
+  - Success banner replaces the empty banner slot in the chrome row above: green `Installed` pill + `<N> mods · <C> components · no errors` + `ran <MM:SS> · finished <relative>`.
+  - The new chrome row immediately above the embedded panel (per H9, visually adjacent to BIO's now-disabled Install button) shows two primary actions: `Return to Home` + `Open install folder`.
+  - The workspace header's `Share import code` button flips to primary teal CTA; clicking opens `SharePasteCodeDialog`.
+  - The modlist transitions from `in-progress` to `installed` in the registry.
+  - On Home, the entry now appears under the `Installed` filter chip.
+- Install Modlist's stage 4 is fully wired. It does **not** use the workspace chrome (the user came in from Install rather than Create); it composes its own simpler progress screen around `page_step5::render`.
+- Reinstall (from Home Kebab on an installed card): danger confirm dialog → routes through Install Modlist preview with overwrite-install mode forced → user clicks Install in the preview → registry flips `Installed` → `InProgress` → install runs. Cancelling at the preview leaves the modlist in `Installed`.
+- `modlist-import-code.txt` is written to the install destination at the start of every install, regardless of entry point.
+- Install concurrency: only one install runs at a time across the app. Other modlists' Install buttons are gated with the SPEC tooltip.
+- **Rail-navigation lock (per C5).** When an install is running, every left-rail item (Home / Install / Create / Settings) is rendered disabled with the SPEC §13.15 tooltip. The user stays in the running install's workspace until cancel or completion. The workspace state loader (Phase 6 P6.T1) is never invoked while an install is running — eliminating the swap-mid-install corruption risk that earlier drafts mitigated with `registry_snapshot` (now dropped per H8).
+
+## What's still missing
+
+- Theme-token reskins on the Step 5 console, BIO popups (Compat, Prompt, Update Check, OAuth) — Phase 8.
+- Final visual polish — Phase 8.
+
+## Dependencies
+
+- Phase 6 (Workspace shell with Step 5 stub; `OrchestratorApp` owns its own `WizardState`).
+- Phase 5 (Install Modlist paste / preview / download stages; Home Reinstall confirm). **Phase 5 also introduces `src/ui/shared/format_relative.rs`** (per L9, used by Home cards and Workspace headers); Phase 7 reuses it for the success banner's `<MM:SS>` / `<H:MM:SS>` duration rendering (P7.T4's `format_install_duration` helper lives in this same file).
+- Phase 3 (registry state transitions).
+
+## File inventory
+
+### New files
+
+| Path | Purpose | Depends on |
+|------|---------|-----------|
+| `src/ui/workspace/step5/mod.rs` | `pub mod page_workspace_step5; pub mod success_banner; pub mod post_install_actions; pub mod share_paste_code_dialog; pub mod state_workspace_step5;` | — |
+| `src/ui/workspace/step5/page_workspace_step5.rs` | Top-level Step 5 chrome. Renders the success-banner row above, then **calls `bio::ui::step5::page_step5::render(ui, &mut orchestrator.wizard_state, &mut orchestrator.step5_console_view, orchestrator.step5_terminal.as_mut(), orchestrator.step5_terminal_error.as_deref(), orchestrator.dev_mode, &orchestrator.exe_fingerprint)` to render BIO's entire Step 5 panel**, then renders the post-install action row above the panel per H9. The returned `Option<Step5Action>` is dispatched via the same `bio::app::*` public dispatch functions BIO's existing handler calls (currently `state.step5.start_install_requested = true` for `StartInstall`). | BIO `page_step5::render` (read-only) |
+| `src/ui/workspace/step5/state_workspace_step5.rs` | Local UI state for the chrome wrap-around only: `share_dialog_open: bool`, `post_install_action_pending: Option<PostInstallAction>` (Return to Home / Open install folder). The embedded panel's UI state (console-filter selection, auto-scroll, prompt-answers panel open) lives in `Step5ConsoleViewState` (BIO field already exposed via `OrchestratorApp`). | — |
+| `src/ui/workspace/step5/success_banner.rs` | Renders the post-install banner above the embedded panel: green `Installed` pill + `<N> mods · <C> components · no errors` + `ran <MM:SS> · finished <relative>`. Visible only when the C3 clean-exit triple holds: `state.step5.install_running == false && state.step5.last_exit_code == Some(0) && state.step5.last_install_failed == false`. | redesign widgets |
+| `src/ui/workspace/step5/post_install_actions.rs` | Renders the post-install action row immediately above the embedded panel (per H9 — visually adjacent to BIO's now-disabled Install button at the top of that panel): `Return to Home` + `Open install folder` buttons. Visible only when the C3 clean-exit triple holds. | redesign widgets |
+| `src/ui/workspace/step5/share_paste_code_dialog.rs` | Non-blocking `egui::Window` popup (per SPEC §10) opened from `Share import code` in `workspace_header.rs`. Title + sub + monospace scrollable box + Copy / Close buttons. Uses BIO `modlist_share::export_modlist_share_code`. | redesign widgets, BIO `modlist_share::export_modlist_share_code` |
+| `src/install_runtime/mod.rs` | `pub mod import_code_writer; pub mod start_hooks; pub mod registry_transition; pub mod install_concurrency; pub mod rail_lock_reason; pub mod flag_policies; pub mod reinstall_route;` | — |
+| `src/install_runtime/import_code_writer.rs` | `pub fn write_modlist_import_code_txt(install_destination: &Path, share_code: &str) -> Result<()>` — writes `modlist-import-code.txt` to the destination folder before WeiDU runs. | std::fs |
+| `src/install_runtime/start_hooks.rs` | `pub fn on_install_start(modlist_id: &str, wizard_state: &WizardState, registry: &mut ModlistRegistry, store: &RegistryStore)`. Computes share code via `bio::app::modlist_share::export_modlist_share_code`, writes `modlist-import-code.txt`, records `install_started_at` in the registry entry. Called from each Install button's click handler just before flipping `start_install_requested = true`. | `import_code_writer`, registry, BIO `modlist_share` |
+| `src/install_runtime/registry_transition.rs` | `pub fn flip_to_installed(id: &str, runtime_stats: InstallStats, registry: &mut ModlistRegistry, store: &RegistryStore)` — performs the state transition + records `install_date` + updates `mod_count` / `component_count` / `total_size_bytes` / `latest_share_code`. Atomic registry write. Called when the post-install panel detects clean-exit. Also `pub fn flip_to_in_progress(id: &str, registry: &mut ModlistRegistry, store: &RegistryStore)` for the install-start path used by Reinstall (see P7.T10). | registry |
+| `src/install_runtime/install_concurrency.rs` | `pub fn install_in_progress(orchestrator: &OrchestratorApp) -> Option<RunningInstall>` — reads `orchestrator.wizard_state.step5.install_running` plus the active workspace id. Returns `Some(RunningInstall { modlist_id, started_at })` while an install is in flight. Used both to gate every Install button across the app (P7.T9) and to power the rail-nav lock (P7.T9b per C5). | `OrchestratorApp` |
+| `src/install_runtime/rail_lock_reason.rs` | **Per C5.** `pub enum RailLockReason { InstallRunning { modlist_id: String, started_at: Instant } }`. The orchestrator computes this once per frame and passes `Option<&RailLockReason>` to `nav_rail::render` to disable all four rail items with the SPEC §13.15 tooltip when an install is running. | `Instant` |
+| `src/install_runtime/flag_policies.rs` | `pub fn compute_flags(workflow: InstallWorkflow, settings: &Step1Settings) -> Vec<&'static str>` — wires SPEC §13.12 policies #1 (`-s` / `-c` for Continue Partial Install) and #5 (`--download` auto-ON for share-code-consuming workflows). Other policies land in Phase 8 (`flag_policies_eet.rs`, `flag_policies_single_game.rs`, `flag_policies_log.rs`, `flag_policies_dest_choice.rs`). | — |
+| `src/install_runtime/reinstall_route.rs` | `pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorApp)` — populates Install Modlist preview state with the stored share code + destination + overwrite-mode + reinstall flag. Navigates to `NavDestination::Install { stage: Preview }`. Does **not** flip the registry state — that happens when the user clicks Install in the preview (see P7.T10). | install state, registry |
+| `src/ui/install/stage_installing.rs` | Replaces the Phase 5 stub for Install Modlist stage 4. Renders `InstallProgressScreen` per SPEC §4.4 — its own simpler progress header above, then **calls `bio::ui::step5::page_step5::render(...)` exactly the same way the workspace chrome does**, then renders its own simpler post-install row above the panel (`Return to Home` + `Open install folder`; no `Share import code` because the user pasted that code). The Install Modlist screen does not use `workspace_view`'s 4-step progress bar / nav bar — it has its own minimal chrome. | BIO `page_step5::render`, registry |
+| `src/ui/home/reinstall_route_wire.rs` | Wires the Home Reinstall confirm dialog's Confirm button to `install_runtime::reinstall_route::start_reinstall`. | `install_runtime::reinstall_route` |
+
+### BIO files read from / consumed (no modifications)
+
+- `src/ui/step5/page_step5.rs::render` — Called directly by `page_workspace_step5.rs` and `stage_installing.rs`. Signature verified: `pub fn render(ui: &mut egui::Ui, state: &mut WizardState, console_view: &mut Step5ConsoleViewState, terminal: Option<&mut EmbeddedTerminal>, terminal_error: Option<&str>, dev_mode: bool, exe_fingerprint: &str) -> Option<Step5Action>`. Used unchanged.
+- `src/core/app/app_step5_flow.rs` — The install orchestration (`ensure_step5_terminal`, `poll_step5_prep`, `start_if_requested`, `poll_step5_terminal`). Called from BIO's `bio::app::app_update_cycle` polling functions, which the orchestrator already invokes from its own `update` loop (per Phase 2).
+- `src/core/app/navigation/app_update_cycle.rs::poll_before_render`, `start_after_render`, `persist_step1_if_needed`, `needs_repaint` — Each is `pub(crate)` and reachable from the orchestrator (which lives inside the library crate per the Phase 1 carve-out #3 split). The orchestrator's `update` calls these the same way `bio::ui::app::update_loop::run` does (the H3-corrected real path; `crate::ui::app_update_loop::run` from earlier drafts is incorrect — that module is `WizardApp`'s private frame entry, not a public API).
+- `src/core/app/terminal/` (EmbeddedTerminal + child) — Owned by `OrchestratorApp` as `step5_terminal: Option<EmbeddedTerminal>`, identical to `WizardApp`'s field.
+- `src/core/app/step5/install_flow.rs` + `command_config.rs` + `auto_answer.rs` + `prompt_memory*.rs` + `scripted*.rs` + `log_files*.rs` + `diagnostics*.rs` — Reused as-is via the call to `page_step5::render`.
+- `src/core/app/modlist_share.rs::export_modlist_share_code` — Used by `share_paste_code_dialog` and `import_code_writer`.
+- `src/core/app/modlist_pack/export.rs` — Used by the share-code generator.
+- `src/ui/step5/action_step5.rs::Step5Action` — The action enum returned by `page_step5::render`. The orchestrator's chrome layer dispatches it the same way BIO does (`StartInstall` → `state.step5.start_install_requested = true`).
+- `src/ui/step5/state_step5.rs::Step5ConsoleViewState` — Owned by `OrchestratorApp` (one per-process instance, mirroring `WizardApp.step5_console_view`). Passed `&mut` into `page_step5::render`.
+
+### BIO files needing allowed mild refactor
+
+**None.** Phase 7 does not modify any existing Step 5 file. The new chrome composes around BIO's public top-level `page_step5::render` rather than reaching into its sub-renderers. No `pub(super)` flip, no `pub(crate)` flip, no field addition, no method addition. Per SPEC §1 decision order: if implementation surfaces a missing piece on a **simple** surface (single state mutation, format helper, dialog wrapper, one-screen render), build a sibling under `src/ui/workspace/step5/` or `src/install_runtime/` and move on — no carve-out required. Carve-outs are only needed for **complex** workflows that can't be cleanly cloned (install-pipeline state coordination, share-code interop format), and Phase 7's complex surfaces are already covered: BIO's install pipeline + terminal are reused as-is via `page_step5::render`; the rail-nav lock (P7.T9b) prevents mid-install state corruption; share-code generation goes through BIO's existing `bio::app::modlist_share::export_modlist_share_code`. The only carve-out potentially needed in this phase is **#5 (schema-additive serde field)** on `export_modlist_share_code` to add the `allow_auto_install` toggle parameter — flagged conditionally in P7.T3 with a sibling re-encoder as the fallback if the new arg is not added. Never flip visibility on BIO source.
+
+## Implementation tasks
+
+### P7.T1 — `OrchestratorApp` owns Step 5 runtime fields
+
+- **What:** Verify `OrchestratorApp` carries the same Step 5 + Step 2 channel-receiver fields `WizardApp` carries (Phase 2's `OrchestratorApp` struct was provisioned with placeholders — formalize them here):
+  - **Step 5 runtime fields:**
+    - `step5_terminal: Option<EmbeddedTerminal>`
+    - `step5_terminal_error: Option<String>`
+    - `step5_console_view: Step5ConsoleViewState`
+    - `step5_prep_rx: Option<Receiver<...>>` (the prep-task channel BIO's `start_after_render` populates)
+    - `step5_pending_start: bool` (BIO's pending-start flag)
+  - **Step 2 channel receivers** (`bio::app::app_update_cycle::poll_before_render` takes 6 channel receivers verified at `src/core/app/navigation/app_update_cycle.rs:19-37`):
+    - `step2_scan_rx: Option<Receiver<Step2ScanEvent>>`
+    - `step2_cancel_token: Option<Arc<AtomicBool>>` (or BIO's equivalent cancel handle)
+    - `step2_progress_queue: VecDeque<...>` (or BIO's progress aggregator)
+    - `step2_update_check_rx: Option<Receiver<Step2UpdateCheckEvent>>`
+    - `step2_update_download_rx: Option<Receiver<Step2UpdateDownloadEvent>>`
+    - `step2_update_extract_rx: Option<Receiver<Step2UpdateExtractEvent>>` **(per review M-new-1 — `poll_before_render` requires this 6th receiver; earlier draft enumerated only 5)**
+
+  Each field type is BIO's existing `pub` type from `bio::app::terminal` / `bio::ui::step5::state_step5` / `bio::app::app_step2_*`. The orchestrator's `update` loop calls `bio::app::app_update_cycle::poll_before_render(...)` and `start_after_render(...)` with `&mut`-pointers to these fields, exactly as `bio::ui::app::update_loop::run` does (read-only reference path per H3 — the orchestrator never invokes that private module, it replicates the same `bio::app::*` call sequence).
+- **Module registration:** Register `install_runtime` as a top-level module via `mod install_runtime;` in `src/bin/infinity_orchestrator.rs` (alongside `mod registry;`). It does not appear in the existing `src/main.rs` because that binary uses only BIO's existing modules.
+- **Where:** Edit `src/bin/infinity_orchestrator.rs` (the orchestrator binary's `OrchestratorApp` struct lives in a module reachable from this entry) or wherever Phase 2 placed the struct.
+- **Acceptance:** `cargo build --bin infinity_orchestrator --release` succeeds with the fields in place. The orchestrator's update loop polls Step 5 channels every frame.
+- **SPEC:** §9.3, §9.4.
+
+### P7.T2 — Workspace Step 5 chrome wraps `page_step5::render`
+
+- **What:** Replace the Phase 6 Step 5 stub. `page_workspace_step5::render(ui, orchestrator, modlist_id)` does:
+  1. Render the **success banner row** above the embedded panel (returns immediately if the C3 clean-exit triple has not yet held — the row is just the empty slot pre-install).
+  2. Render the **post-install action row** above the embedded panel, immediately below the success-banner row (per H9 — visible only when the C3 clean-exit triple holds; pre-install and during-install this row is empty/hidden). This positioning places the post-install actions visually adjacent to BIO's Install button at the top of `page_step5::render`'s panel.
+  3. Call `bio::ui::step5::page_step5::render(ui, &mut orchestrator.wizard_state, &mut orchestrator.step5_console_view, orchestrator.step5_terminal.as_mut(), orchestrator.step5_terminal_error.as_deref(), orchestrator.dev_mode, &orchestrator.exe_fingerprint)` to render BIO's entire Step 5 panel — Command card preview, Summary card, Actions/Diagnostics menus, Prompt Answers, console box, prompt input row. The new chrome rows sit above this panel.
+  4. Dispatch the returned `Option<Step5Action>` via the same `bio::app::*` public dispatch the BIO `handle_step5_action` uses — for `StartInstall` it sets `state.step5.start_install_requested = true` after running the install-start hooks (P7.T3) and after passing the install-concurrency gate (P7.T9).
+- **Where:** New file `page_workspace_step5.rs`.
+- **Acceptance:** Step 5 inside the workspace shows BIO's full Step 5 panel verbatim — command preview, summary, console, prompt input — with the new success-banner row above and post-install action row above-and-immediately-below the banner. Pre-install and during-install, both chrome rows are empty/hidden. Clicking Install kicks off BIO's existing install pipeline.
+- **SPEC:** §9.1, §9.3, §9.2 (H9 positioning).
+
+### P7.T3 — Install start hook
+
+- **What:** Inside the orchestrator's `Step5Action::StartInstall` dispatcher (called by `page_workspace_step5::render`'s action handler and by `stage_installing::render`'s analogous dispatcher), before flipping `state.step5.start_install_requested = true`:
+  1. Check the install concurrency gate (`install_concurrency::install_in_progress(orchestrator)`); if `Some` and the running id differs from this modlist, refuse with the SPEC tooltip and bail.
+  2. Call `install_runtime::start_hooks::on_install_start(modlist_id, install_button_variant, &orchestrator.wizard_state, &mut orchestrator.registry, &orchestrator.registry_store)`:
+     - Compute the share code via `bio::app::modlist_share::export_modlist_share_code(&orchestrator.wizard_state)`, **then set `allow_auto_install = false`** on the decoded payload before re-encoding (per SPEC §13.3 — install-start codes are unverified). Implementation: `export_modlist_share_code` returns the encoded string; the orchestrator's `import_code_writer` re-decodes the payload, flips the bit, re-encodes, writes. Alternatively, BIO's `export_modlist_share_code` may grow an optional flag parameter (under carve-out #5 — the function adds an arg with a sensible default that preserves today's behavior). Pick the simpler implementation that's directive-compliant.
+     - Update `orchestrator.registry.get_mut(modlist_id).latest_share_code` to the same value (with `allow_auto_install = false`). This is the registry's snapshot of the in-progress code.
+     - Write `modlist-import-code.txt` to the install destination via `import_code_writer::write_modlist_import_code_txt`, **gated on the button variant** per SPEC §13.13: `Install` / `Restart Install` / `Reinstall` write (overwrite if present); `Resume Install` skips the write (the original file from the prior attempt remains canonical). All written codes have `allow_auto_install = false`.
+     - Record `install_started_at` in the registry entry (always, regardless of variant — every attempt is timestamped).
+     - **No `registry_snapshot` taken** (per H8: dropped). The C5 rail-nav lock (P7.T9b) prevents the user from navigating away mid-install, and the workspace state loader is gated by the lock — so there is no swap-mid-install path that would require a snapshot to defend against. External mutation to `modlists.json` mid-install is out-of-scope for v1 alpha. The live `orchestrator.registry` stays the only registry view; the post-install state transition (P7.T6) is its only mutation during the install lifetime.
+     - If this entry is a Reinstall path (its current state is `Installed` and the in-memory orchestrator flag indicates a reinstall — set by `reinstall_route::start_reinstall` in P7.T10), call `install_runtime::registry_transition::flip_to_in_progress(modlist_id, ...)` to flip the registry state from `Installed` to `InProgress` **at this point** (not earlier).
+  3. Flip `state.step5.start_install_requested = true`. BIO's existing `bio::app::app_update_cycle::start_after_render` will pick this up on the next poll and start the install.
+- **Where:** Action-dispatch site inside `page_workspace_step5.rs` + new files `install_runtime/start_hooks.rs`, `install_runtime/import_code_writer.rs`, `install_runtime/registry_transition.rs`.
+- **Acceptance:** Clicking Install (fresh): `modlist-import-code.txt` exists in the destination before WeiDU runs; the registry entry has a non-null `install_started_at`. Clicking Restart Install or Reinstall: the file is overwritten with the current share code. Clicking Resume Install: the file is **not** overwritten (verify by checksumming before/after the click). For Reinstall paths, the registry state transitions `Installed` → `InProgress` only after the user clicks Install (not when they click Reinstall in the Home Kebab).
+- **SPEC:** §9.4, §13.13, §3.1 (Reinstall semantics).
+
+### P7.T4 — Success banner (gate is the C3 clean-exit triple)
+
+- **What:** `success_banner::render(ui, &orchestrator.wizard_state, &registry_entry)` renders the post-install banner: green `Installed` pill + `<N> mods · <C> components · no errors` + `ran <MM:SS> · finished <relative>`. Visible only when the C3 clean-exit triple holds: `state.step5.install_running == false && state.step5.last_exit_code == Some(0) && state.step5.last_install_failed == false` (cited from `state_step5.rs:17-19`, set by `step5_runtime_status::process_exit_event` on every install exit). The component counts come from BIO's existing `state.step5` runtime stats (or are re-read from the just-written weidu_component_logs). Hidden pre-install and during-install.
+- **Duration formatter:** `<MM:SS>` for runs < 60 minutes; `<H:MM:SS>` for runs ≥ 60 minutes. Implement via a `format_install_duration(d: Duration) -> String` helper in `src/ui/shared/format_relative.rs` (the same file that holds `format_relative` per L9).
+- **Where:** New file.
+- **Acceptance:** After a clean install, the banner renders above BIO's embedded Step 5 panel. Before any install, the banner row is empty (the embedded panel below shows the pre-install Command/Summary cards from BIO).
+- **SPEC:** §9.2.
+
+### P7.T5 — Post-install action row (rendered immediately ABOVE BIO's panel per H9)
+
+- **What:** `post_install_actions::render(ui, orchestrator, modlist_id)` renders two primary buttons next to BIO's embedded panel: `Return to Home` (sets `orchestrator.nav = NavDestination::Home`) and `Open install folder` (uses `rfd` / platform open with the registry entry's `destination_folder`). Visible only when the C3 clean-exit triple holds.
+
+  **Position per H9.** SPEC §9.2 says the buttons render "next to the disabled Install button". BIO's `page_step5::render` places the Install button at the top of its panel (verified in `src/ui/step5/content/content_install_row_step5.rs` — the install row is the panel's first content row). The orchestrator therefore renders the post-install action row **immediately above** the embedded panel (visually above-and-adjacent to the Install button at the top of BIO's panel). This is the pragmatic resolution to SPEC §9.2's "next to" instruction without replacing BIO's Step 5 body wholesale (which the C4-style rewrite would require — rejected for v1 alpha as too heavy). The alternative of rendering below the panel would put the buttons hundreds of pixels away from the Install button, which conflicts with the SPEC's "next to" directive.
+
+  The `Share import code` button is rendered separately by `workspace_header.rs` (Phase 6 file) — Phase 7 just flips its disabled state once the clean-exit triple holds.
+- **Where:** New file + small edit to `workspace_header.rs` to flip the Share import code button's enabled state.
+- **Acceptance:** After a successful install: `Return to Home` and `Open install folder` appear immediately above BIO's embedded panel (visually adjacent to BIO's now-disabled Install button at the top of that panel). Share import code in the workspace header becomes the primary teal CTA.
+- **SPEC:** §9.2 (H9 pragmatic resolution documented above).
+
+### P7.T6 — Registry state transition on success
+
+- **What:** On clean exit detected by the orchestrator's update loop (transition from `install_running == true` to `install_running == false` with `last_exit_code == Some(0)` and `last_install_failed == false` — the C3 triple), call `install_runtime::registry_transition::flip_to_installed(modlist_id, stats, &mut orchestrator.registry, &orchestrator.registry_store, &orchestrator.wizard_state)`:
+  - Set `state = ModlistState::Installed`.
+  - Set `install_date = now`.
+  - Update `mod_count`, `component_count`.
+  - **Regenerate `latest_share_code` with `allow_auto_install = true`** (per SPEC §13.3 — `flip_to_installed` is the only code path in Infinity Orchestrator that produces an auto-install-eligible code). Call `bio::app::modlist_share::export_modlist_share_code(&wizard_state)` to get the base code, then patch the payload to set the bit to `true`, re-encode. Store the result as `entry.latest_share_code = Some(new_code)`, overwriting the install-start version (which had `allow_auto_install = false`).
+  - The on-disk `modlist-import-code.txt` is **not** rewritten on success (per SPEC §13.13 closing paragraph). It remains the install-start version with `allow_auto_install = false` — useful as a debugging artifact but conservative-by-default for anyone who finds it. The Share import code dialog reads from `entry.latest_share_code` (the post-success regenerated code).
+  - Write atomically.
+
+  **Async size computation.** Total install folder size is computed **on a worker thread** (use `std::thread::spawn` returning a `mpsc::Sender<u64>`). The registry `flip_to_installed` write happens immediately with `total_size_bytes = None`. The Home card renders `—` for the size segment while the value is pending. When the worker reports back, a second atomic registry write fills in `total_size_bytes` and the Home card refreshes on next frame. The success banner and post-install action row do NOT wait for size computation.
+
+  **Failure modes.**
+  - **Worker thread panic** — log the panic and leave `total_size_bytes = None`; the Home card continues to render `—`. No retry, no user-visible error.
+  - **Modlist deleted between worker start and worker result** — when the worker reports back, look up the modlist by id in `orchestrator.registry`. If the entry is absent, discard the result silently (the user already deleted the modlist).
+  - **Registry write failure when storing the size** — log the error and retry on the next debounce cycle. Do not surface as a user-visible error; size is a meta detail, not critical to the install lifecycle.
+  - **Worker takes > 5 minutes** — continue waiting; do not abort. Recursive `du` on a large EET install can legitimately take minutes (especially on Windows with anti-virus scanning). The success banner and post-install action row do not depend on the worker completing.
+
+- **Where:** New file `registry_transition.rs` + a transition detector in `page_workspace_step5.rs`'s update tick (compare `install_running` between frames, fire once on the edge).
+- **Acceptance:** After a successful install: Home shows the entry under the Installed chip; the meta line shows the recorded mod/component counts + size + install relative time (size may render as `—` initially and update on next frame after the worker completes). Cancelled or failed installs leave the entry in `in-progress`.
+- **SPEC:** §9.2, §13.1.
+
+### P7.T7 — Share import code dialog
+
+- **What:** `share_paste_code_dialog::render(ctx, &mut state, &orchestrator.wizard_state)` non-blocking `egui::Window` popup (per SPEC §10): title "Share import code", sub "Anyone can paste this into BIO → Install to get the same modlist.", monospace scrollable box containing the share code, footer with `Close` + primary `Copy`. On `Copy`: write to clipboard, flash `✓ copied to clipboard` inline next to the buttons for ~1.5s.
+- **Share code source.** The share code shown in `SharePasteCodeDialog` is always `ModlistEntry.latest_share_code` — the value written to the registry during `flip_to_installed`. This is the at-install snapshot, not a re-derivation from the current `WizardState`. From the post-install workspace and from the Home Kebab `Copy import code`, both paths read this same field.
+- **Where:** New file.
+- **Acceptance:** From the post-install workspace, clicking `Share import code` opens the dialog with the share code. Copy works.
+- **SPEC:** §10.3.
+
+### P7.T8 — Workspace nav lock
+
+- **What:** Once `Install` has been clicked for this workspace (whether running or finished), `WorkspaceNavBar`'s `← Previous` button becomes disabled with tooltip "Disabled while install is running or after a successful install". The tooltip text is verbatim from SPEC §9.2. The "has been clicked" condition is tracked in `WorkspaceViewState::install_complete` (already provisioned in Phase 6) and `state.step5.install_running`.
+- **Where:** Edit `src/ui/workspace/workspace_nav_bar.rs` (Phase 6 new file) to accept a `disable_prev: bool` arg and apply tooltip.
+- **Acceptance:** Pre-install: Previous works. Post-Install-click (running or finished): Previous disabled with tooltip.
+- **SPEC:** §9.2.
+
+### P7.T9 — Install concurrency gate (per-button gating)
+
+- **What:** `install_concurrency::install_in_progress(orchestrator)` returns `Some(RunningInstall { modlist_id, started_at })` when `orchestrator.wizard_state.step5.install_running == true`. The `modlist_id` is the orchestrator's `state_workspace.loaded_workspace_id` (the modlist whose state was loaded into `WizardState` when the install started). Apply the gate at every install entry point per SPEC §13.15:
+  - Step 5 `Install` button in any workspace (the gate fires before the start hooks).
+  - Install Modlist's final `Install` CTA in the preview-or-destination-not-empty stage.
+  - (Home `resume` / `play` are not gated at the per-button layer — but they are gated at the rail-nav layer per P7.T9b below, because the user can't reach Home or Install while a different install is running.)
+- **Where:** New file `install_concurrency.rs` + apply gate at each Install button click site.
+- **Acceptance:** With the rail lock active (P7.T9b), the user is pinned to the running install's workspace and cannot navigate to a second workspace's Install button — so the per-button gate's defensive role is reduced to the case where the same workspace's Install button is somehow clickable mid-install (e.g., a race window). The gate must still return the right result and tooltip in that defensive case.
+- **SPEC:** §13.15.
+
+### P7.T9b — Rail-navigation lock during in-flight install (C5)
+
+- **What:** When `install_concurrency::install_in_progress(orchestrator)` returns `Some(running)`, the left rail (`src/ui/orchestrator/nav_rail.rs::render` from Phase 2) renders every nav item disabled with the SPEC §13.15 tooltip. The rail's `rail_locked: Option<&RailLockReason>` arg (provisioned in Phase 2 P2.T2's signature) is set to `Some(RailLockReason::InstallRunning { modlist_id, started_at })` whenever an install is running. The user stays in the running install's workspace until cancel or completion; they cannot navigate to Home, Install, Create, or Settings.
+
+  **The orchestrator's `update` poll loop continues to run for the active install** — Step 5's terminal output streams, prompts auto-answer, `app_update_cycle::poll_before_render` and `start_after_render` fire — so the install completes and post-install transitions (P7.T4, P7.T5, P7.T6) fire normally. Only **navigation** is locked; the install itself runs to completion.
+
+  **The workspace state loader is never invoked while an install is running.** Per the rail lock, the user cannot transition into a different `NavDestination::Workspace { modlist_id }` mid-install, so the loader's `populate_wizard_state_from_workspace` (Phase 6 P6.T1) is never called. The corollary: `WizardState` is stable for the duration of the install — exactly what `bio::app::app_step5_flow` and the embedded terminal expect.
+
+  **`RailLockReason` enum.** A new file `src/install_runtime/rail_lock_reason.rs` defines `pub enum RailLockReason { InstallRunning { modlist_id: String, started_at: Instant } }`. The enum is extensible if future versions add other lock reasons (e.g., critical registry-corruption error states); for v1 alpha there is only the install-running variant.
+
+  **Tooltip copy.** The disabled nav items use the SPEC §13.15 tooltip text verbatim ("An install is in progress — cancel or wait for completion before navigating.") — exact wording cited from SPEC §13.15 (verify against current SPEC text at implementation time).
+
+  **Workspace-internal navigation is unaffected.** The user can still switch between Step 2 / Step 3 / Step 4 / Step 5 within the running install's workspace (the in-workspace nav bar's `← Previous` is separately gated per P7.T8, but tab clicks across steps are not blocked beyond P7.T8's `disable_prev` for Step 5).
+
+- **Where:** New file `src/install_runtime/rail_lock_reason.rs`. Edit `src/ui/orchestrator/nav_rail.rs` (Phase 2 new file — editable here) to honor the `rail_locked: Option<&RailLockReason>` arg by disabling all four nav items with the SPEC tooltip when `Some`. Edit `OrchestratorApp::update` to compute the rail-lock state once per frame and pass it into `nav_rail::render`.
+
+- **Acceptance:**
+  - Start an install on modlist A. Observe: every left-rail item renders disabled with the SPEC §13.15 tooltip. Clicking does nothing. The statusbar still shows `1 job running · <A> · <elapsed>`.
+  - During the install, the terminal output continues to stream, prompts continue to auto-answer, and (on clean exit) the post-install banner / action row / registry transition fire normally.
+  - Cancel the install (gracefully). The rail items re-enable on the next frame.
+  - Force-quit the app mid-install. On relaunch, the install is no longer running (process is dead); the rail is unlocked from launch.
+  - During an in-flight install, run `grep -n` on the orchestrator's call stack / logs for `populate_wizard_state_from_workspace` — it must not appear after the install started.
+
+- **SPEC:** §13.15 (rail tooltip); SPEC §1 CRITICAL DIRECTIVE (no BIO mutation — this is net-new orchestrator code).
+
+### P7.T10 — Reinstall flow (registry flips at Install click, not Reinstall click)
+
+- **What:** Phase 5 wired the Reinstall confirm dialog with a placeholder toast. In Phase 7:
+  - **In the Home Reinstall confirm's Confirm handler** (`reinstall_route_wire.rs`), call `install_runtime::reinstall_route::start_reinstall(modlist, orchestrator)`:
+    1. Populate Install Modlist preview state: `destination = modlist.destination_folder`; `import_code = modlist.latest_share_code`; `destination_choice = DestChoice::Clear` (force overwrite); skip `DestinationNotEmptyWarning`.
+    2. Force `prepare_target_dirs_before_install = ON` for this install (SPEC §3.1 Reinstall semantics; §13.12 policy #6).
+    3. Set an orchestrator-local `pending_reinstall_id: Option<String>` flag so the install-start hook (P7.T3) knows to flip the registry state at the right moment. **`pending_reinstall_id: Option<String>` lives on `OrchestratorApp`** (added to the struct in this task) so the flag is visible across screen transitions (Home → Install preview → workspace). Cleared on workspace nav-away (more precisely: on nav-away from `NavDestination::Install` if the install hasn't yet started) or after the install starts (P7.T3's hook clears it once the registry state has been flipped).
+    4. Navigate to `NavDestination::Install { stage: Preview }` (landing the user on a final-review preview with overwrite-install banner).
+    5. **Do not** flip the registry state yet. The modlist stays in `Installed` until the user actually starts the install.
+  - **At the preview's Install click** (handled by P7.T3's install-start hook), if `pending_reinstall_id == Some(modlist_id)`, flip the registry state `Installed` → `InProgress` and clear the flag.
+  - **If the user cancels at the preview** (clicks Back, clicks elsewhere in the rail, closes the app): the modlist remains in `Installed` state. Clear `pending_reinstall_id` on nav-away from `NavDestination::Install`.
+- **Where:** New files `reinstall_route.rs` + `reinstall_route_wire.rs` + small edit to nav-router for the `pending_reinstall_id` cleanup.
+- **Acceptance:** From an installed modlist's Kebab → Reinstall → confirm: the preview opens with the overwrite-install banner. The registry still shows the modlist as `Installed`. **Clicking Install in the preview**: registry flips to `InProgress`, install runs. Cancelling at the preview: registry stays `Installed`. On install success, registry returns to `Installed` via P7.T6.
+- **SPEC:** §3.1 (Reinstall semantics).
+
+### P7.T11 — `modlist-import-code.txt` write semantics across install-button variants
+
+- **What:** P7.T3 wires the writer with variant gating. This task verifies the matrix end-to-end: the file appears (and is written/overwritten/skipped per SPEC §13.13) for every install path:
+  - Fresh Install (Create → New, Create → Import-and-modify, Install Modlist paste, Load Draft → first run, Reinstall) — **write/overwrite**.
+  - Restart Install (after force-cancel) — **overwrite**.
+  - Resume Install (after graceful cancel) — **skip** (original preserved).
+- **Where:** `install_runtime::start_hooks::on_install_start` is called from each entry's "Install" click handler with the variant tag derived from `state.step5.resume_available` + the orchestrator's reinstall flag.
+- **Acceptance:** Manually trigger an install from each entry point and each variant. For Resume Install, checksum `modlist-import-code.txt` before and after the click — they must match. For all others, the file's content equals the current `export_modlist_share_code(&wizard_state)`.
+- **SPEC:** §13.13.
+
+### P7.T12 — `In-progress` → `installed` Home transition
+
+- **What:** After a successful install, the next time the user visits Home, the entry has moved from the In-progress chip to the Installed chip. Filter chip counts update. No explicit refresh required — Home reads the current registry each render.
+- **Where:** Phase 5's `page_home::render` re-reads the registry per frame; no edit needed.
+- **Acceptance:** Install a build, navigate to Home, observe the chip count flip.
+- **SPEC:** §9.2.
+
+### P7.T13 — Graceful cancel preserves `resume_available`
+
+- **What:** When the user cancels the install gracefully (Force unchecked in BIO's cancel modal), `state.step5.resume_available` stays true so the embedded Step 5 panel's Install button reads `Resume Install` on the next visit (existing BIO behavior). Force cancel clears `resume_available` so only `Restart Install` is offered.
+- **Where:** No new code needed — this is existing BIO behavior. Phase 7's task is to verify the button label-flip survives the new chrome (the embedded `page_step5::render` panel already reads `state.step5.resume_available` and renders the right label).
+- **Acceptance:** Cancel gracefully mid-install; close the workspace; reopen it. The embedded Step 5 Install button reads `Resume Install`. Cancel with Force checked; reopen. Button reads `Restart Install`.
+- **SPEC:** §9.2, Appendix A.9, Appendix A.10.
+
+### P7.T14 — Statusbar shows `1 job running · <modlist> · <elapsed>`
+
+- **What:** Update `shell_statusbar::render` (Phase 1) to accept an optional `RunningInstall` info and render the modlist name + elapsed time on the right-of-center segment. When zero installs, render `0 jobs running` as today.
+- **Where:** Edit `src/ui/shell/shell_statusbar.rs` (Phase 1 new file).
+- **Acceptance:** Start an install: statusbar updates. Cancel: statusbar resets to `0 jobs running`.
+- **SPEC:** §13.15.
+
+### P7.T15 — Install Modlist stage 4 (real)
+
+- **What:** Replace `stage_installing_stub.rs` with `stage_installing.rs`. Renders the SPEC §4.4 / §9.3 `InstallProgressScreen`: a header `Installing modlist · <name> · live install console` + back button, then **calls `bio::ui::step5::page_step5::render(ui, &mut orchestrator.wizard_state, &mut orchestrator.step5_console_view, orchestrator.step5_terminal.as_mut(), orchestrator.step5_terminal_error.as_deref(), orchestrator.dev_mode, &orchestrator.exe_fingerprint)`** to render BIO's embedded panel, then renders its own simpler post-install action row above the panel (`Return to Home` + `Open install folder` — no `Share import code` because the user pasted the code; per H9 the row sits above-and-adjacent to BIO's Install button). The Install Modlist screen does **not** use the workspace's 4-step progress bar / nav bar / Save Draft / Share import code header.
+- **Where:** New file `stage_installing.rs`.
+- **Acceptance:** Install Modlist flow runs end-to-end: paste → preview → downloading → installing → success. Registry shows a new `installed` entry post-success.
+- **SPEC:** §4.4, §9.
+
+### P7.T16 — Automatic flag policies #1, #5
+
+- **What:** Wire SPEC §13.12 policies #1 (`-s` / `-c` auto-ON for Continue Partial Install) and #5 (`--download` auto-ON for share-code-consuming workflows). The install runner already accepts these flags; this task is the conditional logic that sets them based on workflow context. Implement in `install_runtime/flag_policies.rs::compute_flags(workflow: InstallWorkflow, settings: &Step1Settings) -> Vec<&'static str>`. Called by `start_hooks::on_install_start` before flipping `start_install_requested = true`. The flags are written into the relevant `Step1State` / `Step5State` fields BIO's install flow already reads (e.g., the `--download` toggle in `state.step1`).
+- **Where:** New file `install_runtime/flag_policies.rs`. Called by the Install button handlers before delegating to BIO.
+- **Acceptance:** Inspect the WeiDU command line in BIO's Command card for each workflow:
+  - Fresh Create → no `-s` / `-c`, `--download` follows Settings → Advanced toggle.
+  - Install Modlist paste → `--download` ON.
+  - Continue Partial Install → `-s` and `-c` both ON.
+  - Reinstall → no `-s` / `-c` (overwrite); `--download` ON.
+- **SPEC:** §13.12 #1, #5.
+
+## Open questions / risks
+
+- **Per-workspace `WizardState` and the install runtime.** Per the new architecture, `OrchestratorApp` owns a single `WizardState` instance that the workspace state loader swaps between modlists. While an install is running, the install runtime borrows that `WizardState` for output. **The C5 rail-nav lock (P7.T9b) makes mid-install workspace swaps impossible**: every left-rail item renders disabled with the SPEC §13.15 tooltip while `install_in_progress(...)` returns `Some`. The user stays in the running install's workspace until cancel or completion. The workspace state loader's `populate_wizard_state_from_workspace` is therefore never invoked mid-install — `WizardState` is stable for the duration. This supersedes the earlier draft's "swap risk" mitigation language.
+- **EET 2-phase install.** EET installs run two phases (BGEE clone, then BG2EE clone, then mods). The existing BIO `app_step5_flow` handles this; the new chrome composes the same flow via the `page_step5::render` call. Phase 7 doesn't add new EET-phase UI — the existing phase indicator inside BIO's embedded panel continues to render. Visual reskin in Phase 8.
+- **Diagnostics auto-export.** SPEC §14.1 says "Diagnostics bundle is auto-exported on every install completion" in dev mode. The existing exporter (`bio::app::step5::diagnostics*`) handles this; the new chrome just lets it run. No new code needed unless the exporter relies on a hard-coded path the new flow doesn't set.
+- **Size computation.** Re-evaluating `total_size_bytes` post-install via recursive `du` can take seconds. Recommendation: compute on a worker thread and write to the registry when ready. Until ready, leave the size segment as `—` in the Home card. (See P7.T6 for the worker-thread design.)
+- **Update-cycle integration.** The orchestrator's `update` loop must call `bio::app::app_update_cycle::poll_before_render` and `start_after_render` every frame (with `&mut`-pointers to the orchestrator's owned Step 5 fields). Phase 2 provisioned the call sites; Phase 7 confirms the wiring works end-to-end with a real install. The poll loop continues to run during the rail-locked period — the rail lock only disables nav clicks, not the update loop.
+- **Registry concurrency note (H8 — `registry_snapshot` mitigation dropped).** The previous draft snapshotted `orchestrator.registry` at install start so that external edits to `modlists.json` mid-install would not corrupt the running install. Per H8 this mitigation is **dropped**. Reasoning: the C5 rail-nav lock pins the user inside the running install's workspace, so the orchestrator itself does not mutate the registry mid-install (no nav transitions, no Home card actions); external mutation to `modlists.json` by another process is out-of-scope for v1 alpha. If a future version supports external registry edits during installs (e.g., a sibling CLI tool), the snapshot mitigation can be reinstated then. The post-install `flip_to_installed` (P7.T6) writes only the running modlist's entry; if `modlists.json` is unparseable at write time, surface a terminal error per SPEC §13.14 (the install itself completed; the registry state-flip failed). This is the same edge case the snapshot would not have helped with anyway.
+- **C5 risk closure.** Earlier drafts flagged a "swap-mid-install corruption risk" tied to the workspace state loader running while an install borrowed `WizardState`. P7.T9b closes this: with the rail locked, the loader cannot run mid-install, so the risk does not occur.
+
+## Verification
+
+1. `cargo build --bin infinity_orchestrator --release` succeeds.
+2. From Home: Create a new modlist; in the workspace navigate to Step 5; verify BIO's pre-install Command / Summary cards render inside the embedded panel; click Install. The console streams output, prompts auto-answer.
+3. During install: success banner row above the panel is empty; post-install action row above the panel is hidden; statusbar shows `1 job running · <name> · <elapsed>`. The left rail's four nav items are all rendered disabled with the SPEC §13.15 tooltip (C5 verification — they were not disabled before clicking Install).
+4. On clean exit (the C3 triple holds — `install_running == false && last_exit_code == Some(0) && last_install_failed == false`): success banner renders above the embedded panel; the post-install action row (`Return to Home` + `Open install folder`) renders **immediately above** the embedded panel (per H9 — visually adjacent to BIO's now-disabled Install button at the top of that panel); `Share import code` button in the workspace header becomes primary teal. Click it → dialog opens with the share code. The left rail re-enables. Return to Home: entry has moved to Installed chip.
+5. Inspect destination folder: `modlist-import-code.txt` present (written before WeiDU ran).
+6. Cancel an install gracefully; reopen the workspace; the embedded panel's Install button reads `Resume Install`. Cancel with Force; reopen. Button reads `Restart Install`. After cancel, the rail re-enables.
+7. From an installed card → Kebab → Reinstall → confirm. Preview opens with the overwrite banner. **Verify**: the registry still shows the modlist as `Installed` at this point. Click Install in the preview. **Verify**: the registry now flips to `InProgress`; install runs; the rail locks (C5). On clean exit, entry returns to `Installed` and the rail unlocks. Alternate path: at the preview, click Back / navigate away — registry stays `Installed` (no transition occurred).
+8. **C5 verification.** Start an install on modlist A. Try to click each left-rail item (Home / Install / Create / Settings) — each is disabled with the SPEC §13.15 tooltip; clicking is a no-op. Statusbar shows A is running. While the install runs, grep the orchestrator's logs (in dev mode) for `populate_wizard_state_from_workspace` — it must not have been called after the install started.
+9. Inspect the WeiDU command line in BIO's Command card for each workflow; flag policies #1 and #5 match SPEC §13.12.
+10. `cargo build --bin BIO --release` continues to succeed; the legacy wizard is unaffected.
+11. **C3 verification.** Trigger a non-clean install (e.g., point WeiDU at a missing source). When BIO's `step5_runtime_status::process_exit_event` sets `last_install_failed = true` (per `src/core/app/step5_runtime_status.rs:72`), confirm: the success banner does not render, the post-install action row does not render, the registry stays in `in-progress` (no `flip_to_installed` fires). The Home card still shows the modlist under In progress.
