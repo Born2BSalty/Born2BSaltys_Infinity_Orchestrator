@@ -8,6 +8,10 @@ use crate::app::compat_step3_rules::Step3CompatMarker;
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::state::Step2Selection;
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BIO_SCROLL_BAR_WIDTH_PX, REDESIGN_BIO_SCROLL_INNER_MARGIN_PX,
+    REDESIGN_BIO_SCROLL_OUTER_MARGIN_PX, ThemePalette,
+};
 use crate::ui::step3::blocks;
 use crate::ui::step3::list_rows_step3::{RowRenderContext, render_rows};
 use crate::ui::step3::state_step3;
@@ -17,6 +21,7 @@ pub(crate) fn render(
     state: &mut WizardState,
     jump_to_selected_requested: &mut bool,
     compat_markers: &HashMap<String, Step3CompatMarker>,
+    palette: ThemePalette,
 ) {
     ui.group(|ui| {
         ui.set_width(ui.available_width());
@@ -25,9 +30,9 @@ pub(crate) fn render(
         let viewport_w = ui.available_width();
         ui.scope(|ui| {
             let mut scroll = egui::style::ScrollStyle::solid();
-            scroll.bar_width = 12.0;
-            scroll.bar_inner_margin = 0.0;
-            scroll.bar_outer_margin = 2.0;
+            scroll.bar_width = REDESIGN_BIO_SCROLL_BAR_WIDTH_PX;
+            scroll.bar_inner_margin = REDESIGN_BIO_SCROLL_INNER_MARGIN_PX;
+            scroll.bar_outer_margin = REDESIGN_BIO_SCROLL_OUTER_MARGIN_PX;
             ui.style_mut().spacing.scroll = scroll;
             egui::ScrollArea::both()
                 .id_salt("step3_list_scroll")
@@ -87,6 +92,7 @@ pub(crate) fn render(
                             locked_blocks,
                             undo_stack,
                             redo_stack,
+                            palette,
                         };
                         let row_outcome = render_rows(ui, &mut row_ctx);
                         let mut visible_rows = row_outcome.visible_rows;
@@ -111,6 +117,7 @@ pub(crate) fn render(
                             drag_from,
                             *drag_over,
                             &visible_rows,
+                            palette,
                         );
                         let mut reorder_ctx =
                             crate::ui::step3::service_step3::drag_ops::LiveReorderContext {

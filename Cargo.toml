@@ -7,13 +7,21 @@ authors = ["Born2BSalty"]
 license = "GPL-3.0-or-later"
 description = "Born2BSalty's Infinity Orchestrator (BIO) - Rust wizard for WeiDU/mod_installer installs"
 
+[lib]
+name = "bio"
+path = "src/lib.rs"
+
 [[bin]]
 name = "BIO"
 path = "src/main.rs"
 
+[[bin]]
+name = "infinity_orchestrator"
+path = "src/bin/infinity_orchestrator.rs"
+
 [dependencies]
 anyhow = "1.0.101"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.58", features = ["derive", "env"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
@@ -39,6 +47,7 @@ egui_term = { path = "third_party/egui_term" }
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

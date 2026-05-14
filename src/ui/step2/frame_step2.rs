@@ -5,6 +5,9 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::ui::shared::layout_tokens_global::*;
+use crate::ui::shared::redesign_tokens::{
+    ThemePalette, redesign_border_soft, redesign_text_primary,
+};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::service_list_ops_step2::recompute_selection_counts;
 
@@ -13,6 +16,7 @@ pub fn render(
     state: &mut WizardState,
     dev_mode: bool,
     exe_fingerprint: &str,
+    palette: ThemePalette,
 ) -> Option<Step2Action> {
     let mut action = None;
     ui.add(Step2LayoutWidget {
@@ -20,6 +24,7 @@ pub fn render(
         action: &mut action,
         dev_mode,
         exe_fingerprint,
+        palette,
     });
     action
 }
@@ -29,6 +34,7 @@ struct Step2LayoutWidget<'a> {
     action: &'a mut Option<Step2Action>,
     dev_mode: bool,
     exe_fingerprint: &'a str,
+    palette: ThemePalette,
 }
 
 impl egui::Widget for Step2LayoutWidget<'_> {
@@ -117,14 +123,32 @@ impl egui::Widget for Step2LayoutWidget<'_> {
             self.state,
             self.action,
             controls_rect,
+            self.palette,
         );
-        crate::ui::step2::content_step2::render_tabs(ui, self.state, self.action, tabs_rect);
-        crate::ui::step2::list_pane_step2::render_list_pane(ui, self.state, self.action, left_rect);
-        crate::ui::step2::details_pane_step2::render_pane(ui, self.state, self.action, right_rect);
-        crate::ui::step2::compat_window_step2::render(ui, self.state);
-        crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, self.state);
+        crate::ui::step2::content_step2::render_tabs(
+            ui,
+            self.state,
+            self.action,
+            tabs_rect,
+            self.palette,
+        );
+        crate::ui::step2::list_pane_step2::render_list_pane(
+            ui,
+            self.state,
+            self.action,
+            left_rect,
+            self.palette,
+        );
+        crate::ui::step2::details_pane_step2::render_pane(
+            ui,
+            self.state,
+            self.action,
+            right_rect,
+            self.palette,
+        );
+        crate::ui::step2::compat_window_step2::render(ui, self.state, self.palette);
+        crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, self.state, self.palette);
 
-        let vis = &ui.visuals().widgets.noninteractive;
         let splitter_x = splitter_rect.center().x;
         ui.painter().line_segment(
             [
@@ -133,7 +157,7 @@ impl egui::Widget for Step2LayoutWidget<'_> {
             ],
             egui::Stroke::new(
                 crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                vis.bg_stroke.color,
+                redesign_border_soft(self.palette),
             ),
         );
 
@@ -145,7 +169,7 @@ impl egui::Widget for Step2LayoutWidget<'_> {
             ],
             egui::Stroke::new(
                 crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                vis.bg_stroke.color,
+                redesign_border_soft(self.palette),
             ),
         );
         let y = left_rect.bottom() - 1.0;
@@ -156,13 +180,16 @@ impl egui::Widget for Step2LayoutWidget<'_> {
             ],
             egui::Stroke::new(
                 crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                vis.bg_stroke.color,
+                redesign_border_soft(self.palette),
             ),
         );
 
         ui.scope_builder(egui::UiBuilder::new().max_rect(footer_rect), |ui| {
             recompute_selection_counts(self.state);
-            ui.label(&self.state.step2.scan_status);
+            ui.label(
+                crate::ui::shared::typography_global::plain(&self.state.step2.scan_status)
+                    .color(redesign_text_primary(self.palette)),
+            );
         });
 
         response

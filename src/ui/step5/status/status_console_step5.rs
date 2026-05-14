@@ -5,6 +5,13 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BIO_SCROLL_BAR_WIDTH_PX, REDESIGN_BIO_SCROLL_INNER_MARGIN_PX,
+    REDESIGN_BIO_SCROLL_OUTER_MARGIN_PX, ThemePalette, redesign_font_mono, redesign_success,
+    redesign_terminal_amber, redesign_terminal_debug, redesign_terminal_default,
+    redesign_terminal_dim, redesign_terminal_error, redesign_terminal_info, redesign_terminal_sand,
+    redesign_terminal_sent,
+};
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
 
 fn is_component_id_token(token: &str) -> bool {
@@ -43,17 +50,17 @@ fn split_chunks_preserve_quotes(line: &str) -> Vec<String> {
     out
 }
 
-fn token_color(token: &str) -> egui::Color32 {
+fn token_color(token: &str, palette: ThemePalette) -> egui::Color32 {
     let t = token.trim();
     let n = normalized_token(t);
-    let default = crate::ui::shared::theme_global::terminal_default();
-    let red = crate::ui::shared::theme_global::terminal_error();
-    let debug_blue = crate::ui::shared::theme_global::terminal_debug();
-    let sent_blue = crate::ui::shared::theme_global::terminal_sent();
-    let info_green = crate::ui::shared::theme_global::terminal_info();
-    let amber = crate::ui::shared::theme_global::terminal_amber();
-    let sand = crate::ui::shared::theme_global::terminal_sand();
-    let dim = crate::ui::shared::theme_global::terminal_dim();
+    let default = redesign_terminal_default(palette);
+    let red = redesign_terminal_error(palette);
+    let debug_blue = redesign_terminal_debug(palette);
+    let sent_blue = redesign_terminal_sent(palette);
+    let info_green = redesign_terminal_info(palette);
+    let amber = redesign_terminal_amber(palette);
+    let sand = redesign_terminal_sand(palette);
+    let dim = redesign_terminal_dim(palette);
 
     if n == "ERROR" || n == "FATAL" {
         return red;
@@ -84,10 +91,10 @@ fn token_color(token: &str) -> egui::Color32 {
     default
 }
 
-fn render_styled_line(ui: &mut egui::Ui, line: &str) {
+fn render_styled_line(ui: &mut egui::Ui, line: &str, palette: ThemePalette) {
     let line_upper = line.to_ascii_uppercase();
     let success_line = line_upper.contains("SUCCESSFULLY INSTALLED");
-    let success_green = crate::ui::shared::theme_global::success();
+    let success_green = redesign_success(palette);
     if line.is_empty() {
         ui.label(egui::RichText::new(" ").monospace().strong());
         return;
@@ -99,11 +106,14 @@ fn render_styled_line(ui: &mut egui::Ui, line: &str) {
             let color = if success_line && (n == "SUCCESSFULLY" || n == "INSTALLED") {
                 success_green
             } else {
-                token_color(&token)
+                token_color(&token, palette)
             };
             ui.label(
                 egui::RichText::new(&token)
-                    .monospace()
+                    .font(egui::FontId::new(
+                        crate::ui::shared::typography_global::SIZE_SECTION_TITLE,
+                        redesign_font_mono(),
+                    ))
                     .strong()
                     .color(color),
             );
@@ -117,6 +127,7 @@ pub(crate) fn render_console_panel(
     console_view: &mut Step5ConsoleViewState,
     terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
+    palette: ThemePalette,
 ) {
     ui.group(|ui| {
         ui.set_width(ui.available_width());
@@ -141,9 +152,9 @@ pub(crate) fn render_console_panel(
             ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
                 ui.scope(|ui| {
                     let mut scroll = egui::style::ScrollStyle::solid();
-                    scroll.bar_width = 12.0;
-                    scroll.bar_inner_margin = 0.0;
-                    scroll.bar_outer_margin = 2.0;
+                    scroll.bar_width = REDESIGN_BIO_SCROLL_BAR_WIDTH_PX;
+                    scroll.bar_inner_margin = REDESIGN_BIO_SCROLL_INNER_MARGIN_PX;
+                    scroll.bar_outer_margin = REDESIGN_BIO_SCROLL_OUTER_MARGIN_PX;
                     ui.style_mut().spacing.scroll = scroll;
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                     let out = egui::ScrollArea::vertical()
@@ -151,7 +162,7 @@ pub(crate) fn render_console_panel(
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             for line in selected_text.split('\n') {
-                                render_styled_line(ui, line);
+                                render_styled_line(ui, line, palette);
                             }
                             if should_auto_scroll {
                                 ui.add_space(0.0);

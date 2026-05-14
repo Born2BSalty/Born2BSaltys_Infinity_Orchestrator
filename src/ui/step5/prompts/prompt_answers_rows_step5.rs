@@ -3,12 +3,14 @@
 
 use eframe::egui;
 
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
 use crate::ui::step5::prompt_memory;
 
 pub(crate) fn render_entry_row(
     ui: &mut egui::Ui,
     key: &str,
     entry: prompt_memory::PromptAnswerEntry,
+    palette: ThemePalette,
 ) {
     let mut enabled = entry.enabled;
     if ui.checkbox(&mut enabled, "").changed() {
@@ -31,6 +33,7 @@ pub(crate) fn render_entry_row(
     };
     ui.label(
         crate::ui::shared::typography_global::weak(preview.clone())
+            .color(redesign_text_muted(palette))
             .text_style(egui::TextStyle::Small),
     )
     .on_hover_text(format!("{preview}\n\nKey: {key}"));

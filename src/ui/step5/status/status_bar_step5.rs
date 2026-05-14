@@ -5,6 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
 
 pub(crate) fn render_console(
@@ -13,6 +14,7 @@ pub(crate) fn render_console(
     console_view: &mut Step5ConsoleViewState,
     terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
+    palette: ThemePalette,
 ) {
     crate::ui::step5::status_console_step5::render_console_panel(
         ui,
@@ -20,6 +22,7 @@ pub(crate) fn render_console(
         console_view,
         terminal,
         terminal_error,
+        palette,
     );
 }
 
@@ -28,6 +31,7 @@ pub(crate) fn render_status_and_input(
     state: &mut WizardState,
     console_view: &mut Step5ConsoleViewState,
     mut terminal: Option<&mut EmbeddedTerminal>,
+    palette: ThemePalette,
 ) {
     let waiting_for_input_before = terminal
         .as_deref()
@@ -65,8 +69,11 @@ pub(crate) fn render_status_and_input(
         state.step5.prompt_required_sound_latched = false;
     }
 
-    let phase_info =
-        crate::ui::step5::status_phase_step5::compute_phase(state, waiting_for_input_after);
+    let phase_info = crate::ui::step5::status_phase_step5::compute_phase(
+        state,
+        waiting_for_input_after,
+        palette,
+    );
 
     ui.horizontal(|ui| {
         crate::ui::step5::status_input_row_step5::render_input_row(
@@ -78,7 +85,7 @@ pub(crate) fn render_status_and_input(
     });
 
     ui.horizontal_centered(|ui| {
-        crate::ui::step5::status_phase_step5::render_phase(ui, state, &phase_info);
+        crate::ui::step5::status_phase_step5::render_phase(ui, state, &phase_info, palette);
         crate::ui::step5::service_process_line_step5::render_process_runtime_inline(
             ui,
             state,

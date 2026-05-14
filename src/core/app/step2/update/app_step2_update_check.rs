@@ -279,8 +279,26 @@ pub(super) fn check_latest_release_for_worker(
         super::app_step2_update_weaselmods::check_weaselmods_download_page(agent, &request)
     } else if mod_downloads::source_is_morpheus_mart_page_url(&request.source_url) {
         super::app_step2_update_morpheus_mart::check_morpheus_mart_download_page(agent, &request)
+    } else if mod_downloads::source_is_sentrizeal_download_url(&request.source_url) {
+        sentrizeal_download_outcome(request)
     } else {
         failed_outcome(request, "source is not auto-resolvable")
+    }
+}
+
+fn sentrizeal_download_outcome(request: Step2UpdateCheckRequest) -> Step2UpdateCheckOutcome {
+    let tp2 = mod_downloads::normalize_mod_download_tp2(&request.tp_file);
+    Step2UpdateCheckOutcome {
+        game_tab: request.game_tab,
+        tp_file: request.tp_file,
+        label: request.label,
+        source_id: request.source_id,
+        tag: Some("sentrizeal".to_string()),
+        source_ref: None,
+        asset_name: Some(format!("{tp2}-sentrizeal.zip")),
+        asset_url: Some(request.source_url),
+        error: None,
+        package_kind: Step2PackageKind::PageArchive,
     }
 }
 

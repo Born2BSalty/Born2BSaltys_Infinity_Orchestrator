@@ -5,6 +5,10 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::ui::shared::layout_tokens_global::*;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent, redesign_border_soft,
+    redesign_shell_bg, redesign_text_on_accent, redesign_text_primary,
+};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::prompt_popup_step2::{
     collect_step2_prompt_toolbar_entries, draw_prompt_toolbar_badge,
@@ -15,22 +19,22 @@ use crate::ui::step2::toolbar_compat_step2::{
     active_tab_compat_summary, draw_active_tab_issue_badge, first_active_tab_issue_target,
 };
 
-pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
+pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str, palette: ThemePalette) {
     let is_active = active == value;
     let fill = if is_active {
-        ui.visuals().widgets.active.bg_fill
+        redesign_accent(palette)
     } else {
-        ui.visuals().widgets.inactive.bg_fill
+        redesign_shell_bg(palette)
     };
     let stroke = if is_active {
-        ui.visuals().widgets.active.bg_stroke
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_accent(palette))
     } else {
-        ui.visuals().widgets.inactive.bg_stroke
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette))
     };
     let text_color = if is_active {
-        ui.visuals().widgets.active.fg_stroke.color
+        redesign_text_on_accent(palette)
     } else {
-        ui.visuals().widgets.inactive.fg_stroke.color
+        redesign_text_primary(palette)
     };
 
     let button =
@@ -124,6 +128,7 @@ pub fn render_controls(
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
     controls_rect: egui::Rect,
+    _palette: ThemePalette,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(controls_rect), |ui| {
         let ui_locked =
@@ -228,6 +233,7 @@ pub fn render_tabs(
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
     tabs_rect: egui::Rect,
+    palette: ThemePalette,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(tabs_rect), |ui| {
         ui.horizontal(|ui| {
@@ -247,8 +253,8 @@ pub fn render_tabs(
                     bgee_scanned || bg2_scanned || review_edit_scan_complete(state);
 
                 if show_bgee && show_bg2ee {
-                    draw_tab(ui, &mut state.step2.active_game_tab, "BGEE");
-                    draw_tab(ui, &mut state.step2.active_game_tab, "BG2EE");
+                    draw_tab(ui, &mut state.step2.active_game_tab, "BGEE", palette);
+                    draw_tab(ui, &mut state.step2.active_game_tab, "BG2EE", palette);
                 } else if show_bgee {
                     ui.label(crate::ui::shared::typography_global::monospace("BGEE"));
                 } else if show_bg2ee {
@@ -342,6 +348,7 @@ pub fn render_tabs(
                     &state.step2.active_game_tab,
                     &issue_summary,
                     &state.step2.compat_popup_filter,
+                    palette,
                 ) && let Some(target) = issue_target
                 {
                     toolbar_actions_step2::open_active_tab_issue(
@@ -350,7 +357,7 @@ pub fn render_tabs(
                         Some(target),
                     );
                 }
-                if draw_prompt_toolbar_badge(ui, prompt_count) {
+                if draw_prompt_toolbar_badge(ui, prompt_count, palette) {
                     toolbar_actions_step2::open_prompt_toolbar(state);
                 }
             });
@@ -404,7 +411,7 @@ fn active_mods_ref(state: &WizardState) -> &Vec<crate::app::state::Step2ModState
 }
 
 pub fn render_compat_popup(ui: &mut egui::Ui, state: &mut WizardState) {
-    crate::ui::step2::compat_window_step2::render(ui, state);
+    crate::ui::step2::compat_window_step2::render(ui, state, ThemePalette::Dark);
 }
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_action_row;
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_details;

@@ -103,6 +103,8 @@ pub(crate) struct ModDownloadSource {
     #[serde(default)]
     pub(crate) source_default: bool,
     #[serde(default)]
+    pub(crate) source_default_explicit: bool,
+    #[serde(default)]
     pub(crate) url: String,
     #[serde(default)]
     pub(crate) github: Option<String>,
@@ -213,6 +215,12 @@ pub(crate) fn load_user_mod_download_source_block(
     allow_source_id_change: bool,
 ) -> Result<String, String> {
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
+    if !allow_source_id_change {
+        return Ok(load_mod_download_sources()
+            .resolve_source(tp2, Some(source_id))
+            .map(|source| source_to_editor_block(&source))
+            .unwrap_or_else(|| template_source_block(label, source_id)));
+    }
     let path = mod_downloads_user_path();
     let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
     if let Some(block) = find_mod_block(&content, tp2)
@@ -220,14 +228,7 @@ pub(crate) fn load_user_mod_download_source_block(
     {
         return Ok(source_block);
     }
-    if allow_source_id_change {
-        Ok(template_source_block(label, source_id))
-    } else {
-        Ok(load_mod_download_sources()
-            .resolve_source(tp2, Some(source_id))
-            .map(|source| source_to_editor_block(&source))
-            .unwrap_or_else(|| template_source_block(label, source_id)))
-    }
+    Ok(template_source_block(label, source_id))
 }
 
 pub(crate) fn save_user_mod_download_source_block(
@@ -713,6 +714,7 @@ const SOURCE_BLOCK_FIELD_ORDER: &[&str] = &[
     "branch",
     "asset",
     "subdir_require",
+    "config_files",
     "aliases",
     "tp2_rename",
     "pkg_windows",
@@ -802,6 +804,17 @@ fn source_to_editor_block(source: &ModDownloadSource) -> String {
             escape_toml_string(subdir_require)
         ));
     }
+    if !source.config_files.is_empty() {
+        lines.push(format!(
+            "config_files = [{}]",
+            source
+                .config_files
+                .iter()
+                .map(|config_file| format!("\"{}\"", escape_toml_string(config_file)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
     if !source.aliases.is_empty() {
         lines.push(format!(
             "aliases = [{}]",
@@ -831,6 +844,9 @@ fn source_to_editor_block(source: &ModDownloadSource) -> String {
     }
     if let Some(pkg_macos) = source.pkg_macos.as_ref() {
         lines.push(format!("pkg_macos = \"{}\"", escape_toml_string(pkg_macos)));
+    }
+    if source.source_default && source.source_default_explicit {
+        lines.push("default = true".to_string());
     }
     lines.join("\n")
 }
@@ -1009,6 +1025,9 @@ fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSour
     }
     if let Some(source_label) = overlay.source_label {
         target.source_label = source_label;
+    }
+    if overlay.source_default_explicit {
+        target.source_default_explicit = true;
     }
     if overlay.source_default {
         target.source_default = true;
@@ -1248,7 +1267,19 @@ fn normalize_source(source: &mut ModDownloadSource) {
         .channel
         .take()
         .map(|channel| channel.trim().to_string())
-        .filter(|channel| !channel.is_empty());
+        .map(|channel| {
+            if channel == "releases" {
+                "release".to_string()
+            } else {
+                channel
+            }
+        })
+        .filter(|channel| {
+            matches!(
+                channel.as_str(),
+                "release" | "pre-release" | "preonly" | "master" | "ifeellucky"
+            )
+        });
     source.tag = source
         .tag
         .take()

@@ -614,6 +614,7 @@ dependencies = [
  "ureq",
  "wait-timeout",
  "walkdir",
+ "windows-sys 0.61.2",
  "winres",
  "zip",
 ]
@@ -883,6 +884,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]

@@ -4,6 +4,7 @@
 use eframe::egui;
 
 use crate::app::state::Step3ItemState;
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_accent};
 use crate::ui::step3::blocks;
 use crate::ui::step3::drag;
 
@@ -96,6 +97,7 @@ pub(crate) fn draw_insert_marker(
     drag_from: &Option<usize>,
     drag_over: Option<usize>,
     visible_rows: &[(usize, egui::Rect)],
+    palette: ThemePalette,
 ) {
     if drag_from.is_none() {
         return;
@@ -116,7 +118,10 @@ pub(crate) fn draw_insert_marker(
             };
             ui.painter().line_segment(
                 [egui::pos2(x0, y), egui::pos2(x1, y)],
-                egui::Stroke::new(1.5, ui.visuals().selection.stroke.color),
+                egui::Stroke::new(
+                    crate::ui::shared::redesign_tokens::REDESIGN_BORDER_WIDTH_PX,
+                    redesign_accent(palette),
+                ),
             );
         }
     }

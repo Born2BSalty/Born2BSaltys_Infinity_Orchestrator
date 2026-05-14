@@ -5,6 +5,10 @@ use eframe::egui;
 
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BIO_SCROLL_BAR_WIDTH_PX, REDESIGN_BIO_SCROLL_INNER_MARGIN_PX,
+    REDESIGN_BIO_SCROLL_OUTER_MARGIN_PX, ThemePalette, redesign_text_primary,
+};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::service_list_ops_step2::mod_matches_filter;
 use crate::ui::step2::state_step2::active_mods_mut;
@@ -17,6 +21,7 @@ pub(crate) fn render_list_pane(
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
     left_rect: egui::Rect,
+    palette: ThemePalette,
 ) {
     let selection_before = selection_snapshot(state);
     ui.scope_builder(egui::UiBuilder::new().max_rect(left_rect), |ui| {
@@ -32,9 +37,9 @@ pub(crate) fn render_list_pane(
                 ui.set_min_size(left_rect.size());
                 ui.scope(|ui| {
                     let mut scroll = egui::style::ScrollStyle::solid();
-                    scroll.bar_width = 12.0;
-                    scroll.bar_inner_margin = 0.0;
-                    scroll.bar_outer_margin = 2.0;
+                    scroll.bar_width = REDESIGN_BIO_SCROLL_BAR_WIDTH_PX;
+                    scroll.bar_inner_margin = REDESIGN_BIO_SCROLL_INNER_MARGIN_PX;
+                    scroll.bar_outer_margin = REDESIGN_BIO_SCROLL_OUTER_MARGIN_PX;
                     ui.style_mut().spacing.scroll = scroll;
                     ui.add_enabled_ui(
                         !state.step1.installs_exactly_from_weidu_logs() && !state.step2.is_scanning,
@@ -54,7 +59,12 @@ pub(crate) fn render_list_pane(
                                 let prompt_eval = build_prompt_eval_context(state);
                                 let mods = active_mods_mut(&mut state.step2);
                                 if mods.is_empty() {
-                                    ui.label("No mods scanned yet.");
+                                    ui.label(
+                                        crate::ui::shared::typography_global::plain(
+                                            "No mods scanned yet.",
+                                        )
+                                        .color(redesign_text_primary(palette)),
+                                    );
                                 } else {
                                     let mut rendered_any = false;
                                     for mod_state in mods.iter_mut() {
@@ -73,6 +83,7 @@ pub(crate) fn render_list_pane(
                                             collapse_default_open,
                                             jump_to_selected_requested:
                                                 &mut jump_to_selected_requested,
+                                            palette,
                                         };
                                         let maybe_selected =
                                             render_mod_tree(ui, &mut render_ctx, mod_state);
@@ -101,7 +112,12 @@ pub(crate) fn render_list_pane(
                                         ui.add_space(6.0);
                                     }
                                     if !rendered_any {
-                                        ui.label("No mods/components match your search.");
+                                        ui.label(
+                                            crate::ui::shared::typography_global::plain(
+                                                "No mods/components match your search.",
+                                            )
+                                            .color(redesign_text_primary(palette)),
+                                        );
                                     }
                                 }
                                 state.step2.selected = selected;

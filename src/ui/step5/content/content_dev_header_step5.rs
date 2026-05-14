@@ -5,6 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_accent_path, redesign_success};
 
 const STEP5_TITLE: &str = "Step 5: Install, Logs, Diagnostics";
 
@@ -13,6 +14,7 @@ pub(crate) fn render_dev_header(
     state: &mut WizardState,
     terminal: Option<&EmbeddedTerminal>,
     dev_mode: bool,
+    palette: ThemePalette,
 ) {
     ui.heading(step5_title(state, terminal));
     ui.label("Final execution view.");
@@ -26,9 +28,9 @@ pub(crate) fn render_dev_header(
             "OFF"
         };
         let color = if has_rust_log {
-            crate::ui::shared::theme_global::success()
+            redesign_success(palette)
         } else {
-            crate::ui::shared::theme_global::accent_path()
+            redesign_accent_path(palette)
         };
         let msg = if has_rust_log {
             format!("Dev Mode: RUST_LOG={level} selected.")

@@ -4,27 +4,33 @@
 use eframe::egui;
 
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    ThemePalette, redesign_accent, redesign_border_soft, redesign_compat_conflict,
+    redesign_compat_conflict_fill, redesign_compat_warning, redesign_compat_warning_fill,
+    redesign_shell_bg, redesign_text_on_accent, redesign_text_primary, redesign_warning,
+};
 use crate::ui::shared::typography_global as typo;
 use crate::ui::step2::prompt_popup_step2::{draw_prompt_toolbar_badge, open_toolbar_prompt_popup};
 use crate::ui::step3::list_step3;
 use crate::ui::step3::{state_step3, toolbar_support_step3};
 
-pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
+pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str, palette: ThemePalette) {
     let is_active = active == value;
     let fill = if is_active {
-        ui.visuals().widgets.active.bg_fill
+        redesign_accent(palette)
     } else {
-        ui.visuals().widgets.inactive.bg_fill
+        redesign_shell_bg(palette)
     };
     let stroke = if is_active {
-        ui.visuals().widgets.active.bg_stroke
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_accent(palette))
     } else {
-        ui.visuals().widgets.inactive.bg_stroke
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette))
     };
     let text_color = if is_active {
-        ui.visuals().widgets.active.fg_stroke.color
+        redesign_text_on_accent(palette)
     } else {
-        ui.visuals().widgets.inactive.fg_stroke.color
+        redesign_text_primary(palette)
     };
     let button =
         egui::Button::new(crate::ui::shared::typography_global::plain(value).color(text_color))
@@ -44,6 +50,7 @@ fn draw_tab_issue_badge(
     value: &str,
     issue_count: usize,
     has_blocking: bool,
+    palette: ThemePalette,
 ) -> bool {
     if issue_count == 0 {
         return false;
@@ -51,13 +58,13 @@ fn draw_tab_issue_badge(
 
     let (text_color, fill_color) = if has_blocking {
         (
-            crate::ui::shared::theme_global::conflict(),
-            crate::ui::shared::theme_global::conflict_fill(),
+            redesign_compat_conflict(palette),
+            redesign_compat_conflict_fill(palette),
         )
     } else {
         (
-            crate::ui::shared::theme_global::warning(),
-            crate::ui::shared::theme_global::warning_fill(),
+            redesign_compat_warning(palette),
+            redesign_compat_warning_fill(palette),
         )
     };
 
@@ -67,12 +74,9 @@ fn draw_tab_issue_badge(
     let issue_label = if issue_count == 1 { "issue" } else { "issues" };
     let badge = egui::Button::new(badge_text)
         .fill(fill_color)
-        .stroke(egui::Stroke::new(
-            crate::ui::shared::layout_tokens_global::BORDER_THIN,
-            fill_color,
-        ))
-        .corner_radius(egui::CornerRadius::same(7))
-        .min_size(egui::vec2(0.0, 18.0));
+        .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, fill_color))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BIO_PILL_RADIUS_PX as u8))
+        .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX));
     if ui
         .add(badge)
         .on_hover_text(format!(
@@ -92,13 +96,14 @@ fn render_toolbar(
     dev_mode: bool,
     exe_fingerprint: &str,
     summary: &toolbar_support_step3::Step3ToolbarSummary,
+    palette: ThemePalette,
 ) {
     ui.horizontal(|ui| {
         let (bgee_issue_count, bgee_has_blocking) = summary.bgee_summary;
         let (bg2ee_issue_count, bg2ee_has_blocking) = summary.bg2ee_summary;
         if summary.show_bgee && summary.show_bg2ee {
-            draw_tab(ui, &mut state.step3.active_game_tab, "BGEE");
-            draw_tab(ui, &mut state.step3.active_game_tab, "BG2EE");
+            draw_tab(ui, &mut state.step3.active_game_tab, "BGEE", palette);
+            draw_tab(ui, &mut state.step3.active_game_tab, "BG2EE", palette);
             ui.add_space(8.0);
             if draw_tab_issue_badge(
                 ui,
@@ -106,6 +111,7 @@ fn render_toolbar(
                 "BGEE",
                 bgee_issue_count,
                 bgee_has_blocking,
+                palette,
             ) && let Some(target) = summary.bgee_target.as_ref()
             {
                 toolbar_support_step3::open_toolbar_issue_popup(state, target);
@@ -116,6 +122,7 @@ fn render_toolbar(
                 "BG2EE",
                 bg2ee_issue_count,
                 bg2ee_has_blocking,
+                palette,
             ) && let Some(target) = summary.bg2ee_target.as_ref()
             {
                 toolbar_support_step3::open_toolbar_issue_popup(state, target);
@@ -125,7 +132,7 @@ fn render_toolbar(
             } else {
                 summary.bg2ee_prompt_count
             };
-            if draw_prompt_toolbar_badge(ui, active_prompt_count) {
+            if draw_prompt_toolbar_badge(ui, active_prompt_count, palette) {
                 open_toolbar_prompt_popup(
                     state,
                     &format!("Prompt Components ({})", state.step3.active_game_tab),
@@ -139,11 +146,12 @@ fn render_toolbar(
                 "BGEE",
                 bgee_issue_count,
                 bgee_has_blocking,
+                palette,
             ) && let Some(target) = summary.bgee_target.as_ref()
             {
                 toolbar_support_step3::open_toolbar_issue_popup(state, target);
             }
-            if draw_prompt_toolbar_badge(ui, summary.bgee_prompt_count) {
+            if draw_prompt_toolbar_badge(ui, summary.bgee_prompt_count, palette) {
                 open_toolbar_prompt_popup(state, "Prompt Components (BGEE)");
             }
         } else if summary.show_bg2ee {
@@ -154,11 +162,12 @@ fn render_toolbar(
                 "BG2EE",
                 bg2ee_issue_count,
                 bg2ee_has_blocking,
+                palette,
             ) && let Some(target) = summary.bg2ee_target.as_ref()
             {
                 toolbar_support_step3::open_toolbar_issue_popup(state, target);
             }
-            if draw_prompt_toolbar_badge(ui, summary.bg2ee_prompt_count) {
+            if draw_prompt_toolbar_badge(ui, summary.bg2ee_prompt_count, palette) {
                 open_toolbar_prompt_popup(state, "Prompt Components (BG2EE)");
             }
         }
@@ -221,7 +230,13 @@ fn render_toolbar(
     });
 }
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool, exe_fingerprint: &str) {
+pub fn render(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    dev_mode: bool,
+    exe_fingerprint: &str,
+    palette: ThemePalette,
+) {
     state_step3::normalize_active_tab(state);
     let toolbar_summary = toolbar_support_step3::build_toolbar_summary(state);
     let active_markers = if state.step3.active_game_tab == "BGEE" {
@@ -241,21 +256,34 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool, exe_fi
     ));
     ui.add_space(8.0);
 
-    render_toolbar(ui, state, dev_mode, exe_fingerprint, &toolbar_summary);
+    render_toolbar(
+        ui,
+        state,
+        dev_mode,
+        exe_fingerprint,
+        &toolbar_summary,
+        palette,
+    );
     if let Some(err) = toolbar_summary.compat_rules_error.as_deref() {
         ui.add_space(4.0);
         ui.label(
             crate::ui::shared::typography_global::weak(format!("Compat rules load failed: {err}"))
-                .color(crate::ui::shared::theme_global::warning()),
+                .color(redesign_warning(palette)),
         );
     }
 
     ui.add_space(6.0);
     let mut jump_to_selected_requested = state.step3.jump_to_selected_requested;
     state.step3.jump_to_selected_requested = false;
-    list_step3::render(ui, state, &mut jump_to_selected_requested, active_markers);
-    crate::ui::step2::content_step2::render_compat_popup(ui, state);
-    crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, state);
+    list_step3::render(
+        ui,
+        state,
+        &mut jump_to_selected_requested,
+        active_markers,
+        palette,
+    );
+    crate::ui::step2::compat_window_step2::render(ui, state, palette);
+    crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, state, palette);
     state.step3.jump_to_selected_requested =
         state.step3.jump_to_selected_requested || jump_to_selected_requested;
 }

@@ -18,6 +18,8 @@ pub(crate) fn apply_step2_scan_deprecated(mods: &mut [Step2ModState]) {
         let deprecated_hits = deprecated_cache
             .entry(mod_state.tp2_path.clone())
             .or_insert_with(|| load_component_deprecated_hits(&mod_state.tp2_path));
+        let propagated_hits =
+            deprecated_empty_subcomponent_placeholder_hits(mod_state, deprecated_hits);
 
         for component in &mut mod_state.components {
             if component
@@ -28,7 +30,10 @@ pub(crate) fn apply_step2_scan_deprecated(mods: &mut [Step2ModState]) {
                 continue;
             }
 
-            let Some(hit) = deprecated_hits.get(component.component_id.trim()) else {
+            let Some(hit) = deprecated_hits
+                .get(component.component_id.trim())
+                .or_else(|| propagated_hits.get(component.component_id.trim()))
+            else {
                 continue;
             };
 
@@ -61,6 +66,52 @@ fn apply_deprecated(
     ));
     component.compat_evidence = Some(hit.raw_evidence.clone());
     component.disabled_reason = Some(hit.message.clone());
+}
+
+fn deprecated_empty_subcomponent_placeholder_hits(
+    mod_state: &Step2ModState,
+    direct_hits: &HashMap<String, DeprecatedHit>,
+) -> HashMap<String, DeprecatedHit> {
+    let mut groups = HashMap::<String, Vec<&Step2ComponentState>>::new();
+    for component in &mod_state.components {
+        let Some(key) = component.subcomponent_key.as_deref() else {
+            continue;
+        };
+        groups.entry(key.to_string()).or_default().push(component);
+    }
+
+    let mut out = HashMap::<String, DeprecatedHit>::new();
+    for group in groups.values() {
+        if !group
+            .iter()
+            .all(|component| component.tp2_empty_placeholder_block)
+        {
+            continue;
+        }
+        let Some(direct_hit) = group
+            .iter()
+            .find_map(|component| direct_hits.get(component.component_id.trim()))
+        else {
+            continue;
+        };
+        for component in group {
+            let component_id = component.component_id.trim();
+            if direct_hits.contains_key(component_id) {
+                continue;
+            }
+            out.insert(
+                component_id.to_string(),
+                DeprecatedHit {
+                    source: direct_hit.source.clone(),
+                    raw_evidence: direct_hit.raw_evidence.clone(),
+                    message:
+                        "TP2 marks another empty placeholder choice in this SUBCOMPONENT group as deprecated."
+                            .to_string(),
+                },
+            );
+        }
+    }
+    out
 }
 
 fn load_component_deprecated_hits(tp2_path: &str) -> HashMap<String, DeprecatedHit> {

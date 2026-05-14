@@ -240,7 +240,7 @@ fn requested_github_channel(value: Option<&str>) -> GitHubChannel {
     {
         Some("pre-release") => GitHubChannel::Pre,
         Some("preonly") => GitHubChannel::PreOnly,
-        Some("releases") => GitHubChannel::Stable,
+        Some("release" | "releases") => GitHubChannel::Stable,
         Some("master") => GitHubChannel::Master,
         Some("ifeellucky") => GitHubChannel::IFeelLucky,
         _ => GitHubChannel::Stable,

@@ -8,6 +8,7 @@ pub fn render_pane(
     state: &mut crate::app::state::WizardState,
     action: &mut Option<Step2Action>,
     right_rect: eframe::egui::Rect,
+    palette: crate::ui::shared::redesign_tokens::ThemePalette,
 ) {
     ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(right_rect), |ui| {
         let details = crate::ui::step2::service_details_step2::selected_details(state);
@@ -19,9 +20,9 @@ pub fn render_pane(
             ));
             ui.add_space(4.0);
             if exact_log_mode {
-                details_pane_content::render_exact_log_status(ui, state);
+                details_pane_content::render_exact_log_status(ui, state, palette);
             } else {
-                details_pane_content::render(ui, &details, action);
+                details_pane_content::render(ui, &details, action, palette);
             }
         });
     });
@@ -31,17 +32,23 @@ pub(crate) mod details_pane_content {
     use eframe::egui;
 
     use crate::app::state::{WizardState, exact_log_ready_to_install};
-    use crate::ui::shared::theme_global as theme;
+    use crate::ui::shared::redesign_tokens::{
+        ThemePalette, redesign_error, redesign_success, redesign_warning,
+    };
     use crate::ui::shared::typography_global as typo;
     use crate::ui::step2::details_paths_step2::{
-        render_component_block, render_paths_grid, render_raw_line,
+        PathsGridLayout, render_component_block, render_paths_grid, render_raw_line,
     };
-    use crate::ui::step2::details_selection_step2::render_selection_grid;
+    use crate::ui::step2::details_selection_step2::{SelectionGridLayout, render_selection_grid};
     use crate::ui::step2::state_step2::Step2Details;
 
     use super::Step2Action;
 
-    pub(crate) fn render_exact_log_status(ui: &mut egui::Ui, state: &WizardState) {
+    pub(crate) fn render_exact_log_status(
+        ui: &mut egui::Ui,
+        state: &WizardState,
+        palette: ThemePalette,
+    ) {
         let ready = exact_log_ready_to_install(state);
         let downloadable_missing = state.step2.update_selected_missing_sources.len();
         let manual_sources = state.step2.update_selected_manual_sources.len();
@@ -59,10 +66,10 @@ pub(crate) mod details_pane_content {
                 let (headline, color) = if ready {
                     (
                         "All required mods are available. You can continue to install.",
-                        theme::success_bright(),
+                        redesign_success(palette),
                     )
                 } else {
-                    ("Install cannot continue yet.", theme::error())
+                    ("Install cannot continue yet.", redesign_error(palette))
                 };
                 ui.label(typo::strong("Exact-Log Install Status").color(color));
                 ui.add_space(4.0);
@@ -71,7 +78,7 @@ pub(crate) mod details_pane_content {
                 if !state.step2.exact_log_mod_list_checked {
                     ui.label(
                         typo::plain("Run Check Mod List to verify required mods.")
-                            .color(theme::warning()),
+                            .color(redesign_warning(palette)),
                     );
                     ui.add_space(8.0);
                 }
@@ -90,13 +97,14 @@ pub(crate) mod details_pane_content {
         ui: &mut egui::Ui,
         details: &Step2Details,
         action: &mut Option<Step2Action>,
+        palette: ThemePalette,
     ) {
         egui::ScrollArea::vertical()
             .id_salt("step2_details_scroll")
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 if let Some(mod_name) = &details.mod_name {
-                    render_details_content(ui, mod_name, details, action);
+                    render_details_content(ui, mod_name, details, action, palette);
                 } else {
                     ui.label("Select an item to view details.");
                 }
@@ -108,6 +116,7 @@ pub(crate) mod details_pane_content {
         mod_name: &str,
         details: &Step2Details,
         action: &mut Option<Step2Action>,
+        palette: ThemePalette,
     ) {
         let label_w = 86.0;
         let action_w = 48.0;
@@ -122,11 +131,21 @@ pub(crate) mod details_pane_content {
         });
         ui.add_space(4.0);
 
-        render_selection_grid(ui, details, action, label_w, value_w, row_h, value_chars);
+        render_selection_grid(
+            ui,
+            details,
+            action,
+            SelectionGridLayout::new(label_w, value_w, row_h, value_chars, palette),
+        );
         ui.add_space(6.0);
         ui.separator();
         ui.add_space(4.0);
-        render_paths_grid(ui, details, action, label_w, value_w, row_h, value_chars);
+        render_paths_grid(
+            ui,
+            details,
+            action,
+            PathsGridLayout::new(label_w, value_w, row_h, value_chars, palette),
+        );
         ui.add_space(6.0);
         render_component_block(ui, details);
         render_raw_line(ui, details);

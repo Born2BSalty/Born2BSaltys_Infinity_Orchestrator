@@ -6,6 +6,11 @@ use eframe::egui;
 use crate::app::prompt_eval_summary::evaluate_component_prompt_summary;
 use crate::app::prompt_popup_text::format_component_prompt_popup_text_with_body;
 use crate::app::state::{Step2ComponentState, Step2Selection};
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_PX, REDESIGN_BIO_ROW_GAP_PX,
+    REDESIGN_BORDER_WIDTH_PX, redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text,
+    redesign_text_disabled,
+};
 use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
     format_component_row_label_with_display,
@@ -71,7 +76,9 @@ pub(crate) fn render_component_row(
             component.checked = false;
             component.selected_order = None;
         }
-        if let Some((dot_color, _, _)) = compat_colors(component.compat_kind.as_deref()) {
+        if let Some((dot_color, _, _)) =
+            compat_colors(component.compat_kind.as_deref(), ctx.palette)
+        {
             ui.label(crate::ui::shared::typography_global::strong("•").color(dot_color));
         }
         let is_selected = matches!(
@@ -89,10 +96,10 @@ pub(crate) fn render_component_row(
         let widget_text = if effectively_disabled {
             egui::WidgetText::RichText(
                 crate::ui::shared::typography_global::strong(display_label.as_str())
-                    .color(crate::ui::shared::theme_global::text_disabled()),
+                    .color(redesign_text_disabled(ctx.palette)),
             )
         } else {
-            colored_component_widget_text(ui, display_label.as_str())
+            colored_component_widget_text(ui, display_label.as_str(), ctx.palette)
         };
         let row_w = ui.available_width().max(0.0);
         ui.allocate_ui_with_layout(
@@ -100,7 +107,7 @@ pub(crate) fn render_component_row(
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
                 ui.set_max_width(row_w);
-                let compat = compat_colors(component.compat_kind.as_deref());
+                let compat = compat_colors(component.compat_kind.as_deref(), ctx.palette);
                 let mut row = ui.selectable_label(is_selected, widget_text);
                 if *ctx.jump_to_selected_requested && is_selected {
                     ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
@@ -118,7 +125,7 @@ pub(crate) fn render_component_row(
                     });
                 }
                 if let Some((pill_text_color, pill_bg, pill_label)) = compat {
-                    ui.add_space(6.0);
+                    ui.add_space(REDESIGN_BIO_ROW_GAP_PX);
                     let pill_text = crate::ui::shared::typography_global::strong(pill_label)
                         .color(pill_text_color)
                         .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
@@ -129,8 +136,10 @@ pub(crate) fn render_component_row(
                                 crate::ui::shared::layout_tokens_global::BORDER_THIN,
                                 pill_bg,
                             ))
-                            .corner_radius(egui::CornerRadius::same(7))
-                            .min_size(egui::vec2(0.0, 18.0)),
+                            .corner_radius(egui::CornerRadius::same(
+                                REDESIGN_BIO_PILL_RADIUS_PX as u8,
+                            ))
+                            .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX)),
                     );
                     if let Some(reason) = &component.disabled_reason {
                         pill_response = pill_response.on_hover_text(reason);
@@ -152,20 +161,22 @@ pub(crate) fn render_component_row(
                 let evaluated_prompt_summary =
                     evaluate_component_prompt_summary(component, ctx.prompt_eval);
                 if !evaluated_prompt_summary.trim().is_empty() {
-                    ui.add_space(6.0);
+                    ui.add_space(REDESIGN_BIO_ROW_GAP_PX);
                     let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
-                        .color(crate::ui::shared::theme_global::prompt_text())
+                        .color(redesign_prompt_text(ctx.palette))
                         .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
                     let prompt_response = ui
                         .add(
                             egui::Button::new(prompt_text)
-                                .fill(crate::ui::shared::theme_global::prompt_fill())
+                                .fill(redesign_prompt_fill(ctx.palette))
                                 .stroke(egui::Stroke::new(
-                                    crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                                    crate::ui::shared::theme_global::prompt_stroke(),
+                                    REDESIGN_BORDER_WIDTH_PX,
+                                    redesign_prompt_stroke(ctx.palette),
                                 ))
-                                .corner_radius(egui::CornerRadius::same(7))
-                                .min_size(egui::vec2(0.0, 18.0)),
+                                .corner_radius(egui::CornerRadius::same(
+                                    REDESIGN_BIO_PILL_RADIUS_PX as u8,
+                                ))
+                                .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX)),
                         )
                         .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
                     if prompt_response.clicked() {

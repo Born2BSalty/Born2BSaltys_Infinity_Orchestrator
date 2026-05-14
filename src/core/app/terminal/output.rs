@@ -17,11 +17,11 @@ mod accessors {
             analyze::prompt_headers_ready(&self.output_buffer)
         }
 
-        pub fn current_prompt_info(&self) -> Option<analyze::PromptInfo> {
+        pub(crate) fn current_prompt_info(&self) -> Option<analyze::PromptInfo> {
             analyze::current_prompt_info(&self.output_buffer)
         }
 
-        pub fn prompt_kind_name(&self, prompt: &analyze::PromptInfo) -> &'static str {
+        pub(crate) fn prompt_kind_name(&self, prompt: &analyze::PromptInfo) -> &'static str {
             analyze::prompt_kind_name(prompt)
         }
 

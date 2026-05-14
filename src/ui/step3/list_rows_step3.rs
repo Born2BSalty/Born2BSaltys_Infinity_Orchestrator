@@ -12,6 +12,11 @@ use crate::app::state::Step3ItemState;
 use crate::app::step3_history;
 use crate::app::step3_prompt_edit::PromptActionRequest;
 use crate::parser::prompt_eval_expr::PromptEvalContext;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_PX, REDESIGN_BIO_ROW_GAP_PX,
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_prompt_fill, redesign_prompt_stroke,
+    redesign_prompt_text, redesign_text_disabled, redesign_warning,
+};
 use crate::ui::step3::block_selection_step3::{
     selected_full_main_parent_block_indices, single_child_main_parent_block_indices,
 };
@@ -48,6 +53,7 @@ pub(crate) struct RowRenderContext<'a> {
     pub locked_blocks: &'a mut Vec<String>,
     pub undo_stack: &'a mut Vec<Vec<Step3ItemState>>,
     pub redo_stack: &'a mut Vec<Vec<Step3ItemState>>,
+    pub palette: ThemePalette,
 }
 
 pub(crate) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> RowRenderOutcome {
@@ -88,10 +94,10 @@ pub(crate) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> 
             ui.horizontal(|ui| {
                 let lock_icon = if is_locked {
                     crate::ui::shared::typography_global::strong("🔒")
-                        .color(crate::ui::shared::theme_global::warning())
+                        .color(redesign_warning(ctx.palette))
                 } else {
                     crate::ui::shared::typography_global::strong("🔓")
-                        .color(crate::ui::shared::theme_global::text_disabled())
+                        .color(redesign_text_disabled(ctx.palette))
                 };
                 if ui
                     .small_button(lock_icon)
@@ -148,27 +154,27 @@ pub(crate) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> 
             ui.horizontal(|ui| {
                 ui.add_space(25.0);
                 let text = format_step3::format_step3_item(item);
-                let row_text = format_step3::weidu_colored_widget_text(ui, &text);
+                let row_text = format_step3::weidu_colored_widget_text(ui, &text, ctx.palette);
                 let resp = ui.selectable_label(selected.contains(&idx), row_text);
                 if let Some(marker) = compat_marker
                     && let Some((pill_text_color, pill_bg, pill_label)) =
-                        crate::ui::step2::tree_compat_display_step2::compat_colors(Some(
-                            &marker.kind,
-                        ))
+                        crate::ui::step2::tree_compat_display_step2::compat_colors(
+                            Some(&marker.kind),
+                            ctx.palette,
+                        )
                 {
-                    ui.add_space(6.0);
+                    ui.add_space(REDESIGN_BIO_ROW_GAP_PX);
                     let pill_text = crate::ui::shared::typography_global::strong(pill_label)
                         .color(pill_text_color)
                         .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
                     let pill_response = ui.add(
                         egui::Button::new(pill_text)
                             .fill(pill_bg)
-                            .stroke(egui::Stroke::new(
-                                crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                                pill_bg,
+                            .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, pill_bg))
+                            .corner_radius(egui::CornerRadius::same(
+                                REDESIGN_BIO_PILL_RADIUS_PX as u8,
                             ))
-                            .corner_radius(egui::CornerRadius::same(7))
-                            .min_size(egui::vec2(0.0, 18.0)),
+                            .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX)),
                     );
                     let pill_response = if let Some(message) = marker.message.as_deref() {
                         pill_response.on_hover_text(message)
@@ -185,20 +191,22 @@ pub(crate) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> 
                     }
                 }
                 if !prompt_summary.trim().is_empty() {
-                    ui.add_space(6.0);
+                    ui.add_space(REDESIGN_BIO_ROW_GAP_PX);
                     let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
-                        .color(crate::ui::shared::theme_global::prompt_text())
+                        .color(redesign_prompt_text(ctx.palette))
                         .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
                     let prompt_response = ui
                         .add(
                             egui::Button::new(prompt_text)
-                                .fill(crate::ui::shared::theme_global::prompt_fill())
+                                .fill(redesign_prompt_fill(ctx.palette))
                                 .stroke(egui::Stroke::new(
-                                    crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                                    crate::ui::shared::theme_global::prompt_stroke(),
+                                    REDESIGN_BORDER_WIDTH_PX,
+                                    redesign_prompt_stroke(ctx.palette),
                                 ))
-                                .corner_radius(egui::CornerRadius::same(7))
-                                .min_size(egui::vec2(0.0, 18.0)),
+                                .corner_radius(egui::CornerRadius::same(
+                                    REDESIGN_BIO_PILL_RADIUS_PX as u8,
+                                ))
+                                .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX)),
                         )
                         .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
                     if prompt_response.clicked() {

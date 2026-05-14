@@ -47,6 +47,10 @@ pub(super) fn to_mod_states(
             } else {
                 fs::read_to_string(&tp2_path).ok()
             };
+            let tp2_component_blocks = tp2_text
+                .as_deref()
+                .map(tp2_blocks::parse_tp2_component_blocks)
+                .unwrap_or_default();
             let mut deduped_components = dedup_components(comps);
             if let Some(tp2_text) = tp2_text.as_deref() {
                 order::reorder_components_by_tp2_order(
@@ -131,6 +135,8 @@ pub(super) fn to_mod_states(
                 components: deduped_components
                     .into_iter()
                     .map(|component| {
+                        let tp2_component_block =
+                            tp2_component_blocks.get(component.component_id.trim());
                         let derived_group = derived_collapsible_groups
                             .get(component.component_id.trim())
                             .cloned();
@@ -142,6 +148,10 @@ pub(super) fn to_mod_states(
                             weidu_group: derived_weidu_groups
                                 .get(component.component_id.trim())
                                 .cloned(),
+                            subcomponent_key: tp2_component_block
+                                .and_then(|block| block.subcomponent_key.clone()),
+                            tp2_empty_placeholder_block: tp2_component_block
+                                .is_some_and(tp2_block_is_empty_placeholder),
                             collapsible_group: derived_group
                                 .as_ref()
                                 .map(|group| group.header.clone()),
@@ -200,6 +210,27 @@ fn should_drop_hidden_only_utility_mod(mod_state: &Step2ModState) -> bool {
             .hidden_components
             .iter()
             .all(|component| component.reason == NESTED_UTILITY_HIDE_REASON)
+}
+
+fn tp2_block_is_empty_placeholder(block: &tp2_blocks::Tp2ComponentBlock) -> bool {
+    let Some((first, rest)) = block.body_lines.split_first() else {
+        return false;
+    };
+    if !first
+        .trim_start()
+        .to_ascii_uppercase()
+        .starts_with("BEGIN ")
+    {
+        return false;
+    }
+    rest.iter().all(|line| {
+        let trimmed = line.trim();
+        trimmed.is_empty()
+            || trimmed.starts_with("//")
+            || trimmed.starts_with("/*")
+            || trimmed.starts_with('*')
+            || trimmed.starts_with("*/")
+    })
 }
 
 fn find_best_ini(tp2_path: &str) -> Option<String> {

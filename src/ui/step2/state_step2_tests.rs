@@ -55,6 +55,8 @@ fn eet_core_mod(checked: bool) -> Step2ModState {
             component_id: "0".to_string(),
             label: "EET core".to_string(),
             weidu_group: None,
+            subcomponent_key: None,
+            tp2_empty_placeholder_block: false,
             collapsible_group: None,
             collapsible_group_is_umbrella: false,
             raw_line: String::new(),

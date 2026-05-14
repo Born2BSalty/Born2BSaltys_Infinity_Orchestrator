@@ -4,8 +4,11 @@
 use eframe::egui;
 
 use crate::app::state::Step2ModState;
+use crate::ui::shared::redesign_tokens::{
+    ThemePalette, redesign_error, redesign_success, redesign_text_muted, redesign_text_primary,
+};
 
-pub(crate) fn render(ui: &mut egui::Ui, mod_state: &Step2ModState) {
+pub(crate) fn render(ui: &mut egui::Ui, mod_state: &Step2ModState, palette: ThemePalette) {
     let marker = if mod_state.update_locked {
         Some("\u{1F512}".to_string())
     } else {
@@ -16,12 +19,12 @@ pub(crate) fn render(ui: &mut egui::Ui, mod_state: &Step2ModState) {
     };
     ui.add_space(4.0);
     let marker_color = if mod_state.update_locked {
-        crate::ui::shared::theme_global::text_muted()
+        redesign_text_muted(palette)
     } else {
         match marker.as_str() {
-            "+" => crate::ui::shared::theme_global::success(),
-            "!" => crate::ui::shared::theme_global::error(),
-            _ => ui.visuals().text_color(),
+            "+" => redesign_success(palette),
+            "!" => redesign_error(palette),
+            _ => redesign_text_primary(palette),
         }
     };
     ui.label(crate::ui::shared::typography_global::strong(marker).color(marker_color));

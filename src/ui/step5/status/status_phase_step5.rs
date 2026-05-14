@@ -4,29 +4,37 @@
 use eframe::egui;
 
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::{
+    ThemePalette, redesign_accent_path, redesign_error, redesign_status_idle,
+    redesign_status_preparing, redesign_status_running, redesign_text_muted, redesign_warning,
+};
 
 pub(crate) struct PhaseInfo {
     pub label: &'static str,
     pub color: egui::Color32,
 }
 
-pub(crate) fn compute_phase(state: &WizardState, waiting_for_input: bool) -> PhaseInfo {
+pub(crate) fn compute_phase(
+    state: &WizardState,
+    waiting_for_input: bool,
+    palette: ThemePalette,
+) -> PhaseInfo {
     if state.step5.install_running {
         if state.step5.cancel_pending {
             return PhaseInfo {
                 label: "Cancelling",
-                color: crate::ui::shared::theme_global::warning(),
+                color: redesign_warning(palette),
             };
         }
         if waiting_for_input {
             return PhaseInfo {
                 label: "Waiting Input",
-                color: crate::ui::shared::theme_global::accent_path(),
+                color: redesign_accent_path(palette),
             };
         }
         return PhaseInfo {
             label: "Running",
-            color: crate::ui::shared::theme_global::status_running(),
+            color: redesign_status_running(palette),
         };
     }
     if state.step5.last_status_text.starts_with("Preflight")
@@ -35,22 +43,27 @@ pub(crate) fn compute_phase(state: &WizardState, waiting_for_input: bool) -> Pha
     {
         return PhaseInfo {
             label: "Preparing",
-            color: crate::ui::shared::theme_global::status_preparing(),
+            color: redesign_status_preparing(palette),
         };
     }
     if state.step5.has_run_once {
         return PhaseInfo {
             label: "Finished",
-            color: crate::ui::shared::theme_global::text_muted(),
+            color: redesign_text_muted(palette),
         };
     }
     PhaseInfo {
         label: "Idle",
-        color: crate::ui::shared::theme_global::status_idle(),
+        color: redesign_status_idle(palette),
     }
 }
 
-pub(crate) fn render_phase(ui: &mut egui::Ui, state: &WizardState, phase: &PhaseInfo) {
+pub(crate) fn render_phase(
+    ui: &mut egui::Ui,
+    state: &WizardState,
+    phase: &PhaseInfo,
+    palette: ThemePalette,
+) {
     let phase_state = if state.step5.cancel_pending {
         "Pending".to_string()
     } else {
@@ -80,9 +93,9 @@ pub(crate) fn render_phase(ui: &mut egui::Ui, state: &WizardState, phase: &Phase
         let status_color = if status_text.starts_with("Install start failed:")
             || status_text.contains("os error")
         {
-            crate::ui::shared::theme_global::error()
+            redesign_error(palette)
         } else {
-            crate::ui::shared::theme_global::text_muted()
+            redesign_text_muted(palette)
         };
         ui.label(
             crate::ui::shared::typography_global::weak(status_text.to_string()).color(status_color),

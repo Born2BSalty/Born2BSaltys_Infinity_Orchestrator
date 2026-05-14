@@ -15,6 +15,13 @@ use crate::app::step5::diagnostics::build_weidu_export_lines;
 const SHARE_CODE_PREFIX: &str = "BIO-MODLIST-V1:";
 
 pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, String> {
+    export_modlist_share_code_with_auto_install(state, true)
+}
+
+pub(crate) fn export_modlist_share_code_with_auto_install(
+    state: &WizardState,
+    allow_auto_install: bool,
+) -> Result<String, String> {
     crate::app::mod_downloads::ensure_mod_downloads_files().map_err(|err| err.to_string())?;
     let weidu_logs = export_weidu_logs(state)?;
     if relevant_weidu_text_is_empty(
@@ -51,6 +58,7 @@ pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, S
         "mod_configs": {
             "files": mod_configs,
         },
+        "allow_auto_install": allow_auto_install,
     });
     let payload_text = serde_json::to_string(&payload).map_err(|err| err.to_string())?;
     let compressed = zlib_compress(payload_text.as_bytes())?;
@@ -75,10 +83,13 @@ pub(crate) struct ModlistSharePreview {
     pub(crate) installed_refs_text: String,
     pub(crate) mod_config_count: usize,
     pub(crate) mod_configs_text: String,
+    pub(crate) allow_auto_install: bool,
 }
 
 pub(crate) fn preview_modlist_share_code(code: &str) -> Result<ModlistSharePreview, String> {
-    share_preview(&decode_share_payload(code)?)
+    let preview = share_preview(&decode_share_payload(code)?)?;
+    let _allow_auto_install = preview.allow_auto_install;
+    Ok(preview)
 }
 
 pub(crate) fn import_modlist_share_code(
@@ -136,6 +147,8 @@ struct ModlistSharePayload {
     installed_refs: ModlistShareInstalledRefs,
     #[serde(default)]
     mod_configs: ModlistShareModConfigs,
+    #[serde(default = "default_true")]
+    allow_auto_install: bool,
 }
 
 #[derive(Default, Deserialize)]
@@ -242,7 +255,12 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
             .unwrap_or_default(),
         mod_config_count: payload.mod_configs.files.len(),
         mod_configs_text,
+        allow_auto_install: payload.allow_auto_install,
     })
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn write_imported_weidu_logs(

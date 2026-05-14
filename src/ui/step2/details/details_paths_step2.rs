@@ -3,30 +3,37 @@
 
 use eframe::egui;
 
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_warning};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::Step2Details;
 
-struct PathsGridLayout {
+pub(crate) struct PathsGridLayout {
     label_w: f32,
     value_w: f32,
     row_h: f32,
     value_chars: usize,
+    palette: ThemePalette,
 }
 
 pub(crate) fn render_paths_grid(
     ui: &mut egui::Ui,
     details: &Step2Details,
     action: &mut Option<Step2Action>,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
+    layout: PathsGridLayout,
 ) {
+    let PathsGridLayout {
+        label_w,
+        value_w,
+        row_h,
+        value_chars,
+        palette,
+    } = layout;
     let layout = PathsGridLayout {
         label_w,
         value_w,
         row_h,
         value_chars,
+        palette,
     };
     ui.label(crate::ui::shared::typography_global::small_strong(
         "Paths / Links",
@@ -90,6 +97,24 @@ pub(crate) fn render_paths_grid(
         });
     ui.add_space(6.0);
     render_package_grid(ui, details, action, &layout);
+}
+
+impl PathsGridLayout {
+    pub(crate) fn new(
+        label_w: f32,
+        value_w: f32,
+        row_h: f32,
+        value_chars: usize,
+        palette: ThemePalette,
+    ) -> Self {
+        Self {
+            label_w,
+            value_w,
+            row_h,
+            value_chars,
+            palette,
+        }
+    }
 }
 
 fn render_package_grid(
@@ -273,7 +298,7 @@ fn render_path_row(
     let display = ellipsize_end(raw, layout.value_chars);
     let mut text = crate::ui::shared::typography_global::monospace(display);
     if value.is_none() && missing_amber {
-        text = text.color(crate::ui::shared::theme_global::warning());
+        text = text.color(redesign_warning(layout.palette));
     }
     ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
         .on_hover_text(raw);

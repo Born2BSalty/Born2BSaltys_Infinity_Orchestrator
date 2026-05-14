@@ -321,6 +321,8 @@ pub struct Step2ComponentState {
     pub component_id: String,
     pub label: String,
     pub weidu_group: Option<String>,
+    pub subcomponent_key: Option<String>,
+    pub tp2_empty_placeholder_block: bool,
     pub collapsible_group: Option<String>,
     pub collapsible_group_is_umbrella: bool,
     pub raw_line: String,

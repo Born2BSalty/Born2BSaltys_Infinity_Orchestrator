@@ -3,12 +3,13 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
+use crate::app::mod_downloads;
 use crate::app::state::{Step2UpdateAsset, WizardState};
 
 #[derive(Debug, Clone)]
@@ -154,11 +155,40 @@ fn download_one_asset(
     asset: &Step2UpdateAsset,
     destination: &Path,
 ) -> Result<(), String> {
-    let response = agent
+    let is_sentrizeal = mod_downloads::source_is_sentrizeal_download_url(&asset.asset_url);
+    let mut request = agent
         .get(&asset.asset_url)
-        .set("User-Agent", "BIO-update-download")
-        .call()
-        .map_err(|err| err.to_string())?;
+        .set("User-Agent", "BIO-update-download");
+    if is_sentrizeal {
+        request = request.set("Referer", "https://www.sentrizeal.com/pst_7.htm");
+    }
+    let response = request.call().map_err(|err| err.to_string())?;
+    if is_sentrizeal {
+        let content_type = response
+            .header("Content-Type")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        if content_type.starts_with("text/html") {
+            return Err(
+                "Sentrizeal download returned no archive bytes; missing Referer or blocked response"
+                    .to_string(),
+            );
+        }
+        let mut bytes = Vec::new();
+        response
+            .into_reader()
+            .read_to_end(&mut bytes)
+            .map_err(|err| err.to_string())?;
+        if bytes.is_empty() {
+            return Err(
+                "Sentrizeal download returned no archive bytes; missing Referer or blocked response"
+                    .to_string(),
+            );
+        }
+        fs::write(destination, bytes).map_err(|err| err.to_string())?;
+        return Ok(());
+    }
     let mut reader = response.into_reader();
     let mut file = fs::File::create(destination).map_err(|err| err.to_string())?;
     io::copy(&mut reader, &mut file).map_err(|err| err.to_string())?;

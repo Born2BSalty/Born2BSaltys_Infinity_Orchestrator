@@ -3,30 +3,39 @@
 
 use eframe::egui;
 
+use crate::ui::shared::redesign_tokens::{
+    ThemePalette, redesign_success, redesign_text_muted, redesign_warning,
+};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::Step2Details;
 
-struct SelectionGridLayout {
+pub(crate) struct SelectionGridLayout {
     label_w: f32,
     value_w: f32,
     row_h: f32,
     value_chars: usize,
+    palette: ThemePalette,
 }
 
 pub(crate) fn render_selection_grid(
     ui: &mut egui::Ui,
     details: &Step2Details,
     action: &mut Option<Step2Action>,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
+    layout: SelectionGridLayout,
 ) {
+    let SelectionGridLayout {
+        label_w,
+        value_w,
+        row_h,
+        value_chars,
+        palette,
+    } = layout;
     let layout = SelectionGridLayout {
         label_w,
         value_w,
         row_h,
         value_chars,
+        palette,
     };
     ui.label(crate::ui::shared::typography_global::small_strong(
         "Selection",
@@ -53,10 +62,10 @@ pub(crate) fn render_selection_grid(
                 None,
                 action,
             );
-            render_checked_row(ui, details, label_w, value_w, row_h);
-            render_state_row(ui, details, label_w, value_w, row_h);
+            render_checked_row(ui, details, label_w, value_w, row_h, palette);
+            render_state_row(ui, details, label_w, value_w, row_h, palette);
             if details.compat_kind.is_some() {
-                render_compat_rows(ui, details, label_w, value_w, row_h, value_chars);
+                render_compat_rows(ui, details, label_w, value_w, row_h, value_chars, palette);
             }
             render_value_row(
                 ui,
@@ -111,6 +120,24 @@ pub(crate) fn render_selection_grid(
         });
 }
 
+impl SelectionGridLayout {
+    pub(crate) fn new(
+        label_w: f32,
+        value_w: f32,
+        row_h: f32,
+        value_chars: usize,
+        palette: ThemePalette,
+    ) -> Self {
+        Self {
+            label_w,
+            value_w,
+            row_h,
+            value_chars,
+            palette,
+        }
+    }
+}
+
 fn render_value_row(
     ui: &mut egui::Ui,
     layout: &SelectionGridLayout,
@@ -159,6 +186,7 @@ fn render_checked_row(
     label_w: f32,
     value_w: f32,
     row_h: f32,
+    palette: ThemePalette,
 ) {
     let Some(checked) = details.is_checked else {
         return;
@@ -168,10 +196,11 @@ fn render_checked_row(
         egui::Label::new(crate::ui::shared::typography_global::strong("Checked")),
     );
     let checked_pill = match checked {
-        true => crate::ui::shared::typography_global::strong("Checked")
-            .color(crate::ui::shared::theme_global::success()),
+        true => {
+            crate::ui::shared::typography_global::strong("Checked").color(redesign_success(palette))
+        }
         false => crate::ui::shared::typography_global::strong("Unchecked")
-            .color(crate::ui::shared::theme_global::text_muted()),
+            .color(redesign_text_muted(palette)),
     };
     ui.add_sized([value_w, row_h], egui::Label::new(checked_pill));
     ui.label("");
@@ -184,6 +213,7 @@ fn render_state_row(
     label_w: f32,
     value_w: f32,
     row_h: f32,
+    palette: ThemePalette,
 ) {
     let Some(is_disabled) = details.is_disabled else {
         return;
@@ -193,11 +223,9 @@ fn render_state_row(
         egui::Label::new(crate::ui::shared::typography_global::strong("State")),
     );
     let state_text = if is_disabled {
-        crate::ui::shared::typography_global::strong("Disabled")
-            .color(crate::ui::shared::theme_global::warning())
+        crate::ui::shared::typography_global::strong("Disabled").color(redesign_warning(palette))
     } else {
-        crate::ui::shared::typography_global::strong("Selectable")
-            .color(crate::ui::shared::theme_global::success())
+        crate::ui::shared::typography_global::strong("Selectable").color(redesign_success(palette))
     };
     let state_resp = ui.add_sized([value_w, row_h], egui::Label::new(state_text));
     if let Some(reason) = details.disabled_reason.as_deref() {
@@ -214,12 +242,14 @@ fn render_compat_rows(
     value_w: f32,
     row_h: f32,
     value_chars: usize,
+    palette: ThemePalette,
 ) {
     let layout = SelectionGridLayout {
         label_w,
         value_w,
         row_h,
         value_chars,
+        palette,
     };
     let mut ignored_action = None;
     render_value_row(
@@ -241,7 +271,7 @@ fn render_compat_rows(
         &mut ignored_action,
     );
 
-    render_reason_row(ui, details, label_w, value_w, row_h, value_chars);
+    render_reason_row(ui, details, label_w, value_w, row_h, value_chars, palette);
     render_origin_row(ui, details, label_w, value_w, row_h, value_chars);
     render_optional_monospace_row(
         ui,
@@ -279,6 +309,7 @@ fn render_reason_row(
     value_w: f32,
     row_h: f32,
     value_chars: usize,
+    palette: ThemePalette,
 ) {
     ui.add_sized(
         [label_w, row_h],
@@ -292,8 +323,7 @@ fn render_reason_row(
     ui.add_sized(
         [value_w, row_h],
         egui::Label::new(
-            crate::ui::shared::typography_global::plain(display)
-                .color(crate::ui::shared::theme_global::warning()),
+            crate::ui::shared::typography_global::plain(display).color(redesign_warning(palette)),
         ),
     )
     .on_hover_text(reason);

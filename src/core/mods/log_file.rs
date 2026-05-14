@@ -35,6 +35,10 @@ impl LogFile {
         self.components.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.components.is_empty()
+    }
+
     #[cfg(test)]
     pub(crate) fn from_components(components: Vec<Component>) -> Self {
         Self { components }
