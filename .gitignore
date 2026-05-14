@@ -21,7 +21,9 @@ infinity_orchestrator/wireframe-preview/node_modules/
 /Infinity Orchestrator Wireframe*.html
 /infinity_orchestrator.zip
 
-# AI harness local config — machine-specific (permissions, paths).
-# Per-dir CLAUDE.md / AGENTS.md context files ARE tracked on this private
-# fork so the orientation notes travel with the repo across dev machines.
-.claude/
+# Per-dir CLAUDE.md / AGENTS.md notes + the shared bits of `.claude/`
+# (rules, agents, etc.) are tracked on this private fork so AI orientation
+# travels with the repo across dev machines. Only the local harness state
+# below is excluded — it's per-machine and carries permission grants /
+# transient session data that shouldn't sync.
+.claude/settings.local.json
