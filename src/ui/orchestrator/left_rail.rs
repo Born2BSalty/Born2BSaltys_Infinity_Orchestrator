@@ -301,35 +301,21 @@ fn paint_home_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Col
     let top = center.y - 7.0;
     let bottom = center.y + 7.0;
 
-    painter.line_segment(
-        [egui::pos2(left, roof_y), egui::pos2(center.x, top)],
-        stroke,
-    );
-    painter.line_segment(
-        [egui::pos2(center.x, top), egui::pos2(right, roof_y)],
-        stroke,
-    );
-    painter.line_segment(
-        [
-            egui::pos2(left + 1.5, roof_y),
-            egui::pos2(left + 1.5, bottom),
+    // One closed outline: bottom-left → up the left wall → roof apex →
+    // down the right wall → (closed back along the floor). The walls meet
+    // the roof eaves flush (no dangling 1.5px overhang) and `closed_line`
+    // joins the corners cleanly, so the apex has no butt-cap notch — fixes
+    // the prior "warped" look from independent, disconnected segments.
+    painter.add(egui::Shape::closed_line(
+        vec![
+            egui::pos2(left, bottom),
+            egui::pos2(left, roof_y),
+            egui::pos2(center.x, top),
+            egui::pos2(right, roof_y),
+            egui::pos2(right, bottom),
         ],
         stroke,
-    );
-    painter.line_segment(
-        [
-            egui::pos2(right - 1.5, roof_y),
-            egui::pos2(right - 1.5, bottom),
-        ],
-        stroke,
-    );
-    painter.line_segment(
-        [
-            egui::pos2(left + 1.5, bottom),
-            egui::pos2(right - 1.5, bottom),
-        ],
-        stroke,
-    );
+    ));
 }
 
 fn paint_install_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {

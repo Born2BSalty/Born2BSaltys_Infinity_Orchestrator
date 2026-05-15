@@ -115,7 +115,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
             egui::Layout::top_down(egui::Align::Min),
             |ui| {
                 redesign_box(ui, palette, None, |ui| {
-                    ui.set_width(ui.available_width());
                     if is_empty {
                         // SPEC §3.4 — first-launch CTA replaces the chips +
                         // list inside the same Box.

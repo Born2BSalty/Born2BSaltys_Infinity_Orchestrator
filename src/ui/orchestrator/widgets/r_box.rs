@@ -43,7 +43,14 @@ pub fn redesign_box<R>(
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
         .inner_margin(egui::Margin { left: 12, right: 12, top: 10, bottom: 10 });
 
-    let response = frame.show(ui, |ui| body(ui));
+    // Boxes are block-level containers (wireframe `Box` is `display:block`):
+    // fill the available width so the chassis is flush with its column
+    // rather than shrink-wrapping to its content. Every caller wants this;
+    // doing it here keeps them from each repeating `ui.set_width(...)`.
+    let response = frame.show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        body(ui)
+    });
 
     if let Some(label_text) = label {
         // Paint the corner label over the top-left of the box's stroke. The
