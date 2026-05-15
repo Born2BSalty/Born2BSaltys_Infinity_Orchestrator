@@ -68,7 +68,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 | `src/ui/install/preview_tabs.rs` | The 6-tab file-folder strip + per-tab rendered content. Tab content reads from the parsed `ModlistSharePreview`. | BIO `modlist_share::preview_modlist_share_code` (read-only) |
 | `src/ui/install/destination_not_empty.rs` | The yellow-bordered warning Box with 3 radio buttons. Mirrors `screens.jsx::DestinationNotEmptyWarning` (line 123–154). | redesign widgets |
 | `src/ui/orchestrator/widgets/dialogs/confirm_dialog.rs` | Shared `ConfirmDialog` (title + message + Cancel + primary Confirm, optional danger styling). Used by Home delete, Step 2 select-via-weidu-log (existing BIO), etc. Per SPEC §10.1, non-blocking `egui::Window`. | redesign widgets |
-| `src/registry/operations.rs` | High-level write helpers used by Home: `delete_modlist(id, store, registry, options)` (removes registry entry **and** on-disk install folder, atomic-where-possible), `copy_share_code_to_clipboard(id, registry)`, `rename_modlist(id, new_name, registry)`. | std::fs, arboard or rfd-like clipboard |
+| `src/registry/operations.rs` | High-level write helpers used by Home: `delete_modlist(id, store, registry, options)` (removes registry entry **and** on-disk install folder, atomic-where-possible), `share_code_for(id, registry) -> Option<String>` (returns the entry's `latest_share_code` for the caller to copy), `rename_modlist(id, new_name, registry)`. **No clipboard crate** — the actual copy is done at the UI layer via egui's built-in `ui.ctx().copy_text(code)` (a ctx-less registry helper can't reach the clipboard; `arboard`/`copypasta` would add an X11/Wayland-linked dependency for zero benefit). | std::fs |
 
 ### BIO files read from / consumed (no modifications)
 
@@ -93,7 +93,7 @@ None. All Phase 5 work is in new files.
 ### P5.T2 — `modlist_card::render`
 
 - **What:** Card chassis: a horizontal Box, left has the modlist name (bold Poppins 13px) + meta line (hand-style faint Poppins 14px), right has the action cluster. Two card types differ only in the action cluster + meta-line content:
-  - In-progress: `<N> mods · <C> components · last touched <rel> · paused at Step <K>` + primary `resume` + Kebab with `Copy import code`, `Rename`, `Delete`.
+  - In-progress: `<N> mods · <C> components · last touched <rel> · paused at Step <K>` + primary `resume` + Kebab with `Copy import code`, `Rename`, `Delete`. `K` reads `entry.paused_at_step` (the denormalized registry field added for this — `mod_count` / `component_count` are denormalized the same way). If `paused_at_step` is `None`, omit the `· paused at Step <K>` segment gracefully rather than rendering a placeholder. `Copy import code` reads `operations::share_code_for(id, registry)` then calls `ui.ctx().copy_text(code)` at the callback site (egui built-in clipboard — no external crate).
   - Installed: `<N> mods · <size> · installed <rel>` + neutral **`open`** button (renamed from wireframe's `play` for v1 alpha; opens the install folder per M6 / SPEC §3.2) + Kebab with `Copy import code`, `Open install folder`, `Rename`, `Reinstall`, `Delete`.
 - **Where:** New file.
 - **Acceptance:** Both card types render correctly. Kebab menu items invoke the right callbacks. The `open` button (renamed from `play` per M6) opens the install folder in the OS file manager. No game-launcher attempt; the label honestly reflects the behavior.

@@ -89,6 +89,13 @@ pub struct ModlistEntry {
     pub mod_count: u32,
     /// Cached component count for the Home card meta line.
     pub component_count: u32,
+    /// Cached workspace step (2–5) the in-progress build is paused at, for
+    /// the Home card meta line (`… · paused at Step <K>`). Denormalized onto
+    /// the registry the same way `mod_count` / `component_count` are, so Home
+    /// renders without loading `workspace.json`. `None` for installed entries
+    /// (their meta line shows `installed <when>` instead). Kept in sync by
+    /// the Phase 6 workspace-persistence cycle on every workspace write.
+    pub paused_at_step: Option<u8>,
     /// Cached total install footprint (computed post-install in Phase 7).
     pub total_size_bytes: Option<u64>,
     /// Last share/import code captured for this modlist.
@@ -113,6 +120,7 @@ impl Default for ModlistEntry {
             last_played_date: None,
             mod_count: 0,
             component_count: 0,
+            paused_at_step: None,
             total_size_bytes: None,
             latest_share_code: None,
             workspace_file_relpath: PathBuf::new(),

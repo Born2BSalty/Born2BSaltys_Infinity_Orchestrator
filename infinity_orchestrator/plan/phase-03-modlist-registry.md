@@ -34,7 +34,7 @@ Add the data layer for the multi-modlist redesign: a `modlists.json` registry in
 | Path | Purpose | Depends on |
 |------|---------|-----------|
 | `src/registry/mod.rs` | `pub mod model; pub mod store; pub mod store_workspace; pub mod ids; pub mod errors; pub mod workspace_model; pub mod persistence_cycle; pub mod dev_seed; pub mod operations;` (`operations` is populated in Phase 5; declared here for module visibility). Registered in `src/lib.rs` via `pub mod registry;`. | — |
-| `src/registry/model.rs` | Serde structs `ModlistRegistry`, `ModlistEntry`, `ModlistState (InProgress \| Installed)`. Fields per SPEC §13.1: `id`, `name`, `game (Game enum: BGEE/BG2EE/IWDEE/EET)`, `destination_folder`, `state`, `creation_date`, `last_touched_date`, `install_date: Option`, `last_played_date: Option`, `mod_count`, `component_count`, `total_size_bytes: Option<u64>`, `latest_share_code: Option<String>`, `workspace_file_relpath: PathBuf`. All `#[serde(default)]` so adding fields stays backward-compat. | serde |
+| `src/registry/model.rs` | Serde structs `ModlistRegistry`, `ModlistEntry`, `ModlistState (InProgress \| Installed)`. Fields per SPEC §13.1: `id`, `name`, `game (Game enum: BGEE/BG2EE/IWDEE/EET)`, `destination_folder`, `state`, `creation_date`, `last_touched_date`, `install_date: Option`, `last_played_date: Option`, `mod_count`, `component_count`, `paused_at_step: Option<u8>` (denormalized workspace step for the in-progress Home card meta line — `None` for installed entries; kept in sync by the Phase 6 workspace-persistence cycle), `total_size_bytes: Option<u64>`, `latest_share_code: Option<String>`, `workspace_file_relpath: PathBuf`. All `#[serde(default)]` so adding fields stays backward-compat. | serde |
 | `src/registry/ids.rs` | `pub fn new_modlist_id() -> String` — stable slug-safe ID. Recommended: a 12-character base32 ULID for sortability + readability. | — |
 | `src/registry/errors.rs` | `pub enum RegistryError { Io(io::Error), Parse(serde_json::Error), Corrupt { path, message } }`. Implements `Display + Error`. | serde_json |
 | `src/registry/store.rs` | `pub struct RegistryStore { path: PathBuf }` with `pub fn new_default() -> Self`, `pub fn load(&self) -> Result<ModlistRegistry, RegistryError>`, `pub fn save(&self, &ModlistRegistry) -> Result<(), RegistryError>`. Mirrors the shape of `bio::settings::store::SettingsStore` (read it as reference; do not modify it). Uses `bio::platform_defaults::app_config_file("modlists.json", ".")` for the path. | `bio::platform_defaults::app_config_file` |
@@ -63,7 +63,7 @@ The previous plan's "Phase 3 extends the existing persist cycle" wording is remo
 - **What:** Create `src/registry/model.rs` with:
   ```rust
   pub struct ModlistRegistry { pub format_version: u32, pub entries: Vec<ModlistEntry> }
-  pub struct ModlistEntry { id, name, game, destination_folder, state, creation_date, last_touched_date, install_date, last_played_date, mod_count, component_count, total_size_bytes, latest_share_code, workspace_file_relpath }
+  pub struct ModlistEntry { id, name, game, destination_folder, state, creation_date, last_touched_date, install_date, last_played_date, mod_count, component_count, paused_at_step, total_size_bytes, latest_share_code, workspace_file_relpath }
   pub enum ModlistState { InProgress, Installed }
   pub enum Game { BGEE, BG2EE, IWDEE, EET }
   ```

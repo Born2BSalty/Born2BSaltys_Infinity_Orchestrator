@@ -56,8 +56,11 @@ pub fn seed_demo_entry(
         last_touched_date: now,
         install_date: None,
         last_played_date: None,
-        mod_count: 0,
-        component_count: 0,
+        // Demo values mirror the wireframe's in-progress card mock so the
+        // seeded entry renders a realistic Home meta line.
+        mod_count: 9,
+        component_count: 136,
+        paused_at_step: Some(3),
         total_size_bytes: None,
         latest_share_code: None,
         workspace_file_relpath: PathBuf::from(format!("modlists/{id}/workspace.json")),
