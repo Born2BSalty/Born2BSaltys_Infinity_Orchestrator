@@ -141,18 +141,26 @@ pub fn render(
     ui.add_space(14.0);
 
     // ── Import-code Box (or the partial info Box). ──
+    // The import-code box fills the space down to the footer and the textarea
+    // scrolls INSIDE it: a very large pasted code must never grow the page or
+    // push the footer off-screen (the panel has no outer scrollbar). This
+    // mirrors the cap-to-footer region pattern `stage_preview.rs` uses for its
+    // content box.
     if is_partial {
         partial_info_box(ui, palette, &state.destination);
+        // Spacer pushes the footer to the bottom (wireframe `flex:1`),
+        // reserving the footer's own footprint.
+        let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
+        if spacer > 0.0 {
+            ui.add_space(spacer);
+        }
     } else {
-        import_code_box(ui, palette, &mut state.import_code);
-    }
-
-    // ── Spacer pushes the footer to the bottom (wireframe `flex:1`). ──
-    // Reserve the footer's own footprint so it stays inside the visible
-    // content area rather than overflowing below the panel.
-    let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
-    if spacer > 0.0 {
-        ui.add_space(spacer);
+        let box_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(160.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), box_h),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| import_code_box(ui, palette, &mut state.import_code),
+        );
     }
 
     // ── SubFlowFooter ──
@@ -320,22 +328,32 @@ fn import_code_box(ui: &mut egui::Ui, palette: ThemePalette, code: &mut String) 
             .inner_margin(egui::Margin::same(12));
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.add_sized(
-                egui::vec2(ui.available_width(), 200.0),
-                egui::TextEdit::multiline(code)
-                    .font(egui::FontId::new(
-                        12.0,
-                        egui::FontFamily::Name("firacode_nerd".into()),
-                    ))
-                    .frame(false)
-                    .hint_text(
-                        egui::RichText::new(CODE_PLACEHOLDER)
-                            .family(egui::FontFamily::Name("firacode_nerd".into()))
-                            .color(redesign_text_faint(palette)),
-                    )
-                    .text_color(redesign_text_primary(palette))
-                    .background_color(redesign_input_bg(palette)),
-            );
+            // Scroll INSIDE the box: `auto_shrink([false, false])` makes the
+            // scroll area fill the bounded frame instead of shrinking to
+            // content, so a huge code scrolls here rather than growing the
+            // page. `desired_width(INFINITY)` wraps to the box width (no
+            // horizontal overflow); `desired_rows` is the empty-state height.
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.add(
+                        egui::TextEdit::multiline(code)
+                            .desired_width(f32::INFINITY)
+                            .desired_rows(8)
+                            .font(egui::FontId::new(
+                                12.0,
+                                egui::FontFamily::Name("firacode_nerd".into()),
+                            ))
+                            .frame(false)
+                            .hint_text(
+                                egui::RichText::new(CODE_PLACEHOLDER)
+                                    .family(egui::FontFamily::Name("firacode_nerd".into()))
+                                    .color(redesign_text_faint(palette)),
+                            )
+                            .text_color(redesign_text_primary(palette))
+                            .background_color(redesign_input_bg(palette)),
+                    );
+                });
         });
     });
 }
