@@ -597,6 +597,7 @@ const InstallScreen = ({ reinstallTarget }) => {
   const [dest, setDest] = useState(reinstallTarget ? reinstallTarget.destination : "");
   const [destChoice, setDestChoice] = useState(null);
   const isReinstall = !!reinstallTarget;
+  const [forkInfoOpen, setForkInfoOpen] = useState(false);
 
   const isPartial = destChoice === "continue";
   const handleBrowse = () => {
@@ -673,12 +674,19 @@ const InstallScreen = ({ reinstallTarget }) => {
   // preview
   return (
     <div className="sk-page" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, padding: "20px 28px" }}>
-      <ScreenTitle
-        title={isReinstall ? `Reinstall "${reinstallTarget.n}"` : FORK_META.name}
-        sub={isReinstall
-          ? `overwrite install mode · existing files at ${dest} will be replaced before install runs`
-          : `${FORK_META.author} · review what will be installed before BIO downloads anything`}
-      />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <ScreenTitle
+          title={isReinstall ? `Reinstall "${reinstallTarget.n}"` : FORK_META.name}
+          sub={isReinstall
+            ? `overwrite install mode · existing files at ${dest} will be replaced before install runs`
+            : `by ${FORK_META.author} · review what will be installed before BIO downloads anything`}
+        />
+        {!isReinstall && FORK_META.forkedFrom && FORK_META.forkedFrom.length > 0 && (
+          <div style={{ flexShrink: 0, marginTop: 4 }}>
+            <Btn small onClick={() => setForkInfoOpen(true)}>⑂ fork info</Btn>
+          </div>
+        )}
+      </div>
       {isReinstall && (
         <Box style={{
           padding: "10px 14px",
@@ -708,6 +716,12 @@ const InstallScreen = ({ reinstallTarget }) => {
         onPrimary={() => setStage("downloading")}
         primaryLabel={isReinstall ? "Reinstall →" : "Import Modlist →"}
         hint={isReinstall ? "wipes target dirs, then runs install" : "downloads, extracts, then runs install — no review step"}
+      />
+      <ForkInfoPopup
+        open={forkInfoOpen}
+        onClose={() => setForkInfoOpen(false)}
+        lineage={FORK_META.forkedFrom}
+        self={{ name: FORK_META.name, author: FORK_META.author }}
       />
     </div>
   );
@@ -2207,6 +2221,104 @@ const PillPopup = ({ open, title, body, onClose }) => {
   );
 };
 
+// Fork lineage popup (SPEC §10.9). Read-only credit chain: oldest → newest
+// ancestors from `lineage`, culminating in the current modlist (`self`).
+// Triggered from the workspace header `⑂ view fork details` and the
+// Install / Fork preview `⑂ fork info` affordance.
+const ForkInfoPopup = ({ open, onClose, lineage = [], self }) => {
+  const [collapsed, toggleCollapsed, popupRef, anchorStyle] = usePopupCollapse(open);
+  if (!open) return null;
+  const hasLineage = Array.isArray(lineage) && lineage.length > 0;
+  const chain = hasLineage
+    ? [...lineage.map((a) => ({ ...a, current: false })), ...(self ? [{ ...self, current: true }] : [])]
+    : [];
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 100,
+      }}
+    >
+      <div
+        ref={popupRef}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          ...sketchyBorder,
+          background: "var(--shell-bg)",
+          boxShadow: "5px 5px 0 var(--shadow)",
+          padding: 18,
+          maxWidth: 480,
+          width: "92%",
+          ...anchorStyle,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", marginBottom: collapsed ? 0 : 14 }}>
+          <PopupCollapseChevron collapsed={collapsed} onClick={toggleCollapsed} />
+          <Label style={{ fontSize: 15, fontWeight: 500 }}>Fork lineage</Label>
+        </div>
+        {!collapsed && <>
+          {!hasLineage ? (
+            <Label hand style={{ color: "var(--text-faint)", fontSize: 13, marginBottom: 16, display: "block" }}>
+              This modlist was created from scratch — no fork lineage.
+            </Label>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              {chain.map((node, i) => (
+                <div key={i} style={{ marginLeft: i * 20, marginBottom: i === chain.length - 1 ? 0 : 10 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    {i > 0 && (
+                      <span style={{ fontFamily: "'FiraCode Nerd', monospace", color: "var(--text-faint)", fontSize: 13 }}>↳</span>
+                    )}
+                    <span style={{
+                      fontFamily: "'Poppins', 'FiraCode Nerd', sans-serif",
+                      fontSize: 14,
+                      fontWeight: node.current ? 700 : 500,
+                      color: node.current ? "var(--accent-deep)" : "var(--text)",
+                    }}>
+                      {node.name}
+                    </span>
+                    {node.current && (
+                      <span style={{
+                        ...sketchyBorder,
+                        padding: "1px 7px",
+                        fontFamily: "'Poppins', 'FiraCode Nerd', sans-serif",
+                        fontSize: 9,
+                        fontWeight: 500,
+                        letterSpacing: 1,
+                        textTransform: "uppercase",
+                        color: "var(--text-muted)",
+                        whiteSpace: "nowrap",
+                      }}>⑂ this modlist</span>
+                    )}
+                  </div>
+                  <div style={{
+                    marginLeft: i > 0 ? 21 : 0,
+                    fontFamily: "'FiraCode Nerd', monospace",
+                    fontSize: 12,
+                    color: "var(--text-faint)",
+                    marginTop: 2,
+                  }}>
+                    by {node.author || "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Btn small onClick={onClose}>Close</Btn>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+};
+
 // Mock data for the Updates popup demo state (matches BIO's category model).
 // Source Choices lists every mod on the active tab that has at least one configured source.
 // Even mods with a single source appear here with a dropdown showing that lone option.
@@ -3294,6 +3406,7 @@ const WorkspaceView = ({ source, initialTab = "sources", fork, game = "EET", mod
     setTimeout(() => setDraftSavedAt(0), 1600);
   };
   const [sharePasteOpen, setSharePasteOpen] = useState(false);
+  const [forkInfoOpen, setForkInfoOpen] = useState(false);
   const [installComplete, setInstallComplete] = useState(false);
   // Lifted state: ordered array per game tab. Each item is "checked"; un-checking removes it,
   // re-checking appends to end. Order is the source of truth for Steps 2–4.
@@ -3420,7 +3533,7 @@ const WorkspaceView = ({ source, initialTab = "sources", fork, game = "EET", mod
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-          {fork && <Btn small>⑂ view fork details</Btn>}
+          {fork && <Btn small onClick={() => setForkInfoOpen(true)}>⑂ view fork details</Btn>}
           {tab === "final" ? (
             <Btn
               small
@@ -3464,6 +3577,12 @@ const WorkspaceView = ({ source, initialTab = "sources", fork, game = "EET", mod
         open={sharePasteOpen}
         onClose={() => setSharePasteOpen(false)}
       />
+      <ForkInfoPopup
+        open={forkInfoOpen}
+        onClose={() => setForkInfoOpen(false)}
+        lineage={(fork && fork.forkedFrom) || []}
+        self={{ name: displayName, author: "@you" }}
+      />
     </div>
   );
 };
@@ -3489,6 +3608,13 @@ const FORK_META = {
   components: 136,
   bgeeEntries: 21,
   bg2eeEntries: 115,
+  // Lineage, oldest → newest ancestors (SPEC §13.3 `forked_from`). This
+  // modlist's own name/author are the fields above; forkedFrom is the chain
+  // it descends from. Append-only — the original creator stays first.
+  forkedFrom: [
+    { name: "EET Basics", author: "@olim" },
+    { name: "EET Tactical", author: "@b2bs" },
+  ],
 };
 
 const SubFlowFooter = ({ onBack, backLabel = "Back", onPrimary, primaryLabel, hint }) => (
@@ -3541,9 +3667,17 @@ const ForkPasteScreen = ({ onBack, onPreview }) => (
 
 const ForkPreviewScreen = ({ onBack, onAccept }) => {
   const [tab, setTab] = useState("Summary");
+  const [forkInfoOpen, setForkInfoOpen] = useState(false);
   return (
     <div className="sk-page" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, padding: "20px 28px" }}>
-      <ScreenTitle title={FORK_META.name} sub={`${FORK_META.author} · review then fork into a new workspace`} />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <ScreenTitle title={FORK_META.name} sub={`by ${FORK_META.author} · review then fork into a new workspace`} />
+        {FORK_META.forkedFrom && FORK_META.forkedFrom.length > 0 && (
+          <div style={{ flexShrink: 0, marginTop: 4 }}>
+            <Btn small onClick={() => setForkInfoOpen(true)}>⑂ fork info</Btn>
+          </div>
+        )}
+      </div>
       <Box style={{ padding: "14px", flexShrink: 0, marginBottom: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px 16px", fontSize: 14 }}>
           <Label>Game: <strong>{FORK_META.game}</strong></Label>
@@ -3561,6 +3695,12 @@ const ForkPreviewScreen = ({ onBack, onAccept }) => {
         onPrimary={onAccept}
         primaryLabel="Begin Import →"
         hint="downloads mods, applies selection + order, then drops you on Step 2"
+      />
+      <ForkInfoPopup
+        open={forkInfoOpen}
+        onClose={() => setForkInfoOpen(false)}
+        lineage={FORK_META.forkedFrom}
+        self={{ name: FORK_META.name, author: FORK_META.author }}
       />
     </div>
   );

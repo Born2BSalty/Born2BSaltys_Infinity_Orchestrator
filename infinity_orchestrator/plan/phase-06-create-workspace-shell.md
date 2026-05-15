@@ -59,14 +59,14 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
 | `src/ui/create/state_create.rs` | `pub struct CreateScreenState { stage: CreateStage, modlist_name: String, game: Game, destination: String, destination_choice: Option<DestChoice>, fork_code: String, fork_preview: Option<ModlistSharePreview>, resumed_build_id: Option<String> }`. `CreateStage::{Choose, ForkPaste, ForkPreview, ForkDownload, WorkspaceOpen { id }}`. | — |
 | `src/ui/create/stage_choose.rs` | Renders the choose-mode setup Box + 2 starting-point cards. | redesign widgets, settings |
 | `src/ui/create/stage_fork_paste.rs` | Fork-paste stage — paste textarea + footer. Reuses paste textarea component. | shared paste textarea |
-| `src/ui/create/stage_fork_preview.rs` | Fork-preview stage — same chassis as Install preview, but with `Begin Import →` primary CTA. | `preview_tabs` from Phase 5 |
+| `src/ui/create/stage_fork_preview.rs` | Fork-preview stage — same chassis as Install preview: packed `name`/`author` title/subline + `⑂ fork info` (reuses the Phase-5 `ForkInfoPopup`, showing the incoming parent's lineage), `Begin Import →` CTA, no `allow_auto_install` gate. | `preview_tabs` + `fork_info_popup` from Phase 5 |
 | `src/ui/create/stage_fork_download.rs` | Fork-download stage — calls `ImportDownloadScreen` with title "Downloading fork" + continueLabel "continue to Step 2 →". | `stage_downloading` from Phase 5 |
 | `src/ui/create/load_draft_dialog.rs` | Non-blocking `egui::Window` popup (per SPEC §10) listing in-progress builds with `resume` + Kebab per card. Empty state when none. | registry, modlist_card chassis from Phase 5 |
 | `src/ui/create/destination_default.rs` | Computes a default destination folder for new modlists: `<config_dir>/modlists/installs/<slug-of-name>` (or honors a user-configured base path from Settings → Paths). | platform_defaults, settings |
 | `src/ui/workspace/mod.rs` | `pub mod workspace_view; pub mod state_workspace; pub mod workspace_header; pub mod workspace_progress_bar; pub mod workspace_nav_bar; pub mod workspace_hint_line; pub mod workspace_step_router; pub mod workspace_state_loader; pub mod workspace_step5_stub; pub mod step4; pub mod widgets;` | — |
 | `src/ui/workspace/workspace_view.rs` | The top-level workspace renderer. Owns `WorkspaceViewState`, handles tab switching, embeds the active step content. Signature: `pub fn render(ui, orchestrator: &mut OrchestratorApp, modlist_id: &str, ctx)`. | step_router, state_workspace, state_loader |
 | `src/ui/workspace/state_workspace.rs` | `pub struct WorkspaceViewState { modlist_id: String, modlist_name: String, fork_meta: Option<ForkMeta>, game: Game, current_step: WorkspaceStep, completed_steps: HashSet<WorkspaceStep>, renaming: bool, rename_temp: String, save_draft_flash_until: Option<Instant>, share_paste_open: bool, install_complete: bool, loaded_workspace_id: Option<String> }`. Note: `loaded_workspace_id` tracks which modlist's data is currently sitting inside the orchestrator's shared `WizardState` so the loader knows when a swap is needed. | registry workspace model |
-| `src/ui/workspace/workspace_header.rs` | Top row: `Editing <name>` + ✎ + Fork badge + right-side `save draft` / `Share import code` button. | redesign widgets |
+| `src/ui/workspace/workspace_header.rs` | Top row: `Editing <name>` + ✎ + Fork badge + `⑂ view fork details` (opens the reused Phase-5 `ForkInfoPopup` when `forked_from` non-empty) + right-side `save draft` / `Share import code` button. | redesign widgets, Phase-5 `fork_info_popup` |
 | `src/ui/workspace/workspace_progress_bar.rs` | 4-segment horizontal progress bar with current/completed/upcoming styling. Mirrors `screens.jsx::WorkspaceProgressBar` (line 3186-3244). | redesign theme tokens |
 | `src/ui/workspace/workspace_hint_line.rs` | Per-step hint line in faint hand style. | redesign theme tokens |
 | `src/ui/workspace/workspace_nav_bar.rs` | Bottom row: `← Previous` (disabled on Step 5 once install starts — Phase 7) + step indicator + `Next →`. | redesign widgets |
@@ -81,7 +81,7 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
 | `src/ui/workspace/step4/step4_exact_log_viewer.rs` | `pub fn render(ui, orchestrator: &mut OrchestratorApp)` — the read-only viewer for `install_mode == install_exactly_from_weidu_logs` per SPEC §8.2 / A.7. Reads the configured WeiDU log files from `wizard_state.step1.bgee_log_file` / `bg2ee_log_file` and displays them line-numbered. The `Check Mod List` button triggers `bio::app::app_step4_flow::handle_step4_action(&mut state, Step4Action::CheckMissingMods)` — `pub(crate) fn` per `src/core/app/app_step4_flow.rs:8`, takes `&mut WizardState`, reachable same-crate per the Phase 1 split. No C2 carve-out #4 refactor needed. | redesign widgets, BIO `app_step4_flow` (read-only) |
 | `src/ui/workspace/widgets/mod.rs` | `pub mod weidu_line;` — reserved for any workspace-local widgets that aren't broadly reusable. | — |
 | `src/ui/workspace/widgets/weidu_line.rs` | `pub fn render_weidu_line(ui, item: &Step3ItemState, line_number: Option<usize>)` — three-color line renderer per SPEC §6.7: `<tp2_file>` in `accent-deep`, `<component_id>` in `text-muted`, `<component_label>` in `text-primary`. Optional line-number prefix in `text-faint` for the Step 4 review list. | redesign theme tokens |
-| `src/registry/operations_create.rs` | High-level create operation: `create_modlist(name, game, destination, registry, workspace_store) -> Result<ModlistEntry, RegistryError>`. Allocates an ID, inserts the entry, writes the empty workspace state. | registry store, workspace store |
+| `src/registry/operations_create.rs` | High-level create operation: `create_modlist(name, game, destination, registry, workspace_store) -> Result<ModlistEntry, RegistryError>`. Allocates an ID, inserts the entry, writes the empty workspace state. For forks, also a `create_forked_modlist(...)` variant that sets `author` (from `RedesignSettings.user_name`) and `forked_from` (`parent.forked_from ++ [{parent.name, parent.author}]` — the append rule, parent fields from the parsed `ModlistSharePreview`). `ModlistEntry` (Phase-3 `src/registry/model.rs`) gains `author: Option<String>` + `forked_from: Vec<ForkAncestor>`, both `#[serde(default)]` (additive to a Phase-3 new file — backward-compatible with existing `modlists.json`). | registry store, workspace store, BIO `ForkAncestor` |
 | `src/registry/operations_rename.rs` | `rename_modlist(id, new_name, registry) -> Result<(), RegistryError>`. **Registry rename only** — does not touch the install folder on disk (per SPEC §2.2). | registry store |
 
 ### BIO files read from / consumed (no modifications)
@@ -95,7 +95,7 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
 - `src/core/app/step4_weidu_log_export.rs::auto_save_step4_weidu_logs` — `pub(crate) fn auto_save_step4_weidu_logs(state: &mut WizardState) -> Result<(), String>` (per source line 50). Takes `&mut WizardState` already; same-crate reachable from orchestrator. **Called directly by `step4_save_row.rs`** — no carve-out #4 refactor needed.
 - `src/core/app/app_step4_flow.rs::handle_step4_action` — `pub(crate) fn handle_step4_action(state: &mut WizardState, action: Step4Action)` (per source line 8). Same-crate reachable. Used by the orchestrator's Step 4 wrapper for the `Check Mod List` button in exact-log mode (`Step4Action::CheckMissingMods`).
 - `src/core/app/app_step2_router.rs::handle_step2_action` — `pub(crate) fn handle_step2_action(state: &mut WizardState, scan_rx: &mut ..., cancel: &mut ..., progress: &mut ..., update_check_rx: &mut ..., update_download_rx: &mut ..., action: Step2Action)` per `src/core/app/app_step2_router.rs:6`. Takes `&mut WizardState` + the orchestrator-owned channel receivers directly. **The orchestrator calls this function directly** from `step_action_dispatch::dispatch_step2` — no `WizardApp`, no carve-out #4 refactor. The orchestrator owns its own copies of all the receivers, populated when the relevant background task starts (per the BIO pattern).
-- `src/core/app/modlist_share.rs::preview_modlist_share_code` — Used in fork-preview.
+- `src/core/app/modlist_share.rs::preview_modlist_share_code` — Used in fork-preview. The returned `ModlistSharePreview` now carries the carve-out #5 provenance fields (`name`/`author`/`forked_from`); fork-import reads them to compute the child's `forked_from` (append rule). The `ForkAncestor` struct (defined in `modlist_share.rs` per carve-out #5, Phase 5) is **reused** as the element type of `ModlistEntry.forked_from` — no parallel registry-side type, no drift.
 - `src/core/app/step3_history.rs` — Step 3 undo/redo state. Continues to work inside the embedded Step 3 page (the page reads/writes via `WizardState` fields, no orchestrator involvement needed).
 - `src/core/app/app_step2_*`, `app_step3_*`, `app_step4_*` — public action handlers / orchestration called from `step_action_dispatch.rs` and (for Step 4) from the orchestrator's own Step 4 wrapper.
 
@@ -301,10 +301,10 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
 
 ### P6.T5 — Workspace header with inline rename
 
-- **What:** Renders `Editing <name>` + ✎ icon. Clicking ✎ swaps to an inline input with `save` + `cancel` buttons. Pressing Enter saves; Escape cancels. The rename writes to `registry::operations_rename::rename_modlist` (registry only; on-disk folder untouched). Below the title: a fork badge if this is a forked build, and a fork-source sub-line.
-- **Where:** New file.
-- **Acceptance:** Renaming a modlist updates the registry; the Home card reflects the new name on next visit. The install folder on disk is unchanged.
-- **SPEC:** §2.2.
+- **What:** Renders `Editing <name>` + ✎ icon. Clicking ✎ swaps to an inline input with `save` + `cancel` buttons. Pressing Enter saves; Escape cancels. The rename writes to `registry::operations_rename::rename_modlist` (registry only; on-disk folder untouched). Below the title: a fork badge if this is a forked build (`ModlistEntry.forked_from` non-empty), and a fork-source sub-line built from the immediate parent (last `forked_from` entry). The header's **`⑂ view fork details`** button (shown only when `forked_from` is non-empty, per SPEC §2.2) opens the `ForkInfoPopup` — **the same `src/ui/orchestrator/widgets/dialogs/fork_info_popup.rs` widget built in Phase 5 P5.T10**, fed the entry's `forked_from` chain + the entry's own `name`/`author` as the current node. No new popup file.
+- **Where:** New file (`workspace_header.rs`); reuses the Phase-5 `ForkInfoPopup`.
+- **Acceptance:** Renaming a modlist updates the registry; the Home card reflects the new name on next visit. The install folder on disk is unchanged. For a forked build, `⑂ view fork details` opens the lineage popup with the full chain (oldest→newest) + the current modlist emphasized.
+- **SPEC:** §2.2, §10.9, §13.3 (Provenance).
 
 ### P6.T6 — Save draft button
 
@@ -322,10 +322,15 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
 
 ### P6.T8 — Create fork-paste / fork-preview / fork-download
 
-- **What:** Reuse the same paste textarea + `preview_tabs` widget + `ImportDownloadScreen` from Phase 5, with different button labels and continueLabel. On fork-download completion, create the registry entry (with the fork's name + game + a default destination) and route to the Workspace.
-- **Where:** New files `stage_fork_paste.rs`, `stage_fork_preview.rs`, `stage_fork_download.rs`.
-- **Acceptance:** Pasting a known share code → preview → begin import → downloads → workspace opens with the fork's order/selection pre-loaded and a `⑂ Fork` badge in the header.
-- **SPEC:** §5.3.
+- **What:** Reuse the same paste textarea + `preview_tabs` widget + `ImportDownloadScreen` from Phase 5, with different button labels and continueLabel. **Fork-preview** displays the parsed parent code's packed `name`/`author` as title/subline + the `⑂ fork info` affordance (the Phase-5 `ForkInfoPopup`, showing the *incoming parent's* lineage) — identical to the Install preview (P5.T10), differing only in the `Begin Import →` CTA and no `allow_auto_install` gate (forking is always allowed — SPEC §13.3). On fork-download completion, create the registry entry (the fork's name + game + default destination) and route to the Workspace.
+
+  **Lineage append (the credit guarantee — SPEC §13.3 Provenance / §5.3).** When the registry entry is created, populate, in addition to name/game/destination:
+  - `author` ← `RedesignSettings.user_name` (the local user is the author of *this* fork; empty ⇒ `None`).
+  - `forked_from` ← `<parent.forked_from> ++ [ ForkAncestor { name: parent.name, author: parent.author } ]`, where the parent's `name`/`author`/`forked_from` are read off the parsed `ModlistSharePreview` (carve-out #5 fields). Append-only — the original creator stays first, no ancestor is ever rewritten.
+  This is a registry write only; no share code is generated at fork time (`pack_meta` generation happens later, at install-start / `flip_to_installed` — Phase 7 — and reads these entry fields).
+- **Where:** New files `stage_fork_paste.rs`, `stage_fork_preview.rs`, `stage_fork_download.rs`; the append logic lives in `operations_create.rs`. Reuses the Phase-5 `ForkInfoPopup`.
+- **Acceptance:** Pasting a known share code → preview (shows parent name/author + `⑂ fork info` lineage) → begin import → downloads → workspace opens with the fork's order/selection pre-loaded and a `⑂ Fork` badge. The new `ModlistEntry` has `author` = the configured user name and `forked_from` = parent chain + parent appended (verify by inspecting `modlists.json`).
+- **SPEC:** §5.3, §13.3 (Provenance / append rule), §10.9.
 
 ### P6.T9 — Load Draft dialog
 

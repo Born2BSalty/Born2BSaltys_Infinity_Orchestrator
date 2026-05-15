@@ -20,17 +20,20 @@ Branch `overhaul/infinity_orchestrator`, HEAD **`bb6c74f`**, pushed, clean tree.
 | 1 | Home — visual + nav (P5.T1-6, T8 widget, T15 + shared widgets) | ✅ done + 4 follow-ups |
 | 2 | Home — actions live (P5.T7 delete, T16 toast, T17 open-folder, T18 reinstall stub) | ✅ done + 1 follow-up |
 | 3 | Install — shell + paste stage + stage-4 stub (P5.T9, T13, T14) | ✅ done + 3 follow-ups |
-| **4** | **Install — Preview parse + 6 tabs + `allow_auto_install` carve-out #5 (P5.T10, T11)** | **NEXT — highest scrutiny** |
+| **4** | **Install — Preview parse + 6 tabs + carve-out #5 provenance trio (`allow_auto_install` + `name`/`author`/`forked_from`) + `ForkInfoPopup` (P5.T10, T11)** | **NEXT — highest scrutiny** |
 | 5 | Install — Downloading stage (P5.T12) | pending |
 
 Run-slicing rationale + per-run breakpoints are in this session's history; the canonical task list is the phase doc. After Run 5, Phase 5 is done → Phase 6 (Create + Workspace shell) is the next big phase (its own multi-run slicing; see `plan/phase-06-*.md`, HANDOFF "Finishing the plan" pacing).
 
 ### Run 4 — the immediate next action (read carefully)
 
-Run 4 is **the only BIO-source touch in all of Phase 5**: carve-out #5, a **two-surface** schema-additive change on `src/core/app/modlist_share.rs`:
-1. `ModlistSharePayload::allow_auto_install: bool` with `#[serde(default = "default_true")]` (deserialize-only struct; drafts → `false`, default `true` so pre-redesign codes stay auto-install-eligible).
-2. `ModlistSharePreview::allow_auto_install: bool`, propagated through `share_preview()` (one line) — the surface `stage_preview` reads for the draft-gate.
-Both are mechanical, zero-behavior-change for today's BIO. Plan P5.T10 documents it. Everything else in Run 4 (`preview_modlist_share_code` reuse, the 6 tabs, the gate UI, `InstallScreenState` growth) is net-new orchestrator code. `state_install.rs` currently has only `preview_cached: bool` — Run 4 grows it with the real preview state. Brief the agent that `modlist_share.rs` is the **sole** allowed BIO edit and to surface `SPEC CONFLICT` if anything else needs it. Review that diff against carve-out #5 wording with extra care.
+Run 4 is **the only BIO-source touch in all of Phase 5**: carve-out #5 on `src/core/app/modlist_share.rs`, now the **provenance trio + `allow_auto_install`** (user-directed spec change 2026-05-15 — see SPEC §1 "Modlist-share provenance application", §13.3 Provenance/Generation, §10.9; overview.md revision log). The **exact and only** authorized BIO edits (P5.T10 enumerates them):
+1. `ModlistSharePayload` (`#[derive(Deserialize)]`): `#[serde(default = "default_true")] allow_auto_install: bool` + `#[serde(default)]` `name: Option<String>`, `author: Option<String>`, `forked_from: Vec<ForkAncestor>`.
+2. New `fn default_true() -> bool { true }`.
+3. New `struct ForkAncestor { name: String, author: String }` (the `forked_from` element type).
+4. The symmetric fields on `ModlistSharePreview` (`pub(crate)`).
+5. Four `share_preview()` propagation lines (payload→preview, one per field).
+Nothing else — all `#[serde(default)]`, zero behavior change for today's BIO. **Generation (`pack_meta`) is NOT Run 4** and is never a BIO edit: it's a net-new orchestrator sibling (`registry::share_export`, Phase 6/7) that composes `export_modlist_share_code` + a standard envelope round-trip. Run 4 is **consume-only** — it reads the four fields off `parsed_preview`, drives the title/subline from packed `name`/`author` (fallback `Shared modlist` / author-less), and adds `⑂ fork info` → the new `src/ui/orchestrator/widgets/dialogs/fork_info_popup.rs` (`ForkInfoPopup`, reused by Phase 6). `state_install.rs` currently has only `preview_cached: bool` — Run 4 grows it with the real preview state + `fork_info_open: bool`. Brief the agent: `modlist_share.rs` is the **sole** allowed BIO edit, the diff must be **exactly those five mechanical items**, and surface `SPEC CONFLICT` if anything else in BIO source seems needed. Review that diff against the SPEC §1 provenance paragraph with maximum scrutiny — it is the highest-risk diff in the phase.
 
 ## How to run a run (the loop that works)
 

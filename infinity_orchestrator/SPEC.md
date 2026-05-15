@@ -39,6 +39,8 @@ When the spec and the wireframe disagree on UX, the wireframe wins. When the spe
 > 3. **Library/binary structural split** — the project's current single-binary crate (`src/main.rs` declares the entire module tree) is restructured into a `lib + bins` layout: a new `src/lib.rs` declares `pub mod app; pub mod ui; pub mod settings; ...`, `src/main.rs` becomes a thin shim that calls `bio::ui::run(...)`, and a new `src/bin/infinity_orchestrator.rs` calls into the same library. This is mechanical — no logic changes in any file; the only edits to `main.rs` are deletion of module declarations (now in `lib.rs`) and a one-line call to the library entry point. Existing behavior is preserved bit-for-bit. The orchestrator lives as a sibling module inside the library crate so `pub(crate)` BIO items remain reachable from orchestrator code. **Companion provision (per Phase 1 D#1 resolution):** when the redesign adds new sibling modules under existing BIO directories (e.g., a new `src/ui/shared/redesign_tokens.rs` alongside today's `theme_global.rs`), a single additive `pub mod foo;` line in the corresponding existing `mod.rs` file (e.g., `src/ui/shared/mod.rs`) is allowed to register the new module. No existing line in the `mod.rs` may be reordered, edited, or removed; only an additive line. This is the minimal idiomatic Rust mechanism for exposing a new file in an existing module tree and is purely mechanical.
 > 4. **WizardApp → WizardState signature refactor** — BIO functions whose body only mutates `app.state` (i.e., they take `&mut WizardApp` solely for its `state: WizardState` field) may be refactored to take `&mut WizardState` directly. The function body is unchanged; existing call sites inside `WizardApp` update to pass `&mut self.state` instead of `self`. This lets the orchestrator reuse these functions without constructing a fake `WizardApp`. Scope is tight: the refactor applies **only** to functions whose mutation surface is exclusively `app.state` — functions that also touch channels, the terminal, settings store, or other `WizardApp` fields stay as-is and the orchestrator builds a net-new equivalent. Per-function audit is required before refactoring.
 > 5. **Schema-additive serde field additions** — new optional `#[serde(default = ...)]` fields may be added to existing BIO serde structs when needed for a redesign feature. The new field's default value must preserve today's BIO behavior for any data that omits the field (e.g., existing share codes parse without error, and the code path they trigger is identical to today's). No existing field may be renamed, removed, or have its type changed. The field is added in BIO source; BIO's own code does not need to read or write the new field — the orchestrator does. **Paired in-memory counterparts.** When the schema-additive field lands on a serde struct that has an in-memory companion (notably `Step1Settings` ↔ `Step1State`, paired via `From` impls in `state_convert.rs`), the carve-out also authorizes the symmetric field addition on the in-memory struct plus the two `From` mappings — without that pairing, the value would not round-trip and the carve-out would be useless. The pairing is mechanical: same field name, same type, default = `Default::default()` for the in-memory side. Per-field rationale required (one paragraph documenting why a wrapping struct in the orchestrator is insufficient).
+>
+> **Modlist-share provenance application.** Carve-out #5 authorizes, on `src/core/app/modlist_share.rs`, exactly these schema-additive fields and nothing more: on `ModlistSharePayload` (the `#[derive(Deserialize)]` consume struct) — `#[serde(default = "default_true")] allow_auto_install: bool` plus `#[serde(default)]` `name: Option<String>`, `author: Option<String>`, and `forked_from: Vec<ForkAncestor>`; the symmetric fields on the in-memory `ModlistSharePreview`; and one propagation line per field in `share_preview()`. The `ModlistSharePreview` additions plus the `share_preview()` propagation **are the "paired in-memory counterpart" for this case** — `share_preview()` is the payload→view projection, the analogue of the `From` impls named in the canonical example; without it the orchestrator's preview cannot read the bits and the carve-out is useless. Defaults (`true` / `None` / empty) make every pre-existing or third-party code parse and behave bit-for-bit as today's BIO. **Generation is *not* a BIO modification.** The orchestrator never edits `export_modlist_share_code` or its private envelope helpers. It owns a net-new sibling (`pack_meta`, [§13.3](#133-share-code-bio-modlist-v1)) that *composes* `export_modlist_share_code`: it calls that function for the canonical payload, then applies a standard zlib + base64url + JSON envelope round-trip that inserts the four keys into the decoded object as siblings and re-emits the same `BIO-MODLIST-V1:` string. Per this directive's decision order that envelope transform is a "small format helper" sibling (directive option 2, composes-not-patches; the payload rides through as an opaque `serde_json::Value`, zero schema coupling, zero drift), and needs no carve-out of its own. **Per-field rationale (why not an orchestrator wrapping struct):** BIO's own `preview_modlist_share_code` is the single canonical consume path used by both the Install preview and Create → Import-and-modify; surfacing the four fields *through that one struct* keeps one decode/preview path. A wrapping struct would force a parallel orchestrator-side decoder/preview that re-derives BIO's payload semantics and drifts every time BIO's format evolves — exactly the maintenance hazard carve-outs exist to prevent.
 > 6. **State-aware theme-token reads** — for BIO source files that render redesign-relevant UI surfaces (Step 2 tree, Step 2 Details panel, Step 3 reorder list, Step 5 inner sub-renderers, top-nav chrome, etc.), inline `egui::Color32` literals may be replaced with theme-token reads **even when the literal sits inside conditional logic that decides between colors based on state** (e.g., hover state, selected state, conflict tone, dev-mode banner). Scope is tight: the conditional structure of the function must be preserved exactly — no new branches, no removed branches, no reordered branches, no logic mutations, no behavior changes. Only the color expressions inside each branch may change, and only to swap inline `Color32::from_rgb(...)` calls (and equivalent inline color constructions) for `redesign_*(palette)` accessor calls. The function gains a `palette: ThemePalette` parameter (carrying the orchestrator's active palette) and call sites are updated to pass it. This carve-out is intended to enable visual fidelity for the wireframe-redesigned workspace surfaces without requiring orchestrator-side re-implementation of BIO's complex interaction logic (drag-and-drop, scan integration, expand-collapse, multi-select). Per-file scope documentation required (Phase 8 file inventory tables): each file is annotated with the conditional sites that get the token-read swap, with line-number citations to BIO source.
 >
 > Anything else — logic changes, body restructures, new branches in behavior, visibility flips other than the structural-split implications, signature changes beyond the WizardApp→WizardState exception above, or struct mutations beyond optional schema-additive serde fields — is **disallowed** as a modification to existing BIO source.
@@ -119,7 +121,7 @@ When the user opens a modlist (from Home, Create, or via Load Draft), the entire
 - Below the progress bar is a one-line hint describing the current step.
 - Below the hint is the active step's content area.
 - Below that is a bottom nav row with `← Back` / `Next →` buttons and an indicator like "Step 3 · Reorder and Resolve · next: Review".
-- A header-right button area: `⑂ view fork details` (when forked), and **save draft** (Steps 2–4) or **Share import code** (Step 5 only, enabled only after a successful install).
+- A header-right button area: `⑂ view fork details` — shown only when this modlist's `forked_from` chain is non-empty; opens the [ForkInfoPopup](#109-forkinfopopup) ([§10.9](#109-forkinfopopup)) — and **save draft** (Steps 2–4) or **Share import code** (Step 5 only, enabled only after a successful install).
 - The left rail remains available so the user can jump out to Settings or Home mid-modlist. The workspace state persists.
 
 There is no longer a "Step 1" inside the workspace. Setup migrated to Settings and the Create screen.
@@ -281,7 +283,11 @@ The page is a flex-column with three sections:
 
 ### 4.2 Stage 2 — Preview
 
-`ScreenTitle` shows the **modlist name** as title (e.g., "Born2BSalty's EET tactical playthrough"), with a subline `<author> · review what will be installed before BIO downloads anything`.
+`ScreenTitle` is driven by the share code's packed [provenance fields](#provenance-name-author-forked_from):
+
+- **Title** — the packed `name` (e.g., "Born2BSalty's EET tactical playthrough"). If the code carries no `name` (pre-redesign / third-party / pre-generate-path codes), fall back to the honest generic title **`Shared modlist`** — never fabricate a name.
+- **Subline** — `by @<author> · review what will be installed before BIO downloads anything` when the code carries `author`; if `author` is absent, drop the `by @<author> · ` segment and show just `review what will be installed before BIO downloads anything`. Never invent an author.
+- **`⑂ fork info`** — when the code's `forked_from` chain is non-empty, a small `⑂ fork info` button sits in the title row; clicking it opens the [ForkInfoPopup](#109-forkinfopopup) showing the full lineage. Hidden when the chain is empty (an original, non-forked modlist).
 
 Two stacked sections:
 
@@ -380,10 +386,12 @@ On `resume`, the dialog closes and the workspace opens at **Step 2 (Scan and Sel
 The "Import and modify" sub-flow uses the same chassis as the Install Modlist flow:
 
 - **Fork-paste** (`ForkPasteScreen`) — `Box label="import code"` with the same paste textarea as Install. `SubFlowFooter` with `Back` (→ choose) + **`Preview →`** primary, hint "no download starts until preview is accepted".
-- **Fork-preview** (`ForkPreviewScreen`) — identical to Install's preview stage but the title comes from the parsed share code and the primary CTA is **`Begin Import →`** with hint "downloads mods, applies selection + order, then drops you on Step 2".
+- **Fork-preview** (`ForkPreviewScreen`) — identical to Install's preview stage, including the packed `name`/`author` title + subline and the `⑂ fork info` affordance ([§4.2](#42-stage-2--preview)) — here it shows the **incoming parent's** provenance (its name, author, and ancestor chain). The only differences from Install preview: the primary CTA is **`Begin Import →`** with hint "downloads mods, applies selection + order, then drops you on Step 2", and there is no `allow_auto_install` gate (forking is always allowed — [§13.3](#133-share-code-bio-modlist-v1)).
 - **Fork-download** — uses `ImportDownloadScreen` with title "Downloading fork", hint "after download: components auto-selected · order applied · lands on Step 2 for review", continueLabel "continue to Step 2 →".
 
-After download, the workspace opens with the fork's name in the header (e.g., **"Editing Born2BSalty's EET tactical playthrough"**), a small `⑂ Fork` badge next to the title, and a banner "Forked from _\<name\>_ by _\<author\>_ · _N_ mods · _C_ components preselected".
+After download, the workspace opens with the **new** modlist's name in the header (the user names their fork; default "Editing _\<parent name\>_ (fork)"), a small `⑂ Fork` badge next to the title, and a banner "Forked from _\<parent name\>_ by _\<parent author\>_ · _N_ mods · _C_ components preselected". The badge / `⑂ view fork details` ([§2.2](#22-the-workspace-steps-25)) opens the [ForkInfoPopup](#109-forkinfopopup).
+
+**Lineage is committed at import, not display.** When the user accepts the fork, the new modlist's registry entry records `forked_from = <parent.forked_from> ++ [{ parent.name, parent.author }]` (the append rule — [§13.3](#provenance-name-author-forked_from)). Every code the orchestrator later generates for this modlist carries that grown chain, so the original creator and every intermediate forker stay credited no matter how deep the fork tree goes. The fork-preview screen *displays* the parent's existing chain; the *append* happens once, on accept.
 
 ---
 
@@ -1028,6 +1036,28 @@ Generic confirm/cancel modal:
 
 Bottom-center transient notification (no dismiss button). Used for clipboard copies and any other "this happened" feedback. Auto-dismisses ~1.8s.
 
+### 10.9 ForkInfoPopup
+
+Non-blocking `egui::Window` (same chassis + collapse-chevron pattern as the rest of §10). Read-only — it presents the modlist's **credit lineage** ([§13.3 Provenance](#provenance-name-author-forked_from)). It carries no actions beyond `Close`.
+
+**Triggers:**
+- Workspace header `⑂ view fork details` ([§2.2](#22-the-workspace-steps-25)) — uses the open modlist's registry `forked_from` + its own `name`/`author`.
+- Install preview / fork-preview `⑂ fork info` ([§4.2](#42-stage-2--preview), [§5.3](#53-fork-paste--fork-preview--fork-download)) — uses the parsed share code's `forked_from` + its `name`/`author`.
+
+**Header:** title `Fork lineage`. (Collapse chevron per the global §10 pattern.)
+
+**Body** — a single chain rendered **oldest → newest, top to bottom**, as an ancestry that culminates in the current modlist:
+
+- One row per `ForkAncestor` in `forked_from` order: `<name>` (bold) + `by @<author>` (faint). The root original is the first row.
+- A connector glyph between rows (`↳` in `firacode_nerd`, faint) so it reads as a descent chain.
+- A final, emphasized row for **this** modlist — its own `name` + `by @<author>` (accent-tinted) — visually marked as the current node (e.g., a `⑂ this modlist` faint tag). Its name/author come from the top-level payload/registry, **not** from `forked_from` (per the append rule, a modlist's own identity is never in its own chain).
+- Rows are selectable text (so the user can copy a name/handle). No per-row actions.
+- **Empty-lineage guard:** if `forked_from` is empty (an original, non-forked modlist), the triggers are normally hidden ([§4.2](#42-stage-2--preview)); if the popup is nonetheless opened (e.g., the workspace `⑂` shown for a from-scratch build), the body reads, in faint hand style: `This modlist was created from scratch — no fork lineage.`
+
+**Footer:** `Close` only (matches the §10.6 PillPopup / §10.5 PromptPopup simple-popup pattern).
+
+**Credit invariant.** Because `forked_from` is append-only ([§13.3](#provenance-name-author-forked_from)), this popup always shows every ancestor author from the root forward — forking can extend the chain but never rewrites or removes a prior creator's credit.
+
 ---
 
 ## 11. Settings
@@ -1045,7 +1075,7 @@ A `NameRow` at the top, then a 2-column grid of four settings:
 - Default display: name (e.g. `@b2bs`) + **`edit`** button. When no name is set, the value reads `click to set your name` in faint text (a deliberate affordance-forward choice over the wireframe's neutral `(not set)` — it tells a first-run user what to do). Hint: "credited as the author on any modlists you create or share".
 - Edit mode: real text input (200px wide), placeholder `@yourhandle`, **`save`** primary + `cancel`.
 - The NameRow renders inside the same `SettingsRow` chassis as the other General rows (label + hint stack on the left, control flush-right, dashed bottom rule) — it is not a bespoke standalone block.
-- The configured name is used as the `author` field whenever the user creates a share code.
+- The configured name is used as the `author` field whenever the user creates a share code — packed into the BIO-MODLIST-V1 payload by `pack_meta` ([§13.3](#provenance-name-author-forked_from)). An empty name ⇒ the code carries no `author`, and previews fall back to author-less copy ([§4.2](#42-stage-2--preview)).
 
 #### Other rows (2-col grid)
 
@@ -1274,12 +1304,35 @@ Behavior the new `modlists.json` registry must support:
 
 ### 13.3 Share code (BIO-MODLIST-V1)
 
-The redesigned app **reuses today's BIO format** with one schema-additive field (per CRITICAL DIRECTIVE carve-out #5):
+The redesigned app **reuses today's BIO format** with schema-additive fields (per CRITICAL DIRECTIVE carve-out #5):
 
 - `BIO-MODLIST-V1:<base64url(zlib(json))>`
-- Payload includes: `format_version`, `bio_version`, `game_install` (BGEE/BG2EE/EET/IWDEE), `install_mode`, `weidu_logs` per game, `source_overrides` (a `mod_downloads_user.toml` excerpt), `installed_refs` (pinned tp2 → source + commit/tag), `mod_configs` (pre-supplied config files), and **`allow_auto_install: bool`** (see below).
-- Generated post-install (Share import code dialog) and at draft / install-start time (with the bit set differently — see below).
+- Payload includes everything today's BIO writes — `format_version`, `bio_version`, `game_install` (BGEE/BG2EE/EET/IWDEE), `install_mode`, `weidu_logs` per game, `source_overrides` (a `mod_downloads_user.toml` excerpt), `installed_refs` (pinned tp2 → source + commit/tag), `mod_configs` (pre-supplied config files) — **plus four schema-additive sibling keys the orchestrator adds**: `allow_auto_install: bool` (see [below](#allow_auto_install-schema-additive-field-default-true)) and the **provenance trio** `name`, `author`, `forked_from` (see [Provenance](#provenance-name-author-forked_from) below).
+- Generated post-install (Share import code dialog) and at draft / install-start time (with `allow_auto_install` set differently — see below).
 - Consumed by Install Modlist, Create → Import-and-modify, and Load Draft.
+- **The generator is unmodified.** BIO's `export_modlist_share_code` and its private envelope helpers are never edited. The orchestrator's net-new `pack_meta` sibling calls `export_modlist_share_code` for the canonical payload, then applies a standard zlib + base64url + JSON envelope round-trip that inserts the four keys as siblings and re-emits the same `BIO-MODLIST-V1:` string (see [Generation mechanism](#generation-mechanism-pack_meta)). BIO's `preview_modlist_share_code` decodes the augmented code natively; the four keys are the carve-out #5 `#[serde(default)]` fields, so absent keys parse to today's behavior bit-for-bit.
+
+#### Provenance: `name`, `author`, `forked_from`
+
+Three schema-additive payload keys that carry **credit and lineage** inside the code itself — not as a text prefix on the string, but packed in the JSON payload and unpacked by BIO's own `preview_modlist_share_code` (surfaced via the carve-out #5 fields on `ModlistSharePreview`). All three are optional; absent ⇒ today's behavior.
+
+- **`name: Option<String>`** — the modlist's display name (may contain spaces / special characters; it lives in the code so it survives copy/paste and re-share). Source at generation: the registry `ModlistEntry.name` of the modlist being shared.
+- **`author: Option<String>`** — the handle of whoever generated *this* code. Source at generation: `RedesignSettings.user_name` ([§11.1](#111-general) — "the configured name is used as the `author` field whenever the user creates a share code"). If `user_name` is empty, `author` is omitted (`None`).
+- **`forked_from: Vec<ForkAncestor>`** — the **lineage chain**, ordered **oldest → newest**: `forked_from[0]` is the original root modlist, the last entry is the immediate parent this code was forked from. `ForkAncestor { name: String, author: String }`. Default: empty (an original, non-forked modlist). The element type is structured (not a freeform display string) so it can be rendered, de-duplicated, and localized; it renders as `<name> by @<author>`.
+
+**Lineage append rule (the credit guarantee).** Lineage is **append-only**. When the user runs Create → Import-and-modify on a code with parent `name = P`, `author = A`, `forked_from = L`, the new forked modlist's registry entry gets `forked_from = L ++ [ForkAncestor { name: P, author: A }]`. The child's *own* `name`/`author` live in the top-level payload keys, **never** in its own `forked_from`. Because earlier entries are never rewritten or dropped, every ancestor author down the chain stays credited no matter how many times the modlist is forked. A modlist created from scratch (Create → New, or a plain non-forked install) has `forked_from = []`.
+
+**Display.** The parsed `name`/`author` drive the Install preview ([§4.2](#42-stage-2--preview)) and fork-preview ([§5.3](#53-fork-paste--fork-preview--fork-download)) title + subline; the `forked_from` chain is shown in the **ForkInfoPopup** ([§10.9](#109-forkinfopopup)), opened from the workspace header's `⑂ view fork details` button ([§2.2](#22-the-workspace-steps-25)) and from the preview's `⑂ fork info` affordance. Codes that lack the keys (pre-redesign, third-party, or any code generated before the orchestrator's generate paths ship) fall back to honest generic copy — see [§4.2](#42-stage-2--preview).
+
+#### Generation mechanism (`pack_meta`)
+
+Every code Infinity Orchestrator emits is produced the same way, so the four sibling keys are always consistent:
+
+1. `let base = bio::app::modlist_share::export_modlist_share_code(&wizard_state)?` — BIO builds the canonical payload (unchanged).
+2. The orchestrator's net-new `pack_meta` strips the `BIO-MODLIST-V1:` prefix, base64url-decodes, zlib-inflates, parses to an opaque `serde_json::Value`, **inserts the four keys** (`allow_auto_install`, `name`, `author`, `forked_from`) at the top level of that object, re-serializes, zlib-deflates, base64url-encodes, and re-attaches the prefix.
+3. The result is a single flat `BIO-MODLIST-V1` code that BIO's own `preview_modlist_share_code` / `import_modlist_share_code` decode unchanged.
+
+`pack_meta` is a net-new orchestrator sibling using only existing deps (`flate2`, `serde_json`) + a ~20-line standard base64url codec; it composes — never patches — BIO. The payload rides through as an opaque `Value`, so it is agnostic to any future BIO payload change (zero drift). The orchestrator generate paths that call it are: Save Draft, install-start `modlist-import-code.txt` write, `flip_to_installed` regeneration ([§9.2](#92-post-install-layout-installcompletetrue)), the Share import code dialog source, and Create → Import-and-modify (which also computes the child `forked_from` per the append rule). **The legacy BIO Step 5 "Export Modlist…" path is intentionally untouched** — it has no orchestrator name/author/registry concept and produces a field-less code (consumed via the defaults, exactly as today).
 
 #### `allow_auto_install` (schema-additive field, default `true`)
 
@@ -1307,7 +1360,7 @@ A boolean flag indicating whether the code is eligible for direct auto-install (
 - **Load Draft** dialog ignores the bit — it always opens the workspace for review.
 - **Reinstall** ([§3.1](#cards-in-the-filtered-list)) reads from the registry's `latest_share_code`. Reinstall only acts on `Installed` modlists, where the bit was already flipped to `true` by `flip_to_installed` — so Reinstall is always permitted.
 
-**Rationale for carve-out #5 (vs. a wrapping struct in the orchestrator):** A wrapping struct would mean two parallel serde types — BIO's `ModlistSharePayload` and an orchestrator-side wrapper that mirrors all its fields plus `allow_auto_install`. The maintenance burden compounds every time a future field is added to BIO; the wrapper drifts and needs manual reconciliation. The carve-out lets the field live in one canonical struct with `#[serde(default = "default_true")]` for full backward compatibility on the consume side. The addition is mechanical (one field + one default function) and zero behavior change for existing flows: every code BIO has ever produced is treated identically because the field defaults to `true`.
+**Rationale for carve-out #5 (vs. a wrapping struct in the orchestrator):** A wrapping struct would mean two parallel serde types — BIO's `ModlistSharePayload` and an orchestrator-side wrapper that mirrors all its fields plus the four added keys — and, worse, a parallel orchestrator-side decoder/preview, because BIO's `preview_modlist_share_code` would no longer see the wrapped code. The maintenance burden compounds every time a future field is added to BIO; both the wrapper and the parallel decoder drift and need manual reconciliation. The carve-out lets the four keys live in the one canonical struct (`#[serde(default = "default_true")]` for `allow_auto_install`, `#[serde(default)]` for the provenance trio) so a single decode/preview path serves Install and Create. The consume-side addition is mechanical (four fields + one default function + four propagation lines in `share_preview()`); the generate side adds **zero** BIO code (the `pack_meta` envelope sibling composes `export_modlist_share_code` and round-trips an opaque `serde_json::Value`). Zero behavior change for existing flows: every code BIO has ever produced is treated identically because the keys default to `true` / `None` / empty.
 
 ### 13.4 Mod source manifests
 
@@ -1458,11 +1511,12 @@ This isn't an implementation contract, but it's the user-facing data the redesig
 
 | Concept | Status | Where it lives | Notes |
 |---------|--------|----------------|-------|
-| App-global settings | **existing** | `bio_settings.json` | Paths, tools, theme, language, name, advanced flags. Read/written by existing `src/settings/` loader. |
+| App-global settings | **existing** | `bio_settings.json` | Paths, tools, advanced flags. Read/written by existing `src/settings/` loader. |
+| Redesign UI prefs | **new** | `bio_redesign_settings.json` | Theme, language, diagnostic mode, validate-on-startup, and the **user name used as the share-code `author`** ([§11.1](#111-general) / [§13.3](#provenance-name-author-forked_from)). Sibling file — never merged into `bio_settings.json` (CRITICAL DIRECTIVE). |
 | Prompt memory | **existing** | `prompt_answers.json` | Per-component auto-answers. |
 | User compat rules | **existing** | `step2_compat_rules.toml` | User overrides; default rules embedded. |
 | User mod sources | **existing** | `mod_downloads_user.toml` | User overrides; default sources embedded. |
-| Modlist registry | **new** | `modlists.json` | Index of installed and in-progress modlists for Home + Load Draft. |
+| Modlist registry | **new** | `modlists.json` | Index of installed and in-progress modlists for Home + Load Draft. Per entry also holds `author` (creator handle) and `forked_from` (append-only `ForkAncestor` lineage) — packed into generated share codes ([§13.3](#provenance-name-author-forked_from)). |
 | Per-modlist workspace state | **new** | `modlists/<id>/workspace.json` | Order arrays, checked components, expand state, prompt overrides; loaded when the user opens the modlist. Today's BIO holds equivalent state only in memory under the single active workspace. |
 | Persistence machinery (debounce, nav-flush, drop-flush) | **existing, extended** | `app_bootstrap.rs` / `app_lifecycle.rs` / `app_update_cycle.rs` | Same throttle + drop-time flush logic; the redesign adds `modlists.json` and per-modlist files to the same write paths. |
 | Draft files (legacy on-disk share codes) | **existing** | User-chosen locations, `.txt` | Plain-text BIO-MODLIST-V1 codes. Still consumable via Install Modlist paste; no longer the primary "resume" surface (the registry is). |

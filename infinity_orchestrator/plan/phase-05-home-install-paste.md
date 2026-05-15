@@ -59,7 +59,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 | `src/ui/orchestrator/widgets/pill.rs` | `pub fn render(ui, label, tone: PillTone)` — generic pill with tone-aware fill. | redesign theme tokens |
 | `src/ui/install/mod.rs` | `pub mod page_install; pub mod state_install; pub mod stage_paste; pub mod stage_preview; pub mod stage_downloading; pub mod stage_installing_stub; pub mod sub_flow_footer; pub mod preview_tabs;` | — |
 | `src/ui/install/page_install.rs` | Top-level Install Modlist screen renderer. Dispatches on `InstallStage`. | stage_* |
-| `src/ui/install/state_install.rs` | `pub struct InstallScreenState { stage: InstallStage, destination: String, destination_choice: Option<DestChoice>, import_code: String, parsed_preview: Option<ModlistSharePreview>, active_preview_tab: PreviewTab, download_progress: DownloadProgress }`. | BIO `ModlistSharePreview` |
+| `src/ui/install/state_install.rs` | `pub struct InstallScreenState { stage: InstallStage, destination: String, destination_choice: Option<DestChoice>, import_code: String, parsed_preview: Option<ModlistSharePreview>, active_preview_tab: PreviewTab, fork_info_open: bool, download_progress: DownloadProgress }`. `parsed_preview` (`ModlistSharePreview`) now carries `allow_auto_install` + the provenance trio `name`/`author`/`forked_from` via carve-out #5. | BIO `ModlistSharePreview` |
 | `src/ui/install/stage_paste.rs` | Stage 1 renderer per SPEC §4.1. | redesign widgets |
 | `src/ui/install/stage_preview.rs` | Stage 2 renderer per SPEC §4.2. | preview_tabs |
 | `src/ui/install/stage_downloading.rs` | Stage 3 renderer per SPEC §4.3 (`ImportDownloadScreen`). Wires into existing BIO download / extract events. | BIO `app_step2_update_download` (read-only) |
@@ -68,6 +68,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 | `src/ui/install/preview_tabs.rs` | The 6-tab file-folder strip + per-tab rendered content. Tab content reads from the parsed `ModlistSharePreview`. | BIO `modlist_share::preview_modlist_share_code` (read-only) |
 | `src/ui/install/destination_not_empty.rs` | The yellow-bordered warning Box with 3 radio buttons. Mirrors `screens.jsx::DestinationNotEmptyWarning` (line 123–154). | redesign widgets |
 | `src/ui/orchestrator/widgets/dialogs/confirm_dialog.rs` | Shared `ConfirmDialog` (title + message + Cancel + primary Confirm, optional danger styling). Used by Home delete, Step 2 select-via-weidu-log (existing BIO), etc. Per SPEC §10.1, non-blocking `egui::Window`. | redesign widgets |
+| `src/ui/orchestrator/widgets/dialogs/fork_info_popup.rs` | `ForkInfoPopup` (SPEC §10.9) — read-only credit-lineage chain (oldest→newest ancestors + current node emphasized), Close-only, collapse-anchored. Reused by Phase 6's workspace header `⑂ view fork details` + fork-preview. | redesign widgets, BIO `ModlistSharePreview` (provenance fields) |
 | `src/registry/operations.rs` | High-level write helpers used by Home: `delete_modlist(id, store, registry, options)` (removes registry entry **and** on-disk install folder, atomic-where-possible), `share_code_for(id, registry) -> Option<String>` (returns the entry's `latest_share_code` for the caller to copy), `rename_modlist(id, new_name, registry)`. **No clipboard crate** — the actual copy is done at the UI layer via egui's built-in `ui.ctx().copy_text(code)` (a ctx-less registry helper can't reach the clipboard; `arboard`/`copypasta` would add an X11/Wayland-linked dependency for zero benefit). | std::fs |
 
 ### BIO files read from / consumed (no modifications)
@@ -79,7 +80,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 
 ### BIO files needing allowed mild refactor
 
-None. All Phase 5 work is in new files.
+**One file, Run 4 only:** `src/core/app/modlist_share.rs` — carve-out #5 "Modlist-share provenance application" (SPEC §1): the four `#[serde(default)]` fields on `ModlistSharePayload` (`allow_auto_install` + `name`/`author`/`forked_from`), the `default_true()` fn, the `ForkAncestor` struct, the symmetric `ModlistSharePreview` fields, and the four `share_preview()` propagation lines (enumerated exactly in P5.T10). Schema-additive and behavior-neutral — defaults reproduce today's BIO bit-for-bit. **No other BIO source is touched in Phase 5.** Generation (`pack_meta`) is net-new orchestrator code, never a BIO edit (Phase 6/7).
 
 ## Implementation tasks
 
@@ -159,24 +160,34 @@ None. All Phase 5 work is in new files.
 - **Acceptance:** Pasting a valid BIO-MODLIST-V1 code and clicking `Preview →` advances to stage 2. Empty code with the button disabled.
 - **SPEC:** §4.1.
 
-### P5.T10 — `Install` stage 2 (preview) with `allow_auto_install` gate
+### P5.T10 — `Install` stage 2 (preview): provenance display + `allow_auto_install` gate
 
-- **What:** Calls `bio::app::modlist_share::preview_modlist_share_code(&code)` to parse the share code into a `ModlistSharePreview`. Render Overview Box + 6-tab file-folder Content Box. Each preview tab renders its content from `ModlistSharePreview` fields per SPEC §4.2.
+- **What:** Calls `bio::app::modlist_share::preview_modlist_share_code(&code)` → `ModlistSharePreview` (now carrying, via carve-out #5, `allow_auto_install` + the provenance trio `name` / `author` / `forked_from`). Render the Overview Box + 6-tab Content Box (P5.T11).
 
-  **`allow_auto_install` gate (per SPEC §4.2 + §13.3).** The preview also reads the payload's `allow_auto_install: bool` field (defaulting to `true` if absent — backward compatibility with pre-redesign codes). If `false`:
-  - Render an info banner **above the Overview Box** with text: *"Draft modlist code — this is not from a verified install. Review and customize the components in Create → Import and modify before installing."*
-  - **Disable the footer `Import Modlist →` primary CTA** (greyed out, tooltip "Auto-install disabled for draft codes — open in Create to review").
-  - Render a new secondary CTA **`Open in Create →`** in the footer (between `← Back` and the disabled `Import Modlist →`). On click: navigate to `NavDestination::Create` with the parsed share code pre-loaded into Create's fork-paste stage (Phase 6 wires the pre-load handoff).
+  **Provenance display (SPEC §4.2 + §13.3 Provenance).**
+  - **Title** = the packed `name`; if absent, the honest fallback **`Shared modlist`** (never fabricate a name).
+  - **Subline** = `by @<author> · review what will be installed before BIO downloads anything`; if `author` absent, drop the `by @<author> · ` segment. Never invent an author.
+  - **`⑂ fork info`** button in the title row when `forked_from` is non-empty → opens the `ForkInfoPopup` (SPEC §10.9) showing the lineage chain. Hidden when the chain is empty.
 
-  If `allow_auto_install == true` (default for older codes; explicit-true for post-install regenerated codes), behavior is unchanged: enabled `Import Modlist →` advances to stage 3.
-- **Where:** `src/ui/install/stage_preview.rs`. Add `allow_auto_install: bool` field to `InstallScreenState`, populated from `preview_modlist_share_code`'s parse result. The cross-screen handoff to Create is added in Phase 6 (P6.T?, where the Create fork-paste stage gains the ability to accept a pre-pasted code).
+  **`allow_auto_install` gate (per SPEC §4.2 + §13.3).** Reads `allow_auto_install` from the preview (defaulting to `true` if absent). If `false`:
+  - Info banner **above the Overview Box**: *"Draft modlist code — this is not from a verified install. Review and customize the components in Create → Import and modify before installing."*
+  - **Disable the footer `Import Modlist →`** (greyed, tooltip "Auto-install disabled for draft codes — open in Create to review").
+  - Secondary CTA **`Open in Create →`** in the footer between `← Back` and the disabled primary. On click: navigate to `NavDestination::Create` (Phase 6 wires the code pre-load handoff).
 
-  **Carve-out #5 covers two additive surfaces on `src/core/app/modlist_share.rs` (per review M-new-2):**
-  1. **`ModlistSharePayload::allow_auto_install: bool`** with `#[serde(default = "default_true")]`. The payload is what gets serialized into the share code; the field defaults to `true` so codes from pre-redesign BIO continue to behave as auto-install-eligible.
-  2. **`ModlistSharePreview::allow_auto_install: bool`** propagated from the payload by `share_preview()` (one line added: copy the field through during the payload-to-preview conversion). This surface is what `stage_preview` reads to render the gate. Without this propagation, the preview UI has no way to see the bit; the wrapping-struct alternative would defeat the carve-out's purpose.
-  Both additions are mechanical and zero-behavior-change for today's BIO (which never reads the field in either struct). Document this in P5.T10's "BIO source touches" list.
-- **Acceptance:** Pasting a code with `allow_auto_install = false` (or that the orchestrator generated during draft save) shows the banner + disabled Import + enabled `Open in Create →`. Clicking the latter routes to Create with the code pre-loaded. Pasting a pre-redesign code (no field) or a post-install regenerated code (`allow_auto_install = true`) shows the normal preview with enabled Import.
-- **SPEC:** §4.2, §13.3.
+  If `allow_auto_install == true` (default for older / post-install codes): unchanged — enabled `Import Modlist →` advances to stage 3.
+
+  **Carve-out #5 — the ONLY BIO-source touch in all of Phase 5 (per SPEC §1 "Modlist-share provenance application").** On `src/core/app/modlist_share.rs`, exactly:
+  1. `ModlistSharePayload` (`#[derive(Deserialize)]`): `#[serde(default = "default_true")] allow_auto_install: bool`, `#[serde(default)] name: Option<String>`, `#[serde(default)] author: Option<String>`, `#[serde(default)] forked_from: Vec<ForkAncestor>`.
+  2. New `fn default_true() -> bool { true }` (required by the serde attr).
+  3. New `struct ForkAncestor { name: String, author: String }` — the `forked_from` element type (`#[derive(Debug, Clone, Deserialize)]`, plus whatever `ModlistSharePreview` derives).
+  4. Symmetric fields on `ModlistSharePreview` (`pub(crate)`, matching existing field visibility).
+  5. Four propagation lines in `share_preview()` (copy each field payload→preview).
+  Nothing else. All `#[serde(default)]` ⇒ pre-redesign / third-party codes parse and behave bit-for-bit as today. The implementer must surface **`SPEC CONFLICT`** if anything beyond these five mechanical edits is needed in BIO source.
+
+  **Generation is NOT in this run.** Run 4 is consume-only — the orchestrator never *writes* these fields here. The `pack_meta` generator (SPEC §13.3 Generation mechanism), the registry `ModlistEntry.author` / `forked_from`, and the fork-lineage append land in Phase 6 (Save Draft / fork) + Phase 7 (install-start, `flip_to_installed`). Until then every code lacks the trio, so the preview renders the fallback path in practice — but the display is forward-compatible and lights up automatically when generation ships (same additive model as `allow_auto_install`).
+- **Where:** `src/ui/install/stage_preview.rs` + new `src/ui/orchestrator/widgets/dialogs/fork_info_popup.rs` (`ForkInfoPopup`, reused by Phase 6's workspace header + fork-preview). `InstallScreenState` gains `fork_info_open: bool`; provenance + `allow_auto_install` are read off `parsed_preview` (the `ModlistSharePreview`). The cross-screen Create handoff is Phase 6.
+- **Acceptance:** A code carrying `name`/`author` shows them as title/subline; absent ⇒ `Shared modlist` / no author segment (no fabrication). A code with non-empty `forked_from` shows `⑂ fork info`; clicking opens `ForkInfoPopup` with the chain oldest→newest + the current node emphasized. `allow_auto_install = false` ⇒ banner + disabled Import + enabled `Open in Create →`; `true` / absent ⇒ normal enabled Import. `cargo build --bin BIO --release` still succeeds (the carve-out is behavior-neutral).
+- **SPEC:** §4.2, §13.3 (Provenance + Generation mechanism), §10.9, §1 (carve-out #5 "Modlist-share provenance application").
 
 ### P5.T11 — Preview tabs
 
@@ -239,6 +250,7 @@ None. All Phase 5 work is in new files.
 - **Game launcher (deferred; button renamed per M6).** The wireframe's `play` button is renamed `open` in v1 alpha — the label honestly reflects the behavior (opens the install folder). When a game launcher ships in a future release the label flips back to `play` and the action launches the game. SPEC §3.2 documents this. No game-launcher implementation is in scope for v1 alpha.
 - **Total size computation.** Cards show `<size>` for installed modlists. As noted in Phase 3, computing this requires a recursive `du`. Compute on install completion in Phase 7 and cache in the registry; for Phase 5, render `—` for size when unknown.
 - **Concurrent download with running install.** While Stage 3 of Install Modlist is running, the user might trigger Settings → `Validate now` or navigate to Home. The existing BIO download workers handle this fine (separate channels); confirm no UI-thread blocking happens during large extracts.
+- **Modlist name / author in the preview — RESOLVED, not an open gap.** The pasted share code now packs `name` / `author` / `forked_from` (SPEC §13.3 Provenance, carve-out #5); the preview reads them for the title/subline + `ForkInfoPopup`. Codes that lack them fall back to `Shared modlist` / author-less copy — intentional, not a defect to re-flag. Generation that *populates* them is Phase 6/7 (`pack_meta`); in Phase 5 the fallback path is what renders in practice (consume-only run).
 
 ## Verification
 
@@ -249,5 +261,6 @@ None. All Phase 5 work is in new files.
 5. Click Kebab → Copy import code: toast appears, clipboard contains the code.
 6. Click Kebab → Delete: confirm dialog appears with correct body. Confirm: card disappears, statusbar bumps down.
 7. Click `paste import code` → Install opens. Paste a known good share code, click `Preview →`. Preview stage shows tabs with parsed content. Click `Import Modlist →`. Download stage starts. (Stage 4 stub renders after downloads complete.)
-8. Navigate freely between Home / Install / Settings; no state loss.
-9. `cargo build --bin BIO --release` continues to succeed; the legacy wizard is unaffected.
+8. Provenance: a pre-redesign / third-party code (no packed fields) shows title `Shared modlist`, no `by @…` segment, no `⑂ fork info` button — and `cargo test --lib` confirms the serde-default round-trip is behavior-neutral. (Codes that *carry* the trio only exist once Phase 6/7 generation ships; the display path is verified here, populated later.)
+9. Navigate freely between Home / Install / Settings; no state loss.
+10. `cargo build --bin BIO --release` continues to succeed; the legacy wizard is unaffected (carve-out #5 is schema-additive + behavior-neutral).
