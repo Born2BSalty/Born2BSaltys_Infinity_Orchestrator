@@ -132,8 +132,18 @@ pub fn render(
             ui.add_space(16.0);
 
             // ── Footer: Cancel + (danger) primary Confirm, flush-right. ──
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.x = 8.0;
+            // Allocate the footer as a FIXED-height band. An unbounded
+            // `with_layout` inside an auto-sizing `egui::Window` claims the
+            // full available height and vertically-centers the buttons in
+            // it — which inflated the window with a large dead gap between
+            // the body and the buttons. Bounding the band to one button-row
+            // lets the window shrink-wrap to its content.
+            let footer_h = 30.0;
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), footer_h),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
 
                 // `right_to_left` lays trailing-edge first → push the primary
                 // first so the on-screen order reads [Cancel] [Confirm].
