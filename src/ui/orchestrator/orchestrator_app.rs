@@ -323,11 +323,29 @@ impl OrchestratorApp {
         self.tick_bio_settings(now);
     }
 
-    fn tick_bio_settings(&mut self, now: Instant) {
-        let snapshot = AppSettings {
+    /// Build the `AppSettings` snapshot written to `bio_settings.json`.
+    ///
+    /// `game_install` is masked to the value loaded from disk at startup. In
+    /// the orchestrator the game is a **per-modlist** choice held in
+    /// `wizard_state.step1.game_install` (Phase 6's workspace loader sets it
+    /// from the modlist's `entry.game`). Writing that per-modlist value into
+    /// the global settings file would conflate per-modlist state with global
+    /// state (plan P4.T3). Masking it in every snapshot — the one used for
+    /// the dirty comparison **and** the one written — means a per-modlist
+    /// game switch never marks `bio_settings` dirty and never reaches disk;
+    /// the global `game_install` loaded at startup is preserved verbatim.
+    fn bio_settings_snapshot(&self) -> AppSettings {
+        let mut step1: crate::settings::model::Step1Settings =
+            self.wizard_state.step1.clone().into();
+        step1.game_install = self.bio_settings_last_saved.step1.game_install.clone();
+        AppSettings {
             exe_fingerprint: self.exe_fingerprint.clone(),
-            step1: self.wizard_state.step1.clone().into(),
-        };
+            step1,
+        }
+    }
+
+    fn tick_bio_settings(&mut self, now: Instant) {
+        let snapshot = self.bio_settings_snapshot();
         if snapshot == self.bio_settings_last_saved {
             self.bio_settings_last_dirty_at = None;
             return;
@@ -371,10 +389,7 @@ impl OrchestratorApp {
                 self.redesign_settings_last_saved = self.redesign_settings.clone();
             }
         }
-        let bio_snapshot = AppSettings {
-            exe_fingerprint: self.exe_fingerprint.clone(),
-            step1: self.wizard_state.step1.clone().into(),
-        };
+        let bio_snapshot = self.bio_settings_snapshot();
         if bio_snapshot != self.bio_settings_last_saved {
             if let Err(err) = self.settings_store.save(&bio_snapshot) {
                 warn!(target = "orchestrator", "bio_settings flush failed: {err}");
