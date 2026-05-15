@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::fmt::Write as _;
+
 use crate::app::state::{Step2ComponentState, Step2ModState, WizardState};
 
 pub(super) fn append_dev_compat_snapshots(state: &WizardState, out: &mut String) {
@@ -11,7 +13,7 @@ pub(super) fn append_dev_compat_snapshots(state: &WizardState, out: &mut String)
 
 fn append_step2_compat_snapshot(tab: &str, mods: &[Step2ModState], out: &mut String) {
     let mut listed = 0usize;
-    out.push_str(&format!("{tab}:\n"));
+    let _ = writeln!(out, "{tab}:");
     for mod_state in mods {
         for component in &mod_state.components {
             if component.compat_kind.is_none() {
@@ -32,36 +34,36 @@ fn append_step2_component(
     out: &mut String,
 ) {
     let kind = component.compat_kind.as_deref().unwrap_or("none");
-    out.push_str(&format!(
-        "  - {} #{} [{}] {}\n",
+    let _ = writeln!(
+        out,
+        "  - {} #{} [{}] {}",
         mod_state.name, component.component_id, kind, component.label
-    ));
-    out.push_str(&format!(
-        "    state={} checked={}\n",
+    );
+    let _ = writeln!(
+        out,
+        "    state={} checked={}",
         if component.disabled {
             "disabled"
         } else {
             "selectable"
         },
         if component.checked { "yes" } else { "no" }
-    ));
+    );
     if let Some(reason) = component.disabled_reason.as_deref()
         && !reason.trim().is_empty()
     {
-        out.push_str(&format!("    reason: {reason}\n"));
+        let _ = writeln!(out, "    reason: {reason}");
     }
     if let Some(source) = component.compat_source.as_deref()
         && !source.trim().is_empty()
     {
-        out.push_str(&format!("    source: {source}\n"));
+        let _ = writeln!(out, "    source: {source}");
     }
     if let Some(related_mod) = component.compat_related_mod.as_deref() {
-        let related = if let Some(related_component) = component.compat_related_component.as_deref()
-        {
-            format!("{related_mod} #{related_component}")
-        } else {
-            related_mod.to_string()
-        };
-        out.push_str(&format!("    related: {related}\n"));
+        let related = component.compat_related_component.as_deref().map_or_else(
+            || related_mod.to_string(),
+            |related_component| format!("{related_mod} #{related_component}"),
+        );
+        let _ = writeln!(out, "    related: {related}");
     }
 }

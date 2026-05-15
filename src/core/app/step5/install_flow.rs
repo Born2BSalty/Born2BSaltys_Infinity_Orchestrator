@@ -25,20 +25,20 @@ pub(crate) struct PendingInstallStart {
 }
 
 pub(crate) fn step3_install_block_reason(state: &WizardState) -> Option<String> {
-    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let show_primary_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let show_secondary_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
     let mut blocked_tabs = Vec::<String>::new();
 
     for (tab, show, mods, items) in [
         (
             "BGEE",
-            show_bgee,
+            show_primary_game,
             &state.step2.bgee_mods,
             &state.step3.bgee_items,
         ),
         (
             "BG2EE",
-            show_bg2ee,
+            show_secondary_game,
             &state.step2.bg2ee_mods,
             &state.step3.bg2ee_items,
         ),
@@ -84,7 +84,7 @@ pub(crate) fn prepare_start_request(
     state.step5.resolved_game_dir.clear();
 
     if let Some(reason) = step3_install_block_reason(state) {
-        state.step5.last_status_text = reason.clone();
+        state.step5.last_status_text.clone_from(&reason);
         term.append_marker(&reason);
         return None;
     }
@@ -188,7 +188,7 @@ pub(crate) fn apply_completed_prep(
         Err(err) => {
             state.step5.prep_backup_paths.clear();
             state.step5.prep_cleaned_paths.clear();
-            state.step5.last_status_text = err.clone();
+            state.step5.last_status_text.clone_from(&err);
             term.append_marker(&err);
             false
         }
@@ -297,7 +297,7 @@ pub(crate) fn confirm_cancel_request(
     state.step5.cancel_force_checked = false;
 }
 
-pub(crate) fn dismiss_cancel_request(state: &mut WizardState) {
+pub(crate) const fn dismiss_cancel_request(state: &mut WizardState) {
     state.step5.cancel_confirm_open = false;
     state.step5.cancel_force_checked = false;
     state.step5.cancel_requested = false;
@@ -335,6 +335,5 @@ fn arg_value(args: &[String], flag: &str) -> Option<String> {
 fn now_unix_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }

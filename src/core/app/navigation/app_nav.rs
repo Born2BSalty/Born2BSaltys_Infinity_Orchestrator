@@ -101,8 +101,7 @@ pub(crate) fn decide_next_action(state: &WizardState) -> NextAction {
             || state
                 .last_step2_sync_signature
                 .as_deref()
-                .map(|existing| existing != signature)
-                .unwrap_or(true);
+                .is_none_or(|existing| existing != signature);
         if should_sync {
             return NextAction::SyncStep3AndAdvance { signature };
         }
@@ -113,7 +112,7 @@ pub(crate) fn decide_next_action(state: &WizardState) -> NextAction {
     NextAction::Advance
 }
 
-pub(crate) fn apply_next_action(state: &mut WizardState, action: &NextAction) {
+pub(crate) const fn apply_next_action(state: &mut WizardState, action: &NextAction) {
     match action {
         NextAction::Blocked => {}
         NextAction::OpenModlistImport => {
@@ -129,27 +128,27 @@ pub(crate) fn apply_next_action(state: &mut WizardState, action: &NextAction) {
     }
 }
 
-pub(crate) fn current_step(state: &WizardState) -> usize {
+pub(crate) const fn current_step(state: &WizardState) -> usize {
     state.current_step
 }
 
-pub(crate) fn can_go_back(state: &WizardState) -> bool {
+pub(crate) const fn can_go_back(state: &WizardState) -> bool {
     state.can_go_back()
 }
 
-pub(crate) fn on_last_step(state: &WizardState) -> bool {
+pub(crate) const fn on_last_step(state: &WizardState) -> bool {
     state.current_step + 1 == WizardState::STEP_COUNT
 }
 
-pub(crate) fn step5_install_running(state: &WizardState) -> bool {
+pub(crate) const fn step5_install_running(state: &WizardState) -> bool {
     state.current_step == 4 && (state.step5.prep_running || state.step5.install_running)
 }
 
-pub(crate) fn step1_clean_confirm_open(state: &WizardState) -> bool {
+pub(crate) const fn step1_clean_confirm_open(state: &WizardState) -> bool {
     state.step1_clean_confirm_open
 }
 
-pub(crate) fn step4_save_error_open(state: &WizardState) -> bool {
+pub(crate) const fn step4_save_error_open(state: &WizardState) -> bool {
     state.step4_save_error_open
 }
 

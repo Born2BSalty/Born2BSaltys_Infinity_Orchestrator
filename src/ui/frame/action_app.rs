@@ -6,6 +6,7 @@ pub struct AppLaunchAction {
     pub dev_mode: bool,
 }
 
-pub fn launch_gui(dev_mode: bool) -> AppLaunchAction {
+#[must_use]
+pub const fn launch_gui(dev_mode: bool) -> AppLaunchAction {
     AppLaunchAction { dev_mode }
 }

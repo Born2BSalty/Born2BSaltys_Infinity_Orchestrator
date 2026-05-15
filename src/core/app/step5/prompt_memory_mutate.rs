@@ -6,13 +6,13 @@ use std::sync::{Mutex, OnceLock};
 use super::{PromptAnswerEntry, alias, storage};
 
 #[derive(Debug, Clone, Default)]
-pub struct PromptAnswerContext {
-    pub component_key: String,
-    pub tp2_file: String,
-    pub component_id: String,
-    pub component_name: String,
-    pub prompt_kind: String,
-    pub source: String,
+pub(crate) struct PromptAnswerContext {
+    pub(crate) component_key: String,
+    pub(crate) tp2_file: String,
+    pub(crate) component_id: String,
+    pub(crate) component_name: String,
+    pub(crate) prompt_kind: String,
+    pub(crate) source: String,
 }
 
 pub(super) fn alias_from_preview(preview: &str) -> String {
@@ -225,8 +225,7 @@ fn now_unix_secs() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn persist_error() -> &'static Mutex<Option<String>> {

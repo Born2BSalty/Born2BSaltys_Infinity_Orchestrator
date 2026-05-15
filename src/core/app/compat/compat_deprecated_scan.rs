@@ -18,6 +18,8 @@ pub(crate) fn apply_step2_scan_deprecated(mods: &mut [Step2ModState]) {
         let deprecated_hits = deprecated_cache
             .entry(mod_state.tp2_path.clone())
             .or_insert_with(|| load_component_deprecated_hits(&mod_state.tp2_path));
+        let propagated_hits =
+            deprecated_empty_subcomponent_placeholder_hits(mod_state, deprecated_hits);
 
         for component in &mut mod_state.components {
             if component
@@ -28,7 +30,10 @@ pub(crate) fn apply_step2_scan_deprecated(mods: &mut [Step2ModState]) {
                 continue;
             }
 
-            let Some(hit) = deprecated_hits.get(component.component_id.trim()) else {
+            let Some(hit) = deprecated_hits
+                .get(component.component_id.trim())
+                .or_else(|| propagated_hits.get(component.component_id.trim()))
+            else {
                 continue;
             };
 
@@ -61,6 +66,52 @@ fn apply_deprecated(
     ));
     component.compat_evidence = Some(hit.raw_evidence.clone());
     component.disabled_reason = Some(hit.message.clone());
+}
+
+fn deprecated_empty_subcomponent_placeholder_hits(
+    mod_state: &Step2ModState,
+    direct_hits: &HashMap<String, DeprecatedHit>,
+) -> HashMap<String, DeprecatedHit> {
+    let mut groups = HashMap::<String, Vec<&Step2ComponentState>>::new();
+    for component in &mod_state.components {
+        let Some(key) = component.subcomponent_key.as_deref() else {
+            continue;
+        };
+        groups.entry(key.to_string()).or_default().push(component);
+    }
+
+    let mut out = HashMap::<String, DeprecatedHit>::new();
+    for group in groups.values() {
+        if !group
+            .iter()
+            .all(|component| component.tp2_empty_placeholder_block)
+        {
+            continue;
+        }
+        let Some(direct_hit) = group
+            .iter()
+            .find_map(|component| direct_hits.get(component.component_id.trim()))
+        else {
+            continue;
+        };
+        for component in group {
+            let component_id = component.component_id.trim();
+            if direct_hits.contains_key(component_id) {
+                continue;
+            }
+            out.insert(
+                component_id.to_string(),
+                DeprecatedHit {
+                    source: direct_hit.source.clone(),
+                    raw_evidence: direct_hit.raw_evidence.clone(),
+                    message:
+                        "TP2 marks another empty placeholder choice in this SUBCOMPONENT group as deprecated."
+                            .to_string(),
+                },
+            );
+        }
+    }
+    out
 }
 
 fn load_component_deprecated_hits(tp2_path: &str) -> HashMap<String, DeprecatedHit> {
@@ -154,16 +205,16 @@ fn deprecated_hit_file_cache() -> &'static Mutex<HashMap<String, CachedDeprecate
 }
 
 fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
-    match fs::metadata(tp2_path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(tp2_path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 fn find_deprecated_evidence(block: &[&str]) -> Option<String> {
@@ -195,7 +246,7 @@ fn inline_begin_deprecated(line: &str) -> Option<&str> {
     let designated_tail = designated_tail.trim_start();
     let digit_len = designated_tail
         .chars()
-        .take_while(|ch| ch.is_ascii_digit())
+        .take_while(char::is_ascii_digit)
         .map(char::len_utf8)
         .sum::<usize>();
     let search_region = &designated_tail[digit_len..];
@@ -226,7 +277,7 @@ fn parse_designated_id(upper_line: &str) -> Option<String> {
     }
     let index = upper_line.find("DESIGNATED")?;
     let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-    let digits: String = tail.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+    let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         None
     } else {

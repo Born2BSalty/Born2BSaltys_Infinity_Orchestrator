@@ -10,6 +10,10 @@ pub enum PromptPopupMode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "wizard Step 2 state is a stable cross-module UI/runtime state contract"
+)]
 pub struct Step2State {
     pub search_query: String,
     pub scan_status: String,
@@ -317,10 +321,16 @@ pub struct Step2HiddenComponentAudit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "component state mirrors independent scan, selection, and compatibility flags"
+)]
 pub struct Step2ComponentState {
     pub component_id: String,
     pub label: String,
     pub weidu_group: Option<String>,
+    pub subcomponent_key: Option<String>,
+    pub tp2_empty_placeholder_block: bool,
     pub collapsible_group: Option<String>,
     pub collapsible_group_is_umbrella: bool,
     pub raw_line: String,
@@ -339,6 +349,7 @@ pub struct Step2ComponentState {
     pub selected_order: Option<usize>,
 }
 
+#[must_use]
 pub fn update_selection_signature(step2: &Step2State) -> String {
     let mut entries = Vec::<String>::new();
     collect_update_selection_signature("BGEE", &step2.bgee_mods, &mut entries);
@@ -354,6 +365,7 @@ pub fn update_selection_signature(step2: &Step2State) -> String {
     entries.join(";")
 }
 
+#[must_use]
 pub fn exact_log_ready_to_install(state: &crate::app::state::WizardState) -> bool {
     state.step1.installs_exactly_from_weidu_logs()
         && state.step2.exact_log_mod_list_checked

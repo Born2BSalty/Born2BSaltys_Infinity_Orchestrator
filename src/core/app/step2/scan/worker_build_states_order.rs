@@ -167,7 +167,7 @@ pub(super) fn parse_begin_label(line: &str, tra_map: &HashMap<String, String>) -
     }
     let tail = trimmed["BEGIN".len()..].trim_start();
     if let Some(rest) = tail.strip_prefix('@') {
-        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
         if digits.is_empty() {
             return None;
         }

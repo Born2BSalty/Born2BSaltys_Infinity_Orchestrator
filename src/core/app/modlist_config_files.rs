@@ -190,6 +190,8 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
     }
     let mut out = Vec::with_capacity(values.len() / 4 * 3);
     for chunk in values.chunks(4) {
+        // Lint-only bytecount dependency is not approved for this local base64 padding check.
+        #[allow(clippy::naive_bytecount)]
         let pad = chunk.iter().filter(|value| **value == 64).count();
         if pad > 2 || chunk[..4 - pad].contains(&64) {
             return Err("pending mod config base64 padding is invalid.".to_string());

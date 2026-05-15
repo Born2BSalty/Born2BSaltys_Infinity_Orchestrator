@@ -13,13 +13,17 @@ use crate::app::state::{Step1State, Step2ModState};
 
 pub use crate::app::scan::Step2ScanEvent;
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "scan worker entry receives owned values moved into the spawned thread"
+)]
 pub fn run_scan(step1: Step1State, sender: Sender<Step2ScanEvent>, cancel: Arc<AtomicBool>) {
     match scan_impl(&step1, &sender, &cancel) {
-        Ok((bgee_mods, bg2ee_mods, report)) => {
-            prewarm_import_compat_caches(&bgee_mods, &bg2ee_mods);
+        Ok((primary_game_mods, secondary_game_mods, report)) => {
+            prewarm_import_compat_caches(&primary_game_mods, &secondary_game_mods);
             let _ = sender.send(Step2ScanEvent::Finished {
-                bgee_mods,
-                bg2ee_mods,
+                bgee_mods: primary_game_mods,
+                bg2ee_mods: secondary_game_mods,
                 report: Box::new(report),
             });
         }
@@ -32,9 +36,12 @@ pub fn run_scan(step1: Step1State, sender: Sender<Step2ScanEvent>, cancel: Arc<A
     }
 }
 
-fn prewarm_import_compat_caches(bgee_mods: &[Step2ModState], bg2ee_mods: &[Step2ModState]) {
+fn prewarm_import_compat_caches(
+    primary_game_mods: &[Step2ModState],
+    secondary_game_mods: &[Step2ModState],
+) {
     let mut seen = HashSet::<String>::new();
-    for mod_state in bgee_mods.iter().chain(bg2ee_mods.iter()) {
+    for mod_state in primary_game_mods.iter().chain(secondary_game_mods.iter()) {
         let tp2_path = mod_state.tp2_path.trim();
         if tp2_path.is_empty() || !seen.insert(tp2_path.to_string()) {
             continue;

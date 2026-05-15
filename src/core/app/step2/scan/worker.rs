@@ -15,7 +15,9 @@ mod orchestrate {
     use std::thread;
 
     use crate::app::controller::util::current_exe_fingerprint;
-    use crate::app::scan::cache::{cache_context, load_scan_cache, save_scan_cache};
+    use crate::app::scan::cache::{
+        ScanCache, ScanCacheLoadMeta, cache_context, load_scan_cache, save_scan_cache,
+    };
     use crate::app::scan::discovery::{build_preview_mods, group_tp2s, resolve_scan_game_dir};
     use crate::app::scan::{ENABLE_TWO_PHASE_PREVIEW, ScannedComponent, Step2ScanEvent};
     use crate::app::state::{Step1State, Step2ModState, Step2ScanReport, Step2Tp2ProbeReport};
@@ -26,6 +28,7 @@ mod orchestrate {
     use super::scan_group::{ScanGroupContext, scan_tp2_group};
 
     const SCAN_WORKER_STACK_SIZE: usize = 32 * 1024 * 1024;
+    type GroupedTp2s = Vec<(String, Vec<PathBuf>)>;
 
     fn select_main_tp2<'a>(
         group_label: &str,
@@ -51,7 +54,7 @@ mod orchestrate {
             let file_name = tp2
                 .file_name()
                 .and_then(|value| value.to_str())
-                .map(|value| value.to_ascii_lowercase())
+                .map(str::to_ascii_lowercase)
                 .unwrap_or_default();
             if file_name == preferred_setup {
                 return Some(tp2);
@@ -95,165 +98,66 @@ mod orchestrate {
         };
         let grouped = group_tp2s(&mods_root, scan_depth)?;
         let preferred_locale_info = Arc::new(detect_preferred_game_locale(step1));
-        if ENABLE_TWO_PHASE_PREVIEW {
-            let preview = build_preview_mods(&grouped);
-            let (bgee_mods, bg2ee_mods) = match step1.game_install.as_str() {
-                "BG2EE" => (Vec::new(), preview),
-                "EET" => (preview.clone(), preview),
-                _ => (preview, Vec::new()),
-            };
-            let _ = sender.send(Step2ScanEvent::Preview {
-                bgee_mods,
-                bg2ee_mods,
-                total: grouped.len(),
-            });
-        }
+        send_two_phase_preview(step1, sender, &grouped);
 
         let total = grouped.len();
         let grouped = Arc::new(grouped);
-        let mods_map = Arc::new(Mutex::new(BTreeMap::<String, Vec<ScannedComponent>>::new()));
-        let tp2_map = Arc::new(Mutex::new(BTreeMap::<String, String>::new()));
         let loaded_cache = load_scan_cache();
         let cache_meta = loaded_cache.meta.clone();
-        let cache = Arc::new(Mutex::new(loaded_cache.cache));
-        let ctx = Arc::new(cache_context(&weidu, &game_dir, &mods_root));
-        let next_index = Arc::new(AtomicUsize::new(0));
-        let progress_count = Arc::new(AtomicUsize::new(0));
-        let scan_error = Arc::new(Mutex::new(None::<String>));
+        let shared =
+            ScanWorkerShared::new(grouped, loaded_cache.cache, &weidu, &game_dir, &mods_root);
         let worker_count = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
+            .map_or(4, std::num::NonZero::get)
             .clamp(2, 16);
-        let scan_reports = Arc::new(Mutex::new(Vec::<Step2Tp2ProbeReport>::new()));
-
-        thread::scope(|scope| {
-            for _ in 0..worker_count {
-                let grouped = Arc::clone(&grouped);
-                let mods_map = Arc::clone(&mods_map);
-                let tp2_map = Arc::clone(&tp2_map);
-                let next_index = Arc::clone(&next_index);
-                let progress_count = Arc::clone(&progress_count);
-                let cancel = Arc::clone(cancel);
-                let sender = sender.clone();
-                let weidu = weidu.clone();
-                let game_dir = game_dir.clone();
-                let mods_root = mods_root.clone();
-                let cache = Arc::clone(&cache);
-                let ctx = Arc::clone(&ctx);
-                let preferred_locale = Arc::clone(&preferred_locale_info);
-                let scan_error = Arc::clone(&scan_error);
-                let scan_error_for_worker = Arc::clone(&scan_error);
-                let scan_reports = Arc::clone(&scan_reports);
-                if let Err(err) = thread::Builder::new()
-                    .name("bio-scan-worker".to_string())
-                    .stack_size(SCAN_WORKER_STACK_SIZE)
-                    .spawn_scoped(scope, move || {
-                        loop {
-                            if cancel.load(Ordering::Relaxed) {
-                                break;
-                            }
-                            if scan_error_for_worker
-                                .lock()
-                                .map(|guard| guard.is_some())
-                                .unwrap_or(true)
-                            {
-                                break;
-                            }
-                            let idx = next_index.fetch_add(1, Ordering::Relaxed);
-                            if idx >= grouped.len() {
-                                break;
-                            }
-                            let (label, tp2_paths) = &grouped[idx];
-                            let Some(main_tp2) = select_main_tp2(label, tp2_paths, &mods_root)
-                            else {
-                                continue;
-                            };
-
-                            let scan_group_ctx = ScanGroupContext {
-                                group_label: label,
-                                weidu: &weidu,
-                                game_dir: &game_dir,
-                                mods_root: &mods_root,
-                                cache: &cache,
-                                ctx: &ctx,
-                                preferred_locale: preferred_locale.locale.as_str(),
-                                game_install: step1.game_install.as_str(),
-                            };
-                            let (entries, reports) =
-                                match scan_tp2_group(&scan_group_ctx, tp2_paths) {
-                                    Ok(result) => result,
-                                    Err(err) => {
-                                        if let Ok(mut guard) = scan_error_for_worker.lock()
-                                            && guard.is_none()
-                                        {
-                                            *guard = Some(err);
-                                        }
-                                        break;
-                                    }
-                                };
-
-                            if let Ok(mut map) = mods_map.lock() {
-                                map.entry(label.clone()).or_default().extend(entries);
-                            }
-                            if let Ok(mut all_reports) = scan_reports.lock() {
-                                all_reports.extend(reports);
-                            }
-                            if let Ok(mut map) = tp2_map.lock() {
-                                map.entry(label.clone())
-                                    .or_insert_with(|| main_tp2.display().to_string());
-                            }
-
-                            let done = progress_count.fetch_add(1, Ordering::Relaxed) + 1;
-                            let _ = sender.send(Step2ScanEvent::Progress {
-                                current: done,
-                                total,
-                                name: label.clone(),
-                            });
-                        }
-                    })
-                {
-                    if let Ok(mut guard) = scan_error.lock()
-                        && guard.is_none()
-                    {
-                        *guard = Some(format!("failed to spawn scan worker: {err}"));
-                    }
-                    break;
-                }
-            }
+        run_scan_workers(&ScanWorkerRun {
+            step1,
+            sender,
+            cancel,
+            weidu: &weidu,
+            game_dir: &game_dir,
+            mods_root: &mods_root,
+            preferred_locale_info: &preferred_locale_info,
+            total,
+            worker_count,
+            shared: &shared,
         });
 
         if cancel.load(Ordering::Relaxed) {
             return Err("canceled".to_string());
         }
-        if let Some(err) = scan_error
+        let scan_error = shared
+            .scan_error
             .lock()
             .map_err(|_| "scan error lock poisoned".to_string())?
-            .clone()
-        {
+            .clone();
+        if let Some(err) = scan_error {
             return Err(err);
         }
 
-        let mods_map = mods_map
+        let mods_map = shared
+            .mods_map
             .lock()
             .map_err(|_| "scan map lock poisoned".to_string())?
             .clone();
-        let tp2_map = tp2_map
+        let tp2_map = shared
+            .tp2_map
             .lock()
             .map_err(|_| "scan tp2 map lock poisoned".to_string())?
             .clone();
-        let scan_cache_save_error = match cache.lock() {
-            Ok(cache) => save_scan_cache(&cache),
-            Err(_) => Some("scan cache lock poisoned during save".to_string()),
-        };
+        let scan_cache_save_error = shared.cache.lock().map_or_else(
+            |_| Some("scan cache lock poisoned during save".to_string()),
+            |cache| save_scan_cache(&cache),
+        );
 
-        let scanned_mods = to_mod_states(mods_map, tp2_map, &mods_root);
-        let (bgee_mods, bg2ee_mods) = match step1.game_install.as_str() {
+        let scanned_mods = to_mod_states(mods_map, &tp2_map, &mods_root);
+        let (primary_game_mods, secondary_game_mods) = match step1.game_install.as_str() {
             "BG2EE" => (Vec::new(), scanned_mods),
             "EET" => (scanned_mods.clone(), scanned_mods),
             _ => (scanned_mods, Vec::new()),
         };
 
-        let mut tp2_reports = scan_reports
+        let mut tp2_reports = shared
+            .scan_reports
             .lock()
             .map_err(|_| "scan reports lock poisoned".to_string())?
             .clone();
@@ -261,60 +165,315 @@ mod orchestrate {
         let tp2_cache_hits = tp2_reports.iter().filter(|r| r.used_cache).count();
         let total_tp2 = tp2_reports.len();
         let current_exe_fingerprint = current_exe_fingerprint();
-        let report = Step2ScanReport {
-            game_dir: game_dir.display().to_string(),
-            mods_root: mods_root.display().to_string(),
+        let report = build_scan_report(ScanReportBuild {
+            game_dir: &game_dir,
+            mods_root: &mods_root,
             scan_depth,
-            preferred_locale: preferred_locale_info.locale.clone(),
-            preferred_locale_source: preferred_locale_info.source.clone(),
-            preferred_locale_baldur_lua: preferred_locale_info
-                .baldur_lua_path
-                .as_ref()
-                .map(|p| p.display().to_string()),
+            preferred_locale_info: &preferred_locale_info,
             worker_count,
             total_groups: total,
             total_tp2,
             tp2_cache_hits,
-            tp2_cache_misses: total_tp2.saturating_sub(tp2_cache_hits),
-            scan_cache_path: cache_meta.path,
-            scan_cache_source: cache_meta.source,
-            scan_cache_load_status: cache_meta.load_status,
-            scan_cache_load_error: cache_meta.load_error,
-            scan_cache_file_exists: cache_meta.file_exists,
-            scan_cache_file_mtime_secs: cache_meta.file_mtime_secs,
-            scan_cache_file_version: cache_meta.file_version,
-            scan_cache_writer_app_version: cache_meta.file_writer_app_version.clone(),
-            scan_cache_writer_exe_fingerprint: cache_meta.file_writer_exe_fingerprint.clone(),
-            scan_cache_entry_count: cache_meta.file_entry_count,
-            scan_cache_version_matches_current_schema: cache_meta.version_matches_current_schema,
-            scan_cache_fallback_path: cache_meta.fallback_path,
-            scan_cache_fallback_source: cache_meta.fallback_source,
-            scan_cache_fallback_load_status: cache_meta.fallback_load_status,
-            scan_cache_fallback_load_error: cache_meta.fallback_load_error,
+            cache_meta,
             scan_cache_save_error,
-            scan_cache_writer_matches_current_app_version: if tp2_cache_hits == 0 {
-                None
-            } else {
-                Some(
-                    cache_meta
-                        .file_writer_app_version
-                        .as_deref()
-                        .is_some_and(|v| v == env!("CARGO_PKG_VERSION")),
-                )
-            },
-            scan_cache_writer_matches_current_exe: if tp2_cache_hits == 0 {
-                None
-            } else {
-                Some(
-                    cache_meta
-                        .file_writer_exe_fingerprint
-                        .as_deref()
-                        .is_some_and(|v| v == current_exe_fingerprint),
-                )
-            },
+            current_exe_fingerprint: &current_exe_fingerprint,
             tp2_reports,
+        });
+        Ok((primary_game_mods, secondary_game_mods, report))
+    }
+
+    fn send_two_phase_preview(
+        step1: &Step1State,
+        sender: &Sender<Step2ScanEvent>,
+        grouped: &GroupedTp2s,
+    ) {
+        if !ENABLE_TWO_PHASE_PREVIEW {
+            return;
+        }
+        let preview = build_preview_mods(grouped);
+        let (primary_game_mods, secondary_game_mods) = match step1.game_install.as_str() {
+            "BG2EE" => (Vec::new(), preview),
+            "EET" => (preview.clone(), preview),
+            _ => (preview, Vec::new()),
         };
-        Ok((bgee_mods, bg2ee_mods, report))
+        let _ = sender.send(Step2ScanEvent::Preview {
+            bgee_mods: primary_game_mods,
+            bg2ee_mods: secondary_game_mods,
+            total: grouped.len(),
+        });
+    }
+
+    struct ScanWorkerShared {
+        grouped: Arc<GroupedTp2s>,
+        mods_map: Arc<Mutex<BTreeMap<String, Vec<ScannedComponent>>>>,
+        tp2_map: Arc<Mutex<BTreeMap<String, String>>>,
+        cache: Arc<Mutex<ScanCache>>,
+        ctx: Arc<String>,
+        next_index: Arc<AtomicUsize>,
+        progress_count: Arc<AtomicUsize>,
+        scan_error: Arc<Mutex<Option<String>>>,
+        scan_reports: Arc<Mutex<Vec<Step2Tp2ProbeReport>>>,
+    }
+
+    impl ScanWorkerShared {
+        fn new(
+            grouped: Arc<GroupedTp2s>,
+            cache: ScanCache,
+            weidu: &Path,
+            game_dir: &Path,
+            mods_root: &Path,
+        ) -> Self {
+            Self {
+                grouped,
+                mods_map: Arc::new(Mutex::new(BTreeMap::<String, Vec<ScannedComponent>>::new())),
+                tp2_map: Arc::new(Mutex::new(BTreeMap::<String, String>::new())),
+                cache: Arc::new(Mutex::new(cache)),
+                ctx: Arc::new(cache_context(weidu, game_dir, mods_root)),
+                next_index: Arc::new(AtomicUsize::new(0)),
+                progress_count: Arc::new(AtomicUsize::new(0)),
+                scan_error: Arc::new(Mutex::new(None::<String>)),
+                scan_reports: Arc::new(Mutex::new(Vec::<Step2Tp2ProbeReport>::new())),
+            }
+        }
+    }
+
+    struct ScanWorkerRun<'a> {
+        step1: &'a Step1State,
+        sender: &'a Sender<Step2ScanEvent>,
+        cancel: &'a Arc<AtomicBool>,
+        weidu: &'a Path,
+        game_dir: &'a Path,
+        mods_root: &'a Path,
+        preferred_locale_info: &'a super::language::PreferredLocaleInfo,
+        total: usize,
+        worker_count: usize,
+        shared: &'a ScanWorkerShared,
+    }
+
+    fn run_scan_workers(run: &ScanWorkerRun<'_>) {
+        thread::scope(|scope| {
+            for _ in 0..run.worker_count {
+                let grouped = Arc::clone(&run.shared.grouped);
+                let mods_map = Arc::clone(&run.shared.mods_map);
+                let tp2_map = Arc::clone(&run.shared.tp2_map);
+                let next_index = Arc::clone(&run.shared.next_index);
+                let progress_count = Arc::clone(&run.shared.progress_count);
+                let cancel = Arc::clone(run.cancel);
+                let sender = run.sender.clone();
+                let weidu = run.weidu.to_path_buf();
+                let game_dir = run.game_dir.to_path_buf();
+                let mods_root = run.mods_root.to_path_buf();
+                let cache = Arc::clone(&run.shared.cache);
+                let ctx = Arc::clone(&run.shared.ctx);
+                let preferred_locale = Arc::new((*run.preferred_locale_info).clone());
+                let scan_error = Arc::clone(&run.shared.scan_error);
+                let scan_error_for_worker = Arc::clone(&run.shared.scan_error);
+                let scan_reports = Arc::clone(&run.shared.scan_reports);
+                let game_install = run.step1.game_install.clone();
+                let worker = ScanWorkerLoop {
+                    grouped,
+                    mods_map,
+                    tp2_map,
+                    next_index,
+                    progress_count,
+                    cancel,
+                    sender,
+                    weidu,
+                    game_dir,
+                    mods_root,
+                    cache,
+                    ctx,
+                    preferred_locale,
+                    scan_error: scan_error_for_worker,
+                    scan_reports,
+                    total: run.total,
+                    game_install,
+                };
+                if let Err(err) = thread::Builder::new()
+                    .name("bio-scan-worker".to_string())
+                    .stack_size(SCAN_WORKER_STACK_SIZE)
+                    .spawn_scoped(scope, move || scan_worker_loop(&worker))
+                {
+                    set_scan_error(&scan_error, format!("failed to spawn scan worker: {err}"));
+                    break;
+                }
+            }
+        });
+    }
+
+    struct ScanWorkerLoop {
+        grouped: Arc<GroupedTp2s>,
+        mods_map: Arc<Mutex<BTreeMap<String, Vec<ScannedComponent>>>>,
+        tp2_map: Arc<Mutex<BTreeMap<String, String>>>,
+        next_index: Arc<AtomicUsize>,
+        progress_count: Arc<AtomicUsize>,
+        cancel: Arc<AtomicBool>,
+        sender: Sender<Step2ScanEvent>,
+        weidu: PathBuf,
+        game_dir: PathBuf,
+        mods_root: PathBuf,
+        cache: Arc<Mutex<ScanCache>>,
+        ctx: Arc<String>,
+        preferred_locale: Arc<super::language::PreferredLocaleInfo>,
+        scan_error: Arc<Mutex<Option<String>>>,
+        scan_reports: Arc<Mutex<Vec<Step2Tp2ProbeReport>>>,
+        total: usize,
+        game_install: String,
+    }
+
+    fn scan_worker_loop(worker: &ScanWorkerLoop) {
+        loop {
+            if worker.cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            if worker
+                .scan_error
+                .lock()
+                .map_or(true, |guard| guard.is_some())
+            {
+                break;
+            }
+            let idx = worker.next_index.fetch_add(1, Ordering::Relaxed);
+            if idx >= worker.grouped.len() {
+                break;
+            }
+            let (label, tp2_paths) = &worker.grouped[idx];
+            let Some(main_tp2) = select_main_tp2(label, tp2_paths, &worker.mods_root) else {
+                continue;
+            };
+            let scan_group_ctx = ScanGroupContext {
+                group_label: label,
+                weidu: &worker.weidu,
+                game_dir: &worker.game_dir,
+                mods_root: &worker.mods_root,
+                cache: &worker.cache,
+                ctx: &worker.ctx,
+                preferred_locale: worker.preferred_locale.locale.as_str(),
+                game_install: worker.game_install.as_str(),
+            };
+            let (entries, reports) = match scan_tp2_group(&scan_group_ctx, tp2_paths) {
+                Ok(result) => result,
+                Err(err) => {
+                    set_scan_error(&worker.scan_error, err);
+                    break;
+                }
+            };
+            store_scan_group_result(worker, label, main_tp2, entries, reports);
+        }
+    }
+
+    fn store_scan_group_result(
+        worker: &ScanWorkerLoop,
+        label: &str,
+        main_tp2: &Path,
+        entries: Vec<ScannedComponent>,
+        reports: Vec<Step2Tp2ProbeReport>,
+    ) {
+        if let Ok(mut map) = worker.mods_map.lock() {
+            map.entry(label.to_string()).or_default().extend(entries);
+        }
+        if let Ok(mut all_reports) = worker.scan_reports.lock() {
+            all_reports.extend(reports);
+        }
+        if let Ok(mut map) = worker.tp2_map.lock() {
+            map.entry(label.to_string())
+                .or_insert_with(|| main_tp2.display().to_string());
+        }
+        let done = worker.progress_count.fetch_add(1, Ordering::Relaxed) + 1;
+        let _ = worker.sender.send(Step2ScanEvent::Progress {
+            current: done,
+            total: worker.total,
+            name: label.to_string(),
+        });
+    }
+
+    fn set_scan_error(scan_error: &Arc<Mutex<Option<String>>>, err: String) {
+        if let Ok(mut guard) = scan_error.lock()
+            && guard.is_none()
+        {
+            *guard = Some(err);
+        }
+    }
+
+    struct ScanReportBuild<'a> {
+        game_dir: &'a Path,
+        mods_root: &'a Path,
+        scan_depth: usize,
+        preferred_locale_info: &'a super::language::PreferredLocaleInfo,
+        worker_count: usize,
+        total_groups: usize,
+        total_tp2: usize,
+        tp2_cache_hits: usize,
+        cache_meta: ScanCacheLoadMeta,
+        scan_cache_save_error: Option<String>,
+        current_exe_fingerprint: &'a str,
+        tp2_reports: Vec<Step2Tp2ProbeReport>,
+    }
+
+    fn build_scan_report(input: ScanReportBuild<'_>) -> Step2ScanReport {
+        Step2ScanReport {
+            game_dir: input.game_dir.display().to_string(),
+            mods_root: input.mods_root.display().to_string(),
+            scan_depth: input.scan_depth,
+            preferred_locale: input.preferred_locale_info.locale.clone(),
+            preferred_locale_source: input.preferred_locale_info.source.clone(),
+            preferred_locale_baldur_lua: input
+                .preferred_locale_info
+                .baldur_lua_path
+                .as_ref()
+                .map(|path| path.display().to_string()),
+            worker_count: input.worker_count,
+            total_groups: input.total_groups,
+            total_tp2: input.total_tp2,
+            tp2_cache_hits: input.tp2_cache_hits,
+            tp2_cache_misses: input.total_tp2.saturating_sub(input.tp2_cache_hits),
+            scan_cache_path: input.cache_meta.path,
+            scan_cache_source: input.cache_meta.source,
+            scan_cache_load_status: input.cache_meta.load_status,
+            scan_cache_load_error: input.cache_meta.load_error,
+            scan_cache_file_exists: input.cache_meta.file_exists,
+            scan_cache_file_mtime_secs: input.cache_meta.file_mtime_secs,
+            scan_cache_file_version: input.cache_meta.file_version,
+            scan_cache_writer_app_version: input.cache_meta.file_writer_app_version.clone(),
+            scan_cache_writer_exe_fingerprint: input.cache_meta.file_writer_exe_fingerprint.clone(),
+            scan_cache_entry_count: input.cache_meta.file_entry_count,
+            scan_cache_version_matches_current_schema: input
+                .cache_meta
+                .version_matches_current_schema,
+            scan_cache_fallback_path: input.cache_meta.fallback_path,
+            scan_cache_fallback_source: input.cache_meta.fallback_source,
+            scan_cache_fallback_load_status: input.cache_meta.fallback_load_status,
+            scan_cache_fallback_load_error: input.cache_meta.fallback_load_error,
+            scan_cache_save_error: input.scan_cache_save_error,
+            scan_cache_writer_matches_current_app_version: cache_writer_matches_version(
+                input.tp2_cache_hits,
+                input.cache_meta.file_writer_app_version.as_deref(),
+            ),
+            scan_cache_writer_matches_current_exe: cache_writer_matches_exe(
+                input.tp2_cache_hits,
+                input.cache_meta.file_writer_exe_fingerprint.as_deref(),
+                input.current_exe_fingerprint,
+            ),
+            tp2_reports: input.tp2_reports,
+        }
+    }
+
+    fn cache_writer_matches_version(
+        tp2_cache_hits: usize,
+        writer_version: Option<&str>,
+    ) -> Option<bool> {
+        (tp2_cache_hits != 0)
+            .then(|| writer_version.is_some_and(|version| version == env!("CARGO_PKG_VERSION")))
+    }
+
+    fn cache_writer_matches_exe(
+        tp2_cache_hits: usize,
+        writer_fingerprint: Option<&str>,
+        current_exe_fingerprint: &str,
+    ) -> Option<bool> {
+        (tp2_cache_hits != 0).then(|| {
+            writer_fingerprint.is_some_and(|fingerprint| fingerprint == current_exe_fingerprint)
+        })
     }
 }
 

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_LABEL_FONT_SIZE_PX, ThemePalette, redesign_accent_comment, redesign_accent_numbers,
+    redesign_selection_highlight, redesign_text_primary,
+};
 use eframe::egui;
 
 fn parse_lang_and_component_ids(raw_line: &str, fallback_component_id: &str) -> (String, String) {
@@ -48,12 +52,20 @@ pub(crate) fn format_component_row_label_with_display(
     format!("#{lang} #{component} // {display}")
 }
 
-pub(crate) fn colored_component_widget_text(ui: &egui::Ui, text: &str) -> egui::WidgetText {
+pub(crate) fn colored_component_widget_text(
+    text: &str,
+    filter: &str,
+    palette: ThemePalette,
+) -> egui::WidgetText {
     let mut job = egui::text::LayoutJob::default();
-    let mono = egui::TextStyle::Monospace.resolve(ui.style());
-    let default_color = ui.visuals().text_color();
-    let nums_color = crate::ui::shared::theme_global::accent_numbers();
-    let comment_color = crate::ui::shared::theme_global::accent_comment();
+    let mono = egui::FontId::new(
+        REDESIGN_LABEL_FONT_SIZE_PX,
+        crate::ui::shared::redesign_tokens::redesign_font_mono(),
+    );
+    let default_color = redesign_text_primary(palette);
+    let nums_color = redesign_accent_numbers(palette);
+    let comment_color = redesign_accent_comment(palette);
+    let highlight_bg = redesign_selection_highlight(palette);
 
     if let Some(split_at) = text.find("//") {
         let left = text[..split_at].trim_end();
@@ -69,16 +81,43 @@ pub(crate) fn colored_component_widget_text(ui: &egui::Ui, text: &str) -> egui::
         } else {
             nums_color
         };
-        append_text(&mut job, left, &mono, left_color);
+        append_with_highlights(&mut job, left, &mono, left_color, filter, highlight_bg);
         append_text(&mut job, " ", &mono, default_color);
         append_text(&mut job, "//", &mono, comment_color);
         append_text(&mut job, " ", &mono, default_color);
-        append_text(&mut job, right, &mono, right_color);
+        append_with_highlights(&mut job, right, &mono, right_color, filter, highlight_bg);
         return egui::WidgetText::from(job);
     }
 
-    append_text(&mut job, text, &mono, default_color);
+    append_with_highlights(&mut job, text, &mono, default_color, filter, highlight_bg);
     egui::WidgetText::from(job)
+}
+
+fn append_with_highlights(
+    job: &mut egui::text::LayoutJob,
+    text: &str,
+    font_id: &egui::FontId,
+    color: egui::Color32,
+    filter: &str,
+    highlight_bg: egui::Color32,
+) {
+    if filter.is_empty() {
+        append_text(job, text, font_id, color);
+        return;
+    }
+    let lower_text = text.to_lowercase();
+    let mut last = 0usize;
+    for (idx, matched) in lower_text.match_indices(filter) {
+        let end = idx + matched.len();
+        if idx > last {
+            append_text(job, &text[last..idx], font_id, color);
+        }
+        append_highlighted(job, &text[idx..end], font_id, color, highlight_bg);
+        last = end;
+    }
+    if last < text.len() {
+        append_text(job, &text[last..], font_id, color);
+    }
 }
 
 fn append_text(
@@ -96,6 +135,28 @@ fn append_text(
         egui::TextFormat {
             font_id: font_id.clone(),
             color,
+            ..Default::default()
+        },
+    );
+}
+
+fn append_highlighted(
+    job: &mut egui::text::LayoutJob,
+    text: &str,
+    font_id: &egui::FontId,
+    color: egui::Color32,
+    background: egui::Color32,
+) {
+    if text.is_empty() {
+        return;
+    }
+    job.append(
+        text,
+        0.0,
+        egui::TextFormat {
+            font_id: font_id.clone(),
+            color,
+            background,
             ..Default::default()
         },
     );

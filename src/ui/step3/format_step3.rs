@@ -4,14 +4,22 @@
 use eframe::egui;
 
 use crate::app::state::Step3ItemState;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_LABEL_FONT_SIZE_PX, ThemePalette, redesign_accent_comment, redesign_accent_numbers,
+    redesign_accent_path, redesign_font_mono, redesign_text_primary,
+};
 
-pub(crate) fn weidu_colored_widget_text(ui: &egui::Ui, text: &str) -> egui::WidgetText {
+pub(crate) fn weidu_colored_widget_text(
+    _ui: &egui::Ui,
+    text: &str,
+    palette: ThemePalette,
+) -> egui::WidgetText {
     let mut job = egui::text::LayoutJob::default();
-    let mono = egui::TextStyle::Monospace.resolve(ui.style());
-    let default_color = ui.visuals().text_color();
-    let path_color = crate::ui::shared::theme_global::accent_path();
-    let nums_color = crate::ui::shared::theme_global::accent_numbers();
-    let comment_color = crate::ui::shared::theme_global::success();
+    let mono = egui::FontId::new(REDESIGN_LABEL_FONT_SIZE_PX, redesign_font_mono());
+    let default_color = redesign_text_primary(palette);
+    let path_color = redesign_accent_path(palette);
+    let nums_color = redesign_accent_numbers(palette);
+    let comment_color = redesign_accent_comment(palette);
 
     if let Some(path_start) = text.find('~')
         && let Some(path_end_rel) = text[path_start + 1..].find('~')
@@ -37,14 +45,14 @@ pub(crate) fn weidu_colored_widget_text(ui: &egui::Ui, text: &str) -> egui::Widg
 }
 
 pub(crate) fn format_step3_item(item: &Step3ItemState) -> String {
-    if !item.raw_line.trim().is_empty() {
-        normalize_weidu_like_line(&item.raw_line)
-    } else {
+    if item.raw_line.trim().is_empty() {
         let folder = item.mod_name.replace('/', "\\");
         format!(
             "~{}\\{}~ #0 #{} // {}",
             folder, item.tp_file, item.component_id, item.component_label
         )
+    } else {
+        normalize_weidu_like_line(&item.raw_line)
     }
 }
 

@@ -37,31 +37,28 @@ pub fn execute_component(
         })?;
 
     let timeout = Duration::from_secs(options.timeout as u64);
-    match child.wait_timeout(timeout)? {
-        Some(_) => {
-            let output = child.wait_with_output()?;
-            if !output.status.success() {
-                return Err(anyhow!(
-                    "weidu failed for {} {} (exit={:?})\nstdout:\n{}\nstderr:\n{}",
-                    component.name,
-                    component.component,
-                    output.status.code(),
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                ));
-            }
-            Ok(())
-        }
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            Err(anyhow!(
-                "weidu timed out after {} seconds for {} {}",
-                options.timeout,
+    if child.wait_timeout(timeout)?.is_some() {
+        let output = child.wait_with_output()?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "weidu failed for {} {} (exit={:?})\nstdout:\n{}\nstderr:\n{}",
                 component.name,
-                component.component
-            ))
+                component.component,
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
+        Ok(())
+    } else {
+        let _ = child.kill();
+        let _ = child.wait();
+        Err(anyhow!(
+            "weidu timed out after {} seconds for {} {}",
+            options.timeout,
+            component.name,
+            component.component
+        ))
     }
 }
 
@@ -79,7 +76,7 @@ fn build_args(tp2_path: &Path, component: &Component, options: &CoreOptions) -> 
     for token in options
         .weidu_log_mode
         .split(',')
-        .map(|v| v.trim())
+        .map(str::trim)
         .filter(|v| !v.is_empty())
     {
         if let Some(path) = token.strip_prefix("log ") {

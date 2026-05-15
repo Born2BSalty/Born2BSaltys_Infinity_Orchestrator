@@ -219,7 +219,7 @@ fn extract_component_id_from_node_id(node_id: &str) -> Option<String> {
     let marker = ":@";
     let pos = node_id.find(marker)?;
     let rest = &node_id[pos + marker.len()..];
-    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         None
     } else {

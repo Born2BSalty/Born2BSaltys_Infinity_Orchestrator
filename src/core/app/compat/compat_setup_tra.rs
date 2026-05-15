@@ -78,7 +78,9 @@ fn collect_setup_tra_files(base: &Path, out: &mut Vec<PathBuf>) {
             .file_name()
             .and_then(|value| value.to_str())
             .is_some_and(|name| {
-                name.ends_with(".tra") && name.to_ascii_lowercase().contains("setup")
+                path.extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("tra"))
+                    && name.to_ascii_lowercase().contains("setup")
             })
             && !out.iter().any(|existing| existing == &path)
         {

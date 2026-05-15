@@ -8,7 +8,7 @@ use std::sync::mpsc::Receiver;
 
 use anyhow::Result;
 
-mod analyze;
+pub mod analyze;
 mod api;
 mod backend;
 mod input;
@@ -16,6 +16,10 @@ mod output;
 mod process;
 mod scripted_inputs;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "terminal state tracks independent process, capture, logging, and update flags"
+)]
 pub struct EmbeddedTerminal {
     pub(super) child: Option<Child>,
     pub(super) stdin: Option<ChildStdin>,

@@ -14,6 +14,7 @@ pub struct SettingsStore {
 }
 
 impl SettingsStore {
+    #[must_use]
     pub fn new_default() -> Self {
         let path = app_config_file("bio_settings.json", ".");
         Self { path }

@@ -8,6 +8,7 @@ use super::WizardApp;
 mod dispatch {
     use eframe::egui;
 
+    use crate::ui::shared::redesign_tokens::ThemePalette;
     use crate::ui::{step1, step2, step3, step4, step5};
 
     use super::super::WizardApp;
@@ -30,6 +31,7 @@ mod dispatch {
                     &mut app.state,
                     app.dev_mode,
                     app.exe_fingerprint.as_str(),
+                    ThemePalette::Dark,
                 ) {
                     app.handle_step2_action(action);
                 }
@@ -40,6 +42,7 @@ mod dispatch {
                     &mut app.state,
                     app.dev_mode,
                     app.exe_fingerprint.as_str(),
+                    ThemePalette::Dark,
                 );
             }
             3 => {
@@ -56,13 +59,18 @@ mod dispatch {
                 if let Some(action) = step5::page_step5::render(
                     ui,
                     &mut app.state,
-                    &mut app.step5_console_view,
-                    app.step5_terminal.as_mut(),
-                    app.step5_terminal_error.as_deref(),
-                    app.dev_mode,
-                    app.exe_fingerprint.as_str(),
+                    step5::page_step5::Step5RenderRuntime {
+                        console_view: &mut app.step5_console_view,
+                        terminal: app.step5_terminal.as_mut(),
+                        terminal_error: app.step5_terminal_error.as_deref(),
+                    },
+                    step5::page_step5::Step5RenderOptions {
+                        dev_mode: app.dev_mode,
+                        exe_fingerprint: app.exe_fingerprint.as_str(),
+                        palette: ThemePalette::Dark,
+                    },
                 ) {
-                    handle_step5_action(app, action);
+                    handle_step5_action(app, &action);
                 }
             }
             _ => {}
@@ -82,7 +90,7 @@ mod dispatch {
         }
     }
 
-    fn handle_step5_action(app: &mut WizardApp, action: step5::action_step5::Step5Action) {
+    const fn handle_step5_action(app: &mut WizardApp, action: &step5::action_step5::Step5Action) {
         match action {
             step5::action_step5::Step5Action::StartInstall => {
                 app.state.step5.start_install_requested = true;
@@ -98,14 +106,14 @@ mod repaint {
 
     pub(super) fn request_if_needed(app: &WizardApp, ctx: &egui::Context) {
         if crate::app::app_update_cycle::needs_repaint(
-            &app.step1_github_auth_rx,
-            &app.step2_scan_rx,
+            app.step1_github_auth_rx.as_ref(),
+            app.step2_scan_rx.as_ref(),
             &app.step2_progress_queue,
-            &app.step2_update_check_rx,
-            &app.step2_update_download_rx,
-            &app.step2_update_extract_rx,
-            &app.step5_terminal,
-            &app.step5_prep_rx,
+            app.step2_update_check_rx.as_ref(),
+            app.step2_update_download_rx.as_ref(),
+            app.step2_update_extract_rx.as_ref(),
+            app.step5_terminal.as_ref(),
+            app.step5_prep_rx.as_ref(),
             &app.state,
         ) {
             ctx.request_repaint_after(Duration::from_millis(16));

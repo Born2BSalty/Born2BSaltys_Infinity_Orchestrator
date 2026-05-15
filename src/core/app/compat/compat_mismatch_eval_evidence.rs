@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
+use crate::parser::{Token, tokenize};
 
 pub(crate) fn render_requirement_evidence(input: &str) -> Option<String> {
     let tokens = tokenize(input);
@@ -16,7 +16,7 @@ struct EvidenceParser {
 }
 
 impl EvidenceParser {
-    fn new(tokens: Vec<Token>) -> Self {
+    const fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, pos: 0 }
     }
 
@@ -77,8 +77,7 @@ impl EvidenceParser {
             "ENGINE_IS" => self.render_multi_value_call("ENGINE_IS"),
             "GAME_INCLUDES" => self.render_multi_value_call("GAME_INCLUDES"),
             "MOD_IS_INSTALLED" => self.render_mod_is_installed(),
-            "FILE_EXISTS_IN_GAME" => self.consume_ignored_file_call(),
-            "FILE_EXISTS" => self.consume_ignored_file_call(),
+            "FILE_EXISTS_IN_GAME" | "FILE_EXISTS" => self.consume_ignored_file_call(),
             "TRUE" => Some("TRUE".to_string()),
             "FALSE" => Some("FALSE".to_string()),
             _ => None,
@@ -148,7 +147,7 @@ impl EvidenceParser {
 
     fn consume_value(&mut self) -> Option<String> {
         match self.peek().cloned() {
-            Some(Token::Atom(value)) | Some(Token::Ident(value)) => {
+            Some(Token::Atom(value) | Token::Ident(value)) => {
                 self.pos += 1;
                 Some(value)
             }
@@ -180,7 +179,7 @@ impl EvidenceParser {
         self.consume_value()
     }
 
-    fn is_at_end(&self) -> bool {
+    const fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len()
     }
 
@@ -189,7 +188,7 @@ impl EvidenceParser {
     }
 }
 
-fn render_comparison_op(op: &Token) -> &'static str {
+const fn render_comparison_op(op: &Token) -> &'static str {
     match op {
         Token::Eq => "=",
         Token::Gt => ">",

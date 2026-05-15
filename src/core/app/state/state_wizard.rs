@@ -4,6 +4,10 @@
 use super::{Step1State, Step2State, Step3State, Step5State};
 
 #[derive(Debug, Clone, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "wizard root state is the stable orchestration contract across UI and runtime adapters"
+)]
 pub struct WizardState {
     pub current_step: usize,
     pub step1: Step1State,

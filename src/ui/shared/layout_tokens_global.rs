@@ -40,3 +40,23 @@ pub const STEP4_SAVE_BTN_H: f32 = 28.0;
 pub const STEP5_SECTION_GAP: f32 = 6.0;
 pub const STEP5_INSTALL_BTN_W: f32 = 130.0;
 pub const STEP5_INSTALL_BTN_H: f32 = 28.0;
+
+#[must_use]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "egui radius APIs use u8; layout radius tokens are bounded UI constants"
+)]
+pub const fn radius_u8(value: f32) -> u8 {
+    value as u8
+}
+
+#[must_use]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "UI character capacity estimates are non-negative bounded layout values"
+)]
+pub const fn floor_usize(value: f32) -> usize {
+    value.floor() as usize
+}

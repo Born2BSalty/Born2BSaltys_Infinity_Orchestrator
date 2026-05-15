@@ -3,31 +3,26 @@
 
 use eframe::egui;
 
+use crate::ui::shared::redesign_tokens::{
+    ThemePalette, redesign_success, redesign_text_muted, redesign_warning,
+};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::Step2Details;
 
-struct SelectionGridLayout {
+pub(crate) struct SelectionGridLayout {
     label_w: f32,
     value_w: f32,
     row_h: f32,
     value_chars: usize,
+    palette: ThemePalette,
 }
 
 pub(crate) fn render_selection_grid(
     ui: &mut egui::Ui,
     details: &Step2Details,
     action: &mut Option<Step2Action>,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
+    layout: &SelectionGridLayout,
 ) {
-    let layout = SelectionGridLayout {
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
-    };
     ui.label(crate::ui::shared::typography_global::small_strong(
         "Selection",
     ));
@@ -35,80 +30,138 @@ pub(crate) fn render_selection_grid(
         .num_columns(3)
         .spacing([8.0, 4.0])
         .show(ui, |ui| {
-            render_value_row(
-                ui,
-                &layout,
-                "Component",
-                details.component_label.as_deref(),
-                false,
-                None,
-                action,
-            );
-            render_value_row(
-                ui,
-                &layout,
-                "ID",
-                details.component_id.as_deref(),
-                true,
-                None,
-                action,
-            );
-            render_checked_row(ui, details, label_w, value_w, row_h);
-            render_state_row(ui, details, label_w, value_w, row_h);
-            if details.compat_kind.is_some() {
-                render_compat_rows(ui, details, label_w, value_w, row_h, value_chars);
-            }
-            render_value_row(
-                ui,
-                &layout,
-                "Language",
-                details.component_lang.as_deref(),
-                true,
-                None,
-                action,
-            );
-            render_value_row(
-                ui,
-                &layout,
-                "TP2 File",
-                details.tp_file.as_deref(),
-                true,
-                details.tp2_path.clone().map(Step2Action::OpenSelectedTp2),
-                action,
-            );
-            let shown_count = details.shown_component_count.map(|n| n.to_string());
-            render_value_row(
-                ui,
-                &layout,
-                "Shown",
-                shown_count.as_deref(),
-                true,
-                None,
-                action,
-            );
-            let hidden_count = details.hidden_component_count.map(|n| n.to_string());
-            render_value_row(
-                ui,
-                &layout,
-                "Hidden",
-                hidden_count.as_deref(),
-                true,
-                None,
-                action,
-            );
-            let raw_count = details.raw_component_count.map(|n| n.to_string());
-            render_value_row(ui, &layout, "Raw", raw_count.as_deref(), true, None, action);
-            let selected_order = details.selected_order.map(|n| n.to_string());
-            render_value_row(
-                ui,
-                &layout,
-                "Order",
-                selected_order.as_deref(),
-                true,
-                None,
-                action,
-            );
+            render_component_identity_rows(ui, details, action, layout);
+            render_component_count_rows(ui, details, action, layout);
         });
+}
+
+fn render_component_identity_rows(
+    ui: &mut egui::Ui,
+    details: &Step2Details,
+    action: &mut Option<Step2Action>,
+    layout: &SelectionGridLayout,
+) {
+    render_value_row(
+        ui,
+        layout,
+        "Component",
+        details.component_label.as_deref(),
+        false,
+        None,
+        action,
+    );
+    render_value_row(
+        ui,
+        layout,
+        "ID",
+        details.component_id.as_deref(),
+        true,
+        None,
+        action,
+    );
+    render_checked_row(
+        ui,
+        details,
+        layout.label_w,
+        layout.value_w,
+        layout.row_h,
+        layout.palette,
+    );
+    render_state_row(
+        ui,
+        details,
+        layout.label_w,
+        layout.value_w,
+        layout.row_h,
+        layout.palette,
+    );
+    if details.compat_kind.is_some() {
+        render_compat_rows(
+            ui,
+            details,
+            layout.label_w,
+            layout.value_w,
+            layout.row_h,
+            layout.value_chars,
+            layout.palette,
+        );
+    }
+    render_value_row(
+        ui,
+        layout,
+        "Language",
+        details.component_lang.as_deref(),
+        true,
+        None,
+        action,
+    );
+    render_value_row(
+        ui,
+        layout,
+        "TP2 File",
+        details.tp_file.as_deref(),
+        true,
+        details.tp2_path.clone().map(Step2Action::OpenSelectedTp2),
+        action,
+    );
+}
+
+fn render_component_count_rows(
+    ui: &mut egui::Ui,
+    details: &Step2Details,
+    action: &mut Option<Step2Action>,
+    layout: &SelectionGridLayout,
+) {
+    let shown_count = details.shown_component_count.map(|n| n.to_string());
+    render_value_row(
+        ui,
+        layout,
+        "Shown",
+        shown_count.as_deref(),
+        true,
+        None,
+        action,
+    );
+    let hidden_count = details.hidden_component_count.map(|n| n.to_string());
+    render_value_row(
+        ui,
+        layout,
+        "Hidden",
+        hidden_count.as_deref(),
+        true,
+        None,
+        action,
+    );
+    let raw_count = details.raw_component_count.map(|n| n.to_string());
+    render_value_row(ui, layout, "Raw", raw_count.as_deref(), true, None, action);
+    let selected_order = details.selected_order.map(|n| n.to_string());
+    render_value_row(
+        ui,
+        layout,
+        "Order",
+        selected_order.as_deref(),
+        true,
+        None,
+        action,
+    );
+}
+
+impl SelectionGridLayout {
+    pub(crate) const fn new(
+        label_w: f32,
+        value_w: f32,
+        row_h: f32,
+        value_chars: usize,
+        palette: ThemePalette,
+    ) -> Self {
+        Self {
+            label_w,
+            value_w,
+            row_h,
+            value_chars,
+            palette,
+        }
+    }
 }
 
 fn render_value_row(
@@ -159,6 +212,7 @@ fn render_checked_row(
     label_w: f32,
     value_w: f32,
     row_h: f32,
+    palette: ThemePalette,
 ) {
     let Some(checked) = details.is_checked else {
         return;
@@ -167,11 +221,11 @@ fn render_checked_row(
         [label_w, row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("Checked")),
     );
-    let checked_pill = match checked {
-        true => crate::ui::shared::typography_global::strong("Checked")
-            .color(crate::ui::shared::theme_global::success()),
-        false => crate::ui::shared::typography_global::strong("Unchecked")
-            .color(crate::ui::shared::theme_global::text_muted()),
+    let checked_pill = if checked {
+        crate::ui::shared::typography_global::strong("Checked").color(redesign_success(palette))
+    } else {
+        crate::ui::shared::typography_global::strong("Unchecked")
+            .color(redesign_text_muted(palette))
     };
     ui.add_sized([value_w, row_h], egui::Label::new(checked_pill));
     ui.label("");
@@ -184,6 +238,7 @@ fn render_state_row(
     label_w: f32,
     value_w: f32,
     row_h: f32,
+    palette: ThemePalette,
 ) {
     let Some(is_disabled) = details.is_disabled else {
         return;
@@ -193,11 +248,9 @@ fn render_state_row(
         egui::Label::new(crate::ui::shared::typography_global::strong("State")),
     );
     let state_text = if is_disabled {
-        crate::ui::shared::typography_global::strong("Disabled")
-            .color(crate::ui::shared::theme_global::warning())
+        crate::ui::shared::typography_global::strong("Disabled").color(redesign_warning(palette))
     } else {
-        crate::ui::shared::typography_global::strong("Selectable")
-            .color(crate::ui::shared::theme_global::success())
+        crate::ui::shared::typography_global::strong("Selectable").color(redesign_success(palette))
     };
     let state_resp = ui.add_sized([value_w, row_h], egui::Label::new(state_text));
     if let Some(reason) = details.disabled_reason.as_deref() {
@@ -214,12 +267,14 @@ fn render_compat_rows(
     value_w: f32,
     row_h: f32,
     value_chars: usize,
+    palette: ThemePalette,
 ) {
     let layout = SelectionGridLayout {
         label_w,
         value_w,
         row_h,
         value_chars,
+        palette,
     };
     let mut ignored_action = None;
     render_value_row(
@@ -241,7 +296,7 @@ fn render_compat_rows(
         &mut ignored_action,
     );
 
-    render_reason_row(ui, details, label_w, value_w, row_h, value_chars);
+    render_reason_row(ui, details, label_w, value_w, row_h, value_chars, palette);
     render_origin_row(ui, details, label_w, value_w, row_h, value_chars);
     render_optional_monospace_row(
         ui,
@@ -279,6 +334,7 @@ fn render_reason_row(
     value_w: f32,
     row_h: f32,
     value_chars: usize,
+    palette: ThemePalette,
 ) {
     ui.add_sized(
         [label_w, row_h],
@@ -292,8 +348,7 @@ fn render_reason_row(
     ui.add_sized(
         [value_w, row_h],
         egui::Label::new(
-            crate::ui::shared::typography_global::plain(display)
-                .color(crate::ui::shared::theme_global::warning()),
+            crate::ui::shared::typography_global::plain(display).color(redesign_warning(palette)),
         ),
     )
     .on_hover_text(reason);

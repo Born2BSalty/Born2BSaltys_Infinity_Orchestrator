@@ -96,6 +96,6 @@ pub(crate) fn tokenize(input: &str) -> Vec<Token> {
     out
 }
 
-fn is_ident_char(ch: char) -> bool {
+const fn is_ident_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | ':' | '/' | '\\' | '%' | '-' | '#')
 }

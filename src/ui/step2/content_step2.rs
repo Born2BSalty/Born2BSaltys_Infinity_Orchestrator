@@ -4,7 +4,14 @@
 use eframe::egui;
 
 use crate::app::state::WizardState;
-use crate::ui::shared::layout_tokens_global::*;
+use crate::ui::shared::layout_tokens_global::{
+    STEP2_BTN_H, STEP2_CANCEL_SCAN_BTN_W, STEP2_SCAN_BTN_W, STEP2_SEARCH_INPUT_H,
+    STEP2_SEARCH_MAX_W, STEP2_TABS_LOG_BTN_BG2EE_W, STEP2_TABS_LOG_BTN_BGEE_W,
+};
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent, redesign_border_soft,
+    redesign_shell_bg, redesign_text_on_accent, redesign_text_primary,
+};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::prompt_popup_step2::{
     collect_step2_prompt_toolbar_entries, draw_prompt_toolbar_badge,
@@ -15,22 +22,22 @@ use crate::ui::step2::toolbar_compat_step2::{
     active_tab_compat_summary, draw_active_tab_issue_badge, first_active_tab_issue_target,
 };
 
-pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
+pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str, palette: ThemePalette) {
     let is_active = active == value;
     let fill = if is_active {
-        ui.visuals().widgets.active.bg_fill
+        redesign_accent(palette)
     } else {
-        ui.visuals().widgets.inactive.bg_fill
+        redesign_shell_bg(palette)
     };
     let stroke = if is_active {
-        ui.visuals().widgets.active.bg_stroke
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_accent(palette))
     } else {
-        ui.visuals().widgets.inactive.bg_stroke
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette))
     };
     let text_color = if is_active {
-        ui.visuals().widgets.active.fg_stroke.color
+        redesign_text_on_accent(palette)
     } else {
-        ui.visuals().widgets.inactive.fg_stroke.color
+        redesign_text_primary(palette)
     };
 
     let button =
@@ -38,7 +45,9 @@ pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
             .fill(fill)
             .stroke(stroke)
             .corner_radius(egui::CornerRadius::same(
-                crate::ui::shared::layout_tokens_global::RADIUS_SM as u8,
+                crate::ui::shared::layout_tokens_global::radius_u8(
+                    crate::ui::shared::layout_tokens_global::RADIUS_SM,
+                ),
             ));
 
     if ui.add_sized([58.0, 24.0], button).clicked() {
@@ -124,6 +133,7 @@ pub fn render_controls(
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
     controls_rect: egui::Rect,
+    _palette: ThemePalette,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(controls_rect), |ui| {
         let ui_locked =
@@ -228,6 +238,7 @@ pub fn render_tabs(
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
     tabs_rect: egui::Rect,
+    palette: ThemePalette,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(tabs_rect), |ui| {
         ui.horizontal(|ui| {
@@ -237,122 +248,7 @@ pub fn render_tabs(
                 ))
                 .on_hover_text(crate::ui::shared::tooltip_global::STEP2_MODS_COMPONENTS);
             ui.add_enabled_ui(!non_scan_controls_locked(state), |ui| {
-                let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-                let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-                let active_is_bgee = state.step2.active_game_tab == "BGEE";
-                let active_is_bg2 = state.step2.active_game_tab == "BG2EE";
-                let bgee_scanned = !state.step2.bgee_mods.is_empty();
-                let bg2_scanned = !state.step2.bg2ee_mods.is_empty();
-                let has_completed_scan =
-                    bgee_scanned || bg2_scanned || review_edit_scan_complete(state);
-
-                if show_bgee && show_bg2ee {
-                    draw_tab(ui, &mut state.step2.active_game_tab, "BGEE");
-                    draw_tab(ui, &mut state.step2.active_game_tab, "BG2EE");
-                } else if show_bgee {
-                    ui.label(crate::ui::shared::typography_global::monospace("BGEE"));
-                } else if show_bg2ee {
-                    ui.label(crate::ui::shared::typography_global::monospace("BG2EE"));
-                }
-
-                let issue_summary = active_tab_compat_summary(active_mods_ref(state));
-                let prompt_entries = collect_step2_prompt_toolbar_entries(state);
-                let prompt_count: usize = prompt_entries
-                    .iter()
-                    .map(|entry| entry.component_ids.len())
-                    .sum();
-                let can_bootstrap_from_log = if state.step1.installs_exactly_from_weidu_logs() {
-                    false
-                } else if state.step1.bootstraps_from_weidu_logs() {
-                    review_edit_scan_complete(state)
-                } else {
-                    has_completed_scan
-                };
-                let target_filter = if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
-                    issue_summary.dominant_filter
-                } else {
-                    state.step2.compat_popup_filter.as_str()
-                };
-                let issue_target =
-                    first_active_tab_issue_target(active_mods_ref(state), target_filter);
-                let build_from_scanned_mods = !state.step1.uses_source_weidu_logs();
-                let exact_log_mode = state.step1.installs_exactly_from_weidu_logs();
-
-                ui.add_space(10.0);
-                if !exact_log_mode
-                    && active_is_bgee
-                    && ui
-                        .add_enabled(
-                            bgee_scanned || can_bootstrap_from_log,
-                            egui::Button::new("Select BGEE via WeiDU Log")
-                                .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BGEE_W, 24.0)),
-                        )
-                        .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BGEE_LOG)
-                        .clicked()
-                {
-                    *action = Some(Step2Action::SelectBgeeViaLog);
-                }
-                if !exact_log_mode
-                    && active_is_bg2
-                    && ui
-                        .add_enabled(
-                            bg2_scanned || can_bootstrap_from_log,
-                            egui::Button::new("Select BG2EE via WeiDU Log")
-                                .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BG2EE_W, 24.0)),
-                        )
-                        .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BG2EE_LOG)
-                        .clicked()
-                {
-                    *action = Some(Step2Action::SelectBg2eeViaLog);
-                }
-                if build_from_scanned_mods {
-                    if ui
-                        .add_enabled(
-                            has_completed_scan && !state.step2.is_scanning,
-                            egui::Button::new("Updates...").min_size(egui::vec2(124.0, 24.0)),
-                        )
-                        .on_hover_text("Open the updates popup.")
-                        .clicked()
-                    {
-                        *action = Some(Step2Action::OpenUpdatePopup);
-                    }
-                } else if exact_log_mode {
-                    if ui
-                        .add_enabled(
-                            !state.step2.is_scanning,
-                            egui::Button::new("Mod List...").min_size(egui::vec2(124.0, 24.0)),
-                        )
-                        .on_hover_text("Open the exact-log mod list popup.")
-                        .clicked()
-                    {
-                        *action = Some(Step2Action::OpenUpdatePopup);
-                    }
-                } else if ui
-                    .add_enabled(
-                        review_edit_scan_complete(state) && !state.step2.is_scanning,
-                        egui::Button::new("Updates...").min_size(egui::vec2(124.0, 24.0)),
-                    )
-                    .on_hover_text("Open the updates popup.")
-                    .clicked()
-                {
-                    *action = Some(Step2Action::OpenUpdatePopup);
-                }
-                if draw_active_tab_issue_badge(
-                    ui,
-                    &state.step2.active_game_tab,
-                    &issue_summary,
-                    &state.step2.compat_popup_filter,
-                ) && let Some(target) = issue_target
-                {
-                    toolbar_actions_step2::open_active_tab_issue(
-                        state,
-                        &issue_summary,
-                        Some(target),
-                    );
-                }
-                if draw_prompt_toolbar_badge(ui, prompt_count) {
-                    toolbar_actions_step2::open_prompt_toolbar(state);
-                }
+                render_tab_controls(ui, state, action, palette);
             });
             clear_selection_from_empty_header_space(
                 ui,
@@ -363,6 +259,209 @@ pub fn render_tabs(
             );
         });
     });
+}
+
+fn render_tab_controls(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    action: &mut Option<Step2Action>,
+    palette: ThemePalette,
+) {
+    let status = Step2TabStatus::new(state);
+    render_game_tabs(ui, state, status, palette);
+    let issue_summary = active_tab_compat_summary(active_mods_ref(state));
+    let prompt_count = active_prompt_count(state);
+    let target_filter = if state.step2.compat_popup_filter.eq_ignore_ascii_case("All") {
+        issue_summary.dominant_filter
+    } else {
+        state.step2.compat_popup_filter.as_str()
+    };
+    let issue_target = first_active_tab_issue_target(active_mods_ref(state), target_filter);
+
+    ui.add_space(10.0);
+    render_log_selection_buttons(ui, action, status);
+    render_update_button(ui, state, action, status);
+    if draw_active_tab_issue_badge(
+        ui,
+        &state.step2.active_game_tab,
+        &issue_summary,
+        &state.step2.compat_popup_filter,
+        palette,
+    ) && let Some(target) = issue_target
+    {
+        toolbar_actions_step2::open_active_tab_issue(state, &issue_summary, Some(target));
+    }
+    if draw_prompt_toolbar_badge(ui, prompt_count, palette) {
+        toolbar_actions_step2::open_prompt_toolbar(state);
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Step2TabStatus {
+    visibility: Step2GameVisibility,
+    active: Step2ActiveTab,
+    scan: Step2ScanStatus,
+    mode: Step2ModeStatus,
+}
+
+#[derive(Clone, Copy)]
+struct Step2GameVisibility {
+    show_primary_game: bool,
+    show_secondary_game: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Step2ActiveTab {
+    active_is_bgee: bool,
+    active_is_bg2: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Step2ScanStatus {
+    bgee_scanned: bool,
+    bg2_scanned: bool,
+    has_completed_scan: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Step2ModeStatus {
+    can_bootstrap_from_log: bool,
+    build_from_scanned_mods: bool,
+    exact_log_mode: bool,
+}
+
+impl Step2TabStatus {
+    fn new(state: &WizardState) -> Self {
+        let show_primary_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+        let show_secondary_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+        let bgee_scanned = !state.step2.bgee_mods.is_empty();
+        let bg2_scanned = !state.step2.bg2ee_mods.is_empty();
+        let has_completed_scan = bgee_scanned || bg2_scanned || review_edit_scan_complete(state);
+        let exact_log_mode = state.step1.installs_exactly_from_weidu_logs();
+        let can_bootstrap_from_log = if exact_log_mode {
+            false
+        } else if state.step1.bootstraps_from_weidu_logs() {
+            review_edit_scan_complete(state)
+        } else {
+            has_completed_scan
+        };
+        Self {
+            visibility: Step2GameVisibility {
+                show_primary_game,
+                show_secondary_game,
+            },
+            active: Step2ActiveTab {
+                active_is_bgee: state.step2.active_game_tab == "BGEE",
+                active_is_bg2: state.step2.active_game_tab == "BG2EE",
+            },
+            scan: Step2ScanStatus {
+                bgee_scanned,
+                bg2_scanned,
+                has_completed_scan,
+            },
+            mode: Step2ModeStatus {
+                can_bootstrap_from_log,
+                build_from_scanned_mods: !state.step1.uses_source_weidu_logs(),
+                exact_log_mode,
+            },
+        }
+    }
+}
+
+fn render_game_tabs(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    status: Step2TabStatus,
+    palette: ThemePalette,
+) {
+    if status.visibility.show_primary_game && status.visibility.show_secondary_game {
+        draw_tab(ui, &mut state.step2.active_game_tab, "BGEE", palette);
+        draw_tab(ui, &mut state.step2.active_game_tab, "BG2EE", palette);
+    } else if status.visibility.show_primary_game {
+        ui.label(crate::ui::shared::typography_global::monospace("BGEE"));
+    } else if status.visibility.show_secondary_game {
+        ui.label(crate::ui::shared::typography_global::monospace("BG2EE"));
+    }
+}
+
+fn active_prompt_count(state: &WizardState) -> usize {
+    collect_step2_prompt_toolbar_entries(state)
+        .iter()
+        .map(|entry| entry.component_ids.len())
+        .sum()
+}
+
+fn render_log_selection_buttons(
+    ui: &mut egui::Ui,
+    action: &mut Option<Step2Action>,
+    status: Step2TabStatus,
+) {
+    if !status.mode.exact_log_mode
+        && status.active.active_is_bgee
+        && ui
+            .add_enabled(
+                status.scan.bgee_scanned || status.mode.can_bootstrap_from_log,
+                egui::Button::new("Select BGEE via WeiDU Log")
+                    .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BGEE_W, 24.0)),
+            )
+            .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BGEE_LOG)
+            .clicked()
+    {
+        *action = Some(Step2Action::SelectBgeeViaLog);
+    }
+    if !status.mode.exact_log_mode
+        && status.active.active_is_bg2
+        && ui
+            .add_enabled(
+                status.scan.bg2_scanned || status.mode.can_bootstrap_from_log,
+                egui::Button::new("Select BG2EE via WeiDU Log")
+                    .min_size(egui::vec2(STEP2_TABS_LOG_BTN_BG2EE_W, 24.0)),
+            )
+            .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SELECT_BG2EE_LOG)
+            .clicked()
+    {
+        *action = Some(Step2Action::SelectBg2eeViaLog);
+    }
+}
+
+fn render_update_button(
+    ui: &mut egui::Ui,
+    state: &WizardState,
+    action: &mut Option<Step2Action>,
+    status: Step2TabStatus,
+) {
+    if status.mode.build_from_scanned_mods {
+        if ui
+            .add_enabled(
+                status.scan.has_completed_scan && !state.step2.is_scanning,
+                egui::Button::new("Updates...").min_size(egui::vec2(124.0, 24.0)),
+            )
+            .on_hover_text("Open the updates popup.")
+            .clicked()
+        {
+            *action = Some(Step2Action::OpenUpdatePopup);
+        }
+    } else if status.mode.exact_log_mode {
+        if ui
+            .add_enabled(
+                !state.step2.is_scanning,
+                egui::Button::new("Mod List...").min_size(egui::vec2(124.0, 24.0)),
+            )
+            .on_hover_text("Open the exact-log mod list popup.")
+            .clicked()
+        {
+            *action = Some(Step2Action::OpenUpdatePopup);
+        }
+    } else if ui
+        .add_enabled(
+            review_edit_scan_complete(state) && !state.step2.is_scanning,
+            egui::Button::new("Updates...").min_size(egui::vec2(124.0, 24.0)),
+        )
+        .on_hover_text("Open the updates popup.")
+        .clicked()
+    {
+        *action = Some(Step2Action::OpenUpdatePopup);
+    }
 }
 
 fn clear_selection_from_empty_header_space(
@@ -384,12 +483,8 @@ fn clear_selection_from_empty_header_space(
     if !row_rect.contains(pos) {
         return;
     }
-    let protected = protected_a
-        .map(|rect| rect.expand(2.0).contains(pos))
-        .unwrap_or(false)
-        || protected_b
-            .map(|rect| rect.expand(2.0).contains(pos))
-            .unwrap_or(false);
+    let protected = protected_a.is_some_and(|rect| rect.expand(2.0).contains(pos))
+        || protected_b.is_some_and(|rect| rect.expand(2.0).contains(pos));
     if !protected {
         state.step2.selected = None;
     }
@@ -404,15 +499,16 @@ fn active_mods_ref(state: &WizardState) -> &Vec<crate::app::state::Step2ModState
 }
 
 pub fn render_compat_popup(ui: &mut egui::Ui, state: &mut WizardState) {
-    crate::ui::step2::compat_window_step2::render(ui, state);
+    crate::ui::step2::compat_window_step2::render(ui, state, ThemePalette::Dark);
 }
-pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_action_row;
-pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_details;
+pub use crate::ui::step2::compat_popup_step2::compat_popup_action_row;
+pub use crate::ui::step2::compat_popup_step2::compat_popup_details;
 
-pub(crate) mod step2_details_select {
+pub mod step2_details_select {
     use crate::app::state::WizardState;
     use crate::ui::step2::state_step2::Step2Details;
 
+    #[must_use]
     pub fn selected_details(state: &WizardState) -> Step2Details {
         crate::ui::step2::service_details_step2::selected_details(state)
     }

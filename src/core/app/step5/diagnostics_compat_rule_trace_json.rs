@@ -28,23 +28,27 @@ pub(super) fn write_compat_rule_trace_json(
     let load_error = loaded.error.clone();
     let rules = loaded.rules;
 
-    let mut bgee_recomputed = state.step2.bgee_mods.clone();
-    let mut bg2ee_recomputed = state.step2.bg2ee_mods.clone();
-    let _ = apply_step2_compat_rules(&state.step1, &mut bgee_recomputed, &mut bg2ee_recomputed);
+    let mut primary_recomputed = state.step2.bgee_mods.clone();
+    let mut secondary_recomputed = state.step2.bg2ee_mods.clone();
+    let _ = apply_step2_compat_rules(
+        &state.step1,
+        &mut primary_recomputed,
+        &mut secondary_recomputed,
+    );
 
     let rows = vec![
         trace_tab(
             "BGEE",
             state,
             &state.step2.bgee_mods,
-            &bgee_recomputed,
+            &primary_recomputed,
             &rules,
         ),
         trace_tab(
             "BG2EE",
             state,
             &state.step2.bg2ee_mods,
-            &bg2ee_recomputed,
+            &secondary_recomputed,
             &rules,
         ),
     ];
@@ -148,18 +152,19 @@ fn build_rule_matches(
     let mut out = Vec::<serde_json::Value>::new();
 
     for (rule_index, rule) in rules.iter().enumerate() {
-        let mode_match = mode_matches(rule, &state.step1.game_install);
+        let game_mode_matches = mode_matches(rule, &state.step1.game_install);
         let tab_match = tab_matches(rule, tab);
         let kind_match =
             match_kind_matches(rule.match_kind.as_ref(), component.compat_kind.as_deref());
-        let mod_match = compat_mod_matches(rule, &mod_state.tp_file, &mod_state.name);
+        let mod_identity_matches = compat_mod_matches(rule, &mod_state.tp_file, &mod_state.name);
         let component_match = compat_component_matches(
             rule,
             &component.component_id,
             &component.label,
             &component.raw_line,
         );
-        let selector_match = mode_match && tab_match && kind_match && mod_match && component_match;
+        let selector_match =
+            game_mode_matches && tab_match && kind_match && mod_identity_matches && component_match;
         let direct_match = selector_match && direct_rule_applies(rule, &state.step1, tab);
         let relation_match = selector_match
             && relation_rule_applies(
@@ -170,7 +175,7 @@ fn build_rule_matches(
                 active_items,
             );
 
-        if !(mod_match || direct_match || relation_match) {
+        if !(mod_identity_matches || direct_match || relation_match) {
             continue;
         }
 
@@ -180,12 +185,12 @@ fn build_rule_matches(
             "message": rule.message,
             "source_bucket": compat_rule_source_bucket(rule),
             "source_path": compat_rule_source_path(rule),
-            "component": rule.component.as_ref().map(|value| value.trimmed_items()),
-            "component_id": rule.component_id.as_ref().map(|value| value.trimmed_items()),
-            "mode_match": mode_match,
+            "component": rule.component.as_ref().map(crate::app::compat_rules_model::StringOrMany::trimmed_items),
+            "component_id": rule.component_id.as_ref().map(crate::app::compat_rules_model::StringOrMany::trimmed_items),
+            "mode_match": game_mode_matches,
             "tab_match": tab_match,
             "match_kind_match": kind_match,
-            "mod_match": mod_match,
+            "mod_match": mod_identity_matches,
             "component_match": component_match,
             "selector_match": selector_match,
             "direct_match": direct_match,

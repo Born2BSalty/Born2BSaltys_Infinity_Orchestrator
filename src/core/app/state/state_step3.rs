@@ -17,6 +17,10 @@ pub struct Step3ItemState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "wizard Step 3 state is a stable cross-module UI/runtime state contract"
+)]
 pub struct Step3State {
     pub active_game_tab: String,
     pub bgee_items: Vec<Step3ItemState>,

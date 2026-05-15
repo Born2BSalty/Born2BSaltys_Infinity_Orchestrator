@@ -9,6 +9,10 @@ pub struct ResumeTargets {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "wizard Step 5 state preserves independent runtime, cancel, prompt, and sharing flags"
+)]
 pub struct Step5State {
     pub console_output: String,
     pub input_line: String,

@@ -39,7 +39,7 @@ pub fn render_game_selection_content(ui: &mut egui::Ui, s: &mut Step1State) {
     });
 }
 
-fn step1_language_options() -> &'static [(&'static str, &'static str)] {
+const fn step1_language_options() -> &'static [(&'static str, &'static str)] {
     &[
         ("en_US", "English"),
         ("de_DE", "German"),
@@ -126,6 +126,15 @@ pub fn render_options_content(
 ) {
     section_title(ui, "Options");
     sync_install_mode(s);
+    render_prompt_tag_copy(ui);
+    render_github_connect(ui, github_button_label, action);
+    render_install_mode_selector(ui, s);
+    sync_install_mode(s);
+    render_option_toggles(ui, s);
+    render_target_prep_options(ui, s);
+}
+
+fn render_prompt_tag_copy(ui: &mut egui::Ui) {
     let prompt_help = "Copies: // @wlb-inputs:\n\
 \n\
 What it does\n\
@@ -165,6 +174,13 @@ Prompt sequence with blank input\n\
     if copy_resp.clicked() {
         ui.ctx().copy_text("// @wlb-inputs:".to_string());
     }
+}
+
+fn render_github_connect(
+    ui: &mut egui::Ui,
+    github_button_label: &str,
+    action: &mut Option<Step1Action>,
+) {
     if ui
         .button(github_button_label)
         .on_hover_text("Connect BIO to GitHub using browser-based authorization.")
@@ -172,6 +188,9 @@ Prompt sequence with blank input\n\
     {
         *action = Some(Step1Action::ConnectGitHub);
     }
+}
+
+fn render_install_mode_selector(ui: &mut egui::Ui, s: &mut Step1State) {
     ui.horizontal(|ui| {
         ui.add_space(100.0);
         ui.label(typo::strong("Install Mode"));
@@ -200,7 +219,9 @@ Prompt sequence with blank input\n\
                 "Import Modlist",
             );
         });
-    sync_install_mode(s);
+}
+
+fn render_option_toggles(ui: &mut egui::Ui, s: &mut Step1State) {
     ui.checkbox(
         &mut s.weidu_log_mode_enabled,
         "Enable WeiDU Logging Options (-u)",
@@ -225,6 +246,9 @@ Prompt sequence with blank input\n\
             egui::DragValue::new(&mut s.lookback).range(1..=5000),
         );
     });
+}
+
+fn render_target_prep_options(ui: &mut egui::Ui, s: &mut Step1State) {
     let show_backup_checkbox = if s.game_install == "EET" {
         s.new_pre_eet_dir_enabled || s.new_eet_dir_enabled
     } else {
@@ -281,14 +305,14 @@ pub fn render_flags_content(ui: &mut egui::Ui, s: &mut Step1State) {
         .on_hover_text(tt::STEP1_DOWNLOAD_MISSING);
     ui.checkbox(&mut s.overwrite, "-o Overwrite mod folder")
         .on_hover_text(tt::STEP1_OVERWRITE_MOD_FOLDER);
-    if s.game_install != "EET" {
+    if s.game_install == "EET" {
+        s.generate_directory_enabled = false;
+    } else {
         ui.checkbox(
             &mut s.generate_directory_enabled,
             "-g Clone source game -> target directory",
         )
         .on_hover_text(tt::STEP1_CLONE_SOURCE_TARGET);
-    } else {
-        s.generate_directory_enabled = false;
     }
 }
 

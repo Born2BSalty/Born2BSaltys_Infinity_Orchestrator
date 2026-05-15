@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::state::WizardState;
-use crate::parser::weidu_version::{normalize_version_text, parse_version};
+use crate::parser::{normalize_version_text, parse_version};
 
 pub(crate) fn mark_update_available(state: &mut WizardState, game_tab: &str, tp_file: &str) {
     let mods = if game_tab == "BGEE" {
@@ -47,13 +47,12 @@ pub(crate) fn mod_has_current_version(state: &WizardState, game_tab: &str, tp_fi
     };
     mods.iter()
         .find(|mod_state| mod_state.tp_file == tp_file)
-        .map(|mod_state| {
+        .is_some_and(|mod_state| {
             mod_state
                 .components
                 .iter()
                 .any(|component| parse_version(&component.raw_line).is_some())
         })
-        .unwrap_or(false)
 }
 
 pub(crate) fn version_is_update(

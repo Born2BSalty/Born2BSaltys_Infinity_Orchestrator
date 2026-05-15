@@ -3,6 +3,7 @@
 
 use crate::app::state::Step2ModState;
 
+#[must_use]
 pub fn current_exe_fingerprint() -> String {
     let Ok(path) = std::env::current_exe() else {
         return "unknown".to_string();
@@ -72,7 +73,6 @@ fn try_open_candidates(candidates: &[(&str, &[&str])]) -> std::io::Result<()> {
             Ok(_) => return Ok(()),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 last_err = Some(err);
-                continue;
             }
             Err(err) => return Err(err),
         }

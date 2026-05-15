@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::parser::prompt_eval_expr_tokens::tokenize;
+use super::super::tokenize;
 
 use super::{EvalState, Parser, PromptEvalContext, PromptVarContext};
 
@@ -13,7 +13,7 @@ pub(crate) fn evaluate_condition_clause(
     evaluate_condition_clause_state(condition_text, prompt_eval, prompt_vars).is_not_false()
 }
 
-pub(crate) fn evaluate_condition_clause_state(
+pub(super) fn evaluate_condition_clause_state(
     condition_text: &str,
     prompt_eval: &PromptEvalContext,
     prompt_vars: Option<&PromptVarContext>,
@@ -82,7 +82,8 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{evaluate_condition_clause, evaluate_condition_clause_state};
-    use crate::parser::prompt_eval_expr::{EvalState, PromptEvalContext};
+    use crate::parser::PromptEvalContext;
+    use crate::parser::prompt_eval_expr::EvalState;
 
     fn test_context() -> PromptEvalContext {
         let mut active_games = HashSet::new();
@@ -173,8 +174,7 @@ mod tests {
         let mut ctx = test_context();
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_millis());
         let root = std::env::temp_dir().join(format!("bio_prompt_eval_{stamp}"));
         let child = root.join("override").join("test.itm");
         fs::create_dir_all(child.parent().expect("parent")).expect("mkdir");

@@ -47,12 +47,12 @@ pub(crate) fn select_visible_and_refresh_compat(state: &mut WizardState) {
     refresh_compat(state);
 }
 
-pub(crate) fn collapse_all(state: &mut WizardState) {
+pub(crate) const fn collapse_all(state: &mut WizardState) {
     state.step2.collapse_default_open = false;
     state.step2.collapse_epoch = state.step2.collapse_epoch.saturating_add(1);
 }
 
-pub(crate) fn expand_all(state: &mut WizardState) {
+pub(crate) const fn expand_all(state: &mut WizardState) {
     state.step2.collapse_default_open = true;
     state.step2.collapse_epoch = state.step2.collapse_epoch.saturating_add(1);
 }

@@ -7,7 +7,7 @@ use super::PromptEvalContext;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PromptVarContext {
-    pub(crate) vars: std::collections::HashMap<String, PromptVarValue>,
+    pub vars: std::collections::HashMap<String, PromptVarValue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,9 +18,9 @@ pub(crate) enum PromptVarValue {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PromptComponentInput<'a> {
-    pub(crate) raw_line: &'a str,
-    pub(crate) component_id: &'a str,
-    pub(crate) prompt_events: &'a [crate::parser::PromptSummaryEvent],
+    pub raw_line: &'a str,
+    pub component_id: &'a str,
+    pub prompt_events: &'a [crate::parser::PromptSummaryEvent],
 }
 
 pub(crate) fn lookup_var<'a>(
@@ -30,14 +30,14 @@ pub(crate) fn lookup_var<'a>(
     vars?.vars.get(&normalize_var_name(name))
 }
 
-pub fn normalize_tp2_stem(value: &str) -> String {
+pub(crate) fn normalize_tp2_stem(value: &str) -> String {
     let lower = value.replace('\\', "/").to_ascii_lowercase();
     let file = lower.rsplit('/').next().unwrap_or(&lower);
     let no_ext = file.strip_suffix(".tp2").unwrap_or(file);
     no_ext.strip_prefix("setup-").unwrap_or(no_ext).to_string()
 }
 
-pub(crate) fn normalize_var_name(input: &str) -> String {
+pub(super) fn normalize_var_name(input: &str) -> String {
     input
         .trim()
         .trim_matches('%')
@@ -182,12 +182,12 @@ pub(crate) fn extract_copy_table_path(lines: &[&str], needle: &str) -> Option<St
 pub(crate) fn resolve_table_path(source_file: &Path, table_rel: &str) -> Option<PathBuf> {
     let rel = table_rel.replace('\\', "/");
     let source_dir = source_file.parent()?;
-    let mod_root = source_dir.parent().unwrap_or(source_dir);
-    let mods_root = mod_root.parent().unwrap_or(mod_root);
+    let source_mod_root = source_dir.parent().unwrap_or(source_dir);
+    let mods_directory_root = source_mod_root.parent().unwrap_or(source_mod_root);
     let candidates = [
         PathBuf::from(&rel),
-        mods_root.join(&rel),
-        mod_root.join(&rel),
+        mods_directory_root.join(&rel),
+        source_mod_root.join(&rel),
         source_dir.join(&rel),
     ];
     candidates.into_iter().find(|path| path.is_file())

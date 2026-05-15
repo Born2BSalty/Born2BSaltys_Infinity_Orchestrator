@@ -28,15 +28,13 @@ mod config {
                 self.child_env
                     .push(("BIO_FULL_DEBUG".to_string(), "1".to_string()));
             }
-            let diagnostics_dir = run_id
-                .map(run_dir_from_id)
-                .unwrap_or_else(|| PathBuf::from("diagnostics"));
+            let diagnostics_dir =
+                run_id.map_or_else(|| PathBuf::from("diagnostics"), run_dir_from_id);
             let logs_dir = diagnostics_dir.join("logs");
             self.raw_log_path = if step1.log_raw_output_dev {
                 let ts = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
+                    .map_or(0, |d| d.as_secs());
                 Some(logs_dir.join(format!("raw_output_{ts}.log")))
             } else {
                 None
@@ -44,8 +42,7 @@ mod config {
             self.bio_debug_log_path = if step1.bio_full_debug {
                 let ts = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
+                    .map_or(0, |d| d.as_secs());
                 Some(logs_dir.join(format!("bio_full_debug_{ts}.log")))
             } else {
                 None
@@ -215,8 +212,9 @@ mod lifecycle {
             }
         }
 
+        #[must_use]
         pub fn process_id(&self) -> Option<u32> {
-            self.child.as_ref().map(|c| c.id())
+            self.child.as_ref().map(std::process::Child::id)
         }
 
         pub(in crate::app::terminal) fn write_bytes(&mut self, data: &[u8]) {
@@ -234,7 +232,11 @@ mod lifecycle {
             }
         }
 
-        pub(in crate::app::terminal) fn record_runtime_error(&mut self, message: String) {
+        pub(in crate::app::terminal) fn record_runtime_error(
+            &mut self,
+            message: impl Into<String>,
+        ) {
+            let message = message.into();
             self.last_runtime_error = Some(message.clone());
             self.append_output(&format!("\n[terminal] {message}\n"));
             self.important_buffer.push_str("[terminal] ");
@@ -259,14 +261,15 @@ mod terminate {
         }
 
         fn terminate_process_tree(&mut self, marker: &str) {
-            self.log_bio_debug(&format!("terminate_process_tree marker=\"{}\"", marker));
-            let pid = self.child.as_ref().map(|c| c.id());
-            let mut kill_error = None::<String>;
-            if let Some(child) = self.child.as_mut()
+            self.log_bio_debug(&format!("terminate_process_tree marker=\"{marker}\""));
+            let pid = self.child.as_ref().map(std::process::Child::id);
+            let kill_error = if let Some(child) = self.child.as_mut()
                 && let Err(err) = child.kill()
             {
-                kill_error = Some(format!("process kill failed: {err}"));
-            }
+                Some(format!("process kill failed: {err}"))
+            } else {
+                None
+            };
             if let Some(message) = kill_error {
                 self.record_runtime_error(message);
             }

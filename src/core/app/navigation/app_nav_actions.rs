@@ -27,7 +27,7 @@ pub(crate) fn handle_reset(
     dev_mode: bool,
     exe_fingerprint: &str,
 ) {
-    super::app_step2_scan::cancel_step2_scan(state, step2_cancel);
+    super::app_step2_scan::cancel_step2_scan(state, step2_cancel.as_ref());
     *step2_scan_rx = None;
     *step2_cancel = None;
     step2_progress_queue.clear();
@@ -113,11 +113,11 @@ pub(crate) fn handle_clean_confirm_yes(
     );
 }
 
-pub(crate) fn handle_clean_confirm_no(state: &mut WizardState) {
+pub(crate) const fn handle_clean_confirm_no(state: &mut WizardState) {
     state.clear_step1_clean_confirm();
 }
 
-pub(crate) fn dismiss_step4_save_error(state: &mut WizardState) {
+pub(crate) const fn dismiss_step4_save_error(state: &mut WizardState) {
     state.dismiss_step4_save_error();
 }
 
@@ -131,9 +131,10 @@ fn advance_after_next(
     let action = super::app_nav::decide_next_action(state);
     match &action {
         NextAction::Blocked => return,
-        NextAction::OpenModlistImport => {}
-        NextAction::ApplySavedLogAndAdvance => {}
-        NextAction::JumpToInstallStep => {}
+        NextAction::OpenModlistImport
+        | NextAction::ApplySavedLogAndAdvance
+        | NextAction::JumpToInstallStep
+        | NextAction::Advance => {}
         NextAction::SyncStep3AndAdvance { signature } => {
             super::app_step3_sync_flow::sync_step3_from_step2(state);
             state.set_last_step2_sync_signature(signature.clone());
@@ -151,7 +152,6 @@ fn advance_after_next(
                 return;
             }
         }
-        NextAction::Advance => {}
     }
     super::app_nav::apply_next_action(state, &action);
     app_lifecycle::save_settings_best_effort(

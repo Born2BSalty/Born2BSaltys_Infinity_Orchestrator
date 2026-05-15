@@ -5,6 +5,9 @@ use eframe::egui;
 
 use crate::app::mod_downloads;
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_compat_info_fill, redesign_text_primary,
+};
 use crate::ui::step2::action_step2::Step2Action;
 
 const UPDATE_CHECK_GRID_SPACING_X: f32 = 8.0;
@@ -16,7 +19,7 @@ pub(super) struct SourceChoiceLayout {
 }
 
 impl SourceChoiceLayout {
-    pub(super) fn list_prefix_width(self) -> f32 {
+    pub(super) const fn list_prefix_width(self) -> f32 {
         self.list_prefix_width
     }
 }
@@ -113,7 +116,7 @@ fn source_choice_layout(ui: &egui::Ui, source_choices: &[SourceChoiceRow]) -> So
 
 fn widest_source_choice_label_width(ui: &egui::Ui, source_choices: &[SourceChoiceRow]) -> f32 {
     let font_id = egui::TextStyle::Body.resolve(ui.style());
-    let text_color = ui.visuals().text_color();
+    let text_color = redesign_text_primary(ThemePalette::Dark);
     source_choices
         .iter()
         .map(|choice| measured_text_width(ui, &choice.label, &font_id, text_color))
@@ -122,7 +125,7 @@ fn widest_source_choice_label_width(ui: &egui::Ui, source_choices: &[SourceChoic
 
 fn source_choice_dropdown_width(ui: &egui::Ui, source_choices: &[SourceChoiceRow]) -> f32 {
     let font_id = egui::TextStyle::Button.resolve(ui.style());
-    let text_color = ui.visuals().text_color();
+    let text_color = redesign_text_primary(ThemePalette::Dark);
     source_choices
         .iter()
         .flat_map(|choice| {
@@ -206,9 +209,13 @@ pub(super) fn render_list(
 
 pub(super) fn render_section_header(ui: &mut egui::Ui, title: &str) {
     let text = crate::ui::shared::typography_global::strong(title)
-        .color(crate::ui::shared::theme_global::text_primary());
+        .color(redesign_text_primary(ThemePalette::Dark));
     egui::Frame::group(ui.style())
-        .fill(crate::ui::shared::theme_global::info_fill())
+        .fill(redesign_compat_info_fill(ThemePalette::Dark))
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            crate::ui::shared::redesign_tokens::redesign_border_soft(ThemePalette::Dark),
+        ))
         .inner_margin(egui::Margin {
             left: 8,
             right: 8,

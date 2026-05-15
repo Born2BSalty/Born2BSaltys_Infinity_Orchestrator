@@ -123,7 +123,7 @@ pub(crate) fn normalize_kind(kind: &str) -> &str {
     }
 }
 
-pub(crate) fn kind_disables_selection(kind: &str) -> bool {
+pub(crate) const fn kind_disables_selection(kind: &str) -> bool {
     kind.eq_ignore_ascii_case("included")
         || kind.eq_ignore_ascii_case("not_needed")
         || kind.eq_ignore_ascii_case("not_compatible")
@@ -134,11 +134,9 @@ pub(crate) fn kind_disables_selection(kind: &str) -> bool {
 
 pub(crate) fn normalize_mod_key(value: &str) -> String {
     let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
+    let file = lower
+        .rfind(['/', '\\'])
+        .map_or(lower.as_str(), |idx| &lower[idx + 1..]);
     let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
     without_ext
         .strip_prefix("setup-")
@@ -160,13 +158,11 @@ pub(super) fn string_or_many_items(value: Option<&StringOrMany>) -> Vec<String> 
 }
 
 fn option_list_matches(option: Option<&StringOrMany>, value: &str) -> bool {
-    option
-        .map(|items| {
-            let needle = value.trim().to_ascii_uppercase();
-            items
-                .normalized_items()
-                .into_iter()
-                .any(|item| item == needle)
-        })
-        .unwrap_or(true)
+    option.is_none_or(|items| {
+        let needle = value.trim().to_ascii_uppercase();
+        items
+            .normalized_items()
+            .into_iter()
+            .any(|item| item == needle)
+    })
 }

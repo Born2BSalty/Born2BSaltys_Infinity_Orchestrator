@@ -3,7 +3,7 @@
 
 use crate::app::prompt_eval_summary::evaluate_prompt_summary_input;
 use crate::app::state::Step3ItemState;
-use crate::parser::prompt_eval_expr::PromptEvalContext;
+use crate::parser::PromptEvalContext;
 
 pub(crate) fn evaluate_step3_item_prompt_summary(
     item: &Step3ItemState,

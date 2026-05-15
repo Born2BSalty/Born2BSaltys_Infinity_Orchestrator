@@ -27,10 +27,10 @@ pub(crate) fn compat_role(kind: &str, source: Option<&str>) -> String {
     let Some(source) = source.map(str::trim) else {
         return "Compatibility rule".to_string();
     };
-    let lower = source.to_ascii_lowercase();
-    if lower.ends_with(".toml") {
+    let extension = std::path::Path::new(source).extension();
+    if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("toml")) {
         "Rule file".to_string()
-    } else if lower.ends_with(".tp2") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("tp2")) {
         if kind.eq_ignore_ascii_case("mismatch") {
             "TP2 guard".to_string()
         } else if kind.eq_ignore_ascii_case("missing_dep") {
@@ -47,8 +47,10 @@ pub(crate) fn compat_role(kind: &str, source: Option<&str>) -> String {
 
 pub(crate) fn display_name_from_tp2(tp2_ref: &str) -> String {
     let file = tp2_file_name(tp2_ref);
-    let lower = file.to_ascii_lowercase();
-    let stem = if lower.ends_with(".tp2") {
+    let stem = if std::path::Path::new(&file)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("tp2"))
+    {
         &file[..file.len().saturating_sub(4)]
     } else {
         file.as_str()
@@ -66,11 +68,9 @@ pub(crate) fn display_name_from_tp2(tp2_ref: &str) -> String {
 
 pub(crate) fn tp2_file_name(tp2_ref: &str) -> String {
     let trimmed = tp2_ref.trim().trim_matches(['~', '"']);
-    let file = if let Some(idx) = trimmed.rfind(['/', '\\']) {
-        &trimmed[idx + 1..]
-    } else {
-        trimmed
-    };
+    let file = trimmed
+        .rfind(['/', '\\'])
+        .map_or(trimmed, |idx| &trimmed[idx + 1..]);
     if file.is_empty() {
         tp2_ref.to_string()
     } else {

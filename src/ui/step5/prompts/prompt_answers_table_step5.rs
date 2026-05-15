@@ -3,10 +3,11 @@
 
 use eframe::egui;
 
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::prompt_memory;
 use crate::ui::step5::service_prompt_groups_step5::group_prompt_entries;
 
-pub(crate) fn render_table(ui: &mut egui::Ui) {
+pub(crate) fn render_table(ui: &mut egui::Ui, palette: ThemePalette) {
     let entries = prompt_memory::list_entries();
     if entries.is_empty() {
         ui.label(crate::ui::shared::typography_global::weak(
@@ -39,7 +40,7 @@ pub(crate) fn render_table(ui: &mut egui::Ui) {
 
                                 for (key, entry) in group.items {
                                     crate::ui::step5::prompt_answers_rows_step5::render_entry_row(
-                                        ui, &key, entry,
+                                        ui, &key, entry, palette,
                                     );
                                 }
                             });

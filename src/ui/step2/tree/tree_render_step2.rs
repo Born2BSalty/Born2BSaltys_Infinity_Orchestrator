@@ -4,19 +4,20 @@
 use eframe::egui;
 
 use crate::app::state::{Step2ModState, Step2Selection};
-use crate::parser::prompt_eval_expr::PromptEvalContext;
+use crate::parser::PromptEvalContext;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::service_list_ops_step2::mod_matches_filter;
 use crate::ui::step2::tree_component_types_step2::ComponentRowsContext;
 use crate::ui::step2::tree_components_step2::render_component_rows;
 use crate::ui::step2::tree_parent_step2::{ParentRowResult, render_parent_row};
 
-pub struct ModTreeRenderResult {
+pub(crate) struct ModTreeRenderResult {
     pub selected: Step2Selection,
     pub open_compat_for_component: Option<(String, String, String)>,
     pub open_prompt_popup: Option<(String, String)>,
 }
 
-pub struct ModTreeRenderContext<'a> {
+pub(crate) struct ModTreeRenderContext<'a> {
     pub filter: &'a str,
     pub active_tab: &'a str,
     pub selected: &'a Option<Step2Selection>,
@@ -25,9 +26,10 @@ pub struct ModTreeRenderContext<'a> {
     pub collapse_epoch: u64,
     pub collapse_default_open: bool,
     pub jump_to_selected_requested: &'a mut bool,
+    pub palette: ThemePalette,
 }
 
-pub fn render_mod_tree(
+pub(crate) fn render_mod_tree(
     ui: &mut egui::Ui,
     ctx: &mut ModTreeRenderContext<'_>,
     mod_state: &mut Step2ModState,
@@ -49,7 +51,7 @@ pub fn render_mod_tree(
         ctx.collapse_default_open,
     );
     if *ctx.jump_to_selected_requested
-        && selection_targets_mod(ctx.selected, ctx.active_tab, &mod_state.tp_file)
+        && selection_targets_mod(ctx.selected.as_ref(), ctx.active_tab, &mod_state.tp_file)
     {
         state.set_open(true);
     }
@@ -57,6 +59,8 @@ pub fn render_mod_tree(
     let mut new_selection: Option<Step2Selection> = None;
     let mut open_compat_for_component: Option<(String, String, String)> = None;
     let mut open_prompt_popup: Option<(String, String)> = None;
+    let parent_tp_file = mod_state.tp_file.clone();
+    let parent_mod_name = mod_state.name.clone();
     state
         .show_header(ui, |ui| {
             let ParentRowResult {
@@ -66,11 +70,19 @@ pub fn render_mod_tree(
             } = render_parent_row(
                 ui,
                 mod_state,
-                ctx.active_tab,
-                ctx.selected,
-                ctx.next_selection_order,
-                ctx.prompt_eval,
-                ctx.jump_to_selected_requested,
+                &mut ComponentRowsContext {
+                    filter: ctx.filter,
+                    active_tab: ctx.active_tab,
+                    selected: ctx.selected,
+                    next_selection_order: ctx.next_selection_order,
+                    prompt_eval: ctx.prompt_eval,
+                    collapse_epoch: ctx.collapse_epoch,
+                    collapse_default_open: ctx.collapse_default_open,
+                    jump_to_selected_requested: ctx.jump_to_selected_requested,
+                    tp_file: &parent_tp_file,
+                    mod_name: &parent_mod_name,
+                    palette: ctx.palette,
+                },
             );
             if selection.is_some() {
                 new_selection = selection;
@@ -96,6 +108,7 @@ pub fn render_mod_tree(
                 jump_to_selected_requested: ctx.jump_to_selected_requested,
                 tp_file: &tp_file,
                 mod_name: &mod_name,
+                palette: ctx.palette,
             };
             let row_result = render_component_rows(ui, &mut row_ctx, mod_state);
             if row_result.selection.is_some() {
@@ -138,20 +151,22 @@ fn finalize_mod_checked_state(mod_state: &mut Step2ModState) {
 }
 
 fn selection_targets_mod(
-    selected: &Option<Step2Selection>,
+    selected: Option<&Step2Selection>,
     active_tab: &str,
     tp_file: &str,
 ) -> bool {
     match selected {
-        Some(Step2Selection::Mod {
-            game_tab,
-            tp_file: selected_tp,
-        }) => game_tab == active_tab && selected_tp == tp_file,
-        Some(Step2Selection::Component {
-            game_tab,
-            tp_file: selected_tp,
-            ..
-        }) => game_tab == active_tab && selected_tp == tp_file,
+        Some(
+            Step2Selection::Mod {
+                game_tab,
+                tp_file: selected_tp,
+            }
+            | Step2Selection::Component {
+                game_tab,
+                tp_file: selected_tp,
+                ..
+            },
+        ) => game_tab == active_tab && selected_tp == tp_file,
         None => false,
     }
 }

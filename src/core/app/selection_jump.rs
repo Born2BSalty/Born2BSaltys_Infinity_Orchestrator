@@ -20,9 +20,10 @@ pub(crate) fn step2_jump_to_target(
     for mod_state in mods {
         if let Some(target_component) = component_ref {
             if let Some(component) = mod_state.components.iter().find(|component| {
-                let component_key = parse_component_tp2_from_raw(&component.raw_line)
-                    .map(|tp2| normalize_mod_key(&tp2))
-                    .unwrap_or_else(|| normalize_mod_key(&mod_state.tp_file));
+                let component_key = parse_component_tp2_from_raw(&component.raw_line).map_or_else(
+                    || normalize_mod_key(&mod_state.tp_file),
+                    |tp2| normalize_mod_key(&tp2),
+                );
                 component.component_id.trim().parse::<u32>().ok() == Some(target_component)
                     && component_key == target_key
             }) {
@@ -35,10 +36,10 @@ pub(crate) fn step2_jump_to_target(
                 return;
             }
         } else if let Some(component) = mod_state.components.iter().find(|component| {
-            parse_component_tp2_from_raw(&component.raw_line)
-                .map(|tp2| normalize_mod_key(&tp2))
-                .unwrap_or_else(|| normalize_mod_key(&mod_state.tp_file))
-                == target_key
+            parse_component_tp2_from_raw(&component.raw_line).map_or_else(
+                || normalize_mod_key(&mod_state.tp_file),
+                |tp2| normalize_mod_key(&tp2),
+            ) == target_key
         }) {
             state.step2.selected = Some(Step2Selection::Component {
                 game_tab: game_tab.to_string(),
@@ -133,12 +134,9 @@ fn jump_to_target_in_tab(
         if !mod_matches {
             return false;
         }
-        match component_ref {
-            Some(target_component) => {
-                item.component_id.trim().parse::<u32>().ok() == Some(target_component)
-            }
-            None => true,
-        }
+        component_ref.is_none_or(|target_component| {
+            item.component_id.trim().parse::<u32>().ok() == Some(target_component)
+        })
     });
 
     let Some(target_idx) = target_idx else {

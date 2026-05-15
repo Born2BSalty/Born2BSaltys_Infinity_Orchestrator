@@ -28,6 +28,8 @@ fn compat_component_matches_star_component_id() {
         component_id: "42".to_string(),
         label: "Any component".to_string(),
         weidu_group: None,
+        subcomponent_key: None,
+        tp2_empty_placeholder_block: false,
         collapsible_group: None,
         collapsible_group_is_umbrella: false,
         raw_line: "BEGIN @42 DESIGNATED 42".to_string(),

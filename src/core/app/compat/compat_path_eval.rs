@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use super::compat_rule_runtime::game_dir_for_tab as shared_game_dir_for_tab;
 use crate::app::state::Step1State;
-use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
+use crate::parser::{Token, tokenize};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PathRequirementContext {
@@ -27,11 +27,11 @@ pub(crate) enum PathTriState {
 }
 
 impl PathTriState {
-    fn from_bool(value: bool) -> Self {
+    const fn from_bool(value: bool) -> Self {
         if value { Self::True } else { Self::False }
     }
 
-    fn and(self, rhs: Self) -> Self {
+    const fn and(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::False, _) | (_, Self::False) => Self::False,
             (Self::Ignored, value) | (value, Self::Ignored) => value,
@@ -40,7 +40,7 @@ impl PathTriState {
         }
     }
 
-    fn or(self, rhs: Self) -> Self {
+    const fn or(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::True, _) | (_, Self::True) => Self::True,
             (Self::Ignored, value) | (value, Self::Ignored) => value,
@@ -49,7 +49,7 @@ impl PathTriState {
         }
     }
 
-    fn not(self) -> Self {
+    const fn not(self) -> Self {
         match self {
             Self::True => Self::False,
             Self::False => Self::True,
@@ -107,7 +107,7 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn new(tokens: Vec<Token>, context: &'a PathRequirementContext) -> Self {
+    const fn new(tokens: Vec<Token>, context: &'a PathRequirementContext) -> Self {
         Self {
             tokens,
             pos: 0,
@@ -159,8 +159,7 @@ impl<'a> Parser<'a> {
         self.pos += 1;
         match name.to_ascii_uppercase().as_str() {
             "DIRECTORY_EXISTS" => self.parse_path_call(true),
-            "FILE_EXISTS_IN_GAME" => self.parse_ignored_file_call(),
-            "FILE_EXISTS" => self.parse_ignored_file_call(),
+            "FILE_EXISTS_IN_GAME" | "FILE_EXISTS" => self.parse_ignored_file_call(),
             "TRUE" => PathTriState::True,
             "FALSE" => PathTriState::False,
             _ => PathTriState::Unknown,
@@ -202,11 +201,7 @@ impl<'a> Parser<'a> {
 
     fn consume_call_value(&mut self) -> Option<String> {
         match self.peek().cloned() {
-            Some(Token::Atom(value)) => {
-                self.pos += 1;
-                Some(value)
-            }
-            Some(Token::Ident(value)) => {
+            Some(Token::Atom(value) | Token::Ident(value)) => {
                 self.pos += 1;
                 Some(value)
             }
@@ -259,8 +254,7 @@ mod tests {
     #[test]
     fn skips_variable_paths() {
         let context = PathRequirementContext::default();
-        let outcome =
-            evaluate_path_requirement(r#"DIRECTORY_EXISTS ~%MOD_FOLDER%/base~"#, &context);
+        let outcome = evaluate_path_requirement(r"DIRECTORY_EXISTS ~%MOD_FOLDER%/base~", &context);
         assert_eq!(outcome.value, PathTriState::Unknown);
         assert!(outcome.used_supported_predicate);
     }
@@ -268,10 +262,8 @@ mod tests {
     #[test]
     fn parses_boolean_directory_requirement() {
         let context = PathRequirementContext::default();
-        let outcome = evaluate_path_requirement(
-            r#"!(DIRECTORY_EXISTS ~foo~) OR FILE_EXISTS ~bar~"#,
-            &context,
-        );
+        let outcome =
+            evaluate_path_requirement(r"!(DIRECTORY_EXISTS ~foo~) OR FILE_EXISTS ~bar~", &context);
         assert!(outcome.used_supported_predicate);
     }
 }

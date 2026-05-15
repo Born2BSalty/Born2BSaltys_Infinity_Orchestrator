@@ -6,8 +6,7 @@ use std::path::Path;
 pub(super) fn is_seven_zip_archive(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
-        .map(|value| value.eq_ignore_ascii_case("7z"))
-        .unwrap_or(false)
+        .is_some_and(|value| value.eq_ignore_ascii_case("7z"))
 }
 
 pub(super) fn extract_seven_zip_archive(archive_path: &Path, out_dir: &Path) -> Result<(), String> {

@@ -227,21 +227,22 @@ fn extract_wlb_inputs(raw_line: &str) -> Option<String> {
 
 fn strip_wlb_marker(raw_line: &str) -> String {
     let lower = raw_line.to_ascii_lowercase();
-    if let Some(start) = lower.find(WLB_MARKER) {
-        let mut head = raw_line[..start].to_string();
-        while head.ends_with(' ') || head.ends_with('\t') {
-            head.pop();
-        }
-        if head.ends_with("//") {
-            head.truncate(head.len().saturating_sub(2));
+    lower.find(WLB_MARKER).map_or_else(
+        || raw_line.trim().to_string(),
+        |start| {
+            let mut head = raw_line[..start].to_string();
             while head.ends_with(' ') || head.ends_with('\t') {
                 head.pop();
             }
-        }
-        head
-    } else {
-        raw_line.trim().to_string()
-    }
+            if head.ends_with("//") {
+                head.truncate(head.len().saturating_sub(2));
+                while head.ends_with(' ') || head.ends_with('\t') {
+                    head.pop();
+                }
+            }
+            head
+        },
+    )
 }
 
 fn set_wlb_inputs(raw_line: &str, answer: &str) -> String {

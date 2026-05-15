@@ -176,11 +176,11 @@ pub(crate) enum TriState {
 }
 
 impl TriState {
-    pub(super) fn from_bool(value: bool) -> Self {
+    pub(super) const fn from_bool(value: bool) -> Self {
         if value { Self::True } else { Self::False }
     }
 
-    pub(super) fn and(self, rhs: Self) -> Self {
+    pub(super) const fn and(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::False, _) | (_, Self::False) => Self::False,
             (Self::Ignored, value) | (value, Self::Ignored) => value,
@@ -189,7 +189,7 @@ impl TriState {
         }
     }
 
-    pub(super) fn or(self, rhs: Self) -> Self {
+    pub(super) const fn or(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::True, _) | (_, Self::True) => Self::True,
             (Self::Ignored, value) | (value, Self::Ignored) => value,
@@ -198,7 +198,7 @@ impl TriState {
         }
     }
 
-    pub(super) fn not(self) -> Self {
+    pub(super) const fn not(self) -> Self {
         match self {
             Self::True => Self::False,
             Self::False => Self::True,

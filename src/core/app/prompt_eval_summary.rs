@@ -8,9 +8,9 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::app::prompt_eval_vars::build_prompt_var_context;
 use crate::app::state::Step2ComponentState;
-use crate::parser::PromptSummaryEvent;
-use crate::parser::prompt_eval_expr::{
-    PromptComponentInput, PromptEvalContext, PromptVarContext, evaluate_condition_clause,
+use crate::parser::{
+    PromptComponentInput, PromptEvalContext, PromptSummaryEvent, PromptVarContext,
+    evaluate_condition_clause,
 };
 
 const PROMPT_SUMMARY_CACHE_LIMIT: usize = 8192;
@@ -48,17 +48,17 @@ pub(crate) fn evaluate_prompt_summary_input(
         prompt_events,
         prompt_eval,
     );
-    if let Some(cached) = prompt_summary_cache()
+    let cached = prompt_summary_cache()
         .lock()
         .expect("prompt summary cache lock poisoned")
         .get(&cache_key)
-        .cloned()
-    {
+        .cloned();
+    if let Some(cached) = cached {
         return cached;
     }
 
     let result = if prompt_events.is_empty() {
-        prompt_summary.map(str::trim).unwrap_or("").to_string()
+        prompt_summary.map_or("", str::trim).to_string()
     } else {
         let prompt_vars = build_prompt_var_context(
             PromptComponentInput {
@@ -222,7 +222,7 @@ fn is_real_question_line(line: &str) -> bool {
 }
 
 fn first_prompt_line(block: &str) -> &str {
-    block.lines().next().map(str::trim).unwrap_or("")
+    block.lines().next().map_or("", str::trim)
 }
 
 fn has_prompt_options(block: &str) -> bool {

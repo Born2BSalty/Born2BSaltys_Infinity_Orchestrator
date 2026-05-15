@@ -84,21 +84,7 @@ pub(crate) fn poll_step2_update_check(
         Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
     >,
 ) {
-    let Some(rx) = step2_update_check_rx.as_ref() else {
-        return;
-    };
-    let event = match rx.try_recv() {
-        Ok(event) => Some(event),
-        Err(TryRecvError::Empty) => None,
-        Err(TryRecvError::Disconnected) => {
-            state.step2.update_selected_check_running = false;
-            state.step2.update_selected_merge_latest_fallback = false;
-            state.step2.update_selected_check_requests.clear();
-            state.step2.scan_status = "Check updates failed: worker disconnected".to_string();
-            *step2_update_check_rx = None;
-            return;
-        }
-    };
+    let event = poll_update_check_event(state, step2_update_check_rx);
     let Some(event) = event else {
         return;
     };
@@ -126,11 +112,58 @@ pub(crate) fn poll_step2_update_check(
     };
     *step2_update_check_rx = None;
     state.step2.update_selected_check_running = false;
+    finish_update_check(state, outcomes, merge_latest_fallback);
+}
+
+fn poll_update_check_event(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+) -> Option<super::app_step2_update_check_worker::Step2UpdateCheckEvent> {
+    let rx = step2_update_check_rx.as_ref()?;
+    match rx.try_recv() {
+        Ok(event) => Some(event),
+        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Disconnected) => {
+            state.step2.update_selected_check_running = false;
+            state.step2.update_selected_merge_latest_fallback = false;
+            state.step2.update_selected_check_requests.clear();
+            state.step2.scan_status = "Check updates failed: worker disconnected".to_string();
+            *step2_update_check_rx = None;
+            None
+        }
+    }
+}
+
+fn finish_update_check(
+    state: &mut WizardState,
+    outcomes: Vec<Step2UpdateCheckOutcome>,
+    merge_latest_fallback: bool,
+) {
     let existing_actionable = state.step2.update_selected_update_sources.len()
         + state.step2.update_selected_missing_sources.len();
+    prepare_finished_update_check(state, &outcomes, merge_latest_fallback);
+    let sources = mod_downloads::load_mod_download_sources();
+
+    for outcome in outcomes {
+        apply_update_check_outcome(state, &sources, outcome, merge_latest_fallback);
+    }
+
+    state.step2.update_selected_check_requests.clear();
+    state.step2.update_selected_merge_latest_fallback = false;
+    state.step2.scan_status =
+        update_check_finished_status(state, merge_latest_fallback, existing_actionable);
+}
+
+fn prepare_finished_update_check(
+    state: &mut WizardState,
+    outcomes: &[Step2UpdateCheckOutcome],
+    merge_latest_fallback: bool,
+) {
     if !merge_latest_fallback {
         if state.step2.update_selected_refresh_target_tp_file.is_some() {
-            clear_targeted_update_check_results(state, &outcomes);
+            clear_targeted_update_check_results(state, outcomes);
         } else {
             state.step2.update_selected_update_assets.clear();
             state.step2.update_selected_update_sources.clear();
@@ -149,103 +182,181 @@ pub(crate) fn poll_step2_update_check(
     state.step2.update_selected_refresh_target_game_tab = None;
     state.step2.update_selected_refresh_target_tp_file = None;
     state.step2.update_selected_check_done_count = state.step2.update_selected_check_total_count;
-    let sources = mod_downloads::load_mod_download_sources();
+}
 
-    for outcome in outcomes {
-        if let Some(tag) = outcome.tag.clone() {
-            store_latest_checked_version(state, &outcome.game_tab, &outcome.tp_file, &tag);
-            let has_current_version =
-                mod_has_current_version(state, &outcome.game_tab, &outcome.tp_file);
-            let is_missing_download =
-                exact_log_missing_download_requested(state, &outcome.game_tab, &outcome.tp_file);
-            let allow_log_missing_download = is_missing_download
-                && (state.step1.installs_exactly_from_weidu_logs()
-                    || state.step1.bootstraps_from_weidu_logs());
-            let uses_source_snapshot =
-                matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot);
-            let source_ref = outcome.source_ref.clone().unwrap_or_else(|| tag.clone());
-            if source_ref_matches(&outcome.tp_file, &outcome.source_id, &source_ref) {
-                continue;
-            }
-            if uses_source_snapshot && let Some(err) = sources.error.as_ref() {
-                push_update_check_failure(
-                    state,
-                    &outcome.game_tab,
-                    &outcome.tp_file,
-                    &outcome.label,
-                    err,
-                    merge_latest_fallback,
-                );
-                continue;
-            }
-            let allow_source_ref_update = uses_source_snapshot
-                && source_ref_is_update(&outcome.tp_file, &outcome.source_id, &source_ref);
-            let allow_snapshot_install = uses_source_snapshot
-                && !has_current_version
-                && state.step1.have_weidu_logs
-                && state.step1.download_archive
-                && !source_ref_matches(&outcome.tp_file, &outcome.source_id, &source_ref);
-            if matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot)
-                && !allow_source_ref_update
-                && !allow_snapshot_install
-                && !allow_log_missing_download
-                && !has_current_version
-            {
-                continue;
-            }
-            if !allow_source_ref_update && !allow_snapshot_install && !allow_log_missing_download {
-                if !has_current_version {
-                    continue;
-                }
-                if !version_is_update(state, &outcome.game_tab, &outcome.tp_file, &tag) {
-                    continue;
-                }
-            }
-            if let (Some(asset_name), Some(asset_url)) = (outcome.asset_name, outcome.asset_url) {
-                state
-                    .step2
-                    .update_selected_update_assets
-                    .push(Step2UpdateAsset {
-                        game_tab: outcome.game_tab.clone(),
-                        tp_file: outcome.tp_file.clone(),
-                        label: outcome.label.clone(),
-                        source_id: outcome.source_id.clone(),
-                        tag: tag.clone(),
-                        asset_name,
-                        asset_url,
-                        installed_source_ref: uses_source_snapshot.then_some(source_ref),
-                    });
-            }
-            let entry = format!("{} ({tag})", outcome.label);
-            if allow_log_missing_download {
-                state.step2.update_selected_missing_sources.push(entry);
-            } else {
-                state.step2.update_selected_update_sources.push(entry);
-            }
-            if allow_source_ref_update {
-                mark_update_available(state, &outcome.game_tab, &outcome.tp_file);
-                continue;
-            }
-            if has_current_version {
-                mark_update_available(state, &outcome.game_tab, &outcome.tp_file);
-            }
-        } else {
-            let error = outcome
-                .error
-                .unwrap_or_else(|| "no release found".to_string());
-            push_update_check_failure(
-                state,
-                &outcome.game_tab,
-                &outcome.tp_file,
-                &outcome.label,
-                &error,
-                merge_latest_fallback,
-            );
+fn apply_update_check_outcome(
+    state: &mut WizardState,
+    sources: &mod_downloads::ModDownloadsLoad,
+    outcome: Step2UpdateCheckOutcome,
+    merge_latest_fallback: bool,
+) {
+    let Some(tag) = outcome.tag.clone() else {
+        let error = outcome
+            .error
+            .unwrap_or_else(|| "no release found".to_string());
+        push_update_check_failure(
+            state,
+            &outcome.game_tab,
+            &outcome.tp_file,
+            &outcome.label,
+            &error,
+            merge_latest_fallback,
+        );
+        return;
+    };
+
+    store_latest_checked_version(state, &outcome.game_tab, &outcome.tp_file, &tag);
+    let decision =
+        update_check_outcome_decision(state, sources, &outcome, &tag, merge_latest_fallback);
+    if let Some(decision) = decision {
+        record_successful_update_outcome(state, outcome, &tag, decision);
+    }
+}
+
+struct UpdateOutcomeDecision {
+    has_current_version: bool,
+    allow_log_missing_download: bool,
+    allow_source_ref_update: bool,
+    installed_source_ref: Option<String>,
+}
+
+fn update_check_outcome_decision(
+    state: &mut WizardState,
+    sources: &mod_downloads::ModDownloadsLoad,
+    outcome: &Step2UpdateCheckOutcome,
+    tag: &str,
+    merge_latest_fallback: bool,
+) -> Option<UpdateOutcomeDecision> {
+    let has_current_version = mod_has_current_version(state, &outcome.game_tab, &outcome.tp_file);
+    let is_missing_download =
+        exact_log_missing_download_requested(state, &outcome.game_tab, &outcome.tp_file);
+    let allow_log_missing_download = is_missing_download
+        && (state.step1.installs_exactly_from_weidu_logs()
+            || state.step1.bootstraps_from_weidu_logs());
+    let uses_source_snapshot = matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot);
+    let source_ref = outcome
+        .source_ref
+        .clone()
+        .unwrap_or_else(|| tag.to_string());
+    let allow_source_ref_update = uses_source_snapshot
+        && source_ref_is_update(&outcome.tp_file, &outcome.source_id, &source_ref);
+    let allow_snapshot_install = uses_source_snapshot
+        && !has_current_version
+        && state.step1.have_weidu_logs
+        && state.step1.download_archive
+        && !source_ref_matches(&outcome.tp_file, &outcome.source_id, &source_ref);
+    let decision = UpdateOutcomeDecision {
+        has_current_version,
+        allow_log_missing_download,
+        allow_source_ref_update,
+        installed_source_ref: uses_source_snapshot.then_some(source_ref.clone()),
+    };
+    should_record_update_outcome(
+        state,
+        &ShouldRecordUpdateOutcome {
+            sources,
+            outcome,
+            tag,
+            merge_latest_fallback,
+            decision: &decision,
+            uses_source_snapshot,
+            source_ref: &source_ref,
+            allow_snapshot_install,
+        },
+    )
+    .then_some(decision)
+}
+
+struct ShouldRecordUpdateOutcome<'a> {
+    sources: &'a mod_downloads::ModDownloadsLoad,
+    outcome: &'a Step2UpdateCheckOutcome,
+    tag: &'a str,
+    merge_latest_fallback: bool,
+    decision: &'a UpdateOutcomeDecision,
+    uses_source_snapshot: bool,
+    source_ref: &'a str,
+    allow_snapshot_install: bool,
+}
+
+fn should_record_update_outcome(
+    state: &mut WizardState,
+    ctx: &ShouldRecordUpdateOutcome<'_>,
+) -> bool {
+    if source_ref_matches(&ctx.outcome.tp_file, &ctx.outcome.source_id, ctx.source_ref) {
+        return false;
+    }
+    if ctx.uses_source_snapshot
+        && let Some(err) = ctx.sources.error.as_ref()
+    {
+        push_update_check_failure(
+            state,
+            &ctx.outcome.game_tab,
+            &ctx.outcome.tp_file,
+            &ctx.outcome.label,
+            err,
+            ctx.merge_latest_fallback,
+        );
+        return false;
+    }
+    if matches!(ctx.outcome.package_kind, Step2PackageKind::SourceSnapshot)
+        && !ctx.decision.allow_source_ref_update
+        && !ctx.allow_snapshot_install
+        && !ctx.decision.allow_log_missing_download
+        && !ctx.decision.has_current_version
+    {
+        return false;
+    }
+    if !ctx.decision.allow_source_ref_update
+        && !ctx.allow_snapshot_install
+        && !ctx.decision.allow_log_missing_download
+    {
+        if !ctx.decision.has_current_version {
+            return false;
+        }
+        if !version_is_update(state, &ctx.outcome.game_tab, &ctx.outcome.tp_file, ctx.tag) {
+            return false;
         }
     }
+    true
+}
 
-    state.step2.update_selected_check_requests.clear();
-    state.step2.update_selected_merge_latest_fallback = false;
+fn record_successful_update_outcome(
+    state: &mut WizardState,
+    outcome: Step2UpdateCheckOutcome,
+    tag: &str,
+    decision: UpdateOutcomeDecision,
+) {
+    if let (Some(asset_name), Some(asset_url)) = (outcome.asset_name, outcome.asset_url) {
+        state
+            .step2
+            .update_selected_update_assets
+            .push(Step2UpdateAsset {
+                game_tab: outcome.game_tab.clone(),
+                tp_file: outcome.tp_file.clone(),
+                label: outcome.label.clone(),
+                source_id: outcome.source_id.clone(),
+                tag: tag.to_string(),
+                asset_name,
+                asset_url,
+                installed_source_ref: decision.installed_source_ref,
+            });
+    }
+    let entry = format!("{} ({tag})", outcome.label);
+    if decision.allow_log_missing_download {
+        state.step2.update_selected_missing_sources.push(entry);
+    } else {
+        state.step2.update_selected_update_sources.push(entry);
+    }
+    if decision.allow_source_ref_update || decision.has_current_version {
+        mark_update_available(state, &outcome.game_tab, &outcome.tp_file);
+    }
+}
+
+fn update_check_finished_status(
+    state: &WizardState,
+    merge_latest_fallback: bool,
+    existing_actionable: usize,
+) -> String {
     let updates = state.step2.update_selected_update_sources.len();
     let missing = state.step2.update_selected_missing_sources.len();
     let failed = state
@@ -253,7 +364,7 @@ pub(crate) fn poll_step2_update_check(
         .update_selected_exact_version_failed_sources
         .len()
         + state.step2.update_selected_failed_sources.len();
-    state.step2.scan_status = if merge_latest_fallback {
+    if merge_latest_fallback {
         format!(
             "Latest fallback finished: {} added, {failed} failed",
             (updates + missing).saturating_sub(existing_actionable)
@@ -266,7 +377,7 @@ pub(crate) fn poll_step2_update_check(
         format!("Check updates finished: {updates} updates, {missing} missing, {failed} failed")
     } else {
         format!("Check updates finished: {updates} updates, {failed} failed")
-    };
+    }
 }
 
 pub(super) fn check_latest_release_for_worker(
@@ -279,8 +390,26 @@ pub(super) fn check_latest_release_for_worker(
         super::app_step2_update_weaselmods::check_weaselmods_download_page(agent, &request)
     } else if mod_downloads::source_is_morpheus_mart_page_url(&request.source_url) {
         super::app_step2_update_morpheus_mart::check_morpheus_mart_download_page(agent, &request)
+    } else if mod_downloads::source_is_sentrizeal_download_url(&request.source_url) {
+        sentrizeal_download_outcome(request)
     } else {
         failed_outcome(request, "source is not auto-resolvable")
+    }
+}
+
+fn sentrizeal_download_outcome(request: Step2UpdateCheckRequest) -> Step2UpdateCheckOutcome {
+    let tp2 = mod_downloads::normalize_mod_download_tp2(&request.tp_file);
+    Step2UpdateCheckOutcome {
+        game_tab: request.game_tab,
+        tp_file: request.tp_file,
+        label: request.label,
+        source_id: request.source_id,
+        tag: Some("sentrizeal".to_string()),
+        source_ref: None,
+        asset_name: Some(format!("{tp2}-sentrizeal.zip")),
+        asset_url: Some(request.source_url),
+        error: None,
+        package_kind: Step2PackageKind::PageArchive,
     }
 }
 

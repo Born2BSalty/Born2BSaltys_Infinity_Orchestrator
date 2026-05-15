@@ -7,7 +7,7 @@ use std::path::Path;
 use crate::app::scan::ScannedComponent;
 
 use super::super::tp2_blocks::{
-    parse_tp2_component_blocks_in_order, split_subcomponent_display_label,
+    Tp2ComponentBlock, parse_tp2_component_blocks_in_order, split_subcomponent_display_label,
 };
 use super::{DerivedCollapsibleGroup, block_is_deprecated_placeholder};
 
@@ -21,13 +21,32 @@ pub(super) fn detect_derived_collapsible_groups(
         return HashMap::new();
     }
 
-    let deprecated_placeholder_ids = ordered_blocks
+    let deprecated_placeholder_ids = deprecated_placeholder_ids(&ordered_blocks);
+    let display_by_id = display_by_component_id(components);
+    let same_mod_installed_guards = same_mod_installed_guards(tp_file, &ordered_blocks);
+    let mut out = HashMap::<String, DerivedCollapsibleGroup>::new();
+    detect_same_mod_umbrella_groups(
+        &ordered_blocks,
+        &display_by_id,
+        &same_mod_installed_guards,
+        &mut out,
+    );
+    detect_subcomponent_parent_groups(&ordered_blocks, &display_by_id, &mut out);
+    detect_bridged_subcomponent_groups(components, &deprecated_placeholder_ids, &mut out);
+
+    out
+}
+
+fn deprecated_placeholder_ids(ordered_blocks: &[Tp2ComponentBlock]) -> HashSet<String> {
+    ordered_blocks
         .iter()
         .filter(|block| block_is_deprecated_placeholder(block))
         .map(|block| block.component_id.trim().to_string())
-        .collect::<HashSet<_>>();
+        .collect()
+}
 
-    let display_by_id: HashMap<String, String> = components
+fn display_by_component_id(components: &[ScannedComponent]) -> HashMap<String, String> {
+    components
         .iter()
         .map(|component| {
             (
@@ -35,10 +54,15 @@ pub(super) fn detect_derived_collapsible_groups(
                 component.display.trim().to_string(),
             )
         })
-        .collect();
+        .collect()
+}
 
-    let mut same_mod_installed_guards = HashMap::<String, String>::new();
-    for block in &ordered_blocks {
+fn same_mod_installed_guards(
+    tp_file: &str,
+    ordered_blocks: &[Tp2ComponentBlock],
+) -> HashMap<String, String> {
+    let mut guards = HashMap::<String, String>::new();
+    for block in ordered_blocks {
         let mut targets = block
             .body_lines
             .iter()
@@ -47,43 +71,29 @@ pub(super) fn detect_derived_collapsible_groups(
         targets.sort();
         targets.dedup();
         if targets.len() == 1 {
-            same_mod_installed_guards.insert(block.component_id.clone(), targets[0].clone());
+            guards.insert(block.component_id.clone(), targets[0].clone());
         }
     }
+    guards
+}
 
-    let mut out = HashMap::<String, DerivedCollapsibleGroup>::new();
+fn detect_same_mod_umbrella_groups(
+    ordered_blocks: &[Tp2ComponentBlock],
+    display_by_id: &HashMap<String, String>,
+    same_mod_installed_guards: &HashMap<String, String>,
+    out: &mut HashMap<String, DerivedCollapsibleGroup>,
+) {
     let mut index = 0usize;
     while index < ordered_blocks.len() {
-        let umbrella = &ordered_blocks[index];
-        let umbrella_id = umbrella.component_id.trim();
-        let Some(umbrella_display) = display_by_id.get(umbrella_id) else {
-            index += 1;
-            continue;
-        };
-        if split_subcomponent_display_label(umbrella_display).is_some() {
-            index += 1;
-            continue;
-        }
-
-        let mut child_ids = Vec::<String>::new();
-        let mut next_index = index + 1;
-        while next_index < ordered_blocks.len() {
-            let child = &ordered_blocks[next_index];
-            if same_mod_installed_guards
-                .get(child.component_id.trim())
-                .is_some_and(|target| target == umbrella_id)
-            {
-                child_ids.push(child.component_id.clone());
-                next_index += 1;
-            } else {
-                break;
-            }
-        }
-
-        if child_ids.len() >= 2 {
-            let header = derive_collapsible_group_header(umbrella_display);
+        let (next_index, group) = same_mod_umbrella_group_at(
+            index,
+            ordered_blocks,
+            display_by_id,
+            same_mod_installed_guards,
+        );
+        if let Some((umbrella_id, header, child_ids)) = group {
             out.insert(
-                umbrella_id.to_string(),
+                umbrella_id,
                 DerivedCollapsibleGroup {
                     header: header.clone(),
                     is_umbrella: true,
@@ -101,15 +111,62 @@ pub(super) fn detect_derived_collapsible_groups(
                 }
             }
             index = next_index;
-            continue;
+        } else {
+            index += 1;
         }
-        index += 1;
+    }
+}
+
+fn same_mod_umbrella_group_at(
+    index: usize,
+    ordered_blocks: &[Tp2ComponentBlock],
+    display_by_id: &HashMap<String, String>,
+    same_mod_installed_guards: &HashMap<String, String>,
+) -> (usize, Option<(String, String, Vec<String>)>) {
+    let umbrella = &ordered_blocks[index];
+    let umbrella_id = umbrella.component_id.trim();
+    let Some(umbrella_display) = display_by_id.get(umbrella_id) else {
+        return (index + 1, None);
+    };
+    if split_subcomponent_display_label(umbrella_display).is_some() {
+        return (index + 1, None);
     }
 
+    let mut child_ids = Vec::<String>::new();
+    let mut next_index = index + 1;
+    while next_index < ordered_blocks.len() {
+        let child = &ordered_blocks[next_index];
+        if same_mod_installed_guards
+            .get(child.component_id.trim())
+            .is_some_and(|target| target == umbrella_id)
+        {
+            child_ids.push(child.component_id.clone());
+            next_index += 1;
+        } else {
+            break;
+        }
+    }
+
+    if child_ids.len() >= 2 {
+        let header = derive_collapsible_group_header(umbrella_display);
+        (
+            next_index,
+            Some((umbrella_id.to_string(), header, child_ids)),
+        )
+    } else {
+        (index + 1, None)
+    }
+}
+
+fn detect_subcomponent_parent_groups(
+    ordered_blocks: &[Tp2ComponentBlock],
+    display_by_id: &HashMap<String, String>,
+    out: &mut HashMap<String, DerivedCollapsibleGroup>,
+) {
     let mut subcomponent_family_members = HashMap::<String, Vec<String>>::new();
     let mut subcomponent_family_headers = HashMap::<String, String>::new();
     let mut subcomponent_family_conflicts = HashSet::<String>::new();
-    for block in &ordered_blocks {
+    for block in ordered_blocks {
         let child_id = block.component_id.trim();
         if child_id.is_empty() || !display_by_id.contains_key(child_id) {
             continue;
@@ -176,7 +233,13 @@ pub(super) fn detect_derived_collapsible_groups(
             );
         }
     }
+}
 
+fn detect_bridged_subcomponent_groups(
+    components: &[ScannedComponent],
+    deprecated_placeholder_ids: &HashSet<String>,
+    out: &mut HashMap<String, DerivedCollapsibleGroup>,
+) {
     let mut index = 0usize;
     while index < components.len() {
         let Some((header, _)) = split_subcomponent_display_label(&components[index].display) else {
@@ -207,7 +270,7 @@ pub(super) fn detect_derived_collapsible_groups(
                 components,
                 next_index,
                 &header,
-                &deprecated_placeholder_ids,
+                deprecated_placeholder_ids,
             ) {
                 member_ids.push(next_component.component_id.trim().to_string());
                 bridged_placeholder_count += 1;
@@ -231,20 +294,22 @@ pub(super) fn detect_derived_collapsible_groups(
 
         index += 1;
     }
-
-    out
 }
 
 fn parse_subcomponent_parent_component_id(token: &str) -> Option<String> {
     let trimmed = token.trim();
-    let raw_digits = if let Some(rest) = trimmed.strip_prefix('@') {
-        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-        (!digits.is_empty()).then_some(digits)
-    } else if trimmed.chars().all(|c| c.is_ascii_digit()) {
-        Some(trimmed.to_string())
-    } else {
-        None
-    }?;
+    let raw_digits = trimmed.strip_prefix('@').map_or_else(
+        || {
+            trimmed
+                .chars()
+                .all(|c| c.is_ascii_digit())
+                .then(|| trimmed.to_string())
+        },
+        |rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            (!digits.is_empty()).then_some(digits)
+        },
+    )?;
     let normalized = raw_digits.trim_start_matches('0');
     if normalized.is_empty() {
         Some("0".to_string())
@@ -370,7 +435,7 @@ fn parse_same_mod_installed_guard_target(tp_file: &str, line: &str) -> Option<St
     }
 
     let tail = rest[end + quote.len_utf8()..].trim_start();
-    let component_id: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let component_id: String = tail.chars().take_while(char::is_ascii_digit).collect();
     if component_id.is_empty() {
         None
     } else {

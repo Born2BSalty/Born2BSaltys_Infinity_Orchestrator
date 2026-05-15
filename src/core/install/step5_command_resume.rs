@@ -54,11 +54,11 @@ pub(crate) fn build_resume_invocation(
         let bg1_dir = resume_targets
             .bg1_game_dir
             .as_deref()
-            .unwrap_or(config.eet_bgee_game_folder.trim());
+            .unwrap_or_else(|| config.eet_bgee_game_folder.trim());
         let bg2_dir = resume_targets
             .bg2_game_dir
             .as_deref()
-            .unwrap_or(config.eet_bg2ee_game_folder.trim());
+            .unwrap_or_else(|| config.eet_bg2ee_game_folder.trim());
         args.push("eet".to_string());
         args.push("--bg1-game-directory".to_string());
         args.push(bg1_dir.to_string());

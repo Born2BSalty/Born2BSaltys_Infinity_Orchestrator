@@ -22,7 +22,10 @@ fn save_weidu_logs_from_step4(state: &WizardState) -> anyhow::Result<()> {
         let dir = PathBuf::from(folder);
         std::fs::create_dir_all(&dir)?;
         let path = dir.join("weidu.log");
-        let mut out: Vec<String> = header.iter().map(|s| s.to_string()).collect();
+        let mut out: Vec<String> = header
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         out.extend(lines);
         std::fs::write(path, out.join("\n"))?;
         Ok(())
@@ -59,8 +62,8 @@ pub(crate) fn auto_save_step4_weidu_logs(state: &mut WizardState) -> Result<(), 
         }
         Err(err) => {
             let msg = format!("Save weidu.log failed: {err}");
-            state.step2.scan_status = msg.clone();
-            state.step5.last_status_text = msg.clone();
+            state.step2.scan_status.clone_from(&msg);
+            state.step5.last_status_text.clone_from(&msg);
             Err(msg)
         }
     }

@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use crate::parser::prompt_eval_expr_tokens::Token;
+use super::super::Token;
 
 use super::values::{EvalState, ScalarValue, normalize_game_token};
 use super::{PromptEvalContext, PromptVarContext, lookup_var, normalize_tp2_stem};
@@ -16,7 +16,7 @@ pub(crate) struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         tokens: Vec<Token>,
         prompt_eval: &'a PromptEvalContext,
         prompt_vars: Option<&'a PromptVarContext>,
@@ -33,7 +33,7 @@ impl<'a> Parser<'a> {
         self.parse_or()
     }
 
-    pub(crate) fn is_at_end(&self) -> bool {
+    pub(crate) const fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len()
     }
 
@@ -185,7 +185,7 @@ impl<'a> Parser<'a> {
         EvalState::from_bool(
             values
                 .into_iter()
-                .map(normalize_game_token)
+                .map(|value| normalize_game_token(&value))
                 .any(|game| self.prompt_eval.active_games.contains(&game)),
         )
     }
@@ -198,7 +198,7 @@ impl<'a> Parser<'a> {
         EvalState::from_bool(
             values
                 .into_iter()
-                .map(normalize_game_token)
+                .map(|value| normalize_game_token(&value))
                 .any(|game| self.prompt_eval.active_engines.contains(&game)),
         )
     }
@@ -254,20 +254,14 @@ impl<'a> Parser<'a> {
     }
 
     fn skip_extra_values_until_rparen(&mut self) {
-        loop {
-            match self.peek() {
-                Some(Token::RParen) | None => break,
-                Some(Token::Atom(_)) | Some(Token::Ident(_)) => {
-                    self.pos += 1;
-                }
-                _ => break,
-            }
+        while matches!(self.peek(), Some(Token::Atom(_) | Token::Ident(_))) {
+            self.pos += 1;
         }
     }
 
     fn consume_value(&mut self) -> Option<String> {
         match self.peek().cloned() {
-            Some(Token::Atom(value)) | Some(Token::Ident(value)) => {
+            Some(Token::Atom(value) | Token::Ident(value)) => {
                 self.pos += 1;
                 Some(value)
             }

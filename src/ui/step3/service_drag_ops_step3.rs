@@ -4,6 +4,7 @@
 use eframe::egui;
 
 use crate::app::state::Step3ItemState;
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_accent};
 use crate::ui::step3::blocks;
 use crate::ui::step3::drag;
 
@@ -93,9 +94,10 @@ pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'
 pub(crate) fn draw_insert_marker(
     ui: &egui::Ui,
     items: &[Step3ItemState],
-    drag_from: &Option<usize>,
+    drag_from: Option<&usize>,
     drag_over: Option<usize>,
     visible_rows: &[(usize, egui::Rect)],
+    palette: ThemePalette,
 ) {
     if drag_from.is_none() {
         return;
@@ -116,7 +118,10 @@ pub(crate) fn draw_insert_marker(
             };
             ui.painter().line_segment(
                 [egui::pos2(x0, y), egui::pos2(x1, y)],
-                egui::Stroke::new(1.5, ui.visuals().selection.stroke.color),
+                egui::Stroke::new(
+                    crate::ui::shared::redesign_tokens::REDESIGN_BORDER_WIDTH_PX,
+                    redesign_accent(palette),
+                ),
             );
         }
     }
@@ -142,17 +147,11 @@ pub(crate) fn update_drag_target_from_pointer(ui: &egui::Ui, ctx: &mut DragPoint
             .count()
             .max(1);
         if n > 0 && k > 0 {
-            let list_top_y = visible_rows
-                .first()
-                .map(|(_, r)| r.top())
-                .unwrap_or(pointer.y);
+            let list_top_y = visible_rows.first().map_or(pointer.y, |(_, r)| r.top());
             let row_h = if *drag_row_h > 0.0 {
                 *drag_row_h
             } else {
-                (visible_rows
-                    .first()
-                    .map(|(_, r)| r.height())
-                    .unwrap_or(20.0)
+                (visible_rows.first().map_or(20.0, |(_, r)| r.height())
                     + ui.spacing().item_spacing.y.max(0.0))
                 .max(1.0)
             };

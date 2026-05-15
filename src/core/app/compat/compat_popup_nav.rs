@@ -58,7 +58,7 @@ pub(crate) fn select_popup_target(state: &mut WizardState, target: &PopupCompatT
         component_id: target.component_id.clone(),
         component_key: target.component_key.clone(),
     });
-    state.step2.active_game_tab = target.game_tab.clone();
+    state.step2.active_game_tab.clone_from(&target.game_tab);
     state.step2.jump_to_selected_requested = true;
     if state.current_step == 2 {
         let _ = step3_jump_to_target(
@@ -68,23 +68,21 @@ pub(crate) fn select_popup_target(state: &mut WizardState, target: &PopupCompatT
             target.component_id.trim().parse::<u32>().ok(),
         );
     }
-    state.step2.compat_popup_issue_override = target.issue_override.clone();
+    state
+        .step2
+        .compat_popup_issue_override
+        .clone_from(&target.issue_override);
     state.step2.compat_popup_open = true;
 }
 
 pub(crate) fn refresh_popup_override(state: &mut WizardState) {
     if state.current_step == 2 {
-        let Some(target) = current_target_override(state) else {
-            state.step2.compat_popup_issue_override = None;
-            state.step2.compat_popup_open = true;
-            return;
-        };
-        state.step2.compat_popup_issue_override = target.issue_override;
-        state.step2.compat_popup_open = true;
+        state.step2.compat_popup_issue_override =
+            current_target_override(state).and_then(|target| target.issue_override);
     } else {
         state.step2.compat_popup_issue_override = None;
-        state.step2.compat_popup_open = true;
     }
+    state.step2.compat_popup_open = true;
 }
 
 pub(crate) fn selected_game_tab(state: &WizardState) -> Option<String> {
@@ -126,7 +124,7 @@ pub(crate) fn jump_to_related(state: &mut WizardState, issue: &CompatIssue) {
         return;
     };
     step2_jump_to_target(state, &game_tab, &related_mod, related_component);
-    state.step2.active_game_tab = game_tab.clone();
+    state.step2.active_game_tab.clone_from(&game_tab);
     state.step2.jump_to_selected_requested = true;
     if state.current_step == 2 {
         if step3_jump_to_target(state, &game_tab, &related_mod, related_component) {

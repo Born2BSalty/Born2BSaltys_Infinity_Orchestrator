@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::state::Step2Selection;
-use crate::parser::prompt_eval_expr::PromptEvalContext;
+use crate::parser::PromptEvalContext;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 
 pub(crate) type CompatPopupTarget = Option<(String, String, String)>;
 pub(crate) type PromptPopupTarget = Option<(String, String)>;
@@ -24,6 +25,7 @@ pub(crate) struct ComponentRowsContext<'a> {
     pub jump_to_selected_requested: &'a mut bool,
     pub tp_file: &'a str,
     pub mod_name: &'a str,
+    pub palette: ThemePalette,
 }
 
 pub(crate) struct ComponentRenderState<'a> {
@@ -35,7 +37,7 @@ pub(crate) struct ComponentRenderState<'a> {
     pub enforce_meta_for: &'a mut Vec<usize>,
 }
 
-pub(crate) fn reborrow_render_state<'a>(
+pub(crate) const fn reborrow_render_state<'a>(
     state: &'a mut ComponentRenderState<'_>,
 ) -> ComponentRenderState<'a> {
     ComponentRenderState {

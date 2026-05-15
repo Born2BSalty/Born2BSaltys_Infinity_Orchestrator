@@ -166,13 +166,15 @@ fn walk_setup_tra_files(base: &Path) -> Vec<std::path::PathBuf> {
             out.extend(walk_setup_tra_files(&path));
             continue;
         }
-        if path
+        let is_tra = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("tra"));
+        let has_setup_name = path
             .file_name()
             .and_then(|value| value.to_str())
-            .is_some_and(|name| {
-                name.ends_with(".tra") && name.to_ascii_lowercase().contains("setup")
-            })
-        {
+            .is_some_and(|name| name.to_ascii_lowercase().contains("setup"));
+        if is_tra && has_setup_name {
             out.push(path);
         }
     }

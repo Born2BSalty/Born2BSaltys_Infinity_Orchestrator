@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-mod filters {
+pub mod filters {
     use super::prompt::is_prompt_line;
     use super::utils::has_level_token;
 
@@ -102,7 +102,7 @@ mod filters {
         }
     }
 }
-mod model {
+pub mod model {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(crate) enum PromptKind {
         YesNo,
@@ -112,19 +112,19 @@ mod model {
     }
 
     pub(crate) struct PromptInfo {
-        pub(crate) key: String,
-        pub(crate) legacy_key: Option<String>,
-        pub(crate) preview_line: String,
-        pub(crate) kind: PromptKind,
-        pub(crate) option_count: usize,
-        pub(crate) line_count: usize,
-        pub(crate) char_count: usize,
+        pub key: String,
+        pub legacy_key: Option<String>,
+        pub preview_line: String,
+        pub kind: PromptKind,
+        pub option_count: usize,
+        pub line_count: usize,
+        pub char_count: usize,
     }
 }
 
 #[path = "analyze_prompt_block.rs"]
-mod prompt_block;
-mod prompt_detect {
+pub mod prompt_block;
+pub mod prompt_detect {
     use super::utils::recent_lines;
 
     fn has_yes_no_prompt_tokens(line_upper: &str) -> bool {
@@ -136,7 +136,7 @@ mod prompt_detect {
             && has_yes_no_prompt_tokens(line_upper)
     }
 
-    pub(crate) fn is_prompt_line(line: &str) -> bool {
+    pub(super) fn is_prompt_line(line: &str) -> bool {
         let u = line.to_ascii_uppercase();
         u.contains("USER INPUT REQUIRED")
             || u.contains("PLEASE CHOOSE")
@@ -183,10 +183,10 @@ mod prompt_detect {
         has_input_required && has_question_is
     }
 }
-mod prompt_match {
+pub mod prompt_match {
     use super::model::{PromptInfo, PromptKind};
 
-    pub(crate) fn prompt_kind_name(prompt: &PromptInfo) -> &'static str {
+    pub(crate) const fn prompt_kind_name(prompt: &PromptInfo) -> &'static str {
         match prompt.kind {
             PromptKind::YesNo => "yes/no",
             PromptKind::Path => "path",
@@ -195,9 +195,9 @@ mod prompt_match {
         }
     }
 }
-mod prompt {
+pub mod prompt {
     pub(crate) use super::prompt_block::current_prompt_info;
-    pub(crate) use super::prompt_detect::is_prompt_line;
+    pub(super) use super::prompt_detect::is_prompt_line;
     pub(crate) use super::prompt_detect::likely_input_needed_visible;
     pub(crate) use super::prompt_detect::prompt_capture_end;
     pub(crate) use super::prompt_detect::prompt_capture_start;
@@ -253,28 +253,28 @@ mod utils {
     }
 
     pub(super) fn fnv1a64(value: &str) -> u64 {
-        let mut hash = 0xcbf29ce484222325u64;
+        let mut hash = 0xcbf2_9ce4_8422_2325_u64;
         for &b in value.as_bytes() {
-            hash ^= b as u64;
-            hash = hash.wrapping_mul(0x100000001b3);
+            hash ^= u64::from(b);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
         }
         hash
     }
 }
 
-pub(crate) use model::PromptInfo;
+pub(super) use model::PromptInfo;
 
-pub(crate) use filters::extract_error_block;
-pub(crate) use filters::important_line;
-pub(crate) use filters::installed_line;
-pub(crate) use filters::likely_failure_visible;
-pub(crate) use filters::parser_timestamp_line;
-pub(crate) use filters::warning_capture_end;
-pub(crate) use filters::warning_capture_start;
+pub(super) use filters::extract_error_block;
+pub(super) use filters::important_line;
+pub(super) use filters::installed_line;
+pub(super) use filters::likely_failure_visible;
+pub(super) use filters::parser_timestamp_line;
+pub(super) use filters::warning_capture_end;
+pub(super) use filters::warning_capture_start;
 
-pub(crate) use prompt::current_prompt_info;
-pub(crate) use prompt::likely_input_needed_visible;
-pub(crate) use prompt::prompt_capture_end;
-pub(crate) use prompt::prompt_capture_start;
-pub(crate) use prompt::prompt_headers_ready;
-pub(crate) use prompt::prompt_kind_name;
+pub(super) use prompt::current_prompt_info;
+pub(super) use prompt::likely_input_needed_visible;
+pub(super) use prompt::prompt_capture_end;
+pub(super) use prompt::prompt_capture_start;
+pub(super) use prompt::prompt_headers_ready;
+pub(super) use prompt::prompt_kind_name;

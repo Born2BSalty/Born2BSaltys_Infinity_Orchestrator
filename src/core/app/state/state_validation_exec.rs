@@ -19,7 +19,7 @@ pub(super) fn check_file(label: &str, value: &str, checked: &mut usize, errors: 
         {
             return;
         }
-        let parent_exists = path.parent().is_some_and(|parent| parent.exists());
+        let parent_exists = path.parent().is_some_and(std::path::Path::exists);
         if parent_exists {
             errors.push(format!("{label} file was not found"));
         } else {
@@ -33,8 +33,7 @@ pub(super) fn check_file(label: &str, value: &str, checked: &mut usize, errors: 
         && path
             .extension()
             .and_then(|value| value.to_str())
-            .map(|ext| !ext.eq_ignore_ascii_case("log"))
-            .unwrap_or(false)
+            .is_some_and(|ext| !ext.eq_ignore_ascii_case("log"))
     {
         errors.push(format!("{label} should use .log extension"));
     }

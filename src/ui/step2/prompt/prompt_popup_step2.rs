@@ -7,13 +7,18 @@ use crate::app::prompt_popup_nav;
 use crate::app::prompt_popup_text::PromptToolbarModEntry;
 use crate::app::state::{PromptPopupMode, WizardState};
 use crate::ui::shared::layout_tokens_global::{SPACE_MD, SPACE_SM, SPACE_XS};
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_U8, REDESIGN_BIO_SMALL_BUTTON_HEIGHT_PX,
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_numbers, redesign_border_soft,
+    redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_shell_bg,
+};
 
-pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
+pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
     if !state.step2.prompt_popup_open {
         return;
     }
     if state.step2.prompt_popup_mode == PromptPopupMode::ToolbarIndex {
-        render_prompt_toolbar_popup(ui, state);
+        render_prompt_toolbar_popup(ui, state, palette);
         return;
     }
     let title = state.step2.prompt_popup_title.clone();
@@ -21,7 +26,7 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     let jump_ids = prompt_popup_nav::collect_text_prompt_jump_ids(state, &title, &text);
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
-    egui::Window::new(format!("Parsed prompts - {}", title))
+    egui::Window::new(format!("Parsed prompts - {title}"))
         .open(&mut open)
         .resizable(true)
         .collapsible(false)
@@ -53,13 +58,16 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
                         let button_text = crate::ui::shared::typography_global::monospace(
                             component_id.to_string(),
                         )
-                        .color(crate::ui::shared::theme_global::accent_numbers());
+                        .color(redesign_accent_numbers(palette));
                         if ui
                             .add(
                                 egui::Button::new(button_text)
-                                    .min_size(egui::vec2(42.0, 22.0))
-                                    .fill(ui.visuals().widgets.inactive.bg_fill)
-                                    .stroke(ui.visuals().widgets.inactive.bg_stroke),
+                                    .min_size(egui::vec2(42.0, REDESIGN_BIO_SMALL_BUTTON_HEIGHT_PX))
+                                    .fill(redesign_shell_bg(palette))
+                                    .stroke(egui::Stroke::new(
+                                        REDESIGN_BORDER_WIDTH_PX,
+                                        redesign_border_soft(palette),
+                                    )),
                             )
                             .clicked()
                         {
@@ -83,22 +91,26 @@ pub(crate) fn open_toolbar_prompt_popup(state: &mut WizardState, title: &str) {
     prompt_popup_nav::open_toolbar_prompt_popup(state, title);
 }
 
-pub(crate) fn draw_prompt_toolbar_badge(ui: &mut egui::Ui, count: usize) -> bool {
+pub(crate) fn draw_prompt_toolbar_badge(
+    ui: &mut egui::Ui,
+    count: usize,
+    palette: ThemePalette,
+) -> bool {
     if count == 0 {
         return false;
     }
     let prompt_text = crate::ui::shared::typography_global::strong(format!("PROMPT {count}"))
-        .color(crate::ui::shared::theme_global::prompt_text())
+        .color(redesign_prompt_text(palette))
         .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
     ui.add(
         egui::Button::new(prompt_text)
-            .fill(crate::ui::shared::theme_global::prompt_fill())
+            .fill(redesign_prompt_fill(palette))
             .stroke(egui::Stroke::new(
-                crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                crate::ui::shared::theme_global::prompt_stroke(),
+                REDESIGN_BORDER_WIDTH_PX,
+                redesign_prompt_stroke(palette),
             ))
-            .corner_radius(egui::CornerRadius::same(7))
-            .min_size(egui::vec2(0.0, 18.0)),
+            .corner_radius(egui::CornerRadius::same(REDESIGN_BIO_PILL_RADIUS_U8))
+            .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX)),
     )
     .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS)
     .clicked()
@@ -112,7 +124,7 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
     )
 }
 
-fn render_prompt_toolbar_popup(ui: &mut egui::Ui, state: &mut WizardState) {
+fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState, palette: ThemePalette) {
     let title = state.step2.prompt_popup_title.clone();
     let entries = prompt_popup_nav::collect_active_prompt_toolbar_entries(state);
     let mut open = state.step2.prompt_popup_open;
@@ -143,17 +155,19 @@ fn render_prompt_toolbar_popup(ui: &mut egui::Ui, state: &mut WizardState) {
                                             crate::ui::shared::typography_global::monospace(
                                                 component_id.to_string(),
                                             )
-                                            .color(
-                                                crate::ui::shared::theme_global::accent_numbers(),
-                                            );
+                                            .color(redesign_accent_numbers(palette));
                                         if ui
                                             .add(
                                                 egui::Button::new(button_text)
-                                                    .min_size(egui::vec2(42.0, 22.0))
-                                                    .fill(ui.visuals().widgets.inactive.bg_fill)
-                                                    .stroke(
-                                                        ui.visuals().widgets.inactive.bg_stroke,
-                                                    ),
+                                                    .min_size(egui::vec2(
+                                                        42.0,
+                                                        REDESIGN_BIO_SMALL_BUTTON_HEIGHT_PX,
+                                                    ))
+                                                    .fill(redesign_shell_bg(palette))
+                                                    .stroke(egui::Stroke::new(
+                                                        REDESIGN_BORDER_WIDTH_PX,
+                                                        redesign_border_soft(palette),
+                                                    )),
                                             )
                                             .clicked()
                                         {

@@ -103,6 +103,8 @@ pub(crate) struct ModDownloadSource {
     #[serde(default)]
     pub(crate) source_default: bool,
     #[serde(default)]
+    pub(crate) source_default_explicit: bool,
+    #[serde(default)]
     pub(crate) url: String,
     #[serde(default)]
     pub(crate) github: Option<String>,
@@ -213,6 +215,14 @@ pub(crate) fn load_user_mod_download_source_block(
     allow_source_id_change: bool,
 ) -> Result<String, String> {
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
+    if !allow_source_id_change {
+        return Ok(load_mod_download_sources()
+            .resolve_source(tp2, Some(source_id))
+            .map_or_else(
+                || template_source_block(label, source_id),
+                |source| source_to_editor_block(&source),
+            ));
+    }
     let path = mod_downloads_user_path();
     let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
     if let Some(block) = find_mod_block(&content, tp2)
@@ -220,14 +230,7 @@ pub(crate) fn load_user_mod_download_source_block(
     {
         return Ok(source_block);
     }
-    if allow_source_id_change {
-        Ok(template_source_block(label, source_id))
-    } else {
-        Ok(load_mod_download_sources()
-            .resolve_source(tp2, Some(source_id))
-            .map(|source| source_to_editor_block(&source))
-            .unwrap_or_else(|| template_source_block(label, source_id)))
-    }
+    Ok(template_source_block(label, source_id))
 }
 
 pub(crate) fn save_user_mod_download_source_block(
@@ -256,7 +259,7 @@ pub(crate) fn save_user_mod_download_source_block(
             edited_source_id.trim()
         ));
     }
-    let source_input = normalize_source_save_input(tp2, label, source_block)?;
+    let source_input = normalize_source_save_input(tp2, label, source_block);
     let target_mod_exists = find_mod_block(&content, &source_input.tp2).is_some()
         || !load_mod_download_sources()
             .find_sources(&source_input.tp2)
@@ -404,74 +407,70 @@ struct SourceSaveInput {
     has_mod_parent: bool,
 }
 
-fn normalize_source_save_input(
-    tp2: &str,
-    label: &str,
-    source_block: &str,
-) -> Result<SourceSaveInput, String> {
+fn normalize_source_save_input(tp2: &str, label: &str, source_block: &str) -> SourceSaveInput {
     let Ok(parsed) = toml::from_str::<ModDownloadsFile>(source_block) else {
-        return Ok(SourceSaveInput {
+        return SourceSaveInput {
             tp2: tp2.to_string(),
             label: label.to_string(),
             source_block: source_block.to_string(),
             has_mod_parent: false,
-        });
+        };
     };
     let Some(mod_overlay) = parsed.mods.first() else {
-        return Ok(SourceSaveInput {
+        return SourceSaveInput {
             tp2: tp2.to_string(),
             label: label.to_string(),
             source_block: source_block.to_string(),
             has_mod_parent: false,
-        });
+        };
     };
     let Some(parsed_tp2) = mod_overlay.source.tp2.as_deref() else {
-        return Ok(SourceSaveInput {
+        return SourceSaveInput {
             tp2: tp2.to_string(),
             label: label.to_string(),
             source_block: source_block.to_string(),
             has_mod_parent: false,
-        });
+        };
     };
     let Some(parsed_label) = mod_overlay.source.name.as_deref() else {
-        return Ok(SourceSaveInput {
+        return SourceSaveInput {
             tp2: tp2.to_string(),
             label: label.to_string(),
             source_block: source_block.to_string(),
             has_mod_parent: false,
-        });
+        };
     };
     let Some((source_start, source_end)) = source_block_ranges(source_block).first().copied()
     else {
-        return Ok(SourceSaveInput {
+        return SourceSaveInput {
             tp2: parsed_tp2.trim().to_string(),
             label: parsed_label.trim().to_string(),
             source_block: source_block.to_string(),
             has_mod_parent: false,
-        });
+        };
     };
     if parsed_tp2.trim().is_empty() || parsed_label.trim().is_empty() {
-        return Ok(SourceSaveInput {
+        return SourceSaveInput {
             tp2: tp2.to_string(),
             label: label.to_string(),
             source_block: source_block.to_string(),
             has_mod_parent: false,
-        });
+        };
     }
     if mod_overlay.sources.is_empty() {
-        return Ok(SourceSaveInput {
+        return SourceSaveInput {
             tp2: parsed_tp2.trim().to_string(),
             label: parsed_label.trim().to_string(),
             source_block: source_block.to_string(),
             has_mod_parent: false,
-        });
+        };
     }
-    Ok(SourceSaveInput {
+    SourceSaveInput {
         tp2: parsed_tp2.trim().to_string(),
         label: parsed_label.trim().to_string(),
         source_block: source_block[source_start..source_end].trim().to_string(),
         has_mod_parent: true,
-    })
+    }
 }
 
 fn new_source_parent_error() -> String {
@@ -713,6 +712,7 @@ const SOURCE_BLOCK_FIELD_ORDER: &[&str] = &[
     "branch",
     "asset",
     "subdir_require",
+    "config_files",
     "aliases",
     "tp2_rename",
     "pkg_windows",
@@ -802,6 +802,17 @@ fn source_to_editor_block(source: &ModDownloadSource) -> String {
             escape_toml_string(subdir_require)
         ));
     }
+    if !source.config_files.is_empty() {
+        lines.push(format!(
+            "config_files = [{}]",
+            source
+                .config_files
+                .iter()
+                .map(|config_file| format!("\"{}\"", escape_toml_string(config_file)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
     if !source.aliases.is_empty() {
         lines.push(format!(
             "aliases = [{}]",
@@ -831,6 +842,9 @@ fn source_to_editor_block(source: &ModDownloadSource) -> String {
     }
     if let Some(pkg_macos) = source.pkg_macos.as_ref() {
         lines.push(format!("pkg_macos = \"{}\"", escape_toml_string(pkg_macos)));
+    }
+    if source.source_default && source.source_default_explicit {
+        lines.push("default = true".to_string());
     }
     lines.join("\n")
 }
@@ -910,11 +924,11 @@ fn write_if_changed(path: &Path, content: &str) -> io::Result<()> {
     }
 }
 
-fn default_mod_downloads_content() -> &'static str {
+const fn default_mod_downloads_content() -> &'static str {
     include_str!("../config/default_mod_downloads.toml")
 }
 
-fn user_mod_downloads_content() -> &'static str {
+const fn user_mod_downloads_content() -> &'static str {
     include_str!("../config/user_mod_downloads.toml")
 }
 
@@ -1009,6 +1023,9 @@ fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSour
     }
     if let Some(source_label) = overlay.source_label {
         target.source_label = source_label;
+    }
+    if overlay.source_default_explicit {
+        target.source_default_explicit = true;
     }
     if overlay.source_default {
         target.source_default = true;
@@ -1199,81 +1216,15 @@ fn apply_source_variant_overlay(
 fn normalize_source(source: &mut ModDownloadSource) {
     source.name = source.name.trim().to_string();
     source.tp2 = source.tp2.trim().to_string();
-    source.aliases = source
-        .aliases
-        .iter()
-        .map(|alias| alias.trim().to_string())
-        .filter(|alias| !alias.is_empty())
-        .collect();
+    source.aliases = trimmed_nonempty_sorted(&source.aliases, false);
     source.aliases.dedup();
-    source.config_files = source
-        .config_files
-        .iter()
-        .map(|config_file| config_file.trim().to_string())
-        .filter(|config_file| !config_file.is_empty())
-        .collect();
-    source.config_files.sort();
+    source.config_files = trimmed_nonempty_sorted(&source.config_files, true);
     source.config_files.dedup();
-    source.tp2_rename = source.tp2_rename.take().and_then(|rename| {
-        let from = rename.from.trim().to_string();
-        let to = rename.to.trim().to_string();
-        (!from.is_empty() && !to.is_empty()).then_some(ModDownloadTp2Rename { from, to })
-    });
-    source.source_id = source.source_id.trim().to_string();
-    if source.source_id.is_empty() {
-        source.source_id = "primary".to_string();
-    }
-    source.source_label = source.source_label.trim().to_string();
-    if source.source_label.is_empty() {
-        source.source_label = source.source_id.clone();
-    }
+    source.tp2_rename = normalize_tp2_rename(source.tp2_rename.take());
+    normalize_source_identity(source);
     source.url = source.url.trim().to_string();
-    source.github = source
-        .github
-        .take()
-        .map(|github| github.trim().to_string())
-        .filter(|github| !github.is_empty());
-    source.exact_github = source
-        .exact_github
-        .iter()
-        .map(|github| github.trim().to_string())
-        .filter(|github| !github.is_empty())
-        .collect();
-    if let Some(primary) = source.github.as_deref() {
-        source
-            .exact_github
-            .retain(|github| !github.eq_ignore_ascii_case(primary));
-    }
-    source.channel = source
-        .channel
-        .take()
-        .map(|channel| channel.trim().to_string())
-        .filter(|channel| !channel.is_empty());
-    source.tag = source
-        .tag
-        .take()
-        .map(|tag| tag.trim().to_string())
-        .filter(|tag| !tag.is_empty());
-    source.commit = source
-        .commit
-        .take()
-        .map(|commit| commit.trim().to_string())
-        .filter(|commit| !commit.is_empty());
-    source.branch = source
-        .branch
-        .take()
-        .map(|branch| branch.trim().to_string())
-        .filter(|branch| !branch.is_empty());
-    source.asset = source
-        .asset
-        .take()
-        .map(|asset| asset.trim().to_string())
-        .filter(|asset| !asset.is_empty());
-    source.subdir_require = source
-        .subdir_require
-        .take()
-        .map(|subdir_require| subdir_require.trim().to_string())
-        .filter(|subdir_require| !subdir_require.is_empty());
+    normalize_github_fields(source);
+    normalize_ref_fields(source);
     if source.commit.is_some() {
         source.channel = None;
         source.tag = None;
@@ -1301,21 +1252,86 @@ fn normalize_source(source: &mut ModDownloadSource) {
         source.pkg_macos = None;
         return;
     }
-    source.pkg_windows = source
-        .pkg_windows
-        .take()
-        .map(|pkg| pkg.trim().to_string())
-        .filter(|pkg| !pkg.is_empty());
-    source.pkg_linux = source
-        .pkg_linux
-        .take()
-        .map(|pkg| pkg.trim().to_string())
-        .filter(|pkg| !pkg.is_empty());
-    source.pkg_macos = source
-        .pkg_macos
-        .take()
-        .map(|pkg| pkg.trim().to_string())
-        .filter(|pkg| !pkg.is_empty());
+    normalize_package_fields(source);
+}
+
+fn trimmed_nonempty_sorted(values: &[String], sort: bool) -> Vec<String> {
+    let mut out: Vec<String> = values
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+    if sort {
+        out.sort();
+    }
+    out
+}
+
+fn normalize_tp2_rename(rename: Option<ModDownloadTp2Rename>) -> Option<ModDownloadTp2Rename> {
+    rename.and_then(|rename| {
+        let from = rename.from.trim().to_string();
+        let to = rename.to.trim().to_string();
+        (!from.is_empty() && !to.is_empty()).then_some(ModDownloadTp2Rename { from, to })
+    })
+}
+
+fn normalize_source_identity(source: &mut ModDownloadSource) {
+    source.source_id = source.source_id.trim().to_string();
+    if source.source_id.is_empty() {
+        source.source_id = "primary".to_string();
+    }
+    source.source_label = source.source_label.trim().to_string();
+    if source.source_label.is_empty() {
+        source.source_label.clone_from(&source.source_id);
+    }
+}
+
+fn normalize_github_fields(source: &mut ModDownloadSource) {
+    source.github = trim_option(source.github.take());
+    source.exact_github = trimmed_nonempty_sorted(&source.exact_github, false);
+    if let Some(primary) = source.github.as_deref() {
+        source
+            .exact_github
+            .retain(|github| !github.eq_ignore_ascii_case(primary));
+    }
+}
+
+fn normalize_ref_fields(source: &mut ModDownloadSource) {
+    source.channel = normalize_channel(source.channel.take());
+    source.tag = trim_option(source.tag.take());
+    source.commit = trim_option(source.commit.take());
+    source.branch = trim_option(source.branch.take());
+    source.asset = trim_option(source.asset.take());
+    source.subdir_require = trim_option(source.subdir_require.take());
+}
+
+fn normalize_channel(channel: Option<String>) -> Option<String> {
+    trim_option(channel)
+        .map(|channel| {
+            if channel == "releases" {
+                "release".to_string()
+            } else {
+                channel
+            }
+        })
+        .filter(|channel| {
+            matches!(
+                channel.as_str(),
+                "release" | "pre-release" | "preonly" | "master" | "ifeellucky"
+            )
+        })
+}
+
+fn normalize_package_fields(source: &mut ModDownloadSource) {
+    source.pkg_windows = trim_option(source.pkg_windows.take());
+    source.pkg_linux = trim_option(source.pkg_linux.take());
+    source.pkg_macos = trim_option(source.pkg_macos.take());
+}
+
+fn trim_option(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn source_is_valid(source: &ModDownloadSource) -> bool {

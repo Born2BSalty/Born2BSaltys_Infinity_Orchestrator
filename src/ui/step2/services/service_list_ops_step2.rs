@@ -7,6 +7,7 @@ use crate::ui::step2::tree_selection_rules_step2::{
     enforce_tp2_same_mod_exclusive_after_bulk,
 };
 
+#[must_use]
 pub fn mod_matches_filter(mod_state: &Step2ModState, filter: &str) -> bool {
     if filter.is_empty() {
         return true;

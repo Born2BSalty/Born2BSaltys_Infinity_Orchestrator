@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::HashSet;
+use std::hash::BuildHasher;
 
 use super::log_apply_keys::{
     log_lookup_keys, mod_lookup_keys_for_mod, normalize_path_key, tp2_lookup_keys,
@@ -9,7 +10,7 @@ use super::log_apply_keys::{
 use crate::app::state::{Step2ComponentState, Step2ModState};
 use crate::mods::component::Component;
 
-pub fn normalize_component_name(value: &str) -> String {
+pub(crate) fn normalize_component_name(value: &str) -> String {
     let mut s = value.replace(['\u{2013}', '\u{2014}'], "-");
     if let Some((head, tail)) = s.rsplit_once(':') {
         let t = tail.trim();
@@ -26,7 +27,7 @@ pub fn normalize_component_name(value: &str) -> String {
         .to_ascii_lowercase()
 }
 
-pub fn parse_component_tp2_from_raw(raw: &str) -> Option<String> {
+pub(crate) fn parse_component_tp2_from_raw(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if !trimmed.starts_with('~') {
         return None;
@@ -37,7 +38,7 @@ pub fn parse_component_tp2_from_raw(raw: &str) -> Option<String> {
     Some(normalize_path_key(&rest[..end]))
 }
 
-pub fn installed_component_display_name(installed: &Component) -> String {
+pub(crate) fn installed_component_display_name(installed: &Component) -> String {
     if installed.sub_component.trim().is_empty() {
         installed.component_name.clone()
     } else {
@@ -49,13 +50,13 @@ pub fn installed_component_display_name(installed: &Component) -> String {
     }
 }
 
-pub fn tp2_compatible(child_tp2_norm: &str, target_tp2_norm: &str) -> bool {
+pub(crate) fn tp2_compatible(child_tp2_norm: &str, target_tp2_norm: &str) -> bool {
     let child_keys: HashSet<String> = tp2_lookup_keys(child_tp2_norm).into_iter().collect();
     let target_keys: HashSet<String> = tp2_lookup_keys(target_tp2_norm).into_iter().collect();
     !child_keys.is_disjoint(&target_keys)
 }
 
-pub fn is_eet_end_line(installed: &Component) -> bool {
+pub(crate) fn is_eet_end_line(installed: &Component) -> bool {
     let tp2 = normalize_path_key(format!("{}\\{}", installed.name, installed.tp_file).as_str());
     if tp2 != normalize_path_key(r"EET_END\EET_END.TP2") {
         return false;
@@ -70,7 +71,7 @@ pub fn is_eet_end_line(installed: &Component) -> bool {
     target_name == expected_name
 }
 
-pub fn try_apply_eet_end_fallback(
+pub(crate) fn try_apply_eet_end_fallback(
     mods: &mut [Step2ModState],
     installed: &Component,
     next_order: &mut usize,
@@ -114,7 +115,10 @@ pub fn try_apply_eet_end_fallback(
     false
 }
 
-pub fn is_allowed_tp2(allow: &HashSet<String>, installed: &Component) -> bool {
+pub(crate) fn is_allowed_tp2<S: BuildHasher>(
+    allow: &HashSet<String, S>,
+    installed: &Component,
+) -> bool {
     let keys = log_lookup_keys(installed.name.as_str(), installed.tp_file.as_str());
     keys.iter().any(|k| allow.contains(k))
 }

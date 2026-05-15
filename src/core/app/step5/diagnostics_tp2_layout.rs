@@ -208,8 +208,7 @@ fn count_ext_files_recursive(
         let is_match = path
             .extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case(ext))
-            .unwrap_or(false);
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext));
         if is_match {
             *total = total.saturating_add(1);
         }

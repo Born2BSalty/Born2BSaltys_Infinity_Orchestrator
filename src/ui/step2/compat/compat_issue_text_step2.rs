@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-pub(crate) mod compat_popup_issue_text_explain {
+pub mod compat_popup_issue_text_explain {
     use crate::app::compat_issue_text::issue_summary as core_issue_summary;
     use crate::ui::step2::compat_types_step2::CompatIssueDisplay;
 
@@ -17,6 +17,6 @@ pub(crate) mod compat_popup_issue_text_explain {
     }
 }
 
-pub(crate) mod compat_popup_issue_text_kind {
+pub mod compat_popup_issue_text_kind {
     pub(crate) use crate::app::compat_issue_text::human_kind;
 }

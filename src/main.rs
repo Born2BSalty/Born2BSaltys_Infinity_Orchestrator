@@ -6,28 +6,9 @@
 use anyhow::Result;
 use clap::Parser;
 
-#[path = "core/app/mod.rs"]
-mod app;
-#[path = "core/cli/mod.rs"]
-mod cli;
-#[path = "core/config/mod.rs"]
-mod config;
-#[path = "core/install/mod.rs"]
-mod install;
-#[path = "core/logging/mod.rs"]
-mod logging;
-#[path = "core/mods/mod.rs"]
-mod mods;
-#[path = "core/parser/mod.rs"]
-mod parser;
-#[path = "core/platform_defaults.rs"]
-mod platform_defaults;
-mod settings;
-mod ui;
-
-use cli::args::{Cli, Command};
-use config::options;
-use logging::setup;
+use bio::cli::args::{Cli, Command};
+use bio::config::options;
+use bio::logging::setup;
 
 fn main() -> Result<()> {
     let mut cli = Cli::parse();
@@ -37,8 +18,8 @@ fn main() -> Result<()> {
     setup::init(&cli.log_level)?;
     if let Some(command) = options::from_cli(&cli) {
         match &command {
-            options::AppCommandConfig::Gui { dev_mode } => ui::run(*dev_mode)?,
-            _ => app::dispatch::run(&command)?,
+            options::AppCommandConfig::Gui { dev_mode } => bio::ui::run(*dev_mode)?,
+            _ => bio::app::dispatch::run(&command)?,
         }
     }
     Ok(())

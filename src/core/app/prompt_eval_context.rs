@@ -4,9 +4,10 @@
 use std::collections::HashSet;
 
 use crate::app::state::{Step2ModState, WizardState};
-use crate::parser::prompt_eval_expr::{PromptEvalContext, normalize_tp2_stem};
+use crate::parser::{PromptEvalContext, normalize_tp2_stem};
 
-pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
+#[must_use]
+pub(crate) fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
     let mut checked_components = HashSet::<(String, String)>::new();
     collect_checked_components(&state.step2.bgee_mods, &mut checked_components);
     collect_checked_components(&state.step2.bg2ee_mods, &mut checked_components);

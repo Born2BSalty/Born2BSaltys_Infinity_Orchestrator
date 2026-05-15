@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
+use super::{Token, tokenize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ParsedComponentRequirement {
-    pub(crate) raw_line: String,
-    pub(crate) targets: Vec<ParsedDependencyTarget>,
-    pub(crate) message: Option<String>,
+    pub raw_line: String,
+    pub targets: Vec<ParsedDependencyTarget>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ParsedDependencyTarget {
-    pub(crate) target_mod: String,
-    pub(crate) target_component_id: String,
+    pub target_mod: String,
+    pub target_component_id: String,
 }
 
 pub(crate) fn collect_component_requirements(block: &[&str]) -> Vec<ParsedComponentRequirement> {
@@ -223,7 +223,7 @@ fn is_negated_call_context(tokens: &[Token], index: usize) -> bool {
     while cursor > 0 {
         cursor -= 1;
         match tokens.get(cursor) {
-            Some(Token::LParen) => continue,
+            Some(Token::LParen) => {}
             Some(Token::Bang | Token::Not) => return true,
             _ => return false,
         }
@@ -239,7 +239,7 @@ pub(crate) fn parse_negated_mod_is_installed_targets(
     let mut out = Vec::<ParsedDependencyTarget>::new();
 
     while index < tokens.len() {
-        if !matches!(tokens.get(index), Some(Token::Bang) | Some(Token::Not)) {
+        if !matches!(tokens.get(index), Some(Token::Bang | Token::Not)) {
             index += 1;
             continue;
         }
@@ -332,10 +332,7 @@ pub(crate) fn normalize_component_id(value: &str) -> Option<String> {
     let trimmed = value
         .trim()
         .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
-    let digits: String = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
+    let digits: String = trimmed.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         return None;
     }
@@ -349,11 +346,9 @@ pub(crate) fn normalize_component_id(value: &str) -> Option<String> {
 
 fn normalize_mod_key(value: &str) -> String {
     let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
+    let file = lower
+        .rfind(['/', '\\'])
+        .map_or(lower.as_str(), |idx| &lower[idx + 1..]);
     let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
     without_ext
         .strip_prefix("setup-")

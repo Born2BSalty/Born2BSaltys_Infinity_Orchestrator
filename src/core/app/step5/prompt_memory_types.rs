@@ -42,34 +42,34 @@ pub(super) struct PromptAnswerDiskEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PromptAnswerEntry {
+pub(crate) struct PromptAnswerEntry {
     #[serde(default)]
-    pub alias: String,
-    pub answer: String,
+    pub(crate) alias: String,
+    pub(crate) answer: String,
     #[serde(default = "default_enabled")]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default)]
-    pub preview: String,
+    pub(crate) preview: String,
     #[serde(default)]
-    pub component_key: String,
+    pub(crate) component_key: String,
     #[serde(default)]
-    pub tp2_file: String,
+    pub(crate) tp2_file: String,
     #[serde(default)]
-    pub component_id: String,
+    pub(crate) component_id: String,
     #[serde(default)]
-    pub component_name: String,
+    pub(crate) component_name: String,
     #[serde(default)]
-    pub prompt_kind: String,
+    pub(crate) prompt_kind: String,
     #[serde(default)]
-    pub source: String,
+    pub(crate) source: String,
     #[serde(default)]
-    pub captured_at: u64,
+    pub(crate) captured_at: u64,
     #[serde(default)]
-    pub last_used_at: u64,
+    pub(crate) last_used_at: u64,
     #[serde(default)]
-    pub hit_count: u64,
+    pub(crate) hit_count: u64,
 }
 
-pub(super) fn default_enabled() -> bool {
+pub(super) const fn default_enabled() -> bool {
     false
 }

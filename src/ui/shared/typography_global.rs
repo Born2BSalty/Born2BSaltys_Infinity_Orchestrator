@@ -8,6 +8,7 @@ use std::path::Path;
 pub const SIZE_SECTION_TITLE: f32 = 14.0;
 pub const SIZE_PILL_TEXT: f32 = 11.0;
 
+#[must_use]
 pub fn section_title(text: &str) -> egui::RichText {
     egui::RichText::new(text).strong().size(SIZE_SECTION_TITLE)
 }

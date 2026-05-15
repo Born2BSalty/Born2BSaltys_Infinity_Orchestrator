@@ -36,12 +36,12 @@ pub(crate) fn try_auto_answer_prompt(
     let line_count = prompt_info.line_count;
     let char_count = prompt_info.char_count;
     let has_scripted_candidate = term.peek_next_scripted_input_for_current().is_some();
-    let prompt_kind = term.prompt_kind_name(&prompt_info).to_string();
+    let prompt_kind = EmbeddedTerminal::prompt_kind_name(&prompt_info).to_string();
     let prompt_signature = if has_scripted_candidate {
         let component_key = term.current_scripted_component_key().unwrap_or_default();
-        format!("scripted|{}|{}", component_key, prompt_kind)
+        format!("scripted|{component_key}|{prompt_kind}")
     } else {
-        format!("{}|{}", prompt_key, prompt_kind)
+        format!("{prompt_key}|{prompt_kind}")
     };
     let now_ms = now_unix_millis();
     super::readiness::update_prompt_readiness(state, &prompt_signature, now_ms);
@@ -146,7 +146,7 @@ pub(crate) fn send_manual_input(state: &mut WizardState, term: &mut EmbeddedTerm
     if let Some(prompt_info) = term.current_prompt_info() {
         let ctx = prompt_context(
             term,
-            term.prompt_kind_name(&prompt_info).to_string(),
+            EmbeddedTerminal::prompt_kind_name(&prompt_info).to_string(),
             "manual",
         );
         prompt_memory::remember_answer_with_context(
@@ -165,11 +165,10 @@ fn now_unix_millis() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-fn adaptive_prompt_debounce_ms(
+const fn adaptive_prompt_debounce_ms(
     base_delay_ms: u64,
     option_count: usize,
     line_count: usize,

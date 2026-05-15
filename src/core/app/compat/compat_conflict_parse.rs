@@ -79,16 +79,16 @@ fn conflict_cache() -> &'static Mutex<HashMap<String, CachedConflicts>> {
 }
 
 fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
-    match fs::metadata(tp2_path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(tp2_path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 fn collect_component_conflicts(
@@ -130,8 +130,7 @@ fn parse_conflict_line(line: &str, tra_map: &HashMap<String, String>) -> Vec<Com
             .and_then(|value| resolve_message_token(&value, tra_map));
         let next_start = upper[index..]
             .find("FORBID_COMPONENT")
-            .map(|offset| index + offset)
-            .unwrap_or(trimmed.len());
+            .map_or(trimmed.len(), |offset| index + offset);
         if !target_mod.is_empty() {
             out.push(ComponentConflict {
                 raw_line: trimmed[start..next_start].trim().to_string(),
@@ -218,10 +217,7 @@ fn normalize_component_id(value: &str) -> Option<String> {
     let trimmed = value
         .trim()
         .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
-    let digits: String = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
+    let digits: String = trimmed.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         return None;
     }

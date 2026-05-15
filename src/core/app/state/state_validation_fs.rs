@@ -58,8 +58,7 @@ pub(super) fn has_tp2_within_depth(root: &Path, depth: usize) -> bool {
                 let is_tp2 = path
                     .extension()
                     .and_then(|value| value.to_str())
-                    .map(|ext| ext.eq_ignore_ascii_case("tp2"))
-                    .unwrap_or(false);
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("tp2"));
                 if is_tp2 {
                     return true;
                 }

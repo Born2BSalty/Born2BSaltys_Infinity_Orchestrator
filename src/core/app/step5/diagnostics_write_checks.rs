@@ -10,25 +10,25 @@ use crate::app::state::WizardState;
 use crate::platform_defaults::{resolve_mod_installer_binary, resolve_weidu_binary};
 
 #[derive(Debug, Clone)]
-pub struct DiagnosticsContext {
-    pub dev_mode: bool,
-    pub exe_fingerprint: String,
+pub(crate) struct DiagnosticsContext {
+    pub(crate) dev_mode: bool,
+    pub(crate) exe_fingerprint: String,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct AppDataCopySummary {
-    pub copied: Vec<PathBuf>,
-    pub missing: Vec<String>,
+pub(crate) struct AppDataCopySummary {
+    pub(crate) copied: Vec<PathBuf>,
+    pub(crate) missing: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct WriteCheckSummary {
-    pub lines: Vec<String>,
+pub(crate) struct WriteCheckSummary {
+    pub(crate) lines: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Tp2LayoutSummary {
-    pub lines: Vec<String>,
+pub(crate) struct Tp2LayoutSummary {
+    pub(crate) lines: Vec<String>,
 }
 
 pub(super) fn run_write_checks(state: &WizardState, ts: u64) -> WriteCheckSummary {
@@ -36,113 +36,37 @@ pub(super) fn run_write_checks(state: &WizardState, ts: u64) -> WriteCheckSummar
     let s = &state.step1;
     let mut seen: HashSet<String> = HashSet::new();
 
-    push_dir_check("Mods Folder", &s.mods_folder, ts, &mut seen, &mut summary);
-    push_dir_check(
-        "Generate Directory",
-        &s.generate_directory,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "WeiDU log folder",
-        &s.weidu_log_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "BGEE game folder",
-        &s.bgee_game_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "BG2EE game folder",
-        &s.bg2ee_game_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "EET BGEE game folder",
-        &s.eet_bgee_game_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "EET BG2EE game folder",
-        &s.eet_bg2ee_game_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "BGEE log folder",
-        &s.bgee_log_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "BG2EE log folder",
-        &s.bg2ee_log_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "EET BGEE log folder",
-        &s.eet_bgee_log_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "EET BG2EE log folder",
-        &s.eet_bg2ee_log_folder,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "EET pre directory",
-        &s.eet_pre_dir,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_dir_check(
-        "EET new directory",
-        &s.eet_new_dir,
+    push_dir_checks(
+        &[
+            ("Mods Folder", &s.mods_folder),
+            ("Generate Directory", &s.generate_directory),
+            ("WeiDU log folder", &s.weidu_log_folder),
+            ("BGEE game folder", &s.bgee_game_folder),
+            ("BG2EE game folder", &s.bg2ee_game_folder),
+            ("EET BGEE game folder", &s.eet_bgee_game_folder),
+            ("EET BG2EE game folder", &s.eet_bg2ee_game_folder),
+            ("BGEE log folder", &s.bgee_log_folder),
+            ("BG2EE log folder", &s.bg2ee_log_folder),
+            ("EET BGEE log folder", &s.eet_bgee_log_folder),
+            ("EET BG2EE log folder", &s.eet_bg2ee_log_folder),
+            ("EET pre directory", &s.eet_pre_dir),
+            ("EET new directory", &s.eet_new_dir),
+        ],
         ts,
         &mut seen,
         &mut summary,
     );
 
     let weidu_binary = resolve_weidu_binary(&s.weidu_binary);
-    push_file_check("WeiDU binary", &weidu_binary, ts, &mut seen, &mut summary);
     let mod_installer_binary = resolve_mod_installer_binary(&s.mod_installer_binary);
-    push_file_check(
-        "mod_installer binary",
-        &mod_installer_binary,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_file_check("WeiDU log file", &s.log_file, ts, &mut seen, &mut summary);
-    push_file_check(
-        "BGEE WeiDU log file",
-        &s.bgee_log_file,
-        ts,
-        &mut seen,
-        &mut summary,
-    );
-    push_file_check(
-        "BG2EE WeiDU log file",
-        &s.bg2ee_log_file,
+    push_file_checks(
+        &[
+            ("WeiDU binary", weidu_binary.as_str()),
+            ("mod_installer binary", mod_installer_binary.as_str()),
+            ("WeiDU log file", &s.log_file),
+            ("BGEE WeiDU log file", &s.bgee_log_file),
+            ("BG2EE WeiDU log file", &s.bg2ee_log_file),
+        ],
         ts,
         &mut seen,
         &mut summary,
@@ -154,6 +78,28 @@ pub(super) fn run_write_checks(state: &WizardState, ts: u64) -> WriteCheckSummar
             .push("INFO | write checks | no configured paths to test".to_string());
     }
     summary
+}
+
+fn push_dir_checks(
+    checks: &[(&str, &str)],
+    ts: u64,
+    seen: &mut HashSet<String>,
+    summary: &mut WriteCheckSummary,
+) {
+    for (label, raw) in checks {
+        push_dir_check(label, raw, ts, seen, summary);
+    }
+}
+
+fn push_file_checks(
+    checks: &[(&str, &str)],
+    ts: u64,
+    seen: &mut HashSet<String>,
+    summary: &mut WriteCheckSummary,
+) {
+    for (label, raw) in checks {
+        push_file_check(label, raw, ts, seen, summary);
+    }
 }
 
 fn push_dir_check(

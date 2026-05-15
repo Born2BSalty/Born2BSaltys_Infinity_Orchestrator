@@ -8,7 +8,7 @@ use crate::app::state::{ResumeTargets, Step1State};
 
 use super::target_prep::paths_point_to_same_dir;
 
-pub fn validate_runtime_prep_paths(step1: &Step1State) -> Result<(), String> {
+pub(crate) fn validate_runtime_prep_paths(step1: &Step1State) -> Result<(), String> {
     let mut checks: Vec<(&str, &str, &str)> = Vec::new();
     if step1.game_install == "EET" {
         if step1.new_pre_eet_dir_enabled {
@@ -55,14 +55,12 @@ pub fn validate_runtime_prep_paths(step1: &Step1State) -> Result<(), String> {
         let target_path = Path::new(target);
         if !target_path.exists() || !target_path.is_dir() {
             return Err(format!(
-                "Target directory must already exist and be a folder: {}",
-                target
+                "Target directory must already exist and be a folder: {target}"
             ));
         }
         if paths_point_to_same_dir(source_path, target_path) {
             return Err(format!(
-                "{source_label} and target directory cannot be the same: {}",
-                source
+                "{source_label} and target directory cannot be the same: {source}"
             ));
         }
     }
@@ -70,7 +68,7 @@ pub fn validate_runtime_prep_paths(step1: &Step1State) -> Result<(), String> {
     Ok(())
 }
 
-pub fn verify_targets_prepared(step1: &Step1State) -> Result<(), String> {
+pub(crate) fn verify_targets_prepared(step1: &Step1State) -> Result<(), String> {
     let mut targets: Vec<(&str, &str)> = Vec::new();
     if step1.game_install == "EET" {
         if step1.new_pre_eet_dir_enabled {
@@ -101,7 +99,7 @@ pub fn verify_targets_prepared(step1: &Step1State) -> Result<(), String> {
     Ok(())
 }
 
-pub fn validate_resume_paths(
+pub(crate) fn validate_resume_paths(
     step1: &Step1State,
     resume_targets: &ResumeTargets,
 ) -> Result<(), String> {
@@ -110,11 +108,11 @@ pub fn validate_resume_paths(
         let bg1_dir = resume_targets
             .bg1_game_dir
             .as_deref()
-            .unwrap_or(step1.eet_bgee_game_folder.trim());
+            .unwrap_or_else(|| step1.eet_bgee_game_folder.trim());
         let bg2_dir = resume_targets
             .bg2_game_dir
             .as_deref()
-            .unwrap_or(step1.eet_bg2ee_game_folder.trim());
+            .unwrap_or_else(|| step1.eet_bg2ee_game_folder.trim());
         checks.push(("Resume BGEE game directory", bg1_dir));
         checks.push(("Resume BG2EE/EET game directory", bg2_dir));
     } else {

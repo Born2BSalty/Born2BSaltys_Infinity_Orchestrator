@@ -6,7 +6,7 @@ use super::super::compat_mismatch_eval::{
     evaluate_requirement,
 };
 use super::guards::RequirementGuard;
-use crate::parser::compat_dependency_expr::{
+use crate::parser::{
     ParsedDependencyTarget, parse_mod_is_installed_dependency_targets,
     parse_negated_mod_is_installed_targets,
 };
@@ -99,11 +99,7 @@ pub(super) fn preferred_guard_hit(
         if priority == 2 {
             return Some(candidate);
         }
-        if best
-            .as_ref()
-            .map(|(current, _)| priority > *current)
-            .unwrap_or(true)
-        {
+        if best.as_ref().is_none_or(|(current, _)| priority > *current) {
             best = Some((priority, candidate));
         }
     }

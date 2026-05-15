@@ -11,8 +11,7 @@ use crate::app::component_details::{
 };
 use crate::app::controller::log_apply_match::parse_component_tp2_from_raw;
 use crate::app::state::{Step2Selection, WizardState};
-use crate::parser::weidu_component_line::parse_lang;
-use crate::parser::weidu_version::parse_version;
+use crate::parser::{parse_lang, parse_version};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SelectedDetailsData {

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::app_step2_update_check::{
     Step2PackageKind, Step2UpdateCheckOutcome, Step2UpdateCheckRequest,
 };
-use crate::parser::weidu_version::normalize_version_text;
+use crate::parser::normalize_version_text;
 
 pub(super) fn check_morpheus_mart_download_page(
     agent: &ureq::Agent,
@@ -127,7 +127,7 @@ fn version_from_filename(name: &str) -> Option<String> {
         .strip_suffix(".zip")
         .or_else(|| name.trim().strip_suffix(".7z"))
         .or_else(|| name.trim().strip_suffix(".rar"))
-        .unwrap_or(name.trim());
+        .unwrap_or_else(|| name.trim());
     let version = stem.rsplit_once('-')?.1.trim();
     if version.is_empty() {
         None

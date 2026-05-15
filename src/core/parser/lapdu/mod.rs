@@ -10,6 +10,7 @@ mod map_to_bio;
 mod model;
 mod runner;
 
+#[must_use]
 pub fn collect_prompt_summary_index(
     tp2_path: &Path,
     mods_root: &Path,

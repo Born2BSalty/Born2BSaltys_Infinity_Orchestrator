@@ -6,24 +6,25 @@ use std::collections::HashMap;
 use super::{EmbeddedTerminal, input, scripted_inputs};
 
 impl EmbeddedTerminal {
-    pub fn has_new_data(&self) -> bool {
+    #[must_use]
+    pub const fn has_new_data(&self) -> bool {
         self.has_new_data
     }
 
-    pub fn take_exit_event(&mut self) -> bool {
+    pub const fn take_exit_event(&mut self) -> bool {
         let had_exit = self.saw_exit_event;
         self.saw_exit_event = false;
         had_exit
     }
 
-    pub fn take_exit_code(&mut self) -> Option<i32> {
+    pub const fn take_exit_code(&mut self) -> Option<i32> {
         let code = self.last_exit_code;
         self.last_exit_code = None;
         code
     }
 
     pub fn send_line(&mut self, line: &str) {
-        self.log_bio_debug(&format!("send_line=\"{}\"", line));
+        self.log_bio_debug(&format!("send_line=\"{line}\""));
         input::send_line(self, line);
     }
 
@@ -53,6 +54,7 @@ impl EmbeddedTerminal {
         scripted_inputs::take_next_scripted_input_for_current(self)
     }
 
+    #[must_use]
     pub fn peek_next_scripted_input_for_current(&self) -> Option<&str> {
         scripted_inputs::peek_next_scripted_input_for_current(self)
     }

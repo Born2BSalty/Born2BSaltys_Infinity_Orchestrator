@@ -5,6 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 
 pub(crate) fn render_button(ui: &mut egui::Ui, state: &mut WizardState) {
     if ui
@@ -17,9 +18,10 @@ pub(crate) fn render_button(ui: &mut egui::Ui, state: &mut WizardState) {
 }
 
 pub(crate) fn render_window(
-    ui: &mut egui::Ui,
+    ui: &egui::Ui,
     state: &mut WizardState,
     terminal: Option<&EmbeddedTerminal>,
+    palette: ThemePalette,
 ) {
     if !state.step5.prompt_answers_window_open {
         return;
@@ -34,7 +36,7 @@ pub(crate) fn render_window(
             ui.set_min_size(ui.available_size());
             crate::ui::step5::prompt_answers_top_bar_step5::render_top_bar(ui, state, terminal);
             ui.separator();
-            crate::ui::step5::prompt_answers_table_step5::render_table(ui);
+            crate::ui::step5::prompt_answers_table_step5::render_table(ui, palette);
         });
 
     state.step5.prompt_answers_window_open = open;
