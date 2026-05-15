@@ -1145,7 +1145,7 @@ Disabling the unimplemented services (rather than letting the user click and sho
 
 A 2-column grid (`ui.columns(2, ...)` → exactly 50 / 50 split per the wireframe's `gridTemplateColumns: "1fr 1fr"`). Each row uses an end-capped layout: label left-aligned, optional unit hint to its right, input / toggle flush-right at the column edge. The control stops at the column boundary regardless of label or hint length so a long hint never pushes adjacent rows.
 
-**Gate-absorbed value fields.** Every ValueRow in this section follows the absorb-the-gate pattern: today's BIO pairs each value with a boolean "enable" gate; the redesign drops the boolean. An **empty / cleared** value field means "use BIO's hard-coded default" (shown in the input's placeholder text, e.g. `default 5`); a **filled** value field means "override with this value". Same expressive power, half the controls. See [Appendix A.15](#a15-bio-step-1-toggles-not-in-the-wireframes-advanced-tab) for the dropped gates.
+**Gate-absorbed value fields.** Every ValueRow in this section follows the absorb-the-gate pattern: today's BIO pairs each value with a boolean "enable" gate; the redesign drops the boolean. An **empty / cleared** value field means "use BIO's hard-coded default" (shown in the input's placeholder text, e.g. `default 5`); a **filled** value field means "override with this value". Same expressive power, half the controls. See [Appendix A.15](#a15-bio-step-1-toggles-not-in-the-wireframes-advanced-tab) for the dropped gates. **The placeholder numbers below are the live `Step1Settings::default()` values and are authoritative** — the wireframe mock's illustrative figures (`3`, `7200`, `1007`, …) are not; a placeholder that says `default N` must always equal BIO's actual runtime default for that field so the user sees what they'll really get on an empty field.
 
 **Left column — Timing & limits** (ValueRow components):
 
@@ -1156,7 +1156,7 @@ A 2-column grid (`ui.columns(2, ...)` → exactly 50 / 50 split per the wirefram
 - `Tick (dev)` (placeholder `default 500`, hint `ms`)
 - `Prompt context lookback` (placeholder `default 10`)
 
-**Right column — Install behavior** (ToggleRow components):
+**Right column — Install behavior** (ToggleRow components). The labels below are the redesign's terse rewrites and are **authoritative over the wireframe mock's longer phrasings** (`Sound cue when prompt input is required`, etc.). The `Casefold filename matching` row is **intentionally present** even though the wireframe mock omits it — it surfaces an existing BIO capability the mock simply didn't draw.
 
 - `Prompt sound cue` (hint `beep when a prompt needs you`, default on)
 - `Download missing mods` (hint `fetch GitHub/Weasel/Morpheus during install`, default on)

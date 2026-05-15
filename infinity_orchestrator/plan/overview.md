@@ -363,7 +363,7 @@ The `tweaks-panel.jsx` file is wireframe-iteration-only — its contents do not 
 - **H8** — The Phase 7 `registry_snapshot` mitigation is **dropped**. C5's rail-nav lock makes mid-install registry corruption moot (the user cannot navigate the orchestrator while an install runs; external mutation to `modlists.json` is out-of-scope for v1 alpha). Phase 7 P7.T3 simplified.
 - **H9** — Step 5's post-install buttons (`Return to Home`, `Open install folder`) are rendered **immediately above** BIO's embedded Step 5 panel, not below. Per SPEC §9.2 "next to the disabled Install button." BIO's `page_step5::render` puts the Install button at the top of its panel; the orchestrator's chrome row above the panel sits visually adjacent to it. Phase 7 P7.T5 updated. The alternative (replacing BIO's Step 5 body wholesale per C4) was rejected as too heavy for v1 alpha.
 - **H10** — Wireframe label is "Clear contents", not "Replace contents". Phase 5 P5.T9 updated.
-- **H11** — Per-edit debounced path validation is a real Phase 4 task (P4.T11b), not just an Open Question. Debounce window 500ms idle per keystroke.
+- **H11** — Per-edit debounced path validation is a real Phase 4 task (P4.T11b), not just an Open Question. Debounce window 200ms idle per keystroke (authoritative; matches SPEC §11.2 and `validate_debounce::DEBOUNCE_MS`).
 
 **What remains open (not addressed in this pass):**
 
