@@ -78,6 +78,16 @@ pub fn redesign_btn(
     let sense = if opts.disabled { egui::Sense::hover() } else { egui::Sense::click() };
     let (rect, response) = ui.allocate_exact_size(desired_size, sense);
 
+    // Wireframe `.sk-btn:active { transform: translate(1px, 1px) }` — while
+    // the pointer is held on the button, shift the whole drawing (shadow
+    // included, like a CSS transform) down-right 1px for a tactile press.
+    let pressed = !opts.disabled && response.is_pointer_button_down_on();
+    let rect = if pressed {
+        rect.translate(egui::vec2(1.0, 1.0))
+    } else {
+        rect
+    };
+
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         let alpha = if opts.disabled { 0.5 } else { 1.0 };

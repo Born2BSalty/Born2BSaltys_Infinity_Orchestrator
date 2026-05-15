@@ -100,9 +100,13 @@ pub fn render(
                 |ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     ui.label(
+                        // Wireframe card name is a plain `<Label>` (weight
+                        // 400) — not bold. poppins_medium is our nearest
+                        // non-bold UI weight; full primary color carries the
+                        // title hierarchy (meta below is faint).
                         egui::RichText::new(&entry.name)
                             .size(13.0)
-                            .family(egui::FontFamily::Name("poppins_bold".into()))
+                            .family(egui::FontFamily::Name("poppins_medium".into()))
                             .color(redesign_text_primary(palette)),
                     );
                     ui.label(

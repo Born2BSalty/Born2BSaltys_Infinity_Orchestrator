@@ -89,9 +89,12 @@ pub fn render(
         // 20px gap, then the detected-games block (wireframe `marginTop: 20`).
         ui.add_space(20.0);
         ui.label(
+            // Wireframe `<Label hand>` — 14px accent-deep, weight 400 (not
+            // bold). poppins_light is how we map the wireframe's hand-style
+            // labels elsewhere (e.g. the card meta line).
             egui::RichText::new("game installs detected")
                 .size(14.0)
-                .family(egui::FontFamily::Name("poppins_medium".into()))
+                .family(egui::FontFamily::Name("poppins_light".into()))
                 .color(redesign_accent_deep(palette)),
         );
         ui.add_space(6.0);
