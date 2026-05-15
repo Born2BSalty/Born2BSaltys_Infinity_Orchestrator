@@ -9,14 +9,20 @@
 //   - Sibling file in the same config dir; **never** merged into
 //     `bio_settings.json`.
 //   - Atomic write via temp file + rename, parent-dir auto-create.
-//   - Missing file returns `Ok(default)`; corrupt file returns an `anyhow`
-//     error (the Settings tab can surface this as a friendly banner — Phase
-//     4 ships with a log-and-default-fallback to keep the General tab
-//     functional even on first-launch with a malformed sibling file).
+//   - Missing file returns `Ok(default)`; corrupt / unreadable file returns
+//     an `anyhow` error. The orchestrator's policy on that error is
+//     **backup-and-default** (SPEC §13.14): rename the bad file aside via
+//     `backup_corrupt_file` then continue with `RedesignSettings::default()`.
+//     These are reconstructable UI preferences, not irreplaceable user data,
+//     so they do **not** get the registry's terminal-error treatment — but
+//     the bad file is preserved (not silently overwritten by the next write).
+//   - `load` itself stays pure: it never renames/mutates the file. The
+//     backup rename is an explicit caller step, mirroring `RegistryStore`.
 //
-// SPEC: §11.1.
+// SPEC: §11.1, §13.14.
 
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 
@@ -70,6 +76,22 @@ impl RedesignSettingsStore {
                 )
             }),
         }
+    }
+
+    /// Rename the on-disk file (if present) to
+    /// `bio_redesign_settings.json.corrupt-<unix-ts>` and return the new
+    /// path. Called by `OrchestratorApp::new` on the load-error path so a
+    /// corrupt preferences file is preserved for inspection instead of being
+    /// silently overwritten by the next debounced write. Mirrors
+    /// `RegistryStore::backup_corrupt_file`; `load` stays pure.
+    pub fn backup_corrupt_file(&self) -> std::io::Result<PathBuf> {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let new_path = self.path.with_extension(format!("json.corrupt-{ts}"));
+        std::fs::rename(&self.path, &new_path)?;
+        Ok(new_path)
     }
 
     /// Persist atomically via temp file + rename.
@@ -141,5 +163,33 @@ mod tests {
         let s2 = store.load().expect("load");
         assert_eq!(s2.user_name, "Alice");
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn corrupt_file_returns_err_and_load_stays_pure() {
+        let path = temp_path("corrupt");
+        std::fs::write(&path, b"{ not json").expect("write garbage");
+        let store = RedesignSettingsStore::new_with_path(&path);
+        assert!(store.load().is_err(), "corrupt file is an Err");
+        // load() must not mutate the file — backup is an explicit step.
+        let still_there = std::fs::read_to_string(&path).expect("file intact");
+        assert_eq!(still_there, "{ not json");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn backup_corrupt_file_renames_to_unix_ts_suffix() {
+        let path = temp_path("backup");
+        std::fs::write(&path, b"{ bad").expect("write");
+        let store = RedesignSettingsStore::new_with_path(&path);
+        let new_path = store.backup_corrupt_file().expect("rename");
+        assert!(!path.exists(), "original moved aside");
+        assert!(new_path.exists(), "backup created");
+        let name = new_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+        assert!(name.contains("corrupt-"), "name `{name}` has timestamp suffix");
+        let _ = std::fs::remove_file(&new_path);
     }
 }

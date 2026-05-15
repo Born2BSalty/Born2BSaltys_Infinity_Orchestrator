@@ -1400,13 +1400,14 @@ Writes happen at three moments:
 
 Crash / hard-kill behavior: because changes are written on each debounced interval, the worst case loss is the throttled window's worth of edits. Modlist registry writes (add / rename / delete / state transition) are individually atomic and don't queue.
 
-**Corrupt / missing state files — terminal error policy.** The redesign does **not** attempt clever recovery if a state file is corrupt or missing. Concretely:
+**Corrupt / missing state files.** Recovery policy splits by what the file holds. **Irreplaceable user data** (the modlist registry + per-modlist workspace state) gets a strict terminal-error policy — the redesign does **not** attempt clever recovery. **Reconstructable UI preferences** (`bio_redesign_settings.json`) get a lighter backup-and-default policy. Concretely:
 
-- **`modlists.json` corrupt or unreadable at app start** — the app surfaces a terminal error state on Home (or wherever it lands) explaining the file path and the parse failure. It does not silently rebuild, wipe, or partially load the file.
+- **`modlists.json` corrupt or unreadable at app start** — the app surfaces a terminal error state on Home (or wherever it lands) explaining the file path and the parse failure. It does not silently rebuild, wipe, or partially load the file. The corrupt file is renamed aside (`modlists.json.corrupt-<unix-ts>`) so it is preserved for the user to inspect or restore.
 - **`modlists/<id>/workspace.json` missing or corrupt** when the user opens that modlist — the workspace cannot load; surface the same terminal error. The registry entry stays (so the user can still Delete it from Home), but the workspace itself is unusable until the file is restored or the entry is deleted.
 - **State-file corruption discovered mid-install** — abort the install with a terminal error. Do not proceed with stale data.
+- **`bio_redesign_settings.json` corrupt or unreadable at app start** — **not** a terminal error. The orchestrator renames the bad file aside (`bio_redesign_settings.json.corrupt-<unix-ts>`), logs a warning, and continues with `RedesignSettings::default()`. These are reconstructable preferences (display name, theme, language, diagnostic + validate-on-startup toggles) — bricking the app over a corrupt prefs file would be disproportionate. The backup rename is what prevents the silent data loss of the next debounced write overwriting the unreadable file. `load()` itself stays pure; the rename is an explicit step in `OrchestratorApp::new`, mirroring `RegistryStore::backup_corrupt_file`.
 
-No auto-recovery, no "ignore and continue" path. The user must fix the underlying issue (restore from backup, delete the file, etc.) or remove the affected modlist.
+For the irreplaceable-data files: no auto-recovery, no "ignore and continue" path. The user must fix the underlying issue (restore from backup, delete the file, etc.) or remove the affected modlist.
 
 Workspace state stored per modlist:
 - order array per game tab

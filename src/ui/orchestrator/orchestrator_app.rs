@@ -197,8 +197,23 @@ impl OrchestratorApp {
             Err(err) => {
                 warn!(
                     target = "orchestrator",
-                    "bio_redesign_settings.json load failed: {err}; using defaults"
+                    "bio_redesign_settings.json load failed: {err}; backing up and using defaults"
                 );
+                // SPEC §13.14: redesign settings are reconstructable UI
+                // preferences, so they get backup-and-default (not the
+                // registry's terminal-error block). Move the bad file aside
+                // so the next debounced write can't silently overwrite it.
+                match redesign_settings_store.backup_corrupt_file() {
+                    Ok(backup) => warn!(
+                        target = "orchestrator",
+                        "backed up corrupt redesign settings to {}",
+                        backup.display()
+                    ),
+                    Err(backup_err) => warn!(
+                        target = "orchestrator",
+                        "failed backing up corrupt redesign settings: {backup_err}"
+                    ),
+                }
                 RedesignSettings::default()
             }
         };
