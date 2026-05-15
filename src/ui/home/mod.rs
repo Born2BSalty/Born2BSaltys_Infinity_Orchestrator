@@ -12,13 +12,16 @@
 //   - `game_installs_detected` — the detected-games lines.
 //   - `first_launch_setup_card`— the empty-registry setup CTA.
 //
-// Run 2 adds `confirm_delete` + `toast` (P5.T7 / T16 / T18); they are NOT
-// declared here yet (the modules don't exist this run).
+// Run 2 ("Home — actions live") adds:
+//   - `confirm_delete`         — Delete + Reinstall confirm bodies (P5.T7 / T18).
+//   - `toast`                  — bottom-center transient toast (P5.T16).
 
 pub mod add_a_modlist;
+pub mod confirm_delete;
 pub mod filter_chip;
 pub mod first_launch_setup_card;
 pub mod game_installs_detected;
 pub mod modlist_card;
 pub mod page_home;
 pub mod state_home;
+pub mod toast;

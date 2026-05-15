@@ -35,12 +35,15 @@
 use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
+use crate::registry::operations;
 use crate::ui::home::add_a_modlist::{self, AddAModlistAction};
-use crate::ui::home::state_home::{empty_filter_message, HomeFilter};
-use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card};
+use crate::ui::home::confirm_delete;
+use crate::ui::home::state_home::{empty_filter_message, HomeFilter, ToastMessage};
+use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card, toast};
 use crate::ui::home::modlist_card::ModlistCardActions;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::settings::state_settings::SettingsTab;
 use crate::ui::shared::format_relative::relative_time;
@@ -62,7 +65,21 @@ enum NavRequest {
     Workspace { modlist_id: String },
 }
 
-pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui::Context) {
+/// A non-navigation card intent (Kebab / button) carrying the target modlist
+/// id, collected during the read-only card render and applied after the
+/// immutable borrows end (same deferral pattern as `NavRequest`).
+enum CardIntent {
+    /// Copy the entry's import code to the clipboard + toast (P5.T2 / §3.2).
+    CopyImportCode(String),
+    /// Open the install folder in the OS file manager (P5.T17 / §3.2).
+    OpenInstallFolder(String),
+    /// Arm the Delete confirm dialog (P5.T7 / §3.1).
+    RequestDelete(String),
+    /// Arm the Reinstall confirm dialog (P5.T18 / §3.1).
+    RequestReinstall(String),
+}
+
+pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
     let palette = orchestrator.theme_palette;
 
     // ── Snapshot the registry into owned, render-order lists ──
@@ -96,6 +113,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
     );
 
     let mut nav_request: Option<NavRequest> = None;
+    let mut card_intent: Option<CardIntent> = None;
     // The effective filter for this frame (explicit choice, else SPEC §3.1
     // default derived from live counts). A chip click overrides it.
     let mut effective_filter = orchestrator
@@ -138,14 +156,18 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
 
                         ui.add_space(12.0);
 
-                        if let Some(act) = render_card_list(
+                        let (nav, intent) = render_card_list(
                             ui,
                             palette,
                             effective_filter,
                             &installed,
                             &in_progress,
-                        ) {
+                        );
+                        if let Some(act) = nav {
                             nav_request = Some(act);
+                        }
+                        if let Some(i) = intent {
+                            card_intent = Some(i);
                         }
                     }
                 });
@@ -192,6 +214,182 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
                     modlist_id: Some(modlist_id),
                 };
             }
+        }
+    }
+
+    // ── Card intents (Kebab / button) — applied after render borrows end ──
+    if let Some(intent) = card_intent {
+        apply_card_intent(orchestrator, ctx, intent);
+    }
+
+    // ── Confirm dialogs (P5.T7 / P5.T18) + toast (P5.T16) ──
+    // Rendered after the page body so they float above the destination
+    // content. Non-blocking per SPEC §10.1.
+    render_delete_confirm(orchestrator, ctx);
+    render_reinstall_confirm(orchestrator, ctx);
+    drive_toast(orchestrator, ctx);
+}
+
+/// Apply a non-navigation card intent. Copy / open run immediately;
+/// delete / reinstall arm the corresponding confirm dialog.
+fn apply_card_intent(
+    orchestrator: &mut OrchestratorApp,
+    ctx: &egui::Context,
+    intent: CardIntent,
+) {
+    match intent {
+        CardIntent::CopyImportCode(id) => {
+            // SPEC §3.2: writes the build's BIO-MODLIST-V1 code to the
+            // clipboard, shows the toast. The registry helper only resolves
+            // the code; the clipboard write is egui-built-in (no crate).
+            match operations::share_code_for(&id, &orchestrator.registry) {
+                Some(code) => {
+                    ctx.copy_text(code);
+                    let name = modlist_name(orchestrator, &id);
+                    orchestrator.home_screen_state.toast = Some(ToastMessage::success(
+                        format!("Copied import code for \"{name}\""),
+                    ));
+                }
+                None => {
+                    // No code yet (pre-Phase-7 in-progress build). Surface it
+                    // rather than silently doing nothing.
+                    let name = modlist_name(orchestrator, &id);
+                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(
+                        format!("No import code yet for \"{name}\""),
+                    ));
+                }
+            }
+        }
+        CardIntent::OpenInstallFolder(id) => open_install_folder_for(orchestrator, &id),
+        CardIntent::RequestDelete(id) => {
+            orchestrator.home_screen_state.delete_target = Some(id);
+        }
+        CardIntent::RequestReinstall(id) => {
+            orchestrator.home_screen_state.reinstall_target = Some(id);
+        }
+    }
+}
+
+/// P5.T17 — open the entry's install folder via the OS file manager. On
+/// failure (unset / missing folder) surface the error in the bottom-of-screen
+/// toast in its error tone (SPEC §3.2: "do not attempt to open or recreate
+/// the folder").
+fn open_install_folder_for(orchestrator: &mut OrchestratorApp, id: &str) {
+    let Some(entry) = orchestrator.registry.find(id).cloned() else {
+        return;
+    };
+    if let Err(msg) = operations::open_install_folder(&entry) {
+        orchestrator.home_screen_state.toast = Some(ToastMessage::error(msg));
+    }
+}
+
+/// The display name for an id, or a graceful fallback if the entry vanished.
+fn modlist_name(orchestrator: &OrchestratorApp, id: &str) -> String {
+    orchestrator
+        .registry
+        .find(id)
+        .map(|e| e.name.clone())
+        .unwrap_or_else(|| "modlist".to_string())
+}
+
+/// Render the Delete confirm if `delete_target` is armed. On confirm: call
+/// `operations::delete_modlist` (registry entry + guarded on-disk folder),
+/// then toast `Deleted "<name>"`. On cancel: clear the target, no change.
+fn render_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
+    let Some(id) = orchestrator.home_screen_state.delete_target.clone() else {
+        return;
+    };
+    let Some(entry) = orchestrator.registry.find(&id).cloned() else {
+        // Entry disappeared (e.g. deleted via another path) — disarm.
+        orchestrator.home_screen_state.delete_target = None;
+        return;
+    };
+
+    let (title, body) = confirm_delete::delete_dialog_text(&entry);
+    let dialog = confirm_delete::delete_confirm(&id, &title, &body);
+    let outcome = confirm_dialog::render(ctx, orchestrator.theme_palette, &dialog);
+
+    match outcome {
+        ConfirmOutcome::Confirmed => {
+            orchestrator.home_screen_state.delete_target = None;
+            let name = entry.name.clone();
+            match operations::delete_modlist(
+                &id,
+                &orchestrator.registry_store,
+                &mut orchestrator.registry,
+            ) {
+                Ok(_) => {
+                    // Keep the persistence cycle's snapshot consistent with
+                    // the just-written-through registry so the debounced
+                    // tick doesn't re-detect a phantom diff.
+                    orchestrator
+                        .persistence_cycle
+                        .last_saved_registry = orchestrator.registry.clone();
+                    orchestrator.home_screen_state.toast =
+                        Some(ToastMessage::success(format!("Deleted \"{name}\"")));
+                }
+                Err(err) => {
+                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(
+                        format!("Couldn't delete \"{name}\": {err}"),
+                    ));
+                }
+            }
+        }
+        ConfirmOutcome::Cancelled => {
+            orchestrator.home_screen_state.delete_target = None;
+        }
+        ConfirmOutcome::Pending => {}
+    }
+}
+
+/// Render the Reinstall confirm if `reinstall_target` is armed. Phase 5 is
+/// preview-only (P5.T18): on confirm, show the placeholder toast. No
+/// reinstall / no Install-preview route — that is Phase 7.
+fn render_reinstall_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
+    let Some(id) = orchestrator.home_screen_state.reinstall_target.clone() else {
+        return;
+    };
+    let Some(entry) = orchestrator.registry.find(&id).cloned() else {
+        orchestrator.home_screen_state.reinstall_target = None;
+        return;
+    };
+
+    let (title, body) = confirm_delete::reinstall_dialog_text(&entry);
+    let dialog = confirm_delete::reinstall_confirm(&id, &title, &body);
+    let outcome = confirm_dialog::render(ctx, orchestrator.theme_palette, &dialog);
+
+    match outcome {
+        ConfirmOutcome::Confirmed => {
+            orchestrator.home_screen_state.reinstall_target = None;
+            let msg = operations::queue_reinstall_stub(&id, &orchestrator.registry);
+            orchestrator.home_screen_state.toast = Some(ToastMessage::success(msg));
+        }
+        ConfirmOutcome::Cancelled => {
+            orchestrator.home_screen_state.reinstall_target = None;
+        }
+        ConfirmOutcome::Pending => {}
+    }
+}
+
+/// Render the toast (if any) and drive its ~1.8s auto-dismiss. egui paints
+/// lazily, so request a repaint while a toast is live so it actually expires
+/// without waiting for the next user event.
+fn drive_toast(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
+    let live = toast::render(
+        ctx,
+        orchestrator.theme_palette,
+        orchestrator.home_screen_state.toast.as_ref(),
+    );
+    if !live {
+        return;
+    }
+    if let Some(t) = orchestrator.home_screen_state.toast.as_ref() {
+        if t.is_expired() {
+            orchestrator.home_screen_state.toast = None;
+        } else {
+            // Wake up exactly when the toast's TTL elapses.
+            let remaining = toast::TOAST_TTL.saturating_sub(t.shown_at.elapsed());
+            ctx.request_repaint_after(remaining);
         }
     }
 }
@@ -285,16 +483,17 @@ fn render_filter_chips(
     picked
 }
 
-/// Render the filtered card list (wireframe `flex column gap:10`). Returns a
-/// `NavRequest` if a card's primary action fired this frame. An empty
-/// filtered list shows the faint per-chip message (SPEC §3.1 "Empty states").
+/// Render the filtered card list (wireframe `flex column gap:10`). Returns
+/// `(nav, intent)` — at most one of each fires per frame (a single click is a
+/// single action). An empty filtered list shows the faint per-chip message
+/// (SPEC §3.1 "Empty states").
 fn render_card_list(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     filter: HomeFilter,
     installed: &[ModlistEntry],
     in_progress: &[ModlistEntry],
-) -> Option<NavRequest> {
+) -> (Option<NavRequest>, Option<CardIntent>) {
     // installed-first then in-progress-after for `All` (SPEC §3.1).
     let visible: Vec<&ModlistEntry> = match filter {
         HomeFilter::Installed => installed.iter().collect(),
@@ -309,10 +508,11 @@ fn render_card_list(
                 .family(egui::FontFamily::Proportional)
                 .color(redesign_text_faint(palette)),
         );
-        return None;
+        return (None, None);
     }
 
     let mut nav: Option<NavRequest> = None;
+    let mut intent: Option<CardIntent> = None;
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 10.0;
         for entry in visible {
@@ -325,14 +525,24 @@ fn render_card_list(
                         modlist_id: entry.id.clone(),
                     });
                 }
-                ModlistCardActions::Open => {
-                    // `open` opens the install folder (P5.T17, Run 2). Run 1
-                    // intentionally takes no action — the button renders and
-                    // is clickable but the folder-open is deferred.
+                // Installed card's `open` button == Kebab's `Open install
+                // folder` (SPEC §3.2 / HANDOFF M6 — v1 alpha opens the folder).
+                ModlistCardActions::Open
+                | ModlistCardActions::OpenInstallFolder => {
+                    intent = Some(CardIntent::OpenInstallFolder(entry.id.clone()));
+                }
+                ModlistCardActions::CopyImportCode => {
+                    intent = Some(CardIntent::CopyImportCode(entry.id.clone()));
+                }
+                ModlistCardActions::Reinstall => {
+                    intent = Some(CardIntent::RequestReinstall(entry.id.clone()));
+                }
+                ModlistCardActions::Delete => {
+                    intent = Some(CardIntent::RequestDelete(entry.id.clone()));
                 }
                 ModlistCardActions::None => {}
             }
         }
     });
-    nav
+    (nav, intent)
 }

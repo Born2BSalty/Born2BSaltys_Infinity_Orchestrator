@@ -30,12 +30,14 @@
 //                  `None` (post-install size computation lands in Phase 7;
 //                  Phase 5 / Run 1 has no size yet).
 //
-// **Run 1 nuance:** the card renders the Kebab with all its menu items
-// present, but each item's `on_click` is a placeholder no-op (`|| {}`).
-// Delete / Copy import code / Open install folder / Reinstall / Rename are
-// wired in Run 2 (P5.T7 / T16 / T17 / T18). The primary action button
-// (`resume` / `open`) returns a `ModlistCardActions` so the page can route;
-// Run 1's page only acts on `Resume`.
+// **Run 2 ("Home — actions live"):** the Kebab items now bubble real intents
+// up to `page_home` via `ModlistCardActions` (interior-mutability `Cell`
+// inside `render_action_cluster`, since `KebabItem::on_click` is `FnMut`).
+// Wired this run: Copy import code (P5.T2 callback site), Open install folder
+// (P5.T17), Reinstall (P5.T18), Delete (P5.T7). **`Rename` stays an inert
+// `|| {}` placeholder** — it is a later run, explicitly out of Run 2 scope.
+// The primary action button (`resume` / `open`) also routes via the returned
+// `ModlistCardActions`.
 //
 // SPEC: §3.2 (cards shared shape), §3.1 (in-list cards + Kebab item sets).
 
@@ -51,8 +53,9 @@ use crate::ui::shared::redesign_tokens::{
     redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
-/// What the user did on a card this frame. Run 1 only the primary button
-/// produces a meaningful variant; Kebab actions are inert placeholders.
+/// What the user did on a card this frame. The primary button + the wired
+/// Kebab items (Run 2) each map to a variant; `page_home` applies them after
+/// the immutable render borrows end.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ModlistCardActions {
     /// Nothing was clicked.
@@ -60,9 +63,19 @@ pub enum ModlistCardActions {
     None,
     /// In-progress card's `resume` button — open the workspace at Step 2.
     Resume,
-    /// Installed card's `open` button — open the install folder (Run 2 wires
-    /// the actual folder-open via P5.T17; Run 1 surfaces the intent only).
+    /// Installed card's `open` button — open the install folder (P5.T17).
     Open,
+    /// Kebab → `Copy import code`. The page resolves the entry's
+    /// `latest_share_code` via `operations::share_code_for` and copies it
+    /// with `ctx.copy_text(...)` (egui built-in — no clipboard crate).
+    CopyImportCode,
+    /// Kebab → `Open install folder` (P5.T17). Same effect as the installed
+    /// card's `open` button; distinct variant for traceability.
+    OpenInstallFolder,
+    /// Kebab → `Reinstall` (P5.T18) — opens the danger Reinstall confirm.
+    Reinstall,
+    /// Kebab → `Delete` (P5.T7) — opens the danger Delete confirm.
+    Delete,
 }
 
 /// Render one modlist card. `id_salt` (the entry id) keeps each card's Kebab
@@ -165,26 +178,36 @@ pub fn meta_line(entry: &ModlistEntry) -> String {
 }
 
 /// The right-cluster button + Kebab. Two action sets keyed on state. The
-/// Kebab items are Run-1 placeholders (`|| {}`); the button drives the
-/// returned action.
+/// Kebab item closures are `FnMut`, so they record the chosen intent into a
+/// shared `Cell<ModlistCardActions>` that this function returns once the
+/// closures + `render_kebab` borrow end. `Rename` is intentionally an inert
+/// `|| {}` (out of Run 2 scope — a later run wires it).
 fn render_action_cluster(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     entry: &ModlistEntry,
 ) -> ModlistCardActions {
-    let mut action = ModlistCardActions::None;
+    use std::cell::Cell;
+
+    let picked: Cell<ModlistCardActions> = Cell::new(ModlistCardActions::None);
     ui.spacing_mut().item_spacing.x = 6.0;
 
     match entry.state {
         ModlistState::InProgress => {
             // `right_to_left` lays widgets out trailing-edge first, so add the
             // Kebab first to keep on-screen order [resume] [···].
+            // In-progress Kebab (SPEC §3.1 / §3.2): Copy import code / Rename
+            // / Delete.
             let mut items = vec![
-                KebabItem::new("Copy import code", || {}),
+                KebabItem::new("Copy import code", || {
+                    picked.set(ModlistCardActions::CopyImportCode)
+                }),
+                // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),
-                KebabItem::danger("Delete", || {}),
+                KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
             render_kebab(ui, palette, &entry.id, &mut items);
+            drop(items);
 
             if redesign_btn(
                 ui,
@@ -198,18 +221,28 @@ fn render_action_cluster(
             )
             .clicked()
             {
-                action = ModlistCardActions::Resume;
+                picked.set(ModlistCardActions::Resume);
             }
         }
         ModlistState::Installed => {
+            // Installed Kebab (SPEC §3.2): Copy import code / Open install
+            // folder / Rename / Reinstall / Delete.
             let mut items = vec![
-                KebabItem::new("Copy import code", || {}),
-                KebabItem::new("Open install folder", || {}),
+                KebabItem::new("Copy import code", || {
+                    picked.set(ModlistCardActions::CopyImportCode)
+                }),
+                KebabItem::new("Open install folder", || {
+                    picked.set(ModlistCardActions::OpenInstallFolder)
+                }),
+                // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),
-                KebabItem::new("Reinstall", || {}),
-                KebabItem::danger("Delete", || {}),
+                KebabItem::new("Reinstall", || {
+                    picked.set(ModlistCardActions::Reinstall)
+                }),
+                KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
             render_kebab(ui, palette, &entry.id, &mut items);
+            drop(items);
 
             // Renamed from the wireframe's `play` → `open` for v1 alpha
             // (SPEC §3.2 / HANDOFF M6): neutral (non-primary) small button.
@@ -225,12 +258,12 @@ fn render_action_cluster(
             )
             .clicked()
             {
-                action = ModlistCardActions::Open;
+                picked.set(ModlistCardActions::Open);
             }
         }
     }
 
-    action
+    picked.into_inner()
 }
 
 /// Human-readable byte size (e.g. "2.3 GB"). Only used for installed cards

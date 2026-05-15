@@ -14,6 +14,7 @@
 // `toast`, `clipboard` (per the Phase 2 file inventory comment).
 
 pub mod btn;
+pub mod dialogs;
 pub mod kebab;
 pub mod label;
 pub mod pill;

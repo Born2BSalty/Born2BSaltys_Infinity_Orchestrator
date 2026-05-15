@@ -86,14 +86,54 @@ pub struct HomeScreenState {
     pub toast: Option<ToastMessage>,
 }
 
-/// A transient bottom-center toast. Run 2 (P5.T16) renders + auto-dismisses
-/// this; Run 1 only declares the type so `HomeScreenState` is final.
+/// Visual tone of a toast. The wireframe's only toast is the success-green
+/// `✓ <text>` confirmation (`screens.jsx:367-382`, `color: var(--success)`);
+/// `Success` reproduces that exactly. `Error` is the orchestrator's
+/// bottom-of-screen error surface for SPEC §3.2's "Open install folder"
+/// failure path ("surface an error message in the standard status / error
+/// message area near the bottom of the screen") — rendered in the danger
+/// tone with no `✓` marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ToastTone {
+    /// Green `✓ <text>` confirmation (wireframe default).
+    #[default]
+    Success,
+    /// Coral error line (no leading marker) for surfaced failures.
+    Error,
+}
+
+/// A transient bottom-center toast. P5.T16 renders + auto-dismisses this
+/// (~1.8s). Driven by `HomeScreenState.toast`.
 #[derive(Debug, Clone)]
 pub struct ToastMessage {
-    /// Body text (already includes the leading `✓` where appropriate).
+    /// Body text. Does **not** include the leading `✓` — `toast::render`
+    /// paints the marker separately in `firacode_nerd` (the shipped Poppins
+    /// TTFs are a Latin-only subset and tofu `✓` U+2713; HANDOFF caveat).
     pub text: String,
-    /// Instant the toast was shown (drives the ~1.8s auto-dismiss in Run 2).
+    /// Instant the toast was shown (drives the ~1.8s auto-dismiss).
     pub shown_at: std::time::Instant,
+    /// Visual tone (success = green + ✓, error = coral, no marker).
+    pub tone: ToastTone,
+}
+
+impl ToastMessage {
+    /// A success toast (`✓ <text>`, green) shown "now".
+    pub fn success(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            shown_at: std::time::Instant::now(),
+            tone: ToastTone::Success,
+        }
+    }
+
+    /// An error toast (coral, no marker) shown "now".
+    pub fn error(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            shown_at: std::time::Instant::now(),
+            tone: ToastTone::Error,
+        }
+    }
 }
 
 impl HomeScreenState {
