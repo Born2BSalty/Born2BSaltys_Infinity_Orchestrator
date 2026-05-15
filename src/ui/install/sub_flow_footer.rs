@@ -26,13 +26,23 @@
 // active-press transform, theme-invariant `#1a2638` primary text) — but lays
 // the arrow glyph in `firacode_nerd` and the word in `poppins_medium`.
 //
-// `render` takes three optional pieces (back / hint / primary) so each stage
-// supplies only what it needs:
-//   - `back`    → `Some(BackBtn { label, ... })` renders the `← label` button.
-//   - `hint`    → `Some(&str)` renders the faint hand-style hint.
-//   - `primary` → the right-aligned primary CTA + whether it is disabled.
+// `render` takes optional pieces so each stage supplies only what it needs:
+//   - `back`      → `Some(BackBtn { label, ... })` renders the `← label`
+//                   button (left).
+//   - `secondary` → `Some(SecondaryBtn { label, ... })` renders an optional
+//                   middle CTA (a non-primary glyph button) immediately left
+//                   of the primary. Used by the preview stage's
+//                   `Open in Create →` when `allow_auto_install == false`
+//                   (SPEC §4.2): it sits between `← Back` and the (then
+//                   disabled) `Import Modlist →` primary. `None` for every
+//                   stage that doesn't need it. **Editing this redesign-
+//                   owned footer to add the slot is the chosen approach
+//                   (per the Run-4 settled prep) — not a bespoke footer.**
+//   - `hint`      → `Some(&str)` renders the faint hand-style hint.
+//   - `primary`   → the right-aligned primary CTA + whether it is disabled.
 //
-// SPEC: §4 (the SubFlowFooter pattern is used by every Install stage).
+// SPEC: §4 (the SubFlowFooter pattern is used by every Install stage),
+//       §4.2 (the `Open in Create →` secondary slot on the draft-code gate).
 
 // rationale: the casts are colour-channel / pixel roundings — correct by
 // construction (Cat 2); the dashed-rule `while x < end_x` is an intentional
@@ -52,9 +62,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary, ThemePalette,
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
+    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
+    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
 /// The trailing/leading arrow glyph rendered in `firacode_nerd`. Kept as
@@ -74,6 +84,8 @@ pub const FOOTER_HEIGHT_PX: f32 = 64.0;
 pub struct FooterOutcome {
     /// `← Back`-style button clicked.
     pub back_clicked: bool,
+    /// Optional middle/secondary CTA clicked (e.g. `Open in Create →`).
+    pub secondary_clicked: bool,
     /// Primary CTA clicked (only ever `true` when the primary is enabled).
     pub primary_clicked: bool,
 }
@@ -81,6 +93,16 @@ pub struct FooterOutcome {
 /// The Back-button spec (left side). `label` is the prose only — the leading
 /// `←` is painted separately in `firacode_nerd`.
 pub struct BackBtn<'a> {
+    pub label: &'a str,
+}
+
+/// The optional middle/secondary CTA spec. Rendered as a non-primary glyph
+/// button (sketchy border, no accent fill, no 2×2 shadow) with a trailing
+/// `→` — visually a "secondary action", distinct from the accent primary.
+/// Used by the preview stage's `Open in Create →` (SPEC §4.2 draft-code
+/// gate). Always enabled (the spec only ever shows it as the live escape
+/// hatch when the primary is disabled).
+pub struct SecondaryBtn<'a> {
     pub label: &'a str,
 }
 
@@ -98,6 +120,7 @@ pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     back: Option<BackBtn<'_>>,
+    secondary: Option<SecondaryBtn<'_>>,
     hint: Option<&str>,
     primary: PrimaryBtn<'_>,
 ) -> FooterOutcome {
@@ -145,7 +168,12 @@ pub fn render(
             );
         }
 
-        // ── Primary CTA pushed flush-right (wireframe `marginLeft:auto`). ──
+        // ── Primary (+ optional secondary) pushed flush-right (wireframe
+        // `marginLeft:auto`). `right_to_left` lays the trailing edge first,
+        // so add the primary first and the secondary second to get the
+        // on-screen order `[Secondary] [Primary]` (SPEC §4.2: the
+        // `Open in Create →` escape hatch sits left of the disabled
+        // `Import Modlist →`). ──
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let resp = glyph_btn(
                 ui,
@@ -157,6 +185,22 @@ pub fn render(
             );
             if !primary.disabled && resp.clicked() {
                 outcome.primary_clicked = true;
+            }
+
+            if let Some(s) = secondary {
+                // Non-primary glyph button (no accent fill / no shadow) so it
+                // reads as a secondary action distinct from the primary.
+                let sresp = glyph_btn(
+                    ui,
+                    palette,
+                    GlyphSide::Trailing(ARROW_FWD),
+                    s.label,
+                    false,
+                    false,
+                );
+                if sresp.clicked() {
+                    outcome.secondary_clicked = true;
+                }
             }
         });
     });

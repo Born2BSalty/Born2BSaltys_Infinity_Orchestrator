@@ -14,7 +14,7 @@ The project is the redesign of the existing `bio` Rust crate (Born2BSalty's Infi
 | 2 | Navigation + routing (`OrchestratorApp`, shell chrome, left rail, page router, stubs) | ✓ done, builds clean |
 | 3 | Modlist registry + per-modlist workspace state files | ✓ done, builds clean |
 | 4 | Settings screen (5 sub-tabs) + per-edit debounced path validation | ✓ done, builds clean |
-| 5 | Home + Install Modlist (paste / preview / download stages) | in progress — Runs 1–3 done (Home + Home actions + Install shell/paste/stage-4 stub); Preview (Run 4, now also the share-code **provenance trio** + `ForkInfoPopup` — carve-out #5 grew 1→4 fields) + Downloading (Run 5) pending |
+| 5 | Home + Install Modlist (paste / preview / download stages) | in progress — Runs 1–4 done (Home + Home actions + Install shell/paste/stage-4 stub + **Preview**: provenance display + `allow_auto_install` gate + `ForkInfoPopup`, carve-out #5 = 4 fields); Downloading (Run 5, P5.T12) pending |
 | 6 | Create screen + Workspace shell (Steps 2–4) | not started |
 | 7 | Step 5 install runtime + Reinstall + import-code auto-write + install concurrency + rail-nav lock | not started |
 | 8 | Popup reskins + state-aware theme reads across BIO surfaces + polish | not started |
@@ -36,7 +36,7 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
   - **Body** with the active destination's content.
   - **Statusbar** (26px) at the bottom showing modlist count + jobs-running placeholder.
 - **Home** is the real screen (Phase 5 Runs 1–2): title + subtitle, filter chips (Installed / In progress / All) with counts + default-selection logic, modlist cards (in-progress `resume` / installed `open` + Kebab), `add a modlist` CTAs, `game installs detected` block, first-launch setup CTA, bottom-center toasts. Kebab actions are live: Copy import code (clipboard + toast), Delete (danger confirm → registry entry + guarded on-disk folder removal), Open install folder, Reinstall (Phase-7 placeholder toast). Rename is still inert (later run).
-- **Install Modlist** is wired (Phase 5 Run 3): the paste stage (destination FolderInput + `DestinationNotEmptyWarning` with Clear/Backup/Continue + import-code textarea + footer) and the stage-4 stub render; the Preview (Run 4) and Downloading (Run 5) stages render placeholders.
+- **Install Modlist** is wired (Phase 5 Runs 3–4): the paste stage (destination FolderInput + `DestinationNotEmptyWarning` with Clear/Backup/Continue + import-code textarea + footer), the **Preview** stage (parsed `ModlistSharePreview` → packed name/author title+subline with honest fallback, Overview Box, 6 file-folder tabs, `allow_auto_install` draft-gate with disabled Import + `Open in Create →`, `⑂ fork info` → `ForkInfoPopup`), and the stage-4 stub render; the Downloading (Run 5) stage renders a placeholder.
 - **Create** still shows a stub placeholder (Phase 6).
 - **Settings**: real five-tab screen (General / Paths / Tools / Accounts / Advanced) with:
   - Live theme-palette toggle (Light / Dark) that updates next frame.

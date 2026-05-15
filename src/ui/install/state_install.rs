@@ -7,23 +7,29 @@
 // pasted code / chosen destination are transient until an install starts —
 // Phase 7).
 //
-// **Run 3 scope.** The four-stage machine is declared *whole*
+// **Run 4 scope.** The four-stage machine is declared *whole*
 // (`Paste | Preview | Downloading | InstallingStub`) so the dispatcher and
-// the back-navigation are total, but only `Paste` and `InstallingStub` are
-// fully implemented this run. `Preview` / `Downloading` render minimal
-// Run-4 / Run-5 placeholders (same chassis as the stage-4 stub) so the flow
-// is navigable end to end. The share-code parse, the 6 preview tabs, the
-// `allow_auto_install` gate, and the download/extract engines are explicitly
-// NOT in Run 3 (Run 4 / Run 5 / no `modlist_share.rs` touch this run).
+// the back-navigation are total. Run 3 implemented `Paste` +
+// `InstallingStub`; Run 4 implements `Preview` (the parsed share-code
+// preview — Overview Box + 6 tabs + the `allow_auto_install` gate +
+// provenance display + `ForkInfoPopup`). `Downloading` still renders the
+// Run-5 placeholder; the download/extract engines are NOT in Run 4.
 //
-// The preview/download payload fields the full plan lists
-// (`parsed_preview`, `active_preview_tab`, `download_progress`) are NOT
-// declared yet — Run 3 keeps the state minimal and inert. Pulling in
-// `bio::app::modlist_share::ModlistSharePreview` (or a tab enum / progress
-// struct) now would be speculative abstraction for code that lands in
-// Run 4 / Run 5; `preview_cached` is the single bit the stage-4 stub needs
-// to decide its `← Back to preview` target (SPEC §4.4). Run 4 grows this
-// struct with the real preview state when it implements the parse.
+// Run 4 grows this struct with the real preview state:
+//   - `parsed_preview: Option<ModlistSharePreview>` — the result of
+//     `preview_modlist_share_code`, cached so the parse runs once on
+//     `Paste → Preview` (not per-frame). `None` while on Paste; `Some`
+//     after a successful parse. Carries (via carve-out #5) the
+//     `allow_auto_install` bit + the provenance trio
+//     `name` / `author` / `forked_from`.
+//   - `preview_parse_error: Option<String>` — set when the parse fails so
+//     the preview can show the error instead of a blank box (the wireframe
+//     assumes a valid code; a paste-stage parse failure is real and must be
+//     surfaced, not silently swallowed).
+//   - `active_preview_tab: PreviewTab` — the selected Content-Box tab.
+//   - `fork_info_open: bool` — whether the `ForkInfoPopup` is open.
+// `preview_cached` stays (the stage-4 stub's `← Back to preview` target,
+// SPEC §4.4) and is now set `true` when the parse succeeds.
 //
 // **DestChoice → WeiDU flag mapping (SPEC §13.12 #1 + #6).** The radio
 // labels are wireframe-verbatim (`screens.jsx:123-154`); the flag mapping is
@@ -32,7 +38,9 @@
 // orchestrator-owned `WizardState.step1` at install start (Phase 7), so no
 // BIO state is mutated this run.
 //
-// SPEC: §4.1 (paste stage), §4.4 (stage 4 stub), §13.12 #1/#6 (flag policy).
+// SPEC: §4.1 (paste stage), §4.2 (preview stage + `allow_auto_install`
+//       gate + provenance), §4.4 (stage 4 stub), §13.3 (provenance fields),
+//       §13.12 #1/#6 (flag policy), §1 (carve-out #5).
 
 // rationale: per-screen UI state + the pure `DestChoice::to_flags` mapping —
 // `DestFlags`'s 4 flags model 4 independent WeiDU policy bits (intentional,
@@ -45,6 +53,8 @@
     clippy::must_use_candidate,
     clippy::too_long_first_doc_paragraph
 )]
+
+use crate::app::modlist_share::ModlistSharePreview;
 
 /// The four Install Modlist stages (SPEC §4: paste → preview → downloading →
 /// installing). The machine is whole so the dispatcher + back-navigation are
@@ -149,8 +159,55 @@ impl DestChoice {
     }
 }
 
-/// Per-screen Install Modlist UI state. Minimal + whole for Run 3 (see the
-/// module header for why preview/download payload fields are deferred).
+/// The six Content-Box tabs of the preview stage, in the file-folder strip
+/// (SPEC §4.2; wireframe `screens.jsx::ImportPreviewTabs` line 470 — exact
+/// order + labels). `display_label` is the wireframe-verbatim tab caption.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PreviewTab {
+    /// BIO version / game / install mode / log counts / included flags /
+    /// "what import will do" recap (default tab — wireframe `useState`
+    /// initial is `"Summary"`).
+    #[default]
+    Summary,
+    /// Verbatim BGEE `weidu.log` from the share code.
+    BgeeWeidu,
+    /// Verbatim BG2EE `weidu.log` from the share code.
+    Bg2eeWeidu,
+    /// `mod_downloads_user.toml` excerpt packaged in the share.
+    UserDownloads,
+    /// Pinned `[refs]` / `[sources]` TOML.
+    InstalledRefs,
+    /// `<mod> | <source> | <file>` list of restored mod-config files.
+    ModConfigs,
+}
+
+impl PreviewTab {
+    /// All six tabs in wireframe order (for the tab-strip render loop).
+    pub const ALL: [PreviewTab; 6] = [
+        PreviewTab::Summary,
+        PreviewTab::BgeeWeidu,
+        PreviewTab::Bg2eeWeidu,
+        PreviewTab::UserDownloads,
+        PreviewTab::InstalledRefs,
+        PreviewTab::ModConfigs,
+    ];
+
+    /// Wireframe-verbatim tab caption (`screens.jsx:470`).
+    pub fn display_label(self) -> &'static str {
+        match self {
+            PreviewTab::Summary => "Summary",
+            PreviewTab::BgeeWeidu => "BGEE WeiDU",
+            PreviewTab::Bg2eeWeidu => "BG2EE WeiDU",
+            PreviewTab::UserDownloads => "User Downloads",
+            PreviewTab::InstalledRefs => "Installed Refs",
+            PreviewTab::ModConfigs => "Mod Configs",
+        }
+    }
+}
+
+/// Per-screen Install Modlist UI state. Run 4 grows the preview state (see
+/// the module header); `destination` / `import_code` / the `DestChoice`
+/// machinery stay from Run 3.
 #[derive(Debug, Clone, Default)]
 pub struct InstallScreenState {
     /// Active stage. Defaults to `Paste` so a fresh entry from the rail / the
@@ -166,10 +223,28 @@ pub struct InstallScreenState {
     /// The pasted BIO-MODLIST-V1 share code. Empty disables the footer
     /// primary in non-partial mode (SPEC §4.1).
     pub import_code: String,
+    /// The parsed share-code preview (carve-out #5: carries
+    /// `allow_auto_install` + the provenance trio). `None` until the parse
+    /// runs on `Paste → Preview`; cached so the parse is one-shot, not
+    /// per-frame. Cleared when the user goes back to Paste.
+    ///
+    /// `pub(crate)` (the rest of the struct is `pub`): `ModlistSharePreview`
+    /// is BIO's `pub(crate)` type (carve-out #5 keeps it at its existing
+    /// field visibility — not a redesign decision), so this field can't be
+    /// more public than the type it holds. Every reader is in-crate.
+    pub(crate) parsed_preview: Option<ModlistSharePreview>,
+    /// Set when `preview_modlist_share_code` returned `Err` so the preview
+    /// stage shows the failure instead of a blank box (mutually exclusive
+    /// with `parsed_preview` — a parse either yields a preview or an error).
+    pub preview_parse_error: Option<String>,
+    /// The selected Content-Box tab (SPEC §4.2).
+    pub active_preview_tab: PreviewTab,
+    /// Whether the `ForkInfoPopup` (SPEC §10.9) is open. Toggled by the
+    /// `⑂ fork info` button; the popup is Close-only + non-blocking.
+    pub fork_info_open: bool,
     /// Whether a parsed preview has been cached (drives the stage-4 stub's
     /// `← Back to preview` target — SPEC §4.4: preview if cached, else
-    /// paste). Run 3 sets this to `false`; Run 4 flips it when the parse
-    /// succeeds.
+    /// paste). Set `true` when the parse succeeds.
     pub preview_cached: bool,
 }
 
@@ -179,6 +254,17 @@ impl InstallScreenState {
     /// `Continue Install →` (SPEC §4.1).
     pub fn is_partial(&self) -> bool {
         self.destination_choice == Some(DestChoice::Continue)
+    }
+
+    /// Drop the cached preview + any parse error and close the fork popup.
+    /// Called when the user goes back to Paste (the pasted code may change,
+    /// so a stale preview must not survive) and when a fresh parse is about
+    /// to run.
+    pub fn clear_preview(&mut self) {
+        self.parsed_preview = None;
+        self.preview_parse_error = None;
+        self.fork_info_open = false;
+        self.preview_cached = false;
     }
 }
 
@@ -233,5 +319,45 @@ mod tests {
     #[test]
     fn default_stage_is_paste() {
         assert_eq!(InstallScreenState::default().stage, InstallStage::Paste);
+    }
+
+    #[test]
+    fn preview_tab_labels_are_wireframe_verbatim() {
+        // screens.jsx:470 — exact caption strings, exact order.
+        let labels: Vec<&str> = PreviewTab::ALL.iter().map(|t| t.display_label()).collect();
+        assert_eq!(
+            labels,
+            vec![
+                "Summary",
+                "BGEE WeiDU",
+                "BG2EE WeiDU",
+                "User Downloads",
+                "Installed Refs",
+                "Mod Configs",
+            ]
+        );
+    }
+
+    #[test]
+    fn default_preview_tab_is_summary() {
+        // Wireframe `useState("Summary")` initial.
+        assert_eq!(PreviewTab::default(), PreviewTab::Summary);
+        assert_eq!(
+            InstallScreenState::default().active_preview_tab,
+            PreviewTab::Summary
+        );
+    }
+
+    #[test]
+    fn clear_preview_resets_preview_state() {
+        let mut st = InstallScreenState::default();
+        st.preview_cached = true;
+        st.fork_info_open = true;
+        st.preview_parse_error = Some("boom".to_string());
+        st.clear_preview();
+        assert!(st.parsed_preview.is_none());
+        assert!(st.preview_parse_error.is_none());
+        assert!(!st.fork_info_open);
+        assert!(!st.preview_cached);
     }
 }

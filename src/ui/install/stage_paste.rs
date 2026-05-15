@@ -65,9 +65,9 @@ use crate::ui::install::state_install::{InstallScreenState, InstallStage};
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent_deep, redesign_border_strong, redesign_input_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX,
-    REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
+    redesign_border_strong, redesign_input_bg, redesign_text_faint, redesign_text_muted,
+    redesign_text_primary,
 };
 
 /// What stage 1 wants the dispatcher to do next.
@@ -166,6 +166,9 @@ pub fn render(
         // Stage 1 is the first stage of the sub-flow — no Back button (the
         // wireframe's paste branch renders no `onBack`).
         None::<BackBtn<'_>>,
+        // No secondary CTA on the paste stage (the `Open in Create →` slot
+        // is preview-only — SPEC §4.2).
+        None::<sub_flow_footer::SecondaryBtn<'_>>,
         Some(if is_partial {
             "no share code needed"
         } else {

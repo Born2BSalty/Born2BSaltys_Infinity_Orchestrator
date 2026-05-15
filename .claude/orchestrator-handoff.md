@@ -13,21 +13,29 @@ You are the **orchestrator** for the Infinity Orchestrator redesign: you slice p
 
 ## Where the thread is
 
-Branch `overhaul/infinity_orchestrator`, HEAD **`bb6c74f`**, pushed, clean tree. Phases 1–4 done. **Phase 5 in progress, sliced into 5 runs:**
+Branch `overhaul/infinity_orchestrator`, HEAD = the Phase 5 **Run 4** implementation commit (atop the provenance spec-amendment `acff12f`), pushed, clean tree. Phases 1–4 done. **Phase 5: Runs 1–4 done; Run 5 (Downloading, P5.T12) is the next action.**
 
 | Run | Scope | Status |
 |---|---|---|
 | 1 | Home — visual + nav (P5.T1-6, T8 widget, T15 + shared widgets) | ✅ done + 4 follow-ups |
 | 2 | Home — actions live (P5.T7 delete, T16 toast, T17 open-folder, T18 reinstall stub) | ✅ done + 1 follow-up |
 | 3 | Install — shell + paste stage + stage-4 stub (P5.T9, T13, T14) | ✅ done + 3 follow-ups |
-| **4** | **Install — Preview parse + 6 tabs + carve-out #5 provenance trio (`allow_auto_install` + `name`/`author`/`forked_from`) + `ForkInfoPopup` (P5.T10, T11)** | **NEXT — highest scrutiny** |
-| 5 | Install — Downloading stage (P5.T12) | pending |
+| 4 | Install — Preview parse + 6 tabs + carve-out #5 provenance trio + `ForkInfoPopup` (P5.T10, T11) | ✅ done — independently verified (BIO-guard clean, carve-out = exact 5 items, 178 lib tests, both binaries build) |
+| **5** | **Install — Downloading stage (P5.T12)** | **NEXT** |
 
 Run-slicing rationale + per-run breakpoints are in this session's history; the canonical task list is the phase doc. After Run 5, Phase 5 is done → Phase 6 (Create + Workspace shell) is the next big phase (its own multi-run slicing; see `plan/phase-06-*.md`, HANDOFF "Finishing the plan" pacing).
 
-### Run 4 — the immediate next action (read carefully)
+### Run 4 — ✅ DONE (verified, committed, pushed). Run 5 (P5.T12 Downloading) is next.
 
-Run 4 is **the only BIO-source touch in all of Phase 5**: carve-out #5 on `src/core/app/modlist_share.rs`, now the **provenance trio + `allow_auto_install`** (user-directed spec change 2026-05-15 — see SPEC §1 "Modlist-share provenance application", §13.3 Provenance/Generation, §10.9; overview.md revision log). The **exact and only** authorized BIO edits (P5.T10 enumerates them):
+**Run 4 outcome (independently verified by the orchestrator, not the agent's word):** BIO-source guard clean (only the authorized `modlist_share.rs`); the carve-out #5 diff is *exactly* the 5 enumerated items + the gate-required `#[cfg(test)]` module, purely additive, `export_modlist_share_code`/private envelope untouched; `cargo test --lib` 178/0 (163 baseline +15 Run-4 incl. serde-default round-trips); both binaries build; `stage_preview.rs`/`fork_info_popup.rs` spot-read SPEC-faithful (fallback copy, gate logic, `⑂` painted vector / `↳` glyph, L1/L2 fixes honored). Surfaced judgment calls: a `cargo fmt` scope-creep the agent fully reverted (orchestrator-confirmed clean) → propose standardizing scoped-fmt on `rustfmt --edition 2024 <leaf files>`; pre-existing edition-2024 rustfmt debt in HEAD redesign code (out of scope); honest parse-error render + `pub(crate)` API scoping (within spec intent); open question **D** (Overview "Mods" value) still rendered `—` and flagged for a user decision. The detailed authorized-scope brief below is retained as the audit record of what Run 4 was permitted to touch.
+
+**Next action = Run 5 (P5.T12, Install Downloading stage)** — per-mod download/extract grid wired to BIO's existing `app_step2_update_*` channels (orchestrator-owned receivers, no BIO modification). No BIO-source touch expected (net-new only). Slice/brief it the same way; phase doc P5.T12 is the canonical task.
+
+---
+
+#### Run 4 authorized-scope brief (historical / audit record)
+
+Run 4 was **the only BIO-source touch in all of Phase 5**: carve-out #5 on `src/core/app/modlist_share.rs`, now the **provenance trio + `allow_auto_install`** (user-directed spec change 2026-05-15 — see SPEC §1 "Modlist-share provenance application", §13.3 Provenance/Generation, §10.9; overview.md revision log). The **exact and only** authorized BIO edits (P5.T10 enumerates them):
 1. `ModlistSharePayload` (`#[derive(Deserialize)]`): `#[serde(default = "default_true")] allow_auto_install: bool` + `#[serde(default)]` `name: Option<String>`, `author: Option<String>`, `forked_from: Vec<ForkAncestor>`.
 2. New `fn default_true() -> bool { true }`.
 3. New `struct ForkAncestor { name: String, author: String }` (the `forked_from` element type) with derive **`#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]`** — the full set (not just `Deserialize`) so Phase 6's `ModlistEntry.forked_from` reuse needs no follow-up BIO edit; within carve-out #5 (precedent: `ModlistShareConfigFile` already derives `Serialize` in the same file).

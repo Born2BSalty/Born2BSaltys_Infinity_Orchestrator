@@ -75,6 +75,14 @@ pub(crate) struct ModlistSharePreview {
     pub(crate) installed_refs_text: String,
     pub(crate) mod_config_count: usize,
     pub(crate) mod_configs_text: String,
+    // Carve-out #5 paired in-memory counterpart — `share_preview()` is the
+    // payload→view projection (the analogue of the `From` impls named in the
+    // canonical example); without these the orchestrator's preview cannot
+    // read the four sibling keys. Visibility matches the existing fields.
+    pub(crate) allow_auto_install: bool,
+    pub(crate) name: Option<String>,
+    pub(crate) author: Option<String>,
+    pub(crate) forked_from: Vec<ForkAncestor>,
 }
 
 pub(crate) fn preview_modlist_share_code(code: &str) -> Result<ModlistSharePreview, String> {
@@ -136,6 +144,45 @@ struct ModlistSharePayload {
     installed_refs: ModlistShareInstalledRefs,
     #[serde(default)]
     mod_configs: ModlistShareModConfigs,
+    // Schema-additive sibling keys the orchestrator injects via its net-new
+    // `pack_meta` envelope (CRITICAL DIRECTIVE carve-out #5 "Modlist-share
+    // provenance application"). All optional; absent ⇒ today's BIO behavior
+    // bit-for-bit (`allow_auto_install` defaults `true`, the provenance trio
+    // defaults `None` / empty). BIO's own code never reads or writes these —
+    // only the orchestrator's Install/fork preview does.
+    #[serde(default = "default_true")]
+    allow_auto_install: bool,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    author: Option<String>,
+    #[serde(default)]
+    forked_from: Vec<ForkAncestor>,
+}
+
+/// Default for `ModlistSharePayload::allow_auto_install` — `true` so every
+/// pre-redesign / third-party code (which omits the key) is treated as
+/// auto-install-eligible, exactly as today's BIO consumes it (SPEC §13.3
+/// "`allow_auto_install` (schema-additive field, default `true`)").
+fn default_true() -> bool {
+    true
+}
+
+/// One ancestor in a modlist's fork lineage (SPEC §13.3 Provenance —
+/// `forked_from`, ordered oldest → newest). Derives the full
+/// `Debug, Clone, PartialEq, Serialize, Deserialize` set (not just
+/// `Deserialize`): `Deserialize` for the payload parse; `Serialize` +
+/// `PartialEq` + `Clone` + `Debug` because Phase 6 reuses *this same BIO
+/// type* as the element of the registry `ModlistEntry.forked_from`, which
+/// derives the same set and round-trips / `assert_eq!`s. Pinning the full
+/// set in this single carve-out #5 edit means no follow-up BIO-source touch
+/// in Phase 6. Precedent: the sibling `ModlistShareConfigFile` already
+/// derives `Deserialize, Serialize` in this file. No `Default` is needed
+/// (`Vec` defaults empty).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ForkAncestor {
+    pub(crate) name: String,
+    pub(crate) author: String,
 }
 
 #[derive(Default, Deserialize)]
@@ -242,6 +289,11 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
             .unwrap_or_default(),
         mod_config_count: payload.mod_configs.files.len(),
         mod_configs_text,
+        // Carve-out #5 propagation — one line per sibling key, payload→preview.
+        allow_auto_install: payload.allow_auto_install,
+        name: payload.name.clone(),
+        author: payload.author.clone(),
+        forked_from: payload.forked_from.clone(),
     })
 }
 
@@ -699,4 +751,126 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Carve-out #5 behavior-neutrality proof (Phase 5 Run 4, SPEC §1
+    //! "Modlist-share provenance application", §13.3).
+    //!
+    //! The four schema-additive sibling keys (`allow_auto_install` +
+    //! `name` / `author` / `forked_from`) must parse and behave bit-for-bit
+    //! as today's BIO for any code that omits them — i.e. defaults are
+    //! `true` / `None` / empty, and the `share_preview()` projection carries
+    //! those through. These tests pin that, and also that a code which *does*
+    //! carry the keys surfaces them (forward-compat — generation lands
+    //! Phase 6/7; the consume path is verified here).
+    use super::*;
+
+    /// A minimal but valid payload: `game_install = "BGEE"` with a single
+    /// real (non-comment) BGEE WeiDU entry so `share_preview()`'s
+    /// "no entries" guard passes. The four provenance keys are intentionally
+    /// ABSENT — this is the pre-redesign / third-party shape.
+    const FIELDLESS_PAYLOAD_JSON: &str = r#"{
+        "format_version": 1,
+        "bio_version": "0.1.0-test",
+        "game_install": "BGEE",
+        "install_mode": "start_from_scratch",
+        "weidu_logs": { "bgee": "~MOD\\MOD.TP2~ #0 #0 // A component: 1.0" }
+    }"#;
+
+    #[test]
+    fn absent_provenance_keys_parse_to_today_defaults() {
+        // The exact parse `decode_share_payload` performs after inflation.
+        let payload: ModlistSharePayload =
+            serde_json::from_str(FIELDLESS_PAYLOAD_JSON).expect("fieldless payload must parse");
+        // Carve-out invariant: absent ⇒ auto-install-eligible (today's
+        // behavior — BIO has always treated pre-redesign codes this way).
+        assert!(
+            payload.allow_auto_install,
+            "absent allow_auto_install must default true"
+        );
+        assert_eq!(payload.name, None, "absent name must default None");
+        assert_eq!(payload.author, None, "absent author must default None");
+        assert!(
+            payload.forked_from.is_empty(),
+            "absent forked_from must default empty"
+        );
+    }
+
+    #[test]
+    fn share_preview_projects_defaults_for_fieldless_code() {
+        // The payload→preview projection (the carve-out's paired in-memory
+        // counterpart) must carry the defaults through unchanged.
+        let payload: ModlistSharePayload =
+            serde_json::from_str(FIELDLESS_PAYLOAD_JSON).expect("fieldless payload must parse");
+        let preview = share_preview(&payload).expect("preview must build");
+        assert!(preview.allow_auto_install);
+        assert_eq!(preview.name, None);
+        assert_eq!(preview.author, None);
+        assert!(preview.forked_from.is_empty());
+        // The rest of the preview is unaffected (sanity that the additive
+        // fields did not perturb the existing projection).
+        assert_eq!(preview.game_install, "BGEE");
+        assert_eq!(preview.bgee_entries, 1);
+    }
+
+    #[test]
+    fn present_provenance_keys_are_surfaced_through_preview() {
+        // Forward-compat: a code that *carries* the keys (as orchestrator
+        // `pack_meta` will emit in Phase 6/7) surfaces them on the preview.
+        let json = r#"{
+            "format_version": 1,
+            "bio_version": "0.1.0-test",
+            "game_install": "BGEE",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": { "bgee": "~MOD\\MOD.TP2~ #0 #0 // A component: 1.0" },
+            "allow_auto_install": false,
+            "name": "Born2BSalty's EET tactical playthrough",
+            "author": "@b2bs",
+            "forked_from": [
+                { "name": "EET Basics", "author": "@olim" },
+                { "name": "EET Tactical", "author": "@b2bs" }
+            ]
+        }"#;
+        let payload: ModlistSharePayload =
+            serde_json::from_str(json).expect("payload with provenance must parse");
+        let preview = share_preview(&payload).expect("preview must build");
+        assert!(
+            !preview.allow_auto_install,
+            "explicit false must be carried (draft-code gate)"
+        );
+        assert_eq!(
+            preview.name.as_deref(),
+            Some("Born2BSalty's EET tactical playthrough")
+        );
+        assert_eq!(preview.author.as_deref(), Some("@b2bs"));
+        assert_eq!(
+            preview.forked_from,
+            vec![
+                ForkAncestor {
+                    name: "EET Basics".to_string(),
+                    author: "@olim".to_string(),
+                },
+                ForkAncestor {
+                    name: "EET Tactical".to_string(),
+                    author: "@b2bs".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn fork_ancestor_serde_round_trips() {
+        // `ForkAncestor` derives the full Serialize + Deserialize set so
+        // Phase 6 can reuse it as the registry `ModlistEntry.forked_from`
+        // element with no follow-up BIO edit. Prove the round-trip.
+        let original = ForkAncestor {
+            name: "EET Basics".to_string(),
+            author: "@olim".to_string(),
+        };
+        let json = serde_json::to_string(&original).expect("serialize");
+        let back: ForkAncestor = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(original, back);
+    }
 }
