@@ -30,7 +30,7 @@ use eframe::egui;
 use crate::ui::install::state_install::{InstallScreenState, InstallStage};
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::widgets::render_screen_title;
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
+use crate::ui::shared::redesign_tokens::{redesign_text_faint, ThemePalette};
 
 /// What the stub wants the dispatcher to do next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

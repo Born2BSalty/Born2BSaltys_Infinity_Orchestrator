@@ -25,9 +25,9 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{redesign_btn, BtnOpts};
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_text_faint, redesign_text_primary,
+    redesign_text_faint, redesign_text_primary, ThemePalette,
 };
 
 /// Render the first-launch CTA content. Returns `true` when `Open Settings`
@@ -48,12 +48,10 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette) -> bool {
         ui.add_space(6.0);
         // Faint sub-line — SPEC §3.4 verbatim (note the em dash).
         ui.label(
-            egui::RichText::new(
-                "Get set up first \u{2014} point BIO at your games and tools.",
-            )
-            .size(13.0)
-            .family(egui::FontFamily::Proportional)
-            .color(redesign_text_faint(palette)),
+            egui::RichText::new("Get set up first \u{2014} point BIO at your games and tools.")
+                .size(13.0)
+                .family(egui::FontFamily::Proportional)
+                .color(redesign_text_faint(palette)),
         );
 
         ui.add_space(14.0);

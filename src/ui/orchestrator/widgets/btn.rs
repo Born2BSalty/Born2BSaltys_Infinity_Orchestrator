@@ -18,9 +18,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX, ThemePalette,
     redesign_accent, redesign_border_strong, redesign_shadow, redesign_shell_bg,
-    redesign_text_primary,
+    redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_SHADOW_OFFSET_BTN_PX,
 };
 
 /// Optional rendering options for `redesign_btn`. All default to `false`.
@@ -51,7 +51,11 @@ pub fn redesign_btn(
     label: &str,
     opts: BtnOpts,
 ) -> egui::Response {
-    let (pad_x, pad_y, font_size) = if opts.small { (10.0, 4.0, 12.0) } else { (16.0, 8.0, 14.0) };
+    let (pad_x, pad_y, font_size) = if opts.small {
+        (10.0, 4.0, 12.0)
+    } else {
+        (16.0, 8.0, 14.0)
+    };
     let fill = if opts.primary {
         redesign_accent(palette)
     } else {
@@ -67,7 +71,9 @@ pub fn redesign_btn(
 
     // Measure the label so we can size the rect.
     let font = egui::FontId::new(font_size, egui::FontFamily::Name("poppins_medium".into()));
-    let text_galley = ui.painter().layout_no_wrap(label.to_string(), font.clone(), text_color);
+    let text_galley = ui
+        .painter()
+        .layout_no_wrap(label.to_string(), font.clone(), text_color);
     let width = if opts.block {
         ui.available_width()
     } else {
@@ -75,7 +81,11 @@ pub fn redesign_btn(
     };
     let desired_size = egui::vec2(width, text_galley.size().y + pad_y * 2.0);
 
-    let sense = if opts.disabled { egui::Sense::hover() } else { egui::Sense::click() };
+    let sense = if opts.disabled {
+        egui::Sense::hover()
+    } else {
+        egui::Sense::click()
+    };
     let (rect, response) = ui.allocate_exact_size(desired_size, sense);
 
     // Wireframe `.sk-btn:active { transform: translate(1px, 1px) }` — while
@@ -100,7 +110,11 @@ pub fn redesign_btn(
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
             ));
-            painter.rect_filled(shadow_rect, radius, with_alpha(redesign_shadow(palette), alpha));
+            painter.rect_filled(
+                shadow_rect,
+                radius,
+                with_alpha(redesign_shadow(palette), alpha),
+            );
         }
 
         // Body fill.

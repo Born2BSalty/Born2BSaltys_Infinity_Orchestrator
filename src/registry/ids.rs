@@ -48,8 +48,7 @@ pub fn new_modlist_id() -> String {
     let hash_part = (hashed >> 32) & 0x0000_00FF; // 8 bits
 
     // Layout: [40 ts][12 counter][8 hash] = 60 bits, fits 12 base32 digits.
-    let combined: u64 =
-        (ts_part << 20) | ((counter_part & 0x0FFF) << 8) | hash_part;
+    let combined: u64 = (ts_part << 20) | ((counter_part & 0x0FFF) << 8) | hash_part;
 
     encode_base32_12(combined)
 }

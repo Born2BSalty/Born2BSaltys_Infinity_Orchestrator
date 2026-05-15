@@ -18,8 +18,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, ThemePalette,
     redesign_border_strong, redesign_chrome_bg, redesign_status_dot, redesign_text_muted,
+    ThemePalette, REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX,
 };
 
 /// Paint the redesign statusbar inside the given `ui` (caller is expected to
@@ -27,12 +27,7 @@ use crate::ui::shared::redesign_tokens::{
 ///
 /// `modlist_count` and `jobs_running` are caller-provided. Phase 3 / Phase 7
 /// wire real sources; Phase 1 callers just pass zero.
-pub fn render(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    modlist_count: usize,
-    jobs_running: usize,
-) {
+pub fn render(ui: &mut egui::Ui, palette: ThemePalette, modlist_count: usize, jobs_running: usize) {
     let rect = ui.max_rect();
     let painter = ui.painter();
 
@@ -42,7 +37,10 @@ pub fn render(
     // 1.5px top border.
     let top_y = rect.top() + REDESIGN_BORDER_WIDTH_PX * 0.5;
     painter.line_segment(
-        [egui::pos2(rect.left(), top_y), egui::pos2(rect.right(), top_y)],
+        [
+            egui::pos2(rect.left(), top_y),
+            egui::pos2(rect.right(), top_y),
+        ],
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
     );
 
@@ -68,11 +66,7 @@ pub fn render(
     ];
     for (i, seg) in segments.iter().enumerate() {
         if i > 0 {
-            let galley = painter.layout_no_wrap(
-                "·".to_string(),
-                font.clone(),
-                text_color,
-            );
+            let galley = painter.layout_no_wrap("·".to_string(), font.clone(), text_color);
             let pos = egui::pos2(x, rect.center().y - galley.size().y * 0.5);
             painter.galley(pos, galley.clone(), text_color);
             x += galley.size().x + 8.0;

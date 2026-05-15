@@ -25,9 +25,9 @@ use crate::registry::store_workspace::WorkspaceStore;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::{
-    BtnOpts, redesign_btn, redesign_label, render_screen_title,
+    redesign_btn, redesign_label, render_screen_title, BtnOpts,
 };
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
+use crate::ui::shared::redesign_tokens::{redesign_text_faint, ThemePalette};
 
 pub fn render_home_stub(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
@@ -48,7 +48,11 @@ pub fn render_home_stub(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             ui,
             palette,
             "Open workspace stub (dev)",
-            BtnOpts { small: true, primary: true, ..Default::default() },
+            BtnOpts {
+                small: true,
+                primary: true,
+                ..Default::default()
+            },
         );
         if resp.clicked() {
             orchestrator.nav = NavDestination::Workspace { modlist_id: None };
@@ -61,7 +65,11 @@ pub fn render_home_stub(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             ui,
             palette,
             "Seed test modlist (dev)",
-            BtnOpts { small: true, primary: false, ..Default::default() },
+            BtnOpts {
+                small: true,
+                primary: false,
+                ..Default::default()
+            },
         );
         if seed_resp.clicked() {
             handle_seed_click(orchestrator);
@@ -97,19 +105,15 @@ fn handle_seed_click(orchestrator: &mut OrchestratorApp) {
             // Mark the persistence cycle aware — the registry was saved
             // synchronously by `seed_demo_entry`, but the cycle's snapshot
             // needs to refresh so the next debounce tick doesn't re-write.
-            orchestrator.persistence_cycle.last_saved_registry =
-                orchestrator.registry.clone();
+            orchestrator.persistence_cycle.last_saved_registry = orchestrator.registry.clone();
             orchestrator
                 .persistence_cycle
                 .mark_registry_dirty(Instant::now());
-            orchestrator.home_stub_state.seed_toast_text = Some(format!(
-                "Seeded \"{}\" (id {}).",
-                entry.name, entry.id
-            ));
+            orchestrator.home_stub_state.seed_toast_text =
+                Some(format!("Seeded \"{}\" (id {}).", entry.name, entry.id));
         }
         Err(err) => {
-            orchestrator.home_stub_state.seed_toast_text =
-                Some(format!("Seed failed: {err}"));
+            orchestrator.home_stub_state.seed_toast_text = Some(format!("Seed failed: {err}"));
         }
     }
 }

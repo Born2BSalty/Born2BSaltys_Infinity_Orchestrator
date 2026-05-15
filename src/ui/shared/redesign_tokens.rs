@@ -356,11 +356,26 @@ mod tests {
     #[test]
     fn pill_tones_are_palette_invariant() {
         // SPEC §12.2 says pills are the same hex across palettes.
-        assert_eq!(redesign_pill_danger(ThemePalette::Light), redesign_pill_danger(ThemePalette::Dark));
-        assert_eq!(redesign_pill_warn(ThemePalette::Light), redesign_pill_warn(ThemePalette::Dark));
-        assert_eq!(redesign_pill_info(ThemePalette::Light), redesign_pill_info(ThemePalette::Dark));
-        assert_eq!(redesign_pill_neutral(ThemePalette::Light), redesign_pill_neutral(ThemePalette::Dark));
-        assert_eq!(redesign_pill_text(ThemePalette::Light), redesign_pill_text(ThemePalette::Dark));
+        assert_eq!(
+            redesign_pill_danger(ThemePalette::Light),
+            redesign_pill_danger(ThemePalette::Dark)
+        );
+        assert_eq!(
+            redesign_pill_warn(ThemePalette::Light),
+            redesign_pill_warn(ThemePalette::Dark)
+        );
+        assert_eq!(
+            redesign_pill_info(ThemePalette::Light),
+            redesign_pill_info(ThemePalette::Dark)
+        );
+        assert_eq!(
+            redesign_pill_neutral(ThemePalette::Light),
+            redesign_pill_neutral(ThemePalette::Dark)
+        );
+        assert_eq!(
+            redesign_pill_text(ThemePalette::Light),
+            redesign_pill_text(ThemePalette::Dark)
+        );
     }
 
     #[test]

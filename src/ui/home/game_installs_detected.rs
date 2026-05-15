@@ -36,7 +36,7 @@ use crate::ui::settings::validate_now::{
     FIELD_BG2EE_GAME_FOLDER, FIELD_BGEE_GAME_FOLDER, FIELD_IWDEE_GAME_FOLDER,
 };
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_text_faint, redesign_text_primary,
+    redesign_text_faint, redesign_text_primary, ThemePalette,
 };
 
 /// The three games the wireframe lists, in order, with their game-folder
@@ -60,7 +60,11 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &Orchestra
             let (marker, text, color) = if found {
                 ("\u{2713}", name.to_string(), redesign_text_primary(palette)) // ✓
             } else {
-                ("?", format!("{name} \u{00B7} not found"), redesign_text_faint(palette))
+                (
+                    "?",
+                    format!("{name} \u{00B7} not found"),
+                    redesign_text_faint(palette),
+                )
             };
             // The marker glyph is rendered in FiraCode Nerd, not Poppins:
             // our shipped Poppins TTFs are a Latin-only subset that lacks

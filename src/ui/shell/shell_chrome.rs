@@ -14,7 +14,7 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_page_bg,
+    redesign_page_bg, ThemePalette, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX,
 };
 use crate::ui::shell::{shell_statusbar, shell_titlebar};
 

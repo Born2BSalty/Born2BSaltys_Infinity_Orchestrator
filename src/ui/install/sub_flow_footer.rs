@@ -37,9 +37,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
+    redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
+    redesign_shell_bg, redesign_text_faint, redesign_text_primary, ThemePalette,
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
 /// The trailing/leading arrow glyph rendered in `firacode_nerd`. Kept as
@@ -106,8 +106,15 @@ pub fn render(
 
         // ── Back (left). Glyph in firacode_nerd, prose in poppins_medium. ──
         if let Some(b) = back {
-            if glyph_btn(ui, palette, GlyphSide::Leading(ARROW_BACK), b.label, false, false)
-                .clicked()
+            if glyph_btn(
+                ui,
+                palette,
+                GlyphSide::Leading(ARROW_BACK),
+                b.label,
+                false,
+                false,
+            )
+            .clicked()
             {
                 outcome.back_clicked = true;
             }
@@ -225,7 +232,11 @@ fn glyph_btn(
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
             ));
-            painter.rect_filled(shadow_rect, radius, with_alpha(redesign_shadow(palette), alpha));
+            painter.rect_filled(
+                shadow_rect,
+                radius,
+                with_alpha(redesign_shadow(palette), alpha),
+            );
         }
         painter.rect_filled(rect, radius, with_alpha(fill, alpha));
         painter.rect_stroke(

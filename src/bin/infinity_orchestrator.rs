@@ -13,7 +13,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use eframe::egui;
 
@@ -24,10 +24,7 @@ use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 // font config — wiping our `install_redesign_fonts` registrations. The
 // redesign uses its own Poppins family directly via `FontFamily::Name`.
 
-const APP_TITLE: &str = concat!(
-    "Infinity Orchestrator (alpha) v",
-    env!("CARGO_PKG_VERSION")
-);
+const APP_TITLE: &str = concat!("Infinity Orchestrator (alpha) v", env!("CARGO_PKG_VERSION"));
 
 const WINDOW_WIDTH: f32 = 1280.0;
 const WINDOW_HEIGHT: f32 = 820.0;

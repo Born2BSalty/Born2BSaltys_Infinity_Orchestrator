@@ -51,10 +51,10 @@ impl NavDestination {
     /// The glyph shown in the rail next to the label (SPEC §2.1).
     pub fn icon(&self) -> &'static str {
         match self {
-            NavDestination::Home => "\u{2302}",       // ⌂
-            NavDestination::Install => "\u{2193}",    // ↓
-            NavDestination::Create => "\u{270E}",     // ✎
-            NavDestination::Settings => "\u{2699}",   // ⚙
+            NavDestination::Home => "\u{2302}",             // ⌂
+            NavDestination::Install => "\u{2193}",          // ↓
+            NavDestination::Create => "\u{270E}",           // ✎
+            NavDestination::Settings => "\u{2699}",         // ⚙
             NavDestination::Workspace { .. } => "\u{2630}", // ☰ (workspace — not shown in rail)
         }
     }
@@ -117,7 +117,9 @@ mod tests {
     #[test]
     fn workspace_carries_optional_modlist_id() {
         let a = NavDestination::Workspace { modlist_id: None };
-        let b = NavDestination::Workspace { modlist_id: Some("modlist-1".to_string()) };
+        let b = NavDestination::Workspace {
+            modlist_id: Some("modlist-1".to_string()),
+        };
         assert_ne!(a, b);
         assert!(!a.is_rail_item());
         assert!(!b.is_rail_item());

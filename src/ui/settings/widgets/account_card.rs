@@ -29,12 +29,11 @@
 use eframe::egui;
 
 use crate::ui::orchestrator::widgets::r_box::redesign_box;
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{redesign_btn, BtnOpts};
 use crate::ui::shared::redesign_tokens::{
+    redesign_border_strong, redesign_pill_info, redesign_pill_neutral, redesign_pill_text,
+    redesign_shadow, redesign_shell_bg, redesign_text_faint, redesign_text_primary, ThemePalette,
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_border_strong, redesign_pill_info, redesign_pill_neutral,
-    redesign_pill_text, redesign_shadow, redesign_shell_bg, redesign_text_faint,
-    redesign_text_primary,
 };
 
 /// Connection state of an account card.
@@ -112,46 +111,39 @@ pub fn render(
             }
 
             // Right-anchored cluster: pill + button.
-            ui.with_layout(
-                egui::Layout::right_to_left(egui::Align::Center),
-                |ui| {
-                    let (button_label, button_primary) = match &state {
-                        CardState::Connected { .. } => (disconnect_label, false),
-                        CardState::NotConnected => (connect_label, true),
-                    };
-                    let response = redesign_btn(
-                        ui,
-                        palette,
-                        button_label,
-                        BtnOpts {
-                            primary: button_primary,
-                            small: true,
-                            disabled,
-                            ..Default::default()
-                        },
-                    );
-                    if disabled {
-                        if response.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
-                        }
-                        let _ = response.on_hover_text("coming soon");
-                    } else if response.clicked() {
-                        clicked = true;
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let (button_label, button_primary) = match &state {
+                    CardState::Connected { .. } => (disconnect_label, false),
+                    CardState::NotConnected => (connect_label, true),
+                };
+                let response = redesign_btn(
+                    ui,
+                    palette,
+                    button_label,
+                    BtnOpts {
+                        primary: button_primary,
+                        small: true,
+                        disabled,
+                        ..Default::default()
+                    },
+                );
+                if disabled {
+                    if response.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
                     }
+                    let _ = response.on_hover_text("coming soon");
+                } else if response.clicked() {
+                    clicked = true;
+                }
 
-                    ui.add_space(10.0);
+                ui.add_space(10.0);
 
-                    let (pill_text, pill_fill) = match &state {
-                        CardState::Connected { .. } => {
-                            ("connected", redesign_pill_info(palette))
-                        }
-                        CardState::NotConnected => {
-                            ("not connected", redesign_pill_neutral(palette))
-                        }
-                    };
-                    draw_pill(ui, palette, pill_text, pill_fill);
-                },
-            );
+                let (pill_text, pill_fill) = match &state {
+                    CardState::Connected { .. } => ("connected", redesign_pill_info(palette)),
+                    CardState::NotConnected => ("not connected", redesign_pill_neutral(palette)),
+                };
+                draw_pill(ui, palette, pill_text, pill_fill);
+            });
         });
     });
     ui.add_space(8.0);
@@ -163,9 +155,9 @@ pub fn render(
 /// tone-matched fill.
 fn draw_pill(ui: &mut egui::Ui, palette: ThemePalette, label: &str, fill: egui::Color32) {
     let font = egui::FontId::new(10.0, egui::FontFamily::Name("poppins_medium".into()));
-    let galley = ui
-        .painter()
-        .layout_no_wrap(label.to_string(), font.clone(), redesign_pill_text(palette));
+    let galley =
+        ui.painter()
+            .layout_no_wrap(label.to_string(), font.clone(), redesign_pill_text(palette));
     let pad = egui::vec2(6.0, 1.5);
     let size = egui::vec2(galley.size().x + pad.x * 2.0, galley.size().y + pad.y * 2.0);
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());

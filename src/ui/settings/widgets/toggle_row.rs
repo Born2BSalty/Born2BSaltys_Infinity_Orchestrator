@@ -9,8 +9,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_chrome_bg, redesign_text_faint, redesign_text_primary,
+    redesign_accent, redesign_border_strong, redesign_chrome_bg, redesign_text_faint,
+    redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
 };
 
 pub fn render(
@@ -23,25 +23,17 @@ pub fn render(
 ) {
     ui.horizontal(|ui| {
         let label_width = 200.0;
-        let (label_rect, _) = ui.allocate_exact_size(
-            egui::vec2(label_width, 26.0),
-            egui::Sense::hover(),
-        );
+        let (label_rect, _) =
+            ui.allocate_exact_size(egui::vec2(label_width, 26.0), egui::Sense::hover());
         ui.painter().text(
             egui::pos2(label_rect.left(), label_rect.center().y),
             egui::Align2::LEFT_CENTER,
             label,
-            egui::FontId::new(
-                13.0,
-                egui::FontFamily::Name("poppins_medium".into()),
-            ),
+            egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into())),
             redesign_text_primary(palette),
         );
 
-        let (rect, response) = ui.allocate_exact_size(
-            egui::vec2(42.0, 22.0),
-            egui::Sense::click(),
-        );
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(42.0, 22.0), egui::Sense::click());
         let painter = ui.painter();
         let radius = egui::CornerRadius::same((REDESIGN_BORDER_RADIUS_PX + 8.0) as u8);
         let track_fill = if *on {

@@ -21,11 +21,10 @@ use eframe::egui;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::nav_status::{PathValidationKind, PathValidationSummary};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_NAV_WIDTH_PX,
-    REDESIGN_SHADOW_OFFSET_BTN_PX, ThemePalette, redesign_accent, redesign_accent_deep,
-    redesign_border_strong, redesign_hover_overlay, redesign_rail_bg, redesign_shadow,
-    redesign_shell_bg, redesign_status_dot, redesign_text_faint, redesign_text_muted,
-    redesign_text_primary,
+    redesign_accent, redesign_accent_deep, redesign_border_strong, redesign_hover_overlay,
+    redesign_rail_bg, redesign_shadow, redesign_shell_bg, redesign_status_dot, redesign_text_faint,
+    redesign_text_muted, redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_NAV_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
 };
 
 /// Phase 7 C5 lock reason placeholder. Phase 2 callers pass `None`; the type
@@ -58,7 +57,10 @@ pub fn render(
     painter.rect_filled(rect, 0.0, redesign_rail_bg(palette));
     let right_x = rect.right() - REDESIGN_BORDER_WIDTH_PX * 0.5;
     painter.line_segment(
-        [egui::pos2(right_x, rect.top()), egui::pos2(right_x, rect.bottom())],
+        [
+            egui::pos2(right_x, rect.top()),
+            egui::pos2(right_x, rect.bottom()),
+        ],
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
     );
 
@@ -74,58 +76,55 @@ pub fn render(
         ),
     );
 
-    ui.allocate_new_ui(
-        egui::UiBuilder::new().max_rect(content_rect),
-        |ui| {
-            ui.set_clip_rect(content_rect);
-            ui.vertical(|ui| {
-                // 2. Brand row: 36×36 accent square + wordmark stack.
-                render_brand_row(ui, palette);
+    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(content_rect), |ui| {
+        ui.set_clip_rect(content_rect);
+        ui.vertical(|ui| {
+            // 2. Brand row: 36×36 accent square + wordmark stack.
+            render_brand_row(ui, palette);
 
-                ui.add_space(12.0);
-                // Dashed bottom border under the brand row.
-                let sep_top = ui.cursor().min.y;
-                draw_dashed_horizontal(
-                    ui.painter(),
-                    sep_top,
-                    content_rect.left(),
-                    content_rect.right(),
-                    redesign_border_strong(palette),
-                );
-                ui.add_space(10.0);
+            ui.add_space(12.0);
+            // Dashed bottom border under the brand row.
+            let sep_top = ui.cursor().min.y;
+            draw_dashed_horizontal(
+                ui.painter(),
+                sep_top,
+                content_rect.left(),
+                content_rect.right(),
+                redesign_border_strong(palette),
+            );
+            ui.add_space(10.0);
 
-                // 3. Nav items.
-                for dest in NavDestination::rail_items() {
-                    let active = is_active(current, &dest);
-                    let clicked = render_nav_item(ui, palette, &dest, active);
-                    if clicked {
-                        *current = dest;
-                    }
-                    ui.add_space(4.0);
+            // 3. Nav items.
+            for dest in NavDestination::rail_items() {
+                let active = is_active(current, &dest);
+                let clicked = render_nav_item(ui, palette, &dest, active);
+                if clicked {
+                    *current = dest;
                 }
+                ui.add_space(4.0);
+            }
 
-                // 4. Spacer pushes the status row to the bottom of the rail.
-                let used_y = ui.cursor().min.y;
-                let bottom_dashed_y = content_rect.bottom() - 32.0;
-                if bottom_dashed_y > used_y {
-                    ui.add_space(bottom_dashed_y - used_y);
-                }
+            // 4. Spacer pushes the status row to the bottom of the rail.
+            let used_y = ui.cursor().min.y;
+            let bottom_dashed_y = content_rect.bottom() - 32.0;
+            if bottom_dashed_y > used_y {
+                ui.add_space(bottom_dashed_y - used_y);
+            }
 
-                // Dashed top border above the status row.
-                draw_dashed_horizontal(
-                    ui.painter(),
-                    bottom_dashed_y,
-                    content_rect.left(),
-                    content_rect.right(),
-                    redesign_border_strong(palette),
-                );
-                ui.add_space(8.0);
+            // Dashed top border above the status row.
+            draw_dashed_horizontal(
+                ui.painter(),
+                bottom_dashed_y,
+                content_rect.left(),
+                content_rect.right(),
+                redesign_border_strong(palette),
+            );
+            ui.add_space(8.0);
 
-                // 5. Status dot + summary.
-                render_status_row(ui, palette, validation);
-            });
-        },
-    );
+            // 5. Status dot + summary.
+            render_status_row(ui, palette, validation);
+        });
+    });
 
     // Suppress unused-warning for the width const — keep the symbol alive.
     let _ = REDESIGN_NAV_WIDTH_PX;
@@ -151,10 +150,8 @@ fn render_brand_row(ui: &mut egui::Ui, palette: ThemePalette) {
         egui::vec2(brand_mark_size + 8.0 + 100.0, brand_mark_size),
         egui::Sense::hover(),
     );
-    let mark_square = egui::Rect::from_min_size(
-        mark_rect.min,
-        egui::vec2(brand_mark_size, brand_mark_size),
-    );
+    let mark_square =
+        egui::Rect::from_min_size(mark_rect.min, egui::vec2(brand_mark_size, brand_mark_size));
 
     let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8);
     // 2×2 drop shadow behind the mark.
@@ -419,21 +416,15 @@ fn paint_settings_icon(painter: &egui::Painter, center: egui::Pos2, color: egui:
     }
 }
 
-fn render_status_row(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    validation: &PathValidationSummary,
-) {
+fn render_status_row(ui: &mut egui::Ui, palette: ThemePalette, validation: &PathValidationSummary) {
     let dot_color = match validation.kind {
         PathValidationKind::Ok => redesign_status_dot(palette),
         PathValidationKind::Err(_) => egui::Color32::from_rgb(0xE0, 0x6C, 0x6C),
     };
     let text_color = redesign_text_muted(palette);
 
-    let (rect, _) = ui.allocate_exact_size(
-        egui::vec2(ui.available_width(), 18.0),
-        egui::Sense::hover(),
-    );
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::hover());
     let painter = ui.painter();
 
     // 8×8 dot with 1px ring.

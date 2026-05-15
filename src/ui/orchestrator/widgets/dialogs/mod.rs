@@ -12,4 +12,4 @@
 
 pub mod confirm_dialog;
 
-pub use confirm_dialog::{ConfirmDialog, ConfirmOutcome, render as render_confirm_dialog};
+pub use confirm_dialog::{render as render_confirm_dialog, ConfirmDialog, ConfirmOutcome};

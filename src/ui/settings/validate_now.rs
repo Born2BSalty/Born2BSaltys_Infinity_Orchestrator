@@ -86,9 +86,10 @@ pub fn run_now(step1: &Step1State) -> ValidationReport {
         report.fields.insert(*name, check_path(name, value));
     }
 
-    report
-        .fields
-        .insert(FIELD_WEIDU_BINARY, check_path(FIELD_WEIDU_BINARY, &step1.weidu_binary));
+    report.fields.insert(
+        FIELD_WEIDU_BINARY,
+        check_path(FIELD_WEIDU_BINARY, &step1.weidu_binary),
+    );
     report.fields.insert(
         FIELD_MOD_INSTALLER_BINARY,
         check_path(FIELD_MOD_INSTALLER_BINARY, &step1.mod_installer_binary),
@@ -184,8 +185,7 @@ fn check_working_folder(value: &str) -> PathStatus {
     // install by mistake. Flag, but don't block — they can ignore the warn.
     if path.join("chitin.key").is_file() {
         return PathStatus::Warning {
-            reason: "looks like a game install \u{2014} pick an empty folder"
-                .to_string(),
+            reason: "looks like a game install \u{2014} pick an empty folder".to_string(),
         };
     }
     PathStatus::Ok { detail: None }

@@ -20,7 +20,7 @@ use crate::settings::redesign_fields::{ThemeChoice, UiLanguage};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::widgets::{name_row, segmented_toggle, toggle_row};
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary, ThemePalette,
 };
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
@@ -151,9 +151,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
                     // status with a fresh pass; off → clear it so rows go
                     // neutral until the user edits.
                     orchestrator.settings_screen_state.path_validation_results = if on {
-                        crate::ui::settings::validate_now::run_now(
-                            &orchestrator.wizard_state.step1,
-                        )
+                        crate::ui::settings::validate_now::run_now(&orchestrator.wizard_state.step1)
                     } else {
                         Default::default()
                     };
@@ -216,10 +214,9 @@ fn settings_row(
             },
         );
         // Right: control, flush-right, fixed-fit width.
-        ui.with_layout(
-            egui::Layout::right_to_left(egui::Align::Center),
-            |ui| control(ui),
-        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            control(ui)
+        });
     });
     ui.add_space(8.0);
 
@@ -255,4 +252,3 @@ fn draw_dashed_horizontal(
         x += dash_w + gap_w;
     }
 }
-

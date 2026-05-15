@@ -157,9 +157,7 @@ pub fn delete_modlist(
 /// generates `latest_share_code` post-install; pre-Phase-7 in-progress
 /// entries may legitimately have none).
 pub fn share_code_for(id: &str, registry: &ModlistRegistry) -> Option<String> {
-    registry
-        .find(id)
-        .and_then(|e| e.latest_share_code.clone())
+    registry.find(id).and_then(|e| e.latest_share_code.clone())
 }
 
 /// Open the modlist's install folder in the OS file manager (P5.T17 / SPEC
@@ -174,10 +172,7 @@ pub fn share_code_for(id: &str, registry: &ModlistRegistry) -> Option<String> {
 pub fn open_install_folder(entry: &ModlistEntry) -> Result<(), String> {
     let dest = entry.destination_folder.trim();
     if dest.is_empty() {
-        return Err(format!(
-            "\"{}\" has no install folder set yet.",
-            entry.name
-        ));
+        return Err(format!("\"{}\" has no install folder set yet.", entry.name));
     }
     let path = Path::new(dest);
     if !path.is_dir() {
@@ -188,7 +183,10 @@ pub fn open_install_folder(entry: &ModlistEntry) -> Result<(), String> {
     }
 
     open_path_in_file_manager(path).map_err(|e| {
-        format!("Couldn't open the install folder for \"{}\": {e}", entry.name)
+        format!(
+            "Couldn't open the install folder for \"{}\": {e}",
+            entry.name
+        )
     })
 }
 
@@ -241,13 +239,12 @@ mod tests {
 
     fn tmp_registry_path(label: &str) -> std::path::PathBuf {
         let n = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir()
-            .join(format!(
-                "bio_ops_test_{}_{}_{}_modlists.json",
-                std::process::id(),
-                n,
-                label
-            ))
+        std::env::temp_dir().join(format!(
+            "bio_ops_test_{}_{}_{}_modlists.json",
+            std::process::id(),
+            n,
+            label
+        ))
     }
 
     fn entry(id: &str, dest: &str) -> ModlistEntry {
@@ -331,8 +328,7 @@ mod tests {
         reg.entries.push(entry("AAA000000000", ""));
         reg.entries.push(entry("BBB000000000", ""));
 
-        let out = delete_modlist("AAA000000000", &store, &mut reg)
-            .expect("delete ok");
+        let out = delete_modlist("AAA000000000", &store, &mut reg).expect("delete ok");
         assert_eq!(out, Some(DeleteOutcome::EntryRemovedFolderSkipped));
         assert_eq!(reg.entries.len(), 1);
         assert_eq!(reg.entries[0].id, "BBB000000000");
@@ -350,8 +346,7 @@ mod tests {
         let store = RegistryStore::new_with_path(&path);
         let mut reg = ModlistRegistry::default();
         reg.entries.push(entry("AAA000000000", ""));
-        let out = delete_modlist("ZZZ999999999", &store, &mut reg)
-            .expect("delete ok");
+        let out = delete_modlist("ZZZ999999999", &store, &mut reg).expect("delete ok");
         assert_eq!(out, None);
         assert_eq!(reg.entries.len(), 1);
         let _ = std::fs::remove_file(&path);
@@ -375,8 +370,7 @@ mod tests {
         reg.entries
             .push(entry("CCC000000000", install_dir.to_str().unwrap()));
 
-        let out = delete_modlist("CCC000000000", &store, &mut reg)
-            .expect("delete ok");
+        let out = delete_modlist("CCC000000000", &store, &mut reg).expect("delete ok");
         assert_eq!(out, Some(DeleteOutcome::EntryAndFolderRemoved));
         assert!(reg.entries.is_empty());
         assert!(!install_dir.exists(), "install folder recursively removed");
@@ -391,8 +385,7 @@ mod tests {
         let store = RegistryStore::new_with_path(&path);
         let mut reg = ModlistRegistry::default();
         reg.entries.push(entry("DDD000000000", "some/relative/dir"));
-        let out = delete_modlist("DDD000000000", &store, &mut reg)
-            .expect("delete ok");
+        let out = delete_modlist("DDD000000000", &store, &mut reg).expect("delete ok");
         assert_eq!(out, Some(DeleteOutcome::EntryRemovedFolderSkipped));
         assert!(reg.entries.is_empty());
         let _ = std::fs::remove_file(&path);

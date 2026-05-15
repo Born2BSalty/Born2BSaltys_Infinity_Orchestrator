@@ -11,8 +11,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_chrome_bg, redesign_text_muted, redesign_text_primary,
+    redesign_accent, redesign_border_strong, redesign_chrome_bg, redesign_text_muted,
+    redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
 };
 
 /// Render a two-option segmented control.
@@ -33,10 +33,8 @@ pub fn render(
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
         for (i, (label, selected)) in options.iter().enumerate() {
-            let (rect, response) = ui.allocate_exact_size(
-                egui::vec2(segment_width, height),
-                egui::Sense::click(),
-            );
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(segment_width, height), egui::Sense::click());
             let painter = ui.painter();
             let fill = if *selected {
                 redesign_accent(palette)
@@ -59,10 +57,7 @@ pub fn render(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
                 *label,
-                egui::FontId::new(
-                    12.0,
-                    egui::FontFamily::Name("poppins_medium".into()),
-                ),
+                egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into())),
                 text_color,
             );
 

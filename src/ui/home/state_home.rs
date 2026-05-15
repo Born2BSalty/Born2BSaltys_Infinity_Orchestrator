@@ -140,11 +140,7 @@ impl HomeScreenState {
     /// The effective filter for this render: the user's explicit choice if
     /// they have clicked a chip, otherwise the SPEC §3.1 default derived from
     /// the live counts.
-    pub fn effective_filter(
-        &self,
-        installed_count: usize,
-        in_progress_count: usize,
-    ) -> HomeFilter {
+    pub fn effective_filter(&self, installed_count: usize, in_progress_count: usize) -> HomeFilter {
         self.filter
             .unwrap_or_else(|| resolve_default_filter(installed_count, in_progress_count))
     }

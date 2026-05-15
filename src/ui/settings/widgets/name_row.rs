@@ -19,10 +19,10 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{redesign_btn, BtnOpts};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_input_bg, redesign_text_faint, redesign_text_primary,
+    redesign_border_strong, redesign_input_bg, redesign_text_faint, redesign_text_primary,
+    ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
 };
 
 pub fn render(

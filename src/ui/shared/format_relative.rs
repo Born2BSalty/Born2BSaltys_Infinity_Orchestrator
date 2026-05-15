@@ -110,7 +110,10 @@ mod tests {
     #[test]
     fn minutes_bucket_singular_and_plural() {
         let n = now();
-        assert_eq!(relative_time_from(n - Duration::minutes(1), n), "1 minute ago");
+        assert_eq!(
+            relative_time_from(n - Duration::minutes(1), n),
+            "1 minute ago"
+        );
         assert_eq!(
             relative_time_from(n - Duration::minutes(45), n),
             "45 minutes ago"
@@ -122,7 +125,10 @@ mod tests {
         let n = now();
         assert_eq!(relative_time_from(n - Duration::hours(1), n), "1 hour ago");
         assert_eq!(relative_time_from(n - Duration::hours(2), n), "2 hours ago");
-        assert_eq!(relative_time_from(n - Duration::hours(23), n), "23 hours ago");
+        assert_eq!(
+            relative_time_from(n - Duration::hours(23), n),
+            "23 hours ago"
+        );
     }
 
     #[test]
@@ -139,6 +145,9 @@ mod tests {
         assert_eq!(relative_time_from(n - Duration::days(8), n), "last week");
         assert_eq!(relative_time_from(n - Duration::days(20), n), "2 weeks ago");
         assert_eq!(relative_time_from(n - Duration::days(35), n), "last month");
-        assert_eq!(relative_time_from(n - Duration::days(75), n), "2 months ago");
+        assert_eq!(
+            relative_time_from(n - Duration::days(75), n),
+            "2 months ago"
+        );
     }
 }

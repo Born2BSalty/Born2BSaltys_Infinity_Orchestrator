@@ -38,16 +38,16 @@ use crate::registry::model::{ModlistEntry, ModlistState};
 use crate::registry::operations;
 use crate::ui::home::add_a_modlist::{self, AddAModlistAction};
 use crate::ui::home::confirm_delete;
+use crate::ui::home::modlist_card::ModlistCardActions;
 use crate::ui::home::state_home::{empty_filter_message, HomeFilter, ToastMessage};
 use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card, toast};
-use crate::ui::home::modlist_card::ModlistCardActions;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::settings::state_settings::SettingsTab;
 use crate::ui::shared::format_relative::relative_time;
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
+use crate::ui::shared::redesign_tokens::{redesign_text_faint, ThemePalette};
 
 /// Gap between the two columns + bottom margin (wireframe `gap:20`,
 /// `marginBottom:20`).
@@ -105,12 +105,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     let subtitle = build_subtitle(&installed, in_progress_count);
 
     // ── Title ──
-    render_screen_title(
-        ui,
-        palette,
-        "Welcome back, adventurer",
-        Some(&subtitle),
-    );
+    render_screen_title(ui, palette, "Welcome back, adventurer", Some(&subtitle));
 
     let mut nav_request: Option<NavRequest> = None;
     let mut card_intent: Option<CardIntent> = None;
@@ -232,11 +227,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 
 /// Apply a non-navigation card intent. Copy / open run immediately;
 /// delete / reinstall arm the corresponding confirm dialog.
-fn apply_card_intent(
-    orchestrator: &mut OrchestratorApp,
-    ctx: &egui::Context,
-    intent: CardIntent,
-) {
+fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, intent: CardIntent) {
     match intent {
         CardIntent::CopyImportCode(id) => {
             // SPEC §3.2: writes the build's BIO-MODLIST-V1 code to the
@@ -246,17 +237,17 @@ fn apply_card_intent(
                 Some(code) => {
                     ctx.copy_text(code);
                     let name = modlist_name(orchestrator, &id);
-                    orchestrator.home_screen_state.toast = Some(ToastMessage::success(
-                        format!("Copied import code for \"{name}\""),
-                    ));
+                    orchestrator.home_screen_state.toast = Some(ToastMessage::success(format!(
+                        "Copied import code for \"{name}\""
+                    )));
                 }
                 None => {
                     // No code yet (pre-Phase-7 in-progress build). Surface it
                     // rather than silently doing nothing.
                     let name = modlist_name(orchestrator, &id);
-                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(
-                        format!("No import code yet for \"{name}\""),
-                    ));
+                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(format!(
+                        "No import code yet for \"{name}\""
+                    )));
                 }
             }
         }
@@ -322,16 +313,15 @@ fn render_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context
                     // Keep the persistence cycle's snapshot consistent with
                     // the just-written-through registry so the debounced
                     // tick doesn't re-detect a phantom diff.
-                    orchestrator
-                        .persistence_cycle
-                        .last_saved_registry = orchestrator.registry.clone();
+                    orchestrator.persistence_cycle.last_saved_registry =
+                        orchestrator.registry.clone();
                     orchestrator.home_screen_state.toast =
                         Some(ToastMessage::success(format!("Deleted \"{name}\"")));
                 }
                 Err(err) => {
-                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(
-                        format!("Couldn't delete \"{name}\": {err}"),
-                    ));
+                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(format!(
+                        "Couldn't delete \"{name}\": {err}"
+                    )));
                 }
             }
         }
@@ -527,8 +517,7 @@ fn render_card_list(
                 }
                 // Installed card's `open` button == Kebab's `Open install
                 // folder` (SPEC §3.2 / HANDOFF M6 — v1 alpha opens the folder).
-                ModlistCardActions::Open
-                | ModlistCardActions::OpenInstallFolder => {
+                ModlistCardActions::Open | ModlistCardActions::OpenInstallFolder => {
                     intent = Some(CardIntent::OpenInstallFolder(entry.id.clone()));
                 }
                 ModlistCardActions::CopyImportCode => {

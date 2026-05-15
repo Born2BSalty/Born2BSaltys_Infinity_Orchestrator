@@ -19,12 +19,9 @@
 
 use eframe::egui;
 
-const POPPINS_LIGHT: &[u8] =
-    include_bytes!("../../../assets/fonts/Poppins-Light.ttf");
-const POPPINS_MEDIUM: &[u8] =
-    include_bytes!("../../../assets/fonts/Poppins-Medium.ttf");
-const POPPINS_BOLD: &[u8] =
-    include_bytes!("../../../assets/fonts/Poppins-Bold.ttf");
+const POPPINS_LIGHT: &[u8] = include_bytes!("../../../assets/fonts/Poppins-Light.ttf");
+const POPPINS_MEDIUM: &[u8] = include_bytes!("../../../assets/fonts/Poppins-Medium.ttf");
+const POPPINS_BOLD: &[u8] = include_bytes!("../../../assets/fonts/Poppins-Bold.ttf");
 const FIRACODE_NERD_LIGHT: &[u8] =
     include_bytes!("../../../assets/fonts/FiraCodeNerdFont-Light.ttf");
 
@@ -79,11 +76,7 @@ pub fn install_redesign_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
-fn register_font(
-    fonts: &mut egui::FontDefinitions,
-    name: &'static str,
-    bytes: &'static [u8],
-) {
+fn register_font(fonts: &mut egui::FontDefinitions, name: &'static str, bytes: &'static [u8]) {
     if bytes.is_empty() {
         // Defensive guard: if a font asset is missing/empty at build time the
         // include_bytes! above would have failed to compile, but we keep this

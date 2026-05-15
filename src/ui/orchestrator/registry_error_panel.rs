@@ -24,7 +24,7 @@ use eframe::egui;
 use crate::registry::errors::RegistryError;
 use crate::ui::orchestrator::widgets::{redesign_box, redesign_label, render_screen_title};
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary, ThemePalette,
 };
 
 /// Render the terminal error panel.
@@ -42,9 +42,7 @@ pub fn render_registry_error(
         ui,
         palette,
         "Modlist registry is corrupt or unreadable",
-        Some(
-            "Infinity Orchestrator cannot start until the registry file is fixed.",
-        ),
+        Some("Infinity Orchestrator cannot start until the registry file is fixed."),
     );
 
     redesign_box(ui, palette, Some("registry error"), |ui| {
@@ -109,10 +107,7 @@ fn error_summary(err: &RegistryError) -> (String, String) {
             path.display().to_string(),
             format!("parse failed: {message}"),
         ),
-        RegistryError::Io(io_err) => (
-            String::from("(see log)"),
-            format!("IO error: {io_err}"),
-        ),
+        RegistryError::Io(io_err) => (String::from("(see log)"), format!("IO error: {io_err}")),
         RegistryError::Parse(parse_err) => (
             String::from("(see log)"),
             format!("parse error: {parse_err}"),

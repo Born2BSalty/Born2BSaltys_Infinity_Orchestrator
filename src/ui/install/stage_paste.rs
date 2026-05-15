@@ -56,9 +56,9 @@ use crate::ui::install::state_install::{InstallScreenState, InstallStage};
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
-    redesign_border_strong, redesign_input_bg, redesign_text_faint, redesign_text_muted,
-    redesign_text_primary,
+    redesign_accent_deep, redesign_border_strong, redesign_input_bg, redesign_text_faint,
+    redesign_text_muted, redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX,
+    REDESIGN_BORDER_WIDTH_PX,
 };
 
 /// What stage 1 wants the dispatcher to do next.

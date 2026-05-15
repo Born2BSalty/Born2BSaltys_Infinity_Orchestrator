@@ -21,9 +21,7 @@ use crate::ui::settings::state_settings::{PathStatus, PathStatusTone};
 use crate::ui::settings::validate_debounce;
 use crate::ui::settings::validate_now;
 use crate::ui::settings::widgets::path_row::{self, PathRowMode};
-use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_text_faint, redesign_text_muted,
-};
+use crate::ui::shared::redesign_tokens::{redesign_text_faint, redesign_text_muted, ThemePalette};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
@@ -98,10 +96,15 @@ fn path_row_for_field(
         .fields
         .get(field);
     let (hint, tone) = if is_pending {
-        (Some("checking\u{2026}".to_string()), PathStatusTone::Neutral)
+        (
+            Some("checking\u{2026}".to_string()),
+            PathStatusTone::Neutral,
+        )
     } else {
         let hint = status.map(PathStatus::hint_text);
-        let tone = status.map(PathStatus::tone).unwrap_or(PathStatusTone::Neutral);
+        let tone = status
+            .map(PathStatus::tone)
+            .unwrap_or(PathStatusTone::Neutral);
         (hint, tone)
     };
 

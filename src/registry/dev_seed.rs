@@ -90,11 +90,7 @@ mod tests {
     #[test]
     fn seed_demo_entry_writes_registry_and_workspace() {
         let n = C.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!(
-            "bio_devseed_{}_{}",
-            std::process::id(),
-            n
-        ));
+        let root = std::env::temp_dir().join(format!("bio_devseed_{}_{}", std::process::id(), n));
         let registry_path = root.join("modlists.json");
         let registry_store = RegistryStore::new_with_path(&registry_path);
         let factory = {
@@ -110,12 +106,11 @@ mod tests {
         assert_eq!(registry.entries.len(), 1);
         assert_eq!(entry.state, ModlistState::InProgress);
         assert!(registry_path.exists());
-        assert!(
-            root.join("modlists")
-                .join(&entry.id)
-                .join("workspace.json")
-                .exists()
-        );
+        assert!(root
+            .join("modlists")
+            .join(&entry.id)
+            .join("workspace.json")
+            .exists());
 
         let _ = std::fs::remove_dir_all(&root);
     }

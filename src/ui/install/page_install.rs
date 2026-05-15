@@ -27,7 +27,7 @@ use crate::ui::install::state_install::InstallStage;
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::render_screen_title;
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
+use crate::ui::shared::redesign_tokens::{redesign_text_faint, ThemePalette};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui::Context) {
     let palette = orchestrator.theme_palette;
@@ -38,11 +38,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
 
     match orchestrator.install_screen_state.stage {
         InstallStage::Paste => {
-            match stage_paste::render(
-                ui,
-                palette,
-                &mut orchestrator.install_screen_state,
-            ) {
+            match stage_paste::render(ui, palette, &mut orchestrator.install_screen_state) {
                 PasteOutcome::Advance(stage) => next_stage = Some(stage),
                 PasteOutcome::Stay => {}
             }
@@ -74,11 +70,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
             }
         }
         InstallStage::InstallingStub => {
-            match stage_installing_stub::render(
-                ui,
-                palette,
-                &orchestrator.install_screen_state,
-            ) {
+            match stage_installing_stub::render(ui, palette, &orchestrator.install_screen_state) {
                 InstallingStubOutcome::Back(stage) => next_stage = Some(stage),
                 InstallingStubOutcome::Stay => {}
             }

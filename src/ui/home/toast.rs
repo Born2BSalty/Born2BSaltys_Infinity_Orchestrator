@@ -31,9 +31,9 @@ use eframe::egui;
 
 use crate::ui::home::state_home::{ToastMessage, ToastTone};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_border_strong, redesign_pill_danger, redesign_shadow,
-    redesign_shell_bg, redesign_success,
+    redesign_border_strong, redesign_pill_danger, redesign_shadow, redesign_shell_bg,
+    redesign_success, ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_SHADOW_OFFSET_BTN_PX,
 };
 
 /// Auto-dismiss window. SPEC §3.1 / §10.8: "auto-dismisses ~1.8s"; wireframe
@@ -73,7 +73,10 @@ pub fn render(ctx: &egui::Context, palette: ThemePalette, toast: Option<&ToastMe
 
     egui::Area::new(egui::Id::new("orchestrator_home_toast"))
         .order(egui::Order::Tooltip)
-        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -BOTTOM_OFFSET_PX))
+        .anchor(
+            egui::Align2::CENTER_BOTTOM,
+            egui::vec2(0.0, -BOTTOM_OFFSET_PX),
+        )
         .interactable(false)
         .show(ctx, |ui| {
             let chassis = egui::Frame::default()

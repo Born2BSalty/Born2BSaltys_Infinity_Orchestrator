@@ -32,10 +32,7 @@ pub enum RegistryError {
     Parse(serde_json::Error),
     /// Pre-formatted "file is corrupt" error. Used when load detects a parse
     /// failure and wants to surface both the path and a friendly message.
-    Corrupt {
-        path: PathBuf,
-        message: String,
-    },
+    Corrupt { path: PathBuf, message: String },
 }
 
 impl fmt::Display for RegistryError {
@@ -44,7 +41,11 @@ impl fmt::Display for RegistryError {
             RegistryError::Io(err) => write!(f, "registry IO error: {err}"),
             RegistryError::Parse(err) => write!(f, "registry parse error: {err}"),
             RegistryError::Corrupt { path, message } => {
-                write!(f, "registry file is corrupt ({}): {message}", path.display())
+                write!(
+                    f,
+                    "registry file is corrupt ({}): {message}",
+                    path.display()
+                )
             }
         }
     }

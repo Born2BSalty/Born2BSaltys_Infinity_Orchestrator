@@ -58,8 +58,7 @@ pub fn start_github_flow(orchestrator: &mut OrchestratorApp, force_start: bool) 
         Err(err) => {
             state.github_auth_popup_open = true;
             state.github_auth_running = false;
-            state.github_auth_status_text =
-                format!("GitHub authorization could not start: {err}");
+            state.github_auth_status_text = format!("GitHub authorization could not start: {err}");
             state.step2.scan_status = state.github_auth_status_text.clone();
         }
     }
@@ -91,7 +90,10 @@ pub fn disconnect_github(orchestrator: &mut OrchestratorApp) {
 /// `OrchestratorApp::update`. Delegates to BIO's `poll_github_oauth_flow`
 /// which mutates `WizardState` directly (it's a `pub(crate) fn`).
 pub fn poll_github_oauth_flow(orchestrator: &mut OrchestratorApp) {
-    oauth::poll_github_oauth_flow(&mut orchestrator.wizard_state, &mut orchestrator.github_auth_rx);
+    oauth::poll_github_oauth_flow(
+        &mut orchestrator.wizard_state,
+        &mut orchestrator.github_auth_rx,
+    );
 }
 
 /// Render the popup if `wizard_state.github_auth_popup_open` is set. Called
@@ -108,10 +110,7 @@ pub fn render_github_popup_if_open(orchestrator: &mut OrchestratorApp, ctx: &egu
     if let Some(act) = action {
         match act {
             Step1Action::ConnectGitHub | Step1Action::ReconnectGitHub => {
-                start_github_flow(
-                    orchestrator,
-                    matches!(act, Step1Action::ReconnectGitHub),
-                );
+                start_github_flow(orchestrator, matches!(act, Step1Action::ReconnectGitHub));
             }
             Step1Action::DisconnectGitHub => {
                 disconnect_github(orchestrator);

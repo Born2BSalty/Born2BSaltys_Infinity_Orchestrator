@@ -66,11 +66,16 @@ fn bin_row_for_field(
         .fields
         .get(field);
     let (hint, tone) = if is_pending {
-        (Some("checking\u{2026}".to_string()), PathStatusTone::Neutral)
+        (
+            Some("checking\u{2026}".to_string()),
+            PathStatusTone::Neutral,
+        )
     } else {
         let validated_hint = status.map(PathStatus::hint_text);
         let hint = version_hint.or(validated_hint);
-        let tone = status.map(PathStatus::tone).unwrap_or(PathStatusTone::Neutral);
+        let tone = status
+            .map(PathStatus::tone)
+            .unwrap_or(PathStatusTone::Neutral);
         (hint, tone)
     };
 

@@ -34,11 +34,11 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{redesign_btn, BtnOpts};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_PX, ThemePalette,
     redesign_border_strong, redesign_pill_danger, redesign_shadow, redesign_shell_bg,
-    redesign_text_muted, redesign_text_primary,
+    redesign_text_muted, redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_PX,
 };
 
 /// What the user did on the dialog this frame.
@@ -103,7 +103,10 @@ pub fn render(
         });
 
     egui::Window::new(dialog.title)
-        .id(egui::Id::new(("orchestrator_confirm_dialog", dialog.id_salt)))
+        .id(egui::Id::new((
+            "orchestrator_confirm_dialog",
+            dialog.id_salt,
+        )))
         // Non-blocking per SPEC §10.1 — no modal area / backdrop / focus trap.
         .title_bar(false)
         .resizable(false)
@@ -145,40 +148,41 @@ pub fn render(
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
 
-                // `right_to_left` lays trailing-edge first → push the primary
-                // first so the on-screen order reads [Cancel] [Confirm].
-                let confirm = if dialog.danger {
-                    danger_primary_btn(ui, palette, dialog.confirm_label)
-                } else {
-                    redesign_btn(
+                    // `right_to_left` lays trailing-edge first → push the primary
+                    // first so the on-screen order reads [Cancel] [Confirm].
+                    let confirm = if dialog.danger {
+                        danger_primary_btn(ui, palette, dialog.confirm_label)
+                    } else {
+                        redesign_btn(
+                            ui,
+                            palette,
+                            dialog.confirm_label,
+                            BtnOpts {
+                                small: true,
+                                primary: true,
+                                ..Default::default()
+                            },
+                        )
+                    };
+                    if confirm.clicked() {
+                        outcome = ConfirmOutcome::Confirmed;
+                    }
+
+                    if redesign_btn(
                         ui,
                         palette,
-                        dialog.confirm_label,
+                        "Cancel",
                         BtnOpts {
                             small: true,
-                            primary: true,
                             ..Default::default()
                         },
                     )
-                };
-                if confirm.clicked() {
-                    outcome = ConfirmOutcome::Confirmed;
-                }
-
-                if redesign_btn(
-                    ui,
-                    palette,
-                    "Cancel",
-                    BtnOpts {
-                        small: true,
-                        ..Default::default()
-                    },
-                )
-                .clicked()
-                {
-                    outcome = ConfirmOutcome::Cancelled;
-                }
-            });
+                    .clicked()
+                    {
+                        outcome = ConfirmOutcome::Cancelled;
+                    }
+                },
+            );
         });
 
     outcome
@@ -190,11 +194,7 @@ pub fn render(
 /// padding) matches the normal primary `redesign_btn`. We reproduce the
 /// primary chassis with the fill swapped so the override stays faithful
 /// without forking `redesign_btn`'s options.
-fn danger_primary_btn(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    label: &str,
-) -> egui::Response {
+fn danger_primary_btn(ui: &mut egui::Ui, palette: ThemePalette, label: &str) -> egui::Response {
     let pad_x = 10.0;
     let pad_y = 4.0;
     let font_size = 12.0;

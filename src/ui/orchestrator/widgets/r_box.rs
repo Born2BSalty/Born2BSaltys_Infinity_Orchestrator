@@ -16,8 +16,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_shell_bg, redesign_text_muted,
+    redesign_border_strong, redesign_shell_bg, redesign_text_muted, ThemePalette,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
 };
 
 /// Render a `Box` chassis around a body callback.
@@ -41,7 +41,12 @@ pub fn redesign_box<R>(
             redesign_border_strong(palette),
         ))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
-        .inner_margin(egui::Margin { left: 12, right: 12, top: 10, bottom: 10 });
+        .inner_margin(egui::Margin {
+            left: 12,
+            right: 12,
+            top: 10,
+            bottom: 10,
+        });
 
     let muted = redesign_text_muted(palette);
 

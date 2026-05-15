@@ -97,11 +97,7 @@ pub fn delete_confirm<'a>(id_salt: &'a str, title: &'a str, body: &'a str) -> Co
 }
 
 /// Convenience: build a `ConfirmDialog` descriptor for the Reinstall confirm.
-pub fn reinstall_confirm<'a>(
-    id_salt: &'a str,
-    title: &'a str,
-    body: &'a str,
-) -> ConfirmDialog<'a> {
+pub fn reinstall_confirm<'a>(id_salt: &'a str, title: &'a str, body: &'a str) -> ConfirmDialog<'a> {
     ConfirmDialog {
         id_salt,
         title,

@@ -30,7 +30,7 @@ use eframe::egui;
 
 use crate::ui::home::game_installs_detected;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_box, redesign_btn};
+use crate::ui::orchestrator::widgets::{redesign_box, redesign_btn, BtnOpts};
 use crate::ui::shared::redesign_tokens::redesign_accent_deep;
 
 /// Which CTA the user clicked this frame.
@@ -45,10 +45,7 @@ pub enum AddAModlistAction {
 }
 
 /// Render the right-column `add a modlist` Box (CTAs + game-installs block).
-pub fn render(
-    ui: &mut egui::Ui,
-    orchestrator: &OrchestratorApp,
-) -> AddAModlistAction {
+pub fn render(ui: &mut egui::Ui, orchestrator: &OrchestratorApp) -> AddAModlistAction {
     let palette = orchestrator.theme_palette;
     let mut action = AddAModlistAction::None;
 

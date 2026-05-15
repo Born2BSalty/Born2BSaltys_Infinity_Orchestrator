@@ -44,13 +44,11 @@
 use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
-use crate::ui::orchestrator::widgets::{
-    BtnOpts, KebabItem, redesign_btn, render_kebab,
-};
+use crate::ui::orchestrator::widgets::{redesign_btn, render_kebab, BtnOpts, KebabItem};
 use crate::ui::shared::format_relative::relative_time;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
+    redesign_border_strong, redesign_shell_bg, redesign_text_faint, redesign_text_primary,
+    ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
 };
 
 /// What the user did on a card this frame. The primary button + the wired
@@ -164,9 +162,7 @@ pub fn meta_line(entry: &ModlistEntry) -> String {
             };
             // "installed <rel>" tracks the install date; fall back to
             // last-touched if (defensively) the install date is missing.
-            let when = entry
-                .install_date
-                .unwrap_or(entry.last_touched_date);
+            let when = entry.install_date.unwrap_or(entry.last_touched_date);
             format!(
                 "{} mods \u{00B7} {} \u{00B7} installed {}",
                 entry.mod_count,
@@ -236,9 +232,7 @@ fn render_action_cluster(
                 }),
                 // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),
-                KebabItem::new("Reinstall", || {
-                    picked.set(ModlistCardActions::Reinstall)
-                }),
+                KebabItem::new("Reinstall", || picked.set(ModlistCardActions::Reinstall)),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
             render_kebab(ui, palette, &entry.id, &mut items);

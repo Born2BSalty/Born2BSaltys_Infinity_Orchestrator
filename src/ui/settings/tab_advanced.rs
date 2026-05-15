@@ -24,9 +24,9 @@ use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_chrome_bg, redesign_input_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    redesign_accent, redesign_border_strong, redesign_chrome_bg, redesign_input_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary, ThemePalette,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
 };
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
@@ -62,10 +62,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
                 palette,
                 "Auto-answer initial delay",
                 Some("ms"),
-                &mut orchestrator
-                    .wizard_state
-                    .step1
-                    .auto_answer_initial_delay_ms,
+                &mut orchestrator.wizard_state.step1.auto_answer_initial_delay_ms,
                 &mut orchestrator
                     .wizard_state
                     .step1
@@ -200,17 +197,14 @@ fn end_capped_row(
                         .color(redesign_text_faint(palette)),
                 );
             }
-            ui.with_layout(
-                egui::Layout::left_to_right(egui::Align::Center),
-                |ui| {
-                    ui.label(
-                        egui::RichText::new(label)
-                            .size(13.0)
-                            .family(egui::FontFamily::Name("poppins_medium".into()))
-                            .color(redesign_text_primary(palette)),
-                    );
-                },
-            );
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.label(
+                    egui::RichText::new(label)
+                        .size(13.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(redesign_text_primary(palette)),
+                );
+            });
         });
     });
     ui.add_space(2.0);
@@ -249,10 +243,7 @@ fn paint_input(
 }
 
 fn paint_toggle(ui: &mut egui::Ui, palette: ThemePalette, on: &mut bool) -> bool {
-    let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(42.0, 22.0),
-        egui::Sense::click(),
-    );
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(42.0, 22.0), egui::Sense::click());
     let painter = ui.painter();
     let radius = egui::CornerRadius::same((REDESIGN_BORDER_RADIUS_PX + 8.0) as u8);
     let track_fill = if *on {

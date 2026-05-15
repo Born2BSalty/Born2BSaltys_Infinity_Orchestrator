@@ -16,12 +16,12 @@
 
 use eframe::egui;
 
-use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette,
-    redesign_border_strong, redesign_chrome_bg, redesign_shell_bg, redesign_text_primary,
-};
 #[cfg(not(target_os = "macos"))]
 use crate::ui::shared::redesign_tokens::redesign_text_muted;
+use crate::ui::shared::redesign_tokens::{
+    redesign_border_strong, redesign_chrome_bg, redesign_shell_bg, redesign_text_primary,
+    ThemePalette, REDESIGN_BORDER_WIDTH_PX, REDESIGN_TITLEBAR_HEIGHT_PX,
+};
 
 // macOS traffic-light colors (approximations of the standard system tints).
 const TRAFFIC_CLOSE: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x5F, 0x57);
@@ -96,8 +96,8 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette) {
     // Drag-to-move: trigger if the drag originated outside any control hit zone.
     if bar_response.drag_started() {
         let press_origin = ui.input(|i| i.pointer.press_origin());
-        let on_control = press_origin
-            .is_some_and(|p| interactive_rects.iter().any(|r| r.contains(p)));
+        let on_control =
+            press_origin.is_some_and(|p| interactive_rects.iter().any(|r| r.contains(p)));
         if !on_control {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }
@@ -106,8 +106,7 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette) {
     // Double-click on empty bar area toggles maximize (standard convention).
     if bar_response.double_clicked() {
         let click_pos = ui.input(|i| i.pointer.interact_pos());
-        let on_control = click_pos
-            .is_some_and(|p| interactive_rects.iter().any(|r| r.contains(p)));
+        let on_control = click_pos.is_some_and(|p| interactive_rects.iter().any(|r| r.contains(p)));
         if !on_control {
             toggle_maximized(ui.ctx());
         }

@@ -27,9 +27,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_border_strong, redesign_hover_overlay, redesign_pill_danger,
-    redesign_shadow, redesign_shell_bg, redesign_text_primary,
+    redesign_border_strong, redesign_hover_overlay, redesign_pill_danger, redesign_shadow,
+    redesign_shell_bg, redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
 };
 
 /// One entry in a Kebab dropdown.

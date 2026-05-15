@@ -22,9 +22,9 @@ use eframe::egui;
 
 use crate::ui::settings::state_settings::PathStatusTone;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
-    redesign_border_strong, redesign_input_bg, redesign_pill_danger, redesign_warning_soft,
-    redesign_success_soft, redesign_text_faint, redesign_text_primary,
+    redesign_accent_deep, redesign_border_strong, redesign_input_bg, redesign_pill_danger,
+    redesign_success_soft, redesign_text_faint, redesign_text_primary, redesign_warning_soft,
+    ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
 };
 
 /// Picker style.
@@ -58,18 +58,13 @@ pub fn render(
 
         ui.horizontal(|ui| {
             // Label (fixed width column for alignment across rows).
-            let (label_rect, _) = ui.allocate_exact_size(
-                egui::vec2(LABEL_WIDTH_PX, 26.0),
-                egui::Sense::hover(),
-            );
+            let (label_rect, _) =
+                ui.allocate_exact_size(egui::vec2(LABEL_WIDTH_PX, 26.0), egui::Sense::hover());
             ui.painter().text(
                 egui::pos2(label_rect.left(), label_rect.center().y),
                 egui::Align2::LEFT_CENTER,
                 label,
-                egui::FontId::new(
-                    13.0,
-                    egui::FontFamily::Name("poppins_medium".into()),
-                ),
+                egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into())),
                 redesign_text_primary(palette),
             );
 
