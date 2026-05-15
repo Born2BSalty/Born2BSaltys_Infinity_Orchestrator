@@ -146,7 +146,7 @@ A modlist is **in-progress** until its first successful install completes; on su
 
 #### Filter chips
 
-A horizontal row at the top of the left Box, three rounded-pill buttons (lighter visual treatment than the regular primary `Btn`: no drop shadow, 14px border radius):
+A horizontal row at the top of the left Box, three rounded-pill buttons (lighter visual treatment than the regular primary `Btn`: no drop shadow, 14px border radius). The chips render with slightly taller vertical padding than the wireframe's literal `4px` (≈7px) — a deliberate user-directed visual call (the 4px read too cramped against the rest of the Home chrome); horizontal padding stays at the wireframe's 12px. This is an intentional deviation, not drift.
 
 - **`Installed (N)`** — finished modlists. The default selection when the user lands on Home, since the steady-state experience is "play your existing libraries".
 - **`In progress (P)`** — only rendered when `P > 0`. Shows the count of in-progress builds.
