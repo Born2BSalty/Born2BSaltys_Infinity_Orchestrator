@@ -81,6 +81,7 @@ use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::nav_status::{
     PathValidationKind, PathValidationSummary, compute_path_validation_summary,
 };
+use crate::ui::home::state_home::HomeScreenState;
 use crate::ui::orchestrator::page_router;
 use crate::ui::orchestrator::stubs::home_stub::HomeStubState;
 use crate::ui::settings::oauth_glue;
@@ -134,7 +135,15 @@ pub struct OrchestratorApp {
     pub persistence_cycle: RegistryPersistenceCycle,
     pub workspace_state: HashMap<String, ModlistWorkspaceState>,
     pub workspace_stores: HashMap<String, WorkspaceStore>,
+    /// Phase 3 home-stub state (dev seed toast). Retained for the dev-only
+    /// stub path; Phase 5's real Home uses `home_screen_state` instead.
     pub home_stub_state: HomeStubState,
+
+    // ---------- Phase 5 fields ----------
+    /// Per-screen Home UI state (active filter chip; Run-2 delete/reinstall/
+    /// toast fields are declared but inert this run). Added in Phase 5 P5.T4
+    /// alongside the real Home screen (P5.T15).
+    pub home_screen_state: HomeScreenState,
 
     // ---------- Phase 4 fields ----------
     pub redesign_settings: RedesignSettings,
@@ -245,6 +254,7 @@ impl OrchestratorApp {
             workspace_state: HashMap::new(),
             workspace_stores: HashMap::new(),
             home_stub_state: HomeStubState::default(),
+            home_screen_state: HomeScreenState::default(),
 
             redesign_settings_last_saved: redesign_settings.clone(),
             redesign_settings,

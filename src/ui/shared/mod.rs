@@ -8,5 +8,6 @@ pub mod typography_global;
 
 // Redesign modules (Infinity Orchestrator) — additive registration per
 // CRITICAL DIRECTIVE carve-out #3 companion provision.
+pub mod format_relative;
 pub mod redesign_fonts;
 pub mod redesign_tokens;

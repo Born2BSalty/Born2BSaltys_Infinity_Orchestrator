@@ -4,11 +4,13 @@
 // `page_router` — match on `OrchestratorApp::nav` and dispatch to the active
 // destination's renderer (or stub).
 //
-// Per Phase 2 P2.T4: each arm renders a Phase-2 stub. **The `Workspace` arm
-// renders the placeholder stub — NOT the legacy `WizardApp::update_loop::run`.**
-// Per H3 / C1 / C4: that path was reverted; Phase 6 wires the real workspace
-// view (which calls BIO's per-step page renderers directly + an orchestrator-
-// side Step 4 wrapper per C4).
+// Per Phase 2 P2.T4: arms initially rendered Phase-2 stubs. Phase 4 wired the
+// real `Settings` screen; Phase 5 P5.T15 wires the real `Home` screen.
+// `Install` / `Create` / `Workspace` still render stubs until Phases 5+/6.
+// **The `Workspace` arm renders the placeholder stub — NOT the legacy
+// `WizardApp::update_loop::run`.** Per H3 / C1 / C4: that path was reverted;
+// Phase 6 wires the real workspace view (which calls BIO's per-step page
+// renderers directly + an orchestrator-side Step 4 wrapper per C4).
 //
 // Per Phase 3 P3.T5: when `OrchestratorApp::registry_error` is `Some`, the
 // router short-circuits to `registry_error_panel::render_registry_error` —
@@ -20,6 +22,7 @@
 
 use eframe::egui;
 
+use crate::ui::home::page_home;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::registry_error_panel;
@@ -42,7 +45,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     }
 
     match orchestrator.nav.clone() {
-        NavDestination::Home => stubs::render_home_stub(ui, orchestrator),
+        // Phase 5 P5.T15 — Home stub replaced with the real Home screen.
+        NavDestination::Home => page_home::render(ui, orchestrator, ctx),
         NavDestination::Install => stubs::render_install_stub(ui, palette),
         NavDestination::Create => stubs::render_create_stub(ui, palette),
         // Phase 4 P4.T8 — Settings stub replaced with the real 5-tab screen.
