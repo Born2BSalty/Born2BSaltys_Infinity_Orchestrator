@@ -25,7 +25,7 @@ use crate::ui::install::stage_installing_stub::{self, InstallingStubOutcome};
 use crate::ui::install::stage_paste::{self, PasteOutcome};
 use crate::ui::install::state_install::InstallStage;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::render_screen_title;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, render_screen_title};
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui::Context) {
@@ -49,24 +49,28 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
         InstallStage::Preview => {
             // Run 4 — parsed share-code preview (Overview Box + 6 tabs +
             // `allow_auto_install` gate). Placeholder this run.
-            run_later_placeholder(
+            if run_later_placeholder(
                 ui,
                 palette,
                 "Preview",
                 "Preview \u{2014} arrives in Run 4",
                 "The parsed share-code preview (Overview + Summary / BGEE WeiDU / BG2EE WeiDU / User Downloads / Installed Refs / Mod Configs tabs) lands in Run 4.",
-            );
+            ) {
+                next_stage = Some(InstallStage::Paste);
+            }
         }
         InstallStage::Downloading => {
             // Run 5 — per-mod download/extract grid wired to BIO's existing
             // download/extract engines. Placeholder this run.
-            run_later_placeholder(
+            if run_later_placeholder(
                 ui,
                 palette,
                 "Downloading",
                 "Downloading \u{2014} arrives in Run 5",
                 "The per-mod download/extract progress grid (wired to BIO's existing fetch + archive engines) lands in Run 5.",
-            );
+            ) {
+                next_stage = Some(InstallStage::Paste);
+            }
         }
         InstallStage::InstallingStub => {
             match stage_installing_stub::render(
@@ -86,16 +90,20 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
 }
 
 /// The minimal "this stage arrives in a later run" placeholder — same chassis
-/// as the §4.4 stage-4 stub (`ScreenTitle` + a faint context line) so the
-/// build is whole and the flow is navigable without implying the stage is
-/// done. No footer (these are pass-through placeholders this run).
+/// as the §4.4 stage-4 stub (`ScreenTitle` + a faint context line). Includes a
+/// `Back to paste` button so the placeholder is **not a dead-end**: without it
+/// the user is trapped here (stage persists across rail navigation) until the
+/// app restarts. Returns `true` when Back was clicked this frame; the caller
+/// transitions back to `Paste`. Plain-ASCII label (no `←` glyph) — keeps it
+/// off the Latin-subset Poppins symbol-glyph pitfall and is plenty for
+/// throwaway Run-3 scaffolding (Run 4/5 replace these stages outright).
 fn run_later_placeholder(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     title: &str,
     sub: &str,
     detail: &str,
-) {
+) -> bool {
     render_screen_title(ui, palette, title, Some(sub));
     ui.add_space(8.0);
     ui.label(
@@ -104,4 +112,6 @@ fn run_later_placeholder(
             .family(egui::FontFamily::Proportional)
             .color(redesign_text_faint(palette)),
     );
+    ui.add_space(16.0);
+    redesign_btn(ui, palette, "Back to paste", BtnOpts::default()).clicked()
 }
