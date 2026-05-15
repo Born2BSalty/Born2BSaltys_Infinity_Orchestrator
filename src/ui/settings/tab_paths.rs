@@ -28,50 +28,50 @@ use crate::ui::shared::redesign_tokens::{
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
 
-    section_header(ui, palette, "Game sources");
+    section_header(ui, palette, "GAME SOURCES");
     path_row_for_field(
         ui,
         palette,
         orchestrator,
-        "BGEE game folder",
+        "BGEE source",
         validate_now::FIELD_BGEE_GAME_FOLDER,
     );
     path_row_for_field(
         ui,
         palette,
         orchestrator,
-        "BG2EE game folder",
+        "BG2EE source",
         validate_now::FIELD_BG2EE_GAME_FOLDER,
     );
     path_row_for_field(
         ui,
         palette,
         orchestrator,
-        "IWDEE game folder",
+        "IWDEE source",
         validate_now::FIELD_IWDEE_GAME_FOLDER,
     );
 
     ui.add_space(12.0);
-    section_header(ui, palette, "Working folders");
+    section_header(ui, palette, "WORKING FOLDERS");
     path_row_for_field(
         ui,
         palette,
         orchestrator,
-        "Mods archive folder",
+        "Mods archive",
         validate_now::FIELD_MODS_ARCHIVE_FOLDER,
     );
     path_row_for_field(
         ui,
         palette,
         orchestrator,
-        "Mods backup folder",
+        "Mods backup",
         validate_now::FIELD_MODS_BACKUP_FOLDER,
     );
     path_row_for_field(
         ui,
         palette,
         orchestrator,
-        "Temp folder",
+        "Temp",
         validate_now::FIELD_MODS_FOLDER,
     );
 }
@@ -152,7 +152,7 @@ fn field_mut<'a>(
 fn section_header(ui: &mut egui::Ui, palette: ThemePalette, label: &str) {
     ui.label(
         egui::RichText::new(label)
-            .size(11.0)
+            .size(13.0)
             .family(egui::FontFamily::Name("poppins_medium".into()))
             .color(redesign_text_muted(palette)),
     );

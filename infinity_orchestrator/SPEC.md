@@ -1056,19 +1056,21 @@ A `NameRow` at the top, then a 2-column grid of four settings:
 
 ### 11.2 Paths
 
-Two labeled sections:
+Two labeled sections. Each section header renders in uppercase, muted color, 13px Poppins-medium (`GAME SOURCES`, `WORKING FOLDERS`) — the source strings are uppercased directly rather than via a runtime transform.
 
-**Game sources** — PathRow entries:
+**`GAME SOURCES`** — PathRow entries (row labels are terse, matching the wireframe):
 
-- BGEE game folder (e.g. `C:\GOG\Baldurs Gate Enhanced Edition` on Windows, `/Users/<you>/Library/Application Support/Baldur's Gate Enhanced Edition` on macOS, etc.)
-- BG2EE game folder
-- IWDEE game folder — defaults to `(not set)` if undetected
+- `BGEE source` (e.g. `C:\GOG\Baldurs Gate Enhanced Edition` on Windows, `/Users/<you>/Library/Application Support/Baldur's Gate Enhanced Edition` on macOS, etc.)
+- `BG2EE source`
+- `IWDEE source` — empty until the user sets it
 
-**Working folders** — PathRow entries:
+**`WORKING FOLDERS`** — PathRow entries:
 
-- Mods archive folder
-- Mods backup folder
-- Temp folder (defaults to `%TEMP%\infinity-orch` on Windows, `$TMPDIR/infinity-orch` on macOS/Linux — auto-created on first install)
+- `Mods archive`
+- `Mods backup`
+- `Temp` (defaults to `%TEMP%\infinity-orch` on Windows, `$TMPDIR/infinity-orch` on macOS/Linux — auto-created on first install)
+
+The wireframe also shows a `Tools` working-folder row; it is intentionally **not** rendered here — it conflates with the dedicated Tools sub-tab (which owns the binary paths). This Paths tab is scoped to game sources + working folders only (per Phase 4 plan P4.T3).
 
 Each row is two lines tall:
 
