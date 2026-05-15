@@ -32,6 +32,15 @@
 //
 // SPEC: §10.1 (non-blocking), §10.7 (ConfirmDialog), §3.1.
 
+// rationale: `f32 as u8`/`i8` casts are pixel-radius / shadow-offset
+// roundings of small positive constants — correct by construction (Cat 2);
+// `#[must_use]` on a trivial ctor is churn (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::must_use_candidate
+)]
+
 use eframe::egui;
 
 use crate::ui::orchestrator::widgets::{redesign_btn, BtnOpts};

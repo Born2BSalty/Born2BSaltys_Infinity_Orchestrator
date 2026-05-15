@@ -18,13 +18,17 @@
 //
 // SPEC: §13.1.
 
+// rationale: serde model — `#[must_use]` on trivial query churn (Cat 3);
+// deriving `Eq` is a trait-bound surface change, not provably neutral (Cat 3).
+#![allow(clippy::must_use_candidate, clippy::derive_partial_eq_without_eq)]
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
 /// A reference to a single TP2 component, identifying it by tp2 path, the
 /// component's numeric id, and the chosen install language.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ComponentRef {
     /// TP2 path (normalized — `<mod_folder>/<file>.tp2`).
@@ -33,16 +37,6 @@ pub struct ComponentRef {
     pub id: i64,
     /// Selected install language (TP2 LANGUAGE index, typically 0).
     pub language: u8,
-}
-
-impl Default for ComponentRef {
-    fn default() -> Self {
-        Self {
-            tp2: String::new(),
-            id: 0,
-            language: 0,
-        }
-    }
 }
 
 /// One user-authored override of a TP2 prompt's evaluated answer.
@@ -129,7 +123,7 @@ mod tests {
 
     #[test]
     fn missing_fields_default_to_empty() {
-        let raw = r#"{}"#;
+        let raw = r"{}";
         let w: ModlistWorkspaceState = serde_json::from_str(raw).expect("parse");
         assert!(w.is_empty());
     }

@@ -23,6 +23,9 @@
 //
 // SPEC: §3.2 (card meta lines), §3.1 (Home).
 
+// rationale: `#[must_use]` on trivial formatting helpers is churn (Cat 3).
+#![allow(clippy::must_use_candidate)]
+
 use chrono::{DateTime, Utc};
 
 /// Average days per month used purely for the coarse "months ago" bucket.

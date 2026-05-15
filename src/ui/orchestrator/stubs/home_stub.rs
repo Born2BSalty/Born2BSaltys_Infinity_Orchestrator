@@ -75,12 +75,7 @@ pub fn render_home_stub(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             handle_seed_click(orchestrator);
         }
 
-        if let Some(toast) = orchestrator
-            .home_stub_state
-            .seed_toast_text
-            .as_ref()
-            .cloned()
-        {
+        if let Some(toast) = orchestrator.home_stub_state.seed_toast_text.clone() {
             ui.add_space(8.0);
             let _ = redesign_label(ui, palette, &toast);
         }

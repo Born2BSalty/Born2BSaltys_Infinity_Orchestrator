@@ -6,6 +6,10 @@
 // Per Phase 4 P4.T8 file inventory: simple binary toggle used in the
 // General + Advanced sub-tabs.
 
+// rationale: `f32 as u8` casts are colour-channel / pixel roundings of small
+// positive values — correct by construction (Cat 2).
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{

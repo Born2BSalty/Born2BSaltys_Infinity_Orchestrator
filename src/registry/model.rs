@@ -18,6 +18,16 @@
 //
 // SPEC: §13.1, §15 (additive schema evolution).
 
+// rationale: serde model — `Self`/`const fn`/`#[must_use]` churn adds noise on
+// trivial accessors (Cat 3); deriving `Eq` on these structs is a trait-bound
+// surface change, not provably behavior-neutral, so suppress (Cat 3).
+#![allow(
+    clippy::use_self,
+    clippy::must_use_candidate,
+    clippy::missing_const_for_fn,
+    clippy::derive_partial_eq_without_eq
+)]
+
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
@@ -129,36 +139,26 @@ impl Default for ModlistEntry {
 }
 
 /// The lifecycle stage of a modlist.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ModlistState {
     /// Workspace edits ongoing; install not yet completed.
+    #[default]
     InProgress,
     /// Install completed; entry is read-only from Home (Reinstall = clone).
     Installed,
 }
 
-impl Default for ModlistState {
-    fn default() -> Self {
-        ModlistState::InProgress
-    }
-}
-
 /// Game family for an entry. Mirrors BIO's `game_install` string set but is
 /// strongly typed for the registry.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Game {
+    #[default]
     BGEE,
     BG2EE,
     IWDEE,
     EET,
-}
-
-impl Default for Game {
-    fn default() -> Self {
-        Game::BGEE
-    }
 }
 
 impl Game {

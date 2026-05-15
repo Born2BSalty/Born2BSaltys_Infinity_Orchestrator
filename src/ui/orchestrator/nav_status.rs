@@ -18,6 +18,9 @@
 // Phase 2 — Phase 4 wires real WeiDU version detection via a tool-version
 // cache (per phase 4 P4.T?). This is documented as a known stub.
 
+// rationale: `#[must_use]` on a trivial summary helper is churn (Cat 3).
+#![allow(clippy::must_use_candidate)]
+
 use crate::app::state::WizardState;
 
 /// Whether all configured paths validate cleanly.
@@ -78,8 +81,9 @@ pub fn compute_path_validation_summary(state: &WizardState) -> PathValidationSum
         .step1_path_check
         .as_ref()
         .filter(|(ok, _)| !*ok)
-        .map(|(_, msg)| state_validation::split_path_check_lines(msg).len())
-        .unwrap_or(0);
+        .map_or(0, |(_, msg)| {
+            state_validation::split_path_check_lines(msg).len()
+        });
 
     let text = if issue_count == 0 {
         String::from("\u{00D7} paths not configured")

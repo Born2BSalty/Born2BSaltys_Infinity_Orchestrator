@@ -19,6 +19,10 @@
 //
 // SPEC: §13.14.
 
+// rationale: `Self` vs the explicit variant name is a stylistic preference;
+// the spelled-out `RegistryError::Variant` form reads clearer here (Cat 3).
+#![allow(clippy::use_self)]
+
 use std::error::Error;
 use std::fmt;
 use std::io;

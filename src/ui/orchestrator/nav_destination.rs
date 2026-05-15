@@ -17,23 +17,30 @@
 // SPEC §2.1: Explore is intentionally omitted from v1 alpha (Appendix C
 // lists it as a future v2 track).
 
+// rationale: small router enum with trivial label/icon/predicate accessors —
+// `Self`/`const fn`/`#[must_use]` churn and the doc-paragraph-length lint add
+// noise without behavior value (Cat 3).
+#![allow(
+    clippy::use_self,
+    clippy::missing_const_for_fn,
+    clippy::must_use_candidate,
+    clippy::too_long_first_doc_paragraph
+)]
+
 /// The top-level orchestrator destination router. Variants 1-4 are the rail
 /// items in SPEC §2.1 order; `Workspace` is off-rail and reached from the
 /// Home stub's dev-mode button in Phase 2 (real entry from Home cards in
 /// Phase 5).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum NavDestination {
+    #[default]
     Home,
     Install,
     Create,
     Settings,
-    Workspace { modlist_id: Option<String> },
-}
-
-impl Default for NavDestination {
-    fn default() -> Self {
-        NavDestination::Home
-    }
+    Workspace {
+        modlist_id: Option<String>,
+    },
 }
 
 impl NavDestination {

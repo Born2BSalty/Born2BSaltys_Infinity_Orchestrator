@@ -18,6 +18,16 @@
 // SPEC: §1.2 (sketchy borders / shadow), §12.1 (palette), §12.2 (pill tones),
 //       §12.3 (misc rules), §2.1 (left-rail width 200px labels mode).
 
+// rationale: trivial color-token getters — `const fn`/`#[must_use]`/`Self`
+// churn adds noise without value (Cat 3); float equality here is exact-sentinel
+// constant comparison in tests, intentional (Cat 3).
+#![allow(
+    clippy::missing_const_for_fn,
+    clippy::must_use_candidate,
+    clippy::use_self,
+    clippy::float_cmp
+)]
+
 use eframe::egui::Color32;
 
 // ---------------------------------------------------------------------------
@@ -91,7 +101,7 @@ pub(crate) struct PaletteValues {
 }
 
 /// Light palette — SPEC §12.1 light table + wireframe `index.html:14-36` for
-/// values the spec leaves silent (text_muted/faint/fainter, accent_hover).
+/// values the spec leaves silent (`text_muted`/`faint`/`fainter`, `accent_hover`).
 pub(crate) const LIGHT: PaletteValues = PaletteValues {
     // Surfaces
     page_bg: Color32::from_rgb(0xe8, 0xee, 0xf5),

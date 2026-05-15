@@ -16,6 +16,23 @@
 //
 // SPEC: §2.1.
 
+// rationale: `f32 as u8` casts are colour-channel / pixel roundings, correct
+// by construction (Cat 2). The `0.7071` unit-vector literals are hand-tuned
+// vector-icon geometry — substituting `FRAC_1_SQRT_2` would shift painted
+// pixels, so `approx_constant` is NOT behavior-neutral; likewise `mul_add`
+// changes float rounding. The icon-stepping `while x < end` loop, the
+// readability-distinct match arms, and the `const fn` lint are intentional /
+// churn. All suppressed without changing rendered output (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::approx_constant,
+    clippy::suboptimal_flops,
+    clippy::while_float,
+    clippy::match_same_arms,
+    clippy::missing_const_for_fn
+)]
+
 use eframe::egui;
 
 use crate::ui::orchestrator::nav_destination::NavDestination;

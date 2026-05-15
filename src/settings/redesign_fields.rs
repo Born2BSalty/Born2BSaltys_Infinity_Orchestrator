@@ -12,28 +12,34 @@
 //
 // SPEC: §11.1.
 
+// rationale: serde model + trivial label/list accessors — `Self`/`const fn`/
+// `#[must_use]` churn and the doc-paragraph-length lint add noise without
+// behavior value (Cat 3).
+#![allow(
+    clippy::use_self,
+    clippy::missing_const_for_fn,
+    clippy::must_use_candidate,
+    clippy::too_long_first_doc_paragraph
+)]
+
 use serde::{Deserialize, Serialize};
 
 /// Theme choice persisted alongside the redesign's other UI prefs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeChoice {
     Light,
+    #[default]
     Dark,
-}
-
-impl Default for ThemeChoice {
-    fn default() -> Self {
-        ThemeChoice::Dark
-    }
 }
 
 /// UI language choice. Per SPEC §11.1, only English drives real text rendering
 /// in v1 alpha — the other entries are a visual stub. The persisted value
 /// stays stable across phases so the future i18n layer can read it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum UiLanguage {
+    #[default]
     English,
     German,
     French,
@@ -46,14 +52,8 @@ pub enum UiLanguage {
     Ukrainian,
 }
 
-impl Default for UiLanguage {
-    fn default() -> Self {
-        UiLanguage::English
-    }
-}
-
 impl UiLanguage {
-    /// Stable display label for the General sub-tab ComboBox.
+    /// Stable display label for the General sub-tab `ComboBox`.
     pub fn label(self) -> &'static str {
         match self {
             UiLanguage::English => "English",
@@ -69,7 +69,7 @@ impl UiLanguage {
         }
     }
 
-    /// The full ordered list shown in the ComboBox (SPEC §11.1).
+    /// The full ordered list shown in the `ComboBox` (SPEC §11.1).
     pub fn all() -> &'static [UiLanguage] {
         const ALL: [UiLanguage; 10] = [
             UiLanguage::English,
@@ -93,7 +93,7 @@ impl UiLanguage {
 #[serde(default)]
 pub struct RedesignSettings {
     /// User display name — feeds the share-code author field (SPEC §11.1) and
-    /// the General sub-tab NameRow.
+    /// the General sub-tab `NameRow`.
     pub user_name: String,
     /// Active theme palette persisted across launches.
     pub theme_palette: ThemeChoice,
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn missing_fields_use_defaults() {
-        let raw = r#"{}"#;
+        let raw = r"{}";
         let s: RedesignSettings = serde_json::from_str(raw).expect("backward-compat");
         assert_eq!(s.user_name, "");
         assert_eq!(s.theme_palette, ThemeChoice::Dark);

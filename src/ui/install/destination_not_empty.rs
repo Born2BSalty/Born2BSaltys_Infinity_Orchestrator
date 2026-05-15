@@ -40,6 +40,15 @@
 //
 // SPEC: §4.1, §13.12 #6. Wireframe: screens.jsx:123-154 (verbatim).
 
+// rationale: `f32 as u8`/`i8` casts are pixel-radius / shadow-offset
+// roundings of small positive constants — correct by construction (Cat 2);
+// the doc-paragraph-length lint is subjective style (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::too_long_first_doc_paragraph
+)]
+
 use eframe::egui;
 
 use crate::ui::install::state_install::DestChoice;

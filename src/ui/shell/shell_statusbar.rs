@@ -15,6 +15,10 @@
 // SPEC: §1.2 (26px footer status bar always visible), wireframe
 // `index.html:175-184`, `app.jsx:148-155`.
 
+// rationale: `mul_add` would change float rounding of layout math, so the
+// suboptimal-flops rewrite is not behavior-neutral — suppressed (Cat 3).
+#![allow(clippy::suboptimal_flops)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{

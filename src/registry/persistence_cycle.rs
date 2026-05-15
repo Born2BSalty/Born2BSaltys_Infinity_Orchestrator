@@ -24,6 +24,12 @@
 //
 // SPEC: §13.14.
 
+// rationale: `#[must_use]` on a trivial query is churn (Cat 3); the test-only
+// `Default::default()` + single-field reassign cannot be a struct literal
+// (the struct has private fields), so the field-reassign lint is suppressed
+// rather than restructured (Cat 3).
+#![allow(clippy::must_use_candidate, clippy::field_reassign_with_default)]
+
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -122,10 +128,7 @@ impl RegistryPersistenceCycle {
         store: &WorkspaceStore,
         now: Instant,
     ) -> Result<bool, RegistryError> {
-        let needs_write = match self.last_saved_workspaces.get(modlist_id) {
-            Some(last) => last != in_memory,
-            None => true,
-        };
+        let needs_write = self.last_saved_workspaces.get(modlist_id) != Some(in_memory);
         if !needs_write {
             return Ok(false);
         }
@@ -166,14 +169,11 @@ impl RegistryPersistenceCycle {
             self.last_dirty_at.remove(REGISTRY_KEY);
         }
 
-        for (id, ws) in in_memory_workspaces.iter() {
+        for (id, ws) in in_memory_workspaces {
             let Some(store) = workspace_stores.get(id) else {
                 continue;
             };
-            let differs = match self.last_saved_workspaces.get(id) {
-                Some(last) => last != ws,
-                None => true,
-            };
+            let differs = self.last_saved_workspaces.get(id) != Some(ws);
             if !differs {
                 continue;
             }
@@ -190,13 +190,12 @@ impl RegistryPersistenceCycle {
     }
 
     fn is_debounce_elapsed(&self, key: &str, now: Instant) -> bool {
-        match self.last_dirty_at.get(key) {
-            // No dirty mark means "force-write requested without debouncing"
-            // — e.g., a direct call after a mutation that wants immediate
-            // persistence. Treat as elapsed.
-            None => true,
-            Some(t) => now.saturating_duration_since(*t) >= Duration::from_millis(self.debounce_ms),
-        }
+        // A missing dirty mark means "force-write requested without
+        // debouncing" — e.g., a direct call after a mutation that wants
+        // immediate persistence. Treat as elapsed.
+        self.last_dirty_at.get(key).is_none_or(|t| {
+            now.saturating_duration_since(*t) >= Duration::from_millis(self.debounce_ms)
+        })
     }
 }
 

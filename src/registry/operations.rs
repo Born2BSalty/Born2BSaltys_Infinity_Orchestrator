@@ -38,6 +38,10 @@
 // SPEC: §3.1 (Delete / Reinstall semantics), §3.2 (Open install folder),
 // §13.1.
 
+// rationale: `#[must_use]` on these helpers + the doc-paragraph-length lint
+// are subjective churn without behavior value (Cat 3).
+#![allow(clippy::must_use_candidate, clippy::too_long_first_doc_paragraph)]
+
 use std::path::Path;
 
 use crate::registry::errors::RegistryError;

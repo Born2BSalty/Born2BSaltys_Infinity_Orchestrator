@@ -14,6 +14,11 @@
 //
 // SPEC: §11.1.
 
+// rationale: the dashed-rule `while x < right` is an intentional
+// pixel-stepping loop and the tab render length mirrors its field set —
+// suppressed without behavior change (Cat 3).
+#![allow(clippy::while_float, clippy::too_many_lines)]
+
 use eframe::egui;
 
 use crate::settings::redesign_fields::{ThemeChoice, UiLanguage};
@@ -153,7 +158,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
                     orchestrator.settings_screen_state.path_validation_results = if on {
                         crate::ui::settings::validate_now::run_now(&orchestrator.wizard_state.step1)
                     } else {
-                        Default::default()
+                        crate::ui::settings::state_settings::ValidationReport::default()
                     };
                 }
             },
@@ -215,7 +220,7 @@ fn settings_row(
         );
         // Right: control, flush-right, fixed-fit width.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            control(ui)
+            control(ui);
         });
     });
     ui.add_space(8.0);

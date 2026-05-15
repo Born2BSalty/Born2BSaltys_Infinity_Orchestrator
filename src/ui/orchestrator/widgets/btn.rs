@@ -15,6 +15,18 @@
 //
 // SPEC: §1.2 (sketchy aesthetic, 1.5px borders, 2×2 drop shadow on primary).
 
+// rationale: the casts are colour-channel / pixel roundings — correct by
+// construction (Cat 2); `BtnOpts`'s flags are 4 independent style toggles
+// (intentional, not a state-machine smell) and `mul_add` would change float
+// rounding — suppressed without behavior change (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_lossless,
+    clippy::struct_excessive_bools,
+    clippy::suboptimal_flops
+)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{

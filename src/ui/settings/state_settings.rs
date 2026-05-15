@@ -29,25 +29,28 @@
 //
 // SPEC: §11.
 
+// rationale: per-screen UI state struct + trivial query/ctor helpers —
+// `Self`/`const fn`/`#[must_use]` churn adds noise without behavior value (Cat 3).
+#![allow(
+    clippy::use_self,
+    clippy::missing_const_for_fn,
+    clippy::must_use_candidate
+)]
+
 use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::ui::settings::widgets::tab_strip::TabLabel;
 
 /// The five Settings tabs, in fixed render order (SPEC §11).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SettingsTab {
+    #[default]
     General,
     Paths,
     Tools,
     Accounts,
     Advanced,
-}
-
-impl Default for SettingsTab {
-    fn default() -> Self {
-        SettingsTab::General
-    }
 }
 
 impl TabLabel for SettingsTab {
@@ -136,7 +139,7 @@ pub struct ValidationReport {
     pub issue_count: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SettingsScreenState {
     pub active_tab: SettingsTab,
     pub name_row_editing: bool,
@@ -145,18 +148,4 @@ pub struct SettingsScreenState {
     pub validate_now_in_flight: bool,
     pub path_edit_debounce: HashMap<&'static str, Instant>,
     pub path_validation_results: ValidationReport,
-}
-
-impl Default for SettingsScreenState {
-    fn default() -> Self {
-        Self {
-            active_tab: SettingsTab::default(),
-            name_row_editing: false,
-            name_row_buffer: String::new(),
-            oauth_popup_open: false,
-            validate_now_in_flight: false,
-            path_edit_debounce: HashMap::new(),
-            path_validation_results: ValidationReport::default(),
-        }
-    }
 }

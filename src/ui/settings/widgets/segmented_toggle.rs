@@ -8,6 +8,10 @@
 // `RedesignSettings::theme_palette` via this widget. Clicking either segment
 // flips the value through the `&mut` reference and fires `on_change`.
 
+// rationale: `f32 as u8` casts are colour-channel / pixel roundings of small
+// positive values — correct by construction (Cat 2).
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
@@ -46,12 +50,10 @@ pub fn render(
 
             let text_color = if *selected {
                 egui::Color32::from_rgb(0x1a, 0x26, 0x38)
+            } else if response.hovered() {
+                redesign_text_primary(palette)
             } else {
-                if response.hovered() {
-                    redesign_text_primary(palette)
-                } else {
-                    redesign_text_muted(palette)
-                }
+                redesign_text_muted(palette)
             };
             painter.text(
                 rect.center(),

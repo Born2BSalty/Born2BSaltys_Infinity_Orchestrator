@@ -32,6 +32,11 @@
 //
 // SPEC: §3.1, §3.2, §3.3, §3.4.
 
+// rationale: the top-level Home render fn is a flat sequence of section
+// renders; splitting purely to satisfy a line-count threshold would not aid
+// readability (Cat 3).
+#![allow(clippy::too_many_lines)]
+
 use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
@@ -233,22 +238,19 @@ fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, in
             // SPEC §3.2: writes the build's BIO-MODLIST-V1 code to the
             // clipboard, shows the toast. The registry helper only resolves
             // the code; the clipboard write is egui-built-in (no crate).
-            match operations::share_code_for(&id, &orchestrator.registry) {
-                Some(code) => {
-                    ctx.copy_text(code);
-                    let name = modlist_name(orchestrator, &id);
-                    orchestrator.home_screen_state.toast = Some(ToastMessage::success(format!(
-                        "Copied import code for \"{name}\""
-                    )));
-                }
-                None => {
-                    // No code yet (pre-Phase-7 in-progress build). Surface it
-                    // rather than silently doing nothing.
-                    let name = modlist_name(orchestrator, &id);
-                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(format!(
-                        "No import code yet for \"{name}\""
-                    )));
-                }
+            if let Some(code) = operations::share_code_for(&id, &orchestrator.registry) {
+                ctx.copy_text(code);
+                let name = modlist_name(orchestrator, &id);
+                orchestrator.home_screen_state.toast = Some(ToastMessage::success(format!(
+                    "Copied import code for \"{name}\""
+                )));
+            } else {
+                // No code yet (pre-Phase-7 in-progress build). Surface it
+                // rather than silently doing nothing.
+                let name = modlist_name(orchestrator, &id);
+                orchestrator.home_screen_state.toast = Some(ToastMessage::error(format!(
+                    "No import code yet for \"{name}\""
+                )));
             }
         }
         CardIntent::OpenInstallFolder(id) => open_install_folder_for(orchestrator, &id),
@@ -279,8 +281,7 @@ fn modlist_name(orchestrator: &OrchestratorApp, id: &str) -> String {
     orchestrator
         .registry
         .find(id)
-        .map(|e| e.name.clone())
-        .unwrap_or_else(|| "modlist".to_string())
+        .map_or_else(|| "modlist".to_string(), |e| e.name.clone())
 }
 
 /// Render the Delete confirm if `delete_target` is armed. On confirm: call
@@ -303,7 +304,7 @@ fn render_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context
     match outcome {
         ConfirmOutcome::Confirmed => {
             orchestrator.home_screen_state.delete_target = None;
-            let name = entry.name.clone();
+            let name = entry.name;
             match operations::delete_modlist(
                 &id,
                 &orchestrator.registry_store,
@@ -405,14 +406,13 @@ fn build_subtitle(installed: &[ModlistEntry], in_progress_count: usize) -> Strin
         .iter()
         .filter(|e| e.last_played_date.is_some())
         .max_by_key(|e| e.last_played_date)
+        && let Some(when) = last.last_played_date
     {
-        if let Some(when) = last.last_played_date {
-            segments.push(format!(
-                "last played {} {}",
-                last.game.to_legacy_string(),
-                relative_time(when)
-            ));
-        }
+        segments.push(format!(
+            "last played {} {}",
+            last.game.to_legacy_string(),
+            relative_time(when)
+        ));
     }
 
     segments.join(" \u{00B7} ")

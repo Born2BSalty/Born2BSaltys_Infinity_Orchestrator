@@ -102,9 +102,7 @@ fn path_row_for_field(
         )
     } else {
         let hint = status.map(PathStatus::hint_text);
-        let tone = status
-            .map(PathStatus::tone)
-            .unwrap_or(PathStatusTone::Neutral);
+        let tone = status.map_or(PathStatusTone::Neutral, PathStatus::tone);
         (hint, tone)
     };
 

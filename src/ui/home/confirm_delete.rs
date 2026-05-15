@@ -30,6 +30,14 @@
 //
 // SPEC: §3.1 (Delete semantics, Reinstall semantics), §10.1, §10.7.
 
+// rationale: trivial dialog-text/ctor helpers — `const fn`/`#[must_use]` and
+// the doc-paragraph-length lint are churn without behavior value (Cat 3).
+#![allow(
+    clippy::missing_const_for_fn,
+    clippy::must_use_candidate,
+    clippy::too_long_first_doc_paragraph
+)]
+
 use crate::registry::model::ModlistEntry;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::ConfirmDialog;
 

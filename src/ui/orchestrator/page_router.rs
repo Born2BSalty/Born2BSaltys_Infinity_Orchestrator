@@ -58,7 +58,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
         // Phase 4 P4.T8 — Settings stub replaced with the real 5-tab screen.
         NavDestination::Settings => page_settings::render(ui, orchestrator, ctx),
         NavDestination::Workspace { modlist_id } => {
-            stubs::render_workspace_stub(ui, palette, modlist_id.as_deref())
+            stubs::render_workspace_stub(ui, palette, modlist_id.as_deref());
         }
     }
 }

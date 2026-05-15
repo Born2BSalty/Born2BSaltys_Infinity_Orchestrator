@@ -41,6 +41,19 @@
 //
 // SPEC: §3.2 (cards shared shape), §3.1 (in-list cards + Kebab item sets).
 
+// rationale: the casts are pixel-radius roundings and a byte-count→f64
+// widening for human-readable size formatting — correct by construction at
+// the magnitudes involved (Cat 2); `#[must_use]` on a trivial helper is
+// churn (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::must_use_candidate
+)]
+
+use std::fmt::Write as _;
+
 use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
@@ -151,15 +164,15 @@ pub fn meta_line(entry: &ModlistEntry) -> String {
             );
             // Omit the segment entirely (not a placeholder) when unknown.
             if let Some(step) = entry.paused_at_step {
-                s.push_str(&format!(" \u{00B7} paused at Step {step}"));
+                let _ = write!(s, " \u{00B7} paused at Step {step}");
             }
             s
         }
         ModlistState::Installed => {
-            let size = match entry.total_size_bytes {
-                Some(bytes) => human_size(bytes),
-                None => "\u{2014}".to_string(), // — (em dash) when size unknown
-            };
+            // `—` (em dash) when size unknown.
+            let size = entry
+                .total_size_bytes
+                .map_or_else(|| "\u{2014}".to_string(), human_size);
             // "installed <rel>" tracks the install date; fall back to
             // last-touched if (defensively) the install date is missing.
             let when = entry.install_date.unwrap_or(entry.last_touched_date);
@@ -196,7 +209,7 @@ fn render_action_cluster(
             // / Delete.
             let mut items = vec![
                 KebabItem::new("Copy import code", || {
-                    picked.set(ModlistCardActions::CopyImportCode)
+                    picked.set(ModlistCardActions::CopyImportCode);
                 }),
                 // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),
@@ -225,10 +238,10 @@ fn render_action_cluster(
             // folder / Rename / Reinstall / Delete.
             let mut items = vec![
                 KebabItem::new("Copy import code", || {
-                    picked.set(ModlistCardActions::CopyImportCode)
+                    picked.set(ModlistCardActions::CopyImportCode);
                 }),
                 KebabItem::new("Open install folder", || {
-                    picked.set(ModlistCardActions::OpenInstallFolder)
+                    picked.set(ModlistCardActions::OpenInstallFolder);
                 }),
                 // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),

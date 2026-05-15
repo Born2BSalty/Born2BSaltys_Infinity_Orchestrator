@@ -34,13 +34,25 @@
 //
 // SPEC: §4.1 (paste stage), §4.4 (stage 4 stub), §13.12 #1/#6 (flag policy).
 
+// rationale: per-screen UI state + the pure `DestChoice::to_flags` mapping —
+// `DestFlags`'s 4 flags model 4 independent WeiDU policy bits (intentional,
+// not a state-machine smell); `Self`/`const fn`/`#[must_use]` and the
+// doc-paragraph-length lint are churn without behavior value (Cat 3).
+#![allow(
+    clippy::struct_excessive_bools,
+    clippy::use_self,
+    clippy::missing_const_for_fn,
+    clippy::must_use_candidate,
+    clippy::too_long_first_doc_paragraph
+)]
+
 /// The four Install Modlist stages (SPEC §4: paste → preview → downloading →
 /// installing). The machine is whole so the dispatcher + back-navigation are
 /// total; Run 3 implements `Paste` + `InstallingStub`, with `Preview` /
 /// `Downloading` rendering Run-4 / Run-5 placeholders.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InstallStage {
-    /// Stage 1 — destination + DestinationNotEmptyWarning + import-code
+    /// Stage 1 — destination + `DestinationNotEmptyWarning` + import-code
     /// textarea + footer (SPEC §4.1). Fully implemented this run.
     #[default]
     Paste,
@@ -72,7 +84,7 @@ pub enum DestChoice {
     Continue,
 }
 
-/// The WeiDU / install-runner flags a `DestChoice` resolves to, per
+/// The `WeiDU` / install-runner flags a `DestChoice` resolves to, per
 /// SPEC §13.12. These mirror `bio::app::state::Step1State` fields
 /// (`prepare_target_dirs_before_install`, `backup_targets_before_eet_copy`,
 /// `skip_installed`, `check_last_installed`). Run 3 only computes this; the
@@ -81,7 +93,7 @@ pub enum DestChoice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DestFlags {
     /// `prepare_target_dirs_before_install` — wipe/prepare the target dirs
-    /// before WeiDU runs (SPEC §13.12 #6).
+    /// before `WeiDU` runs (SPEC §13.12 #6).
     pub prepare_target_dirs_before_install: bool,
     /// `backup_targets_before_eet_copy` — move existing files aside first
     /// (SPEC §13.12 #6).
@@ -95,7 +107,7 @@ pub struct DestFlags {
 }
 
 impl DestChoice {
-    /// SPEC §13.12 #1 + #6 — the canonical DestChoice → flag mapping.
+    /// SPEC §13.12 #1 + #6 — the canonical `DestChoice` → flag mapping.
     ///
     /// | choice     | prepare | backup | -s / -c |
     /// |------------|---------|--------|---------|
@@ -144,7 +156,7 @@ pub struct InstallScreenState {
     /// Active stage. Defaults to `Paste` so a fresh entry from the rail / the
     /// Home `paste import code` CTA lands on stage 1.
     pub stage: InstallStage,
-    /// Destination folder string (FolderInput value). The
+    /// Destination folder string (`FolderInput` value). The
     /// `DestinationNotEmptyWarning` shows only when this is set AND non-empty
     /// on disk.
     pub destination: String,

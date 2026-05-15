@@ -13,6 +13,10 @@
 //
 // SPEC: §13.1 (registry CRUD; this is just exercising it without UI yet).
 
+// rationale: doc-paragraph-length is a subjective style lint; the existing
+// doc wording is intentional (Cat 3).
+#![allow(clippy::too_long_first_doc_paragraph)]
+
 use std::path::PathBuf;
 
 use chrono::Utc;

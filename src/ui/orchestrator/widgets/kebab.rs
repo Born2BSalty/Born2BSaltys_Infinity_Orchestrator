@@ -24,6 +24,11 @@
 //
 // SPEC: §3.2 (card Kebab menus), §6.4 (toolbar Kebab pattern).
 
+// rationale: the `f32 as u8` / `f32 as i8` casts are pixel-radius / shadow-
+// offset roundings of small positive layout constants — correct by
+// construction (Cat 2).
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
@@ -121,7 +126,7 @@ pub fn render(
                 for item in items.iter_mut() {
                     if menu_item(ui, palette, item.label, item.danger) {
                         (item.on_click)();
-                        ui.memory_mut(|mem| mem.close_popup());
+                        ui.memory_mut(egui::Memory::close_popup);
                     }
                 }
             });

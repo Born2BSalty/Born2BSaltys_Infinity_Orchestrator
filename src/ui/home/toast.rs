@@ -25,6 +25,19 @@
 //
 // SPEC: §10.8 (Toast), §3.1 (bottom-center, ~1.8s auto-dismiss), §3.2.
 
+// rationale: `f32 as u8`/`i8` casts are pixel-radius / shadow-offset
+// roundings of small positive constants — correct by construction (Cat 2);
+// `#[must_use]`, the doc-paragraph-length lint, and the test-only
+// `Instant - Duration` (a deliberate past-instant; cannot underflow here) are
+// churn / intentional and suppressed (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::must_use_candidate,
+    clippy::too_long_first_doc_paragraph,
+    clippy::unchecked_time_subtraction
+)]
+
 use std::time::Duration;
 
 use eframe::egui;

@@ -18,6 +18,15 @@
 //
 // SPEC: §12.2 (pill tones).
 
+// rationale: `f32 as u8` casts are pixel-radius roundings of small positive
+// constants — correct by construction (Cat 2); `Self` vs the explicit enum
+// name is a stylistic preference (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::use_self
+)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{

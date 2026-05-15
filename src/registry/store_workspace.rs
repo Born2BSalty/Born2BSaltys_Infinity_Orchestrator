@@ -23,6 +23,9 @@
 //
 // SPEC: §13.1, §13.14.
 
+// rationale: `#[must_use]` on trivial path/ctor accessors is churn (Cat 3).
+#![allow(clippy::must_use_candidate)]
+
 use std::path::{Path, PathBuf};
 
 use crate::platform_defaults::app_config_dir;
@@ -127,8 +130,10 @@ mod tests {
         let root = temp_root("subdir");
         let path = root.join("modlists/ABCDEFGHIJKL/workspace.json");
         let store = WorkspaceStore::new_with_path(&path);
-        let mut state = ModlistWorkspaceState::default();
-        state.last_share_code = Some("X".to_string());
+        let state = ModlistWorkspaceState {
+            last_share_code: Some("X".to_string()),
+            ..Default::default()
+        };
         store.save(&state).expect("save");
         assert!(path.exists(), "workspace file written");
         assert!(path.parent().unwrap().exists(), "modlists subdir created");

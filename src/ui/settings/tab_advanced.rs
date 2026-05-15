@@ -20,6 +20,17 @@
 //
 // SPEC: §11.5.
 
+// rationale: `f32 as u8` casts are pixel roundings of small positive
+// constants — correct by construction (Cat 2); the tab render fn's argument
+// count / length mirror the sub-tab's field set and a split would not aid
+// readability (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::too_many_arguments,
+    clippy::too_many_lines
+)]
+
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;

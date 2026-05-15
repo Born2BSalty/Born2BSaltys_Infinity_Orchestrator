@@ -13,6 +13,10 @@
 //
 // SPEC: §1.2 (sketchy aesthetic).
 
+// rationale: `f32 as u8` casts are pixel-radius roundings of small positive
+// layout constants — correct by construction (Cat 2).
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{

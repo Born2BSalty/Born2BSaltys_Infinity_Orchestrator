@@ -14,6 +14,19 @@
 // Click-and-drag on empty bar area moves the window. Double-click maximizes.
 // SPEC: §1.2 (custom titlebar), wireframe `index.html:89-108`, `app.jsx:80-92`.
 
+// rationale: `usize as f32` is a small layout-count widening — correct by
+// construction (Cat 2). `mul_add` changes float rounding, the `&mut` params
+// keep the render call shape stable for symmetry with sibling renderers,
+// and `Self`/`const fn` are stylistic — all suppressed without behavior
+// change (Cat 3).
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::suboptimal_flops,
+    clippy::needless_pass_by_ref_mut,
+    clippy::use_self,
+    clippy::missing_const_for_fn
+)]
+
 use eframe::egui;
 
 #[cfg(not(target_os = "macos"))]
@@ -215,7 +228,7 @@ fn render_windows_controls(
     let total_w = control_w * controls.len() as f32;
     let mut x = rect.right() - padding_right - total_w;
 
-    for (action, glyph) in controls.iter() {
+    for (action, glyph) in &controls {
         let control_rect = egui::Rect::from_min_max(
             egui::pos2(x, rect.top()),
             egui::pos2(x + control_w, rect.bottom() - REDESIGN_BORDER_WIDTH_PX),

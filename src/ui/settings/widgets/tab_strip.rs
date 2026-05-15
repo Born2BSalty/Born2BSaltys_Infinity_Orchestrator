@@ -13,6 +13,15 @@
 //
 // Mirrors the wireframe file-folder treatment (`screens.jsx::TabStrip`).
 
+// rationale: `f32 as u8` casts are pixel roundings of small positive
+// constants — correct by construction (Cat 2); the doc list indentation is
+// intentional for the ASCII diagram (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::doc_overindented_list_items
+)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{

@@ -15,6 +15,10 @@
 // Per-keystroke typing does NOT fire a validation per keystroke; only the
 // 500ms-idle pause does.
 
+// rationale: doc-paragraph-length is a subjective style lint; the wording is
+// intentional (Cat 3).
+#![allow(clippy::too_long_first_doc_paragraph)]
+
 use std::time::{Duration, Instant};
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;

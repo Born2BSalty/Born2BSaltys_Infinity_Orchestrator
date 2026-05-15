@@ -49,6 +49,15 @@
 //
 // SPEC: §4.1, §13.12 #1/#6. Wireframe: screens.jsx:624-670 (verbatim copy).
 
+// rationale: `f32 as u8` casts are pixel roundings of small positive
+// constants — correct by construction (Cat 2); the `const` is intentionally
+// scoped next to its sole use site rather than hoisted (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::items_after_statements
+)]
+
 use eframe::egui;
 
 use crate::ui::install::destination_not_empty;
@@ -117,15 +126,15 @@ pub fn render(
         // SPEC §4.1: the warning shows only when the destination is set AND
         // non-empty on disk. The wireframe's `{dest && …}` is a mock stand-in
         // for "the chosen folder has content"; we check the real filesystem.
-        if destination_is_non_empty(&state.destination) {
-            if let Some(picked) = destination_not_empty::render(
+        if destination_is_non_empty(&state.destination)
+            && let Some(picked) = destination_not_empty::render(
                 ui,
                 palette,
                 state.destination_choice,
                 true, // allow_partial — Install Modlist always offers continue
-            ) {
-                state.destination_choice = Some(picked);
-            }
+            )
+        {
+            state.destination_choice = Some(picked);
         }
     });
 
@@ -192,12 +201,9 @@ fn destination_is_non_empty(path: &str) -> bool {
     if trimmed.is_empty() {
         return false;
     }
-    match std::fs::read_dir(trimmed) {
-        Ok(mut entries) => entries.next().is_some(),
-        // Not a directory / doesn't exist / unreadable → treat as "no
-        // warning" (there is nothing to clear/back-up/continue).
-        Err(_) => false,
-    }
+    // A non-directory / missing / unreadable path → treat as "no warning"
+    // (there is nothing to clear/back-up/continue).
+    std::fs::read_dir(trimmed).is_ok_and(|mut entries| entries.next().is_some())
 }
 
 /// `FolderInput` (wireframe `screens.jsx::FolderInput`, line 91-121). Mirrors
@@ -274,13 +280,12 @@ fn folder_input(
                 )),
             )
             .clicked()
+            && let Some(path) = rfd::FileDialog::new().pick_folder()
         {
-            if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                let s = path.to_string_lossy().to_string();
-                if s != *value {
-                    *value = s;
-                    changed = true;
-                }
+            let s = path.to_string_lossy().to_string();
+            if s != *value {
+                *value = s;
+                changed = true;
             }
         }
     });

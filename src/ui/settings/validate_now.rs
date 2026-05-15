@@ -16,6 +16,11 @@
 // (~5 lines) rather than escalated to a carve-out. Read-only use of public
 // `bio::app::state_validation::is_step1_valid` for the aggregate ok gate.
 
+// rationale: the explicit working-folder arm and the catch-all arm share a
+// body but are kept distinct for readability; `#[must_use]` on trivial
+// helpers is churn (Cat 3).
+#![allow(clippy::match_same_arms, clippy::must_use_candidate)]
+
 use std::path::Path;
 
 use crate::app::state::Step1State;
@@ -82,7 +87,7 @@ pub fn run_now(step1: &Step1State) -> ValidationReport {
         (FIELD_MODS_BACKUP_FOLDER, &step1.mods_backup_folder),
         (FIELD_WEIDU_LOG_FOLDER, &step1.weidu_log_folder),
     ];
-    for (name, value) in folder_fields.iter() {
+    for (name, value) in &folder_fields {
         report.fields.insert(*name, check_path(name, value));
     }
 
@@ -206,14 +211,14 @@ fn check_binary(value: &str) -> PathStatus {
         // green "ok" when nothing is installed system-wide. If the user
         // typed `weidu` but `weidu` isn't on PATH, the install will fail —
         // surface that here.
-        match resolve_on_path(value) {
-            Some(resolved) => PathStatus::Ok {
-                detail: Some(resolved.display().to_string()),
-            },
-            None => PathStatus::Error {
+        resolve_on_path(value).map_or_else(
+            || PathStatus::Error {
                 reason: "not on $PATH — install or specify the full path".to_string(),
             },
-        }
+            |resolved| PathStatus::Ok {
+                detail: Some(resolved.display().to_string()),
+            },
+        )
     }
 }
 

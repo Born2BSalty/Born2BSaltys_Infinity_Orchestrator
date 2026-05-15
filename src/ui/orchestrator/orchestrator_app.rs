@@ -120,7 +120,7 @@ pub struct OrchestratorApp {
     /// Raw CLI dev-mode flag — held so we can OR with the persisted toggle
     /// across runtime updates without losing the launch-time enable.
     pub dev_mode_cli_flag: bool,
-    /// Executable fingerprint produced by bootstrap_init.
+    /// Executable fingerprint produced by `bootstrap_init`.
     pub exe_fingerprint: String,
     /// Per-frame cached path-validation summary used by the left rail's
     /// bottom status row.
@@ -146,7 +146,7 @@ pub struct OrchestratorApp {
     /// alongside the real Home screen (P5.T15).
     pub home_screen_state: HomeScreenState,
     /// Per-screen Install Modlist UI state (active stage, destination,
-    /// DestChoice, pasted code). Added in Phase 5 / Run 3 alongside the real
+    /// `DestChoice`, pasted code). Added in Phase 5 / Run 3 alongside the real
     /// Install screen (P5.T14). The 4-stage machine is whole; Run 3
     /// implements Paste + the stage-4 stub.
     pub install_screen_state: InstallScreenState,
@@ -173,9 +173,11 @@ impl OrchestratorApp {
     pub fn new(dev_mode: bool) -> Self {
         let bootstrap = app_bootstrap_init::initialize(dev_mode);
 
-        let mut wizard_state = WizardState::default();
-        wizard_state.step1 = bootstrap.step1.clone();
-        wizard_state.github_auth_login = bootstrap.github_auth_login;
+        let wizard_state = WizardState {
+            step1: bootstrap.step1.clone(),
+            github_auth_login: bootstrap.github_auth_login,
+            ..Default::default()
+        };
 
         let path_validation = compute_path_validation_summary(&wizard_state);
 
@@ -313,7 +315,7 @@ impl OrchestratorApp {
         {
             warn!(target = "orchestrator", "persist_registry_if_needed failed: {err}");
         }
-        for (id, ws) in self.workspace_state.iter() {
+        for (id, ws) in &self.workspace_state {
             let Some(store) = self.workspace_stores.get(id) else {
                 continue;
             };
@@ -369,7 +371,9 @@ impl OrchestratorApp {
     fn bio_settings_snapshot(&self) -> AppSettings {
         let mut step1: crate::settings::model::Step1Settings =
             self.wizard_state.step1.clone().into();
-        step1.game_install = self.bio_settings_last_saved.step1.game_install.clone();
+        step1
+            .game_install
+            .clone_from(&self.bio_settings_last_saved.step1.game_install);
         AppSettings {
             exe_fingerprint: self.exe_fingerprint.clone(),
             step1,

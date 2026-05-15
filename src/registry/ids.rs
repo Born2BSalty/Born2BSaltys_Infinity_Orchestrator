@@ -14,6 +14,11 @@
 // The randomness is **not** cryptographic; it only needs to be collision-free
 // for the user's local modlist directory.
 
+// rationale: the `u128 as u64` cast on a recent unix-ms timestamp never
+// truncates in practice and the id only needs local uniqueness — correct by
+// construction (Cat 2); `#[must_use]` on the id ctor is churn (Cat 3).
+#![allow(clippy::cast_possible_truncation, clippy::must_use_candidate)]
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,8 +43,7 @@ const CROCKFORD_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 pub fn new_modlist_id() -> String {
     let ts_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_millis() as u64);
 
     let (counter, hashed) = derive_entropy(ts_ms);
     // 60 bits = 40 timestamp + 20 entropy (12 from counter, 8 from hash mix).

@@ -73,9 +73,7 @@ fn bin_row_for_field(
     } else {
         let validated_hint = status.map(PathStatus::hint_text);
         let hint = version_hint.or(validated_hint);
-        let tone = status
-            .map(PathStatus::tone)
-            .unwrap_or(PathStatusTone::Neutral);
+        let tone = status.map_or(PathStatusTone::Neutral, PathStatus::tone);
         (hint, tone)
     };
 

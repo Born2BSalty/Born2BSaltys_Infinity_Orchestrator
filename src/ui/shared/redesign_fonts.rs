@@ -14,7 +14,7 @@
 //!   (Latin-only) and converted to `.ttf` for egui consumption. A future pass
 //!   should replace these with full Latin-Extended `.ttf` builds from the
 //!   upstream Google Fonts release for better glyph coverage.
-//! - FiraCode Nerd 300: derived from the wireframe's `firacode-nerd-300.woff2`
+//! - `FiraCode` Nerd 300: derived from the wireframe's `firacode-nerd-300.woff2`
 //!   and converted to `.ttf`.
 
 use eframe::egui;

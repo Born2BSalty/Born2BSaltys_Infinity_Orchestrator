@@ -26,6 +26,18 @@
 // suppresses the click event, for stub services like Nexus / Mega that we
 // haven't wired yet.
 
+// rationale: the casts are colour-channel / pixel roundings — correct by
+// construction (Cat 2); `mul_add` would change float rounding, and the
+// by-value arg + arg-count keep the widget's call shape stable — suppressed
+// without behavior change (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::suboptimal_flops,
+    clippy::needless_pass_by_value,
+    clippy::too_many_arguments
+)]
+
 use eframe::egui;
 
 use crate::ui::orchestrator::widgets::r_box::redesign_box;

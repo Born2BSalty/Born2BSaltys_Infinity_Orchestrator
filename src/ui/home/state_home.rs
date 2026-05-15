@@ -14,6 +14,16 @@
 //
 // SPEC: §3.1 (filter chips + default selection + empty-filter copy), §3.4.
 
+// rationale: per-screen UI state + trivial predicate/ctor helpers —
+// `Self`/`const fn`/`#[must_use]` and the doc-paragraph-length lint are churn
+// without behavior value (Cat 3).
+#![allow(
+    clippy::use_self,
+    clippy::missing_const_for_fn,
+    clippy::must_use_candidate,
+    clippy::too_long_first_doc_paragraph
+)]
+
 /// Which Home filter chip is active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeFilter {

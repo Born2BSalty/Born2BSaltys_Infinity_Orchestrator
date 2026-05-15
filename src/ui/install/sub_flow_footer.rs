@@ -34,6 +34,21 @@
 //
 // SPEC: §4 (the SubFlowFooter pattern is used by every Install stage).
 
+// rationale: the casts are colour-channel / pixel roundings — correct by
+// construction (Cat 2); the dashed-rule `while x < end_x` is an intentional
+// pixel-stepping loop, the by-value `PrimaryBtn`/`BackBtn` args keep the
+// widget's call shape stable, and the line-count / doc-paragraph lints are
+// subjective — all suppressed without behavior change (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_lossless,
+    clippy::while_float,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines,
+    clippy::too_long_first_doc_paragraph
+)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
@@ -105,8 +120,8 @@ pub fn render(
         ui.spacing_mut().item_spacing.x = 12.0;
 
         // ── Back (left). Glyph in firacode_nerd, prose in poppins_medium. ──
-        if let Some(b) = back {
-            if glyph_btn(
+        if let Some(b) = back
+            && glyph_btn(
                 ui,
                 palette,
                 GlyphSide::Leading(ARROW_BACK),
@@ -115,9 +130,8 @@ pub fn render(
                 false,
             )
             .clicked()
-            {
-                outcome.back_clicked = true;
-            }
+        {
+            outcome.back_clicked = true;
         }
 
         // ── Hint (faint hand-style, marginLeft:6). ──

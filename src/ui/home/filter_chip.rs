@@ -26,6 +26,16 @@
 // var(--accent) with dark text, inactive chips var(--shell-bg) + normal
 // text).
 
+// rationale: `f32 as u8` is a pixel-radius rounding of a small positive
+// constant — correct by construction (Cat 2). `mul_add` would change float
+// rounding, so the suboptimal-flops rewrite is not behavior-neutral and is
+// suppressed instead (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::suboptimal_flops
+)]
+
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{

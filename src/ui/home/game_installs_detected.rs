@@ -55,7 +55,7 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &Orchestra
 
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
-        for (name, field) in GAME_ROWS.iter() {
+        for (name, field) in &GAME_ROWS {
             let found = matches!(report.fields.get(*field), Some(PathStatus::Ok { .. }));
             let (marker, text, color) = if found {
                 ("\u{2713}", name.to_string(), redesign_text_primary(palette)) // ✓

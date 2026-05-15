@@ -25,6 +25,9 @@
 //
 // SPEC: §13.1, §13.14.
 
+// rationale: `#[must_use]` on trivial path/ctor accessors is churn (Cat 3).
+#![allow(clippy::must_use_candidate)]
+
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -116,8 +119,7 @@ impl RegistryStore {
     pub fn backup_corrupt_file(&self) -> std::io::Result<PathBuf> {
         let ts = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs());
         let new_path = self.path.with_extension(format!("json.corrupt-{ts}"));
         std::fs::rename(&self.path, &new_path)?;
         Ok(new_path)

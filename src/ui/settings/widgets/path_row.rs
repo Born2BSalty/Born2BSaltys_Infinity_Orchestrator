@@ -18,6 +18,15 @@
 // `allocate_ui_with_layout` pitfall where the inner content's `min_rect`
 // expands the parent allocation beyond the slot.
 
+// rationale: `f32 as u8` casts are pixel roundings of small positive
+// constants — correct by construction (Cat 2); the row renderer's argument
+// count mirrors its inputs and a struct wrapper would not aid clarity (Cat 3).
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::too_many_arguments
+)]
+
 use eframe::egui;
 
 use crate::ui::settings::state_settings::PathStatusTone;
@@ -143,27 +152,27 @@ pub fn render(
             egui::vec2(ui.available_width(), WARNING_LINE_HEIGHT_PX),
             egui::Sense::hover(),
         );
-        if let (Some(hint_text), Some((x0, x1))) = (hint, input_x_range) {
-            if !hint_text.is_empty() {
-                let color = hint_color(palette, tone);
-                let painter = ui.painter();
-                // Clip text to the input's x-range so a long reason never
-                // bleeds into the browse button area.
-                let clip = egui::Rect::from_min_max(
-                    egui::pos2(x0, warning_rect.top()),
-                    egui::pos2(x1, warning_rect.bottom()),
-                );
-                let prior_clip = painter.clip_rect();
-                let painter = painter.with_clip_rect(clip);
-                painter.text(
-                    egui::pos2(x0 + 2.0, warning_rect.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    hint_text,
-                    egui::FontId::new(11.0, egui::FontFamily::Proportional),
-                    color,
-                );
-                let _ = prior_clip;
-            }
+        if let (Some(hint_text), Some((x0, x1))) = (hint, input_x_range)
+            && !hint_text.is_empty()
+        {
+            let color = hint_color(palette, tone);
+            let painter = ui.painter();
+            // Clip text to the input's x-range so a long reason never
+            // bleeds into the browse button area.
+            let clip = egui::Rect::from_min_max(
+                egui::pos2(x0, warning_rect.top()),
+                egui::pos2(x1, warning_rect.bottom()),
+            );
+            let prior_clip = painter.clip_rect();
+            let painter = painter.with_clip_rect(clip);
+            painter.text(
+                egui::pos2(x0 + 2.0, warning_rect.center().y),
+                egui::Align2::LEFT_CENTER,
+                hint_text,
+                egui::FontId::new(11.0, egui::FontFamily::Proportional),
+                color,
+            );
+            let _ = prior_clip;
         }
     });
     ui.add_space(ROW_VERTICAL_GAP_PX);

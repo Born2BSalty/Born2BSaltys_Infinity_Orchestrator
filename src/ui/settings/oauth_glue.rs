@@ -25,6 +25,10 @@
 //
 // SPEC: §11.4, §13.2.
 
+// rationale: doc-paragraph-length is a subjective style lint; the wording is
+// intentional (Cat 3).
+#![allow(clippy::too_long_first_doc_paragraph)]
+
 use eframe::egui;
 
 use crate::app::app_step1_github_oauth as oauth;

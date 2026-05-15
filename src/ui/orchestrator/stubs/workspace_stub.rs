@@ -25,12 +25,14 @@ pub fn render_workspace_stub(ui: &mut egui::Ui, palette: ThemePalette, modlist_i
     );
 
     ui.add_space(8.0);
-    let note = match modlist_id {
-        Some(id) => format!("Loaded modlist id: {id}"),
-        None => String::from(
-            "No modlist id loaded (entered via dev-mode `Open workspace stub (dev)` button)",
-        ),
-    };
+    let note = modlist_id.map_or_else(
+        || {
+            String::from(
+                "No modlist id loaded (entered via dev-mode `Open workspace stub (dev)` button)",
+            )
+        },
+        |id| format!("Loaded modlist id: {id}"),
+    );
     ui.label(
         egui::RichText::new(note)
             .size(13.0)
