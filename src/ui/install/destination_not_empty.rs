@@ -26,9 +26,13 @@
 //   - `continue` → "Continue partial installation"  (only when
 //     `allow_partial == true`)
 //
-// The `⚠` U+26A0 glyph is rendered in `firacode_nerd`, NOT Poppins: the
-// shipped Poppins TTFs are a Latin-only subset and would tofu it (HANDOFF
-// "Non-Latin symbol glyphs" caveat). The amber `#edc547` border + the
+// The wireframe's `⚠` (U+26A0, "Miscellaneous Symbols" block) is painted as
+// a VECTOR triangle, not a font glyph: neither the Latin-subset Poppins nor
+// the shipped FiraCode Nerd covers U+2600–26FF (base FiraCode has the
+// math/arrow/✓ ranges but not Misc Symbols; the Nerd patch adds PUA icons,
+// not that backfill), so a glyph here tofus to `?`. Vectors decouple it from
+// font coverage — the same approach `left_rail.rs` uses for the nav icons.
+// See `paint_warning_triangle`. The amber `#edc547` border + the
 // `rgba(237,197,71,0.18)` fill are wireframe-literal hex values local to this
 // warning (they are not in the redesign palette table — the wireframe hard-
 // codes them here, so we mirror them as local constants per the fidelity
@@ -98,12 +102,19 @@ pub fn render(
         // ── Header row: ⚠ + "Target directory not empty" (gap 10). ──
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 10.0;
-            // ⚠ in FiraCode Nerd (Poppins is Latin-subset — HANDOFF caveat).
-            ui.label(
-                egui::RichText::new("\u{26A0}")
-                    .size(13.0)
-                    .family(egui::FontFamily::Name("firacode_nerd".into()))
-                    .color(redesign_text_primary(palette)),
+            // The warning mark is a PAINTED VECTOR, not a glyph. `⚠` U+26A0
+            // is in the "Miscellaneous Symbols" block, which neither the
+            // Latin-subset Poppins NOR the shipped FiraCode Nerd covers
+            // (base FiraCode has math/arrows/✓ but not U+2600–26FF; the Nerd
+            // patch adds PUA icons, not that backfill) — a glyph here tofus
+            // to `?`. Vectors decouple it from font coverage entirely, the
+            // same approach `left_rail.rs` uses for the nav icons.
+            let (icon_rect, _) =
+                ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
+            paint_warning_triangle(
+                ui.painter(),
+                icon_rect.center(),
+                redesign_text_primary(palette),
             );
             ui.label(
                 egui::RichText::new("Target directory not empty")
@@ -152,6 +163,36 @@ pub fn render(
     });
 
     picked
+}
+
+/// Paint the warning mark as a vector triangle + `!` (see the module header
+/// for why this is not a font glyph). Sized to ~13px ink centered on
+/// `center`; stroke + color match the header text so it reads as one unit.
+fn paint_warning_triangle(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
+    let stroke = egui::Stroke::new(1.6, color);
+    let hw = 6.5; // half-width of the triangle base
+    let top = center.y - 6.0; // apex
+    let base_y = center.y + 5.0; // base line
+
+    // Triangle outline (closed): apex → base-right → base-left.
+    painter.add(egui::Shape::closed_line(
+        vec![
+            egui::pos2(center.x, top),
+            egui::pos2(center.x + hw, base_y),
+            egui::pos2(center.x - hw, base_y),
+        ],
+        stroke,
+    ));
+
+    // Exclamation: short vertical stem + a dot near the base.
+    painter.line_segment(
+        [
+            egui::pos2(center.x, center.y - 2.0),
+            egui::pos2(center.x, center.y + 1.5),
+        ],
+        stroke,
+    );
+    painter.circle_filled(egui::pos2(center.x, center.y + 3.6), 0.95, color);
 }
 
 /// The wireframe-verbatim option set (`screens.jsx:124-128`). `Continue
