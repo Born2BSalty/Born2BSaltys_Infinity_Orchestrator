@@ -24,8 +24,9 @@ use eframe::egui;
 use crate::ui::install::stage_installing_stub::{self, InstallingStubOutcome};
 use crate::ui::install::stage_paste::{self, PasteOutcome};
 use crate::ui::install::state_install::InstallStage;
+use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, render_screen_title};
+use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui::Context) {
@@ -90,13 +91,14 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _ctx: &egui
 }
 
 /// The minimal "this stage arrives in a later run" placeholder — same chassis
-/// as the §4.4 stage-4 stub (`ScreenTitle` + a faint context line). Includes a
-/// `Back to paste` button so the placeholder is **not a dead-end**: without it
-/// the user is trapped here (stage persists across rail navigation) until the
-/// app restarts. Returns `true` when Back was clicked this frame; the caller
-/// transitions back to `Paste`. Plain-ASCII label (no `←` glyph) — keeps it
-/// off the Latin-subset Poppins symbol-glyph pitfall and is plenty for
-/// throwaway Run-3 scaffolding (Run 4/5 replace these stages outright).
+/// as the §4.4 stage-4 stub (`ScreenTitle` + a faint context line + the
+/// bottom-pinned `sub_flow_footer`). Routing the Back control through
+/// `sub_flow_footer` (exactly like `stage_installing_stub`) keeps it
+/// pixel-identical to the rest of the Install sub-flow: dashed top rule,
+/// bottom-pinned, `←` glyph in `firacode_nerd`, right-aligned (disabled)
+/// primary. Without a Back the placeholder is a dead-end (stage persists
+/// across rail nav → trapped until restart). Returns `true` when Back was
+/// clicked; the caller transitions to `Paste`.
 fn run_later_placeholder(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -112,6 +114,27 @@ fn run_later_placeholder(
             .family(egui::FontFamily::Proportional)
             .color(redesign_text_faint(palette)),
     );
-    ui.add_space(16.0);
-    redesign_btn(ui, palette, "Back to paste", BtnOpts::default()).clicked()
+
+    // Bottom-pin the footer, reserving its footprint, exactly as the §4.4
+    // stub does — so the Back button is visually consistent across stages.
+    let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
+    if spacer > 0.0 {
+        ui.add_space(spacer);
+    }
+
+    // No forward action on a placeholder → disabled primary, same as the
+    // §4.4 stub's disabled `Install`. The footer always paints a primary.
+    sub_flow_footer::render(
+        ui,
+        palette,
+        Some(BackBtn {
+            label: "Back to paste",
+        }),
+        None,
+        PrimaryBtn {
+            label: "Install",
+            disabled: true,
+        },
+    )
+    .back_clicked
 }
