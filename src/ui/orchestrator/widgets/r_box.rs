@@ -44,47 +44,31 @@ pub fn redesign_box<R>(
         .inner_margin(egui::Margin { left: 12, right: 12, top: 10, bottom: 10 });
 
     let muted = redesign_text_muted(palette);
-    let bg = redesign_shell_bg(palette);
 
-    // The corner label straddles the box's top border — half of it sits
-    // ABOVE the box rect. If the box is the first element in a clip-bounded
-    // column (e.g. Home's right column), that half gets clipped off ("title
-    // bleeding off the top"). Measure the label up front and reserve its
-    // top-half as leading space so the straddling label lands inside the
-    // parent UI's content area.
-    let label_galley = label.map(|text| {
-        let font = egui::FontId::new(10.0, egui::FontFamily::Name("poppins_medium".into()));
-        ui.painter().layout_no_wrap(text.to_string(), font, muted)
-    });
-    if let Some(g) = &label_galley {
-        ui.add_space((g.size().y * 0.5).ceil());
-    }
-
+    // The wireframe `.sk-corner-label` has no CSS — it's just plain text as
+    // the first child *inside* the box's padding (`Box` is
+    // `position:relative; padding:10px 12px`). So the label renders inside
+    // the box as the first content line, at normal size — NOT a tiny
+    // fieldset-legend straddling the border. Rendering it inside (rather
+    // than as a painted overlay above `rect.top()`) also means labeled and
+    // unlabeled boxes start at the same Y, so a labeled box stays aligned
+    // with an unlabeled sibling in the same row.
+    //
     // Boxes are block-level containers (wireframe `Box` is `display:block`):
     // fill the available width so the chassis is flush with its column
     // rather than shrink-wrapping to its content. Every caller wants this;
     // doing it here keeps them from each repeating `ui.set_width(...)`.
-    let response = frame.show(ui, |ui| {
+    frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
+        if let Some(text) = label {
+            ui.label(
+                egui::RichText::new(text)
+                    .size(13.0)
+                    .family(egui::FontFamily::Name("poppins_medium".into()))
+                    .color(muted),
+            );
+            ui.add_space(8.0);
+        }
         body(ui)
-    });
-
-    if let Some(galley) = label_galley {
-        // Paint the corner label straddling the top-left of the box's
-        // stroke (wireframe `.sk-corner-label`). The leading space reserved
-        // above keeps the top half from being clipped.
-        let rect = response.response.rect;
-        let painter = ui.painter();
-        let label_size = galley.size();
-        let label_pos = egui::pos2(rect.left() + 8.0, rect.top() - label_size.y * 0.5);
-        let label_rect = egui::Rect::from_min_size(
-            label_pos - egui::vec2(2.0, 0.0),
-            egui::vec2(label_size.x + 4.0, label_size.y),
-        );
-        // Background patch so the label "breaks" the border line cleanly.
-        painter.rect_filled(label_rect, 0.0, bg);
-        painter.galley(label_pos, galley, muted);
-    }
-
-    response
+    })
 }
