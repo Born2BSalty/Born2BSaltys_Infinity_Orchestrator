@@ -82,6 +82,7 @@ use crate::ui::orchestrator::nav_status::{
     PathValidationKind, PathValidationSummary, compute_path_validation_summary,
 };
 use crate::ui::home::state_home::HomeScreenState;
+use crate::ui::install::state_install::InstallScreenState;
 use crate::ui::orchestrator::page_router;
 use crate::ui::orchestrator::stubs::home_stub::HomeStubState;
 use crate::ui::settings::oauth_glue;
@@ -144,6 +145,11 @@ pub struct OrchestratorApp {
     /// toast fields are declared but inert this run). Added in Phase 5 P5.T4
     /// alongside the real Home screen (P5.T15).
     pub home_screen_state: HomeScreenState,
+    /// Per-screen Install Modlist UI state (active stage, destination,
+    /// DestChoice, pasted code). Added in Phase 5 / Run 3 alongside the real
+    /// Install screen (P5.T14). The 4-stage machine is whole; Run 3
+    /// implements Paste + the stage-4 stub.
+    pub install_screen_state: InstallScreenState,
 
     // ---------- Phase 4 fields ----------
     pub redesign_settings: RedesignSettings,
@@ -255,6 +261,7 @@ impl OrchestratorApp {
             workspace_stores: HashMap::new(),
             home_stub_state: HomeStubState::default(),
             home_screen_state: HomeScreenState::default(),
+            install_screen_state: InstallScreenState::default(),
 
             redesign_settings_last_saved: redesign_settings.clone(),
             redesign_settings,

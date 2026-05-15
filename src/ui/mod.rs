@@ -15,6 +15,7 @@ pub mod step5;
 // Redesign module (Infinity Orchestrator) — additive registration per
 // CRITICAL DIRECTIVE carve-out #3 companion provision.
 pub mod home;
+pub mod install;
 pub mod orchestrator;
 pub mod settings;
 pub mod shell;

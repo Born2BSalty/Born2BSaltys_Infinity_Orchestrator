@@ -14,7 +14,7 @@ The project is the redesign of the existing `bio` Rust crate (Born2BSalty's Infi
 | 2 | Navigation + routing (`OrchestratorApp`, shell chrome, left rail, page router, stubs) | ✓ done, builds clean |
 | 3 | Modlist registry + per-modlist workspace state files | ✓ done, builds clean |
 | 4 | Settings screen (5 sub-tabs) + per-edit debounced path validation | ✓ done, builds clean |
-| 5 | Home + Install Modlist (paste / preview / download stages) | not started |
+| 5 | Home + Install Modlist (paste / preview / download stages) | in progress — Runs 1–3 done (Home + Home actions + Install shell/paste/stage-4 stub); Preview (Run 4) + Downloading (Run 5) pending |
 | 6 | Create screen + Workspace shell (Steps 2–4) | not started |
 | 7 | Step 5 install runtime + Reinstall + import-code auto-write + install concurrency + rail-nav lock | not started |
 | 8 | Popup reskins + state-aware theme reads across BIO surfaces + polish | not started |
@@ -29,15 +29,16 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
   - `BIO` — the legacy linear-wizard app, untouched in behavior, still launches from `cargo run --bin BIO`.
   - `infinity_orchestrator` — the new redesigned app, launches from `cargo run --bin infinity_orchestrator`.
 - Both build cleanly on macOS. Windows cross-compilation from macOS is not currently working — see the *Windows builds* section at the bottom of this doc.
-- 116/116 lib tests pass.
+- 163/163 lib tests pass (Phase 5 Run 3 added DestChoice→flag + warning-option-label tests).
 - The orchestrator binary opens an `eframe` window (1280×820, min 1024×700) with:
   - **Titlebar** (34px, sketchy border, `Infinity Orchestrator` title centered, traffic-light dots top-left).
   - **Left rail** (200px) with the brand mark + 4 nav items (Home / Install / Create / Settings) + a bottom status indicator (`weidu vN · all paths ok` or per-path error count).
   - **Body** with the active destination's content.
   - **Statusbar** (26px) at the bottom showing modlist count + jobs-running placeholder.
-- Home shows a placeholder with a dev-only `Seed test modlist (dev)` button (gated on the `-d` flag).
-- Install / Create show stub placeholders.
-- **Settings** is the most complete user surface so far: real five-tab screen (General / Paths / Tools / Accounts / Advanced) with:
+- **Home** is the real screen (Phase 5 Runs 1–2): title + subtitle, filter chips (Installed / In progress / All) with counts + default-selection logic, modlist cards (in-progress `resume` / installed `open` + Kebab), `add a modlist` CTAs, `game installs detected` block, first-launch setup CTA, bottom-center toasts. Kebab actions are live: Copy import code (clipboard + toast), Delete (danger confirm → registry entry + guarded on-disk folder removal), Open install folder, Reinstall (Phase-7 placeholder toast). Rename is still inert (later run).
+- **Install Modlist** is wired (Phase 5 Run 3): the paste stage (destination FolderInput + `DestinationNotEmptyWarning` with Clear/Backup/Continue + import-code textarea + footer) and the stage-4 stub render; the Preview (Run 4) and Downloading (Run 5) stages render placeholders.
+- **Create** still shows a stub placeholder (Phase 6).
+- **Settings**: real five-tab screen (General / Paths / Tools / Accounts / Advanced) with:
   - Live theme-palette toggle (Light / Dark) that updates next frame.
   - Per-keystroke debounced path validation that updates the rail status row.
   - GitHub OAuth `connect` button opens BIO's existing device-flow popup verbatim.

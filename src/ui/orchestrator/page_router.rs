@@ -5,8 +5,10 @@
 // destination's renderer (or stub).
 //
 // Per Phase 2 P2.T4: arms initially rendered Phase-2 stubs. Phase 4 wired the
-// real `Settings` screen; Phase 5 P5.T15 wires the real `Home` screen.
-// `Install` / `Create` / `Workspace` still render stubs until Phases 5+/6.
+// real `Settings` screen; Phase 5 P5.T15 wires the real `Home` screen and
+// P5.T14 wires the real `Install` screen (Run 3: paste stage + stage-4 stub;
+// the Preview / Downloading stages render Run-4 / Run-5 placeholders).
+// `Create` / `Workspace` still render stubs until Phase 6.
 // **The `Workspace` arm renders the placeholder stub — NOT the legacy
 // `WizardApp::update_loop::run`.** Per H3 / C1 / C4: that path was reverted;
 // Phase 6 wires the real workspace view (which calls BIO's per-step page
@@ -23,6 +25,7 @@
 use eframe::egui;
 
 use crate::ui::home::page_home;
+use crate::ui::install::page_install;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::registry_error_panel;
@@ -47,7 +50,10 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     match orchestrator.nav.clone() {
         // Phase 5 P5.T15 — Home stub replaced with the real Home screen.
         NavDestination::Home => page_home::render(ui, orchestrator, ctx),
-        NavDestination::Install => stubs::render_install_stub(ui, palette),
+        // Phase 5 P5.T14 — Install stub replaced with the real Install
+        // Modlist screen (Run 3: paste stage + stage-4 stub; Preview /
+        // Downloading render Run-4 / Run-5 placeholders).
+        NavDestination::Install => page_install::render(ui, orchestrator, ctx),
         NavDestination::Create => stubs::render_create_stub(ui, palette),
         // Phase 4 P4.T8 — Settings stub replaced with the real 5-tab screen.
         NavDestination::Settings => page_settings::render(ui, orchestrator, ctx),

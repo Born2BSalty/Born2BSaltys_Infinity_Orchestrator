@@ -275,7 +275,7 @@ The whole flow uses the `SubFlowFooter` pattern: Back on the left, optional hint
 
 The page is a flex-column with three sections:
 
-1. **Destination folder** — `FolderInput` with `browse` button. If the destination is non-empty, a warning Box appears with radio choices (e.g., "this folder is not empty — replace contents / continue partial install / cancel"). Continue-partial mode skips the share-code requirement entirely.
+1. **Destination folder** — `FolderInput` with `browse` button. If the destination is non-empty, a `DestinationNotEmptyWarning` Box appears with toggle-style choice buttons (per the wireframe `screens.jsx:123-154`, **not** native radio widgets — the active choice is the `primary`-styled button): **Clear contents** / **Backup contents then proceed** / **Continue partial installation** (the last only when partial is allowed). Choice → flag mapping per [§13.12](#1312-automatic-flag-policies) #1/#6. Continue-partial mode skips the share-code requirement entirely.
 2. **Import code** — only shown if not in continue-partial mode. `Box label="import code"` with a multi-line monospace textarea (placeholder: `BIO-MODLIST-V1:eJyrVkrLz1eyUkpKLFKqBQA...` + "Paste the full code here.").
 3. **Footer** — `SubFlowFooter` with primary **Preview →** (or **Continue Install →** if partial), hint "no install starts until preview is accepted" (or "no share code needed").
 
