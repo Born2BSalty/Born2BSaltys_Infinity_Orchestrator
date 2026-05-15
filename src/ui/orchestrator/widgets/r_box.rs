@@ -24,8 +24,8 @@ pub fn redesign_box<R>(
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_SETTINGS_BOX_PADDING_X_PX as i8,
-            REDESIGN_SETTINGS_BOX_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SETTINGS_BOX_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SETTINGS_BOX_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());

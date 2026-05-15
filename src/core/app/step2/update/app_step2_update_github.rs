@@ -9,7 +9,7 @@ use super::app_step2_update_check::{
     Step2PackageKind, Step2UpdateCheckOutcome, Step2UpdateCheckRequest, failed_outcome,
 };
 use crate::app::mod_downloads;
-use crate::parser::weidu_version::normalize_version_text;
+use crate::parser::normalize_version_text;
 
 pub(super) fn check_github_download_page(
     agent: &ureq::Agent,
@@ -240,18 +240,16 @@ fn requested_github_channel(value: Option<&str>) -> GitHubChannel {
     {
         Some("pre-release") => GitHubChannel::Pre,
         Some("preonly") => GitHubChannel::PreOnly,
-        Some("release" | "releases") => GitHubChannel::Stable,
         Some("master") => GitHubChannel::Master,
         Some("ifeellucky") => GitHubChannel::IFeelLucky,
         _ => GitHubChannel::Stable,
     }
 }
 
-fn release_matches_channel(release: &GitHubRelease, channel: GitHubChannel) -> bool {
+const fn release_matches_channel(release: &GitHubRelease, channel: GitHubChannel) -> bool {
     match channel {
         GitHubChannel::Stable => !release.prerelease,
-        GitHubChannel::Pre => release.prerelease,
-        GitHubChannel::PreOnly => release.prerelease,
+        GitHubChannel::Pre | GitHubChannel::PreOnly => release.prerelease,
         GitHubChannel::Master | GitHubChannel::IFeelLucky => true,
     }
 }

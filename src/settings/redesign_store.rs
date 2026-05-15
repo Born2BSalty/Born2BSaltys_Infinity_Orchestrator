@@ -14,12 +14,14 @@ pub struct RedesignSettingsStore {
 }
 
 impl RedesignSettingsStore {
+    #[must_use]
     pub fn new_default() -> Self {
         Self {
             path: app_config_file("bio_redesign_settings.json", "."),
         }
     }
 
+    #[must_use]
     pub fn load(&self) -> RedesignSettings {
         let Ok(raw) = std::fs::read_to_string(&self.path) else {
             return RedesignSettings::default();

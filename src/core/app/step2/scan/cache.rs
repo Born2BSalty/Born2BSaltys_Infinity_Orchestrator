@@ -70,12 +70,14 @@ struct RawScanCacheMeta {
     entries: BTreeMap<String, serde_json::Value>,
 }
 
+#[must_use]
 pub fn normalize_context_path(path: &Path) -> String {
     path.to_string_lossy()
         .replace('\\', "/")
         .to_ascii_lowercase()
 }
 
+#[must_use]
 pub fn cache_context(weidu: &Path, game_dir: &Path, mods_root: &Path) -> String {
     format!(
         "v={SCAN_CACHE_VERSION}|weidu={}|game={}|mods={}",
@@ -92,17 +94,20 @@ pub fn load_scan_cache() -> LoadedScanCache {
         Err(meta) => *meta,
     };
     let legacy = PathBuf::from(SCAN_CACHE_FILE);
-    let legacy_result = if legacy != primary {
-        Some(try_load_cache(&legacy, "legacy_local"))
-    } else {
+    let legacy_result = if legacy == primary {
         None
+    } else {
+        Some(try_load_cache(&legacy, "legacy_local"))
     };
     if let Some(Ok(mut loaded)) = legacy_result {
         if primary_meta.file_exists || primary_meta.load_status != "missing" {
             loaded.meta.fallback_path = Some(primary_meta.path.clone());
             loaded.meta.fallback_source = Some(primary_meta.source.clone());
             loaded.meta.fallback_load_status = Some(primary_meta.load_status.clone());
-            loaded.meta.fallback_load_error = primary_meta.load_error.clone();
+            loaded
+                .meta
+                .fallback_load_error
+                .clone_from(&primary_meta.load_error);
         }
         return loaded;
     }
@@ -118,6 +123,7 @@ pub fn load_scan_cache() -> LoadedScanCache {
     }
 }
 
+#[must_use]
 pub fn save_scan_cache(cache: &ScanCache) -> Option<String> {
     let text = match serde_json::to_string(&cache_for_write(cache)) {
         Ok(text) => text,
@@ -141,6 +147,7 @@ pub fn save_scan_cache(cache: &ScanCache) -> Option<String> {
     None
 }
 
+#[must_use]
 pub fn clear_scan_cache_files() -> Vec<String> {
     let mut errors = Vec::<String>::new();
     let primary = scan_cache_path();
@@ -205,10 +212,11 @@ pub fn cache_get(
         }
     };
     let entry = cache.entries.get(&key)?;
-    if entry.context == context && entry.mtime_secs == mtime_secs && entry.size == size {
-        return Some(entry.components.clone());
-    }
-    None
+    let components =
+        (entry.context == context && entry.mtime_secs == mtime_secs && entry.size == size)
+            .then(|| entry.components.clone());
+    drop(cache);
+    components
 }
 
 pub fn cache_put(
@@ -293,7 +301,7 @@ fn inspect_and_parse_cache_text(
     let file_writer_exe_fingerprint = raw
         .as_ref()
         .and_then(|r| non_empty(&r.writer_exe_fingerprint));
-    let file_entry_count = raw.as_ref().map(|r| r.entries.len()).unwrap_or(0);
+    let file_entry_count = raw.as_ref().map_or(0, |r| r.entries.len());
     let mut meta = ScanCacheLoadMeta {
         path: path.display().to_string(),
         source: source.to_string(),
@@ -321,10 +329,10 @@ fn inspect_and_parse_cache_text(
     match parse_cache_text(text) {
         Ok(cache) => Ok((meta, cache)),
         Err(err) => {
-            meta.load_status = if file_version != Some(SCAN_CACHE_VERSION) {
-                "version_mismatch".to_string()
-            } else {
+            meta.load_status = if file_version == Some(SCAN_CACHE_VERSION) {
                 "parse_error".to_string()
+            } else {
+                "version_mismatch".to_string()
             };
             meta.load_error = Some(err);
             Err(Box::new(meta))

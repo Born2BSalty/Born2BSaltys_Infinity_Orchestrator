@@ -21,7 +21,10 @@ fn main() -> Result<()> {
     bio::logging::setup::init(&cli.log_level)?;
 
     let mut options = bio::ui::frame::frame_window::native_options();
-    options.viewport = options.viewport.with_decorations(false);
+    options.viewport = options
+        .viewport
+        .with_decorations(false)
+        .with_transparent(false);
     eframe::run_native(
         "Infinity Orchestrator",
         options,

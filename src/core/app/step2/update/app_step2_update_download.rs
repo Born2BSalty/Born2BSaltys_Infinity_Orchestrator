@@ -119,7 +119,7 @@ fn download_update_assets(
 
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
-        .timeout_read(Duration::from_secs(120))
+        .timeout_read(Duration::from_mins(2))
         .build();
     let mut cached_results = BTreeMap::<String, Result<(), String>>::new();
     let total = assets.len();
@@ -127,18 +127,15 @@ fn download_update_assets(
         let file_name = archive_file_name(asset);
         let destination = archive_dir.join(file_name);
         let cache_key = format!("{}|{}", destination.display(), asset.asset_url);
-        let download_result = if let Some(existing) = cached_results.get(&cache_key) {
-            existing.clone()
-        } else {
-            let result = download_one_asset(&agent, asset, &destination);
-            cached_results.insert(cache_key, result.clone());
-            result
-        };
+        let download_result = cached_results
+            .entry(cache_key)
+            .or_insert_with(|| download_one_asset(&agent, asset, &destination))
+            .clone();
         match download_result {
             Ok(()) => {
                 result
                     .downloaded
-                    .push(format!("{} -> {}", asset.label, destination.display()))
+                    .push(format!("{} -> {}", asset.label, destination.display()));
             }
             Err(err) => result.failed.push(format!("{}: {err}", asset.label)),
         }

@@ -9,26 +9,25 @@ use chrono::Local;
 use super::source_logs::{copy_saved_weidu_logs, copy_source_weidu_logs};
 use crate::app::state::{Step1State, Step5State};
 
-pub fn begin_new_run(step5: &mut Step5State) -> String {
+pub(crate) fn begin_new_run(step5: &mut Step5State) -> String {
     prune_old_diagnostics(None);
     let run_id = make_run_id();
     step5.diagnostics_run_id = Some(run_id.clone());
     run_id
 }
 
-pub fn current_or_new_run_id(step5: &Step5State) -> String {
+pub(crate) fn current_or_new_run_id(step5: &Step5State) -> String {
     step5.diagnostics_run_id.clone().unwrap_or_else(make_run_id)
 }
 
-pub fn run_dir_from_id(run_id: &str) -> PathBuf {
+pub(crate) fn run_dir_from_id(run_id: &str) -> PathBuf {
     PathBuf::from("diagnostics").join(format!("run_{run_id}"))
 }
 
-pub fn prune_old_diagnostics(keep_run_id: Option<&str>) {
+pub(crate) fn prune_old_diagnostics(keep_run_id: Option<&str>) {
     let diagnostics_dir = Path::new("diagnostics");
-    let entries = match fs::read_dir(diagnostics_dir) {
-        Ok(entries) => entries,
-        Err(_) => return,
+    let Ok(entries) = fs::read_dir(diagnostics_dir) else {
+        return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
@@ -44,7 +43,7 @@ pub fn prune_old_diagnostics(keep_run_id: Option<&str>) {
     }
 }
 
-pub fn copy_weidu_logs_for_diagnostics(step1: &Step1State, run_id: &str) {
+pub(crate) fn copy_weidu_logs_for_diagnostics(step1: &Step1State, run_id: &str) {
     if !step1.bio_full_debug && !step1.log_raw_output_dev {
         return;
     }
@@ -60,12 +59,15 @@ fn make_run_id() -> String {
 }
 
 #[derive(Debug, Clone)]
-pub struct DiagnosticLogGroup {
-    pub label: String,
-    pub copied_paths: Vec<PathBuf>,
+pub(crate) struct DiagnosticLogGroup {
+    pub(crate) label: String,
+    pub(crate) copied_paths: Vec<PathBuf>,
 }
 
-pub fn copy_diagnostic_origin_logs(step1: &Step1State, logs_dir: &Path) -> Vec<DiagnosticLogGroup> {
+pub(crate) fn copy_diagnostic_origin_logs(
+    step1: &Step1State,
+    logs_dir: &Path,
+) -> Vec<DiagnosticLogGroup> {
     let _ = fs::create_dir_all(logs_dir);
     let mut groups = vec![
         copy_directory_group(

@@ -15,6 +15,7 @@ pub struct PathValidationSummary {
     pub text: String,
 }
 
+#[must_use]
 pub fn compute_path_validation_summary(state: &WizardState) -> PathValidationSummary {
     match &state.step1_path_check {
         Some((true, _)) => PathValidationSummary {

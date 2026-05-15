@@ -18,7 +18,7 @@ pub(crate) fn render_button(ui: &mut egui::Ui, state: &mut WizardState) {
 }
 
 pub(crate) fn render_window(
-    ui: &mut egui::Ui,
+    ui: &egui::Ui,
     state: &mut WizardState,
     terminal: Option<&EmbeddedTerminal>,
     palette: ThemePalette,

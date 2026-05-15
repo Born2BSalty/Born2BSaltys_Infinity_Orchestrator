@@ -4,9 +4,10 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, REDESIGN_FILTER_CHIP_LABEL_GAP_PX, REDESIGN_FILTER_CHIP_PADDING_X_PX,
-    REDESIGN_FILTER_CHIP_PADDING_Y_PX, REDESIGN_FILTER_CHIP_RADIUS_PX, REDESIGN_LABEL_FONT_SIZE_PX,
-    ThemePalette, redesign_accent, redesign_border_strong, redesign_shell_bg, redesign_text_faint,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_FILTER_CHIP_FONT_SIZE_PX, REDESIGN_FILTER_CHIP_LABEL_GAP_PX,
+    REDESIGN_FILTER_CHIP_PADDING_X_PX, REDESIGN_FILTER_CHIP_PADDING_Y_PX,
+    REDESIGN_FILTER_CHIP_RADIUS_PX, ThemePalette, redesign_accent, redesign_border_strong,
+    redesign_font_light, redesign_font_medium, redesign_shell_bg, redesign_text_faint,
     redesign_text_on_accent, redesign_text_primary,
 };
 
@@ -41,20 +42,26 @@ pub fn render(
         ))
         .corner_radius(REDESIGN_FILTER_CHIP_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_FILTER_CHIP_PADDING_X_PX as i8,
-            REDESIGN_FILTER_CHIP_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_FILTER_CHIP_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_FILTER_CHIP_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = REDESIGN_FILTER_CHIP_LABEL_GAP_PX;
                 ui.label(
                     egui::RichText::new(label)
-                        .size(REDESIGN_LABEL_FONT_SIZE_PX)
+                        .family(if active {
+                            redesign_font_medium()
+                        } else {
+                            redesign_font_light()
+                        })
+                        .size(REDESIGN_FILTER_CHIP_FONT_SIZE_PX)
                         .color(label_color),
                 );
                 ui.label(
                     egui::RichText::new(format!("({count})"))
-                        .size(REDESIGN_LABEL_FONT_SIZE_PX)
+                        .family(redesign_font_light())
+                        .size(REDESIGN_FILTER_CHIP_FONT_SIZE_PX)
                         .color(count_color),
                 );
             });

@@ -5,7 +5,7 @@ use super::app_step2_update_check::{
     Step2PackageKind, Step2UpdateCheckOutcome, Step2UpdateCheckRequest,
 };
 use crate::app::mod_downloads::normalize_mod_download_tp2;
-use crate::parser::weidu_version::normalize_version_text;
+use crate::parser::normalize_version_text;
 
 pub(super) fn check_weaselmods_download_page(
     agent: &ureq::Agent,

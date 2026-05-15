@@ -13,7 +13,7 @@ pub(crate) fn apply_saved_weidu_log_selection(state: &mut WizardState) {
     match state.step1.game_install.as_str() {
         "BG2EE" => {
             let log_path = resolve_bg2_weidu_log_path(&state.step1);
-            apply_weidu_log_selection_from_path(state, false, log_path)
+            apply_weidu_log_selection_from_path(state, false, log_path);
         }
         "EET" => {
             let bgee_log_path = resolve_bgee_weidu_log_path(&state.step1);
@@ -23,7 +23,7 @@ pub(crate) fn apply_saved_weidu_log_selection(state: &mut WizardState) {
         }
         _ => {
             let log_path = resolve_bgee_weidu_log_path(&state.step1);
-            apply_weidu_log_selection_from_path(state, true, log_path)
+            apply_weidu_log_selection_from_path(state, true, log_path);
         }
     }
 }
@@ -64,7 +64,7 @@ pub(crate) fn apply_weidu_log_selection_from_path(
             let picked_bgee = apply_log_to_mods(
                 &mut state.step2.bgee_mods,
                 &log,
-                None,
+                None::<&HashSet<String>>,
                 true,
                 &mut next_order,
             );
@@ -81,14 +81,14 @@ pub(crate) fn apply_weidu_log_selection_from_path(
         (_, true) => apply_log_to_mods(
             &mut state.step2.bgee_mods,
             &log,
-            None,
+            None::<&HashSet<String>>,
             true,
             &mut next_order,
         ),
         _ => apply_log_to_mods(
             &mut state.step2.bg2ee_mods,
             &log,
-            None,
+            None::<&HashSet<String>>,
             true,
             &mut next_order,
         ),

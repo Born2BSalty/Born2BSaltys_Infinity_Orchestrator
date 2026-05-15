@@ -8,7 +8,7 @@ use crate::app::terminal::EmbeddedTerminal;
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_warning};
 
 pub(crate) fn render_cancel_confirm(
-    ui: &mut egui::Ui,
+    ui: &egui::Ui,
     state: &mut WizardState,
     terminal: Option<&mut EmbeddedTerminal>,
     palette: ThemePalette,

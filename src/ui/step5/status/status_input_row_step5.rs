@@ -30,15 +30,16 @@ pub(crate) fn render_input_row(
     let send_now = can_send && enter_pressed && (input.has_focus() || input.lost_focus());
     let should_focus_input = std::mem::take(&mut console_view.request_input_focus);
 
-    let mut keep_input_focus = false;
-    if send_now {
+    let keep_input_focus = if send_now {
         if let Some(term) = terminal {
             let reply = state.step5.input_line.clone();
             crate::app::step5::auto_answer::send_manual_input(state, term, &reply);
         }
         state.step5.input_line.clear();
-        keep_input_focus = true;
-    }
+        true
+    } else {
+        false
+    };
     if can_send && (keep_input_focus || should_focus_input) {
         input.request_focus();
     }

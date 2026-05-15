@@ -6,13 +6,13 @@ use eframe::egui;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_SCREEN_SUBTITLE_FONT_SIZE_PX, REDESIGN_SCREEN_TITLE_BOTTOM_GAP_PX,
     REDESIGN_SCREEN_TITLE_FONT_SIZE_PX, REDESIGN_SCREEN_TITLE_SUBTITLE_GAP_PX, ThemePalette,
-    redesign_font_bold, redesign_font_light, redesign_text_muted, redesign_text_primary,
+    redesign_font_light, redesign_font_medium, redesign_text_muted, redesign_text_primary,
 };
 
 pub fn render(ui: &mut egui::Ui, palette: ThemePalette, title: &str, sub: Option<&str>) {
     ui.label(
         egui::RichText::new(title)
-            .family(redesign_font_bold())
+            .family(redesign_font_medium())
             .size(REDESIGN_SCREEN_TITLE_FONT_SIZE_PX)
             .color(redesign_text_primary(palette)),
     );

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::parser::prompt_eval_expr::{
+use crate::parser::{
     PromptComponentInput, PromptEvalContext, PromptVarContext,
     apply_component_block_assignments_text, apply_mod_compat_prompt_value_from_text,
     apply_source_file_assignments_text, extract_copy_table_path, extract_tp2_path_from_raw_line,

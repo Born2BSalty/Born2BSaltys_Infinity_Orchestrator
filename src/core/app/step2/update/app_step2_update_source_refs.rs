@@ -39,10 +39,10 @@ pub(super) fn save_installed_source_ref(tp2: &str, source_ref: &str) -> io::Resu
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut refs = match fs::read_to_string(&path) {
-        Ok(value) => toml::from_str::<ModSourceRefsFile>(&value).unwrap_or_default(),
-        Err(_) => ModSourceRefsFile::default(),
-    };
+    let mut refs = fs::read_to_string(&path).map_or_else(
+        |_| ModSourceRefsFile::default(),
+        |value| toml::from_str::<ModSourceRefsFile>(&value).unwrap_or_default(),
+    );
     refs.refs.insert(
         normalize_mod_download_tp2(tp2),
         source_ref.trim().to_string(),
@@ -61,9 +61,8 @@ pub(super) fn load_installed_source_id(tp2: &str) -> Option<String> {
 }
 
 pub(crate) fn load_installed_source_ids() -> BTreeMap<String, String> {
-    let content = match fs::read_to_string(installed_source_refs_path()) {
-        Ok(content) => content,
-        Err(_) => return BTreeMap::new(),
+    let Ok(content) = fs::read_to_string(installed_source_refs_path()) else {
+        return BTreeMap::new();
     };
     let parsed = toml::from_str::<ModSourceRefsFile>(&content).unwrap_or_default();
     parsed
@@ -79,10 +78,10 @@ pub(super) fn save_installed_source_id(tp2: &str, source_id: &str) -> io::Result
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut refs = match fs::read_to_string(&path) {
-        Ok(value) => toml::from_str::<ModSourceRefsFile>(&value).unwrap_or_default(),
-        Err(_) => ModSourceRefsFile::default(),
-    };
+    let mut refs = fs::read_to_string(&path).map_or_else(
+        |_| ModSourceRefsFile::default(),
+        |value| toml::from_str::<ModSourceRefsFile>(&value).unwrap_or_default(),
+    );
     refs.sources.insert(
         normalize_mod_download_tp2(tp2),
         source_id.trim().to_string(),

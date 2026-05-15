@@ -35,8 +35,7 @@ pub(crate) fn render_status_and_input(
 ) {
     let waiting_for_input_before = terminal
         .as_deref()
-        .map(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some())
-        .unwrap_or(false);
+        .is_some_and(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some());
     let prev_auto_key = state.step5.last_auto_prompt_key.clone();
     let prev_scripted_cycle = state.step5.last_scripted_cycle_signature.clone();
     let prev_scripted_send_ms = state.step5.last_scripted_send_unix_ms;
@@ -49,8 +48,7 @@ pub(crate) fn render_status_and_input(
 
     let waiting_for_input_after = terminal
         .as_deref()
-        .map(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some())
-        .unwrap_or(false);
+        .is_some_and(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some());
     let auto_answer_sent_this_tick = state.step5.last_auto_prompt_key != prev_auto_key
         || state.step5.last_scripted_cycle_signature != prev_scripted_cycle
         || state.step5.last_scripted_send_unix_ms != prev_scripted_send_ms;

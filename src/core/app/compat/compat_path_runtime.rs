@@ -8,7 +8,7 @@ use std::time::SystemTime;
 
 use super::compat_path_eval::{PathRequirementContext, PathTriState, evaluate_path_requirement};
 use crate::parser::collect_tp2_component_blocks;
-use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
+use crate::parser::{Token, tokenize};
 
 pub(crate) type ComponentPathGuardCache = HashMap<String, HashMap<String, Vec<PathGuard>>>;
 
@@ -89,7 +89,7 @@ fn first_predicate_target(eval_text: &str, predicate: &str) -> Option<String> {
             value_index += 1;
         }
         match tokens.get(value_index) {
-            Some(Token::Atom(value)) | Some(Token::Ident(value)) if !value.trim().is_empty() => {
+            Some(Token::Atom(value) | Token::Ident(value)) if !value.trim().is_empty() => {
                 return Some(value.trim().to_string());
             }
             _ => return None,
@@ -157,16 +157,16 @@ fn path_guard_file_cache() -> &'static Mutex<HashMap<String, CachedPathGuards>> 
 }
 
 fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
-    match fs::metadata(tp2_path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(tp2_path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 fn collect_path_guards(block: &[&str]) -> Vec<PathGuard> {

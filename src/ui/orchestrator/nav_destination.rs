@@ -11,32 +11,30 @@ pub enum NavDestination {
 }
 
 impl NavDestination {
-    pub fn rail_items() -> [NavDestination; 4] {
-        [
-            NavDestination::Home,
-            NavDestination::Install,
-            NavDestination::Create,
-            NavDestination::Settings,
-        ]
+    #[must_use]
+    pub const fn rail_items() -> [Self; 4] {
+        [Self::Home, Self::Install, Self::Create, Self::Settings]
     }
 
-    pub fn label(&self) -> &'static str {
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
         match self {
-            NavDestination::Home => "Home",
-            NavDestination::Install => "Install",
-            NavDestination::Create => "Create",
-            NavDestination::Settings => "Settings",
-            NavDestination::Workspace { .. } => "Workspace",
+            Self::Home => "Home",
+            Self::Install => "Install",
+            Self::Create => "Create",
+            Self::Settings => "Settings",
+            Self::Workspace { .. } => "Workspace",
         }
     }
 
-    pub fn icon(&self) -> &'static str {
+    #[must_use]
+    pub const fn icon(&self) -> &'static str {
         match self {
-            NavDestination::Home => "⌂",
-            NavDestination::Install => "↓",
-            NavDestination::Create => "✎",
-            NavDestination::Settings => "⚙",
-            NavDestination::Workspace { .. } => "",
+            Self::Home => "⌂",
+            Self::Install => "↓",
+            Self::Create => "✎",
+            Self::Settings => "⚙",
+            Self::Workspace { .. } => "",
         }
     }
 }

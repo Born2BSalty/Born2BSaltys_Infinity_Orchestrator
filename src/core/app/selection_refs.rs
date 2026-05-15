@@ -3,11 +3,9 @@
 
 pub(crate) fn normalize_mod_key(value: &str) -> String {
     let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
+    let file = lower
+        .rfind(['/', '\\'])
+        .map_or(lower.as_str(), |idx| &lower[idx + 1..]);
     let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
     without_ext
         .strip_prefix("setup-")

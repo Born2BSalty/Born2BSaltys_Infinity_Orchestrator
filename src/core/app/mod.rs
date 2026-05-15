@@ -144,6 +144,6 @@ pub mod step3_toolbar;
 #[path = "state/step4_action.rs"]
 pub mod step4_action;
 pub mod step4_weidu_log_export;
-pub(crate) mod step5;
+pub mod step5;
 pub mod step5_runtime_status;
 pub mod terminal;

@@ -16,7 +16,7 @@ pub(super) fn write_compat_rule_matches_summary_json(
     let trace_path = run_dir.join("compat_rule_trace.json");
     let payload = match fs::read_to_string(&trace_path) {
         Ok(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
-            Ok(trace) => build_summary_payload(timestamp_unix_secs, trace),
+            Ok(trace) => build_summary_payload(timestamp_unix_secs, &trace),
             Err(err) => json!({
                 "schema_version": 1,
                 "generated_at_unix": timestamp_unix_secs,
@@ -37,96 +37,8 @@ pub(super) fn write_compat_rule_matches_summary_json(
     Ok(out_path)
 }
 
-fn build_summary_payload(timestamp_unix_secs: u64, trace: serde_json::Value) -> serde_json::Value {
-    let mut grouped = BTreeMap::<String, RuleMatchSummary>::new();
-    let tabs = trace
-        .get("tabs")
-        .and_then(serde_json::Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-
-    for tab in tabs {
-        let tab_name = tab
-            .get("tab")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_string();
-        let components = tab
-            .get("components")
-            .and_then(serde_json::Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        for component in components {
-            let mod_name = component
-                .get("mod_name")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            let component_id = component
-                .get("component_id")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            let rule_matches = component
-                .get("rule_matches")
-                .and_then(serde_json::Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            for rule_match in rule_matches {
-                let matched = rule_match
-                    .get("direct_match")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false)
-                    || rule_match
-                        .get("relation_match")
-                        .and_then(serde_json::Value::as_bool)
-                        .unwrap_or(false);
-                if !matched {
-                    continue;
-                }
-                let rule_index = rule_match
-                    .get("rule_index")
-                    .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(0);
-                let source_path = rule_match
-                    .get("source_path")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
-                let key = format!("{rule_index}|{source_path}");
-                let entry = grouped.entry(key).or_insert_with(|| RuleMatchSummary {
-                    rule_index,
-                    kind: rule_match
-                        .get("kind")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
-                    message: rule_match
-                        .get("message")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
-                    source_bucket: rule_match
-                        .get("source_bucket")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    source_path,
-                    match_count: 0,
-                    tabs: BTreeMap::new(),
-                    mods: BTreeMap::new(),
-                    components: BTreeMap::new(),
-                });
-                entry.match_count += 1;
-                *entry.tabs.entry(tab_name.clone()).or_default() += 1;
-                *entry.mods.entry(mod_name.clone()).or_default() += 1;
-                *entry
-                    .components
-                    .entry(format!("{mod_name} #{component_id}"))
-                    .or_default() += 1;
-            }
-        }
-    }
+fn build_summary_payload(timestamp_unix_secs: u64, trace: &serde_json::Value) -> serde_json::Value {
+    let grouped = collect_rule_match_summaries(trace);
 
     json!({
         "schema_version": 1,
@@ -145,6 +57,109 @@ fn build_summary_payload(timestamp_unix_secs: u64, trace: serde_json::Value) -> 
             "components": row.components,
         })).collect::<Vec<_>>()
     })
+}
+
+fn collect_rule_match_summaries(trace: &serde_json::Value) -> BTreeMap<String, RuleMatchSummary> {
+    let mut grouped = BTreeMap::<String, RuleMatchSummary>::new();
+    for tab in trace_array(trace, "tabs") {
+        collect_tab_rule_matches(&mut grouped, &tab);
+    }
+    grouped
+}
+
+fn collect_tab_rule_matches(
+    grouped: &mut BTreeMap<String, RuleMatchSummary>,
+    tab: &serde_json::Value,
+) {
+    let tab_name = string_field(tab, "tab", "");
+    for component in trace_array(tab, "components") {
+        collect_component_rule_matches(grouped, &tab_name, &component);
+    }
+}
+
+fn collect_component_rule_matches(
+    grouped: &mut BTreeMap<String, RuleMatchSummary>,
+    tab_name: &str,
+    component: &serde_json::Value,
+) {
+    let mod_name = string_field(component, "mod_name", "");
+    let component_id = string_field(component, "component_id", "");
+    for rule_match in trace_array(component, "rule_matches") {
+        if !rule_match_matched(&rule_match) {
+            continue;
+        }
+        add_rule_match_summary(grouped, tab_name, &mod_name, &component_id, &rule_match);
+    }
+}
+
+fn trace_array(value: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn string_field(value: &serde_json::Value, key: &str, fallback: &str) -> String {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn rule_match_matched(rule_match: &serde_json::Value) -> bool {
+    rule_match
+        .get("direct_match")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+        || rule_match
+            .get("relation_match")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+}
+
+fn add_rule_match_summary(
+    grouped: &mut BTreeMap<String, RuleMatchSummary>,
+    tab_name: &str,
+    mod_name: &str,
+    component_id: &str,
+    rule_match: &serde_json::Value,
+) {
+    let rule_index = rule_match
+        .get("rule_index")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let source_path = string_field(rule_match, "source_path", "");
+    let key = format!("{rule_index}|{source_path}");
+    let entry = grouped
+        .entry(key)
+        .or_insert_with(|| build_rule_match_summary(rule_index, source_path, rule_match));
+    entry.match_count += 1;
+    *entry.tabs.entry(tab_name.to_string()).or_default() += 1;
+    *entry.mods.entry(mod_name.to_string()).or_default() += 1;
+    *entry
+        .components
+        .entry(format!("{mod_name} #{component_id}"))
+        .or_default() += 1;
+}
+
+fn build_rule_match_summary(
+    rule_index: u64,
+    source_path: String,
+    rule_match: &serde_json::Value,
+) -> RuleMatchSummary {
+    RuleMatchSummary {
+        rule_index,
+        kind: string_field(rule_match, "kind", ""),
+        message: string_field(rule_match, "message", ""),
+        source_bucket: string_field(rule_match, "source_bucket", "unknown"),
+        source_path,
+        match_count: 0,
+        tabs: BTreeMap::new(),
+        mods: BTreeMap::new(),
+        components: BTreeMap::new(),
+    }
 }
 
 #[derive(Default)]

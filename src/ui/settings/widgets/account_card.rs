@@ -35,11 +35,15 @@ pub fn render(
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_ACCOUNT_CARD_PADDING_X_PX as i8,
-            REDESIGN_ACCOUNT_CARD_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_ACCOUNT_CARD_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_ACCOUNT_CARD_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
-            ui.set_width((card_width - 2.0 * REDESIGN_ACCOUNT_CARD_PADDING_X_PX).max(0.0));
+            ui.set_width(
+                REDESIGN_ACCOUNT_CARD_PADDING_X_PX
+                    .mul_add(-2.0, card_width)
+                    .max(0.0),
+            );
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = REDESIGN_ACCOUNT_CARD_GAP_PX;
                 render_avatar(ui, palette, initials);
@@ -140,8 +144,8 @@ fn render_pill(ui: &mut egui::Ui, palette: ThemePalette, text: &str, connected: 
         .fill(fill)
         .corner_radius(REDESIGN_ACCOUNT_PILL_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_ACCOUNT_PILL_PADDING_X_PX as i8,
-            REDESIGN_ACCOUNT_PILL_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_ACCOUNT_PILL_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_ACCOUNT_PILL_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.label(

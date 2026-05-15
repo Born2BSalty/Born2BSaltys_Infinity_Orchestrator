@@ -13,9 +13,9 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_MODLIST_CARD_ACTION_GAP_PX, REDESIGN_MODLIST_CARD_ACTION_WIDTH_PX,
     REDESIGN_MODLIST_CARD_META_FONT_SIZE_PX, REDESIGN_MODLIST_CARD_NAME_FONT_SIZE_PX,
     REDESIGN_MODLIST_CARD_PADDING_X_PX, REDESIGN_MODLIST_CARD_PADDING_Y_PX,
-    REDESIGN_MODLIST_CARD_TEXT_GAP_PX, ThemePalette, redesign_border_strong, redesign_font_bold,
-    redesign_font_light, redesign_font_medium, redesign_hover_overlay, redesign_shadow,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
+    REDESIGN_MODLIST_CARD_TEXT_GAP_PX, ThemePalette, redesign_border_strong, redesign_font_light,
+    redesign_font_medium, redesign_hover_overlay, redesign_shadow, redesign_shell_bg,
+    redesign_text_faint, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,8 +57,8 @@ pub fn render(
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_MODLIST_CARD_PADDING_X_PX as i8,
-            REDESIGN_MODLIST_CARD_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_MODLIST_CARD_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_MODLIST_CARD_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -74,7 +74,7 @@ pub fn render(
                         ui.spacing_mut().item_spacing.y = REDESIGN_MODLIST_CARD_TEXT_GAP_PX;
                         ui.label(
                             egui::RichText::new(view.name)
-                                .family(redesign_font_bold())
+                                .family(redesign_font_light())
                                 .size(REDESIGN_MODLIST_CARD_NAME_FONT_SIZE_PX)
                                 .color(redesign_text_primary(palette)),
                         );
@@ -128,7 +128,7 @@ fn kebab_popup_id(name: &str) -> egui::Id {
 }
 
 fn render_kebab_menu(
-    ui: &mut egui::Ui,
+    ui: &egui::Ui,
     palette: ThemePalette,
     view: &ModlistCardView<'_>,
     anchor_rect: egui::Rect,
@@ -156,14 +156,22 @@ fn render_kebab_menu(
                 .corner_radius(REDESIGN_BORDER_RADIUS_PX)
                 .shadow(egui::Shadow {
                     offset: [
-                        REDESIGN_KEBAB_MENU_SHADOW_OFFSET_PX as i8,
-                        REDESIGN_KEBAB_MENU_SHADOW_OFFSET_PX as i8,
+                        crate::ui::shared::redesign_tokens::redesign_i8_px(
+                            REDESIGN_KEBAB_MENU_SHADOW_OFFSET_PX,
+                        ),
+                        crate::ui::shared::redesign_tokens::redesign_i8_px(
+                            REDESIGN_KEBAB_MENU_SHADOW_OFFSET_PX,
+                        ),
                     ],
                     blur: 0,
                     spread: 0,
                     color: redesign_shadow(palette),
                 })
-                .inner_margin(egui::Margin::same(REDESIGN_KEBAB_MENU_PADDING_PX as i8))
+                .inner_margin(egui::Margin::same(
+                    crate::ui::shared::redesign_tokens::redesign_i8_px(
+                        REDESIGN_KEBAB_MENU_PADDING_PX,
+                    ),
+                ))
                 .show(ui, |ui| {
                     ui.set_min_width(REDESIGN_KEBAB_MENU_WIDTH_PX);
                     for (label, action) in menu_items(view.state) {
@@ -181,13 +189,13 @@ fn render_kebab_menu(
         || clicked_outside
         || ui.input(|input| input.key_pressed(egui::Key::Escape))
     {
-        ui.memory_mut(|mem| mem.close_popup());
+        ui.memory_mut(eframe::egui::Memory::close_popup);
     }
 
     selected
 }
 
-fn menu_items(state: ModlistCardState) -> &'static [(&'static str, ModlistCardAction)] {
+const fn menu_items(state: ModlistCardState) -> &'static [(&'static str, ModlistCardAction)] {
     match state {
         ModlistCardState::InProgress => &[
             ("Copy import code", ModlistCardAction::CopyImportCode),
@@ -206,7 +214,7 @@ fn menu_items(state: ModlistCardState) -> &'static [(&'static str, ModlistCardAc
 
 fn menu_row(ui: &mut egui::Ui, palette: ThemePalette, label: &str) -> egui::Response {
     let height =
-        REDESIGN_KEBAB_MENU_ITEM_FONT_SIZE_PX + REDESIGN_KEBAB_MENU_ITEM_PADDING_Y_PX * 2.0;
+        REDESIGN_KEBAB_MENU_ITEM_PADDING_Y_PX.mul_add(2.0, REDESIGN_KEBAB_MENU_ITEM_FONT_SIZE_PX);
     let width = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
     if response.hovered() {

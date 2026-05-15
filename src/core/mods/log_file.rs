@@ -27,20 +27,23 @@ impl LogFile {
         Ok(Self { components })
     }
 
+    #[must_use]
     pub fn components(&self) -> &[Component] {
         &self.components
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.components.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.components.is_empty()
     }
 
     #[cfg(test)]
-    pub(crate) fn from_components(components: Vec<Component>) -> Self {
+    pub(crate) const fn from_components(components: Vec<Component>) -> Self {
         Self { components }
     }
 }

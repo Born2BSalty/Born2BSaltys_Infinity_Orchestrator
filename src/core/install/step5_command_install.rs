@@ -46,7 +46,7 @@ pub(crate) fn build_install_invocation(config: &InstallCommandConfig) -> (String
         } else {
             &config.bgee_game_folder
         };
-        args.push(game_dir.to_string());
+        args.push(game_dir.clone());
         args.push("--log-file".to_string());
         let log_file = if config.game_install == "BG2EE" {
             resolve_bg2_log_file(config)

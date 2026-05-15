@@ -58,7 +58,7 @@ pub(super) fn render(
     });
 }
 
-fn tabs() -> [(InstallPreviewTab, &'static str); 6] {
+const fn tabs() -> [(InstallPreviewTab, &'static str); 6] {
     [
         (InstallPreviewTab::Summary, "Summary"),
         (InstallPreviewTab::BgeeWeidu, "BGEE WeiDU"),

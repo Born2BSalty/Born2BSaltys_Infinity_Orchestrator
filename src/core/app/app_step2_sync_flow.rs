@@ -79,10 +79,13 @@ fn assign_fallback_orders(mods: &mut [Step2ModState], mut next_order: usize) {
     }
 }
 
-fn step2_selection_signature(bgee_mods: &[Step2ModState], bg2ee_mods: &[Step2ModState]) -> String {
+fn step2_selection_signature(
+    primary_game_mods: &[Step2ModState],
+    secondary_game_mods: &[Step2ModState],
+) -> String {
     let mut entries: Vec<String> = Vec::new();
-    collect_tab_signature("BGEE", bgee_mods, &mut entries);
-    collect_tab_signature("BG2EE", bg2ee_mods, &mut entries);
+    collect_tab_signature("BGEE", primary_game_mods, &mut entries);
+    collect_tab_signature("BG2EE", secondary_game_mods, &mut entries);
     entries.sort_unstable();
     entries.join(";")
 }

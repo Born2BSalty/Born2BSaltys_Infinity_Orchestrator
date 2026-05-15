@@ -205,16 +205,16 @@ fn deprecated_hit_file_cache() -> &'static Mutex<HashMap<String, CachedDeprecate
 }
 
 fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
-    match fs::metadata(tp2_path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(tp2_path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 fn find_deprecated_evidence(block: &[&str]) -> Option<String> {
@@ -246,7 +246,7 @@ fn inline_begin_deprecated(line: &str) -> Option<&str> {
     let designated_tail = designated_tail.trim_start();
     let digit_len = designated_tail
         .chars()
-        .take_while(|ch| ch.is_ascii_digit())
+        .take_while(char::is_ascii_digit)
         .map(char::len_utf8)
         .sum::<usize>();
     let search_region = &designated_tail[digit_len..];
@@ -277,7 +277,7 @@ fn parse_designated_id(upper_line: &str) -> Option<String> {
     }
     let index = upper_line.find("DESIGNATED")?;
     let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-    let digits: String = tail.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+    let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         None
     } else {

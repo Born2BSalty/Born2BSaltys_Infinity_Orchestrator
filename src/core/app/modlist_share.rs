@@ -88,7 +88,6 @@ pub(crate) struct ModlistSharePreview {
 
 pub(crate) fn preview_modlist_share_code(code: &str) -> Result<ModlistSharePreview, String> {
     let preview = share_preview(&decode_share_payload(code)?)?;
-    let _allow_auto_install = preview.allow_auto_install;
     Ok(preview)
 }
 
@@ -99,7 +98,7 @@ pub(crate) fn import_modlist_share_code(
     let payload = decode_share_payload(code)?;
     let preview = share_preview(&payload)?;
     let mut step1 = state.step1.clone();
-    step1.game_install = payload.game_install.clone();
+    step1.game_install.clone_from(&payload.game_install);
     step1.install_mode =
         crate::app::state::Step1State::normalize_install_mode(&payload.install_mode).to_string();
     step1.sync_install_mode_flags();
@@ -202,12 +201,12 @@ fn decode_share_payload(code: &str) -> Result<ModlistSharePayload, String> {
 fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, String> {
     let install_mode =
         crate::app::state::Step1State::normalize_install_mode(&payload.install_mode).to_string();
-    let bgee_entries = count_weidu_entries(payload.weidu_logs.bgee.as_deref());
-    let bg2ee_entries = count_weidu_entries(payload.weidu_logs.bg2ee.as_deref());
+    let primary_entries = count_weidu_entries(payload.weidu_logs.bgee.as_deref());
+    let secondary_entries = count_weidu_entries(payload.weidu_logs.bg2ee.as_deref());
     if match payload.game_install.as_str() {
-        "EET" => bgee_entries == 0 && bg2ee_entries == 0,
-        "BG2EE" => bg2ee_entries == 0,
-        _ => bgee_entries == 0,
+        "EET" => primary_entries == 0 && secondary_entries == 0,
+        "BG2EE" => secondary_entries == 0,
+        _ => primary_entries == 0,
     } {
         return Err("No WeiDU entries available to import.".to_string());
     }
@@ -229,8 +228,8 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
         bio_version: payload.bio_version.clone(),
         game_install: payload.game_install.clone(),
         install_mode,
-        bgee_entries,
-        bg2ee_entries,
+        bgee_entries: primary_entries,
+        bg2ee_entries: secondary_entries,
         has_source_overrides: payload
             .source_overrides
             .mod_downloads_user_toml
@@ -259,7 +258,7 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
     })
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
@@ -272,25 +271,25 @@ fn write_imported_weidu_logs(
             write_imported_log(
                 "BGEE",
                 payload.weidu_logs.bgee.as_deref(),
-                import_log_target_path(step1, true)?,
+                &import_log_target_path(step1, true)?,
             )?;
             let rewritten_bg2ee =
                 rewrite_imported_eet_bg2ee_wlb_paths(step1, payload.weidu_logs.bg2ee.as_deref())?;
             write_imported_log(
                 "BG2EE",
                 rewritten_bg2ee.as_deref(),
-                import_log_target_path(step1, false)?,
+                &import_log_target_path(step1, false)?,
             )
         }
         "BG2EE" => write_imported_log(
             "BG2EE",
             payload.weidu_logs.bg2ee.as_deref(),
-            import_log_target_path(step1, false)?,
+            &import_log_target_path(step1, false)?,
         ),
         _ => write_imported_log(
             "BGEE",
             payload.weidu_logs.bgee.as_deref(),
-            import_log_target_path(step1, true)?,
+            &import_log_target_path(step1, true)?,
         ),
     }
 }
@@ -401,14 +400,14 @@ fn import_log_target_path(
     Ok(PathBuf::from(value.trim()).join("weidu.log"))
 }
 
-fn write_imported_log(label: &str, text: Option<&str>, path: PathBuf) -> Result<(), String> {
+fn write_imported_log(label: &str, text: Option<&str>, path: &Path) -> Result<(), String> {
     let Some(text) = text.filter(|text| count_weidu_entries(Some(text)) > 0) else {
         return Err(format!("Imported {label} WeiDU log has no entries."));
     };
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    fs::write(&path, text).map_err(|err| format!("Write {label} WeiDU log failed: {err}"))
+    fs::write(path, text).map_err(|err| format!("Write {label} WeiDU log failed: {err}"))
 }
 
 fn write_text_file(path: PathBuf, text: &str) -> Result<(), String> {
@@ -419,7 +418,7 @@ fn write_text_file(path: PathBuf, text: &str) -> Result<(), String> {
 }
 
 fn count_weidu_entries(text: Option<&str>) -> usize {
-    text.map(|text| {
+    text.map_or(0, |text| {
         text.lines()
             .filter(|line| {
                 let line = line.trim();
@@ -427,7 +426,6 @@ fn count_weidu_entries(text: Option<&str>) -> usize {
             })
             .count()
     })
-    .unwrap_or(0)
 }
 
 struct ExportWeiduLogs {
@@ -576,13 +574,15 @@ fn mod_config_root(tp2_path: &str) -> Option<PathBuf> {
 
 fn relevant_weidu_text_is_empty(
     state: &WizardState,
-    bgee_text: Option<&str>,
-    bg2ee_text: Option<&str>,
+    primary_text: Option<&str>,
+    secondary_text: Option<&str>,
 ) -> bool {
     match state.step1.game_install.as_str() {
-        "EET" => weidu_text_has_no_entries(bgee_text) && weidu_text_has_no_entries(bg2ee_text),
-        "BG2EE" => weidu_text_has_no_entries(bg2ee_text),
-        _ => weidu_text_has_no_entries(bgee_text),
+        "EET" => {
+            weidu_text_has_no_entries(primary_text) && weidu_text_has_no_entries(secondary_text)
+        }
+        "BG2EE" => weidu_text_has_no_entries(secondary_text),
+        _ => weidu_text_has_no_entries(primary_text),
     }
 }
 
@@ -700,6 +700,8 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
     }
     let mut out = Vec::with_capacity(values.len() / 4 * 3);
     for chunk in values.chunks(4) {
+        // Lint-only bytecount dependency is not approved for this local base64 padding check.
+        #[allow(clippy::naive_bytecount)]
         let pad = chunk.iter().filter(|value| **value == 64).count();
         if pad > 2 || chunk[..4 - pad].contains(&64) {
             return Err("Share code base64 padding is invalid.".to_string());

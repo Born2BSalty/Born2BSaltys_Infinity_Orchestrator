@@ -11,18 +11,10 @@ mod step1_settings_to_state {
 
     impl From<Step1Settings> for Step1State {
         fn from(value: Step1Settings) -> Self {
-            let install_mode = if value.install_mode.trim().is_empty() {
-                Step1State::derive_install_mode_from_legacy(
-                    value.have_weidu_logs,
-                    value.download_archive,
-                )
-            } else {
-                Step1State::normalize_install_mode(&value.install_mode).to_string()
-            };
+            let install_mode = settings_install_mode(&value);
             let have_weidu_logs = matches!(
                 install_mode.as_str(),
-                Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS
-                    | Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
+                Self::INSTALL_MODE_EXACT_WEIDU_LOGS | Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
             );
             Self {
                 game_install: value.game_install,
@@ -49,11 +41,7 @@ mod step1_settings_to_state {
                 weidu_log_logextern: value.weidu_log_logextern,
                 weidu_log_log_component: value.weidu_log_log_component,
                 weidu_log_folder: value.weidu_log_folder,
-                mod_installer_binary: if value.mod_installer_binary.trim().is_empty() {
-                    default_mod_installer_binary()
-                } else {
-                    resolve_mod_installer_binary(&value.mod_installer_binary)
-                },
+                mod_installer_binary: settings_mod_installer_binary(&value.mod_installer_binary),
                 bgee_game_folder: value.bgee_game_folder,
                 bgee_log_folder: value.bgee_log_folder,
                 bgee_log_file: value.bgee_log_file,
@@ -70,39 +58,21 @@ mod step1_settings_to_state {
                 log_file: value.log_file,
                 generate_directory: value.generate_directory,
                 mods_folder: value.mods_folder,
-                weidu_binary: if value.weidu_binary.trim().is_empty() {
-                    default_weidu_binary()
-                } else {
-                    resolve_weidu_binary(&value.weidu_binary)
-                },
-                language: if value.language.is_empty() {
-                    "en_US".to_string()
-                } else {
-                    value.language
-                },
-                depth: if value.depth == 0 { 5 } else { value.depth },
+                weidu_binary: settings_weidu_binary(&value.weidu_binary),
+                language: settings_language(value.language),
+                depth: default_zero_usize(value.depth, 5),
                 skip_installed: value.skip_installed,
                 abort_on_warnings: value.abort_on_warnings,
-                timeout: if value.timeout == 0 {
-                    3600
-                } else {
-                    value.timeout
-                },
-                auto_answer_initial_delay_ms: if value.auto_answer_initial_delay_ms == 0 {
-                    2000
-                } else {
-                    value.auto_answer_initial_delay_ms
-                },
-                auto_answer_post_send_delay_ms: if value.auto_answer_post_send_delay_ms == 0 {
-                    5000
-                } else {
-                    value.auto_answer_post_send_delay_ms
-                },
-                weidu_log_mode: if value.weidu_log_mode.is_empty() {
-                    "autolog,logapp,log-extern".to_string()
-                } else {
-                    value.weidu_log_mode
-                },
+                timeout: default_zero_usize(value.timeout, 3600),
+                auto_answer_initial_delay_ms: default_zero_usize(
+                    value.auto_answer_initial_delay_ms,
+                    2000,
+                ),
+                auto_answer_post_send_delay_ms: default_zero_usize(
+                    value.auto_answer_post_send_delay_ms,
+                    5000,
+                ),
+                weidu_log_mode: settings_weidu_log_mode(value.weidu_log_mode),
                 strict_matching: value.strict_matching,
                 download: value.download,
                 download_archive: value.download_archive,
@@ -110,16 +80,63 @@ mod step1_settings_to_state {
                 mods_backup_folder: value.mods_backup_folder,
                 overwrite: value.overwrite,
                 check_last_installed: value.check_last_installed,
-                tick: if value.tick == 0 { 500 } else { value.tick },
-                lookback: if value.lookback == 0 {
-                    10
-                } else {
-                    value.lookback
-                },
+                tick: default_zero_u64(value.tick, 500),
+                lookback: default_zero_usize(value.lookback, 10),
                 casefold: value.casefold,
                 backup_targets_before_eet_copy: value.backup_targets_before_eet_copy,
             }
         }
+    }
+
+    fn settings_install_mode(value: &Step1Settings) -> String {
+        if value.install_mode.trim().is_empty() {
+            Step1State::derive_install_mode_from_legacy(
+                value.have_weidu_logs,
+                value.download_archive,
+            )
+        } else {
+            Step1State::normalize_install_mode(&value.install_mode).to_string()
+        }
+    }
+
+    fn settings_mod_installer_binary(value: &str) -> String {
+        if value.trim().is_empty() {
+            default_mod_installer_binary()
+        } else {
+            resolve_mod_installer_binary(value)
+        }
+    }
+
+    fn settings_weidu_binary(value: &str) -> String {
+        if value.trim().is_empty() {
+            default_weidu_binary()
+        } else {
+            resolve_weidu_binary(value)
+        }
+    }
+
+    fn settings_language(value: String) -> String {
+        if value.is_empty() {
+            "en_US".to_string()
+        } else {
+            value
+        }
+    }
+
+    fn settings_weidu_log_mode(value: String) -> String {
+        if value.is_empty() {
+            "autolog,logapp,log-extern".to_string()
+        } else {
+            value
+        }
+    }
+
+    const fn default_zero_u64(value: u64, fallback: u64) -> u64 {
+        if value == 0 { fallback } else { value }
+    }
+
+    const fn default_zero_usize(value: usize, fallback: usize) -> usize {
+        if value == 0 { fallback } else { value }
     }
 }
 mod step1_state_to_settings {

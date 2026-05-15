@@ -112,20 +112,20 @@ pub(crate) fn persist_step1_if_needed(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn needs_repaint(
-    step1_github_auth_rx: &Option<Receiver<super::app_step1_github_oauth::GitHubOAuthFlowResult>>,
-    step2_scan_rx: &Option<Receiver<Step2ScanEvent>>,
+    step1_github_auth_rx: Option<&Receiver<super::app_step1_github_oauth::GitHubOAuthFlowResult>>,
+    step2_scan_rx: Option<&Receiver<Step2ScanEvent>>,
     step2_progress_queue: &VecDeque<(usize, usize, String)>,
-    step2_update_check_rx: &Option<
-        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    step2_update_check_rx: Option<
+        &Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
     >,
-    step2_update_download_rx: &Option<
-        Receiver<super::app_step2_update_download::Step2UpdateDownloadEvent>,
+    step2_update_download_rx: Option<
+        &Receiver<super::app_step2_update_download::Step2UpdateDownloadEvent>,
     >,
-    step2_update_extract_rx: &Option<
-        Receiver<super::app_step2_update_extract::Step2UpdateExtractEvent>,
+    step2_update_extract_rx: Option<
+        &Receiver<super::app_step2_update_extract::Step2UpdateExtractEvent>,
     >,
-    step5_terminal: &Option<EmbeddedTerminal>,
-    step5_prep_rx: &Option<Receiver<Result<TargetPrepResult, String>>>,
+    step5_terminal: Option<&EmbeddedTerminal>,
+    step5_prep_rx: Option<&Receiver<Result<TargetPrepResult, String>>>,
     state: &WizardState,
 ) -> bool {
     step1_github_auth_rx.is_some()
@@ -134,10 +134,7 @@ pub(crate) fn needs_repaint(
         || step2_update_download_rx.is_some()
         || step2_update_extract_rx.is_some()
         || !step2_progress_queue.is_empty()
-        || step5_terminal
-            .as_ref()
-            .map(|term| term.has_new_data())
-            .unwrap_or(false)
+        || step5_terminal.is_some_and(EmbeddedTerminal::has_new_data)
         || step5_prep_rx.is_some()
         || state.step5.prep_running
         || state.step5.install_running

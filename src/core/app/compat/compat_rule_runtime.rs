@@ -2,11 +2,11 @@
 // Copyright (c) 2026 Born2BSalty
 
 #[path = "compat_rule_runtime_active.rs"]
-mod active;
+pub mod active;
 #[path = "compat_rule_runtime_matches.rs"]
-mod matches;
+pub mod matches;
 #[path = "compat_rule_runtime_relations.rs"]
-mod relations;
+pub mod relations;
 
 pub(crate) use active::{
     CompatActiveItem, active_item_order, collect_step2_active_items, collect_step3_active_items,

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
+use crate::parser::{Token, tokenize};
 
 use super::context::{MismatchContext, TriState};
 
@@ -23,7 +23,7 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn new(tokens: Vec<Token>, context: &'a MismatchContext) -> Self {
+    const fn new(tokens: Vec<Token>, context: &'a MismatchContext) -> Self {
         Self {
             tokens,
             pos: 0,
@@ -66,7 +66,7 @@ impl<'a> Parser<'a> {
         let Some(rhs) = self.consume_comparison_value() else {
             return TriState::Unknown;
         };
-        compare_tristate(lhs, op, rhs)
+        compare_tristate(lhs, &op, rhs)
     }
 
     fn parse_primary(&mut self) -> TriState {
@@ -89,8 +89,7 @@ impl<'a> Parser<'a> {
             "ENGINE_IS" => self.parse_game_call(GamePredicate::Engine),
             "GAME_INCLUDES" => self.parse_game_call(GamePredicate::Includes),
             "MOD_IS_INSTALLED" => self.parse_mod_is_installed(),
-            "FILE_EXISTS_IN_GAME" => self.parse_ignored_file_call(),
-            "FILE_EXISTS" => self.parse_ignored_file_call(),
+            "FILE_EXISTS_IN_GAME" | "FILE_EXISTS" => self.parse_ignored_file_call(),
             "TRUE" => TriState::True,
             "FALSE" => TriState::False,
             _ => TriState::Unknown,
@@ -168,7 +167,7 @@ impl<'a> Parser<'a> {
 
     fn consume_value(&mut self) -> Option<String> {
         match self.peek().cloned() {
-            Some(Token::Atom(value)) | Some(Token::Ident(value)) => {
+            Some(Token::Atom(value) | Token::Ident(value)) => {
                 self.pos += 1;
                 Some(value)
             }
@@ -201,7 +200,7 @@ impl<'a> Parser<'a> {
         parse_comparison_value(&value)
     }
 
-    fn is_at_end(&self) -> bool {
+    const fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len()
     }
 
@@ -224,18 +223,21 @@ pub(super) enum ComparisonValue {
 
 pub(super) fn parse_comparison_value(value: &str) -> Option<ComparisonValue> {
     let trimmed = value.trim();
-    if let Ok(int) = trimmed.parse::<i64>() {
-        Some(ComparisonValue::Int(int))
-    } else if trimmed.eq_ignore_ascii_case("TRUE") {
-        Some(ComparisonValue::Int(1))
-    } else if trimmed.eq_ignore_ascii_case("FALSE") {
-        Some(ComparisonValue::Int(0))
-    } else {
-        None
-    }
+    trimmed.parse::<i64>().map_or_else(
+        |_| {
+            if trimmed.eq_ignore_ascii_case("TRUE") {
+                Some(ComparisonValue::Int(1))
+            } else if trimmed.eq_ignore_ascii_case("FALSE") {
+                Some(ComparisonValue::Int(0))
+            } else {
+                None
+            }
+        },
+        |int| Some(ComparisonValue::Int(int)),
+    )
 }
 
-pub(super) fn compare_tristate(lhs: TriState, op: Token, rhs: ComparisonValue) -> TriState {
+pub(super) const fn compare_tristate(lhs: TriState, op: &Token, rhs: ComparisonValue) -> TriState {
     let Some(lhs) = tristate_to_int(lhs) else {
         return TriState::Unknown;
     };
@@ -249,7 +251,7 @@ pub(super) fn compare_tristate(lhs: TriState, op: Token, rhs: ComparisonValue) -
     TriState::from_bool(value)
 }
 
-fn tristate_to_int(value: TriState) -> Option<i64> {
+const fn tristate_to_int(value: TriState) -> Option<i64> {
     match value {
         TriState::True => Some(1),
         TriState::False => Some(0),
@@ -257,7 +259,7 @@ fn tristate_to_int(value: TriState) -> Option<i64> {
     }
 }
 
-fn comparison_value_to_int(value: ComparisonValue) -> i64 {
+const fn comparison_value_to_int(value: ComparisonValue) -> i64 {
     match value {
         ComparisonValue::Int(value) => value,
     }

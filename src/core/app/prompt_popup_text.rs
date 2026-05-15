@@ -68,7 +68,7 @@ pub(crate) fn build_mod_prompt_popup_text(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
+        .map(std::string::ToString::to_string)
 }
 
 pub(crate) fn mod_has_any_prompt(
@@ -205,7 +205,7 @@ fn format_prompt_event_blocks(
             blocks.push(block);
         }
     }
-    normalize_prompt_event_blocks(blocks)
+    normalize_prompt_event_blocks(&blocks)
         .into_iter()
         .map(|block| block.to_text())
         .collect::<Vec<_>>()
@@ -244,7 +244,7 @@ impl PromptDisplayBlock {
     }
 
     fn first_line(&self) -> &str {
-        self.body.lines().next().map(str::trim).unwrap_or("")
+        self.body.lines().next().map_or("", str::trim)
     }
 
     fn to_text(&self) -> String {
@@ -257,7 +257,7 @@ impl PromptDisplayBlock {
     }
 }
 
-fn normalize_prompt_event_blocks(blocks: Vec<PromptDisplayBlock>) -> Vec<PromptDisplayBlock> {
+fn normalize_prompt_event_blocks(blocks: &[PromptDisplayBlock]) -> Vec<PromptDisplayBlock> {
     let mut merged = Vec::<PromptDisplayBlock>::new();
     let mut idx = 0usize;
     while idx < blocks.len() {
@@ -292,9 +292,9 @@ fn normalize_prompt_event_blocks(blocks: Vec<PromptDisplayBlock>) -> Vec<PromptD
 }
 
 fn should_merge_preface_block(current: &PromptDisplayBlock, next: &PromptDisplayBlock) -> bool {
-    is_informational_preface_block(current)
+    current.options == next.options
+        && is_informational_preface_block(current)
         && is_real_question_block(next)
-        && current.options == next.options
 }
 
 fn is_informational_preface_block(block: &PromptDisplayBlock) -> bool {

@@ -13,5 +13,5 @@ pub fn render(
     exe_fingerprint: &str,
     palette: ThemePalette,
 ) {
-    crate::ui::step3::content_step3::render(ui, state, dev_mode, exe_fingerprint, palette)
+    crate::ui::step3::content_step3::render(ui, state, dev_mode, exe_fingerprint, palette);
 }

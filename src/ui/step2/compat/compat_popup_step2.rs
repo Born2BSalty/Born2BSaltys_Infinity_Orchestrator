@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_explain;
-pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_kind;
+pub use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_explain;
+pub use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_kind;
 
-pub(crate) mod compat_popup_action_row {
+pub mod compat_popup_action_row {
     use eframe::egui;
 
     use crate::app::compat_popup_nav;
@@ -14,7 +14,7 @@ pub(crate) mod compat_popup_action_row {
     use crate::ui::step2::compat_popup_step2::compat_popup_details as details;
     use crate::ui::step2::service_selection_step2::rule_source_open_path;
 
-    pub(crate) fn render_action_row(ui: &mut egui::Ui, state: &mut WizardState) {
+    pub fn render_action_row(ui: &mut egui::Ui, state: &mut WizardState) {
         let issue = details::selected_or_synth_issue(state);
         let can_jump_this = compat_popup_nav::selected_game_tab(state).is_some();
         let can_jump_related = issue
@@ -65,7 +65,7 @@ pub(crate) mod compat_popup_action_row {
     }
 }
 
-pub(crate) mod compat_popup_details {
+pub mod compat_popup_details {
     use eframe::egui;
 
     use crate::app::compat_issue::CompatIssue;
@@ -85,11 +85,7 @@ pub(crate) mod compat_popup_details {
     use crate::ui::step2::compat_types_step2::{CompatIssueStatusTone, display_issue};
     use crate::ui::step2::content_step2::step2_details_select::selected_details;
 
-    pub(crate) fn render_details(
-        ui: &mut egui::Ui,
-        state: &mut WizardState,
-        palette: ThemePalette,
-    ) {
+    pub fn render_details(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
         let details = selected_details(state);
         let issue = selected_or_synth_issue(state);
         let issue_display = issue.as_ref().map(display_issue);
@@ -115,7 +111,7 @@ pub(crate) mod compat_popup_details {
         let kind = details
             .compat_kind
             .as_deref()
-            .or(issue_display.as_ref().map(|issue| issue.kind.as_str()))
+            .or_else(|| issue_display.as_ref().map(|issue| issue.kind.as_str()))
             .unwrap_or("unknown");
         if let Some(issue) = issue_display.as_ref()
             && !kind.eq_ignore_ascii_case("included")
@@ -159,7 +155,7 @@ pub(crate) mod compat_popup_details {
         let source = details
             .compat_source
             .as_deref()
-            .or(issue.as_ref().map(|issue| issue.source.as_str()));
+            .or_else(|| issue.as_ref().map(|issue| issue.source.as_str()));
         if let Some(source) = source {
             ui.add_space(6.0);
             ui.label(crate::ui::shared::typography_global::strong("Rule source"));
@@ -186,7 +182,8 @@ pub(crate) mod compat_popup_details {
         }
     }
 
-    pub(crate) fn selected_or_synth_issue(state: &WizardState) -> Option<CompatIssue> {
+    #[must_use]
+    pub fn selected_or_synth_issue(state: &WizardState) -> Option<CompatIssue> {
         selected_compat_issue(state)
     }
 

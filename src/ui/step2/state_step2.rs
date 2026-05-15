@@ -43,16 +43,16 @@ pub struct Step2Details {
 }
 
 pub fn normalize_active_tab(state: &mut WizardState) {
-    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let active_is_visible = (state.step2.active_game_tab == "BGEE" && show_bgee)
-        || (state.step2.active_game_tab == "BG2EE" && show_bg2ee);
+    let show_primary_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let show_secondary_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let active_is_visible = (state.step2.active_game_tab == "BGEE" && show_primary_game)
+        || (state.step2.active_game_tab == "BG2EE" && show_secondary_game);
     if active_is_visible {
         return;
     }
-    if show_bgee {
+    if show_primary_game {
         state.step2.active_game_tab = "BGEE".to_string();
-    } else if show_bg2ee {
+    } else if show_secondary_game {
         state.step2.active_game_tab = "BG2EE".to_string();
     }
 }
@@ -65,18 +65,22 @@ pub fn active_mods_mut(step2: &mut Step2State) -> &mut Vec<Step2ModState> {
     }
 }
 
+#[must_use]
 pub fn review_edit_waiting_for_first_scan(state: &WizardState) -> bool {
     state.step1.bootstraps_from_weidu_logs() && state.step2.last_scan_report.is_none()
 }
 
+#[must_use]
 pub fn review_edit_scan_complete(state: &WizardState) -> bool {
     state.step1.bootstraps_from_weidu_logs() && state.step2.last_scan_report.is_some()
 }
 
-pub fn review_edit_any_log_applied(state: &WizardState) -> bool {
+#[must_use]
+pub const fn review_edit_any_log_applied(state: &WizardState) -> bool {
     state.step2.review_edit_bgee_log_applied || state.step2.review_edit_bg2ee_log_applied
 }
 
+#[must_use]
 pub fn non_scan_controls_locked(state: &WizardState) -> bool {
     state.step2.is_scanning || review_edit_waiting_for_first_scan(state)
 }

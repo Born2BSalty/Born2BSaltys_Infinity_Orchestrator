@@ -25,12 +25,10 @@ pub(crate) fn process_graceful_cancel(step5: &mut Step5State, term: &mut Embedde
         step5.cancel_pending_boundary_count = Some(boundary_counter);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_secs())
-            .unwrap_or(0);
+            .map_or(0, |duration| duration.as_secs());
         let can_retry = step5
             .cancel_signal_sent_unix_secs
-            .map(|last| now.saturating_sub(last) >= 1)
-            .unwrap_or(true);
+            .is_none_or(|last| now.saturating_sub(last) >= 1);
         if can_retry {
             term.graceful_terminate();
             step5.cancel_was_graceful = true;
@@ -65,8 +63,7 @@ pub(crate) fn process_exit_event(step5: &mut Step5State, term: &mut EmbeddedTerm
     if let Some(start) = step5.install_started_unix_secs.take() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_secs())
-            .unwrap_or(0);
+            .map_or(0, |duration| duration.as_secs());
         step5.last_runtime_secs = Some(now.saturating_sub(start));
     }
     step5.last_install_failed = term.likely_failure_visible();
@@ -90,22 +87,24 @@ pub(crate) fn process_exit_event(step5: &mut Step5State, term: &mut EmbeddedTerm
     step5.prompt_ready_first_seen_unix_ms = None;
     step5.prompt_required_sound_latched = false;
     if let Some(run_id) = step5.active_run_id.take() {
-        let suffix = match finished_exit {
-            Some(code) => format!(" (exit {code})"),
-            None => String::new(),
-        };
+        let suffix = finished_exit.map_or_else(String::new, |code| format!(" (exit {code})"));
         term.append_marker(&format!("Run #{run_id} finished{suffix}"));
     }
     step5.last_status_text = if step5.last_install_failed {
-        match step5.last_exit_code {
-            Some(code) => format!("Install failed (exit {code})"),
-            None => "Install failed".to_string(),
-        }
+        step5.last_exit_code.map_or_else(
+            || "Install failed".to_string(),
+            |code| format!("Install failed (exit {code})"),
+        )
     } else {
-        match step5.last_exit_code {
-            Some(0) => "Install finished (exit 0)".to_string(),
-            Some(code) => format!("Install finished (exit {code})"),
-            None => "Install finished".to_string(),
-        }
+        step5.last_exit_code.map_or_else(
+            || "Install finished".to_string(),
+            |code| {
+                if code == 0 {
+                    "Install finished (exit 0)".to_string()
+                } else {
+                    format!("Install finished (exit {code})")
+                }
+            },
+        )
     };
 }

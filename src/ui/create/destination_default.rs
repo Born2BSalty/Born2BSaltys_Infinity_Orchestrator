@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+#[must_use]
 pub fn for_modlist_name(name: &str) -> String {
     let slug = name
         .chars()
@@ -17,5 +18,5 @@ pub fn for_modlist_name(name: &str) -> String {
         .collect::<Vec<_>>()
         .join("-");
 
-    format!("modlists/installs/{}", slug)
+    format!("modlists/installs/{slug}")
 }

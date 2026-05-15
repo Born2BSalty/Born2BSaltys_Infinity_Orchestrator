@@ -50,7 +50,7 @@ pub(crate) fn advance_pending_saved_log_flow(
         None
     };
     if let Some(reason) = preflight_blocker {
-        stop_auto_build(state, reason);
+        stop_auto_build(state, &reason);
         return;
     }
 
@@ -92,7 +92,7 @@ pub(crate) fn advance_pending_saved_log_flow(
     {
         if state.modlist_auto_build_active {
             if let Some(reason) = auto_build_blocker_before_download(state) {
-                stop_auto_build(state, reason);
+                stop_auto_build(state, &reason);
                 return;
             }
             if state.step2.update_selected_update_assets.is_empty() {
@@ -118,24 +118,24 @@ pub(crate) fn advance_pending_saved_log_flow(
         && !state.step2.update_selected_extract_running
     {
         if scan_failed(state) {
-            stop_auto_build(state, "scan failed after extraction".to_string());
+            stop_auto_build(state, "scan failed after extraction");
             return;
         }
         if let Some(reason) = auto_build_blocker_before_install(state) {
-            stop_auto_build(state, reason);
+            stop_auto_build(state, &reason);
             return;
         }
         start_auto_build_install(state);
     }
 }
 
-fn clear_pending(state: &mut WizardState) {
+const fn clear_pending(state: &mut WizardState) {
     state.step2.pending_saved_log_apply = false;
     state.step2.pending_saved_log_update_preview = false;
     state.step2.pending_saved_log_download = false;
 }
 
-fn stop_auto_build(state: &mut WizardState, reason: String) {
+fn stop_auto_build(state: &mut WizardState, reason: &str) {
     clear_pending(state);
     state.modlist_auto_build_active = false;
     state.modlist_auto_build_waiting_for_install = false;

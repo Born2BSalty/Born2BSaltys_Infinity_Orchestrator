@@ -3,6 +3,7 @@
 
 use crate::app::state::{Step1State, Step2ModState, Step3ItemState};
 
+#[must_use]
 pub fn build_step3_items(mods: &[Step2ModState]) -> Vec<Step3ItemState> {
     #[derive(Clone)]
     struct SelectedComponent {
@@ -80,6 +81,7 @@ pub fn build_step3_items(mods: &[Step2ModState]) -> Vec<Step3ItemState> {
     out
 }
 
+#[must_use]
 pub fn collect_parent_block_ids(items: &[Step3ItemState]) -> Vec<String> {
     let mut out = Vec::new();
     for item in items.iter().filter(|i| i.is_parent) {
@@ -90,7 +92,7 @@ pub fn collect_parent_block_ids(items: &[Step3ItemState]) -> Vec<String> {
     out
 }
 
-pub fn scrub_dev_settings(step1: &mut Step1State) {
+pub const fn scrub_dev_settings(step1: &mut Step1State) {
     step1.bio_full_debug = false;
     step1.tick_dev_enabled = false;
     step1.log_raw_output_dev = false;

@@ -7,6 +7,10 @@ use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binar
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "settings schema fields are persisted and must remain stable"
+)]
 pub struct Step1Settings {
     pub game_install: String,
     pub install_mode: String,

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-pub(crate) use crate::ui::step2::action_step2::Step2Action;
+pub use crate::ui::step2::action_step2::Step2Action;
 
 pub fn render_pane(
     ui: &mut eframe::egui::Ui,
@@ -28,7 +28,7 @@ pub fn render_pane(
     });
 }
 
-pub(crate) mod details_pane_content {
+pub mod details_pane_content {
     use eframe::egui;
 
     use crate::app::state::{WizardState, exact_log_ready_to_install};
@@ -44,11 +44,7 @@ pub(crate) mod details_pane_content {
 
     use super::Step2Action;
 
-    pub(crate) fn render_exact_log_status(
-        ui: &mut egui::Ui,
-        state: &WizardState,
-        palette: ThemePalette,
-    ) {
+    pub fn render_exact_log_status(ui: &mut egui::Ui, state: &WizardState, palette: ThemePalette) {
         let ready = exact_log_ready_to_install(state);
         let downloadable_missing = state.step2.update_selected_missing_sources.len();
         let manual_sources = state.step2.update_selected_manual_sources.len();
@@ -93,7 +89,7 @@ pub(crate) mod details_pane_content {
             });
     }
 
-    pub(crate) fn render(
+    pub fn render(
         ui: &mut egui::Ui,
         details: &Step2Details,
         action: &mut Option<Step2Action>,
@@ -122,7 +118,8 @@ pub(crate) mod details_pane_content {
         let action_w = 48.0;
         let value_w = (ui.available_width() - label_w - action_w - 24.0).max(120.0);
         let row_h = 20.0;
-        let value_chars = ((value_w / 7.2).floor() as usize).max(12);
+        let value_chars =
+            crate::ui::shared::layout_tokens_global::floor_usize(value_w / 7.2).max(12);
 
         ui.label(crate::ui::shared::typography_global::strong(mod_name));
         ui.horizontal(|ui| {
@@ -135,7 +132,7 @@ pub(crate) mod details_pane_content {
             ui,
             details,
             action,
-            SelectionGridLayout::new(label_w, value_w, row_h, value_chars, palette),
+            &SelectionGridLayout::new(label_w, value_w, row_h, value_chars, palette),
         );
         ui.add_space(6.0);
         ui.separator();
@@ -144,7 +141,7 @@ pub(crate) mod details_pane_content {
             ui,
             details,
             action,
-            PathsGridLayout::new(label_w, value_w, row_h, value_chars, palette),
+            &PathsGridLayout::new(label_w, value_w, row_h, value_chars, palette),
         );
         ui.add_space(6.0);
         render_component_block(ui, details);

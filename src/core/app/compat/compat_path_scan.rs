@@ -49,7 +49,7 @@ fn apply_path_requirement(
     component.disabled = hit.kind.eq_ignore_ascii_case("path_requirement");
     component.compat_kind = Some(hit.kind.to_string());
     component.compat_source = Some(hit.source.clone());
-    component.compat_related_mod = hit.related_target.clone();
+    component.compat_related_mod.clone_from(&hit.related_target);
     component.compat_related_component = None;
     component.compat_graph = Some(format!(
         "{} #{} {}",

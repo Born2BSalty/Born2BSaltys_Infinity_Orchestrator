@@ -32,13 +32,13 @@ pub fn redesign_btn(
     };
     let margin = if opts.small {
         egui::Margin::symmetric(
-            REDESIGN_BUTTON_SMALL_PADDING_X_PX as i8,
-            REDESIGN_BUTTON_SMALL_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_SMALL_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_SMALL_PADDING_Y_PX),
         )
     } else {
         egui::Margin::symmetric(
-            REDESIGN_BUTTON_PADDING_X_PX as i8,
-            REDESIGN_BUTTON_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_PADDING_Y_PX),
         )
     };
     let text_color = if opts.disabled {
@@ -56,8 +56,8 @@ pub fn redesign_btn(
     let shadow = if opts.primary {
         egui::Shadow {
             offset: [
-                REDESIGN_SHADOW_OFFSET_BTN_PX as i8,
-                REDESIGN_SHADOW_OFFSET_BTN_PX as i8,
+                crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SHADOW_OFFSET_BTN_PX),
+                crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SHADOW_OFFSET_BTN_PX),
             ],
             blur: 0,
             spread: 0,

@@ -8,15 +8,19 @@ use std::time::SystemTime;
 use crate::app::state::Step1State;
 
 #[derive(Debug, Clone)]
-pub struct SourceLogInfo {
-    pub tag: &'static str,
-    pub path: PathBuf,
-    pub exists: bool,
-    pub size_bytes: Option<u64>,
-    pub modified: Option<SystemTime>,
+pub(crate) struct SourceLogInfo {
+    pub(crate) tag: &'static str,
+    pub(crate) path: PathBuf,
+    pub(crate) exists: bool,
+    pub(crate) size_bytes: Option<u64>,
+    pub(crate) modified: Option<SystemTime>,
 }
 
-pub fn copy_source_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) -> Vec<PathBuf> {
+pub(super) fn copy_source_weidu_logs(
+    step1: &Step1State,
+    out_dir: &Path,
+    suffix: &str,
+) -> Vec<PathBuf> {
     let mut copied = Vec::new();
     let _ = fs::create_dir_all(out_dir);
     for (tag, source) in resolve_source_logs(step1) {
@@ -31,7 +35,11 @@ pub fn copy_source_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) 
     copied
 }
 
-pub fn copy_saved_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) -> Vec<PathBuf> {
+pub(super) fn copy_saved_weidu_logs(
+    step1: &Step1State,
+    out_dir: &Path,
+    suffix: &str,
+) -> Vec<PathBuf> {
     let mut copied = Vec::new();
     let _ = fs::create_dir_all(out_dir);
     for (tag, source) in resolve_saved_logs(step1) {
@@ -46,7 +54,7 @@ pub fn copy_saved_weidu_logs(step1: &Step1State, out_dir: &Path, suffix: &str) -
     copied
 }
 
-pub fn source_log_infos(step1: &Step1State) -> Vec<SourceLogInfo> {
+pub(crate) fn source_log_infos(step1: &Step1State) -> Vec<SourceLogInfo> {
     resolve_source_logs(step1)
         .into_iter()
         .map(|(tag, path)| {
@@ -54,8 +62,8 @@ pub fn source_log_infos(step1: &Step1State) -> Vec<SourceLogInfo> {
             SourceLogInfo {
                 tag,
                 path,
-                exists: meta.as_ref().is_some_and(|value| value.is_file()),
-                size_bytes: meta.as_ref().map(|value| value.len()),
+                exists: meta.as_ref().is_some_and(std::fs::Metadata::is_file),
+                size_bytes: meta.as_ref().map(std::fs::Metadata::len),
                 modified: meta.and_then(|value| value.modified().ok()),
             }
         })
@@ -74,18 +82,18 @@ fn resolve_source_logs(step1: &Step1State) -> Vec<(&'static str, PathBuf)> {
 }
 
 fn resolve_bgee_log_path(step1: &Step1State) -> PathBuf {
-    if !step1.bgee_log_file.trim().is_empty() {
-        PathBuf::from(step1.bgee_log_file.trim())
-    } else {
+    if step1.bgee_log_file.trim().is_empty() {
         resolve_saved_bgee_log_path(step1)
+    } else {
+        PathBuf::from(step1.bgee_log_file.trim())
     }
 }
 
 fn resolve_bg2_log_path(step1: &Step1State) -> PathBuf {
-    if !step1.bg2ee_log_file.trim().is_empty() {
-        PathBuf::from(step1.bg2ee_log_file.trim())
-    } else {
+    if step1.bg2ee_log_file.trim().is_empty() {
         resolve_saved_bg2_log_path(step1)
+    } else {
+        PathBuf::from(step1.bg2ee_log_file.trim())
     }
 }
 

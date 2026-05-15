@@ -15,21 +15,21 @@ use crate::app::state::Step1State;
 #[test]
 fn classifies_positive_game_is_failure_as_mismatch() {
     let context = mismatch_context("BGEE", "BGEE", &[]);
-    let classification = classify_guard(r#"GAME_IS ~BG2EE EET~"#, &context);
+    let classification = classify_guard(r"GAME_IS ~BG2EE EET~", &context);
     assert_eq!(classification.kind, "mismatch");
 }
 
 #[test]
 fn classifies_negated_game_is_failure_as_mismatch() {
     let context = mismatch_context("BG2EE", "BG2EE", &[]);
-    let classification = classify_guard(r#"NOT GAME_IS ~BG2EE EET~"#, &context);
+    let classification = classify_guard(r"NOT GAME_IS ~BG2EE EET~", &context);
     assert_eq!(classification.kind, "mismatch");
 }
 
 #[test]
 fn classifies_game_includes_failure_as_conditional() {
     let context = mismatch_context("BG2EE", "BG2EE", &[]);
-    let classification = classify_guard(r#"GAME_INCLUDES ~SOD~"#, &context);
+    let classification = classify_guard(r"GAME_INCLUDES ~SOD~", &context);
     assert_eq!(classification.kind, "conditional");
 }
 
@@ -37,7 +37,7 @@ fn classifies_game_includes_failure_as_conditional() {
 fn classifies_mixed_game_and_mod_checks_as_conditional_when_game_matches() {
     let context = mismatch_context("BGEE", "BGEE", &[("foo", "0")]);
     let classification = classify_guard(
-        r#"GAME_IS ~BGEE~ AND NOT(MOD_IS_INSTALLED ~foo.tp2~ ~0~)"#,
+        r"GAME_IS ~BGEE~ AND NOT(MOD_IS_INSTALLED ~foo.tp2~ ~0~)",
         &context,
     );
     assert_eq!(classification.kind, "conditional");
@@ -47,7 +47,7 @@ fn classifies_mixed_game_and_mod_checks_as_conditional_when_game_matches() {
 fn classifies_ascension_style_wrong_phase_guard_as_mismatch() {
     let context = mismatch_context("EET", "BGEE", &[]);
     let classification = classify_guard(
-        r#"GAME_IS ~bg2ee eet~ OR MOD_IS_INSTALLED ~setup-bg2fixpack.tp2~ ~0~"#,
+        r"GAME_IS ~bg2ee eet~ OR MOD_IS_INSTALLED ~setup-bg2fixpack.tp2~ ~0~",
         &context,
     );
     assert_eq!(classification.kind, "mismatch");
@@ -75,21 +75,21 @@ fn prefers_mismatch_over_earlier_conditional_failure() {
 fn treats_eet_as_inactive_until_eet_core_is_checked() {
     let without_core = mismatch_context("EET", "BG2EE", &[]);
     assert_eq!(
-        evaluate_requirement(r#"GAME_IS ~EET~"#, &without_core),
+        evaluate_requirement(r"GAME_IS ~EET~", &without_core),
         TriState::False
     );
 
     let with_core = mismatch_context("EET", "BG2EE", &[("eet", "0")]);
     assert_eq!(
-        evaluate_requirement(r#"GAME_IS ~EET~"#, &with_core),
+        evaluate_requirement(r"GAME_IS ~EET~", &with_core),
         TriState::True
     );
     assert_eq!(
-        evaluate_requirement(r#"GAME_IS ~BG2EE~"#, &with_core),
+        evaluate_requirement(r"GAME_IS ~BG2EE~", &with_core),
         TriState::False
     );
     assert_eq!(
-        evaluate_requirement(r#"ENGINE_IS ~BG2EE~"#, &with_core),
+        evaluate_requirement(r"ENGINE_IS ~BG2EE~", &with_core),
         TriState::True
     );
 }
@@ -97,7 +97,7 @@ fn treats_eet_as_inactive_until_eet_core_is_checked() {
 #[test]
 fn blocks_bg2ee_game_is_component_after_eet_core_is_checked() {
     let context = mismatch_context("EET", "BG2EE", &[("eet", "0")]);
-    let classification = classify_guard(r#"GAME_IS ~bgee bg2ee iwdee~"#, &context);
+    let classification = classify_guard(r"GAME_IS ~bgee bg2ee iwdee~", &context);
     assert_eq!(classification.kind, "mismatch");
 }
 

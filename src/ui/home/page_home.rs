@@ -11,14 +11,17 @@ use crate::ui::home::{
     add_a_modlist, confirm_delete, confirm_reinstall, filter_chip, first_launch_setup_card,
     game_installs_detected, modlist_card, rename_modlist,
 };
-use crate::ui::orchestrator::widgets::r_box::redesign_box;
 use crate::ui::orchestrator::widgets::screen_title;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_HOME_CARD_LIST_GAP_PX, REDESIGN_HOME_CHIP_ROW_BOTTOM_MARGIN_PX,
-    REDESIGN_HOME_CHIP_ROW_GAP_PX, REDESIGN_HOME_GAME_BLOCK_TOP_MARGIN_PX,
-    REDESIGN_HOME_GRID_BOTTOM_MARGIN_PX, REDESIGN_HOME_GRID_GAP_PX,
-    REDESIGN_HOME_LEFT_COLUMN_WEIGHT, REDESIGN_HOME_RIGHT_COLUMN_WEIGHT,
-    REDESIGN_LABEL_FONT_SIZE_PX, ThemePalette, redesign_text_faint,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_BOX_LABEL_FONT_SIZE_PX,
+    REDESIGN_BOX_LABEL_GAP_PX, REDESIGN_HOME_CARD_LIST_GAP_PX,
+    REDESIGN_HOME_CHIP_ROW_BOTTOM_MARGIN_PX, REDESIGN_HOME_CHIP_ROW_GAP_PX,
+    REDESIGN_HOME_GAME_BLOCK_TOP_MARGIN_PX, REDESIGN_HOME_GRID_BOTTOM_MARGIN_PX,
+    REDESIGN_HOME_GRID_GAP_PX, REDESIGN_HOME_LEFT_COLUMN_WEIGHT,
+    REDESIGN_HOME_PANEL_PADDING_MARGIN, REDESIGN_HOME_RIGHT_COLUMN_WEIGHT,
+    REDESIGN_LABEL_FONT_SIZE_PX, REDESIGN_PAGE_PADDING_X_PX, REDESIGN_PAGE_PADDING_Y_PX,
+    ThemePalette, redesign_border_strong, redesign_shell_bg, redesign_text_faint,
+    redesign_text_muted,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,9 +48,7 @@ pub fn render(
     registry: Option<&ModlistRegistry>,
     wizard_state: &WizardState,
 ) -> Option<HomeAction> {
-    let entries = registry
-        .map(|registry| registry.entries.as_slice())
-        .unwrap_or(&[]);
+    let entries = registry.map_or_else(|| [].as_slice(), |registry| registry.entries.as_slice());
     let installed_count = entries
         .iter()
         .filter(|entry| entry.state == ModlistState::Installed)
@@ -60,50 +61,66 @@ pub fn render(
 
     let mut action = None;
     let subtitle = home_subtitle(installed_count, in_progress_count, entries);
-    screen_title::render(ui, palette, "Welcome back, adventurer", Some(&subtitle));
+    egui::Frame::NONE
+        .inner_margin(egui::Margin::symmetric(
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PAGE_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PAGE_PADDING_Y_PX),
+        ))
+        .show(ui, |ui| {
+            screen_title::render(ui, palette, "Welcome back, adventurer", Some(&subtitle));
 
-    let available_width = ui.available_width();
-    let left_width = ((available_width - REDESIGN_HOME_GRID_GAP_PX)
-        * REDESIGN_HOME_LEFT_COLUMN_WEIGHT
-        / (REDESIGN_HOME_LEFT_COLUMN_WEIGHT + REDESIGN_HOME_RIGHT_COLUMN_WEIGHT))
-        .max(f32::MIN_POSITIVE);
-    let right_width =
-        (available_width - left_width - REDESIGN_HOME_GRID_GAP_PX).max(f32::MIN_POSITIVE);
+            let available_width = ui.available_width();
+            let left_width = ((available_width - REDESIGN_HOME_GRID_GAP_PX)
+                * REDESIGN_HOME_LEFT_COLUMN_WEIGHT
+                / (REDESIGN_HOME_LEFT_COLUMN_WEIGHT + REDESIGN_HOME_RIGHT_COLUMN_WEIGHT))
+                .max(f32::MIN_POSITIVE);
+            let right_width =
+                (available_width - left_width - REDESIGN_HOME_GRID_GAP_PX).max(f32::MIN_POSITIVE);
 
-    ui.horizontal_top(|ui| {
-        ui.spacing_mut().item_spacing.x = REDESIGN_HOME_GRID_GAP_PX;
-        ui.allocate_ui_with_layout(
-            egui::vec2(left_width, ui.available_height()),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                redesign_box(ui, palette, None, |ui| {
-                    if installed_count == 0 && in_progress_count == 0 {
-                        action = first_launch_setup_card::render(ui, palette).or(action.take());
-                    } else {
-                        render_filter_row(ui, palette, state, installed_count, in_progress_count);
-                        ui.add_space(REDESIGN_HOME_CHIP_ROW_BOTTOM_MARGIN_PX);
-                        render_cards(ui, palette, state.filter, entries, &mut action);
-                    }
-                });
-            },
-        );
-
-        ui.allocate_ui_with_layout(
-            egui::vec2(right_width, ui.available_height()),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                action = add_a_modlist::render(ui, palette).or(action.take());
-                ui.add_space(REDESIGN_HOME_GAME_BLOCK_TOP_MARGIN_PX);
-                game_installs_detected::render(
-                    ui,
-                    palette,
-                    &wizard_state.step1,
-                    wizard_state.step1_path_check.as_ref(),
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = REDESIGN_HOME_GRID_GAP_PX;
+                ui.allocate_ui_with_layout(
+                    egui::vec2(left_width, ui.available_height()),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        home_box(ui, palette, None, |ui| {
+                            if installed_count == 0 && in_progress_count == 0 {
+                                action = first_launch_setup_card::render(ui, palette)
+                                    .or_else(|| action.take());
+                            } else {
+                                render_filter_row(
+                                    ui,
+                                    palette,
+                                    state,
+                                    installed_count,
+                                    in_progress_count,
+                                );
+                                ui.add_space(REDESIGN_HOME_CHIP_ROW_BOTTOM_MARGIN_PX);
+                                render_cards(ui, palette, state.filter, entries, &mut action);
+                            }
+                        });
+                    },
                 );
-            },
-        );
-    });
-    ui.add_space(REDESIGN_HOME_GRID_BOTTOM_MARGIN_PX);
+
+                ui.allocate_ui_with_layout(
+                    egui::vec2(right_width, ui.available_height()),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        home_box(ui, palette, Some("add a modlist"), |ui| {
+                            action = add_a_modlist::render(ui, palette).or_else(|| action.take());
+                            ui.add_space(REDESIGN_HOME_GAME_BLOCK_TOP_MARGIN_PX);
+                            game_installs_detected::render(
+                                ui,
+                                palette,
+                                &wizard_state.step1,
+                                wizard_state.step1_path_check.as_ref(),
+                            );
+                        });
+                    },
+                );
+            });
+            ui.add_space(REDESIGN_HOME_GRID_BOTTOM_MARGIN_PX);
+        });
 
     if let Some(target_id) = state.delete_target.as_deref()
         && let Some(entry) = entries.iter().find(|entry| entry.id == target_id)
@@ -120,6 +137,34 @@ pub fn render(
     }
 
     action
+}
+
+fn home_box<R>(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    label: Option<&str>,
+    body: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    egui::Frame::NONE
+        .fill(redesign_shell_bg(palette))
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            redesign_border_strong(palette),
+        ))
+        .corner_radius(REDESIGN_BORDER_RADIUS_PX)
+        .inner_margin(egui::Margin::same(REDESIGN_HOME_PANEL_PADDING_MARGIN))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            if let Some(label) = label {
+                ui.label(
+                    egui::RichText::new(label)
+                        .size(REDESIGN_BOX_LABEL_FONT_SIZE_PX)
+                        .color(redesign_text_muted(palette)),
+                );
+                ui.add_space(REDESIGN_BOX_LABEL_GAP_PX);
+            }
+            body(ui)
+        })
 }
 
 fn render_filter_row(
@@ -252,10 +297,13 @@ fn meta_line(entry: &ModlistEntry) -> String {
 }
 
 fn total_size_text(total_size_bytes: Option<u64>) -> String {
-    match total_size_bytes {
-        Some(bytes) => format!("{:.1} GB", bytes as f64 / 1_073_741_824.0),
-        None => "—".to_string(),
-    }
+    total_size_bytes.map_or_else(
+        || "—".to_string(),
+        |bytes| {
+            let tenths = bytes.saturating_mul(10).saturating_add(536_870_912) / 1_073_741_824;
+            format!("{}.{:01} GB", tenths / 10, tenths % 10)
+        },
+    )
 }
 
 fn relative_time(timestamp: DateTime<Utc>) -> String {
@@ -273,7 +321,7 @@ fn relative_time(timestamp: DateTime<Utc>) -> String {
     }
 }
 
-fn empty_filter_text(filter: HomeFilter) -> &'static str {
+const fn empty_filter_text(filter: HomeFilter) -> &'static str {
     match filter {
         HomeFilter::Installed => {
             "No installed modlists yet. Create one or paste an import code to add the first."

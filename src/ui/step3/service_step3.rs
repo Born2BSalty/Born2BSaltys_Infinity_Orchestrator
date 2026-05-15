@@ -58,14 +58,14 @@ pub fn apply_row_selection(
     }
 }
 
-pub(crate) mod component_uncheck {
+pub mod component_uncheck {
     pub(crate) use crate::ui::step3::service_component_uncheck_step3::*;
 }
 
-pub(crate) mod prompt_actions {
+pub mod prompt_actions {
     pub(crate) use crate::ui::step3::service_prompt_actions_step3::*;
 }
 
-pub(crate) mod drag_ops {
+pub mod drag_ops {
     pub(crate) use crate::ui::step3::service_drag_ops_step3::*;
 }

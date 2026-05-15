@@ -28,12 +28,15 @@ pub fn render(
     } else {
         0.0
     };
-    let input_width = (row_width
-        - REDESIGN_PATH_ROW_LABEL_WIDTH_PX
-        - REDESIGN_PATH_BUTTON_WIDTH_PX
-        - hint_width
-        - (REDESIGN_PATH_ROW_GAP_PX * if hint.is_some() { 3.0 } else { 2.0 }))
-    .max(120.0);
+    let input_width = (if hint.is_some() { 3.0_f32 } else { 2.0_f32 })
+        .mul_add(
+            -REDESIGN_PATH_ROW_GAP_PX,
+            row_width
+                - REDESIGN_PATH_ROW_LABEL_WIDTH_PX
+                - REDESIGN_PATH_BUTTON_WIDTH_PX
+                - hint_width,
+        )
+        .max(120.0);
 
     let response = ui
         .allocate_ui_with_layout(
@@ -60,8 +63,12 @@ pub fn render(
                     ))
                     .corner_radius(REDESIGN_BORDER_RADIUS_PX)
                     .inner_margin(egui::Margin::symmetric(
-                        REDESIGN_PATH_INPUT_PADDING_X_PX as i8,
-                        REDESIGN_PATH_INPUT_PADDING_Y_PX as i8,
+                        crate::ui::shared::redesign_tokens::redesign_i8_px(
+                            REDESIGN_PATH_INPUT_PADDING_X_PX,
+                        ),
+                        crate::ui::shared::redesign_tokens::redesign_i8_px(
+                            REDESIGN_PATH_INPUT_PADDING_Y_PX,
+                        ),
                     ))
                     .show(ui, |ui| {
                         changed = ui

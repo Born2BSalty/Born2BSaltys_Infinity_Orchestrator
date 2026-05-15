@@ -37,11 +37,9 @@ fn split_chunks_preserve_quotes(line: &str) -> Vec<String> {
             cur.push(ch);
             continue;
         }
+        cur.push(ch);
         if ch.is_whitespace() && !in_quote {
-            cur.push(ch);
             out.push(std::mem::take(&mut cur));
-        } else {
-            cur.push(ch);
         }
     }
     if !cur.is_empty() {

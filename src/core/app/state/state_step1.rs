@@ -4,6 +4,10 @@
 use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binary};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "wizard Step 1 state is a stable cross-module UI/runtime state contract"
+)]
 pub struct Step1State {
     pub game_install: String,
     pub install_mode: String,
@@ -74,6 +78,7 @@ impl Step1State {
     pub const INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT: &str = "start_from_weidu_logs_then_review_edit";
     pub const INSTALL_MODE_IMPORT_MODLIST: &str = "import_modlist";
 
+    #[must_use]
     pub fn derive_install_mode_from_legacy(
         have_weidu_logs: bool,
         download_archive: bool,
@@ -87,6 +92,7 @@ impl Step1State {
         }
     }
 
+    #[must_use]
     pub fn normalize_install_mode(value: &str) -> &'static str {
         match value {
             Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS => {
@@ -99,6 +105,7 @@ impl Step1State {
         }
     }
 
+    #[must_use]
     pub fn uses_source_weidu_logs(&self) -> bool {
         matches!(
             self.install_mode.as_str(),
@@ -106,14 +113,17 @@ impl Step1State {
         )
     }
 
+    #[must_use]
     pub fn installs_exactly_from_weidu_logs(&self) -> bool {
         self.install_mode == Self::INSTALL_MODE_EXACT_WEIDU_LOGS
     }
 
+    #[must_use]
     pub fn bootstraps_from_weidu_logs(&self) -> bool {
         self.install_mode == Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
     }
 
+    #[must_use]
     pub fn imports_modlist(&self) -> bool {
         self.install_mode == Self::INSTALL_MODE_IMPORT_MODLIST
     }

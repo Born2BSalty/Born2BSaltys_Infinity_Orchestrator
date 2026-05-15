@@ -42,7 +42,6 @@ fn issue_code(kind: &str) -> &'static str {
     match kind {
         "mismatch" | "game_mismatch" => "MISMATCH",
         "missing_dep" => "REQ_MISSING",
-        "conflict" | "not_compatible" => "RULE_HIT",
         "included" => "INCLUDED",
         "order_block" => "ORDER_BLOCK",
         "conditional" => "CONDITIONAL",

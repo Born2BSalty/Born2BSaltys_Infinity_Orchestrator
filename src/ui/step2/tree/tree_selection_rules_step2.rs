@@ -100,8 +100,7 @@ pub(crate) fn enforce_meta_mode_exclusive(mod_state: &mut Step2ModState, changed
     let changed_is_meta = mod_state
         .components
         .get(changed_idx)
-        .map(|c| c.is_meta_mode_component)
-        .unwrap_or(false);
+        .is_some_and(|c| c.is_meta_mode_component);
     if changed_is_meta {
         for (idx, comp) in mod_state.components.iter_mut().enumerate() {
             if idx != changed_idx && !comp.disabled {
@@ -139,11 +138,11 @@ pub(crate) fn enforce_meta_mode_after_bulk(mod_state: &mut Step2ModState) {
         if !comp.checked || comp.disabled || !comp.is_meta_mode_component {
             continue;
         }
-        if !first_meta_seen {
-            first_meta_seen = true;
-        } else {
+        if first_meta_seen {
             comp.checked = false;
             comp.selected_order = None;
+        } else {
+            first_meta_seen = true;
         }
     }
 }
@@ -201,7 +200,7 @@ pub(crate) fn enforce_tp2_same_mod_exclusive_after_bulk(mod_state: &mut Step2Mod
     }
 }
 
-pub(crate) fn set_component_checked_state(
+pub(crate) const fn set_component_checked_state(
     component: &mut Step2ComponentState,
     next_selection_order: &mut usize,
 ) {
@@ -231,7 +230,7 @@ fn subcomponent_base_key(label: &str) -> Option<String> {
     Some(base.to_ascii_lowercase())
 }
 
-fn same_mod_exclusive_targets(mod_state: &Step2ModState, source_idx: usize) -> Vec<String> {
+const fn same_mod_exclusive_targets(mod_state: &Step2ModState, source_idx: usize) -> Vec<String> {
     let _ = (mod_state, source_idx);
     Vec::new()
 }

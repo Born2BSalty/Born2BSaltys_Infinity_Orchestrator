@@ -13,6 +13,7 @@ pub struct WorkspaceStore {
 }
 
 impl WorkspaceStore {
+    #[must_use]
     pub fn new_for_id(modlist_id: &str) -> Self {
         Self::new(app_config_file(
             &format!("modlists/{modlist_id}/workspace.json"),
@@ -20,10 +21,12 @@ impl WorkspaceStore {
         ))
     }
 
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self { path }
     }
 
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }

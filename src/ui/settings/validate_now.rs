@@ -18,6 +18,7 @@ pub enum PathStatus {
     NotWritable,
 }
 
+#[must_use]
 pub fn run_now(settings: &Step1Settings) -> ValidationReport {
     let state = Step1State::from(settings.clone());
     let (ok, message) = crate::app::state_validation::run_path_check(&state);

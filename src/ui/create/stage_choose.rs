@@ -80,8 +80,12 @@ fn render_name_and_game(ui: &mut egui::Ui, palette: ThemePalette, state: &mut Cr
                 ))
                 .corner_radius(REDESIGN_BORDER_RADIUS_PX)
                 .inner_margin(egui::Margin::symmetric(
-                    REDESIGN_BUTTON_SMALL_PADDING_X_PX as i8,
-                    REDESIGN_BUTTON_SMALL_PADDING_Y_PX as i8,
+                    crate::ui::shared::redesign_tokens::redesign_i8_px(
+                        REDESIGN_BUTTON_SMALL_PADDING_X_PX,
+                    ),
+                    crate::ui::shared::redesign_tokens::redesign_i8_px(
+                        REDESIGN_BUTTON_SMALL_PADDING_Y_PX,
+                    ),
                 ))
                 .show(ui, |ui| {
                     ui.add(
@@ -113,8 +117,8 @@ fn render_game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) 
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_BUTTON_SMALL_PADDING_X_PX as i8,
-            REDESIGN_BUTTON_SMALL_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_SMALL_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_SMALL_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             egui::ComboBox::from_id_salt("create_game_selector")
@@ -171,7 +175,7 @@ fn render_starting_card(
     action
 }
 
-fn game_label(game: &Game) -> &'static str {
+const fn game_label(game: &Game) -> &'static str {
     match game {
         Game::BGEE => "BGEE",
         Game::BG2EE => "BG2EE",

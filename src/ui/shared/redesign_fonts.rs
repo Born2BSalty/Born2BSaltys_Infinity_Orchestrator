@@ -39,6 +39,22 @@ pub fn install_redesign_fonts(ctx: &egui::Context) {
         .entry(egui::FontFamily::Monospace)
         .or_default()
         .insert(0, "firacode_nerd".to_owned());
+    fonts.families.insert(
+        egui::FontFamily::Name("poppins_light".into()),
+        vec!["poppins_light".to_owned()],
+    );
+    fonts.families.insert(
+        egui::FontFamily::Name("poppins_medium".into()),
+        vec!["poppins_medium".to_owned()],
+    );
+    fonts.families.insert(
+        egui::FontFamily::Name("poppins_bold".into()),
+        vec!["poppins_bold".to_owned()],
+    );
+    fonts.families.insert(
+        egui::FontFamily::Name("firacode_nerd".into()),
+        vec!["firacode_nerd".to_owned()],
+    );
 
     ctx.set_fonts(fonts);
 }

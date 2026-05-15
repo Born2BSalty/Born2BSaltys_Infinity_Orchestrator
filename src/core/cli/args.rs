@@ -79,6 +79,10 @@ pub struct EetArgs {
 }
 
 #[derive(Args, Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "CLI option fields define stable Clap flags and environment bindings"
+)]
 pub struct CommonOptions {
     #[arg(long, env = "WEIDU_BINARY", default_value = "")]
     pub weidu_binary: String,

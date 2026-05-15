@@ -25,8 +25,7 @@ pub fn render(
         "connect"
     };
 
-    let mut action = None;
-    if account_card::render(
+    let action = if account_card::render(
         ui,
         palette,
         "GitHub",
@@ -36,12 +35,14 @@ pub fn render(
     )
     .clicked()
     {
-        action = Some(if connected_user.is_some() {
+        Some(if connected_user.is_some() {
             AccountAction::DisconnectGitHub
         } else {
             AccountAction::ConnectGitHub
-        });
-    }
+        })
+    } else {
+        None
+    };
     ui.add_space(10.0);
     let _ = account_card::render(ui, palette, "Nexus Mods", "NX", None, "connect");
     ui.add_space(10.0);

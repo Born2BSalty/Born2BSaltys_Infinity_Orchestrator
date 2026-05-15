@@ -9,7 +9,7 @@ pub(crate) fn handle_step4_action(state: &mut WizardState, action: Step4Action) 
     match action {
         Step4Action::SaveWeiduLog => {
             if let Err(err) = auto_save_step4_weidu_logs(state) {
-                state.step5.last_status_text = err.clone();
+                state.step5.last_status_text = err;
             }
         }
         Step4Action::CheckMissingMods => {

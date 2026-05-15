@@ -15,7 +15,7 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, name: &mut String) {
     let response = egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(
             0,
-            REDESIGN_SETTINGS_ROW_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SETTINGS_ROW_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.set_width(row_width);

@@ -29,8 +29,7 @@ pub(super) fn run_path_check(s: &Step1State) -> (bool, String) {
                 || s.imports_modlist())
             {
                 errors.push(format!(
-                    "Mods Folder has no .tp2 files within scan depth {}",
-                    depth
+                    "Mods Folder has no .tp2 files within scan depth {depth}"
                 ));
             }
         }
@@ -85,8 +84,7 @@ pub(super) fn run_path_check(s: &Step1State) -> (bool, String) {
             let log_dir = s.weidu_log_folder.trim();
             if !log_dir.is_empty() && log_dir.contains(' ') {
                 errors.push(format!(
-                    "WeiDU log folder in -u mode cannot contain spaces on this backend. Invalid path: \"{}\". Use a no-space path.",
-                    log_dir
+                    "WeiDU log folder in -u mode cannot contain spaces on this backend. Invalid path: \"{log_dir}\". Use a no-space path."
                 ));
             }
         }

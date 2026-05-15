@@ -73,16 +73,16 @@ fn requirement_guard_file_cache() -> &'static Mutex<HashMap<String, CachedRequir
 }
 
 fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
-    match fs::metadata(tp2_path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(tp2_path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 pub(super) fn collect_requirement_guards(block: &[&str]) -> Vec<RequirementGuard> {
@@ -138,15 +138,15 @@ fn build_display_line(trimmed: &str, clean_line: &str, eval_text: &str) -> Strin
     let display_expr = render_requirement_evidence(eval_text);
     let upper = trimmed.to_ascii_uppercase();
     if upper.starts_with("REQUIRE_PREDICATE") {
-        return display_expr
-            .map(|expr| format!("REQUIRE_PREDICATE {expr}"))
-            .unwrap_or_else(|| "REQUIRE_PREDICATE".to_string());
+        return display_expr.map_or_else(
+            || "REQUIRE_PREDICATE".to_string(),
+            |expr| format!("REQUIRE_PREDICATE {expr}"),
+        );
     }
     if upper.starts_with("SUBCOMPONENT") {
         let prefix = clean_line
             .split_once('(')
-            .map(|(head, _)| head.trim())
-            .unwrap_or(trimmed.trim());
+            .map_or_else(|| trimmed.trim(), |(head, _)| head.trim());
         return match display_expr {
             Some(expr) if expr.starts_with('(') => format!("{prefix} {expr}"),
             Some(expr) => format!("{prefix} ({expr})"),

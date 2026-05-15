@@ -98,8 +98,8 @@ fn render_text_input(ui: &mut egui::Ui, palette: ThemePalette, value: &mut Strin
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_PATH_INPUT_PADDING_X_PX as i8,
-            REDESIGN_PATH_INPUT_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PATH_INPUT_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PATH_INPUT_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.add(
@@ -120,8 +120,8 @@ fn render_code_input(ui: &mut egui::Ui, palette: ThemePalette, value: &mut Strin
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_PATH_INPUT_PADDING_X_PX as i8,
-            REDESIGN_PATH_INPUT_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PATH_INPUT_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PATH_INPUT_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.add_sized(

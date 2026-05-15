@@ -113,11 +113,10 @@ pub fn render(
                     context.dev_mode,
                     context.exe_fingerprint,
                 );
-                None
             } else {
                 stubs::render_workspace_stub(ui, palette);
-                None
             }
+            None
         }
     }
 }

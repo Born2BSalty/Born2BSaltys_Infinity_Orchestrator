@@ -38,7 +38,7 @@ pub(crate) fn render_entry_row(
     )
     .on_hover_text(format!("{preview}\n\nKey: {key}"));
 
-    let mut answer = entry.answer.clone();
+    let mut answer = entry.answer;
     let answer_resp = ui.add_sized([170.0, 24.0], egui::TextEdit::singleline(&mut answer));
     if answer_resp.changed() {
         prompt_memory::set_answer(key, &answer);

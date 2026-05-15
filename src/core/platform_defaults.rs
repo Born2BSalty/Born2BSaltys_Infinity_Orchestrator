@@ -14,14 +14,17 @@ const DEFAULT_MOD_INSTALLER_BINARY: &str = "mod_installer.exe";
 #[cfg(not(target_os = "windows"))]
 const DEFAULT_MOD_INSTALLER_BINARY: &str = "mod_installer";
 
+#[must_use]
 pub fn default_weidu_binary() -> String {
     DEFAULT_WEIDU_BINARY.to_string()
 }
 
+#[must_use]
 pub fn default_mod_installer_binary() -> String {
     DEFAULT_MOD_INSTALLER_BINARY.to_string()
 }
 
+#[must_use]
 pub fn resolve_weidu_binary(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -31,6 +34,7 @@ pub fn resolve_weidu_binary(value: &str) -> String {
     }
 }
 
+#[must_use]
 pub fn resolve_mod_installer_binary(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -58,6 +62,7 @@ fn normalize_binary_for_platform(value: &str) -> String {
     }
 }
 
+#[must_use]
 pub fn compose_weidu_log_path(folder: &str) -> String {
     let trimmed = folder.trim();
     if trimmed.is_empty() {
@@ -70,6 +75,7 @@ pub fn compose_weidu_log_path(folder: &str) -> String {
     }
 }
 
+#[must_use]
 pub fn app_config_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -103,6 +109,7 @@ pub fn app_config_dir() -> Option<PathBuf> {
     None
 }
 
+#[must_use]
 pub fn app_config_file(file_name: &str, fallback_dir: &str) -> PathBuf {
     if let Some(dir) = app_config_dir() {
         return dir.join(file_name);
@@ -110,6 +117,7 @@ pub fn app_config_file(file_name: &str, fallback_dir: &str) -> PathBuf {
     PathBuf::from(fallback_dir).join(file_name)
 }
 
+#[must_use]
 pub fn normalize_tp2_filename(tp_file: &str) -> String {
     let replaced = tp_file.replace('\\', "/");
     let filename = replaced
@@ -120,10 +128,12 @@ pub fn normalize_tp2_filename(tp_file: &str) -> String {
     filename.to_ascii_uppercase()
 }
 
+#[must_use]
 pub fn compose_component_key(tp_file: &str, component: &str) -> String {
     format!("{}#{}", normalize_tp2_filename(tp_file), component.trim())
 }
 
+#[must_use]
 pub fn normalize_weidu_like_line(raw: &str) -> String {
     let trimmed = raw.trim();
     if !trimmed.starts_with('~') {
@@ -135,16 +145,15 @@ pub fn normalize_weidu_like_line(raw: &str) -> String {
     let path_part = &trimmed[1..end];
     let suffix = &trimmed[end + 1..];
     let path = Path::new(path_part);
-    let file = path
-        .file_name()
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| weidu_path_fallback_file(path_part));
-    let folder = path
-        .parent()
-        .and_then(|v| v.file_name())
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| weidu_path_fallback_folder(path_part));
-    format!("~{}\\{}~{}", folder, file, suffix)
+    let file = path.file_name().map_or_else(
+        || weidu_path_fallback_file(path_part),
+        |v| v.to_string_lossy().to_string(),
+    );
+    let folder = path.parent().and_then(|v| v.file_name()).map_or_else(
+        || weidu_path_fallback_folder(path_part),
+        |v| v.to_string_lossy().to_string(),
+    );
+    format!("~{folder}\\{file}~{suffix}")
 }
 
 fn weidu_path_fallback_file(path_part: &str) -> String {

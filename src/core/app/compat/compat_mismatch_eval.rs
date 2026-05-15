@@ -2,13 +2,13 @@
 // Copyright (c) 2026 Born2BSalty
 
 #[path = "compat_mismatch_eval_classify.rs"]
-mod classify;
+pub mod classify;
 #[path = "compat_mismatch_eval_context.rs"]
-mod context;
+pub mod context;
 #[path = "compat_mismatch_eval_evidence.rs"]
-mod evidence;
+pub mod evidence;
 #[path = "compat_mismatch_eval_parser.rs"]
-mod parser;
+pub mod parser;
 
 pub(crate) use classify::{RequirementFailureClass, classify_failed_requirement};
 pub(crate) use context::{MismatchContext, TriState, build_mismatch_context};

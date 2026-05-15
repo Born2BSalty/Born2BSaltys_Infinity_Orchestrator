@@ -65,8 +65,8 @@ pub fn render_with_step5_runtime(
 
     egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_PAGE_PADDING_X_PX as i8,
-            REDESIGN_PAGE_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PAGE_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PAGE_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());

@@ -26,6 +26,7 @@ impl SettingsTab {
         Self::Advanced,
     ];
 
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::General => "General",
@@ -38,6 +39,10 @@ impl SettingsTab {
 }
 
 #[derive(Debug, Clone)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "settings screen state preserves independent widget and option flags"
+)]
 pub struct SettingsScreenState {
     pub active_tab: SettingsTab,
     pub general_changed_this_frame: bool,
@@ -113,6 +118,7 @@ impl Default for SettingsScreenState {
 }
 
 impl SettingsScreenState {
+    #[must_use]
     pub fn from_redesign_settings(settings: &RedesignSettings) -> Self {
         Self {
             user_name: settings.user_name.clone(),
@@ -124,6 +130,7 @@ impl SettingsScreenState {
         }
     }
 
+    #[must_use]
     pub fn current_redesign_settings(&self) -> RedesignSettings {
         RedesignSettings {
             user_name: self.user_name.clone(),
@@ -134,11 +141,11 @@ impl SettingsScreenState {
         }
     }
 
-    pub fn mark_general_changed(&mut self) {
+    pub const fn mark_general_changed(&mut self) {
         self.general_changed_this_frame = true;
     }
 
-    pub fn take_general_changed(&mut self) -> bool {
+    pub const fn take_general_changed(&mut self) -> bool {
         let changed = self.general_changed_this_frame;
         self.general_changed_this_frame = false;
         changed

@@ -19,7 +19,7 @@ pub(super) struct SourceChoiceLayout {
 }
 
 impl SourceChoiceLayout {
-    pub(super) fn list_prefix_width(self) -> f32 {
+    pub(super) const fn list_prefix_width(self) -> f32 {
         self.list_prefix_width
     }
 }

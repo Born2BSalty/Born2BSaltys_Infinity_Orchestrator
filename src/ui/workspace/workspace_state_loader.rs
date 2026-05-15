@@ -18,6 +18,7 @@ pub fn populate_wizard_state_from_workspace(
     // Step 2/3 reconstruction remains deferred until that mapping is proven.
 }
 
+#[must_use]
 pub fn extract_workspace_state_from_wizard(
     existing: &ModlistWorkspaceState,
     wizard_state: &WizardState,
@@ -25,7 +26,8 @@ pub fn extract_workspace_state_from_wizard(
     let mut next = existing.clone();
     next.order_bgee = extract_order(&existing.order_bgee, &wizard_state.step3.bgee_items);
     next.order_bg2ee = extract_order(&existing.order_bg2ee, &wizard_state.step3.bg2ee_items);
-    next.step3_group_collapse = existing.step3_group_collapse.clone();
+    next.step3_group_collapse
+        .clone_from(&existing.step3_group_collapse);
     for block_id in &wizard_state.step3.bgee_collapsed_blocks {
         next.step3_group_collapse
             .insert(format!("BGEE:{block_id}"), true);
@@ -37,7 +39,7 @@ pub fn extract_workspace_state_from_wizard(
     next
 }
 
-fn game_to_step1_value(game: &Game) -> &'static str {
+const fn game_to_step1_value(game: &Game) -> &'static str {
     match game {
         Game::BGEE => "BGEE",
         Game::BG2EE => "BG2EE",

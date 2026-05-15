@@ -19,7 +19,7 @@ pub struct HomeScreenState {
 }
 
 impl HomeScreenState {
-    pub fn ensure_valid_filter(&mut self, installed_count: usize, in_progress_count: usize) {
+    pub const fn ensure_valid_filter(&mut self, installed_count: usize, in_progress_count: usize) {
         if installed_count == 0 && in_progress_count == 0 {
             self.filter = HomeFilter::All;
             return;

@@ -9,7 +9,7 @@ use super::compat_mismatch_eval::build_mismatch_context;
 use super::compat_rule_runtime::{kind_disables_selection, normalize_mod_key};
 
 #[path = "compat_mismatch_scan_classify.rs"]
-mod classify;
+pub mod classify;
 #[path = "compat_mismatch_scan_guards.rs"]
 mod guards;
 
@@ -45,8 +45,10 @@ pub(crate) fn apply_step2_scan_mismatch(step1: &Step1State, tab: &str, mods: &mu
             component.compat_kind = Some(hit.kind.to_string());
             component.compat_source =
                 Some(mismatch_source(&mod_state.tp2_path, &mod_state.tp_file));
-            component.compat_related_mod = hit.related_mod.clone();
-            component.compat_related_component = hit.related_component.clone();
+            component.compat_related_mod.clone_from(&hit.related_mod);
+            component
+                .compat_related_component
+                .clone_from(&hit.related_component);
             component.compat_graph = None;
             component.compat_evidence = Some(hit.raw_evidence);
             component.disabled_reason = Some(hit.message);

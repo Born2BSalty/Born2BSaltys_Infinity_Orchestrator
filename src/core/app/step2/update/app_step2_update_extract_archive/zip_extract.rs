@@ -10,8 +10,7 @@ use zip::read::ZipArchive;
 pub(super) fn is_zip_archive(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
-        .map(|value| value.eq_ignore_ascii_case("zip"))
-        .unwrap_or(false)
+        .is_some_and(|value| value.eq_ignore_ascii_case("zip"))
 }
 
 pub(super) fn extract_zip_archive(archive_path: &Path, out_dir: &Path) -> Result<(), String> {
@@ -19,7 +18,7 @@ pub(super) fn extract_zip_archive(archive_path: &Path, out_dir: &Path) -> Result
     let mut archive = ZipArchive::new(file).map_err(|err| err.to_string())?;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(|err| err.to_string())?;
-        let Some(relative) = entry.enclosed_name().map(|value| value.to_path_buf()) else {
+        let Some(relative) = entry.enclosed_name() else {
             continue;
         };
         let destination = out_dir.join(relative);

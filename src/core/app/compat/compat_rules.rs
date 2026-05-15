@@ -159,11 +159,11 @@ fn write_if_changed(path: &std::path::Path, content: &str) -> std::io::Result<()
     }
 }
 
-fn default_step2_rules_content() -> &'static str {
+const fn default_step2_rules_content() -> &'static str {
     include_str!("../../config/default_step2_compat_rules.toml")
 }
 
-fn user_step2_rules_content() -> &'static str {
+const fn user_step2_rules_content() -> &'static str {
     include_str!("../../config/user_step2_compat_rules.toml")
 }
 
@@ -188,16 +188,16 @@ fn rules_cache() -> &'static Mutex<Option<CachedRules>> {
 }
 
 fn cache_stamp(path: &PathBuf) -> FileCacheStamp {
-    match fs::metadata(path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 fn cache_stamp_signature(path: &PathBuf) -> String {

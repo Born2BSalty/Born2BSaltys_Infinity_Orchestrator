@@ -6,8 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub(crate) fn now_unix_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 pub(crate) fn fmt_duration(secs: u64) -> String {

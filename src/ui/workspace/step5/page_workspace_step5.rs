@@ -70,7 +70,7 @@ pub fn render(
             palette,
         },
     );
-    action.or(step5_action.map(WorkspaceStep5Action::Step5))
+    action.or_else(|| step5_action.map(WorkspaceStep5Action::Step5))
 }
 
 fn clean_install_success(state: &WizardState) -> bool {
@@ -93,8 +93,8 @@ fn render_success_banner(
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_SETTINGS_BOX_PADDING_X_PX as i8,
-            REDESIGN_SETTINGS_BOX_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SETTINGS_BOX_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SETTINGS_BOX_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {

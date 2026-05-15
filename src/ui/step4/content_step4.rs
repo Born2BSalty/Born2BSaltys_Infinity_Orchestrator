@@ -107,16 +107,16 @@ pub fn render(
                 return;
             }
 
-            let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-            let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+            let show_primary_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+            let show_secondary_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
             ui.horizontal(|ui| {
                 ui.add_space(12.0);
-                if show_bgee && show_bg2ee {
+                if show_primary_game && show_secondary_game {
                     draw_tab(ui, active_tab_mut(state), "BGEE");
                     draw_tab(ui, active_tab_mut(state), "BG2EE");
-                } else if show_bgee {
+                } else if show_primary_game {
                     ui.label(typo::monospace("BGEE"));
-                } else if show_bg2ee {
+                } else if show_secondary_game {
                     ui.label(typo::monospace("BG2EE"));
                 }
             });
@@ -149,7 +149,9 @@ pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
         .fill(fill)
         .stroke(stroke)
         .corner_radius(egui::CornerRadius::same(
-            crate::ui::shared::layout_tokens_global::RADIUS_SM as u8,
+            crate::ui::shared::layout_tokens_global::radius_u8(
+                crate::ui::shared::layout_tokens_global::RADIUS_SM,
+            ),
         ));
     if ui.add_sized([58.0, 24.0], button).clicked() {
         *active = value.to_string();
@@ -198,15 +200,15 @@ pub fn render_source_logs(ui: &mut egui::Ui, state: &mut WizardState) {
         return;
     }
 
-    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let show_primary_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let show_secondary_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
     ui.horizontal(|ui| {
-        if show_bgee && show_bg2ee {
+        if show_primary_game && show_secondary_game {
             draw_tab(ui, &mut state.step3.active_game_tab, "BGEE");
             draw_tab(ui, &mut state.step3.active_game_tab, "BG2EE");
-        } else if show_bgee {
+        } else if show_primary_game {
             ui.label(typo::monospace("BGEE"));
-        } else if show_bg2ee {
+        } else if show_secondary_game {
             ui.label(typo::monospace("BG2EE"));
         }
     });

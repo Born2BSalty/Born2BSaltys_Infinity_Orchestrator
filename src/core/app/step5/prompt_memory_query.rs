@@ -64,6 +64,7 @@ pub(super) fn get_answer_by_alias(alias_value: &str) -> Option<String> {
             found = Some(entry.answer.clone());
         }
     }
+    drop(guard);
     found
 }
 

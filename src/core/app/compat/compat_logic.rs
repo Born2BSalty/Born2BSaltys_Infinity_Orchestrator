@@ -18,37 +18,37 @@ use super::compat_rules::{CompatRule, compat_rule_source_path, load_rules};
 
 pub(crate) fn apply_step2_compat_rules(
     step1: &Step1State,
-    bgee_mods: &mut [Step2ModState],
-    bg2ee_mods: &mut [Step2ModState],
+    primary_game_mods: &mut [Step2ModState],
+    secondary_game_mods: &mut [Step2ModState],
 ) -> Option<String> {
-    clear_step2_compat_state(bgee_mods);
-    clear_step2_compat_state(bg2ee_mods);
+    clear_step2_compat_state(primary_game_mods);
+    clear_step2_compat_state(secondary_game_mods);
 
-    apply_step2_scan_mismatch(step1, "BGEE", bgee_mods);
-    apply_step2_scan_mismatch(step1, "BG2EE", bg2ee_mods);
-    apply_step2_scan_path_requirement(step1, "BGEE", bgee_mods);
-    apply_step2_scan_path_requirement(step1, "BG2EE", bg2ee_mods);
-    apply_step2_scan_missing_dep(bgee_mods);
-    apply_step2_scan_missing_dep(bg2ee_mods);
-    apply_step2_scan_conflict(bgee_mods);
-    apply_step2_scan_conflict(bg2ee_mods);
-    apply_step2_scan_deprecated(bgee_mods);
-    apply_step2_scan_deprecated(bg2ee_mods);
+    apply_step2_scan_mismatch(step1, "BGEE", primary_game_mods);
+    apply_step2_scan_mismatch(step1, "BG2EE", secondary_game_mods);
+    apply_step2_scan_path_requirement(step1, "BGEE", primary_game_mods);
+    apply_step2_scan_path_requirement(step1, "BG2EE", secondary_game_mods);
+    apply_step2_scan_missing_dep(primary_game_mods);
+    apply_step2_scan_missing_dep(secondary_game_mods);
+    apply_step2_scan_conflict(primary_game_mods);
+    apply_step2_scan_conflict(secondary_game_mods);
+    apply_step2_scan_deprecated(primary_game_mods);
+    apply_step2_scan_deprecated(secondary_game_mods);
 
     let loaded = load_rules();
     let rules = loaded.rules;
     if !rules.is_empty() {
-        apply_direct_rules_to_tab(step1, "BGEE", &rules, bgee_mods);
-        apply_direct_rules_to_tab(step1, "BG2EE", &rules, bg2ee_mods);
-        finalize_step2_compat_state(bgee_mods);
-        finalize_step2_compat_state(bg2ee_mods);
+        apply_direct_rules_to_tab(step1, "BGEE", &rules, primary_game_mods);
+        apply_direct_rules_to_tab(step1, "BG2EE", &rules, secondary_game_mods);
+        finalize_step2_compat_state(primary_game_mods);
+        finalize_step2_compat_state(secondary_game_mods);
 
-        apply_relation_rules_to_tab(step1, "BGEE", &rules, bgee_mods);
-        apply_relation_rules_to_tab(step1, "BG2EE", &rules, bg2ee_mods);
+        apply_relation_rules_to_tab(step1, "BGEE", &rules, primary_game_mods);
+        apply_relation_rules_to_tab(step1, "BG2EE", &rules, secondary_game_mods);
     }
 
-    finalize_step2_compat_state(bgee_mods);
-    finalize_step2_compat_state(bg2ee_mods);
+    finalize_step2_compat_state(primary_game_mods);
+    finalize_step2_compat_state(secondary_game_mods);
     loaded.error
 }
 

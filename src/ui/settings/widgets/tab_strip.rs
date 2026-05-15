@@ -33,14 +33,22 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, active_tab: &mut Setting
                 .fill(fill)
                 .stroke(stroke)
                 .corner_radius(egui::CornerRadius {
-                    nw: REDESIGN_SETTINGS_TAB_RADIUS_PX as u8,
-                    ne: REDESIGN_SETTINGS_TAB_RADIUS_PX as u8,
+                    nw: crate::ui::shared::redesign_tokens::redesign_u8_px(
+                        REDESIGN_SETTINGS_TAB_RADIUS_PX,
+                    ),
+                    ne: crate::ui::shared::redesign_tokens::redesign_u8_px(
+                        REDESIGN_SETTINGS_TAB_RADIUS_PX,
+                    ),
                     sw: 0,
                     se: 0,
                 })
                 .inner_margin(egui::Margin::symmetric(
-                    REDESIGN_SETTINGS_TAB_PADDING_X_PX as i8,
-                    REDESIGN_SETTINGS_TAB_PADDING_Y_PX as i8,
+                    crate::ui::shared::redesign_tokens::redesign_i8_px(
+                        REDESIGN_SETTINGS_TAB_PADDING_X_PX,
+                    ),
+                    crate::ui::shared::redesign_tokens::redesign_i8_px(
+                        REDESIGN_SETTINGS_TAB_PADDING_Y_PX,
+                    ),
                 ))
                 .show(ui, |ui| ui.label(if active { text.strong() } else { text }))
                 .response

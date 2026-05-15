@@ -26,10 +26,12 @@ pub fn render(
     let mut action = None;
     egui::Frame::NONE
         .inner_margin(egui::Margin {
-            left: REDESIGN_PAGE_PADDING_X_PX as i8,
-            right: REDESIGN_PAGE_PADDING_X_PX as i8,
-            top: REDESIGN_SETTINGS_PAGE_PADDING_TOP_PX as i8,
-            bottom: REDESIGN_PAGE_PADDING_Y_PX as i8,
+            left: crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PAGE_PADDING_X_PX),
+            right: crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PAGE_PADDING_X_PX),
+            top: crate::ui::shared::redesign_tokens::redesign_i8_px(
+                REDESIGN_SETTINGS_PAGE_PADDING_TOP_PX,
+            ),
+            bottom: crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_PAGE_PADDING_Y_PX),
         })
         .show(ui, |ui| {
             apply_settings_visuals(ui, palette);

@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::app::state::Step2ModState;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX,
     ThemePalette, redesign_border_soft, redesign_shell_bg, redesign_text_muted,
 };
 use crate::ui::step2::tree_compat_display_step2::compat_colors;
@@ -139,14 +139,14 @@ pub(crate) fn draw_active_tab_issue_badge(
         "Warning" => Some("warning"),
         _ => None,
     };
-    let (text_color, fill_color) = compat_colors(kind_key, palette)
-        .map(|(text_color, fill_color, _)| (text_color, fill_color))
-        .unwrap_or((redesign_text_muted(palette), redesign_shell_bg(palette)));
+    let (text_color, fill_color) = compat_colors(kind_key, palette).map_or_else(
+        || (redesign_text_muted(palette), redesign_shell_bg(palette)),
+        |(text_color, fill_color, _)| (text_color, fill_color),
+    );
 
     let badge = egui::Button::new(
         crate::ui::shared::typography_global::strong(format!(
-            "{game_tab} {} {}",
-            display_filter, display_count
+            "{game_tab} {display_filter} {display_count}"
         ))
         .color(text_color)
         .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT),
@@ -160,7 +160,7 @@ pub(crate) fn draw_active_tab_issue_badge(
             redesign_border_soft(palette)
         },
     ))
-    .corner_radius(egui::CornerRadius::same(REDESIGN_BIO_PILL_RADIUS_PX as u8))
+    .corner_radius(egui::CornerRadius::same(REDESIGN_BIO_PILL_RADIUS_U8))
     .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX));
     let issue_label = if summary.total_count == 1 {
         "issue"

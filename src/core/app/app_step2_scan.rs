@@ -23,7 +23,7 @@ pub(crate) fn poll_step2_scan_events(
     events::poll_step2_scan_events(state, step2_scan_rx, step2_cancel, step2_progress_queue);
 }
 
-pub(crate) fn cancel_step2_scan(state: &mut WizardState, step2_cancel: &Option<Arc<AtomicBool>>) {
+pub(crate) fn cancel_step2_scan(state: &mut WizardState, step2_cancel: Option<&Arc<AtomicBool>>) {
     lifecycle::cancel_step2_scan(state, step2_cancel);
 }
 

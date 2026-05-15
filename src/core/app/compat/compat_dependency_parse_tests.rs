@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::parser::compat_dependency_expr::{
+use crate::parser::{
     normalize_component_id, parse_mod_is_installed_dependency_targets,
     parse_negated_mod_is_installed_targets, parse_predicate_requirement_line,
     parse_requirement_line, parse_simple_mod_is_installed_predicate,
@@ -10,7 +10,7 @@ use crate::parser::compat_dependency_expr::{
 #[test]
 fn parses_tilde_requirement_component() {
     let parsed =
-        parse_requirement_line(r#"REQUIRE_COMPONENT ~bg1npc/bg1npc.tp2~ 0 @1004 /* comment */"#)
+        parse_requirement_line(r"REQUIRE_COMPONENT ~bg1npc/bg1npc.tp2~ 0 @1004 /* comment */")
             .expect("requirement should parse");
     assert_eq!(parsed.targets.len(), 1);
     assert_eq!(parsed.targets[0].target_mod, "bg1npc");
@@ -35,8 +35,8 @@ fn parses_quoted_requirement_component() {
 
 #[test]
 fn ignores_commented_requirement_component() {
-    assert!(parse_requirement_line(r#"// REQUIRE_COMPONENT ~foo.tp2~ 0 @1"#).is_none());
-    assert!(parse_requirement_line(r#"/* REQUIRE_COMPONENT ~foo.tp2~ 0 @1 */"#).is_none());
+    assert!(parse_requirement_line(r"// REQUIRE_COMPONENT ~foo.tp2~ 0 @1").is_none());
+    assert!(parse_requirement_line(r"/* REQUIRE_COMPONENT ~foo.tp2~ 0 @1 */").is_none());
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn normalizes_component_ids() {
 #[test]
 fn parses_simple_predicate_requirement_component() {
     let parsed = parse_predicate_requirement_line(
-        r#"REQUIRE_PREDICATE (MOD_IS_INSTALLED ~EEEX/EEEX.TP2~ ~0~) ~This component requires EEEx.~"#,
+        r"REQUIRE_PREDICATE (MOD_IS_INSTALLED ~EEEX/EEEX.TP2~ ~0~) ~This component requires EEEx.~",
     )
     .expect("predicate requirement should parse");
     assert_eq!(parsed.targets.len(), 1);
@@ -61,7 +61,7 @@ fn parses_simple_predicate_requirement_component() {
 #[test]
 fn parses_or_predicate_requirement_components() {
     let parsed = parse_predicate_requirement_line(
-        r#"REQUIRE_PREDICATE (MOD_IS_INSTALLED ~foo.tp2~ ~1~) OR (MOD_IS_INSTALLED ~bar.tp2~ ~2~) ~Needs one of them.~"#,
+        r"REQUIRE_PREDICATE (MOD_IS_INSTALLED ~foo.tp2~ ~1~) OR (MOD_IS_INSTALLED ~bar.tp2~ ~2~) ~Needs one of them.~",
     )
     .expect("predicate requirement should parse");
     assert_eq!(parsed.targets.len(), 2);
@@ -75,7 +75,7 @@ fn parses_or_predicate_requirement_components() {
 fn ignores_negated_predicate_requirement_component() {
     assert!(
         parse_predicate_requirement_line(
-            r#"REQUIRE_PREDICATE (!MOD_IS_INSTALLED ~foo.tp2~ ~1~) ~Only when missing.~"#
+            r"REQUIRE_PREDICATE (!MOD_IS_INSTALLED ~foo.tp2~ ~1~) ~Only when missing.~"
         )
         .is_none()
     );
@@ -85,7 +85,7 @@ fn ignores_negated_predicate_requirement_component() {
 fn ignores_compound_predicate_requirement_component() {
     assert!(
         parse_mod_is_installed_dependency_targets(
-            r#"(MOD_IS_INSTALLED ~foo.tp2~ ~1~ AND GAME_IS ~BG2EE~) ~Mixed predicate.~"#
+            r"(MOD_IS_INSTALLED ~foo.tp2~ ~1~ AND GAME_IS ~BG2EE~) ~Mixed predicate.~"
         )
         .is_none()
     );
@@ -95,7 +95,7 @@ fn ignores_compound_predicate_requirement_component() {
 fn ignores_mixed_or_predicate_requirement_component() {
     assert!(
         parse_mod_is_installed_dependency_targets(
-            r#"(GAME_IS ~BG2EE~) OR (MOD_IS_INSTALLED ~foo.tp2~ ~1~) ~Mixed predicate.~"#
+            r"(GAME_IS ~BG2EE~) OR (MOD_IS_INSTALLED ~foo.tp2~ ~1~) ~Mixed predicate.~"
         )
         .is_none()
     );
@@ -116,7 +116,7 @@ fn parses_mod_is_installed_with_int_marker_predicate_component() {
 fn ignores_multi_target_predicate_for_simple_parser() {
     assert!(
         parse_simple_mod_is_installed_predicate(
-            r#"(MOD_IS_INSTALLED ~foo.tp2~ ~1~) OR (MOD_IS_INSTALLED ~bar.tp2~ ~2~) ~Mixed predicate.~"#
+            r"(MOD_IS_INSTALLED ~foo.tp2~ ~1~) OR (MOD_IS_INSTALLED ~bar.tp2~ ~2~) ~Mixed predicate.~"
         )
         .is_none()
     );
@@ -125,7 +125,7 @@ fn ignores_multi_target_predicate_for_simple_parser() {
 #[test]
 fn parses_negated_mod_is_installed_targets() {
     let parsed = parse_negated_mod_is_installed_targets(
-        r#"NOT(MOD_IS_INSTALLED ~foo.tp2~ ~1~) AND !MOD_IS_INSTALLED ~bar.tp2~ ~2~"#,
+        r"NOT(MOD_IS_INSTALLED ~foo.tp2~ ~1~) AND !MOD_IS_INSTALLED ~bar.tp2~ ~2~",
     )
     .expect("negated targets should parse");
     assert_eq!(parsed.len(), 2);
@@ -139,7 +139,7 @@ fn parses_negated_mod_is_installed_targets() {
 fn ignores_broad_negated_group_for_negated_target_parser() {
     assert!(
         parse_negated_mod_is_installed_targets(
-            r#"NOT((MOD_IS_INSTALLED ~foo.tp2~ ~1~) OR (MOD_IS_INSTALLED ~bar.tp2~ ~2~))"#
+            r"NOT((MOD_IS_INSTALLED ~foo.tp2~ ~1~) OR (MOD_IS_INSTALLED ~bar.tp2~ ~2~))"
         )
         .is_none()
     );

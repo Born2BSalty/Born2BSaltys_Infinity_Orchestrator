@@ -32,10 +32,14 @@ impl Default for RedesignSettings {
     }
 }
 
-fn default_theme_palette() -> ThemePalette {
+const fn default_theme_palette() -> ThemePalette {
     ThemePalette::Dark
 }
 
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde serialize_with requires a reference to the serialized field"
+)]
 fn serialize_theme_palette<S>(palette: &ThemePalette, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,

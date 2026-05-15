@@ -61,7 +61,7 @@ mod cleanup {
             let drop_block = items[next_idx].block_id.clone();
             for item in items.iter_mut() {
                 if !item.is_parent && item.block_id == drop_block {
-                    item.block_id = keep_block.clone();
+                    item.block_id.clone_from(&keep_block);
                 }
             }
             remove_row_and_fix_selection(items, selected, next_idx);
@@ -116,6 +116,7 @@ mod clone_ops {
 mod keys {
     use crate::app::state::Step3ItemState;
 
+    #[must_use]
     pub fn step3_item_key(item: &Step3ItemState) -> String {
         format!(
             "{}|{}|{}|{}|{}|{}",
@@ -189,7 +190,7 @@ mod repair {
                     if !selected_keys.contains(&step3_item_key(&items[j])) {
                         break;
                     }
-                    items[j].block_id = target_block.clone();
+                    items[j].block_id.clone_from(&target_block);
                     moved_any = true;
                     j += 1;
                 }
@@ -220,7 +221,7 @@ mod repair {
                     if !selected_keys.contains(&step3_item_key(&items[j])) {
                         break;
                     }
-                    items[j].block_id = new_block.clone();
+                    items[j].block_id.clone_from(&new_block);
                     j += 1;
                 }
                 idx = j;
@@ -234,6 +235,7 @@ mod repair {
 mod visibility {
     use crate::app::state::Step3ItemState;
 
+    #[must_use]
     pub fn visible_indices(items: &[Step3ItemState], collapsed_blocks: &[String]) -> Vec<usize> {
         let mut out = Vec::with_capacity(items.len());
         for (idx, item) in items.iter().enumerate() {
@@ -249,6 +251,7 @@ mod visibility {
         out
     }
 
+    #[must_use]
     pub fn count_children_in_block(items: &[Step3ItemState], parent_idx: usize) -> usize {
         let block = items[parent_idx].block_id.as_str();
         items
@@ -257,6 +260,7 @@ mod visibility {
             .count()
     }
 
+    #[must_use]
     pub fn block_indices(items: &[Step3ItemState], parent_idx: usize) -> Vec<usize> {
         let block = items[parent_idx].block_id.as_str();
         items

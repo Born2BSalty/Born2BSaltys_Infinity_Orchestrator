@@ -11,15 +11,15 @@ pub(crate) enum EvalState {
 }
 
 impl EvalState {
-    pub(crate) fn from_bool(value: bool) -> Self {
+    pub(crate) const fn from_bool(value: bool) -> Self {
         if value { Self::True } else { Self::False }
     }
 
-    pub(crate) fn is_not_false(self) -> bool {
+    pub(crate) const fn is_not_false(self) -> bool {
         !matches!(self, Self::False)
     }
 
-    pub(crate) fn and(self, rhs: Self) -> Self {
+    pub(crate) const fn and(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::False, _) | (_, Self::False) => Self::False,
             (Self::True, Self::True) => Self::True,
@@ -27,7 +27,7 @@ impl EvalState {
         }
     }
 
-    pub(crate) fn or(self, rhs: Self) -> Self {
+    pub(crate) const fn or(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::True, _) | (_, Self::True) => Self::True,
             (Self::False, Self::False) => Self::False,
@@ -35,7 +35,7 @@ impl EvalState {
         }
     }
 
-    pub(crate) fn not(self) -> Self {
+    pub(crate) const fn not(self) -> Self {
         match self {
             Self::True => Self::False,
             Self::False => Self::True,
@@ -99,13 +99,7 @@ impl ScalarValue {
                 }
             }
             Self::Int(v) => v.to_string(),
-            Self::Text(v) => v
-                .trim()
-                .trim_matches('%')
-                .trim_matches('"')
-                .trim_matches('~')
-                .to_string(),
-            Self::Unknown(v) => v
+            Self::Text(v) | Self::Unknown(v) => v
                 .trim()
                 .trim_matches('%')
                 .trim_matches('"')
@@ -115,7 +109,7 @@ impl ScalarValue {
     }
 }
 
-pub(super) fn normalize_game_token(input: String) -> String {
+pub(super) fn normalize_game_token(input: &str) -> String {
     let lower = input.trim().to_ascii_lowercase();
     if lower.contains("iwd") {
         return "iwdee".to_string();

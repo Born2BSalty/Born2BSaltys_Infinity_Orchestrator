@@ -15,14 +15,17 @@ pub struct RegistryStore {
 }
 
 impl RegistryStore {
+    #[must_use]
     pub fn new_default() -> Self {
         Self::new(app_config_file("modlists.json", "."))
     }
 
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self { path }
     }
 
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -96,8 +99,7 @@ fn corrupt_backup_path(path: &Path) -> PathBuf {
     let mut backup_path = path.to_path_buf();
     let file_name = path
         .file_name()
-        .map(|name| name.to_string_lossy())
-        .unwrap_or_else(|| "modlists.json".into());
+        .map_or_else(|| "modlists.json".into(), |name| name.to_string_lossy());
     let unix_timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -110,8 +112,7 @@ fn temp_registry_path(path: &Path) -> PathBuf {
     let mut temp_path = path.to_path_buf();
     let file_name = path
         .file_name()
-        .map(|name| name.to_string_lossy())
-        .unwrap_or_else(|| "modlists.json".into());
+        .map_or_else(|| "modlists.json".into(), |name| name.to_string_lossy());
     temp_path.set_file_name(format!("{file_name}.tmp"));
     temp_path
 }

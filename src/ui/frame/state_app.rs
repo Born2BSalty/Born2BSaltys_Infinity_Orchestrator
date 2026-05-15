@@ -5,6 +5,7 @@ use crate::ui::app::WizardApp;
 
 use super::action_app::AppLaunchAction;
 
+#[must_use]
 pub fn build_app_state(action: AppLaunchAction) -> WizardApp {
     WizardApp::new(action.dev_mode)
 }

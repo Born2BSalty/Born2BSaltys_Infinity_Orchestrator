@@ -13,60 +13,64 @@ pub enum WorkspaceStep {
 }
 
 impl WorkspaceStep {
-    pub const ALL: [WorkspaceStep; 4] = [
-        WorkspaceStep::Step2,
-        WorkspaceStep::Step3,
-        WorkspaceStep::Step4,
-        WorkspaceStep::Step5,
-    ];
+    pub const ALL: [Self; 4] = [Self::Step2, Self::Step3, Self::Step4, Self::Step5];
 
-    pub fn number(self) -> usize {
+    #[must_use]
+    pub const fn number(self) -> usize {
         match self {
-            WorkspaceStep::Step2 => 2,
-            WorkspaceStep::Step3 => 3,
-            WorkspaceStep::Step4 => 4,
-            WorkspaceStep::Step5 => 5,
+            Self::Step2 => 2,
+            Self::Step3 => 3,
+            Self::Step4 => 4,
+            Self::Step5 => 5,
         }
     }
 
-    pub fn label(self) -> &'static str {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
-            WorkspaceStep::Step2 => "Scan and select",
-            WorkspaceStep::Step3 => "Reorder and resolve",
-            WorkspaceStep::Step4 => "Review",
-            WorkspaceStep::Step5 => "Install",
+            Self::Step2 => "Scan and select",
+            Self::Step3 => "Reorder and resolve",
+            Self::Step4 => "Review",
+            Self::Step5 => "Install",
         }
     }
 
-    pub fn hint(self) -> &'static str {
+    #[must_use]
+    pub const fn hint(self) -> &'static str {
         match self {
-            WorkspaceStep::Step2 => "scan mods, choose components, and resolve missing sources",
-            WorkspaceStep::Step3 => "review install order and resolve conflicts before review",
-            WorkspaceStep::Step4 => "verify setup and generated WeiDU order before install",
-            WorkspaceStep::Step5 => "install runtime arrives in Phase 7",
+            Self::Step2 => "scan mods, choose components, and resolve missing sources",
+            Self::Step3 => "review install order and resolve conflicts before review",
+            Self::Step4 => "verify setup and generated WeiDU order before install",
+            Self::Step5 => "install runtime arrives in Phase 7",
         }
     }
 
-    pub fn previous(self) -> Option<Self> {
+    #[must_use]
+    pub const fn previous(self) -> Option<Self> {
         match self {
-            WorkspaceStep::Step2 => None,
-            WorkspaceStep::Step3 => Some(WorkspaceStep::Step2),
-            WorkspaceStep::Step4 => Some(WorkspaceStep::Step3),
-            WorkspaceStep::Step5 => Some(WorkspaceStep::Step4),
+            Self::Step2 => None,
+            Self::Step3 => Some(Self::Step2),
+            Self::Step4 => Some(Self::Step3),
+            Self::Step5 => Some(Self::Step4),
         }
     }
 
-    pub fn next(self) -> Option<Self> {
+    #[must_use]
+    pub const fn next(self) -> Option<Self> {
         match self {
-            WorkspaceStep::Step2 => Some(WorkspaceStep::Step3),
-            WorkspaceStep::Step3 => Some(WorkspaceStep::Step4),
-            WorkspaceStep::Step4 => Some(WorkspaceStep::Step5),
-            WorkspaceStep::Step5 => None,
+            Self::Step2 => Some(Self::Step3),
+            Self::Step3 => Some(Self::Step4),
+            Self::Step4 => Some(Self::Step5),
+            Self::Step5 => None,
         }
     }
 }
 
 #[derive(Debug, Clone)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "workspace view state preserves independent UI workflow flags"
+)]
 pub struct WorkspaceViewState {
     pub modlist_id: String,
     pub modlist_name: String,

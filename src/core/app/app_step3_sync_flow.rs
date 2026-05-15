@@ -7,11 +7,11 @@ use crate::app::controller::step3_sync::{build_step3_items, collect_parent_block
 use crate::app::state::{Step3ItemState, WizardState};
 
 pub(crate) fn sync_step3_from_step2(state: &mut WizardState) {
-    let bgee_fresh = build_step3_items(&state.step2.bgee_mods);
-    let bg2ee_fresh = build_step3_items(&state.step2.bg2ee_mods);
+    let primary_game_fresh = build_step3_items(&state.step2.bgee_mods);
+    let secondary_game_fresh = build_step3_items(&state.step2.bg2ee_mods);
 
-    state.step3.bgee_items = reconcile_step3_items(&state.step3.bgee_items, bgee_fresh);
-    state.step3.bg2ee_items = reconcile_step3_items(&state.step3.bg2ee_items, bg2ee_fresh);
+    state.step3.bgee_items = reconcile_step3_items(&state.step3.bgee_items, primary_game_fresh);
+    state.step3.bg2ee_items = reconcile_step3_items(&state.step3.bg2ee_items, secondary_game_fresh);
     state.step3.bgee_collapsed_blocks = collect_parent_block_ids(&state.step3.bgee_items);
     state.step3.bg2ee_collapsed_blocks = collect_parent_block_ids(&state.step3.bg2ee_items);
     state.step3.bgee_clone_seq = 1;
@@ -103,7 +103,7 @@ fn rebuild_parent_blocks(children: Vec<Step3ItemState>) -> Vec<Step3ItemState> {
             last_parent_key = next_parent_key;
         }
 
-        child.block_id = current_block_id.clone();
+        child.block_id.clone_from(&current_block_id);
         child.is_parent = false;
         child.parent_placeholder = false;
         out.push(child);

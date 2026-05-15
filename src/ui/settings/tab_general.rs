@@ -93,7 +93,7 @@ fn settings_row(
     let response = egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(
             0,
-            REDESIGN_SETTINGS_ROW_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_SETTINGS_ROW_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             ui.set_width(row_width);
@@ -151,8 +151,8 @@ fn render_language_combo(ui: &mut egui::Ui, palette: ThemePalette, language: &mu
         ))
         .corner_radius(REDESIGN_BORDER_RADIUS_PX)
         .inner_margin(egui::Margin::symmetric(
-            REDESIGN_BUTTON_SMALL_PADDING_X_PX as i8,
-            REDESIGN_BUTTON_SMALL_PADDING_Y_PX as i8,
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_SMALL_PADDING_X_PX),
+            crate::ui::shared::redesign_tokens::redesign_i8_px(REDESIGN_BUTTON_SMALL_PADDING_Y_PX),
         ))
         .show(ui, |ui| {
             egui::ComboBox::from_id_salt("settings_general_language")

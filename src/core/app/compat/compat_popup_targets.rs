@@ -3,7 +3,7 @@
 
 use crate::app::compat_issue::CompatIssue;
 use crate::app::selection_refs::normalize_mod_key;
-use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
+use crate::parser::{Token, tokenize};
 
 pub(crate) fn issue_related_target(issue: &CompatIssue) -> Option<(String, Option<u32>)> {
     explicit_related_target(Some(issue.related_mod.as_str()), issue.related_component)
@@ -52,7 +52,9 @@ pub(crate) fn extract_first_jump_target(
             index += 1;
             continue;
         };
-        let Some(component_ref) = token_value(tokens.get(index + 2)).and_then(parse_component_id)
+        let Some(component_ref) = token_value(tokens.get(index + 2))
+            .as_deref()
+            .and_then(parse_component_id)
         else {
             index += 1;
             continue;
@@ -70,13 +72,10 @@ fn token_value(token: Option<&Token>) -> Option<String> {
     }
 }
 
-fn parse_component_id(value: String) -> Option<u32> {
+fn parse_component_id(value: &str) -> Option<u32> {
     let trimmed = value
         .trim()
         .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
-    let digits: String = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
+    let digits: String = trimmed.chars().take_while(char::is_ascii_digit).collect();
     digits.parse::<u32>().ok()
 }

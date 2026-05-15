@@ -10,7 +10,7 @@ use crate::registry::store::RegistryStore;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 
-const DEFAULT_DEBOUNCE: Duration = Duration::from_millis(1000);
+const DEFAULT_DEBOUNCE: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone)]
 pub struct RegistryPersistenceCycle {
@@ -22,10 +22,12 @@ pub struct RegistryPersistenceCycle {
 }
 
 impl RegistryPersistenceCycle {
+    #[must_use]
     pub fn new(last_saved_registry: ModlistRegistry) -> Self {
         Self::with_debounce(last_saved_registry, DEFAULT_DEBOUNCE)
     }
 
+    #[must_use]
     pub fn with_debounce(last_saved_registry: ModlistRegistry, debounce: Duration) -> Self {
         Self {
             last_saved_registry,
@@ -254,7 +256,7 @@ mod tests {
         let registry = registry_with_id("demo");
         let mut cycle = RegistryPersistenceCycle::with_debounce(
             ModlistRegistry::default(),
-            Duration::from_secs(60),
+            Duration::from_mins(1),
         );
 
         cycle

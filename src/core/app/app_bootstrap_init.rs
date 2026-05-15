@@ -4,6 +4,7 @@
 use crate::app::controller::step3_sync::scrub_dev_settings;
 use crate::app::controller::util::current_exe_fingerprint;
 use crate::app::state::Step1State;
+use crate::settings::model::AppSettings;
 use crate::settings::store::SettingsStore;
 
 pub(crate) struct AppBootstrap {
@@ -29,7 +30,7 @@ pub(crate) fn initialize(dev_mode: bool) -> AppBootstrap {
         Ok(value) => value,
         Err(err) => {
             startup_warnings.push(format!("settings load failed: {err}"));
-            Default::default()
+            AppSettings::default()
         }
     };
     let mut step1 = Step1State::from(loaded.step1);

@@ -110,7 +110,15 @@ pub struct OrchestratorApp {
     step5_pending_start: Option<PendingInstallStart>,
 }
 
+struct ShellRenderState {
+    modlist_count: usize,
+    install_runtime_busy: bool,
+    clean_install_success: bool,
+    current_workspace_entry: CurrentWorkspaceEntrySummary,
+}
+
 impl OrchestratorApp {
+    #[must_use]
     pub fn new(dev_mode: bool) -> Self {
         let bootstrap = crate::app::app_bootstrap_init::initialize(dev_mode);
         let mut wizard_state = WizardState {
@@ -151,7 +159,7 @@ impl OrchestratorApp {
             exe_fingerprint: bootstrap.exe_fingerprint,
             theme_palette: redesign_settings.theme_palette,
             redesign_settings_store,
-            redesign_settings: redesign_settings.clone(),
+            redesign_settings,
             registry_store,
             registry,
             registry_error,
@@ -190,9 +198,11 @@ impl OrchestratorApp {
         };
 
         let workspaces: HashMap<String, ModlistWorkspaceState> =
-            current_workspace_map(&self.workspace_view_state, &self.current_workspace);
-        let workspace_stores: HashMap<String, WorkspaceStore> =
-            current_workspace_store_map(&self.workspace_view_state, &self.current_workspace_store);
+            current_workspace_map(&self.workspace_view_state, self.current_workspace.as_ref());
+        let workspace_stores: HashMap<String, WorkspaceStore> = current_workspace_store_map(
+            &self.workspace_view_state,
+            self.current_workspace_store.as_ref(),
+        );
         if let Err(err) = persistence.flush_all(
             registry,
             &self.registry_store,
@@ -202,11 +212,8 @@ impl OrchestratorApp {
             eprintln!("Failed to flush modlist registry on shutdown: {err}");
         }
     }
-}
 
-impl eframe::App for OrchestratorApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let previous_nav = self.nav.clone();
+    fn poll_update_before_render(&mut self) -> bool {
         oauth_glue::poll_github_flow(&mut self.wizard_state, &mut self.github_auth_rx);
         self.sync_settings_paths_to_step1();
         if validate_debounce::tick(&mut self.settings_screen_state, std::time::Instant::now()) {
@@ -215,7 +222,7 @@ impl eframe::App for OrchestratorApp {
             );
         }
         let install_was_running = self.wizard_state.step5.install_running;
-        let mut step5_requested_repaint = crate::app::app_update_cycle::poll_before_render(
+        let step5_requested_repaint = crate::app::app_update_cycle::poll_before_render(
             &mut self.wizard_state,
             &mut self.step2_scan_rx,
             &mut self.step2_cancel,
@@ -231,130 +238,166 @@ impl eframe::App for OrchestratorApp {
         if !install_was_running && self.wizard_state.step5.install_running {
             self.step5_console_view.request_input_focus = true;
         }
-        let _ = (
-            &self.wizard_state,
-            &self.settings_store,
-            self.dev_mode,
-            &self.exe_fingerprint,
-            &self.settings_screen_state,
-            self.original_cli_dev_mode,
-        );
-        let nav_status = nav_status::compute_path_validation_summary(&self.wizard_state);
-        let modlist_count = self
-            .registry
-            .as_ref()
-            .map_or(0, |registry| registry.entries.len());
-        let install_runtime_busy = self.is_install_runtime_busy();
-        let clean_install_success = self.is_clean_install_success();
-        let rail_locked_tooltip = install_runtime_busy.then_some(INSTALL_NAV_LOCK_TOOLTIP);
-        let current_workspace_entry = self.current_workspace_entry_summary();
+        step5_requested_repaint
+    }
 
-        shell_chrome::render_shell(ctx, self.theme_palette, modlist_count, 0, |ui| {
-            egui::SidePanel::left("orchestrator_nav")
-                .exact_width(REDESIGN_NAV_WIDTH_PX)
-                .resizable(false)
-                .frame(egui::Frame::NONE)
-                .show_inside(ui, |ui| {
-                    nav_rail::render(
+    fn render_orchestrator_shell(
+        &mut self,
+        ctx: &egui::Context,
+        nav_status: &nav_status::PathValidationSummary,
+        shell_state: &ShellRenderState,
+    ) {
+        let rail_locked_tooltip = shell_state
+            .install_runtime_busy
+            .then_some(INSTALL_NAV_LOCK_TOOLTIP);
+        shell_chrome::render_shell(
+            ctx,
+            self.theme_palette,
+            shell_state.modlist_count,
+            0,
+            |ui| {
+                self.render_nav_panel(ui, nav_status, rail_locked_tooltip);
+                self.render_central_panel(ui, shell_state);
+            },
+        );
+    }
+
+    fn render_nav_panel(
+        &mut self,
+        ui: &mut egui::Ui,
+        nav_status: &nav_status::PathValidationSummary,
+        rail_locked_tooltip: Option<&str>,
+    ) {
+        egui::SidePanel::left("orchestrator_nav")
+            .exact_width(REDESIGN_NAV_WIDTH_PX)
+            .resizable(false)
+            .frame(egui::Frame::NONE)
+            .show_inside(ui, |ui| {
+                nav_rail::render(
+                    ui,
+                    self.theme_palette,
+                    &mut self.nav,
+                    nav_status,
+                    rail_locked_tooltip,
+                );
+            });
+    }
+
+    fn render_central_panel(&mut self, ui: &mut egui::Ui, shell_state: &ShellRenderState) {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(redesign_shell_bg(self.theme_palette)))
+            .show_inside(ui, |ui| {
+                if let Some(err) = self.registry_error.as_ref() {
+                    registry_error_panel::render_registry_error(
                         ui,
                         self.theme_palette,
-                        &mut self.nav,
-                        &nav_status,
-                        rail_locked_tooltip,
+                        err,
+                        self.registry_backup_path.as_deref(),
                     );
-                });
+                } else {
+                    self.render_active_page(ui, shell_state);
+                }
+            });
+    }
 
-            egui::CentralPanel::default()
-                .frame(egui::Frame::NONE.fill(redesign_shell_bg(self.theme_palette)))
-                .show_inside(ui, |ui| {
-                    if let Some(err) = self.registry_error.as_ref() {
-                        registry_error_panel::render_registry_error(
-                            ui,
-                            self.theme_palette,
-                            err,
-                            self.registry_backup_path.as_deref(),
-                        );
-                    } else {
-                        if let NavDestination::Workspace {
-                            modlist_id: Some(id),
-                        } = self.nav.clone()
-                        {
-                            self.ensure_workspace_loaded(&id);
-                        }
-                        let action = if matches!(
-                            self.nav,
-                            NavDestination::Workspace {
-                                modlist_id: Some(_)
-                            }
-                        ) {
-                            if let Some(step5_action) = workspace_view::render_with_step5_runtime(
-                                ui,
-                                self.theme_palette,
-                                &mut self.workspace_view_state,
-                                &mut self.wizard_state,
-                                WorkspaceRuntimeOptions {
-                                    step5_runtime: Some(WorkspaceStep5Runtime {
-                                        console_view: &mut self.step5_console_view,
-                                        terminal: self.step5_terminal.as_mut(),
-                                        terminal_error: self.step5_terminal_error.as_deref(),
-                                    }),
-                                    disable_prev: install_runtime_busy || clean_install_success,
-                                    latest_share_code: current_workspace_entry
-                                        .latest_share_code
-                                        .as_deref(),
-                                    step5_success_info: WorkspaceStep5SuccessInfo {
-                                        mod_count: current_workspace_entry.mod_count,
-                                        component_count: current_workspace_entry.component_count,
-                                    },
-                                },
-                                self.dev_mode,
-                                self.exe_fingerprint.as_str(),
-                            ) {
-                                self.handle_workspace_step5_action(step5_action);
-                            }
-                            None
-                        } else {
-                            page_router::render(
-                                ui,
-                                self.theme_palette,
-                                page_router::PageRouterContext {
-                                    nav: &self.nav,
-                                    dev_mode: self.dev_mode,
-                                    dev_seed_message: self.dev_seed_message.as_deref(),
-                                    home_state: &mut self.home_screen_state,
-                                    create_state: &mut self.create_screen_state,
-                                    install_state: &mut self.install_screen_state,
-                                    registry: self.registry.as_ref(),
-                                    wizard_state: &mut self.wizard_state,
-                                    settings_state: &mut self.settings_screen_state,
-                                    workspace_state: &mut self.workspace_view_state,
-                                    step5_console_view: &mut self.step5_console_view,
-                                    step5_terminal: self.step5_terminal.as_mut(),
-                                    step5_terminal_error: self.step5_terminal_error.as_deref(),
-                                    exe_fingerprint: self.exe_fingerprint.as_str(),
-                                },
-                            )
-                        };
-                        if self.settings_screen_state.take_general_changed() {
-                            self.sync_redesign_settings_from_general();
-                        }
-                        if let Some(action) = action {
-                            self.handle_page_action(action);
-                        }
-                        if let Some(text) = self.pending_clipboard_text.take() {
-                            ctx.copy_text(text);
-                        }
-                        if self.workspace_view_state.save_draft_requested {
-                            self.workspace_view_state.save_draft_requested = false;
-                            if self.flush_current_workspace_state().is_ok() {
-                                self.workspace_view_state.save_draft_flash_until =
-                                    Some(Instant::now() + Duration::from_millis(1600));
-                            }
-                        }
-                    }
-                });
-        });
+    fn render_active_page(&mut self, ui: &mut egui::Ui, shell_state: &ShellRenderState) {
+        if let NavDestination::Workspace {
+            modlist_id: Some(id),
+        } = self.nav.clone()
+        {
+            self.ensure_workspace_loaded(&id);
+        }
+        let action = if matches!(
+            self.nav,
+            NavDestination::Workspace {
+                modlist_id: Some(_)
+            }
+        ) {
+            self.render_workspace_page(ui, shell_state);
+            None
+        } else {
+            self.render_routed_page(ui)
+        };
+        if self.settings_screen_state.take_general_changed() {
+            self.sync_redesign_settings_from_general();
+        }
+        if let Some(action) = action {
+            self.handle_page_action(action);
+        }
+        if let Some(text) = self.pending_clipboard_text.take() {
+            ui.ctx().copy_text(text);
+        }
+        self.flush_workspace_draft_if_requested();
+    }
 
+    fn render_workspace_page(&mut self, ui: &mut egui::Ui, shell_state: &ShellRenderState) {
+        if let Some(step5_action) = workspace_view::render_with_step5_runtime(
+            ui,
+            self.theme_palette,
+            &mut self.workspace_view_state,
+            &mut self.wizard_state,
+            WorkspaceRuntimeOptions {
+                step5_runtime: Some(WorkspaceStep5Runtime {
+                    console_view: &mut self.step5_console_view,
+                    terminal: self.step5_terminal.as_mut(),
+                    terminal_error: self.step5_terminal_error.as_deref(),
+                }),
+                disable_prev: shell_state.install_runtime_busy || shell_state.clean_install_success,
+                latest_share_code: shell_state
+                    .current_workspace_entry
+                    .latest_share_code
+                    .as_deref(),
+                step5_success_info: WorkspaceStep5SuccessInfo {
+                    mod_count: shell_state.current_workspace_entry.mod_count,
+                    component_count: shell_state.current_workspace_entry.component_count,
+                },
+            },
+            self.dev_mode,
+            self.exe_fingerprint.as_str(),
+        ) {
+            self.handle_workspace_step5_action(step5_action);
+        }
+    }
+
+    fn render_routed_page(&mut self, ui: &mut egui::Ui) -> Option<page_router::PageAction> {
+        page_router::render(
+            ui,
+            self.theme_palette,
+            page_router::PageRouterContext {
+                nav: &self.nav,
+                dev_mode: self.dev_mode,
+                dev_seed_message: self.dev_seed_message.as_deref(),
+                home_state: &mut self.home_screen_state,
+                create_state: &mut self.create_screen_state,
+                install_state: &mut self.install_screen_state,
+                registry: self.registry.as_ref(),
+                wizard_state: &mut self.wizard_state,
+                settings_state: &mut self.settings_screen_state,
+                workspace_state: &mut self.workspace_view_state,
+                step5_console_view: &mut self.step5_console_view,
+                step5_terminal: self.step5_terminal.as_mut(),
+                step5_terminal_error: self.step5_terminal_error.as_deref(),
+                exe_fingerprint: self.exe_fingerprint.as_str(),
+            },
+        )
+    }
+
+    fn flush_workspace_draft_if_requested(&mut self) {
+        if self.workspace_view_state.save_draft_requested {
+            self.workspace_view_state.save_draft_requested = false;
+            if self.flush_current_workspace_state().is_ok() {
+                self.workspace_view_state.save_draft_flash_until =
+                    Some(Instant::now() + Duration::from_millis(1600));
+            }
+        }
+    }
+
+    fn finish_update_after_render(
+        &mut self,
+        ctx: &egui::Context,
+        previous_nav: &NavDestination,
+        mut step5_requested_repaint: bool,
+    ) {
         let install_was_running = self.wizard_state.step5.install_running;
         step5_requested_repaint |= crate::app::app_update_cycle::start_after_render(
             &mut self.wizard_state,
@@ -371,7 +414,7 @@ impl eframe::App for OrchestratorApp {
         }
         self.record_install_success_if_needed();
 
-        if workspace_nav_changed_away(&previous_nav, &self.nav) {
+        if workspace_nav_changed_away(previous_nav, &self.nav) {
             let _ = self.flush_current_workspace_state();
         }
 
@@ -382,19 +425,51 @@ impl eframe::App for OrchestratorApp {
         if self.github_auth_rx.is_some() || self.wizard_state.github_auth_running {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
-        if crate::app::app_update_cycle::needs_repaint(
-            &self.github_auth_rx,
-            &self.step2_scan_rx,
-            &self.step2_progress_queue,
-            &self.step2_update_check_rx,
-            &self.step2_update_download_rx,
-            &self.step2_update_extract_rx,
-            &self.step5_terminal,
-            &self.step5_prep_rx,
-            &self.wizard_state,
-        ) {
+        if self.needs_runtime_repaint() {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
+    }
+
+    fn needs_runtime_repaint(&self) -> bool {
+        crate::app::app_update_cycle::needs_repaint(
+            self.github_auth_rx.as_ref(),
+            self.step2_scan_rx.as_ref(),
+            &self.step2_progress_queue,
+            self.step2_update_check_rx.as_ref(),
+            self.step2_update_download_rx.as_ref(),
+            self.step2_update_extract_rx.as_ref(),
+            self.step5_terminal.as_ref(),
+            self.step5_prep_rx.as_ref(),
+            &self.wizard_state,
+        )
+    }
+}
+
+impl eframe::App for OrchestratorApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let previous_nav = self.nav.clone();
+        let step5_requested_repaint = self.poll_update_before_render();
+        let _ = (
+            &self.wizard_state,
+            &self.settings_store,
+            self.dev_mode,
+            &self.exe_fingerprint,
+            &self.settings_screen_state,
+            self.original_cli_dev_mode,
+        );
+        let nav_status = nav_status::compute_path_validation_summary(&self.wizard_state);
+        let modlist_count = self
+            .registry
+            .as_ref()
+            .map_or(0, |registry| registry.entries.len());
+        let shell_state = ShellRenderState {
+            modlist_count,
+            install_runtime_busy: self.is_install_runtime_busy(),
+            clean_install_success: self.is_clean_install_success(),
+            current_workspace_entry: self.current_workspace_entry_summary(),
+        };
+        self.render_orchestrator_shell(ctx, &nav_status, &shell_state);
+        self.finish_update_after_render(ctx, &previous_nav, step5_requested_repaint);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -435,7 +510,7 @@ impl OrchestratorApp {
                 self.handle_home_action(action);
             }
             page_router::PageAction::Create(action) => {
-                self.handle_create_action(action);
+                Self::handle_create_action(action);
             }
             page_router::PageAction::Install(action) => {
                 self.handle_install_action(action);
@@ -445,12 +520,12 @@ impl OrchestratorApp {
 
     fn handle_install_action(&mut self, action: InstallAction) {
         match action {
-            InstallAction::Step5(action) => self.handle_step5_action(action),
+            InstallAction::Step5(action) => self.handle_step5_action(&action),
             InstallAction::BeginInstallPreviewAccepted => self.begin_install_preview_accepted(),
         }
     }
 
-    fn handle_create_action(&mut self, action: CreateAction) {
+    const fn handle_create_action(action: CreateAction) {
         match action {
             CreateAction::StartNewModlist
             | CreateAction::PasteShareCode
@@ -529,7 +604,7 @@ impl OrchestratorApp {
         }
     }
 
-    fn open_home_install_folder(&mut self, modlist_id: &str) {
+    fn open_home_install_folder(&self, modlist_id: &str) {
         let Some(entry) = self.registry_entry(modlist_id) else {
             return;
         };
@@ -666,7 +741,7 @@ impl OrchestratorApp {
         }
     }
 
-    fn handle_step5_action(&mut self, action: Step5Action) {
+    fn handle_step5_action(&mut self, action: &Step5Action) {
         match action {
             Step5Action::StartInstall => {
                 let result = self
@@ -748,7 +823,7 @@ impl OrchestratorApp {
 
     fn handle_workspace_step5_action(&mut self, action: WorkspaceStep5Action) {
         match action {
-            WorkspaceStep5Action::Step5(action) => self.handle_step5_action(action),
+            WorkspaceStep5Action::Step5(action) => self.handle_step5_action(&action),
             WorkspaceStep5Action::ReturnToHome => {
                 self.nav = NavDestination::Home;
             }
@@ -758,7 +833,7 @@ impl OrchestratorApp {
         }
     }
 
-    fn open_current_workspace_install_folder(&mut self) {
+    fn open_current_workspace_install_folder(&self) {
         let Some(modlist_id) = self.workspace_view_state.loaded_workspace_id.as_deref() else {
             return;
         };
@@ -774,7 +849,7 @@ impl OrchestratorApp {
         }
     }
 
-    fn is_install_runtime_busy(&self) -> bool {
+    const fn is_install_runtime_busy(&self) -> bool {
         self.wizard_state.step5.prep_running
             || self.wizard_state.step5.install_running
             || self.wizard_state.step5.cancel_pending
@@ -984,12 +1059,12 @@ fn workspace_store_for_entry(entry: &crate::registry::model::ModlistEntry) -> Wo
 
 fn current_workspace_map(
     state: &WorkspaceViewState,
-    workspace: &Option<ModlistWorkspaceState>,
+    workspace: Option<&ModlistWorkspaceState>,
 ) -> HashMap<String, ModlistWorkspaceState> {
     let Some(modlist_id) = state.loaded_workspace_id.as_ref() else {
         return HashMap::new();
     };
-    let Some(workspace) = workspace.as_ref() else {
+    let Some(workspace) = workspace else {
         return HashMap::new();
     };
     HashMap::from([(modlist_id.clone(), workspace.clone())])
@@ -997,18 +1072,18 @@ fn current_workspace_map(
 
 fn current_workspace_store_map(
     state: &WorkspaceViewState,
-    store: &Option<WorkspaceStore>,
+    store: Option<&WorkspaceStore>,
 ) -> HashMap<String, WorkspaceStore> {
     let Some(modlist_id) = state.loaded_workspace_id.as_ref() else {
         return HashMap::new();
     };
-    let Some(store) = store.as_ref() else {
+    let Some(store) = store else {
         return HashMap::new();
     };
     HashMap::from([(modlist_id.clone(), store.clone())])
 }
 
-fn workspace_nav_changed_away(previous: &NavDestination, next: &NavDestination) -> bool {
+const fn workspace_nav_changed_away(previous: &NavDestination, next: &NavDestination) -> bool {
     matches!(
         previous,
         NavDestination::Workspace {
@@ -1031,10 +1106,16 @@ fn initialize_settings_paths_from_step1(
     settings.bg2ee_source_path =
         first_non_empty(&step1.bg2ee_game_folder, &step1.eet_bg2ee_game_folder);
     if step1.game_install == "IWDEE" {
-        settings.iwdee_source_path = step1.bgee_game_folder.clone();
+        settings
+            .iwdee_source_path
+            .clone_from(&step1.bgee_game_folder);
     }
-    settings.mods_archive_path = step1.mods_archive_folder.clone();
-    settings.mods_backup_path = step1.mods_backup_folder.clone();
+    settings
+        .mods_archive_path
+        .clone_from(&step1.mods_archive_folder);
+    settings
+        .mods_backup_path
+        .clone_from(&step1.mods_backup_folder);
 }
 
 fn first_non_empty(primary: &str, fallback: &str) -> String {

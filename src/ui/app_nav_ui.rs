@@ -59,16 +59,16 @@ mod actions {
         );
     }
 
-    pub(super) fn handle_clean_confirm_no(app: &mut WizardApp) {
+    pub(super) const fn handle_clean_confirm_no(app: &mut WizardApp) {
         crate::app::app_nav_actions::handle_clean_confirm_no(&mut app.state);
     }
 
-    pub(super) fn dismiss_step4_save_error(app: &mut WizardApp) {
+    pub(super) const fn dismiss_step4_save_error(app: &mut WizardApp) {
         crate::app::app_nav_actions::dismiss_step4_save_error(&mut app.state);
     }
 }
 
-pub(crate) fn current_step(app: &WizardApp) -> usize {
+pub(crate) const fn current_step(app: &WizardApp) -> usize {
     super::nav::current_step(&app.state)
 }
 
@@ -76,23 +76,23 @@ pub(crate) fn can_advance(app: &WizardApp) -> bool {
     super::nav::can_advance_from_current_step(&app.state)
 }
 
-pub(crate) fn can_go_back(app: &WizardApp) -> bool {
+pub(crate) const fn can_go_back(app: &WizardApp) -> bool {
     super::nav::can_go_back(&app.state)
 }
 
-pub(crate) fn on_last_step(app: &WizardApp) -> bool {
+pub(crate) const fn on_last_step(app: &WizardApp) -> bool {
     super::nav::on_last_step(&app.state)
 }
 
-pub(crate) fn step5_install_running(app: &WizardApp) -> bool {
+pub(crate) const fn step5_install_running(app: &WizardApp) -> bool {
     super::nav::step5_install_running(&app.state)
 }
 
-pub(crate) fn step1_clean_confirm_open(app: &WizardApp) -> bool {
+pub(crate) const fn step1_clean_confirm_open(app: &WizardApp) -> bool {
     super::nav::step1_clean_confirm_open(&app.state)
 }
 
-pub(crate) fn step4_save_error_open(app: &WizardApp) -> bool {
+pub(crate) const fn step4_save_error_open(app: &WizardApp) -> bool {
     super::nav::step4_save_error_open(&app.state)
 }
 
@@ -124,10 +124,10 @@ pub(crate) fn handle_clean_confirm_yes(app: &mut WizardApp) {
     actions::handle_clean_confirm_yes(app);
 }
 
-pub(crate) fn handle_clean_confirm_no(app: &mut WizardApp) {
+pub(crate) const fn handle_clean_confirm_no(app: &mut WizardApp) {
     actions::handle_clean_confirm_no(app);
 }
 
-pub(crate) fn dismiss_step4_save_error(app: &mut WizardApp) {
+pub(crate) const fn dismiss_step4_save_error(app: &mut WizardApp) {
     actions::dismiss_step4_save_error(app);
 }

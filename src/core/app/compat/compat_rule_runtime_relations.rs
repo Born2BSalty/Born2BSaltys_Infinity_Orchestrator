@@ -10,11 +10,11 @@ use super::{
     CompatActiveItem, matches::string_or_many_items, non_empty, normalize_kind, normalize_mod_key,
 };
 
-pub(crate) fn rule_uses_related_target(rule: &CompatRule) -> bool {
+pub(super) fn rule_uses_related_target(rule: &CompatRule) -> bool {
     !string_or_many_items(rule.related_mod.as_ref()).is_empty()
 }
 
-pub(crate) fn rule_uses_path_requirement(rule: &CompatRule) -> bool {
+pub(super) fn rule_uses_path_requirement(rule: &CompatRule) -> bool {
     non_empty(rule.path_field.as_deref()).is_some()
 }
 
@@ -204,13 +204,11 @@ fn target_matches_one(
         return false;
     }
 
-    if let Some(component_id) = non_empty(related_component) {
+    non_empty(related_component).is_none_or(|component_id| {
         item.component_id
             .trim()
             .eq_ignore_ascii_case(component_id.trim())
-    } else {
-        true
-    }
+    })
 }
 
 fn related_targets(rule: &CompatRule) -> Vec<(String, Option<String>)> {

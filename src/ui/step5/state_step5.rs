@@ -4,6 +4,10 @@
 use crate::app::state::WizardState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "console view state preserves independent UI toggle flags"
+)]
 pub struct Step5ConsoleViewState {
     pub important_only: bool,
     pub installed_only: bool,
@@ -24,6 +28,7 @@ impl Default for Step5ConsoleViewState {
     }
 }
 
-pub fn install_in_progress(state: &WizardState) -> bool {
+#[must_use]
+pub const fn install_in_progress(state: &WizardState) -> bool {
     state.step5.prep_running || state.step5.install_running || state.step5.cancel_pending
 }

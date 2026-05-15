@@ -60,14 +60,12 @@ pub(crate) fn spawn_update_check_worker(
                     request.canonical.clone(),
                 );
                 if let Ok(mut guard) = outcomes.lock() {
-                    guard.extend(fan_out_update_check_outcome(outcome, &request.targets));
+                    guard.extend(fan_out_update_check_outcome(&outcome, &request.targets));
                 }
-                let done = if let Ok(mut guard) = completed.lock() {
+                let done = completed.lock().map_or(0, |mut guard| {
                     *guard += 1;
                     *guard
-                } else {
-                    0
-                };
+                });
                 let _ = tx.send(Step2UpdateCheckEvent::Progress(Step2UpdateCheckProgress {
                     completed: done,
                     total,
@@ -78,7 +76,7 @@ pub(crate) fn spawn_update_check_worker(
 
     thread::spawn(move || {
         loop {
-            let done = completed.lock().map(|value| *value).unwrap_or(0);
+            let done = completed.lock().map_or(0, |value| *value);
             if done >= total {
                 let final_outcomes = outcomes
                     .lock()
@@ -183,17 +181,17 @@ fn update_check_request_key(request: &Step2UpdateCheckRequest) -> String {
 }
 
 fn fan_out_update_check_outcome(
-    outcome: Step2UpdateCheckOutcome,
+    outcome: &Step2UpdateCheckOutcome,
     targets: &[Step2UpdateCheckRequest],
 ) -> Vec<Step2UpdateCheckOutcome> {
     targets
         .iter()
         .map(|target| {
             let mut expanded = outcome.clone();
-            expanded.game_tab = target.game_tab.clone();
-            expanded.tp_file = target.tp_file.clone();
-            expanded.label = target.label.clone();
-            expanded.source_id = target.source_id.clone();
+            expanded.game_tab.clone_from(&target.game_tab);
+            expanded.tp_file.clone_from(&target.tp_file);
+            expanded.label.clone_from(&target.label);
+            expanded.source_id.clone_from(&target.source_id);
             expanded
         })
         .collect()

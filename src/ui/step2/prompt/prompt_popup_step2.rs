@@ -8,7 +8,7 @@ use crate::app::prompt_popup_text::PromptToolbarModEntry;
 use crate::app::state::{PromptPopupMode, WizardState};
 use crate::ui::shared::layout_tokens_global::{SPACE_MD, SPACE_SM, SPACE_XS};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_PX, REDESIGN_BIO_SMALL_BUTTON_HEIGHT_PX,
+    REDESIGN_BIO_PILL_HEIGHT_PX, REDESIGN_BIO_PILL_RADIUS_U8, REDESIGN_BIO_SMALL_BUTTON_HEIGHT_PX,
     REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_numbers, redesign_border_soft,
     redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_shell_bg,
 };
@@ -26,7 +26,7 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState, palette: 
     let jump_ids = prompt_popup_nav::collect_text_prompt_jump_ids(state, &title, &text);
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
-    egui::Window::new(format!("Parsed prompts - {}", title))
+    egui::Window::new(format!("Parsed prompts - {title}"))
         .open(&mut open)
         .resizable(true)
         .collapsible(false)
@@ -109,7 +109,7 @@ pub(crate) fn draw_prompt_toolbar_badge(
                 REDESIGN_BORDER_WIDTH_PX,
                 redesign_prompt_stroke(palette),
             ))
-            .corner_radius(egui::CornerRadius::same(REDESIGN_BIO_PILL_RADIUS_PX as u8))
+            .corner_radius(egui::CornerRadius::same(REDESIGN_BIO_PILL_RADIUS_U8))
             .min_size(egui::vec2(0.0, REDESIGN_BIO_PILL_HEIGHT_PX)),
     )
     .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS)
@@ -124,7 +124,7 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
     )
 }
 
-fn render_prompt_toolbar_popup(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
+fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState, palette: ThemePalette) {
     let title = state.step2.prompt_popup_title.clone();
     let entries = prompt_popup_nav::collect_active_prompt_toolbar_entries(state);
     let mut open = state.step2.prompt_popup_open;

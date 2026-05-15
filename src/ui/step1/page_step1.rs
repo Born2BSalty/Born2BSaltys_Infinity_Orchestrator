@@ -67,7 +67,7 @@ pub fn render(
             } else {
                 for line in split_path_check_lines(&msg) {
                     ui.label(
-                        crate::ui::shared::typography_global::plain(format!("- {}", line))
+                        crate::ui::shared::typography_global::plain(format!("- {line}"))
                             .color(crate::ui::shared::theme_global::error()),
                     );
                 }
@@ -100,7 +100,7 @@ pub fn render(
     }
 }
 
-fn render_modlist_import_popup(ui: &mut egui::Ui, state: &mut WizardState) {
+fn render_modlist_import_popup(ui: &egui::Ui, state: &mut WizardState) {
     let mut open = state.modlist_import_window_open;
     if !open {
         return;
@@ -111,122 +111,158 @@ fn render_modlist_import_popup(ui: &mut egui::Ui, state: &mut WizardState) {
         .default_size(egui::vec2(720.0, 420.0))
         .show(ui.ctx(), |ui| {
             if state.modlist_import_preview_mode {
-                ui.label(crate::ui::shared::typography_global::strong(
-                    "BIO Modlist Import Preview",
-                ));
-                ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
-                render_modlist_import_tabs(ui, state);
-                ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
-                let preview_height = (ui.available_height() - 48.0).max(160.0);
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .max_height(preview_height)
-                    .show(ui, |ui| {
-                        ui.label(crate::ui::shared::typography_global::monospace(
-                            modlist_import_tab_text(state),
-                        ));
-                    });
-                ui.horizontal(|ui| {
-                    if ui.button("Back").clicked() {
-                        state.modlist_import_preview_mode = false;
-                    }
-                    if ui
-                        .add_enabled(
-                            state.modlist_import_ready,
-                            egui::Button::new("Import Modlist"),
-                        )
-                        .clicked()
-                    {
-                        let code = state.modlist_import_code.clone();
-                        match crate::app::modlist_share::import_modlist_share_code(state, &code) {
-                            Ok(preview) => {
-                                state.modlist_import_preview =
-                                    format_modlist_import_preview(&preview);
-                                state.modlist_import_error.clear();
-                                state.modlist_import_window_open = false;
-                                state.modlist_import_preview_mode = false;
-                                start_modlist_auto_build(state);
-                            }
-                            Err(err) => {
-                                state.modlist_import_error = err;
-                            }
-                        }
-                    }
-                    if ui.button("Cancel").clicked() {
-                        state.modlist_import_window_open = false;
-                        state.modlist_import_preview_mode = false;
-                    }
-                });
+                render_modlist_import_preview_mode(ui, state);
             } else {
-                ui.label("Paste a BIO-MODLIST-V1 share code.");
-                ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
-                let text_height = (ui.available_height() - 110.0).max(180.0);
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .max_height(text_height)
-                    .show(ui, |ui| {
-                        ui.add_sized(
-                            [ui.available_width(), text_height],
-                            egui::TextEdit::multiline(&mut state.modlist_import_code).code_editor(),
-                        );
-                    });
-                if !state.modlist_import_error.trim().is_empty() {
-                    ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
-                    ui.label(
-                        crate::ui::shared::typography_global::plain(&state.modlist_import_error)
-                            .color(crate::ui::shared::theme_global::error()),
-                    );
-                }
-                ui.horizontal(|ui| {
-                    if ui.button("Preview").clicked() {
-                        match crate::app::modlist_share::preview_modlist_share_code(
-                            &state.modlist_import_code,
-                        ) {
-                            Ok(preview) => {
-                                state.step1.game_install = preview.game_install.clone();
-                                state.step1.install_mode = preview.install_mode.clone();
-                                state.step1.sync_install_mode_flags();
-                                state.step1_path_check = None;
-                                state.modlist_import_preview =
-                                    format_modlist_import_preview(&preview);
-                                state.modlist_import_preview_bgee_log =
-                                    preview.bgee_log_text.clone();
-                                state.modlist_import_preview_bg2ee_log =
-                                    preview.bg2ee_log_text.clone();
-                                state.modlist_import_preview_source_overrides =
-                                    preview.source_overrides_text.clone();
-                                state.modlist_import_preview_installed_refs =
-                                    preview.installed_refs_text.clone();
-                                state.modlist_import_preview_mod_configs =
-                                    preview.mod_configs_text.clone();
-                                state.modlist_import_error.clear();
-                                state.modlist_import_ready = true;
-                                state.modlist_import_preview_mode = true;
-                                state.modlist_import_preview_tab = "Summary".to_string();
-                            }
-                            Err(err) => {
-                                state.modlist_import_preview.clear();
-                                state.modlist_import_preview_bgee_log.clear();
-                                state.modlist_import_preview_bg2ee_log.clear();
-                                state.modlist_import_preview_source_overrides.clear();
-                                state.modlist_import_preview_installed_refs.clear();
-                                state.modlist_import_preview_mod_configs.clear();
-                                state.modlist_import_error = err;
-                                state.modlist_import_ready = false;
-                                state.modlist_import_preview_mode = false;
-                            }
-                        }
-                    }
-                    if ui.button("Cancel").clicked() {
-                        state.modlist_import_window_open = false;
-                    }
-                });
+                render_modlist_import_input_mode(ui, state);
             }
         });
     state.modlist_import_window_open = open && state.modlist_import_window_open;
     if !state.modlist_import_window_open {
         state.modlist_import_preview_mode = false;
     }
+}
+
+fn render_modlist_import_preview_mode(ui: &mut egui::Ui, state: &mut WizardState) {
+    ui.label(crate::ui::shared::typography_global::strong(
+        "BIO Modlist Import Preview",
+    ));
+    ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
+    render_modlist_import_tabs(ui, state);
+    ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
+    let preview_height = (ui.available_height() - 48.0).max(160.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(preview_height)
+        .show(ui, |ui| {
+            ui.label(crate::ui::shared::typography_global::monospace(
+                modlist_import_tab_text(state),
+            ));
+        });
+    render_modlist_import_preview_actions(ui, state);
+}
+
+fn render_modlist_import_preview_actions(ui: &mut egui::Ui, state: &mut WizardState) {
+    ui.horizontal(|ui| {
+        if ui.button("Back").clicked() {
+            state.modlist_import_preview_mode = false;
+        }
+        if ui
+            .add_enabled(
+                state.modlist_import_ready,
+                egui::Button::new("Import Modlist"),
+            )
+            .clicked()
+        {
+            import_previewed_modlist(state);
+        }
+        if ui.button("Cancel").clicked() {
+            state.modlist_import_window_open = false;
+            state.modlist_import_preview_mode = false;
+        }
+    });
+}
+
+fn import_previewed_modlist(state: &mut WizardState) {
+    let code = state.modlist_import_code.clone();
+    match crate::app::modlist_share::import_modlist_share_code(state, &code) {
+        Ok(preview) => {
+            state.modlist_import_preview = format_modlist_import_preview(&preview);
+            state.modlist_import_error.clear();
+            state.modlist_import_window_open = false;
+            state.modlist_import_preview_mode = false;
+            start_modlist_auto_build(state);
+        }
+        Err(err) => {
+            state.modlist_import_error = err;
+        }
+    }
+}
+
+fn render_modlist_import_input_mode(ui: &mut egui::Ui, state: &mut WizardState) {
+    ui.label("Paste a BIO-MODLIST-V1 share code.");
+    ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
+    let text_height = (ui.available_height() - 110.0).max(180.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(text_height)
+        .show(ui, |ui| {
+            ui.add_sized(
+                [ui.available_width(), text_height],
+                egui::TextEdit::multiline(&mut state.modlist_import_code).code_editor(),
+            );
+        });
+    render_modlist_import_error(ui, state);
+    render_modlist_import_input_actions(ui, state);
+}
+
+fn render_modlist_import_error(ui: &mut egui::Ui, state: &WizardState) {
+    if !state.modlist_import_error.trim().is_empty() {
+        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
+        ui.label(
+            crate::ui::shared::typography_global::plain(&state.modlist_import_error)
+                .color(crate::ui::shared::theme_global::error()),
+        );
+    }
+}
+
+fn render_modlist_import_input_actions(ui: &mut egui::Ui, state: &mut WizardState) {
+    ui.horizontal(|ui| {
+        if ui.button("Preview").clicked() {
+            preview_modlist_import(state);
+        }
+        if ui.button("Cancel").clicked() {
+            state.modlist_import_window_open = false;
+        }
+    });
+}
+
+fn preview_modlist_import(state: &mut WizardState) {
+    match crate::app::modlist_share::preview_modlist_share_code(&state.modlist_import_code) {
+        Ok(preview) => apply_modlist_import_preview(state, &preview),
+        Err(err) => reject_modlist_import_preview(state, err),
+    }
+}
+
+fn apply_modlist_import_preview(
+    state: &mut WizardState,
+    preview: &crate::app::modlist_share::ModlistSharePreview,
+) {
+    state.step1.game_install.clone_from(&preview.game_install);
+    state.step1.install_mode.clone_from(&preview.install_mode);
+    state.step1.sync_install_mode_flags();
+    state.step1_path_check = None;
+    state.modlist_import_preview = format_modlist_import_preview(preview);
+    state
+        .modlist_import_preview_bgee_log
+        .clone_from(&preview.bgee_log_text);
+    state
+        .modlist_import_preview_bg2ee_log
+        .clone_from(&preview.bg2ee_log_text);
+    state
+        .modlist_import_preview_source_overrides
+        .clone_from(&preview.source_overrides_text);
+    state
+        .modlist_import_preview_installed_refs
+        .clone_from(&preview.installed_refs_text);
+    state
+        .modlist_import_preview_mod_configs
+        .clone_from(&preview.mod_configs_text);
+    state.modlist_import_error.clear();
+    state.modlist_import_ready = true;
+    state.modlist_import_preview_mode = true;
+    state.modlist_import_preview_tab = "Summary".to_string();
+}
+
+fn reject_modlist_import_preview(state: &mut WizardState, err: String) {
+    state.modlist_import_preview.clear();
+    state.modlist_import_preview_bgee_log.clear();
+    state.modlist_import_preview_bg2ee_log.clear();
+    state.modlist_import_preview_source_overrides.clear();
+    state.modlist_import_preview_installed_refs.clear();
+    state.modlist_import_preview_mod_configs.clear();
+    state.modlist_import_error = err;
+    state.modlist_import_ready = false;
+    state.modlist_import_preview_mode = false;
 }
 
 fn render_modlist_import_tabs(ui: &mut egui::Ui, state: &mut WizardState) {

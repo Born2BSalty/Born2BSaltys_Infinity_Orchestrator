@@ -4,7 +4,8 @@
 mod constraints {
     use crate::app::state::Step3ItemState;
 
-    pub(crate) fn snap_to_parent_boundary(remaining: &[Step3ItemState], target: usize) -> usize {
+    #[must_use]
+    pub fn snap_to_parent_boundary(remaining: &[Step3ItemState], target: usize) -> usize {
         let mut candidates: Vec<usize> = remaining
             .iter()
             .enumerate()
@@ -26,7 +27,8 @@ mod constraints {
         best
     }
 
-    pub(crate) fn enforce_child_parent_constraint(
+    #[must_use]
+    pub fn enforce_child_parent_constraint(
         remaining: &[Step3ItemState],
         insert_at: usize,
         moving: &[Step3ItemState],
@@ -65,7 +67,8 @@ mod constraints {
         if d_start <= d_end { start } else { end }
     }
 
-    pub(crate) fn hard_clamp_insert_at(
+    #[must_use]
+    pub fn hard_clamp_insert_at(
         remaining: &[Step3ItemState],
         insert_at: usize,
         moving: &[Step3ItemState],
@@ -116,7 +119,17 @@ mod constraints {
 }
 
 mod math {
-    pub(crate) fn compute_desired_block_start(
+    #[must_use]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "drag row positions are bounded UI coordinates converted to row indices"
+    )]
+    const fn floor_isize(value: f32) -> isize {
+        value.floor() as isize
+    }
+
+    #[must_use]
+    pub fn compute_desired_block_start(
         pointer_y: f32,
         list_top_y: f32,
         row_pitch: f32,
@@ -126,10 +139,10 @@ mod math {
         k: usize,
     ) -> usize {
         let row_pitch = row_pitch.max(1.0);
-        let desired_grabbed_row =
-            ((pointer_y - list_top_y - grab_offset) / row_pitch).floor() as isize;
-        let max_start = (n.saturating_sub(k)) as isize;
-        (desired_grabbed_row - grab_pos_in_block as isize).clamp(0, max_start) as usize
+        let desired_grabbed_row = floor_isize((pointer_y - list_top_y - grab_offset) / row_pitch);
+        let max_start = isize::try_from(n.saturating_sub(k)).unwrap_or(isize::MAX);
+        let grab_pos_in_block = isize::try_from(grab_pos_in_block).unwrap_or(isize::MAX);
+        usize::try_from((desired_grabbed_row - grab_pos_in_block).clamp(0, max_start)).unwrap_or(0)
     }
 }
 
@@ -138,7 +151,8 @@ mod slots {
 
     use crate::app::state::Step3ItemState;
 
-    pub(crate) fn visible_slot_to_insert_at(
+    #[must_use]
+    pub fn visible_slot_to_insert_at(
         items: &[Step3ItemState],
         block: &[usize],
         visible_rows: &[(usize, egui::Rect)],
@@ -177,11 +191,11 @@ mod slots {
     }
 }
 
-pub(crate) use constraints::enforce_child_parent_constraint;
-pub(crate) use constraints::hard_clamp_insert_at;
-pub(crate) use constraints::snap_to_parent_boundary;
-pub(crate) use math::compute_desired_block_start;
-pub(crate) use slots::visible_slot_to_insert_at;
+pub use constraints::enforce_child_parent_constraint;
+pub use constraints::hard_clamp_insert_at;
+pub use constraints::snap_to_parent_boundary;
+pub use math::compute_desired_block_start;
+pub use slots::visible_slot_to_insert_at;
 
 #[cfg(test)]
 mod tests {

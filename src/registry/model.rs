@@ -93,11 +93,11 @@ impl Default for ModlistEntry {
     }
 }
 
-fn default_format_version() -> u32 {
+const fn default_format_version() -> u32 {
     1
 }
 
-fn default_registry_timestamp() -> DateTime<Utc> {
+const fn default_registry_timestamp() -> DateTime<Utc> {
     DateTime::<Utc>::UNIX_EPOCH
 }
 

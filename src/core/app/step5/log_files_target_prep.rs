@@ -7,12 +7,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::app::state::Step1State;
 
-pub struct TargetPrepResult {
-    pub backups: Vec<PathBuf>,
-    pub cleaned: Vec<PathBuf>,
+pub(crate) struct TargetPrepResult {
+    pub(crate) backups: Vec<PathBuf>,
+    pub(crate) cleaned: Vec<PathBuf>,
 }
 
-pub fn prepare_target_dirs_before_install(step1: &Step1State) -> std::io::Result<TargetPrepResult> {
+pub(crate) fn prepare_target_dirs_before_install(
+    step1: &Step1State,
+) -> std::io::Result<TargetPrepResult> {
     let mut backups = Vec::new();
     let mut cleaned = Vec::new();
 
@@ -83,16 +85,14 @@ fn backup_target_dir_if_nonempty(target: &str) -> std::io::Result<Option<PathBuf
 
     let parent = target_path
         .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let name = target_path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("target");
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let backup = parent.join(format!("_bio_backup_{name}_{ts}"));
 
     fs::rename(&target_path, &backup)?;
