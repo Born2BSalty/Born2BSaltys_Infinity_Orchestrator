@@ -1042,8 +1042,9 @@ A `NameRow` at the top, then a 2-column grid of four settings:
 
 #### Your name row (NameRow)
 
-- Default display: name (e.g. `@b2bs`) + **`edit`** button. Hint: "credited as the author on any modlists you create or share".
+- Default display: name (e.g. `@b2bs`) + **`edit`** button. When no name is set, the value reads `click to set your name` in faint text (a deliberate affordance-forward choice over the wireframe's neutral `(not set)` — it tells a first-run user what to do). Hint: "credited as the author on any modlists you create or share".
 - Edit mode: real text input (200px wide), placeholder `@yourhandle`, **`save`** primary + `cancel`.
+- The NameRow renders inside the same `SettingsRow` chassis as the other General rows (label + hint stack on the left, control flush-right, dashed bottom rule) — it is not a bespoke standalone block.
 - The configured name is used as the `author` field whenever the user creates a share code.
 
 #### Other rows (2-col grid)

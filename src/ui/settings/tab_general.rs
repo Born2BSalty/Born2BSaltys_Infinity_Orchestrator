@@ -26,26 +26,31 @@ use crate::ui::shared::redesign_tokens::{
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
 
-    // NameRow.
-    let user_name = &mut orchestrator.redesign_settings.user_name;
-    let editing = &mut orchestrator.settings_screen_state.name_row_editing;
-    let buffer = &mut orchestrator.settings_screen_state.name_row_buffer;
+    // NameRow — the wireframe wraps this in the same `SettingsRow` chassis as
+    // every other General setting (label + hint stack on the left, control
+    // flush-right, dashed bottom rule). No separate section divider: each
+    // settings_row already carries its own dashed rule.
     let mut name_changed = false;
-    name_row::render(
+    settings_row(
         ui,
         palette,
         "Your name",
-        user_name,
-        editing,
-        buffer,
-        || name_changed = true,
+        "credited as the author on any modlists you create or share",
+        |ui| {
+            name_row::render(
+                ui,
+                palette,
+                &mut orchestrator.redesign_settings.user_name,
+                &mut orchestrator.settings_screen_state.name_row_editing,
+                &mut orchestrator.settings_screen_state.name_row_buffer,
+                || name_changed = true,
+            );
+        },
     );
     if name_changed {
         orchestrator.redesign_settings_dirty = true;
     }
 
-    ui.add_space(16.0);
-    section_divider(ui, palette);
     ui.add_space(12.0);
 
     // 2-column grid: row 1 = Theme | Language, row 2 = Validate | Diagnostic.
@@ -251,19 +256,3 @@ fn draw_dashed_horizontal(
     }
 }
 
-fn section_divider(ui: &mut egui::Ui, palette: ThemePalette) {
-    let rect = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover()).0;
-    let painter = ui.painter();
-    let x0 = rect.left();
-    let x1 = rect.right();
-    let y = rect.center().y;
-    let mut x = x0;
-    while x < x1 {
-        let xe = (x + 4.0).min(x1);
-        painter.line_segment(
-            [egui::pos2(x, y), egui::pos2(xe, y)],
-            egui::Stroke::new(1.0, redesign_text_muted(palette)),
-        );
-        x += 8.0;
-    }
-}
