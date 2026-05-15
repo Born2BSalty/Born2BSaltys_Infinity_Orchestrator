@@ -43,6 +43,23 @@ pub fn redesign_box<R>(
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
         .inner_margin(egui::Margin { left: 12, right: 12, top: 10, bottom: 10 });
 
+    let muted = redesign_text_muted(palette);
+    let bg = redesign_shell_bg(palette);
+
+    // The corner label straddles the box's top border — half of it sits
+    // ABOVE the box rect. If the box is the first element in a clip-bounded
+    // column (e.g. Home's right column), that half gets clipped off ("title
+    // bleeding off the top"). Measure the label up front and reserve its
+    // top-half as leading space so the straddling label lands inside the
+    // parent UI's content area.
+    let label_galley = label.map(|text| {
+        let font = egui::FontId::new(10.0, egui::FontFamily::Name("poppins_medium".into()));
+        ui.painter().layout_no_wrap(text.to_string(), font, muted)
+    });
+    if let Some(g) = &label_galley {
+        ui.add_space((g.size().y * 0.5).ceil());
+    }
+
     // Boxes are block-level containers (wireframe `Box` is `display:block`):
     // fill the available width so the chassis is flush with its column
     // rather than shrink-wrapping to its content. Every caller wants this;
@@ -52,18 +69,12 @@ pub fn redesign_box<R>(
         body(ui)
     });
 
-    if let Some(label_text) = label {
-        // Paint the corner label over the top-left of the box's stroke. The
-        // wireframe puts it slightly outside the border (negative offsets),
-        // but to keep it inside our allocated rect we anchor it just inside
-        // the top-left corner.
+    if let Some(galley) = label_galley {
+        // Paint the corner label straddling the top-left of the box's
+        // stroke (wireframe `.sk-corner-label`). The leading space reserved
+        // above keeps the top half from being clipped.
         let rect = response.response.rect;
         let painter = ui.painter();
-        let font = egui::FontId::new(10.0, egui::FontFamily::Name("poppins_medium".into()));
-        let bg = redesign_shell_bg(palette);
-        let muted = redesign_text_muted(palette);
-
-        let galley = painter.layout_no_wrap(label_text.to_string(), font.clone(), muted);
         let label_size = galley.size();
         let label_pos = egui::pos2(rect.left() + 8.0, rect.top() - label_size.y * 0.5);
         let label_rect = egui::Rect::from_min_size(

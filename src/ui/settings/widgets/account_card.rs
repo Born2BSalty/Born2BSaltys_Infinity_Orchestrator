@@ -127,6 +127,7 @@ pub fn render(
                             primary: button_primary,
                             small: true,
                             disabled,
+                            ..Default::default()
                         },
                     );
                     if disabled {

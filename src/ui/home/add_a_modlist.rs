@@ -62,6 +62,7 @@ pub fn render(
                 "paste import code",
                 BtnOpts {
                     primary: true,
+                    block: true,
                     ..Default::default()
                 },
             )
@@ -74,7 +75,10 @@ pub fn render(
                 ui,
                 palette,
                 "create your own",
-                BtnOpts::default(),
+                BtnOpts {
+                    block: true,
+                    ..Default::default()
+                },
             )
             .clicked()
             {

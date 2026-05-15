@@ -32,6 +32,11 @@ pub struct BtnOpts {
     pub small: bool,
     /// 50% opacity, click suppressed.
     pub disabled: bool,
+    /// Stretch to the full available width (block button) instead of
+    /// shrink-wrapping to the label. Mirrors the wireframe's
+    /// `flex-direction: column` CTA stacks where buttons fill the box
+    /// (default `align-items: stretch`). Off by default — opt in per call.
+    pub block: bool,
 }
 
 /// Paint a redesign button at the current `ui` cursor and return the
@@ -63,10 +68,12 @@ pub fn redesign_btn(
     // Measure the label so we can size the rect.
     let font = egui::FontId::new(font_size, egui::FontFamily::Name("poppins_medium".into()));
     let text_galley = ui.painter().layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let desired_size = egui::vec2(
-        text_galley.size().x + pad_x * 2.0,
-        text_galley.size().y + pad_y * 2.0,
-    );
+    let width = if opts.block {
+        ui.available_width()
+    } else {
+        text_galley.size().x + pad_x * 2.0
+    };
+    let desired_size = egui::vec2(width, text_galley.size().y + pad_y * 2.0);
 
     let sense = if opts.disabled { egui::Sense::hover() } else { egui::Sense::click() };
     let (rect, response) = ui.allocate_exact_size(desired_size, sense);
