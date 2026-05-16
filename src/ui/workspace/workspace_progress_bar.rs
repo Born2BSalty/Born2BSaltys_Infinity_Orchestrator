@@ -143,60 +143,61 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, state: &WorkspaceViewSta
             SegKind::Completed => redesign_text_primary(palette),
         };
 
+        // All three glyph runs (kicker / label / ✓) share the segment's
+        // true vertical center via `painter.text(.., Align2::LEFT_CENTER,
+        // ..)` — the egui-idiomatic equivalent of the wireframe's flex
+        // `alignItems: "center"` (precedent: `left_rail.rs`). The previous
+        // code centered each run independently with `pos.y -
+        // galley.size().y / 2.0`; because egui galley heights bake in
+        // size-dependent ascent/descent, the 10px kicker and the 13/14px
+        // label landed on *different* optical lines, and the bar's 3×3 drop
+        // shadow (which reads as a raised solid) made that mismatch
+        // obvious. Anchoring every run to the same `center().y` with
+        // `LEFT_CENTER` removes the perceived misalignment while keeping
+        // the wireframe shadow intact (#9 fix).
+        let row_cy = seg_rect.center().y;
+
         // Kicker ("STEP N", uppercase). The wireframe letterSpacing 1.4 is
         // approximated by uppercasing + the Poppins-medium 10px size (egui
         // has no per-glyph letter-spacing; the visual weight matches).
         let kicker_font =
             egui::FontId::new(KICKER_SIZE, egui::FontFamily::Name("poppins_medium".into()));
         let kicker_text = step.step_kicker().to_uppercase();
-        let kicker_pos = egui::pos2(seg_rect.min.x + SEG_PAD_X, seg_rect.center().y);
-        let kicker_galley = painter.layout_no_wrap(
-            kicker_text.clone(),
-            kicker_font.clone(),
-            with_alpha(kicker_color, alpha),
-        );
-        painter.galley(
-            egui::pos2(kicker_pos.x, kicker_pos.y - kicker_galley.size().y / 2.0),
-            kicker_galley.clone(),
+        let kicker_rect = painter.text(
+            egui::pos2(seg_rect.min.x + SEG_PAD_X, row_cy),
+            egui::Align2::LEFT_CENTER,
+            &kicker_text,
+            kicker_font,
             with_alpha(kicker_color, alpha),
         );
 
-        // Label.
+        // Label — placed after the kicker's painted right edge + gap, on
+        // the same center line.
         let (label_size, label_family) = if kind == SegKind::Current {
             (14.0, "poppins_bold")
         } else {
             (13.0, "poppins_medium")
         };
         let label_font = egui::FontId::new(label_size, egui::FontFamily::Name(label_family.into()));
-        let label_x = kicker_pos.x + kicker_galley.size().x + SEG_GAP;
-        let label_galley = painter.layout_no_wrap(
-            step.label().to_string(),
+        painter.text(
+            egui::pos2(kicker_rect.right() + SEG_GAP, row_cy),
+            egui::Align2::LEFT_CENTER,
+            step.label(),
             label_font,
-            with_alpha(label_color, alpha),
-        );
-        painter.galley(
-            egui::pos2(label_x, seg_rect.center().y - label_galley.size().y / 2.0),
-            label_galley,
             with_alpha(label_color, alpha),
         );
 
         // ✓ for completed segments — flush-right (marginLeft auto), success
         // color, rendered in `firacode_nerd` (cmap-present base-FiraCode
-        // glyph).
+        // glyph), same center line.
         if kind == SegKind::Completed {
             let check_font =
                 egui::FontId::new(CHECK_SIZE, egui::FontFamily::Name("firacode_nerd".into()));
-            let check_galley = painter.layout_no_wrap(
-                "\u{2713}".to_string(),
+            painter.text(
+                egui::pos2(seg_rect.max.x - SEG_PAD_X, row_cy),
+                egui::Align2::RIGHT_CENTER,
+                "\u{2713}",
                 check_font,
-                redesign_success(palette),
-            );
-            painter.galley(
-                egui::pos2(
-                    seg_rect.max.x - SEG_PAD_X - check_galley.size().x,
-                    seg_rect.center().y - check_galley.size().y / 2.0,
-                ),
-                check_galley,
                 redesign_success(palette),
             );
         }

@@ -69,6 +69,10 @@ use crate::app::app_bootstrap_init;
 use crate::app::app_step1_github_oauth::GitHubOAuthFlowResult;
 use crate::app::state::WizardState;
 use crate::app::step2_worker::Step2ScanEvent;
+use crate::app::{
+    app_step2_saved_log_flow, app_step2_scan, app_step2_update_check, app_step2_update_download,
+    app_step2_update_extract,
+};
 use crate::registry::errors::RegistryError;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::persistence_cycle::RegistryPersistenceCycle;
@@ -183,15 +187,16 @@ pub struct OrchestratorApp {
     /// only adds the flag + setter; nothing reads it yet.
     pub workspace_state_dirty: bool,
 
-    // The six Step 2 channel receivers `bio::app::app_update_cycle::
-    // poll_before_render` (`pub(crate)`) requires. Owned here exactly as
-    // `WizardApp` owns them (`src/ui/app.rs:46-52`): all start `None` /
-    // empty; `bio::app::app_step2_*` channel-creation functions populate
-    // them when the relevant background task starts (the action handlers
-    // take them by `&mut`, mirroring the BIO pattern — see
-    // `step_action_dispatch::dispatch_step2`). The poll/repaint wiring that
-    // drains them lands in Run 4 (Phase 6 persistence/runtime integration);
-    // Run 1 owns the fields so `handle_step2_action` can populate them.
+    // The six Step 2 channel receivers the Step-2 background tasks use.
+    // Owned here exactly as `WizardApp` owns them (`src/ui/app.rs:46-52`):
+    // all start `None` / empty; `bio::app::app_step2_*` channel-creation
+    // functions populate them when the relevant background task starts (the
+    // action handlers take them by `&mut`, mirroring the BIO pattern — see
+    // `step_action_dispatch::dispatch_step2`). They are **drained every
+    // frame** by `poll_step2_channels` (P6.T2c — the narrower-call mirror
+    // of `bio::app::app_update_cycle::poll_before_render`'s Step-2 portion,
+    // since `poll_before_render` is monolithic and also requires Step-5
+    // runtime args the orchestrator does not own pre-Phase-7).
     //
     // Visibility: `pub(crate)` (matching the sibling `github_auth_rx`
     // channel field) — the update-event types are BIO `pub(crate)` enums
@@ -212,18 +217,12 @@ pub struct OrchestratorApp {
     pub(crate) step2_update_download_rx:
         Option<Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent>>,
     /// ⑥ Step 2 update-extract worker event channel. (The 6th — the
-    /// historically-missed `_extract_rx`; `poll_before_render` requires it.)
-    ///
-    /// `#[allow(dead_code)]`: unlike receivers ①–⑤ (read by
-    /// `step_action_dispatch` via `handle_step2_action`), this one is only
-    /// consumed by `bio::app::app_update_cycle::poll_before_render`, whose
-    /// orchestrator-side wiring lands in **Run 4** (Phase-6 persistence /
-    /// runtime integration). It is owned now — per the brief it is "real and
-    /// required" so the field set is the correct 6 from the start — but read
-    /// only once the poll loop is wired. Scoped allow so the Run-1 build is
-    /// warning-clean (the gate permits only the 2 pre-existing `PromptInfo`
-    /// warnings).
-    #[allow(dead_code)]
+    /// historically-missed `_extract_rx`.) Drained every frame by
+    /// `poll_step2_channels` (P6.T2c) via
+    /// `bio::app::app_step2_update_extract::poll_step2_update_extract` —
+    /// the same callee `bio::app::app_update_cycle::poll_before_render`
+    /// uses for the extract receiver. (Run 1 owned it inert behind an
+    /// `#[allow(dead_code)]`; Run 1b wires the poll so it is now read.)
     pub(crate) step2_update_extract_rx:
         Option<Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>>,
 }
@@ -381,6 +380,75 @@ impl OrchestratorApp {
     /// consumes it is wired in Run 4 (P6.T11); nothing drains it yet.
     pub fn mark_workspace_dirty(&mut self) {
         self.workspace_state_dirty = true;
+    }
+
+    /// Drain the 6 Step-2 background-thread receivers every frame (P6.T2c —
+    /// fixes the scan-hang / Cancel-stuck defects).
+    ///
+    /// **Why the narrower `poll_step2_*` calls, not
+    /// `bio::app::app_update_cycle::poll_before_render`.** The H3 real path
+    /// (`bio::ui::app::update_loop::run` → `app_update_cycle::
+    /// poll_before_render`) is **monolithic**: `poll_before_render`'s
+    /// signature additionally requires `step5_terminal` /
+    /// `step5_terminal_error` / `step5_prep_rx` / `step5_pending_start`, and
+    /// its body unconditionally calls `app_step5_flow::poll_step5_terminal`
+    /// + `poll_step5_prep` (`src/core/app/navigation/app_update_cycle.rs:
+    /// 33-76`). The orchestrator does not own the Step-5 install runtime
+    /// pre-Phase-7 (that's Phase 7's `install_runtime`), so it cannot
+    /// satisfy those args. Per the brief's explicit instruction for the
+    /// monolithic case, this calls the **same narrower `bio::app::
+    /// app_step2_*` functions `poll_before_render` calls for the Step-2
+    /// portion** (`app_update_cycle.rs:38-64`), in the same order, with the
+    /// orchestrator's owned receivers — draining scan / cancel / progress /
+    /// update-check / update-download / update-extract / saved-log-flow
+    /// exactly as `WizardApp` does, minus only the Step-5 lines. Every
+    /// callee is `pub(crate) fn`, same-crate reachable via the carve-out-#3
+    /// lib+bin split.
+    fn poll_step2_channels(&mut self) {
+        // Mirrors `poll_before_render` lines 38-64 (the Step-2 portion).
+        app_step2_scan::poll_step2_scan_events(
+            &mut self.wizard_state,
+            &mut self.step2_scan_rx,
+            &mut self.step2_cancel,
+            &mut self.step2_progress_queue,
+        );
+        app_step2_update_check::poll_step2_update_check(
+            &mut self.wizard_state,
+            &mut self.step2_update_check_rx,
+        );
+        app_step2_update_download::poll_step2_update_download(
+            &mut self.wizard_state,
+            &mut self.step2_update_download_rx,
+            &mut self.step2_update_extract_rx,
+        );
+        app_step2_update_extract::poll_step2_update_extract(
+            &mut self.wizard_state,
+            &mut self.step2_update_extract_rx,
+            &mut self.step2_scan_rx,
+            &mut self.step2_cancel,
+            &mut self.step2_progress_queue,
+        );
+        app_step2_saved_log_flow::advance_pending_saved_log_flow(
+            &mut self.wizard_state,
+            &mut self.step2_scan_rx,
+            &mut self.step2_cancel,
+            &mut self.step2_progress_queue,
+            &mut self.step2_update_check_rx,
+            &mut self.step2_update_download_rx,
+        );
+    }
+
+    /// True when a Step-2 background task is in flight, so the orchestrator
+    /// must keep repainting (the worker reports on a thread; without a
+    /// repaint request egui paints lazily and the scan/cancel would appear
+    /// to hang until the next user input). Mirrors the Step-2 subset of
+    /// `bio::app::app_update_cycle::needs_repaint`.
+    fn step2_needs_repaint(&self) -> bool {
+        self.step2_scan_rx.is_some()
+            || self.step2_update_check_rx.is_some()
+            || self.step2_update_download_rx.is_some()
+            || self.step2_update_extract_rx.is_some()
+            || !self.step2_progress_queue.is_empty()
     }
 
     /// Per-frame poll: try to flush pending registry / workspace writes if
@@ -545,6 +613,19 @@ impl eframe::App for OrchestratorApp {
         // Drive the OAuth flow's receiver (if any). Mutates wizard_state
         // (`github_auth_*` fields) per BIO's existing `poll_github_oauth_flow`.
         oauth_glue::poll_github_oauth_flow(self);
+
+        // Drain the 6 Step-2 background-thread receivers BEFORE the render
+        // (exactly the order `bio::ui::app::update_loop::run` polls them —
+        // the H3 real path; see `poll_step2_channels`). Without this the
+        // scan worker starts but never reports → the UI hangs and Cancel
+        // never completes (P6.T2c — fixes the Run-1 follow-up's defect #1:
+        // scan-hang / Cancel-stuck). A Step-2 task in flight needs an
+        // explicit repaint request because egui paints lazily and the
+        // worker reports off-thread.
+        self.poll_step2_channels();
+        if self.step2_needs_repaint() {
+            ctx.request_repaint_after(Duration::from_millis(16));
+        }
 
         // Per-frame path validation summary (left rail bottom).
         self.path_validation = compute_path_validation_summary(&self.wizard_state);

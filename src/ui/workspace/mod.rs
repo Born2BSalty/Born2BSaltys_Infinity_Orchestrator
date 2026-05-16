@@ -12,8 +12,14 @@
 // Phase 6 Run 1 (workspace spine) ships:
 //   - `state_workspace`        → `WorkspaceViewState` (per-modlist view state).
 //   - `workspace_state_loader` → populate / extract / sync-paths.
-//   - `workspace_step_router`  → per-step dispatch (Step 2/3 real, Step 4
-//                                placeholder until Run 2, Step 5 stub).
+//   - `step2`                  → the Step-2 C4 chrome wrapper (P6.T2c):
+//                                net-new redesign chrome (title, full-width
+//                                flex search, no Restart-Diagnostics,
+//                                Details hidden-by-default) reusing **only**
+//                                BIO's tree / details / popup sub-renderers.
+//   - `workspace_step_router`  → per-step dispatch (Step 2 → the C4 wrapper,
+//                                Step 3 real, Step 4 placeholder until
+//                                Run 2, Step 5 stub).
 //   - `step_action_dispatch`   → `dispatch_step2` / `dispatch_step4`.
 //   - `step2_log_glue`         → the `SelectVia*Log` sibling (rfd picker +
 //                                settings-persistence trigger).
@@ -29,6 +35,7 @@
 // SPEC: §2.2, §6, §7, §8, §13.1, §13.14.
 
 pub mod state_workspace;
+pub mod step2;
 pub mod step2_log_glue;
 pub mod step_action_dispatch;
 pub mod workspace_hint_line;

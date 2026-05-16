@@ -32,7 +32,29 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
+use crate::app::state::Step2Selection;
 use crate::registry::model::Game;
+
+/// Orchestrator-owned Step-2 chrome state (P6.T2c). The Step-2 C4 wrapper
+/// owns the **Details-pane visibility** because the wireframe's Step 2 hides
+/// the Details panel by default (SPEC §6: "the Details panel is hidden by
+/// default") whereas BIO's `frame_step2` always renders it in the split.
+/// This is net-new chrome state — BIO's `state_step2` is untouched.
+#[derive(Debug, Clone, Default)]
+pub struct WorkspaceStep2State {
+    /// Details pane visible. **Default `false`** (SPEC §6 — hidden by
+    /// default; opened via the Kebab "Show Details panel" toggle or by
+    /// selecting a tree row, mirroring the wireframe `ComponentTree`
+    /// `onSelect → setDetailsOpen(true)`).
+    pub details_open: bool,
+    /// Snapshot of `wizard_state.step2.selected` from the previous frame.
+    /// When the live selection transitions to a *new* value (a row / `[?]`
+    /// click in BIO's reused tree), the wrapper auto-opens the Details
+    /// panel — the egui equivalent of the wireframe `ComponentTree`'s
+    /// `onSelect`/`onOpenDetails` callbacks (BIO's tree has no separate
+    /// detail-open signal; a row click sets `state.step2.selected`).
+    pub last_selection: Option<Step2Selection>,
+}
 
 /// The four workspace steps (SPEC §2.2). Step 1 no longer exists inside the
 /// workspace — setup migrated to Settings + Create.
@@ -177,6 +199,11 @@ pub struct WorkspaceViewState {
     /// shared `WizardState`. The loader compares this to the routed id to
     /// decide when a populate/swap is needed (P6.T1 / P6.T12).
     pub loaded_workspace_id: Option<String>,
+    /// Net-new Step-2 chrome state (Details-pane visibility — hidden by
+    /// default per SPEC §6 — + the selection snapshot driving auto-open).
+    /// Reset with the rest of the view state on a modlist swap so a fresh
+    /// workspace starts with the Details panel hidden (P6.T2c).
+    pub step2: WorkspaceStep2State,
 }
 
 impl Default for WorkspaceViewState {
@@ -196,6 +223,7 @@ impl Default for WorkspaceViewState {
             share_paste_open: false,
             install_complete: false,
             loaded_workspace_id: None,
+            step2: WorkspaceStep2State::default(),
         }
     }
 }

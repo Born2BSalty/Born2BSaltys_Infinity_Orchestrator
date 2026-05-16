@@ -6,11 +6,14 @@
 // step renderers return their action; the router dispatches via
 // `step_action_dispatch::dispatch_stepN`.
 //
-//   - Step 2: `bio::ui::step2::page_step2::render(ui, &mut
-//     orchestrator.wizard_state, dev_mode, &exe_fingerprint) ->
-//     Option<Step2Action>` — called **directly** (the wireframe content of
-//     Step 2 is unchanged from today's BIO; no orchestrator wrapper). Any
-//     returned action → `step_action_dispatch::dispatch_step2`.
+//   - Step 2: the **C4 chrome wrapper** `bio::ui::workspace::step2::
+//     workspace_step2::render(ui, orchestrator) -> Option<Step2Action>`
+//     (P6.T2c). Net-new redesign chrome (title, full-width `flex` search,
+//     the SPEC §6 toolbar set, **no** "Restart App With Diagnostics",
+//     Details pane hidden-by-default per SPEC §6) that reuses **only**
+//     BIO's tree / details / popup sub-renderers. BIO's `page_step2` /
+//     `frame_step2` are **not** called. Any returned action →
+//     `step_action_dispatch::dispatch_step2`.
 //   - Step 3: `bio::ui::step3::page_step3::render(...)` returns `()` per H2
 //     (no `Step3Action` enum — the page handles its own intents via direct
 //     `WizardState` mutation: drag-reorder, undo/redo, block-select). The
@@ -40,16 +43,10 @@ use crate::ui::workspace::workspace_step5_stub;
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     match orchestrator.workspace_view.current_step {
         WorkspaceStep::Step2 => {
-            let dev_mode = orchestrator.dev_mode;
-            // Clone the fingerprint so the `&orchestrator` borrow ends
-            // before the `&mut orchestrator` dispatch below.
-            let exe_fp = orchestrator.exe_fingerprint.clone();
-            let action = crate::ui::step2::page_step2::render(
-                ui,
-                &mut orchestrator.wizard_state,
-                dev_mode,
-                &exe_fp,
-            );
+            // C4 chrome wrapper (P6.T2c): net-new redesign chrome around
+            // BIO's reused tree / details / popup sub-renderers. BIO's
+            // `page_step2` / `frame_step2` are NOT called.
+            let action = crate::ui::workspace::step2::workspace_step2::render(ui, orchestrator);
             if let Some(a) = action {
                 step_action_dispatch::dispatch_step2(a, orchestrator);
             }
