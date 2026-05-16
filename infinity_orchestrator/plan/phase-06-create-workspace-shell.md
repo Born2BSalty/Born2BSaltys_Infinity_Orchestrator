@@ -38,7 +38,7 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
 - Step 5 install runtime — Phase 7.
 - `WorkspaceNavBar` ← Previous disable behavior after Install click — Phase 7.
 - Share import code button enabled state after successful install — Phase 7.
-- Theme-token reskins of the BIO Step 2 tree / details / popups — Phase 8 (Step 2 inside the workspace works correctly in Phase 6; visual polish lands later).
+- Theme-token (carve-out #6) **colour reskin of the reused BIO component-tree row + details-pane internals** — Phase 8. The Step-2 *chrome* (toolbar / search / tabs / details-default) is **net-new redesign code delivered in Phase 6 (P6.T2c)**, not a Phase-8 BIO reskin — Phase 8's Step-2 surface is now only the tree-row/detail colour swaps + the compat/prompt popups.
 - `modlist-import-code.txt` auto-write on install start — Phase 7.
 
 ## Dependencies
@@ -154,7 +154,7 @@ The previous plan's references to `app_update_loop::run` are corrected to `bio::
   ```rust
   match state.current_step {
       WorkspaceStep::Step2 => {
-          let action = bio::ui::step2::page_step2::render(ui, &mut orchestrator.wizard_state, orchestrator.dev_mode, &orchestrator.exe_fingerprint);
+          let action = bio::ui::workspace::step2::workspace_step2::render(ui, orchestrator); // C4-style — net-new redesign chrome; BIO's page_step2/frame_step2 NOT called (see P6.T2c)
           if let Some(a) = action {
               step_action_dispatch::dispatch_step2(a, orchestrator);
           }
@@ -172,9 +172,9 @@ The previous plan's references to `app_update_loop::run` are corrected to `bio::
       WorkspaceStep::Step5 => bio::ui::workspace::workspace_step5_stub::render(ui, orchestrator),
   }
   ```
-  Step 2 calls BIO's existing public `pub fn render` directly with no orchestrator wrapping (the wireframe content of Step 2 is unchanged from today's BIO). Step 3 calls BIO's existing public `pub fn render` and ignores the `()` return (per H2). Step 4 calls the orchestrator-side `workspace_step4::render` (per C4 — see P6.T2b) and its returned `Option<Step4Action>` is dispatched uniformly via the router's `dispatch_step4` arm. **All dispatch happens at the router layer for consistency.** Step wrappers render the chrome but return the action up; the router dispatches.
+  Step 2 calls the orchestrator-side `workspace_step2::render` (the **Step-2 C4 treatment** — see P6.T2c): net-new redesign chrome (title, full-width `flex` search, the wireframe toolbar button set, **no** "Restart App With Diagnostics", Details pane hidden-by-default per SPEC §6) that reuses **only** BIO's component-tree + details sub-renderers (`bio::ui::step2::list_pane_step2::render_list_pane` / `details_pane_step2::render_pane`) in orchestrator-owned layout rects. BIO's `page_step2`/`frame_step2` are **not** called. Step 3 calls BIO's existing public `pub fn render` and ignores the `()` return (per H2). Step 4 calls the orchestrator-side `workspace_step4::render` (per C4 — see P6.T2b) and its returned `Option<Step4Action>` is dispatched uniformly via the router's `dispatch_step4` arm. **All dispatch happens at the router layer for consistency.** Step wrappers render the chrome but return the action up; the router dispatches.
 - **Where:** New file `workspace_step_router.rs`. Plus `step_action_dispatch.rs` for Step 2 action handling.
-- **Acceptance:** Step 2 renders the existing BIO tree with full functionality (search, checkbox toggles, drag, pills, etc.). Step 3 renders the drag-reorder list. Step 4 renders via the new C4 wrapper. Each step's returned action is dispatched via the same `bio::app::*` public entry points BIO's `WizardApp` ultimately uses (verified via the C2 audit table).
+- **Acceptance:** Step 2 renders the **net-new redesign chrome** (per `screens.jsx` Step 2: full-width `flex` search, the redesign toolbar button set, **no** "Restart App With Diagnostics", Details pane hidden by default per SPEC §6) wrapping BIO's reused component tree + details sub-renderers with full functionality (search filter, checkbox toggles, drag, pills, scan). Step 3 renders the drag-reorder list. Step 4 renders via the C4 wrapper. Each step's returned action is dispatched via the same `bio::app::*` public entry points BIO's `WizardApp` ultimately uses (verified via the C2 audit table).
 - **SPEC:** §2.2, §6, §7, §8.
 
 ### P6.T2b — Step 4 orchestrator-side renderer (C4 — replaces BIO's `page_step4::render`)
@@ -284,6 +284,18 @@ pub fn dispatch_step4(action: Step4Action, orchestrator: &mut OrchestratorApp) {
 ```
 
 The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + settings-persistence trigger for `SelectBgeeViaLog` / `SelectBg2eeViaLog`. It calls `bio::app::app_step2_log::apply_weidu_log_selection_from_path` (`pub(crate)`, same-crate reachable per Phase 1's carve-out #3 split) for the underlying state mutation, plus the orchestrator's own settings-debounce trigger for the `bio_settings.json` write that BIO's `app.save_settings_best_effort()` does inside `WizardApp`.
+
+### P6.T2c — Step 2 orchestrator-side chrome wrapper (C4-style — replaces BIO's `frame_step2`/`page_step2`)
+
+- **What:** Build `src/ui/workspace/step2/workspace_step2.rs` — a net-new orchestrator-side Step 2 renderer, the direct analogue of P6.T2b's Step-4 C4 treatment. The wireframe's Step 2 chrome differs structurally from BIO's (`screens.jsx` Step 2: full-width `flex` search; the redesign toolbar button set; **no** "Restart App With Diagnostics"; Details pane **hidden by default** per SPEC §6 "the Details panel is hidden by default"). Carve-out #6 is colour-only and cannot restructure BIO's `frame_step2` toolbar; the CRITICAL DIRECTIVE forbids editing it — so the chrome is net-new and only BIO's tree/details sub-renderers are reused.
+  - **Signature:** `pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<Step2Action>`. BIO's `bio::ui::step2::page_step2::render` / `frame_step2::render` are **not called**.
+  - **Net-new chrome (orchestrator layout rects, redesign tokens):** screen title + per-step hint; a full-width search input writing the same `state.step2` filter field BIO's `content_step2::render_header` search writes (read the source for the field); the redesign toolbar button row — Scan, Cancel Scan, Select Visible, Collapse All, Expand All, Jump to Selected, Select <Game> via WeiDU Log, Updates… — matching `screens.jsx` (NO "Restart App With Diagnostics"); the BGEE/BG2EE tab strip (reuse `bio::ui::step2::content_step2::render_tabs` or the Phase-4 `tab_strip` — implementer's call); a Details-pane visibility toggle defaulting **hidden** (SPEC §6), the pane shown only when toggled / a row `[?]` is clicked.
+  - **Reused BIO sub-renderers (read-only public API — directive decision-order 1):** tree via `bio::ui::step2::list_pane_step2::render_list_pane(ui, state, &mut action, rect)`; details via `bio::ui::step2::details_pane_step2::render_pane(ui, state, &mut action, rect)`; compat/prompt popups via `compat_window_step2::render` / `prompt_popup_step2::render_prompt_popup`. The orchestrator owns the split/layout rects so the panel never bleeds into the workspace nav-bar footer.
+  - **Background-channel poll (fixes the scan hang — required, not Run 4):** `OrchestratorApp::update` must call `bio::app::app_update_cycle::poll_before_render` every frame (the H3 real path `WizardApp` uses — read `bio::ui::app::update_loop`) to drain the 6 Step-2 receivers (scan / cancel / progress / update-check / update-download / update-extract). Without it the scan worker starts but never reports → UI hangs; cancel never completes.
+  - **Dev-only scan affordance (test enablement; never shipped in normal mode):** behind `orchestrator.dev_mode`, a net-new control to point BIO's scan at a user-chosen existing folder, so the Step-2 chrome+tree+dispatch is visually verifiable before Phase 7. **There is no global Settings "mods" folder** — Settings → Paths supplies game-source / Mods-*archive* / backup / tool paths only; the scannable mods folder is **per-install, extracted at prep time (post-download, pre-Step-2) by the Phase-7 P7.T17 pipeline** (SPEC §13.12a). Production pre-Phase-7 ⇒ scan legitimately finds nothing.
+- **Where:** New files `src/ui/workspace/step2/mod.rs` + `workspace_step2.rs` (+ split helpers as needed). The router's Step 2 arm (P6.T2) calls this.
+- **Acceptance:** Step 2 shows the net-new redesign chrome matching `screens.jsx` (full-width search, redesign button set, no Restart-Diagnostics, details hidden by default) wrapping BIO's reused tree + details. With the dev affordance pointed at a real mods folder: scan **completes** (no hang), the BIO tree renders inside the redesign chrome, checkbox/drag/pills/details work, actions dispatch via `dispatch_step2`, Cancel returns to idle (not stuck "Cancelling…"). Pre-Phase-7 production: scan completes cleanly empty. The panel never overlaps the workspace nav bar.
+- **SPEC:** §6, §1 (decision order; carve-out boundary), §13.12a (per-install extracted-mods folder, Phase 7), §2.2.
 
 ### P6.T3 — Workspace progress bar
 
