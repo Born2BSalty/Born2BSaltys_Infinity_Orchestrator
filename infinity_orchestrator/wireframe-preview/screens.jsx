@@ -3369,7 +3369,7 @@ const WorkspaceNavBar = ({ currentIdx, total, currentLabel, onPrev, onNext, disa
     }}>
       <Btn
         small
-        disabled={isFirst || disablePrev}
+        disabled={disablePrev}
         onClick={onPrev}
         title={disablePrev ? "Disabled while install is running or after a successful install" : undefined}
       >← Previous</Btn>

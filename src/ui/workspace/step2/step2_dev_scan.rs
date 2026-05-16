@@ -19,10 +19,14 @@
 // invented): open an `rfd` folder dialog, write the chosen path into
 // `wizard_state.step1.mods_folder` (the field BIO's scan worker reads —
 // `bio::app::step2::scan::worker` clones `state.step1` and uses
-// `step1.mods_folder`), then trigger the scan via the **existing**
+// `step1.mods_folder`), **snapshot the current selection** for the
+// SPEC §6.3 rescan-reconcile (the #2 fix — the dev scan is the functional
+// rescan path pre-Phase-7), then trigger the scan via the **existing**
 // `Step2Action::StartScan` dispatch path (`step_action_dispatch::
-// dispatch_step2`). No BIO source is touched; no scan code is
-// reimplemented.
+// dispatch_step2`). The re-apply runs on scan-completion in
+// `step2_rescan_reconcile::reconcile_on_scan_complete` (driven from
+// `OrchestratorApp::update` after the channel drain). No BIO source is
+// touched; no scan code is reimplemented.
 //
 // SPEC: §6, §13.12a (per-install extracted-mods folder, Phase 7), §1
 //       (decision order: sibling for simple workflows).
@@ -32,6 +36,7 @@ use rfd::FileDialog;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::step_action_dispatch;
+use crate::ui::workspace::step2::step2_rescan_reconcile;
 
 /// Open a folder picker; if the user picks a folder, point BIO's scan at it
 /// and kick the scan via the existing `StartScan` dispatch path.
@@ -50,6 +55,13 @@ pub fn pick_folder_and_scan(orchestrator: &mut OrchestratorApp) {
 
     // Set the scan source (the exact field BIO's scan worker reads).
     orchestrator.wizard_state.step1.mods_folder = picked.to_string_lossy().to_string();
+
+    // SPEC §6.3 — rescan is **non-destructive**: snapshot the current
+    // selection BEFORE the scan so it can be re-applied onto the
+    // freshly-scanned mod set on scan-completion (the dev scan is the
+    // functional rescan path pre-Phase-7; the production Rescan button is
+    // inert per §13.12a). Must run *before* `StartScan` is dispatched.
+    step2_rescan_reconcile::snapshot_current_selection(orchestrator);
 
     // Kick the scan through the **existing** dispatch path — identical to
     // what the toolbar "Scan Mods Folder" button does (BIO's

@@ -54,6 +54,46 @@ pub struct WorkspaceStep2State {
     /// `onSelect`/`onOpenDetails` callbacks (BIO's tree has no separate
     /// detail-open signal; a row click sets `state.step2.selected`).
     pub last_selection: Option<Step2Selection>,
+    /// **Rescan-reconcile snapshot** (SPEC §6.3, the #2 fix). Captured at
+    /// scan-trigger time — the current selection as
+    /// `(tp2.to_ascii_uppercase(), component_id, selected_order)` over every
+    /// checked component on both tabs — and re-applied onto the freshly
+    /// scanned mod set when the (async) scan **completes** (the fresh set
+    /// has landed via `OrchestratorApp::poll_step2_channels`). `None` when
+    /// no rescan is pending. Orchestrator-owned: BIO's `state_step2` is
+    /// untouched and BIO's scan is non-preserving by design.
+    pub rescan_snapshot: Option<RescanSnapshot>,
+    /// Previous-frame `wizard_state.step2.is_scanning`, so the reconcile can
+    /// fire exactly on the scan-completion edge (`true → false`) — the
+    /// moment BIO's `Step2ScanEvent::Finished` handler has replaced the mod
+    /// vectors. Drained-before-render in `OrchestratorApp::update`.
+    pub was_scanning: bool,
+    /// Post-reconcile drop warning for the scan-status footer (SPEC §6.3:
+    /// _"N component(s) dropped — M mod(s) no longer present"_). `Some` only
+    /// when a completed rescan dropped at least one selected component;
+    /// cleared on the next scan trigger.
+    pub rescan_drop_warning: Option<String>,
+}
+
+/// One captured selection entry for the rescan-reconcile (SPEC §6.3, the #2
+/// fix): the component's `tp2` (upper-cased — BIO matches `tp_file`
+/// case-insensitively, the precedent being
+/// `workspace_state_loader::apply_order_to_mods`), its `component_id`, and
+/// its `selected_order` so the install order is preserved across the
+/// rescan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RescanSelection {
+    pub tp2_upper: String,
+    pub component_id: String,
+    pub selected_order: Option<usize>,
+}
+
+/// The full pre-scan selection snapshot — both game tabs (BIO buckets
+/// single-game modlists, incl. IWDEE, into `bgee_mods`; EET uses both).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RescanSnapshot {
+    pub bgee: Vec<RescanSelection>,
+    pub bg2ee: Vec<RescanSelection>,
 }
 
 /// The four workspace steps (SPEC §2.2). Step 1 no longer exists inside the

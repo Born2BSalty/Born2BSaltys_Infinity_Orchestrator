@@ -6,7 +6,7 @@
 // Mirrors `wireframe-preview/screens.jsx::WorkspaceNavBar` (line 3358-3387):
 //   container: marginTop 20, paddingTop 14, borderTop "1.5px dashed
 //              var(--border-soft)", flex row, alignItems center, gap 12.
-//     <Btn small disabled={isFirst || disablePrev}>← Previous</Btn>
+//     <Btn small disabled={disablePrev}>← Previous</Btn>
 //     <Label hand color:var(--text-faint) marginLeft:14>
 //        on {currentLabel} · step {currentIdx+1} of {total}
 //     </Label>
@@ -31,8 +31,15 @@
 // variant (sketchy border, 2×2 primary shadow, active-press transform,
 // theme-invariant `#1a2638` primary text), with the arrow in `firacode_nerd`.
 //
-// `disable_prev` is `false` in Run 1 (the Phase-7 post-install / install-
-// running gate sets it later — wireframe `disablePrev`).
+// **`← Previous` is enabled on the first workspace step** (Step 2): it
+// routes back to Home (SPEC §2.2 / P6.T4 — the user entered the workspace
+// via a Home `resume`/`open`, so first-step Previous closes that loop
+// rather than being a dead control; intentional affordance-forward
+// deviation from the wireframe's former first-step *disabled* state,
+// recorded SPEC §2.2 + overview 2026-05-16). The caller (`workspace_view`)
+// interprets a first-step `prev_clicked` as the Home route. `← Previous` is
+// force-disabled **only** by `disable_prev` — the Phase-7 install-running /
+// post-install gate (wireframe `disablePrev`; `false` until Phase 7).
 //
 // SPEC: §2.2 (workspace nav bar).
 
@@ -78,7 +85,6 @@ pub fn render(
 
     let total = WorkspaceStep::ALL.len();
     let idx = current.index();
-    let is_first = current.prev().is_none();
     let is_last = current.next().is_none();
 
     // Wireframe: marginTop 20, paddingTop 14, 1.5px dashed top rule.
@@ -96,8 +102,15 @@ pub fn render(
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
 
-        // ← Previous (small; disabled on first step or when force-disabled).
-        let prev_disabled = is_first || disable_prev;
+        // ← Previous (small). **Enabled on the first workspace step** so it
+        // can route back to Home (SPEC §2.2 / P6.T4): the user reached the
+        // workspace via a Home `resume`/`open`, so first-step Previous
+        // closes that loop rather than being a dead control. The caller
+        // (`workspace_view`) interprets a first-step `prev_clicked` as a
+        // Home route. `← Previous` is force-disabled **only** by
+        // `disable_prev` — the Phase-7 install-running / post-install gate
+        // (wireframe `disablePrev`; `false` until Phase 7).
+        let prev_disabled = disable_prev;
         if glyph_btn(
             ui,
             palette,

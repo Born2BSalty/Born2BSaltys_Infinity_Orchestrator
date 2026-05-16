@@ -106,6 +106,7 @@ use eframe::egui;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_faint, redesign_text_primary,
+    redesign_warning_soft,
 };
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::step2::{step2_search, step2_tab_row};
@@ -311,17 +312,41 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     //    sees scan progress ("0/0" → "..." → done) and completion. Painted
     //    in a redesign-token style instead of egui's default label colour.
     //    The recompute also feeds the tab row's `{sel}/{total}` count
-    //    Label (same source BIO uses for its count text). ──
+    //    Label (same source BIO uses for its count text). This footer is
+    //    also "where scan results report" per SPEC §6.3, so the
+    //    rescan-reconcile drop warning (the #2 fix —
+    //    `step2_rescan_reconcile`) is appended here, warn-toned. ──
     crate::ui::step2::service_list_ops_step2::recompute_selection_counts(
         &mut orchestrator.wizard_state,
     );
+    let drop_warning = orchestrator
+        .workspace_view
+        .step2
+        .rescan_drop_warning
+        .clone();
     ui.scope_builder(egui::UiBuilder::new().max_rect(footer_rect), |ui| {
-        ui.label(
-            egui::RichText::new(&orchestrator.wizard_state.step2.scan_status)
-                .size(12.0)
-                .family(egui::FontFamily::Name("poppins_medium".into()))
-                .color(redesign_text_faint(palette)),
-        );
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(&orchestrator.wizard_state.step2.scan_status)
+                    .size(12.0)
+                    .family(egui::FontFamily::Name("poppins_medium".into()))
+                    .color(redesign_text_faint(palette)),
+            );
+            // #2 fix — the rescan-reconcile drop warning (SPEC §6.3:
+            // _"N component(s) dropped — M mod(s) no longer present"_) is
+            // surfaced in the scan-status footer, warn-toned so it reads as
+            // a warning (no dialog — the reconcile is non-destructive by
+            // construction). Set by `step2_rescan_reconcile` on
+            // scan-completion; cleared on the next scan trigger.
+            if let Some(warning) = drop_warning.as_deref() {
+                ui.label(
+                    egui::RichText::new(format!("\u{2014} {warning}"))
+                        .size(12.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(redesign_warning_soft(palette)),
+                );
+            }
+        });
     });
 
     action

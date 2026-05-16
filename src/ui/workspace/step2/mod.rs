@@ -34,11 +34,21 @@
 //                           affordance (test enablement; absent in normal
 //                           mode — pre-Phase-7 there is no per-install
 //                           extracted-mods folder, SPEC §13.12a).
+//   - `step2_rescan_reconcile` → the rescan-reconcile logic (SPEC §6.3, the
+//                           #2 fix): snapshot the selection at scan-trigger
+//                           time, re-apply it onto the freshly-scanned mod
+//                           set on scan-completion (preserving
+//                           `selected_order`), drop only absent
+//                           mods/components + surface the missing-mods
+//                           warning. Net-new orchestrator logic (BIO has no
+//                           reusable rescan-preserves-selection mechanism);
+//                           BIO read-only.
 //
 // SPEC: §6, §1 (decision order; carve-out boundary), §13.12a, §2.2;
 //       wireframe `screens.jsx:2786-2880`.
 
 pub mod step2_dev_scan;
+pub mod step2_rescan_reconcile;
 pub mod step2_search;
 pub mod step2_tab_row;
 pub mod workspace_step2;

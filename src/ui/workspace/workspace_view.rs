@@ -21,7 +21,12 @@
 // The nav bar's outcome drives step advancement + the progress-bar
 // checkmarks: crossing forward into a new step marks the step being left as
 // completed (wireframe `goNext`: `if (!completed.includes(tab))
-// setCompleted([...completed, tab])`).
+// setCompleted([...completed, tab])`). On the **first** workspace step
+// (Step 2) `← Previous` routes back to **Home** (SPEC §2.2 / P6.T4 —
+// affordance-forward: the user entered via a Home `resume`/`open`, so
+// first-step Previous closes that loop rather than being a dead control;
+// recorded SPEC §2.2 + overview 2026-05-16). This mirrors Run-1's
+// Home→Workspace resume route in reverse (set `orchestrator.nav`).
 //
 // Per the plan's file inventory the signature is
 // `render(ui, orchestrator, modlist_id, ctx)`. The caller
@@ -32,6 +37,7 @@
 
 use eframe::egui;
 
+use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
 use crate::ui::workspace::state_workspace::WorkspaceStep;
@@ -103,6 +109,20 @@ pub fn render(
     } else if outcome.prev_clicked {
         if let Some(prev) = current.prev() {
             orchestrator.workspace_view.current_step = prev;
+        } else {
+            // #3 fix — first-step `← Previous` routes back to **Home**
+            // (SPEC §2.2 / P6.T4): the user reached the workspace via a
+            // Home `resume`/`open`, so first-step Previous closes that loop
+            // rather than being a dead control. `current.prev()` is `None`
+            // only on the first workspace step (Step 2), so this arm IS the
+            // first-step case. This mirrors Run-1's Home→Workspace resume
+            // route in reverse — set the top-level destination router
+            // (`page_router` reads `orchestrator.nav` next frame; the
+            // loaded workspace state stays intact so a later resume
+            // re-opens it). `disable_prev` is `false` until Phase 7 and the
+            // nav bar only emits `prev_clicked` when `← Previous` is
+            // enabled, so reaching here already implies not force-disabled.
+            orchestrator.nav = NavDestination::Home;
         }
     }
 }

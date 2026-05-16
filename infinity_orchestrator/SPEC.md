@@ -120,7 +120,7 @@ When the user opens a modlist (from Home, Create, or via Load Draft), the entire
 - A progress bar shows the 4 workspace steps: **Step 2 — Scan and Select**, **Step 3 — Reorder and Resolve**, **Step 4 — Review**, **Step 5 — Install**.
 - Below the progress bar is a one-line hint describing the current step.
 - Below the hint is the active step's content area.
-- Below that is a bottom nav row with `← Back` / `Next →` buttons and an indicator like "Step 3 · Reorder and Resolve · next: Review".
+- Below that is a bottom nav row with `← Previous` / `Next →` buttons and an indicator like "Step 3 · Reorder and Resolve · next: Review". On the **first** workspace step (Step 2) `← Previous` returns to **Home** — the user reached the workspace via a Home `resume`/`open`, so first-step Previous closes that loop rather than being a dead control. Intentional affordance-forward deviation from the wireframe's former first-step *disabled* state (recorded; overview 2026-05-16). `← Previous` is force-disabled only by the Phase-7 install-running gate.
 - A header-right button area: `⑂ view fork details` — shown only when this modlist's `forked_from` chain is non-empty; opens the [ForkInfoPopup](#109-forkinfopopup) ([§10.9](#109-forkinfopopup)) — and **save draft** (Steps 2–4) or **Share import code** (Step 5 only, enabled only after a successful install).
 - The left rail remains available so the user can jump out to Settings or Home mid-modlist. The workspace state persists.
 
@@ -432,7 +432,7 @@ A 15px medium-weight Label reading "Mods / Components".
 ### 6.3 Search + Rescan row
 
 - Wide `Input` (placeholder "Search mods or components...").
-- Right-aligned **`Rescan Mods Folder`** TopButton. Rescan is non-destructive — no confirmation dialog. Triggers a fresh TP2 scan of the configured mods folder; progress shows in the status bar.
+- Right-aligned **`Rescan Mods Folder`** TopButton. Rescan is **non-destructive — it never wipes the user's choices**: it re-scans the mods folder, then **re-applies the current selection set onto the freshly-scanned mod list** (matched by `tp2` + component id, preserving each component's `selected_order`), **dropping only selections whose mod or component is no longer present**. When any are dropped, a warning is surfaced in the scan-status footer (where scan results report): _"N component(s) dropped — M mod(s) no longer present"_. No confirmation dialog (it is non-destructive by construction). While a scan runs, the button becomes **`Cancel Scan`** (intentional addition — the wireframe omits it; a scan can be long-running or wrong-target; recorded). (Pre-Phase-7 the production button is inert per [§13.12a](#1312a-directory-architecture--content-addressed-archives) — no per-install extracted-mods folder exists until P7.T17; the dev-mode scan affordance exercises this reconcile path meanwhile.)
 
 ### 6.4 Toolbar
 

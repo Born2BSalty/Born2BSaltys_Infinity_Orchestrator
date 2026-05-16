@@ -492,15 +492,18 @@ fn details_label(open: bool) -> &'static str {
 
 /// A wireframe `GameTab` (`screens.jsx:1609-1637`; same shape as the
 /// Settings `tab_strip`, `screens.jsx:485-503`): a **tab**, not a closed
-/// button box. Rounded-TOP corners only; the border is stroked on the
-/// **top / left / right edges only** (the wireframe `border` +
-/// `borderBottom: <active ? shell-bg : border-strong>`), so the bottom
-/// edge never draws a `border-strong` line that would close it into a box.
-/// The tab's fill (active = shell-bg, idle = chrome-bg) extends 1.5px past
-/// its bottom into the seam above the tree pane (the wireframe
-/// `marginBottom: -1.5px`) so the **active** tab's shell-bg masks the tree
-/// pane's top border — visually the active tab "flows into" the pane below
-/// (`screens.jsx:1613-1616`). Active = primary text, idle = muted text.
+/// button box. The box is drawn with **egui's native per-corner rounding**
+/// — a single rounded-top `RectShape` (`CornerRadius { nw:R, ne:R, sw:0,
+/// se:0 }`) for both the fill and the 1.5px border, so the two top corners
+/// are correct by construction (no hand-rolled arcs). The box extends 1.5px
+/// past its bottom into the seam above the tree pane (the wireframe
+/// `marginBottom: -1.5px`). The bottom border follows the wireframe
+/// `borderBottom: active ? shell-bg : border-strong`: for the **active**
+/// tab the bottom edge is over-painted in shell-bg so — together with the
+/// shell-bg fill overlap — it masks the tree pane's top border and the tab
+/// "flows into" the pane (`screens.jsx:1613-1616`); for an **idle** tab the
+/// border-strong bottom coincides with the pane's own top border (a single
+/// line, no double rule). Active = primary text, idle = muted text.
 fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut String) {
     let active = current == label;
     let font = egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into()));
@@ -526,64 +529,53 @@ fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut
         } else {
             redesign_chrome_bg(palette)
         };
-        // Fill extends 1.5px past the bottom edge (wireframe
-        // `marginBottom: -1.5px`) so the active tab's shell-bg overlaps —
-        // and masks — the tree pane's top border in the seam below.
-        let fill_rect = egui::Rect::from_min_max(
+        // The tab box extends 1.5px past its bottom edge into the seam above
+        // the tree pane — the wireframe `GameTab` `marginBottom: -1.5px`
+        // (`screens.jsx:1630`). For the ACTIVE tab the shell-bg fill (and
+        // the shell-bg bottom border, below) overlaps & masks the pane's
+        // top border so the tab "flows into" the pane
+        // (`screens.jsx:1613-1616`). For an IDLE tab the box's bottom edge
+        // lands exactly on the pane's own top border, so the (border-strong)
+        // bottom border coincides with the pane border — a single line, no
+        // double rule.
+        let box_rect = egui::Rect::from_min_max(
             rect.min,
             egui::pos2(rect.max.x, rect.max.y + REDESIGN_BORDER_WIDTH_PX),
         );
-        painter.rect_filled(fill_rect, corner, fill);
+        // Native per-corner rounding: rounded TOP only (`4px 4px 0 0`,
+        // wireframe `borderRadius`). `corner` already encodes `sw:0 se:0`,
+        // so egui rounds the two top corners by construction — no
+        // hand-rolled arcs (the #1 defect: the old `paint_corner_arc` used
+        // the wrong arc orientation and the manual edge strokes left a
+        // visible bottom segment).
+        painter.rect_filled(box_rect, corner, fill);
         if !active && response.hovered() {
-            painter.rect_filled(fill_rect, corner, redesign_hover_overlay(palette));
+            painter.rect_filled(box_rect, corner, redesign_hover_overlay(palette));
         }
-        // Stroke ONLY the top / left / right edges (the wireframe `border`
-        // with a NON-`border-strong` `borderBottom`). Drawing all four
-        // sides is the #3 defect — it makes the tab read as a closed
-        // button. The bottom is intentionally open so the tab merges into
-        // the tree pane (Settings-tab behavior, `screens.jsx:494/499`).
+        // Stroke the box natively (one `RectShape`, all four sides) with the
+        // correct rounded-top corners — the wireframe `border: 1.5px solid
+        // border-strong`. `StrokeKind::Inside` keeps the 1.5px line within
+        // `box_rect`.
         let stroke = egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-        let r = REDESIGN_BORDER_RADIUS_PX;
-        // Top edge (between the rounded corners).
-        painter.line_segment(
-            [
-                egui::pos2(rect.left() + r, rect.top()),
-                egui::pos2(rect.right() - r, rect.top()),
-            ],
-            stroke,
-        );
-        // Left edge (corner arc start → bottom).
-        painter.line_segment(
-            [
-                egui::pos2(rect.left(), rect.top() + r),
-                egui::pos2(rect.left(), rect.bottom()),
-            ],
-            stroke,
-        );
-        // Right edge (corner arc start → bottom).
-        painter.line_segment(
-            [
-                egui::pos2(rect.right(), rect.top() + r),
-                egui::pos2(rect.right(), rect.bottom()),
-            ],
-            stroke,
-        );
-        // The two rounded top corners (quarter-arc approximations via short
-        // segments — matches the sketchy 1.5px language elsewhere).
-        paint_corner_arc(
-            painter,
-            egui::pos2(rect.left() + r, rect.top() + r),
-            r,
-            180.0,
-            stroke,
-        );
-        paint_corner_arc(
-            painter,
-            egui::pos2(rect.right() - r, rect.top() + r),
-            r,
-            270.0,
-            stroke,
-        );
+        painter.rect_stroke(box_rect, corner, stroke, egui::StrokeKind::Inside);
+        if active {
+            // Wireframe `borderBottom: active ? shell-bg : border-strong`
+            // (`screens.jsx:1625`): the ACTIVE tab's bottom border is
+            // shell-bg, so over-paint just the bottom edge with the shell-bg
+            // fill. Combined with the 1.5px fill overlap this fully masks
+            // the pane's top border in the tab's x-range — the tab merges
+            // into the pane (no boxed-button bottom line). The IDLE tab
+            // keeps the border-strong bottom drawn above (it coincides with
+            // the pane's top border = one line).
+            let half = REDESIGN_BORDER_WIDTH_PX / 2.0;
+            painter.line_segment(
+                [
+                    egui::pos2(box_rect.left(), box_rect.bottom() - half),
+                    egui::pos2(box_rect.right(), box_rect.bottom() - half),
+                ],
+                egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, fill),
+            );
+        }
         let text_color = if active {
             redesign_text_primary(palette)
         } else {
@@ -599,29 +591,6 @@ fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut
     }
     if response.clicked() {
         *current = label.to_string();
-    }
-}
-
-/// Paint a 90° corner arc as 4 short segments (sketchy 1.5px language).
-/// `center` is the arc centre, `r` the radius, `start_deg` the starting
-/// angle (0° = +x, CCW). Used for the GameTab's two rounded top corners
-/// so the open-bottom tab still has the wireframe's `4px 4px 0 0` radius.
-fn paint_corner_arc(
-    painter: &egui::Painter,
-    center: egui::Pos2,
-    r: f32,
-    start_deg: f32,
-    stroke: egui::Stroke,
-) {
-    let steps = 4;
-    let start = start_deg.to_radians();
-    let sweep = std::f32::consts::FRAC_PI_2; // 90°
-    let mut prev = egui::pos2(center.x + r * start.cos(), center.y - r * start.sin());
-    for i in 1..=steps {
-        let a = start + sweep * (i as f32 / steps as f32);
-        let p = egui::pos2(center.x + r * a.cos(), center.y - r * a.sin());
-        painter.line_segment([prev, p], stroke);
-        prev = p;
     }
 }
 

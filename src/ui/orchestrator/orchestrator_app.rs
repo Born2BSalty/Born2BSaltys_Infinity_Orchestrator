@@ -623,6 +623,15 @@ impl eframe::App for OrchestratorApp {
         // explicit repaint request because egui paints lazily and the
         // worker reports off-thread.
         self.poll_step2_channels();
+        // SPEC §6.3 (the #2 fix) — rescan is non-destructive. The drain
+        // above has just landed the freshly-scanned mod set if the scan
+        // completed this frame; re-apply the pre-scan selection snapshot
+        // onto it (preserving `selected_order`), dropping only mods /
+        // components no longer present + surfacing the missing-mods
+        // warning. No-op unless `is_scanning` just transitioned `true →
+        // false` after a *successful* scan with a snapshot pending — must
+        // run AFTER `poll_step2_channels` so the fresh mods are in place.
+        crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(self);
         if self.step2_needs_repaint() {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
