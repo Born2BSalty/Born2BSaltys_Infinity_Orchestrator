@@ -164,10 +164,24 @@ pub fn render(
     }
 
     // ── SubFlowFooter ──
-    // Footer primary is disabled when the import-code textarea is empty and
-    // we're not in partial mode (SPEC §4.1 acceptance).
+    // SPEC §4.1: the primary is disabled until the destination resolves to a
+    // **real existing folder** (typed garbage / empty does not satisfy it;
+    // `browse` does) AND — when not in partial mode — a share code has been
+    // pasted. A blocked missing/invalid destination shows an actionable hint
+    // instead of the reassurance copy (affordance-forward).
+    let dest_valid = {
+        let t = state.destination.trim();
+        !t.is_empty() && std::path::Path::new(t).is_dir()
+    };
     let code_empty = state.import_code.trim().is_empty();
-    let primary_disabled = !is_partial && code_empty;
+    let primary_disabled = !dest_valid || (!is_partial && code_empty);
+    let hint: &str = if !dest_valid {
+        "set a valid destination folder (browse to a real folder) to continue"
+    } else if is_partial {
+        "no share code needed"
+    } else {
+        "no install starts until preview is accepted"
+    };
     let outcome = sub_flow_footer::render(
         ui,
         palette,
@@ -177,11 +191,7 @@ pub fn render(
         // No secondary CTA on the paste stage (the `Open in Create →` slot
         // is preview-only — SPEC §4.2).
         None::<sub_flow_footer::SecondaryBtn<'_>>,
-        Some(if is_partial {
-            "no share code needed"
-        } else {
-            "no install starts until preview is accepted"
-        }),
+        Some(hint),
         PrimaryBtn {
             label: if is_partial {
                 "Continue Install"

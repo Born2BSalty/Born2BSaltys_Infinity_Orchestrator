@@ -494,3 +494,14 @@ The `tweaks-panel.jsx` file is wireframe-iteration-only — its contents do not 
 **Artifacts changed (this revision):** SPEC §13.12a (new — directory architecture + content-addressed archives + pipeline-reuse contract) + §4.3 (Phasing note); plan phase-07 P7.T17 (new — per-install dirs + staging layer + pipeline drive + binds the §4.3 chassis live); plan phase-05 P5.T12 (chassis/Phase-7 split) + Open-questions + Verification; HANDOFF (status + caveat + lessons-learned); `.claude/orchestrator-handoff.md` (Run-5 done + the standing cross-phase-context block + the premise-check verify rule); this log.
 
 **Status:** Phase 5 complete after Run 5's chassis commits. Phase 6 (Create + Workspace shell) is the next dispatch.
+
+### 2026-05-16 — Run-5 QA fixes: destination required (SPEC §4.1) + warning Light-mode legibility
+
+**Scope.** QA of Run 5 surfaced two issues; both fixed (redesign-only, no BIO touch):
+
+1. **Destination was not required.** SPEC §4.1 only *described* the FolderInput; it never required it, and `stage_paste.rs` gated the footer primary on the share code alone — you could click `Preview →` / `Continue Install →` with no destination. Per the user (final authority): **§4.1 amended** — a valid destination is required in every mode; the primary stays disabled until `destination` resolves to a **real existing directory** (typed garbage / empty does not satisfy it; `browse` does), with an actionable hint while blocked. Enforced in `stage_paste.rs`; P5.T9 acceptance updated.
+2. **`DestinationNotEmptyWarning` unreadable in Light mode.** `WARN_FILL` was a *premultiplied* (baked-dark) constant → an opaque dark box on the Light parchment. Fixed to un-premultiplied amber composited source-over the theme background (pale wash on Light, subtle on Dark); `const`→`fn` because `from_rgba_unmultiplied` is not `const fn` in this egui version.
+
+Verified: orchestrator + BIO build clean, 187/187 tests, scoped rustfmt clean, BIO-source guard empty. SPEC §4.1 + plan P5.T9 + HANDOFF + orchestrator-handoff synced.
+
+**Status:** Phase 5 still complete; these are Run-5 QA follow-ups. Phase 6 next.

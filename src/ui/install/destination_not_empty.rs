@@ -52,20 +52,26 @@
 use eframe::egui;
 
 use crate::ui::install::state_install::DestChoice;
-use crate::ui::orchestrator::widgets::{redesign_btn, BtnOpts};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    redesign_shadow, redesign_text_muted, redesign_text_primary, ThemePalette,
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
+    ThemePalette, redesign_shadow, redesign_text_muted, redesign_text_primary,
 };
 
 /// Wireframe `border: 1.5px solid #edc547` — amber warning border (literal
 /// hex, not a palette token: the wireframe hard-codes it inside this
 /// component).
 const WARN_BORDER: egui::Color32 = egui::Color32::from_rgb(0xed, 0xc5, 0x47);
-/// Wireframe `background: rgba(237, 197, 71, 0.18)` — same amber at 18%.
-/// Premultiplied: alpha = round(0.18·255) = 46; each channel = round(c·0.18)
-/// → R 237·0.18≈43 (0x2B), G 197·0.18≈35 (0x23), B 71·0.18≈13 (0x0D).
-const WARN_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(0x2B, 0x23, 0x0D, 46);
+/// Wireframe `background: rgba(237, 197, 71, 0.18)` — amber at ~18% alpha.
+/// **Un-premultiplied** so egui composites it source-over the *current theme
+/// background* (pale amber wash on Light, subtle amber glow on Dark). The
+/// earlier premultiplied form baked a dark fill that rendered as an opaque
+/// dark box on the Light parchment (QA: "not clear in light mode"). A `fn`
+/// (not a `const`) because `from_rgba_unmultiplied` is not `const fn` in this
+/// egui version. alpha = round(0.18·255) = 46.
+fn warn_fill() -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(0xED, 0xC5, 0x47, 46)
+}
 
 /// Render the warning Box. `choice` is the currently selected option (if
 /// any); returns `Some(new_choice)` when the user clicks one this frame.
@@ -83,7 +89,7 @@ pub fn render(
     let mut picked: Option<DestChoice> = None;
 
     let frame = egui::Frame::default()
-        .fill(WARN_FILL)
+        .fill(warn_fill())
         .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, WARN_BORDER))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
         // Wireframe `padding: 10px 14px`.

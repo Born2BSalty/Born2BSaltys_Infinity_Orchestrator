@@ -157,7 +157,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
   The previous draft used "Replace contents" for the `clear` label. That is incorrect — wireframe `screens.jsx:123-154` shows "Clear contents". Fixed per H10.
 
 - **Where:** `src/ui/install/stage_paste.rs`.
-- **Acceptance:** Pasting a valid BIO-MODLIST-V1 code and clicking `Preview →` advances to stage 2. Empty code with the button disabled.
+- **Acceptance:** A valid destination is **required** — the footer primary is disabled until `destination` resolves to a real existing directory (typed garbage / empty does not satisfy it; `browse` does), in every mode. With a valid destination: pasting a valid BIO-MODLIST-V1 code and clicking `Preview →` advances to stage 2; empty code keeps the button disabled (non-partial). The `DestinationNotEmptyWarning` Box is legible in **both** Light and Dark themes (amber wash composited over the theme background, not a baked-dark fill).
 - **SPEC:** §4.1.
 
 ### P5.T10 — `Install` stage 2 (preview): provenance display + `allow_auto_install` gate

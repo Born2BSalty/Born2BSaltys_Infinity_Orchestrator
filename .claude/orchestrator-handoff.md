@@ -21,7 +21,7 @@ Branch `overhaul/infinity_orchestrator`, HEAD = the Phase 5 **Run 5** commit (th
 | 2 | Home — actions live (P5.T7 delete, T16 toast, T17 open-folder, T18 reinstall stub) | ✅ done + 1 follow-up |
 | 3 | Install — shell + paste stage + stage-4 stub (P5.T9, T13, T14) | ✅ done + 3 follow-ups |
 | 4 | Install — Preview parse + 6 tabs + carve-out #5 provenance trio + `ForkInfoPopup` (P5.T10, T11) | ✅ done — independently verified (BIO-guard clean, carve-out = exact 5 items, 178 lib tests, both binaries build); +1 follow-up: paste-code box capped to footer + scrolls internally (was growing unbounded on large codes) |
-| 5 | Install — Downloading §4.3 chassis (P5.T12) | ✅ done — verified (BIO-guard empty, 187 lib tests, both binaries build); live download data + per-install dirs + content-addressed staging deferred to Phase 7 P7.T17 (SPEC §13.12a) |
+| 5 | Install — Downloading §4.3 chassis (P5.T12) | ✅ done — verified (BIO-guard empty, 187 lib tests, both binaries build); live download data + per-install dirs + content-addressed staging deferred to Phase 7 P7.T17 (SPEC §13.12a). +QA follow-ups: paste-stage now requires a valid destination folder (SPEC §4.1 amended + enforced) + `DestinationNotEmptyWarning` Light-mode legibility fix |
 
 Run-slicing rationale + per-run breakpoints are in this session's history; the canonical task list is the phase doc. After Run 5, Phase 5 is done → Phase 6 (Create + Workspace shell) is the next big phase (its own multi-run slicing; see `plan/phase-06-*.md`, HANDOFF "Finishing the plan" pacing).
 
