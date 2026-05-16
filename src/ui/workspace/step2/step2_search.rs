@@ -18,22 +18,40 @@
 //
 // The wireframe's `<TopButton>Rescan Mods Folder</TopButton>` is rendered
 // here as a redesign `redesign_btn` (small = the wireframe `TopButton` =
-// `Btn small`). It emits `Step2Action::StartScan` — the **same** action
-// BIO's `content_step2::render_controls` "Scan Mods Folder" button emits
-// (`src/ui/step2/content_step2.rs:152`); the orchestrator's
-// `step_action_dispatch::dispatch_step2` routes it through BIO's public
-// `app_step2_router::handle_step2_action` → `app_step2_scan::
-// start_step2_scan`. The enable predicate replicates `render_controls`'
-// `can_scan_mods_folder` (`content_step2.rs:137-141`) — public-state reads
-// only, no BIO logic reimplemented.
+// `Btn small`).
+//
+// ## Production Rescan is INERT pre-Phase-7 (the #2 fix; SPEC §13.12a)
+//
+// BIO's scan worker reads `step1.mods_folder` (`bio::app::step2::scan::
+// worker.rs:75`). The redesign has **no global mods folder** — Settings →
+// Paths supplies game-source / Mods-*archive* / backup / tool paths only.
+// The real scan target is the **per-install extracted-mods folder**
+// produced at prep time by the Phase-7 P7.T17 pipeline (SPEC §13.12a).
+// Pre-Phase-7 there is no valid target, so a production `StartScan` would
+// fall through to whatever stale `mods_folder` Settings holds (a temp dir)
+// — the observed defect. So the production **"Rescan Mods Folder"** button
+// is **disabled** pre-Phase-7 with an explanatory tooltip. This is the
+// SAME accepted §13.12a Phase-7 deferral pattern as the §4.3 Downloading
+// chassis — a deliberate "lights up in Phase 7" stub, not a path-mapping
+// hack. The **dev scan affordance is the functional scan path now.**
+//
+// ## Cancel Scan (the #7 recorded addition)
+//
+// The wireframe has no Cancel. While `state.step2.is_scanning`, the Rescan
+// button is replaced **in place** by **"Cancel Scan"** (enabled), emitting
+// `Step2Action::CancelScan` — already handled by `dispatch_step2` →
+// `app_step2_router::handle_step2_action`. A necessary capability (a scan
+// can be long / wrong-target); recorded as an intentional wireframe
+// omission addition.
 //
 // The dev-only scan-folder affordance (P6.T2c — test enablement; absent in
-// normal mode) sits to the right of Rescan, behind `dev_mode`. Pre-Phase-7
-// there is no per-install extracted-mods folder to scan (SPEC §13.12a), so
-// a developer needs to point the scan at an arbitrary folder to exercise
-// the chrome.
+// normal mode) sits to the right, behind `dev_mode`. It points BIO's scan
+// at a developer-chosen folder regardless of the (absent) production
+// target, so it is **always enabled in dev mode** (the noted-minor fix —
+// it must not inherit a production `can_scan` gate).
 //
-// SPEC: §6 (Step 2 search + Scan), §13.12a (dev scan rationale).
+// SPEC: §6 (Step 2 search + Scan), §13.12a (production Rescan deferral +
+//       dev scan rationale), wireframe omission (Cancel Scan, recorded).
 
 use eframe::egui;
 
@@ -52,11 +70,19 @@ const SEARCH_INPUT_H: f32 = 30.0;
 /// Gap between row items (wireframe search row `gap: 10`).
 const ROW_GAP: f32 = 10.0;
 
-/// Render the search row into `rect`. Returns `Some(Step2Action::StartScan)`
-/// when the `Rescan Mods Folder` button is clicked (the router dispatches it
-/// via `step_action_dispatch::dispatch_step2`). `dev_mode` gates the
-/// (dev-only) scan-folder affordance — when `false` only the field + Rescan
-/// are drawn (normal-mode behavior).
+/// Tooltip on the **disabled** production Rescan button (the #2 fix). States
+/// the §13.12a Phase-7 deferral plainly and points the developer at the dev
+/// scan (the functional path pre-Phase-7).
+const RESCAN_DISABLED_TIP: &str = "Available after install prep (Phase 7) \u{2014} \
+     the mods folder is extracted per-install at prep time (SPEC \u{00A7}13.12a). \
+     Use the dev scan in dev mode to exercise scanning before then.";
+
+/// Render the search row into `rect`. Returns `Some(Step2Action::CancelScan)`
+/// when a scan is running and `Cancel Scan` is clicked (the #7 addition);
+/// the production `Rescan Mods Folder` button is inert pre-Phase-7 (the #2
+/// fix) so it never emits `StartScan`. `dev_mode` gates the (dev-only,
+/// always-enabled) scan-folder affordance — when `false` only the field +
+/// Rescan/Cancel are drawn (normal-mode behavior).
 pub fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
@@ -64,14 +90,7 @@ pub fn render(
     rect: egui::Rect,
     dev_mode: bool,
 ) -> Option<Step2Action> {
-    // Replicates `content_step2::render_controls`' `can_scan_mods_folder`
-    // (`src/ui/step2/content_step2.rs:137-141`) — public-state reads only.
-    let can_scan = if orchestrator.wizard_state.step1.bootstraps_from_weidu_logs() {
-        !orchestrator.wizard_state.step2.is_scanning
-    } else {
-        !orchestrator.wizard_state.step2.is_scanning
-            && orchestrator.wizard_state.step1_mods_folder_has_tp2 != Some(false)
-    };
+    let is_scanning = orchestrator.wizard_state.step2.is_scanning;
 
     let mut action: Option<Step2Action> = None;
 
@@ -81,15 +100,21 @@ pub fn render(
 
             // Right-hand controls are measured first so the search field can
             // claim the remaining (full) width — the wireframe `flex: 1`.
-            let rescan_label = "Rescan Mods Folder";
-            let rescan_w = small_btn_width(ui, rescan_label);
+            // While scanning the in-place button is "Cancel Scan" (#7);
+            // otherwise the (disabled pre-Phase-7) "Rescan Mods Folder" (#2).
+            let scan_btn_label = if is_scanning {
+                "Cancel Scan"
+            } else {
+                "Rescan Mods Folder"
+            };
+            let scan_btn_w = small_btn_width(ui, scan_btn_label);
             let dev_label = "dev: scan a folder\u{2026}";
             let dev_w = if dev_mode {
                 small_btn_width(ui, dev_label) + ROW_GAP
             } else {
                 0.0
             };
-            let search_w = (rect.width() - rescan_w - ROW_GAP - dev_w).max(80.0);
+            let search_w = (rect.width() - scan_btn_w - ROW_GAP - dev_w).max(80.0);
 
             let resp = ui.add_sized(
                 [search_w, SEARCH_INPUT_H],
@@ -111,25 +136,45 @@ pub fn render(
                 egui::StrokeKind::Inside,
             );
 
-            // The wireframe `<TopButton>Rescan Mods Folder</TopButton>` —
-            // redesign `redesign_btn` small (= `Btn small` = `TopButton`).
-            if redesign_btn(
-                ui,
-                palette,
-                rescan_label,
-                BtnOpts {
-                    small: true,
-                    disabled: !can_scan,
-                    ..Default::default()
-                },
-            )
-            .on_hover_text(crate::ui::shared::tooltip_global::STEP2_SCAN)
-            .clicked()
-                && can_scan
-            {
-                action = Some(Step2Action::StartScan);
+            if is_scanning {
+                // #7: "Cancel Scan" replaces Rescan in place while scanning.
+                // Enabled; emits `CancelScan` (handled by `dispatch_step2` →
+                // BIO's `app_step2_router::handle_step2_action`).
+                if redesign_btn(
+                    ui,
+                    palette,
+                    scan_btn_label,
+                    BtnOpts {
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .on_hover_text("Stop the running scan and return to idle.")
+                .clicked()
+                {
+                    action = Some(Step2Action::CancelScan);
+                }
+            } else {
+                // #2: production "Rescan Mods Folder" is INERT pre-Phase-7
+                // (no valid per-install extracted-mods target yet — SPEC
+                // §13.12a). Disabled + explanatory tooltip; emits nothing.
+                redesign_btn(
+                    ui,
+                    palette,
+                    scan_btn_label,
+                    BtnOpts {
+                        small: true,
+                        disabled: true,
+                        ..Default::default()
+                    },
+                )
+                .on_hover_text(RESCAN_DISABLED_TIP);
             }
 
+            // Dev-only scan affordance — ALWAYS enabled in dev mode (the
+            // noted-minor fix: it points BIO's scan at a chosen folder
+            // regardless of the absent production target, so it must not
+            // inherit any production `can_scan` gate).
             if dev_mode && dev_scan_button(ui, palette, dev_label).clicked() {
                 step2_dev_scan::pick_folder_and_scan(orchestrator);
             }

@@ -33,11 +33,16 @@
 //
 // **Net-new chrome (this file + `step2_search` + `step2_tab_row`,
 //   redesign tokens, orchestrator-owned rects):**
-//   - Title `Mods / Components` + the per-step hint line.
+//   - Title `Mods / Components` ONLY (no sub-hint — the workspace shell
+//     already renders the per-step hint under the progress bar; the #6
+//     fix removed the duplicate).
 //   - A **full-width `flex` search** (`step2_search`) writing the *same*
 //     `state.step2.search_query` field BIO's tree filters on, plus the
-//     wireframe `Rescan Mods Folder` button (emits `Step2Action::StartScan`
-//     — the same action BIO's `render_controls` Scan button emits).
+//     wireframe `Rescan Mods Folder` button — **disabled pre-Phase-7**
+//     (the #2 fix: no per-install extracted-mods target yet, SPEC
+//     §13.12a), replaced in place by **`Cancel Scan`** while a scan runs
+//     (the #7 addition, emits `Step2Action::CancelScan`). The functional
+//     scan path pre-Phase-7 is the dev-only scan affordance.
 //   - The net-new redesign tab row (`step2_tab_row`): redesign GameTabs
 //     writing `state.step2.active_game_tab`, the per-tab log/updates
 //     buttons, the live compat / prompt `Pill`s, the count Label, and the
@@ -62,16 +67,24 @@
 //     `bio::ui::app::update_loop::render_shared_popups` does for
 //     `WizardApp`).
 //
-// ## The #4 fix — layout-rect ownership
+// ## The #4 + #1 fixes — layout-rect ownership + hard pane containment
 //
-// BIO's `frame_step2::render` does `ui.allocate_exact_size(vec2(x.max(900),
-// y.max(620)), …)` — it force-claims a 620px-min height regardless of the
-// space the host gave it, which made the embedded panel bleed past the
-// workspace nav bar. This wrapper instead lays every rect out from the
-// **bounded** `ui.available_rect_before_wrap()` the workspace handed it
-// (`workspace_view` already reserved the nav-bar footprint). The tree
-// scrolls *internally* via `render_list_pane`'s own scroll area, so the
-// chrome always fits above the nav bar.
+// (#4) BIO's `frame_step2::render` does `ui.allocate_exact_size(vec2(
+// x.max(900), y.max(620)), …)` — it force-claims a 620px-min height
+// regardless of the space the host gave it, which made the embedded panel
+// bleed past the workspace nav bar. This wrapper instead lays every rect
+// out from the **bounded** `ui.available_rect_before_wrap()` the workspace
+// handed it (`workspace_view` already reserved the nav-bar footprint).
+//
+// (#1) Even so, BIO's `details_pane_step2::render_pane` does NOT clip and
+// its inner `ScrollArea` could still grow the *parent* UI, pushing the nav
+// bar (and its `Next →`) off-screen on a narrow window. So each reused BIO
+// sub-renderer (tree + details) runs inside `clipped_pane`: a child UI with
+// its clip rect hard-set to the pane rect, after which the parent placer is
+// advanced by **exactly** the bounded rect (never by BIO's overgrown
+// internal min-rect). The BIO pane may be visually clipped/cut (its
+// internal restyle is Phase 8) but it can never break its box or push the
+// nav bar.
 //
 // ## Background-channel poll
 //
@@ -95,7 +108,6 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_faint, redesign_text_primary,
 };
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::workspace::state_workspace::WorkspaceStep;
 use crate::ui::workspace::step2::{step2_search, step2_tab_row};
 
 /// Width of the Details pane when open (wireframe `gridTemplateColumns:
@@ -106,10 +118,6 @@ const TITLE_H: f32 = 24.0;
 /// Gap between the title and the search row (wireframe title
 /// `marginBottom: 8`).
 const TITLE_GAP: f32 = 8.0;
-/// Per-step hint line height.
-const HINT_H: f32 = 18.0;
-/// Gap between the hint and the search row.
-const HINT_GAP: f32 = 8.0;
 /// Search-input height (wireframe `Input` row).
 const SEARCH_H: f32 = 30.0;
 /// Gap between the search row and the tab row (wireframe search row
@@ -117,9 +125,12 @@ const SEARCH_H: f32 = 30.0;
 const SEARCH_GAP: f32 = 10.0;
 /// Tab-row height (wireframe action sub-row `height: 30`).
 const TAB_ROW_H: f32 = 30.0;
-/// Gap between the tab row and the tree pane (wireframe grid `gap: 12`,
-/// minus the tab `marginBottom: -1.5` overlap → small positive seam).
-const TAB_TO_GRID_GAP: f32 = 4.0;
+/// The tab row overlaps the tree pane's top edge by 1.5px (the wireframe
+/// `GameTab` / Settings-tab `marginBottom: -1.5px`, `screens.jsx:1630/499`):
+/// the tree pane starts 1.5px **above** the tab row's bottom so the active
+/// tab's shell-bg fill masks the pane's top border (the #3 "tab merges into
+/// the pane" behavior). A negative seam.
+const TAB_TO_GRID_OVERLAP: f32 = 1.5;
 /// Gap between the tree Box and the Details pane (wireframe grid `gap: 12`).
 const GRID_GAP: f32 = 12.0;
 /// Scan-status footer height.
@@ -157,14 +168,20 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     let title_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, TITLE_H));
     y += TITLE_H + TITLE_GAP;
 
-    let hint_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, HINT_H));
-    y += HINT_H + HINT_GAP;
+    // #6 fix: NO per-step sub-hint here. The workspace shell already renders
+    // the per-step hint under the progress bar (`workspace_hint_line`,
+    // wireframe `WorkspaceView` L3557-3559); the wireframe `SourcesPanel`
+    // (`screens.jsx:2794-2802`) has only the "Mods / Components" title, no
+    // sub-hint. A second hint here was a duplicate. Its rect is reclaimed.
 
     let search_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, SEARCH_H));
     y += SEARCH_H + SEARCH_GAP;
 
     let tab_row_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, TAB_ROW_H));
-    y += TAB_ROW_H + TAB_TO_GRID_GAP;
+    // The tree pane starts 1.5px ABOVE the tab row's bottom (negative seam)
+    // so the active GameTab's shell-bg fill overlaps & masks the pane's top
+    // border — the wireframe "tab merges into the pane" behavior (#3).
+    y += TAB_ROW_H - TAB_TO_GRID_OVERLAP;
 
     // The content region takes whatever vertical space remains down to the
     // bottom of the bounded rect minus the footer — NOT force-grown, so it
@@ -179,22 +196,15 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     let mut action: Option<Step2Action> = None;
 
     // ── 1. Net-new title (`Mods / Components`, wireframe Label 15px/500). ──
+    //    NO sub-hint follows (the #6 fix — the shell already renders the
+    //    per-step hint under the progress bar; the wireframe `SourcesPanel`
+    //    has only this title).
     ui.scope_builder(egui::UiBuilder::new().max_rect(title_rect), |ui| {
         ui.label(
             egui::RichText::new("Mods / Components")
                 .size(15.0)
                 .family(egui::FontFamily::Name("poppins_medium".into()))
                 .color(redesign_text_primary(palette)),
-        );
-    });
-
-    // ── 2. Net-new per-step hint line (Step 2 hint, faint hand style). ──
-    ui.scope_builder(egui::UiBuilder::new().max_rect(hint_rect), |ui| {
-        ui.label(
-            egui::RichText::new(WorkspaceStep::Step2.hint())
-                .size(12.0)
-                .family(egui::FontFamily::Name("poppins_medium".into()))
-                .color(redesign_text_faint(palette)),
         );
     });
 
@@ -241,20 +251,37 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
         (content_rect, None)
     };
 
-    crate::ui::step2::list_pane_step2::render_list_pane(
-        ui,
-        &mut orchestrator.wizard_state,
-        &mut action,
-        left_rect,
-    );
-
-    if let Some(right_rect) = right_rect {
-        crate::ui::step2::details_pane_step2::render_pane(
+    // #1 fix — render each reused BIO sub-renderer inside a HARD-CLIPPED,
+    // FIXED-SIZE child UI. BIO's `details_pane_step2::render_pane`
+    // (`scope_builder(max_rect)` + a `group` with
+    // `set_min_size(rect - 12)`) does not clip and lets its inner
+    // `ScrollArea` grow the *parent* UI — which pushed the workspace nav
+    // bar (and its `Next →`) off-screen on a narrow window. `clipped_pane`
+    // (a) sets the child's clip rect so BIO cannot paint outside its rect,
+    // and (b) advances the parent placer by EXACTLY the bounded rect (never
+    // by BIO's overgrown internal min-rect) so the BIO pane can never
+    // expand the parent or shove the nav bar. Per the user directive it is
+    // OK for the BIO pane to be visually clipped / cut off here — its
+    // internal restyle is Phase 8; the hard rule is "never break its box or
+    // push the nav bar".
+    clipped_pane(ui, left_rect, |ui| {
+        crate::ui::step2::list_pane_step2::render_list_pane(
             ui,
             &mut orchestrator.wizard_state,
             &mut action,
-            right_rect,
+            left_rect,
         );
+    });
+
+    if let Some(right_rect) = right_rect {
+        clipped_pane(ui, right_rect, |ui| {
+            crate::ui::step2::details_pane_step2::render_pane(
+                ui,
+                &mut orchestrator.wizard_state,
+                &mut action,
+                right_rect,
+            );
+        });
         // Divider between tree + details (redesign-token styled).
         let dx = left_rect.right() - 1.0;
         ui.painter().line_segment(
@@ -298,4 +325,32 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     });
 
     action
+}
+
+/// Run a reused BIO sub-renderer inside a **hard-clipped, fixed-size** child
+/// UI bounded to `rect` — the #1 containment fix.
+///
+/// `ui.new_child` creates a child that does **not** advance the parent's
+/// placer; we set the child's `clip_rect` to `rect` so the BIO renderer
+/// physically cannot paint outside its box, then advance the parent placer
+/// by **exactly `rect`** (`allocate_rect`) — never by the BIO pane's
+/// (possibly overgrown) internal `min_rect`. Net effect: the BIO pane can
+/// be visually clipped/cut off, but it can never expand `workspace_step2`'s
+/// parent UI or push the workspace nav bar (and its `Next →`) off-screen.
+fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    // Intersect with the inherited clip so we never paint OUTSIDE the rect
+    // (nor outside any ancestor clip — e.g. the workspace scroll area).
+    let clip = rect.intersect(ui.clip_rect());
+    child.set_clip_rect(clip);
+    add(&mut child);
+    // Advance the parent by EXACTLY the bounded rect — discard the child's
+    // overgrown min_rect so the parent (and the nav bar after it) is never
+    // pushed. `Sense::hover()` keeps it inert (the BIO child already
+    // handled its own interactions).
+    ui.allocate_rect(rect, egui::Sense::hover());
 }

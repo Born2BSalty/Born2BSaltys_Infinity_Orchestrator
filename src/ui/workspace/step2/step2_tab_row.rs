@@ -490,9 +490,17 @@ fn details_label(open: bool) -> &'static str {
     }
 }
 
-/// A wireframe `GameTab` (`screens.jsx:1609-1637`): rounded-top, 1.5px
-/// sketchy border, active = shell-bg + primary text, idle = chrome-bg +
-/// muted text. Visually consistent with the redesign `tab_strip` tab look.
+/// A wireframe `GameTab` (`screens.jsx:1609-1637`; same shape as the
+/// Settings `tab_strip`, `screens.jsx:485-503`): a **tab**, not a closed
+/// button box. Rounded-TOP corners only; the border is stroked on the
+/// **top / left / right edges only** (the wireframe `border` +
+/// `borderBottom: <active ? shell-bg : border-strong>`), so the bottom
+/// edge never draws a `border-strong` line that would close it into a box.
+/// The tab's fill (active = shell-bg, idle = chrome-bg) extends 1.5px past
+/// its bottom into the seam above the tree pane (the wireframe
+/// `marginBottom: -1.5px`) so the **active** tab's shell-bg masks the tree
+/// pane's top border — visually the active tab "flows into" the pane below
+/// (`screens.jsx:1613-1616`). Active = primary text, idle = muted text.
 fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut String) {
     let active = current == label;
     let font = egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into()));
@@ -518,15 +526,63 @@ fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut
         } else {
             redesign_chrome_bg(palette)
         };
-        painter.rect_filled(rect, corner, fill);
+        // Fill extends 1.5px past the bottom edge (wireframe
+        // `marginBottom: -1.5px`) so the active tab's shell-bg overlaps —
+        // and masks — the tree pane's top border in the seam below.
+        let fill_rect = egui::Rect::from_min_max(
+            rect.min,
+            egui::pos2(rect.max.x, rect.max.y + REDESIGN_BORDER_WIDTH_PX),
+        );
+        painter.rect_filled(fill_rect, corner, fill);
         if !active && response.hovered() {
-            painter.rect_filled(rect, corner, redesign_hover_overlay(palette));
+            painter.rect_filled(fill_rect, corner, redesign_hover_overlay(palette));
         }
-        painter.rect_stroke(
-            rect,
-            corner,
-            egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-            egui::StrokeKind::Inside,
+        // Stroke ONLY the top / left / right edges (the wireframe `border`
+        // with a NON-`border-strong` `borderBottom`). Drawing all four
+        // sides is the #3 defect — it makes the tab read as a closed
+        // button. The bottom is intentionally open so the tab merges into
+        // the tree pane (Settings-tab behavior, `screens.jsx:494/499`).
+        let stroke = egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
+        let r = REDESIGN_BORDER_RADIUS_PX;
+        // Top edge (between the rounded corners).
+        painter.line_segment(
+            [
+                egui::pos2(rect.left() + r, rect.top()),
+                egui::pos2(rect.right() - r, rect.top()),
+            ],
+            stroke,
+        );
+        // Left edge (corner arc start → bottom).
+        painter.line_segment(
+            [
+                egui::pos2(rect.left(), rect.top() + r),
+                egui::pos2(rect.left(), rect.bottom()),
+            ],
+            stroke,
+        );
+        // Right edge (corner arc start → bottom).
+        painter.line_segment(
+            [
+                egui::pos2(rect.right(), rect.top() + r),
+                egui::pos2(rect.right(), rect.bottom()),
+            ],
+            stroke,
+        );
+        // The two rounded top corners (quarter-arc approximations via short
+        // segments — matches the sketchy 1.5px language elsewhere).
+        paint_corner_arc(
+            painter,
+            egui::pos2(rect.left() + r, rect.top() + r),
+            r,
+            180.0,
+            stroke,
+        );
+        paint_corner_arc(
+            painter,
+            egui::pos2(rect.right() - r, rect.top() + r),
+            r,
+            270.0,
+            stroke,
         );
         let text_color = if active {
             redesign_text_primary(palette)
@@ -543,6 +599,29 @@ fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut
     }
     if response.clicked() {
         *current = label.to_string();
+    }
+}
+
+/// Paint a 90° corner arc as 4 short segments (sketchy 1.5px language).
+/// `center` is the arc centre, `r` the radius, `start_deg` the starting
+/// angle (0° = +x, CCW). Used for the GameTab's two rounded top corners
+/// so the open-bottom tab still has the wireframe's `4px 4px 0 0` radius.
+fn paint_corner_arc(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    r: f32,
+    start_deg: f32,
+    stroke: egui::Stroke,
+) {
+    let steps = 4;
+    let start = start_deg.to_radians();
+    let sweep = std::f32::consts::FRAC_PI_2; // 90°
+    let mut prev = egui::pos2(center.x + r * start.cos(), center.y - r * start.sin());
+    for i in 1..=steps {
+        let a = start + sweep * (i as f32 / steps as f32);
+        let p = egui::pos2(center.x + r * a.cos(), center.y - r * a.sin());
+        painter.line_segment([prev, p], stroke);
+        prev = p;
     }
 }
 

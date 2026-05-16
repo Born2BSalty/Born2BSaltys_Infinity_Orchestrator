@@ -34,6 +34,7 @@ use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
+use crate::ui::workspace::state_workspace::WorkspaceStep;
 use crate::ui::workspace::{
     workspace_hint_line, workspace_nav_bar, workspace_progress_bar, workspace_step_router,
 };
@@ -85,6 +86,15 @@ pub fn render(
     // Apply nav outcome after the render borrows end.
     if outcome.next_clicked {
         if let Some(next) = current.next() {
+            // #5 fix — mirror BIO's Step2→Step3 sync on the forward nav
+            // edge. BIO's `WizardApp` rebuilds Step 3 from Step 2 in
+            // `app_nav_actions::advance_after_next` when leaving Step 2
+            // (`current_step == 1`); the orchestrator's own nav never did,
+            // so Step 3 stayed empty/stale. We mirror BIO's EXACT trigger
+            // + semantics here (no reimplementation, no BIO edit).
+            if current == WorkspaceStep::Step2 {
+                sync_step3_from_step2_on_nav_edge(orchestrator);
+            }
             // Crossing forward marks the step being left as completed
             // (wireframe `goNext`).
             orchestrator.workspace_view.completed_steps.insert(current);
@@ -94,6 +104,65 @@ pub fn render(
         if let Some(prev) = current.prev() {
             orchestrator.workspace_view.current_step = prev;
         }
+    }
+}
+
+/// Mirror BIO's Step2→Step3 sync at the orchestrator's Step2→Step3 forward
+/// nav edge (the #5 fix).
+///
+/// **What BIO does (the mirrored call site + semantics).** BIO's
+/// `WizardApp` Next handler (`bio::app::app_nav_actions::advance_after_next`,
+/// `app_nav_actions.rs:131-156`) asks `bio::app::app_nav::decide_next_action`
+/// (`app_nav.rs:85-114`) for the action. When leaving Step 2
+/// (`current_step == 1`) and the Step-2 selection changed since the last
+/// sync (or Step 3 has no real items), that returns
+/// `NextAction::SyncStep3AndAdvance { signature }`, on which
+/// `advance_after_next` runs **exactly**:
+///
+/// ```ignore
+/// super::app_step3_sync_flow::sync_step3_from_step2(state);
+/// state.set_last_step2_sync_signature(signature.clone());
+/// ```
+///
+/// We replicate **that** arm verbatim — calling BIO's own `pub(crate)`
+/// `decide_next_action` (so the change-detection signature is BIO's own,
+/// carried in the enum payload — zero logic copied) and BIO's own
+/// `pub(crate)` `sync_step3_from_step2`. The orchestrator owns its own
+/// step machine, so we do NOT run BIO's `apply_next_action`/`go_next` or
+/// its settings-save; `wizard_state.current_step` is temporarily set to
+/// BIO's Step-2 index `1` only so `decide_next_action` evaluates the right
+/// branch, then restored (it is a pure `&WizardState` read with no
+/// mutation, so save/restore is sound and leaves no residue).
+///
+/// **Clobber protection (the Step-3 reorder concern).** This is BIO's own
+/// design, inherited by mirroring it exactly:
+///   - If the user only reordered in Step 3 and the Step-2 selection is
+///     unchanged, `decide_next_action` finds the signature unchanged AND
+///     Step 3 has real items, so it returns a NON-sync variant →
+///     `sync_step3_from_step2` is **not called** → the Step-3 order is
+///     left untouched.
+///   - If the Step-2 selection did change, `sync_step3_from_step2` →
+///     `reconcile_step3_items` (`app_step3_sync_flow.rs:32-77`) preserves
+///     the relative order of still-selected Step-3 items and appends only
+///     the newly-selected ones — exactly BIO's behavior.
+fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {
+    use crate::app::app_nav::{NextAction, decide_next_action};
+    use crate::app::app_step3_sync_flow::sync_step3_from_step2;
+
+    let state = &mut orchestrator.wizard_state;
+
+    // Temporarily present "we are on Step 2" to BIO's decision fn (BIO's
+    // Step-2 index is 1). `decide_next_action` is a pure read; restore after.
+    let saved_step = state.current_step;
+    state.current_step = 1;
+    let action = decide_next_action(state);
+    state.current_step = saved_step;
+
+    // Replicate ONLY `advance_after_next`'s `SyncStep3AndAdvance` arm
+    // (`app_nav_actions.rs:137-140`) — BIO's own sync + signature write.
+    if let NextAction::SyncStep3AndAdvance { signature } = action {
+        sync_step3_from_step2(state);
+        state.set_last_step2_sync_signature(signature);
     }
 }
 
@@ -121,7 +190,6 @@ pub const NAV_BAR_RESERVE_PX: f32 = 84.0;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::workspace::state_workspace::WorkspaceStep;
 
     #[test]
     fn nav_reserve_constant_is_reasonable() {
