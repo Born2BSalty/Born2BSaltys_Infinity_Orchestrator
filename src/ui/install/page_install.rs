@@ -11,19 +11,15 @@
 // on `src/core/app/modlist_share.rs` (read here via
 // `preview_modlist_share_code`); **Run 5 modifies ZERO BIO source.**
 //
-// **SPEC CONFLICT / PLAN GAP (Run 5) — the Downloading stage's live
-// download/extract pipeline is intentionally UNWIRED pending the user's
-// decision.** `stage_downloading::render` ships the full §4.3 chassis +
-// state, but `InstallScreenState::download_progress` is populated by nothing
-// this run because BIO exposes no "share code → download list" surface and
-// the only path that produces one is BIO's complex `modlist_auto_build`
-// pipeline (scan → update-preview → update-check → download → extract →
-// rescan), which the directive's decision order classifies as a
-// complex-pipeline workflow — not a `WizardApp`-style channel poll, and not
-// something to reimplement or fork. The Run-5 report escalates this; until
-// it is resolved the screen renders an empty grid (navigable: Cancel →
-// Preview) and the production auto-advance never fires. See
-// `stage_downloading.rs`'s module header for the full analysis.
+// **Downloading live data is RESOLVED-DEFERRED to Phase 7 P7.T17 (SPEC
+// §13.12a) — not an open escalation.** `stage_downloading::render` ships the
+// full §4.3 chassis + state; `InstallScreenState::download_progress` has no
+// feed in Phase 5 by design, because the per-mod list is a byproduct of
+// BIO's `modlist_auto_build` pipeline whose live wiring + the net-new
+// content-addressed staging layer (zero BIO edit) the user assigned to
+// Phase 7 P7.T17 on 2026-05-16 (SPEC §13.12a + overview revision log). The
+// grid renders empty (navigable: Cancel → Preview) and auto-advance never
+// fires until P7.T17 feeds it. See `stage_downloading.rs`'s module header.
 //
 // The deferred-intent pattern mirrors `home/page_home.rs`: each stage
 // renderer returns an outcome enum; the dispatcher applies the resulting

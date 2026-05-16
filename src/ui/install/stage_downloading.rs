@@ -51,44 +51,30 @@
 // emoji glyph appears on this screen, so no vector painting is required here.
 //
 // ──────────────────────────────────────────────────────────────────────────
-//  SPEC CONFLICT / PLAN GAP — the live download/extract wiring is
-//  DELIBERATELY UNWIRED this run, pending the user's decision. Read the
-//  Run-5 report's "SPEC CONFLICT" + "PLAN GAP" sections.
+//  Live data is RESOLVED-DEFERRED, not an open escalation. The Run-5
+//  escalation was decided by the user on 2026-05-16: SPEC §13.12a now
+//  defines the per-install/global directory model + content-addressed
+//  archive staging + the import→auto-build reuse contract, and assigns the
+//  *live* wiring to Phase 7 P7.T17 (the pipeline terminates in the install
+//  runtime). Phase 5 ships THIS §4.3 chassis only — that is the agreed
+//  scope, not a gap. See SPEC §13.12a + overview.md 2026-05-16 revision log.
 //
-//  In short: P5.T12 / the dispatch brief specify that the per-mod download
-//  list "derives from the imported share code (the parsed
-//  `ModlistSharePreview`) via BIO's existing public download orchestration —
-//  reuse it, do not reimplement it", subscribing to the
-//  `Step2UpdateDownloadEvent` / `Step2UpdateExtractEvent` channels "the same
-//  way `WizardApp` does (a simple per-frame channel poll)".
-//
-//  But BIO has **no** "share code → download list" surface.
-//  `ModlistSharePreview` carries weidu.log text + TOML overrides + mod-config
-//  blobs — NOT a `Vec<Step2UpdateAsset>`.
-//  `start_step2_update_download` consumes `state.step2.
-//  update_selected_update_assets`, which is produced **only** as a byproduct
-//  of BIO's `modlist_auto_build` pipeline: `import_modlist_share_code`
-//  (writes logs/TOML to the configured game folders + resets the workflow) →
-//  scan → apply-saved-log → update-**preview** → update-**check** worker →
-//  download → extract → rescan → install — a complex multi-step state
-//  machine driven by `app_step2_saved_log_flow::advance_pending_saved_log_
-//  flow` through `app_update_cycle::poll_before_render`, gated on a fully
-//  configured Step 1 (game dirs, mods-archive folder, weidu.log targets) the
-//  orchestrator's Install flow has not collected (P5.T9 collected only a
-//  destination folder).
-//
-//  Driving that pipeline is NOT "the same as `WizardApp`'s channel poll" —
-//  it is the directive's "complex pipeline workflow" class. Per the dispatch
-//  brief ("If reuse seems blocked → STOP and escalate; do NOT modify or fork
-//  the BIO download/extract pipeline, do NOT silently reimplement it") this
-//  module ships the net-new SPEC §4.3 / wireframe surface + its state, but
-//  the live subscription / orchestration is left for the user's decision
-//  (amend the plan with the auto-build reuse contract vs. re-scope). Until
-//  then `DownloadProgress` is populated by nothing, so every row renders
-//  `queued` and the footer's auto-advance never fires — the screen is
-//  navigable (Cancel → Preview) and forward-compatible: it lights up the
-//  moment the resolved orchestration feeds it (same additive model the rest
-//  of Phase 5 used for provenance / generation).
+//  Why the grid is empty until P7.T17 (context, not a TODO): the per-mod
+//  list is a byproduct of BIO's `modlist_auto_build` pipeline —
+//  `import_modlist_share_code` (writes logs/TOML to the game folders +
+//  resets the workflow) → scan → apply-saved-log → update-preview →
+//  update-check worker → download → extract → rescan → install — driven by
+//  `app_step2_saved_log_flow` through `app_update_cycle::poll_before_render`
+//  and gated on a fully configured Step 1. Per SPEC §13.12a the global game
+//  paths reach the orchestrator-owned `WizardState` via
+//  `sync_paths_from_settings` (Settings → Paths §11.2 — the Install screen
+//  never collected them), and a net-new content-addressed staging layer
+//  *wraps* `app_step2_update_download` / `_extract` with zero BIO edit —
+//  that is P7.T17's job, not a reimplementation or fork. Until it runs,
+//  `DownloadProgress` has no feed, so every row renders `queued` and
+//  auto-advance never fires: the screen stays navigable (Cancel → Preview)
+//  and lights up additively the moment P7.T17 feeds it (the same
+//  forward-compatible model Phase 5 used elsewhere).
 // ──────────────────────────────────────────────────────────────────────────
 //
 // SPEC: §4.3 (Downloading), §4.4 (the stage it auto-advances into — the

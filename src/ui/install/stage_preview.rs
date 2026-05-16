@@ -47,17 +47,22 @@
 // `true` / absent ⇒ unchanged: enabled `Import Modlist →` advances to
 // Downloading (Run-5 placeholder).
 //
-// **Overview values** (dispatch-brief settled prep):
+// **Overview values** (SPEC §4.2):
 //   - Game                = `game_install`
 //   - BGEE/BG2EE entries  = `bgee_entries` / `bg2ee_entries`
-//   - Components          = `bgee_entries + bg2ee_entries` (empirically
-//                           pinned: wireframe 136 == 21+115 — exact, not a
-//                           guess)
-//   - Mods                = `—` (the phase's unknown-value precedent — the
-//                           share preview carries no mod count; deriving it
-//                           would need a hand-rolled weidu.log TP2 parser,
-//                           an unresolved user decision — surfaced as open
-//                           question "D" in the run report). NOT guessed.
+//   - Components          = `bgee_entries + bg2ee_entries` — the real
+//                           per-game component-line count from
+//                           `modlist_share::count_weidu_entries` (the
+//                           wireframe's 136 == 21+115 is that same count,
+//                           not a coincidence).
+//   - Mods                = distinct TP2 across both weidu.logs, derived
+//                           net-new in `preview_counts::distinct_mod_count`
+//                           by reusing BIO's public
+//                           `Component::parse_weidu_line` read-only (one
+//                           mod == one TP2). Resolves former "open
+//                           question D" — the share preview carries the log
+//                           text, so no hand-rolled parser and no BIO edit
+//                           are needed (user decision 2026-05-16).
 //
 // **Parse-failure path.** The wireframe assumes a valid code. A real
 // paste-stage parse failure is surfaced honestly: when
@@ -92,6 +97,7 @@
 use eframe::egui;
 
 use crate::app::modlist_share::ModlistSharePreview;
+use crate::ui::install::preview_counts;
 use crate::ui::install::preview_tabs;
 use crate::ui::install::state_install::InstallScreenState;
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn, SecondaryBtn};
@@ -106,9 +112,6 @@ use crate::ui::shared::redesign_tokens::{
 /// SPEC-authoritative honest fallback when the code carries no packed
 /// `name` (never fabricate). SPEC §4.2.
 const FALLBACK_TITLE: &str = "Shared modlist";
-
-/// The unknown-value placeholder for `Mods` (open question D — see header).
-const UNKNOWN_VALUE: &str = "\u{2014}"; // —
 
 /// SPEC §4.2-verbatim draft-code banner copy.
 const DRAFT_BANNER: &str = "Draft modlist code \u{2014} this is not from a verified install. \
@@ -323,14 +326,16 @@ fn overview_box(ui: &mut egui::Ui, palette: ThemePalette, p: &ModlistSharePrevie
         let col_gap = 16.0;
         let col_w = ((total_w - col_gap * 3.0) / 4.0).max(60.0);
 
-        // `Components` = BGEE + BG2EE entries (empirically pinned:
-        // wireframe 136 == 21 + 115). `Mods` = unknown (open question D).
+        // `Components` = the real BGEE + BG2EE component-line count.
+        // `Mods` = distinct TP2 across both logs (SPEC §4.2) — derived
+        // net-new via BIO's public weidu-line parser, no BIO edit.
         let components = p.bgee_entries + p.bg2ee_entries;
+        let mods = preview_counts::distinct_mod_count(&p.bgee_log_text, &p.bg2ee_log_text);
 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = col_gap;
             overview_cell(ui, palette, col_w, "Game", &p.game_install);
-            overview_cell(ui, palette, col_w, "Mods", UNKNOWN_VALUE);
+            overview_cell(ui, palette, col_w, "Mods", &mods.to_string());
             overview_cell(ui, palette, col_w, "Components", &components.to_string());
             overview_cell(
                 ui,

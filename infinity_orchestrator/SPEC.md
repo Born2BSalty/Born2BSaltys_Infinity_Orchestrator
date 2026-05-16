@@ -162,7 +162,7 @@ Each visible row is a card laid out identically regardless of which chip is acti
 
 - **Modlist name** (bold) + meta line (hand style, faint) on the left.
 - A state-dependent action cluster on the right:
-  - For an **in-progress** card: primary **`resume`** + Kebab with `Copy import code` / `Delete`.
+  - For an **in-progress** card: primary **`resume`** + Kebab with `Copy import code` / `Rename` / `Delete`.
   - For an **installed** card: **`open`** + Kebab with `Copy import code` / `Open install folder` / `Rename` / `Reinstall` / `Delete`. (The wireframe's `play` button is renamed `open` for v1 alpha — see [§3.2](#installed-modlist-card).)
 
 **Reinstall semantics.** `Reinstall` is a full from-scratch reinstall of the same modlist with the same components and order — no editing of the selection is supported in this flow (re-edit is a later functionality). Clicking it opens a danger-styled `ConfirmDialog`:
@@ -210,7 +210,7 @@ Both in-progress builds and installed modlists use the same card chassis: a Box 
 | Item | Action |
 |------|--------|
 | Copy import code | Writes the build's current BIO-MODLIST-V1 code to the clipboard, shows the toast. (Same code that gets auto-written to the destination at install start — see [§13.13](#1313-import-code-auto-generated-on-install-start).) |
-| Rename | Renames the modlist registry entry. Same effect as the workspace's inline ✎ rename ([§2.2](#22-the-workspace-steps-25)) — implementation can either open a small rename dialog or push the user back into the workspace with the title in edit mode. |
+| Rename | Renames the modlist registry entry. Same effect as the workspace's inline ✎ rename ([§2.2](#22-the-workspace-steps-25)) — implementation can either open a small rename dialog or push the user back into the workspace with the title in edit mode. **Phase 5 ships this item visible but inert**; the rename mechanism (a registry-only write) lands in Phase 6 with the Workspace ✎ inline rename and `operations_rename.rs`. Intentional staged deviation, not drift — do not re-flag. |
 | Delete | Removes the in-progress build (after confirmation; the destination folder on disk is untouched). |
 
 The **`resume`** button opens the workspace at **Step 2 (Scan and Select)**, pre-populated with the build's order, selections, and any pending settings. The workspace header reads **"Editing _\<build name\>_"** ([§2.2](#22-the-workspace-steps-25)), the per-game-install tabs reflect the build's stored game choice, and the user can immediately navigate to whatever step they want via the workspace progress bar. (The wireframe demo always lands on Step 2; a future refinement could remember the last-active step per build.)
@@ -227,7 +227,7 @@ The **`resume`** button opens the workspace at **Step 2 (Scan and Select)**, pre
 |------|--------|
 | Copy import code | Writes the modlist's BIO-MODLIST-V1 code to the clipboard, shows the toast. |
 | Open install folder | Opens the modlist's destination folder in the OS file manager. If the folder no longer exists on disk (deleted externally), surface an error message in the standard status / error message area near the bottom of the screen — do not attempt to open or recreate the folder. |
-| Rename | Renames the modlist registry entry. |
+| Rename | Renames the modlist registry entry. **Phase 5 ships this item visible but inert**; the rename mechanism (a registry-only write) lands in Phase 6 with the Workspace ✎ inline rename and `operations_rename.rs` ([§2.2](#22-the-workspace-steps-25)). Intentional staged deviation, not drift — do not re-flag. |
 | Delete | Removes the modlist record (after confirmation; does not touch the install on disk). |
 
 ### 3.3 "Add a modlist" section
@@ -1046,7 +1046,7 @@ Non-blocking `egui::Window` (same chassis + collapse-chevron pattern as the rest
 - Workspace header `⑂ view fork details` ([§2.2](#22-the-workspace-steps-25)) — uses the open modlist's registry `forked_from` + its own `name`/`author`.
 - Install preview / fork-preview `⑂ fork info` ([§4.2](#42-stage-2--preview), [§5.3](#53-fork-paste--fork-preview--fork-download)) — uses the parsed share code's `forked_from` + its `name`/`author`.
 
-**Header:** title `Fork lineage`. (Collapse chevron per the global §10 pattern.)
+**Header:** title `Fork lineage`. (Collapse chevron per the global §10 pattern — like every redesign popup, the chevron is the Phase 8 carve-out #2 `.collapsible(true)` flip / `popup_collapse_anchor.rs`; the `ForkInfoPopup` ships before Phase 8 without it **by design**, consistent with its sibling popups — recorded so a §10.9-vs-code reviewer does not re-flag it as missing scope.)
 
 **Body** — a single chain rendered **oldest → newest, top to bottom**, as an ancestry that culminates in the current modlist:
 

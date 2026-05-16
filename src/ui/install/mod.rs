@@ -47,6 +47,7 @@
 
 pub mod destination_not_empty;
 pub mod page_install;
+pub mod preview_counts;
 pub mod preview_tabs;
 pub mod stage_downloading;
 pub mod stage_installing_stub;
