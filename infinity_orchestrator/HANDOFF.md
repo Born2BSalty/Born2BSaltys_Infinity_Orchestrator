@@ -77,7 +77,7 @@ Run the orchestrator (the eframe window will appear; on macOS it may open behind
 
 ```bash
 ./target/release/infinity_orchestrator        # production mode
-./target/release/infinity_orchestrator -d     # dev mode (enables Seed test modlist button etc.)
+./target/release/infinity_orchestrator -d     # dev mode (diagnostics export + extra logging; the Phase-3 "Seed test modlist" button was stub-only and is gone since Phase 5 replaced the Home stub — re-prep the seed registry per orchestrator-handoff "Test fixtures / runtime")
 ```
 
 ---

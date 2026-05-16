@@ -76,7 +76,8 @@ Non-empty ⇒ ABORT (CRITICAL DIRECTIVE). `infinity_orchestrator/` is excluded o
 
 ## Test fixtures / runtime
 
-- Seed registry for non-empty Home/Install testing: `C:\Users\spany\AppData\Roaming\bio\modlists.json` (2 entries, both `destination_folder:""` — exercises the empty-folder delete guard). Still in place. Revert = delete it (close app first; exit-flush rewrites it).
+- Seed registry for non-empty Home/Install/Workspace testing: `C:\Users\spany\AppData\Roaming\bio\modlists.json`. Current (re-prepped 2026-05-16): **2 entries** — `RUN1BBBBBBBB` "Polished BG2EE" (`installed`) + `KRS5ZBMT0028` "demo-modlist-2" (`in_progress`, BGEE, 9 mods · 136 components · paused Step 3, + its `modlists/<id>/workspace.json`). The in-progress one is what Run-1's Home-`resume` breakpoint needs; both exercise the empty-`destination_folder` delete guard.
+- **Re-prep mechanism (the `-d` "Seed test modlist" button is GONE — stale doc trap):** `dev_seed::seed_demo_entry` is wired *only* in `orchestrator/stubs/home_stub.rs`, which **Phase 5 P5.T15 replaced** with the real `page_home.rs` — so `infinity_orchestrator -d` no longer surfaces a Seed button. Re-prep by driving `bio::registry::dev_seed::seed_demo_entry` through a throwaway `src/bin/*.rs` (`RegistryStore::new_default()` + `WorkspaceStore::new_for_id`; load-then-append preserves existing entries; delete the bin after) — this uses the app's own serializer so the schema is exact. Hand-editing `modlists.json` is drift-prone: verified reprs are `state:"in_progress"|"installed"` (snake/lower), `game:"BGEE"|"BG2EE"|"IWDEE"|"EET"`, RFC3339 dates, `format_version:1`. App MUST be closed first (exit-flush clobbers writes).
 - Runtime config dir: `%APPDATA%\bio\`. App must be closed before linking and before swapping `modlists.json` (it loads on launch, flushes on exit).
 
 ## User working style (observed)
