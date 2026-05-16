@@ -273,7 +273,7 @@ Each phase doc in `infinity_orchestrator/plan/` is the canonical work order. Sum
   - Step body — Steps 2 and 3 render via direct calls to BIO's existing `pub fn page_step2::render` / `page_step3::render` with the orchestrator's owned `WizardState`. Step 4 is an orchestrator-side renderer (per C4 — replaces BIO's `page_step4::render` to avoid the double Save button).
   - Workspace nav bar: `← Previous` / `Next →`.
 - Workspace state loader: populates `WizardState` from per-modlist `workspace.json` on open; extracts back on save / nav-away / debounced write. **Loader is never invoked while an install is running** (per C5 — rail-nav lock).
-- Per-frame `sync_paths_from_settings` mirrors `Step1Settings` paths into `wizard_state.step1` every workspace frame, so Settings → Paths edits propagate without requiring a workspace close/reopen (per M2).
+- `sync_paths_from_settings` re-asserts `Step1Settings` paths into `wizard_state.step1` **once on workspace open** (not per frame): the orchestrator's Settings → Paths tab edits the same in-memory `wizard_state.step1` the workspace renders from, so edits propagate by construction without a close/reopen (M2 — open-only; overview 2026-05-16).
 - Per-frame dirty bit gates persistence writes (per H1) — no per-frame extract+compare.
 - Step action dispatch tables in the phase doc enumerate every `Step2Action` / `Step4Action` variant + which `bio::app::*` public function handles it (per M4).
 

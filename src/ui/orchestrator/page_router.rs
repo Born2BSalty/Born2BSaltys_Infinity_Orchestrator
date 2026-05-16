@@ -85,9 +85,9 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 ///   3. If `loaded_workspace_id != Some(id)`, lazy-load the modlist's
 ///      `workspace.json` into the orchestrator maps and
 ///      `populate_wizard_state_from_workspace`; set `loaded_workspace_id`.
-///   4. **Every workspace frame:** `sync_paths_from_settings` (not just on
-///      open) so Settings → Paths edits propagate without a close/reopen.
-///   5. `workspace_view::render`.
+///   4. `workspace_view::render`. (Path sync is open-only — done once in
+///      `populate_wizard_state_from_workspace`; Settings → Paths edits the
+///      same in-memory `wizard_state.step1`, so no per-frame sync is needed.)
 fn render_workspace(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
@@ -174,15 +174,10 @@ fn render_workspace(
         orchestrator.workspace_view.loaded_workspace_id = Some(id.to_string());
     }
 
-    // 4. Per-frame Settings re-sync (M2) — every workspace frame, not just
-    //    on open, so Settings → Paths edits made while away propagate
-    //    before the step renderer / install hook reads them.
-    workspace_state_loader::sync_paths_from_settings(
-        &orchestrator.settings_store,
-        &mut orchestrator.wizard_state,
-    );
-
-    // 5. Render the workspace shell.
+    // 4. Render the workspace shell. Path sync is open-only (done once in
+    //    `populate_wizard_state_from_workspace`): Settings → Paths edits the
+    //    same in-memory `orchestrator.wizard_state.step1` this renders from,
+    //    so paths are live by construction — no per-frame disk read.
     workspace_view::render(ui, orchestrator, id, ctx);
 }
 

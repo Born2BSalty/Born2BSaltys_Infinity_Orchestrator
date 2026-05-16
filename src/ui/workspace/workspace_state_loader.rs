@@ -22,10 +22,11 @@
 //      callers land in Runs 2/4 — extract ships unwired this run, which is
 //      correct).
 //
-//   3. `sync_paths_from_settings` — mirrors the canonical `Step1Settings`
-//      path/tool fields into `wizard_state.step1` so Settings → Paths edits
-//      propagate to the active workspace **every workspace frame** without a
-//      close/reopen. Pure copy; touches nothing else.
+//   3. `sync_paths_from_settings` — a one-time re-assert of the canonical
+//      `Step1Settings` path/tool fields into `wizard_state.step1`, called on
+//      workspace open (from `populate`). Per-frame is unnecessary: Settings
+//      → Paths edits the *same* in-memory `wizard_state.step1`, so paths are
+//      live by construction. Pure copy; touches nothing else.
 //
 // Uses BIO's `pub` / `pub(crate)` API only (same-crate reachable per the
 // Phase-1 lib+bin split). No BIO source modification; no field is private;
@@ -93,9 +94,9 @@ pub fn populate_wizard_state_from_workspace(
     // 1. Per-modlist game (SPEC §5.1). In-memory only.
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
 
-    // 2. Global paths / tools from Settings (every-frame caller does this
-    //    too; doing it here makes a freshly-opened workspace correct on the
-    //    first frame even before the per-frame sync runs).
+    // 2. Global paths / tools from Settings — the one-time open re-assert.
+    //    This is the ONLY caller: Settings → Paths edits the shared
+    //    `wizard_state.step1` directly, so no per-frame sync is needed.
     sync_paths_from_settings(settings_store, wizard_state);
 
     // 3. Step 2 selection reconstruction. Mark each persisted ComponentRef's
@@ -321,10 +322,9 @@ fn write_collapsed_blocks(
 // ---------------------------------------------------------------------------
 
 /// Mirror the canonical global path / tool fields from Settings → Paths /
-/// Tools (Phase 4) into `wizard_state.step1`. Called **every workspace
-/// frame** (P6.T12 / M2) so a Settings edit made while the user was away
-/// from the workspace propagates before the step renderer or install hook
-/// reads it.
+/// Tools (Phase 4) into `wizard_state.step1`. Called **once on workspace
+/// open** (from `populate_wizard_state_from_workspace`) — a defensive
+/// re-assert, not a per-frame sync.
 ///
 /// Pure copy of the path/tool fields only. It explicitly does **not** touch
 /// `game_install` (per-modlist, owned by the loader — SPEC §5.1) nor any
@@ -334,20 +334,18 @@ fn write_collapsed_blocks(
 /// workspace screen does not collect game paths; this sync is how Step 2's
 /// scan gets a mods folder.
 ///
-/// **Source of truth (PLAN GAP — see report).** The plan's signature takes
-/// `&SettingsStore`, but in this codebase the orchestrator's Settings → Paths
-/// screen edits `wizard_state.step1` *directly* (same `WizardState`
-/// instance), and `SettingsStore` is a path-only handle with no in-memory
-/// accessor — `bio_settings.json` is the persisted form (written via
-/// `OrchestratorApp::bio_settings_snapshot` on a ≤1s debounce). So the
-/// faithful, codebase-consistent source for the persisted global paths is
-/// `settings_store.load()`. Because the workspace and Settings are distinct
-/// screens (you can't edit Settings while the workspace renders), by the time
-/// the user navigates back into the workspace the debounced write has long
-/// flushed, so this re-assert reflects the user's latest Settings edit. On a
-/// load error (e.g. file not yet written) it is a silent no-op — the live
-/// `wizard_state.step1` paths (which Settings edits in place) already hold the
-/// current values; the load is a defensive re-assert, not the only path.
+/// **Why open-only suffices (no per-frame sync).** The orchestrator's
+/// Settings → Paths tab edits the *same in-memory* `wizard_state.step1` the
+/// workspace renders from (`OrchestratorApp::wizard_state`; `tab_paths.rs`),
+/// so a Settings change is visible to the active workspace **by
+/// construction** — there is no second source to reconcile per frame.
+/// `SettingsStore` is a path-only handle (no in-memory accessor;
+/// `bio_settings.json` is the debounced persisted form), so this open-time
+/// call does one `settings_store.load()` as a defensive re-assert of the
+/// last-persisted paths; a load error is a silent no-op because the live
+/// `wizard_state.step1` already holds current values. SPEC §13.14's
+/// "propagate without close/reopen" intent is met by the shared state, not a
+/// per-frame disk read (plan M2 amended — overview 2026-05-16).
 pub fn sync_paths_from_settings(settings_store: &SettingsStore, wizard_state: &mut WizardState) {
     // `Step1Settings -> Step1State` is the canonical `From` mapping (BIO
     // `state_convert.rs`). We can't wholesale-replace `wizard_state.step1`
