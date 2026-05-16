@@ -2841,7 +2841,7 @@ const SourcesPanel = ({ gameTab, setGameTab, fork, game = "EET", orderByTab, set
               {selectedComponents} / {totalComponents} on {upperTab}
             </Label>
             <Kebab items={[
-              { label: `${detailsOpen ? "✓ " : "    "}Show Details panel`, onClick: () => setDetailsOpen((v) => !v) },
+              { label: detailsOpen ? "Hide Details panel" : "Show Details panel", onClick: () => setDetailsOpen((v) => !v) },
               { label: "Clear All", onClick: () => {} },
               { label: "Select Visible", onClick: () => {} },
               { label: "Collapse All", onClick: () => {} },
