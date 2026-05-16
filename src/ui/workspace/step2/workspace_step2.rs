@@ -104,12 +104,13 @@
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_faint, redesign_text_primary,
     redesign_warning_soft,
 };
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::workspace::step2::{step2_search, step2_tab_row};
+use crate::ui::workspace::step2::{step2_log_confirm, step2_search, step2_tab_row};
 
 /// Width of the Details pane when open (wireframe `gridTemplateColumns:
 /// "1fr 420px"`).
@@ -307,6 +308,19 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
         &mut action,
     );
 
+    // ── 6b. Select-via-WeiDU-Log destructive confirm (SPEC §6.10 + wireframe
+    //    `askWeiduImport`). The tab-row button arms
+    //    `workspace_view.step2.pending_weidu_log_confirm`; the danger
+    //    `ConfirmDialog` (the same shared widget Home Delete/Reinstall use)
+    //    renders here, alongside the other Step-2 popups. On **Confirm** the
+    //    matching `Step2Action::Select{Bgee,Bg2ee}ViaLog` is emitted — the
+    //    router dispatches it through the *unchanged* `step2_log_glue`
+    //    picker+apply path. On **Cancel/dismiss** the pending state is just
+    //    cleared: nothing is applied, the selection is untouched. ──
+    if let Some(a) = render_weidu_log_confirm(orchestrator, &ctx) {
+        action = Some(a);
+    }
+
     // ── 7. Scan-status footer (mirrors BIO `frame_step2.rs:163-166`):
     //    recompute selection counts, then show `scan_status` so the user
     //    sees scan progress ("0/0" → "..." → done) and completion. Painted
@@ -378,4 +392,52 @@ fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui:
     // pushed. `Sense::hover()` keeps it inert (the BIO child already
     // handled its own interactions).
     ui.allocate_rect(rect, egui::Sense::hover());
+}
+
+/// Render the Select-via-WeiDU-Log destructive `ConfirmDialog` (SPEC §6.10 +
+/// wireframe `askWeiduImport`) when `workspace_view.step2.
+/// pending_weidu_log_confirm` is armed. Returns:
+///   - `Some(Step2Action::Select{Bgee,Bg2ee}ViaLog)` on **Confirm** — the
+///     pending state is cleared and the caller dispatches it through the
+///     unchanged `step_action_dispatch::dispatch_step2` → `step2_log_glue`
+///     picker+apply path (the flow is unchanged *after* confirm).
+///   - `None` on **Cancel/dismiss** — the pending state is just cleared,
+///     nothing is applied, the user's Step-2 selection is untouched.
+///   - `None` while still pending (dialog open, nothing clicked).
+///
+/// Mirrors the Home `render_delete_confirm` / `render_reinstall_confirm`
+/// arm-render-clear pattern (`home::page_home`): the orchestrator owns the
+/// open/closed state and clears it on `Confirmed`/`Cancelled`.
+fn render_weidu_log_confirm(
+    orchestrator: &mut OrchestratorApp,
+    ctx: &egui::Context,
+) -> Option<Step2Action> {
+    let bgee = orchestrator
+        .workspace_view
+        .step2
+        .pending_weidu_log_confirm?;
+
+    let (title, body) = step2_log_confirm::weidu_log_dialog_text(bgee);
+    let dialog = step2_log_confirm::weidu_log_confirm(&title, &body);
+    let outcome = confirm_dialog::render(ctx, orchestrator.theme_palette, &dialog);
+
+    match outcome {
+        ConfirmOutcome::Confirmed => {
+            orchestrator.workspace_view.step2.pending_weidu_log_confirm = None;
+            // The flow is UNCHANGED after confirm — emit the same action the
+            // Run-1d button emitted directly; the router routes it to the
+            // `step2_log_glue` sibling (picker + apply).
+            Some(if bgee {
+                Step2Action::SelectBgeeViaLog
+            } else {
+                Step2Action::SelectBg2eeViaLog
+            })
+        }
+        ConfirmOutcome::Cancelled => {
+            // Abort: clear the gate, change nothing.
+            orchestrator.workspace_view.step2.pending_weidu_log_confirm = None;
+            None
+        }
+        ConfirmOutcome::Pending => None,
+    }
 }

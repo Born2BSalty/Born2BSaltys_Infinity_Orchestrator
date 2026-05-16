@@ -32,7 +32,20 @@
 // pick rather than the next drift-detecting frame (promptness parity with
 // BIO's immediate best-effort save).
 //
-// SPEC: §6.4 (Select <TAB> via WeiDU Log — BIO-fidelity reuse), §1
+// **Confirmed-destructive opt-in (SPEC §6.10 + wireframe `askWeiduImport`).**
+// Select-via-WeiDU-Log replaces *every* selection on the tab, so it is gated
+// by the danger `ConfirmDialog` (rendered by `workspace_step2`, owned via
+// `WorkspaceStep2State::pending_weidu_log_confirm`). The action — and hence
+// this sibling — only runs *after* the user accepted that dialog. Therefore
+// the picker itself is the final destructive gesture: cancelling it backs
+// out the whole flow, so this sibling **applies nothing and mutates nothing
+// on picker-cancel** — the user's current Step-2 selection is preserved
+// intact. (No "fall back to the resolved default log" — that legacy BIO
+// parity would silently wipe the selection, the data loss the redesign's
+// cancel-is-a-no-op model forbids.)
+//
+// SPEC: §6.4 (Select <TAB> via WeiDU Log — BIO-fidelity reuse), §6.10
+//       (ConfirmDialog only for Select via WeiDU Log — destructive), §1
 //       (decision order: sibling for simple workflows).
 
 use std::path::PathBuf;
@@ -56,33 +69,35 @@ pub fn apply_weidu_log_selection_for_orchestrator(orchestrator: &mut Orchestrato
 
     let picked = pick_weidu_log_file(current, bgee);
 
-    // Mirror BIO: if the user cancelled the picker, fall back to the
-    // resolved default path (so an already-configured log still applies).
-    let log_path = picked.clone().or_else(|| {
-        if bgee {
-            resolve_bgee_weidu_log_path(&orchestrator.wizard_state.step1)
-        } else {
-            resolve_bg2_weidu_log_path(&orchestrator.wizard_state.step1)
-        }
-    });
+    // Redesign behavior (SPEC §6.10 + wireframe `askWeiduImport`): this flow
+    // is a **confirmed destructive opt-in** — the danger ConfirmDialog has
+    // already been accepted before we get here, and the only remaining
+    // gesture is the file pick. If the user cancels the picker they have
+    // backed out, so we **abort**: apply nothing, mutate nothing, leave the
+    // current Step-2 selection exactly as it was. (This deliberately drops
+    // BIO's legacy "fall back to the resolved default log on cancel" parity:
+    // applying the default would silently wipe the user's selection — the
+    // exact data-loss the redesign's cancel-is-a-no-op model forbids.)
+    let Some(path) = picked else {
+        return;
+    };
 
-    if let Some(path) = picked {
-        let picked_str = path.to_string_lossy().to_string();
-        if bgee {
-            orchestrator.wizard_state.step1.bgee_log_file = picked_str;
-        } else {
-            orchestrator.wizard_state.step1.bg2ee_log_file = picked_str;
-        }
-        // (c) Trigger the orchestrator's settings-persistence cycle. The
-        // tick already auto-detects the drift; arming the debounce start
-        // matches BIO's immediate-best-effort-save promptness.
-        orchestrator
-            .bio_settings_last_dirty_at
-            .get_or_insert_with(Instant::now);
+    let picked_str = path.to_string_lossy().to_string();
+    if bgee {
+        orchestrator.wizard_state.step1.bgee_log_file = picked_str;
+    } else {
+        orchestrator.wizard_state.step1.bg2ee_log_file = picked_str;
     }
+    // (c) Trigger the orchestrator's settings-persistence cycle. The
+    // tick already auto-detects the drift; arming the debounce start
+    // matches BIO's immediate-best-effort-save promptness.
+    orchestrator
+        .bio_settings_last_dirty_at
+        .get_or_insert_with(Instant::now);
 
-    // (d) Underlying BIO state mutation (parse + apply the log selection).
-    apply_weidu_log_selection_from_path(&mut orchestrator.wizard_state, bgee, log_path);
+    // (d) Underlying BIO state mutation (parse + apply the log selection) —
+    // only ever reached with a user-picked path (cancel returned above).
+    apply_weidu_log_selection_from_path(&mut orchestrator.wizard_state, bgee, Some(path));
 }
 
 /// Replicates BIO's `pick_weidu_log_file` (`src/ui/app_step2_log.rs:36-50`)

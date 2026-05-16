@@ -33,9 +33,15 @@
 //
 //   - GameTabs                → write `state.step2.active_game_tab`
 //                               (`content_step2::draw_tab`, line 18-47).
-//   - `Select <Tab> via WeiDU Log` → `Step2Action::SelectBgeeViaLog` /
-//                               `SelectBg2eeViaLog` (`content_step2.rs:293/306`)
-//                               → router intercept → `step2_log_glue` sibling.
+//   - `Select <Tab> via WeiDU Log` → arms the orchestrator-owned
+//                               `workspace_view.step2.pending_weidu_log_confirm`
+//                               (the SPEC §6.10 / wireframe `askWeiduImport`
+//                               destructive gate). It does NOT emit an action
+//                               directly: `workspace_step2::render` shows the
+//                               danger `ConfirmDialog`; only on **Confirm**
+//                               does it dispatch `Step2Action::
+//                               Select{Bgee,Bg2ee}ViaLog` → `step2_log_glue`
+//                               sibling. Cancel = no-op.
 //   - `Updates...`            → `Step2Action::OpenUpdatePopup`
 //                               (`content_step2.rs:317`).
 //   - compat `Pill`           → `toolbar_actions_step2::open_active_tab_issue`
@@ -209,6 +215,16 @@ pub fn render(
 
             // `Select <Tab> via WeiDU Log` — hidden for forks + exact-log
             // mode (`render_tabs:282-307`). Active-tab specific.
+            //
+            // SPEC §6.10 + wireframe `askWeiduImport` (`screens.jsx:
+            // 2778-2784`): Select-via-Log is **destructive** (it replaces
+            // *every* selection on the tab), so the button does NOT dispatch
+            // the picker. It arms the orchestrator-owned
+            // `pending_weidu_log_confirm` with the target tab; the danger
+            // `ConfirmDialog` (rendered by `workspace_step2::render`) then
+            // gates it — only on Confirm does the
+            // `Step2Action::Select{Bgee,Bg2ee}ViaLog` picker+apply path run;
+            // on Cancel nothing changes.
             if !is_fork && !exact_log_mode {
                 if active_is_bgee {
                     let enabled = bgee_scanned || can_bootstrap_from_log;
@@ -226,7 +242,7 @@ pub fn render(
                     .clicked()
                         && enabled
                     {
-                        action = Some(Step2Action::SelectBgeeViaLog);
+                        orchestrator.workspace_view.step2.pending_weidu_log_confirm = Some(true);
                     }
                 } else if active_is_bg2 {
                     let enabled = bg2_scanned || can_bootstrap_from_log;
@@ -244,7 +260,7 @@ pub fn render(
                     .clicked()
                         && enabled
                     {
-                        action = Some(Step2Action::SelectBg2eeViaLog);
+                        orchestrator.workspace_view.step2.pending_weidu_log_confirm = Some(false);
                     }
                 }
             }

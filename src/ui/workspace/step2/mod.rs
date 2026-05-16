@@ -43,11 +43,17 @@
 //                           warning. Net-new orchestrator logic (BIO has no
 //                           reusable rescan-preserves-selection mechanism);
 //                           BIO read-only.
+//   - `step2_log_confirm` → the Select-via-WeiDU-Log destructive-confirm
+//                           strings (SPEC §6.10 + wireframe `askWeiduImport`,
+//                           `screens.jsx:2778-2784`). Owns only the
+//                           wireframe-verbatim title/body/label; the modal
+//                           itself is the shared `ConfirmDialog` Home reuses.
 //
-// SPEC: §6, §1 (decision order; carve-out boundary), §13.12a, §2.2;
+// SPEC: §6, §6.10, §1 (decision order; carve-out boundary), §13.12a, §2.2;
 //       wireframe `screens.jsx:2786-2880`.
 
 pub mod step2_dev_scan;
+pub mod step2_log_confirm;
 pub mod step2_rescan_reconcile;
 pub mod step2_search;
 pub mod step2_tab_row;

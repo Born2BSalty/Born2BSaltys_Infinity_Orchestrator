@@ -73,6 +73,17 @@ pub struct WorkspaceStep2State {
     /// when a completed rescan dropped at least one selected component;
     /// cleared on the next scan trigger.
     pub rescan_drop_warning: Option<String>,
+    /// **Pending Select-via-WeiDU-Log destructive confirm** (SPEC §6.10 +
+    /// wireframe `askWeiduImport`, `screens.jsx:2778-2784`). Select-via-Log
+    /// replaces *every* component selection on the tab, so the tab-row
+    /// button does **not** dispatch the picker directly — it arms this with
+    /// the target tab (`Some(true)` = BGEE, `Some(false)` = BG2EE) and
+    /// `workspace_step2::render` shows the danger `ConfirmDialog`. Only on
+    /// **Confirm** does it dispatch `Step2Action::Select{Bgee,Bg2ee}ViaLog`
+    /// (the unchanged `step2_log_glue` picker+apply path); **Cancel/dismiss**
+    /// just clears this — nothing changes. `None` = no confirm in flight.
+    /// Orchestrator-owned (BIO's `state_step2` is untouched).
+    pub pending_weidu_log_confirm: Option<bool>,
 }
 
 /// One captured selection entry for the rescan-reconcile (SPEC §6.3, the #2
