@@ -2,7 +2,7 @@
 
 ## Summary
 
-Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-installs-detected block, first-launch empty state, delete confirm dialog) and the Install Modlist top-level destination's first three stages (paste, preview, downloading). The Install Modlist fourth stage (the actual install runtime) is stubbed and rolled in during Phase 7. Reuse the existing BIO share-code parser (`bio::app::modlist_share::preview_modlist_share_code`) for the preview stage. Reuse the existing BIO download / extract engines (`bio::app::app_step2_update_*`) for the download stage. Wire the registry from Phase 3 to the modlist cards.
+Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-installs-detected block, first-launch empty state, delete confirm dialog) and the Install Modlist top-level destination's first three stages: paste + preview fully, **downloading as a forward-compatible chassis only** (Run 5). The Install Modlist fourth stage (the actual install runtime) is stubbed and rolled in during Phase 7. Reuse the existing BIO share-code parser (`bio::app::modlist_share::preview_modlist_share_code`) for the preview stage. **The BIO download / extract engines (`bio::app::app_step2_update_*`) are NOT consumed in Phase 5** — driving the import → auto-build → download/extract pipeline + per-install directory derivation + content-addressed archive staging is **Phase 7 P7.T17** (SPEC §13.12a), since that pipeline terminates in the install runtime. Wire the registry from Phase 3 to the modlist cards.
 
 ## What ships after this phase
 
@@ -18,7 +18,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 - Clicking `paste import code` (or the Install rail item) opens Install Modlist:
   - Stage 1 (paste): destination folder + `DestinationNotEmptyWarning` (with `clear` / `backup` / `continue partial`) + import-code textarea + footer with `Preview →`.
   - Stage 2 (preview): parsed share-code preview — Overview Box (Game/Mods/Components/log entries) + tabbed Content Box (Summary / BGEE WeiDU / BG2EE WeiDU / User Downloads / Installed Refs / Mod Configs).
-  - Stage 3 (downloading): per-mod download/extract status grid with overall progress bar.
+  - Stage 3 (downloading): the §4.3 **chassis** — overall-progress Box + per-mod 4-col grid + Cancel/auto-advance, grid empty (live download/extract data + content-addressed staging = Phase 7 P7.T17 / SPEC §13.12a).
   - Stage 4: stub showing "Install runtime — Phase 7" + a `← Back to preview` button.
 - The `game installs detected` block on Home reflects path validation events from Phase 4's `validate_now`.
 - Toast notifications appear bottom-center for "Copied import code", "Deleted <name>", etc.
@@ -62,7 +62,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 | `src/ui/install/state_install.rs` | `pub struct InstallScreenState { stage: InstallStage, destination: String, destination_choice: Option<DestChoice>, import_code: String, parsed_preview: Option<ModlistSharePreview>, active_preview_tab: PreviewTab, fork_info_open: bool, download_progress: DownloadProgress }`. `parsed_preview` (`ModlistSharePreview`) now carries `allow_auto_install` + the provenance trio `name`/`author`/`forked_from` via carve-out #5. | BIO `ModlistSharePreview` |
 | `src/ui/install/stage_paste.rs` | Stage 1 renderer per SPEC §4.1. | redesign widgets |
 | `src/ui/install/stage_preview.rs` | Stage 2 renderer per SPEC §4.2. | preview_tabs |
-| `src/ui/install/stage_downloading.rs` | Stage 3 renderer per SPEC §4.3 (`ImportDownloadScreen`). Wires into existing BIO download / extract events. | BIO `app_step2_update_download` (read-only) |
+| `src/ui/install/stage_downloading.rs` | Stage 3 **chassis** per SPEC §4.3 (`ImportDownloadScreen`): overall-progress Box + 4-col grid + Cancel/auto-advance, rendered from `InstallScreenState.download_progress` (empty in Phase 5). Phase 7 P7.T17 edits this same file to bind live `Step2UpdateDownloadEvent`/`Step2UpdateExtractEvent` data. Reusable by Phase 6 fork-download via `DownloadScreenCopy`. | redesign tokens (no BIO dep in Phase 5) |
 | `src/ui/install/stage_installing_stub.rs` | Stage 4 placeholder — labeled "Install runtime — Phase 7" + a `Back to preview` button. | — |
 | `src/ui/install/sub_flow_footer.rs` | `pub fn render(ui, back, hint, primary)` — mirrors `screens.jsx::SubFlowFooter` (line 3494–3510). | redesign widgets |
 | `src/ui/install/preview_tabs.rs` | The 6-tab file-folder strip + per-tab rendered content. Tab content reads from the parsed `ModlistSharePreview`. | BIO `modlist_share::preview_modlist_share_code` (read-only) |
@@ -75,7 +75,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 
 - `src/core/app/modlist_share.rs::preview_modlist_share_code` — Used in Install stage 2 to parse the pasted code without committing it.
 - `src/core/app/state/state_step1.rs` (path validation results) — Read by `game_installs_detected.rs`.
-- `src/core/app/app_step2_update_download.rs` / `app_step2_update_extract.rs` — Used in Install stage 3 to actually fetch + extract mod archives. The existing `Step2UpdateDownloadEvent` / `Step2UpdateExtractEvent` enums are reused. Stage 3's UI subscribes to the same channels via the orchestrator-owned receivers (the orchestrator constructs its own download/extract event channels by calling the same public `bio::app::app_step2_update_*` channel-creation entry points BIO uses — no BIO modification).
+- `src/core/app/app_step2_update_download.rs` / `app_step2_update_extract.rs` — **NOT consumed in Phase 5.** Phase 5's Stage 3 is a chassis with no live data (P5.T12). Driving these engines (via the import → auto-build pipeline + the net-new content-addressed staging layer that wraps them, no BIO modification) is **Phase 7 P7.T17** per SPEC §13.12a — the pipeline terminates in the install runtime, which Phase 5 does not build.
 - `src/registry/store.rs` / `src/registry/store_workspace.rs` (Phase 3 new files) — Read by Home, written by delete.
 
 ### BIO files needing allowed mild refactor

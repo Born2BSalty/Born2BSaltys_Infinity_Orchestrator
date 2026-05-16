@@ -16,7 +16,7 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
   - Setup Box: modlist-name input + game ComboBox (default EET) + destination FolderInput + `DestinationNotEmptyWarning` when applicable.
   - Two starting-point cards: `New modlist from downloaded mods` and `Import and modify another modlist`.
   - Clicking `start →` on the first card creates a new registry entry in `in-progress` state and routes into the Workspace.
-  - Clicking `paste share code →` on the second card opens fork-paste → fork-preview → fork-download → Workspace (the `ImportDownloadScreen` is reused from Phase 5).
+  - Clicking `paste share code →` on the second card opens fork-paste → fork-preview → fork-download → Workspace (the `ImportDownloadScreen` **chassis** is reused from Phase 5). Phase 6 ships the fork navigation + the registry entry + the lineage append; the **live** fork download/extract (and therefore a scan-populated forked workspace) depends on Phase 7 P7.T17 / SPEC §13.12a — the same import → auto-build pipeline + content-addressed staging that all share-code consumption uses.
   - `load draft` button opens the Load Draft dialog listing in-progress builds; clicking `resume` opens the Workspace with that build pre-loaded.
 - Inside the Workspace:
   - Header `Editing <name>` + ✎ rename inline edit (registry write only, not folder rename).
@@ -46,7 +46,7 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
 - Phase 2 (`OrchestratorApp` owns the `WizardState` that Step pages read/write).
 - Phase 3 (registry + workspace state files).
 - Phase 4 (Settings — Create reads the default destination from Settings → Paths).
-- Phase 5 (`ImportDownloadScreen` shared with Phase 6 fork-download).
+- Phase 5 (`ImportDownloadScreen` **chassis** shared with Phase 6 fork-download; its live download data is bound in Phase 7 P7.T17 / SPEC §13.12a, not Phase 6).
 
 ## File inventory
 
@@ -60,7 +60,7 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
 | `src/ui/create/stage_choose.rs` | Renders the choose-mode setup Box + 2 starting-point cards. | redesign widgets, settings |
 | `src/ui/create/stage_fork_paste.rs` | Fork-paste stage — paste textarea + footer. Reuses paste textarea component. | shared paste textarea |
 | `src/ui/create/stage_fork_preview.rs` | Fork-preview stage — same chassis as Install preview: packed `name`/`author` title/subline + `⑂ fork info` (reuses the Phase-5 `ForkInfoPopup`, showing the incoming parent's lineage), `Begin Import →` CTA, no `allow_auto_install` gate. | `preview_tabs` + `fork_info_popup` from Phase 5 |
-| `src/ui/create/stage_fork_download.rs` | Fork-download stage — calls `ImportDownloadScreen` with title "Downloading fork" + continueLabel "continue to Step 2 →". | `stage_downloading` from Phase 5 |
+| `src/ui/create/stage_fork_download.rs` | Fork-download stage — drives the Phase-5 `stage_downloading` **chassis** (via `DownloadScreenCopy`: title "Downloading fork" + continueLabel "continue to Step 2 →"). Live download/extract data is bound in Phase 7 P7.T17 (SPEC §13.12a); Phase 6 ships the navigation + the post-completion registry/route. | `stage_downloading` chassis from Phase 5 |
 | `src/ui/create/load_draft_dialog.rs` | Non-blocking `egui::Window` popup (per SPEC §10) listing in-progress builds with `resume` + Kebab per card. Empty state when none. | registry, modlist_card chassis from Phase 5 |
 | `src/ui/create/destination_default.rs` | Computes a default destination folder for new modlists: `<config_dir>/modlists/installs/<slug-of-name>` (or honors a user-configured base path from Settings → Paths). | platform_defaults, settings |
 | `src/ui/workspace/mod.rs` | `pub mod workspace_view; pub mod state_workspace; pub mod workspace_header; pub mod workspace_progress_bar; pub mod workspace_nav_bar; pub mod workspace_hint_line; pub mod workspace_step_router; pub mod workspace_state_loader; pub mod workspace_step5_stub; pub mod step4; pub mod widgets;` | — |
@@ -328,8 +328,10 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
   - `author` ← `RedesignSettings.user_name` (the local user is the author of *this* fork; empty ⇒ `None`).
   - `forked_from` ← `<parent.forked_from> ++ [ ForkAncestor { name: parent.name, author: parent.author } ]`, where the parent's `name`/`author`/`forked_from` are read off the parsed `ModlistSharePreview` (carve-out #5 fields). Append-only — the original creator stays first, no ancestor is ever rewritten.
   This is a registry write only; no share code is generated at fork time (`pack_meta` generation happens later, at install-start / `flip_to_installed` — Phase 7 — and reads these entry fields).
-- **Where:** New files `stage_fork_paste.rs`, `stage_fork_preview.rs`, `stage_fork_download.rs`; the append logic lives in `operations_create.rs`. Reuses the Phase-5 `ForkInfoPopup`.
-- **Acceptance:** Pasting a known share code → preview (shows parent name/author + `⑂ fork info` lineage) → begin import → downloads → workspace opens with the fork's order/selection pre-loaded and a `⑂ Fork` badge. The new `ModlistEntry` has `author` = the configured user name and `forked_from` = parent chain + parent appended (verify by inspecting `modlists.json`).
+
+  **Phasing (SPEC §13.12a).** Phase 6 ships fork-paste + fork-preview fully, the registry entry + the lineage append, and the fork-download **chassis** navigation. The **live** fork download/extract — driving BIO's import → auto-build pipeline + the per-install dirs + content-addressed staging — is **Phase 7 P7.T17** (the pipeline terminates in the install runtime). Until P7.T17, fork-download navigates the chassis and the forked Workspace opens, but its Step-2 scan is not populated by real fetched mods; it lights up automatically when P7.T17 binds the live pipeline (same forward-compatible model as P5.T12 / Install).
+- **Where:** New files `stage_fork_paste.rs`, `stage_fork_preview.rs`, `stage_fork_download.rs`; the append logic lives in `operations_create.rs`. Reuses the Phase-5 `ForkInfoPopup` + `stage_downloading` chassis.
+- **Acceptance (Phase-6 scope):** Pasting a known share code → preview (shows parent name/author + `⑂ fork info` lineage) → begin import → the fork-download chassis renders → the forked Workspace opens with a `⑂ Fork` badge. The new `ModlistEntry` has `author` = the configured user name and `forked_from` = parent chain + parent appended (verify by inspecting `modlists.json`). Live mod download/extract + the resulting populated Step-2 selection/order = Phase 7 P7.T17 acceptance (SPEC §13.12a), not exercised in Phase 6.
 - **SPEC:** §5.3, §13.3 (Provenance / append rule), §10.9.
 
 ### P6.T9 — Load Draft dialog

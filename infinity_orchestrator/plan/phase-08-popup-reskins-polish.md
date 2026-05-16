@@ -6,7 +6,7 @@ Phase 8 now covers the **full visual-fidelity sweep** across every BIO source fi
 
 The two pre-existing carve-outs (#1 + #2) cover the popup group and a handful of unconditional-color files. Carve-out #6 covers the conditional sites in the Step 2 tree / Step 2 Details / Step 3 reorder list / Step 5 sub-renderers — every site that today branches on hover / selected / disabled / conflict-kind / install-running / prep-running / dev-mode / etc. **The conditional structure of each function is preserved exactly**; only the inline `theme_global::*()` accessor inside each branch swaps for a `redesign_*(palette)` accessor, and each touched function gains a `palette: ThemePalette` parameter that call sites thread through. No new branches, no removed branches, no reordered branches, no logic mutations, no behavior changes.
 
-This phase also wires the remaining SPEC §13.12 automatic flag policies (#2 / #3 / #4 / #6 / #7), the dotted radial background, toast notifications, hover affordances, and the final smoke pass.
+This phase also wires the **residual** SPEC §13.12 flag policies — **#6 + #7 only** — plus the dotted radial background, toast notifications, hover affordances, and the final smoke pass. **#2 / #3 / #4 are NOT Phase 8:** their per-install directory creation (`-u` `weidu_component_logs/`, EET `-p`/`-n` phase dirs, single-game `-g` dir) is install-critical and is owned by **Phase 7 P7.T17** (SPEC §13.12a) — a Phase-7 install cannot run without those dirs, so they cannot be deferred here.
 
 ## What ships after this phase
 
@@ -18,10 +18,10 @@ This phase also wires the remaining SPEC §13.12 automatic flag policies (#2 / #
   - **Step 5** — console line tones (per SPEC §9.2), install row state banner (Preparing / Installing), dev-mode RUST_LOG status line, status phase indicator (Idle / Preparing / Running / Waiting Input / Cancelling / Finished), error-state copy, cancel-confirm warning all read from redesign tokens. The embedded terminal's internal cell colors stay BIO-default (out of token-extraction scope; SPEC §9 doesn't require recolor).
   - **Popups** — Compat popup, Prompt popup (text + toolbar variants), Update Check popup (+ confirm-latest-fallback inner dialog + source editor + forks), GitHub OAuth popup. Every popup also gets the egui-native title-bar collapse chevron (`.collapsible(true)`).
 - **Top-nav chrome** (orchestrator-side `workspace_nav_bar.rs`) already uses redesign tokens via its Phase 6 new-file status. BIO's legacy `update_app.rs` / `app_nav_ui.rs` are part of the `BIO` binary only — not invoked by `OrchestratorApp` — and stay BIO-default per the CRITICAL DIRECTIVE's "anything else is disallowed" rule for the legacy surface.
-- All SPEC §13.12 automatic flag policies in effect:
-  - `-u` always ON, path under `<destination>/weidu_component_logs/` (policy #2)
-  - `-p` / `-n` always ON for EET, paths derived from destination (policy #3)
-  - `-g` always ON for single-game installs, path derived from destination (policy #4)
+- All SPEC §13.12 automatic flag policies in effect (implemented across Phase 7 P7.T16 [#1/#5] + P7.T17 [#2/#3/#4 per-install dirs] + this phase [#6/#7]):
+  - `-u` always ON, path under `<destination>/weidu_component_logs/` (policy #2) — **implemented Phase 7 P7.T17** (install-critical)
+  - `-p` / `-n` always ON for EET, paths derived from destination (policy #3) — **implemented Phase 7 P7.T17** (install-critical)
+  - `-g` always ON for single-game installs, path derived from destination (policy #4) — **implemented Phase 7 P7.T17** (install-critical)
   - `prepare_target_dirs_before_install` / `backup_targets_before_eet_copy` from `DestinationNotEmptyWarning` choice (policy #6)
   - `-autolog` / `-logapp` / `-log-extern` always ON (policy #7)
   - Plus Phase 7's #1 (`-s`/`-c`) and #5 (`--download`)
@@ -49,9 +49,9 @@ This phase also wires the remaining SPEC §13.12 automatic flag policies (#2 / #
 
 | Path | Purpose | Depends on |
 |------|---------|-----------|
-| `src/install_runtime/flag_policies_eet.rs` | Computes EET `-p` / `-n` paths from destination per SPEC §13.12 #3. Creates the two phase folders inside the destination at install start. | std::fs |
-| `src/install_runtime/flag_policies_single_game.rs` | Computes `-g` path for single-game installs per SPEC §13.12 #4. | std::fs |
-| `src/install_runtime/flag_policies_log.rs` | Computes `-u` path inside the destination per SPEC §13.12 #2. Creates `weidu_component_logs/` at install start. | std::fs |
+| ~~`src/install_runtime/flag_policies_eet.rs`~~ | **SUPERSEDED — moved to Phase 7 P7.T17** (`install_runtime/per_install_dirs.rs`). EET `-p`/`-n` phase-dir creation is install-critical (SPEC §13.12a); not a Phase-8 file. | — |
+| ~~`src/install_runtime/flag_policies_single_game.rs`~~ | **SUPERSEDED — moved to Phase 7 P7.T17** (`install_runtime/per_install_dirs.rs`). Single-game `-g` dir is install-critical. | — |
+| ~~`src/install_runtime/flag_policies_log.rs`~~ | **SUPERSEDED — moved to Phase 7 P7.T17** (`install_runtime/per_install_dirs.rs`). `-u` `weidu_component_logs/` dir is install-critical. | — |
 | `src/install_runtime/flag_policies_dest_choice.rs` | Maps the `DestChoice` (clear / backup / continue) to `prepare_target_dirs_before_install` / `backup_targets_before_eet_copy` flag values per SPEC §13.12 #6. | — |
 | `src/ui/shared/redesign_dot_background.rs` | Renders the 20×20px dotted radial background pattern as an `egui::Painter` custom draw. Called from `shell_chrome::render_shell` body. | redesign theme tokens |
 | `src/ui/orchestrator/widgets/clipboard.rs` | Shared clipboard helper used by all redesign copy sites. | `arboard` or `egui_extras` |

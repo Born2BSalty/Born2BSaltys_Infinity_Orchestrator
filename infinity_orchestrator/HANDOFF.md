@@ -289,8 +289,9 @@ Each phase doc in `infinity_orchestrator/plan/` is the canonical work order. Sum
 - Reinstall flow from Home Kebab: danger confirm modal → routes to Install Modlist preview stage with overwrite-install forced → user clicks Install → registry flips back to in-progress → install runs (per SPEC §3.1 + H2). Cancel-preview leaves modlist in `installed` (per M5).
 - **Install concurrency policy** (SPEC §13.15): only one install runs at a time. **Rail navigation is hard-locked** while an install runs (per C5) — every left-rail item disabled with the SPEC tooltip. User can only stay in the running install's workspace until cancel or completion.
 - Install Modlist stage 4 wired (the real install runtime; not in the workspace chrome).
+- **P7.T17 — per-install dirs + content-addressed archive staging + import→auto-build pipeline drive (SPEC §13.12a).** Derives the per-install Mods folder + the install-critical game-clone dirs (#2 `-u`, #3 `-p`/`-n`, #4 `-g`) inside the destination with forced clone flags; the net-new content-addressed staging layer wraps `app_step2_update_download`/`app_step2_update_extract` (zero BIO change — dedupe/coexist/extract-by-hash); drives `import_modlist_share_code` → saved-log/auto-build → download/extract → install; binds the Phase-5 §4.3 Downloading chassis (and the Phase-6 fork-download chassis) to live data. Global paths come from Settings → Paths via `sync_paths_from_settings`.
 - `pending_reinstall_id: Option<String>` on `OrchestratorApp` (per L12) tracks the in-flight reinstall route.
-- Automatic flag policies #1 (`-s` / `-c`), #5 (`--download`) wired (Phase 7); the other policies (#2 `-u`, #3/#4 `-p`/`-n`/`-g`, #6 `prepare_target_dirs`, #7 `-autolog`/`-logapp`/`-log-extern`) are wired in Phase 8 or are already handled by the install runner's defaults.
+- Automatic flag policies: #1 (`-s` / `-c`) + #5 (`--download`) wired in Phase 7 P7.T16; **#2 (`-u`) + #3 (`-p`/`-n`) + #4 (`-g`) wired in Phase 7 P7.T17** (their per-install dirs are install-critical — an install can't run without them, so they cannot be deferred to Phase 8 — SPEC §13.12a). Only #6 (`prepare_target_dirs`/`backup` from the `DestChoice` mapping, already the pure `DestChoice::to_flags` from Run 3) and #7 (`-autolog`/`-logapp`/`-log-extern`, hardcoded) remain for Phase 8.
 
 **Dependencies:** Phases 2 + 3 + 5 + 6.
 
@@ -301,7 +302,7 @@ Each phase doc in `infinity_orchestrator/plan/` is the canonical work order. Sum
 - `.collapsible(false)` → `.collapsible(true)` flips (carve-out #2) on those popups so the global collapse chevron pattern works.
 - **State-aware theme-token reads (carve-out #6)** on the Step 2 tree (`tree_compat_display_step2.rs`, `tree_component_row_step2.rs`, `tree_parent_step2.rs`, `tree_header_marker_step2.rs`, `format_step2.rs`), Step 2 Details panel (`details_pane_step2.rs`, `details_paths_step2.rs`, `details_selection_step2.rs`), Step 3 reorder list (`list_rows_step3.rs`, `content_step3.rs`, `format_step3.rs`, `toolbar_compat_step2.rs`), Step 5 sub-renderers (`content_install_row_step5.rs`, `content_cancel_step5.rs`, `content_dev_header_step5.rs`, `status_phase_step5.rs`, `status_console_step5.rs`).
 - Anchor-on-collapse wrapper for popups (if egui's native title-bar collapse doesn't auto-anchor) in `src/ui/orchestrator/widgets/popup_collapse_anchor.rs`.
-- Remaining automatic flag policies from SPEC §13.12 #2/#3/#4/#6/#7.
+- Residual automatic flag policies from SPEC §13.12: **#6 + #7 only** (#1/#5 → Phase 7 P7.T16; #2/#3/#4 install-critical per-install dirs → Phase 7 P7.T17, SPEC §13.12a) + Settings-surface removal.
 - Dotted radial background pattern matching the wireframe's `body` background.
 - Toast notifications, hover affordances, copy-to-clipboard polish.
 - Final smoke pass.
