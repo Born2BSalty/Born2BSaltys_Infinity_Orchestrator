@@ -4,13 +4,26 @@
 // `page_install` — the Install Modlist destination's top-level renderer
 // (SPEC §4). Dispatches on `InstallScreenState::stage`.
 //
-// **Run 4 scope.** `Paste`, `Preview`, and `InstallingStub` are fully
-// implemented. `Downloading` (Run 5) still renders a minimal placeholder
-// (the same chassis as the stage-4 stub) so the four-stage machine is whole
-// and the flow is navigable end to end. The download/extract engines are
-// NOT in Run 4. The only BIO-source touch in all of Phase 5 is the
-// carve-out #5 schema-additive edit on `src/core/app/modlist_share.rs`
-// (read here via `preview_modlist_share_code`).
+// **Run 5 scope.** All four stages render: `Paste`, `Preview`,
+// `Downloading` (the net-new SPEC §4.3 / wireframe `ImportDownloadScreen`
+// surface — `stage_downloading`), and `InstallingStub`. The only BIO-source
+// touch in all of Phase 5 was the Run-4 carve-out #5 schema-additive edit
+// on `src/core/app/modlist_share.rs` (read here via
+// `preview_modlist_share_code`); **Run 5 modifies ZERO BIO source.**
+//
+// **SPEC CONFLICT / PLAN GAP (Run 5) — the Downloading stage's live
+// download/extract pipeline is intentionally UNWIRED pending the user's
+// decision.** `stage_downloading::render` ships the full §4.3 chassis +
+// state, but `InstallScreenState::download_progress` is populated by nothing
+// this run because BIO exposes no "share code → download list" surface and
+// the only path that produces one is BIO's complex `modlist_auto_build`
+// pipeline (scan → update-preview → update-check → download → extract →
+// rescan), which the directive's decision order classifies as a
+// complex-pipeline workflow — not a `WizardApp`-style channel poll, and not
+// something to reimplement or fork. The Run-5 report escalates this; until
+// it is resolved the screen renders an empty grid (navigable: Cancel →
+// Preview) and the production auto-advance never fires. See
+// `stage_downloading.rs`'s module header for the full analysis.
 //
 // The deferred-intent pattern mirrors `home/page_home.rs`: each stage
 // renderer returns an outcome enum; the dispatcher applies the resulting
@@ -31,15 +44,13 @@
 use eframe::egui;
 
 use crate::app::modlist_share::preview_modlist_share_code;
+use crate::ui::install::stage_downloading::{self, DownloadScreenCopy, DownloadingOutcome};
 use crate::ui::install::stage_installing_stub::{self, InstallingStubOutcome};
 use crate::ui::install::stage_paste::{self, PasteOutcome};
 use crate::ui::install::stage_preview::{self, PreviewOutcome};
 use crate::ui::install::state_install::InstallStage;
-use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::render_screen_title;
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 
 /// A deferred app-level transition bubbled up from a stage renderer, applied
 /// after the render borrow of `orchestrator` ends (same pattern as
@@ -93,16 +104,35 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             }
         }
         InstallStage::Downloading => {
-            // Run 5 — per-mod download/extract grid wired to BIO's existing
-            // download/extract engines. Placeholder this run.
-            if run_later_placeholder(
+            // SPEC §4.3 — the net-new `ImportDownloadScreen` surface
+            // (overall-progress Box + 4-col per-mod grid + footer). The
+            // per-mod model (`download_progress`) is empty this run: the
+            // live download/extract orchestration is escalated as a
+            // SPEC CONFLICT / PLAN GAP (see this file's + `stage_downloading`'s
+            // module headers) and is NOT wired pending the user's decision.
+            // The screen is fully navigable (Cancel → Preview) and the
+            // production auto-advance lights up automatically once the
+            // resolved orchestration feeds `download_progress`.
+            match stage_downloading::render(
                 ui,
                 palette,
-                "Downloading",
-                "Downloading \u{2014} arrives in Run 5",
-                "The per-mod download/extract progress grid (wired to BIO's existing fetch + archive engines) lands in Run 5.",
+                DownloadScreenCopy::INSTALL,
+                &orchestrator.install_screen_state.download_progress,
             ) {
-                request = Some(InstallRequest::Stage(InstallStage::Preview));
+                DownloadingOutcome::Cancel => {
+                    // SPEC §4.3: `Cancel` (← back) returns to Preview. Drop
+                    // any accumulated grid so a re-parse can't inherit a
+                    // stale list.
+                    orchestrator.install_screen_state.download_progress =
+                        crate::ui::install::stage_downloading::DownloadProgress::default();
+                    request = Some(InstallRequest::Stage(InstallStage::Preview));
+                }
+                DownloadingOutcome::Advance => {
+                    // Production auto-advance on download+extract completion
+                    // (SPEC §4.3 → §4.4). Never fires this run (empty model).
+                    request = Some(InstallRequest::Stage(InstallStage::InstallingStub));
+                }
+                DownloadingOutcome::Stay => {}
             }
         }
         InstallStage::InstallingStub => {
@@ -148,51 +178,4 @@ fn run_preview_parse(state: &mut crate::ui::install::state_install::InstallScree
             state.preview_parse_error = Some(msg);
         }
     }
-}
-
-/// The minimal "this stage arrives in a later run" placeholder — same chassis
-/// as the §4.4 stage-4 stub (`ScreenTitle` + a faint context line + the
-/// bottom-pinned `sub_flow_footer`). Routing the Back control through
-/// `sub_flow_footer` (exactly like `stage_installing_stub`) keeps it
-/// pixel-identical to the rest of the Install sub-flow. Returns `true` when
-/// Back was clicked; the caller transitions to `Preview`.
-fn run_later_placeholder(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    title: &str,
-    sub: &str,
-    detail: &str,
-) -> bool {
-    render_screen_title(ui, palette, title, Some(sub));
-    ui.add_space(8.0);
-    ui.label(
-        egui::RichText::new(detail)
-            .size(13.0)
-            .family(egui::FontFamily::Proportional)
-            .color(redesign_text_faint(palette)),
-    );
-
-    // Bottom-pin the footer, reserving its footprint, exactly as the §4.4
-    // stub does — so the Back button is visually consistent across stages.
-    let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
-    if spacer > 0.0 {
-        ui.add_space(spacer);
-    }
-
-    // No forward action on a placeholder → disabled primary, same as the
-    // §4.4 stub's disabled `Install`. The footer always paints a primary.
-    sub_flow_footer::render(
-        ui,
-        palette,
-        Some(BackBtn {
-            label: "Back to preview",
-        }),
-        None::<sub_flow_footer::SecondaryBtn<'_>>,
-        None,
-        PrimaryBtn {
-            label: "Install",
-            disabled: true,
-        },
-    )
-    .back_clicked
 }

@@ -55,6 +55,7 @@
 )]
 
 use crate::app::modlist_share::ModlistSharePreview;
+use crate::ui::install::stage_downloading::DownloadProgress;
 
 /// The four Install Modlist stages (SPEC §4: paste → preview → downloading →
 /// installing). The machine is whole so the dispatcher + back-navigation are
@@ -246,6 +247,17 @@ pub struct InstallScreenState {
     /// `← Back to preview` target — SPEC §4.4: preview if cached, else
     /// paste). Set `true` when the parse succeeds.
     pub preview_cached: bool,
+    /// Stage-3 per-mod download/extract progress model (SPEC §4.3). Grown
+    /// in Run 5 / P5.T12 alongside `stage_downloading`, mirroring how Run 4
+    /// grew the preview state. Populated by the resolved download
+    /// orchestration once the Run-5 SPEC-CONFLICT escalation is decided
+    /// (see `stage_downloading.rs`'s module header) — until then it stays
+    /// `Default` (empty) so the Downloading screen renders the SPEC §4.3
+    /// chassis with no rows / no progress: navigable + forward-compatible
+    /// (same additive model the rest of Phase 5 used). Cleared whenever the
+    /// user leaves Downloading back to Preview (a re-parsed code must not
+    /// inherit a stale grid).
+    pub download_progress: DownloadProgress,
 }
 
 impl InstallScreenState {

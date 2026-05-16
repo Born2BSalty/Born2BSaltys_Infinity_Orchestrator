@@ -4,7 +4,7 @@
 // `src/ui/install/` — the Install Modlist destination (SPEC §4: "consume
 // someone else's modlist" — paste → preview → downloading → installing).
 //
-// Phase 5 ships (Runs 3-4):
+// Phase 5 ships (Runs 3-5):
 //   - `state_install`         — `InstallScreenState` + `InstallStage` (the
 //                               whole 4-stage machine) + `DestChoice` and the
 //                               SPEC §13.12 flag mapping + (Run 4) the
@@ -24,16 +24,31 @@
 //                               `ForkInfoPopup` (Run 4).
 //   - `preview_tabs`          — the 6-tab file-folder strip + per-tab body
 //                               (SPEC §4.2; wireframe screens.jsx:469-529).
+//   - `stage_downloading`     — Stage 3 (SPEC §4.3): the net-new
+//                               `ImportDownloadScreen` surface — overall-
+//                               progress Box + 4-column per-mod grid (mod /
+//                               source / status / progress) + footer (Run 5,
+//                               P5.T12). Reusable for Phase 6's fork-download
+//                               (`DownloadScreenCopy`); only the Install path
+//                               is wired this run. **The live download/extract
+//                               orchestration is escalated as a SPEC CONFLICT
+//                               / PLAN GAP and is intentionally UNWIRED this
+//                               run** — see `stage_downloading.rs`'s module
+//                               header (BIO has no "share code → download
+//                               list" surface; the only producer is BIO's
+//                               complex `modlist_auto_build` pipeline, a
+//                               directive complex-pipeline workflow — not
+//                               reimplemented, not forked, pending the user's
+//                               decision). The screen renders the §4.3 chassis
+//                               with an empty grid (navigable: Cancel →
+//                               Preview) and is forward-compatible.
 //   - `stage_installing_stub` — Stage 4 stub (SPEC §4.4; full runtime is
 //                               Phase 7).
-//
-// Run 5 adds `stage_downloading` (the per-mod download/extract grid). Until
-// then, `page_install` renders the Run-5 placeholder for that stage so the
-// build is whole.
 
 pub mod destination_not_empty;
 pub mod page_install;
 pub mod preview_tabs;
+pub mod stage_downloading;
 pub mod stage_installing_stub;
 pub mod stage_paste;
 pub mod stage_preview;

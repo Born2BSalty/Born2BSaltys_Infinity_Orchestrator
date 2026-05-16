@@ -322,6 +322,8 @@ Uses the shared `ImportDownloadScreen` component:
 
 This screen is reused by Create → fork-download with a different title/sub/continueLabel.
 
+**Phasing.** Phase 5 ships this screen as a forward-compatible **chassis** (overall-progress Box + per-mod grid + Cancel, navigable, empty grid). The **live data** — driving BIO's import → auto-build → download → extract pipeline and the content-addressed staging — lands in **Phase 7** with the install runtime, per [§13.12a](#1312a-directory-architecture-global-vs-per-install--content-addressed-archives) (the pipeline terminates in the install; Phase 5 has no install runtime).
+
 ### 4.4 Stage 4 — Installing
 
 The active install runtime. (See [§8 Step 5 — Install](#8-step-5--install) for the full spec; this stage embeds the same panel without the workspace chrome since the user came in from Install, not Create.)
@@ -1423,6 +1425,29 @@ Several WeiDU / installer flags that today's BIO exposes as user-configurable to
 7. **`-autolog`, `-logapp`, `-log-extern`** — always ON. Hard-coded; no UI. Matches today's BIO defaults ([Appendix A.14](#a14-granular-weidu-log-mode-flags)).
 
 The flags themselves stay on the install command line the existing BIO install runner emits — they're just no longer user-configurable surfaces. Dev mode's diagnostics export records the exact flag values used for any given install.
+
+### 13.12a Directory architecture (global vs per-install) & content-addressed archives
+
+The redesign fixes where every install artifact lives.
+
+**Global — Settings-defined ([§11.2](#112-paths)), shared by every modlist:**
+
+- **Mods archive** — *all* downloaded mod archives for *all* modlists always land here (never per-install).
+- **Mods backup** — pre-install backups; same use as today's BIO.
+- **Game sources** — the pristine BGEE / BG2EE / IWDEE source installs.
+
+**Per-install — created inside the modlist's destination folder, derived (never asked):**
+
+- **Mods folder** — archives are extracted/staged here, and this is what "scan mods folder" reads for component selection. Created per-install inside the destination; removed on a clean successful install (a failed/cancelled install leaves it for diagnosis/resume).
+- **Game install folders** — the cloned, modded game targets. Already specified by [§13.12](#1312-automatic-flag-policies) #3 (EET `-p`/`-n`) and #4 (single-game `-g`): always cloned from the global Game source at install start, fixed names/locations inside the destination, not user-configurable. **The redesign never surfaces BIO's install-into-a-clean-dir-without-cloning path** — clone is forced for every install. BIO's capability is unchanged; the option is simply not presented.
+
+**Content-addressed archives (the global Mods-archive uniqueness rule).** Because the archive folder is global and shared, two modlists may need different versions of the same upstream-named archive (modlist A → mod v1.3, modlist B → mod v1.4, same filename). The archive store is therefore **content-addressed**:
+
+- On download, the orchestrator computes the archive's content hash. Same logical name **and** matching hash as an existing archive ⇒ reuse the existing copy (cross-modlist dedupe, no re-download). Same name, **different** hash ⇒ **both coexist**, stored under a name that encodes the hash so they never collide.
+- Each modlist records, in its lock/pinned data, the exact hash it resolved — so extraction for a given install always targets *that* archive, and re-install / reproduce-from-code uses the same content.
+- This is a **net-new orchestrator staging layer that wraps** BIO's existing download + extract: it controls archive naming on write and selects the correct archive on extract. `app_step2_update_download` / `app_step2_update_extract` are reused **unchanged — no BIO modification**.
+
+**Pipeline-reuse contract.** Install Modlist / Create-import / Load-Draft drive BIO's existing import → auto-build pipeline: `import_modlist_share_code` writes the code's baked-in `weidu.log` + `mod_downloads_user.toml` + pinned `installed_refs`; the saved-log / auto-build flow then scans → applies the log → update-checks (resolving each mod from that imported source config into a concrete download asset) → downloads → extracts → installs. The orchestrator owns the `WizardState` and feeds it the **global paths from Settings → Paths** (via the established settings-sync) plus the per-install derived dirs above — it does **not** collect game paths in the Install screen. The content-addressed staging layer interposes only at the download/extract boundary. **This wiring lands in Phase 7 with the install runtime** (the pipeline terminates in the install); Phase 5 ships the [§4.3](#43-stage-3--downloading) Downloading screen as a forward-compatible chassis.
 
 ### 13.13 Import code auto-generated on install start
 
