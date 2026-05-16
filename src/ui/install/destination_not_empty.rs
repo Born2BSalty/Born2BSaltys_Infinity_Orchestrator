@@ -62,15 +62,17 @@ use crate::ui::shared::redesign_tokens::{
 /// hex, not a palette token: the wireframe hard-codes it inside this
 /// component).
 const WARN_BORDER: egui::Color32 = egui::Color32::from_rgb(0xed, 0xc5, 0x47);
-/// Dark ink for text on this amber-toned surface — **theme-invariant**, per
-/// the SPEC §12.2 rule that toned surfaces use dark text (`#1a2638`)
-/// regardless of palette (same `#1a2638` `redesign_btn` uses on its primary
-/// fill). Deliberate, recorded deviation from the wireframe's
-/// `var(--text-muted)` for the sub-line, which is illegible on the amber fill
-/// in BOTH Light and Dark (QA 2026-05-16). Header uses it solid; the
-/// secondary "how would you like to proceed?" uses it at reduced alpha so it
-/// still reads as secondary while staying legible on amber.
-const WARN_INK: egui::Color32 = egui::Color32::from_rgb(0x1a, 0x26, 0x38);
+/// Ink for text on this warning surface — **white, theme-invariant**. The
+/// amber fill composites over the app's dark-ish backdrop to a fairly **dark
+/// olive in BOTH themes**, so the surface is *dark*, not a light pill tone:
+/// §12.2's "dark text on toned surfaces" rule is for the *light* pill tones
+/// (coral / amber / teal / grey); inverted here because this composited
+/// surface is dark, so it takes light/white ink. Deliberate, recorded
+/// deviation from the wireframe's `var(--text-muted)` (and from the earlier
+/// dark-ink attempt, which looked muddy on the olive — QA 2026-05-16). Header
+/// solid white; the secondary "how would you like to proceed?" uses white at
+/// reduced alpha — secondary but crisp on the dark olive.
+const WARN_INK: egui::Color32 = egui::Color32::from_rgb(0xff, 0xff, 0xff);
 /// Wireframe `background: rgba(237, 197, 71, 0.18)` — amber at ~18% alpha.
 /// **Un-premultiplied** so egui composites it source-over the *current theme
 /// background* (pale amber wash on Light, subtle amber glow on Dark). The
@@ -151,11 +153,11 @@ pub fn render(
             egui::RichText::new("How would you like to proceed?")
                 .size(14.0)
                 .family(egui::FontFamily::Name("poppins_light".into()))
-                // Dark ink at ~70% over the amber surface — secondary vs. the
-                // solid-ink header, but legible in both themes (the grey
-                // `text-muted` token never reads on the gold fill).
+                // White at ~80% over the dark olive surface — secondary vs.
+                // the solid-white header, but crisp in both themes (neither
+                // the grey `text-muted` token nor dark ink reads on it).
                 .color(egui::Color32::from_rgba_unmultiplied(
-                    0x1a, 0x26, 0x38, 0xB3,
+                    0xff, 0xff, 0xff, 0xCC,
                 )),
         );
 
