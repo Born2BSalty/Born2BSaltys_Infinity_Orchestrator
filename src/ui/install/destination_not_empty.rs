@@ -55,13 +55,22 @@ use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_shadow, redesign_text_muted, redesign_text_primary,
+    ThemePalette, redesign_shadow,
 };
 
 /// Wireframe `border: 1.5px solid #edc547` — amber warning border (literal
 /// hex, not a palette token: the wireframe hard-codes it inside this
 /// component).
 const WARN_BORDER: egui::Color32 = egui::Color32::from_rgb(0xed, 0xc5, 0x47);
+/// Dark ink for text on this amber-toned surface — **theme-invariant**, per
+/// the SPEC §12.2 rule that toned surfaces use dark text (`#1a2638`)
+/// regardless of palette (same `#1a2638` `redesign_btn` uses on its primary
+/// fill). Deliberate, recorded deviation from the wireframe's
+/// `var(--text-muted)` for the sub-line, which is illegible on the amber fill
+/// in BOTH Light and Dark (QA 2026-05-16). Header uses it solid; the
+/// secondary "how would you like to proceed?" uses it at reduced alpha so it
+/// still reads as secondary while staying legible on amber.
+const WARN_INK: egui::Color32 = egui::Color32::from_rgb(0x1a, 0x26, 0x38);
 /// Wireframe `background: rgba(237, 197, 71, 0.18)` — amber at ~18% alpha.
 /// **Un-premultiplied** so egui composites it source-over the *current theme
 /// background* (pale amber wash on Light, subtle amber glow on Dark). The
@@ -125,16 +134,12 @@ pub fn render(
             // same approach `left_rail.rs` uses for the nav icons.
             let (icon_rect, _) =
                 ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
-            paint_warning_triangle(
-                ui.painter(),
-                icon_rect.center(),
-                redesign_text_primary(palette),
-            );
+            paint_warning_triangle(ui.painter(), icon_rect.center(), WARN_INK);
             ui.label(
                 egui::RichText::new("Target directory not empty")
                     .size(13.0)
                     .family(egui::FontFamily::Name("poppins_medium".into()))
-                    .color(redesign_text_primary(palette)),
+                    .color(WARN_INK),
             );
         });
 
@@ -146,7 +151,12 @@ pub fn render(
             egui::RichText::new("How would you like to proceed?")
                 .size(14.0)
                 .family(egui::FontFamily::Name("poppins_light".into()))
-                .color(redesign_text_muted(palette)),
+                // Dark ink at ~70% over the amber surface — secondary vs. the
+                // solid-ink header, but legible in both themes (the grey
+                // `text-muted` token never reads on the gold fill).
+                .color(egui::Color32::from_rgba_unmultiplied(
+                    0x1a, 0x26, 0x38, 0xB3,
+                )),
         );
 
         // Wireframe sub `marginBottom: 10`.
