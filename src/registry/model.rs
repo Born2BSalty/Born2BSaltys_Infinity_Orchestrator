@@ -110,6 +110,32 @@ pub struct ModlistEntry {
     pub total_size_bytes: Option<u64>,
     /// Last share/import code captured for this modlist.
     pub latest_share_code: Option<String>,
+    /// Handle of whoever authored *this* modlist (SPEC §13.3 Provenance).
+    /// Source at create/fork: `RedesignSettings.user_name` (empty ⇒ `None`).
+    /// `#[serde(default)]` so older `modlists.json` (which lacks the key)
+    /// parses to `None` — bit-for-bit backward-compatible. *Used* by Runs
+    /// 2/4 (the Create/fork path + `pack_meta`); added now so the model is
+    /// stable.
+    #[serde(default)]
+    pub author: Option<String>,
+    /// Append-only fork lineage, ordered oldest → newest (SPEC §13.3
+    /// Provenance / §5.3 append rule): `forked_from[0]` is the original
+    /// root, the last entry is the immediate parent. Empty for a
+    /// from-scratch (non-forked) modlist. The element type is BIO's
+    /// `pub(crate)` `ForkAncestor` (carve-out #5, Phase 5) — **reused**, no
+    /// parallel registry-side type, no drift; its pinned Phase-5 derive set
+    /// (`Debug, Clone, PartialEq, Serialize, Deserialize`) already satisfies
+    /// `ModlistEntry`'s derives + the `modlists.json` round-trip, so this
+    /// adds **zero** BIO-source edit. `#[serde(default)]` (a `Vec` defaults
+    /// empty) keeps older files backward-compatible. *Used* by Runs 2/4.
+    /// `pub(crate)` (not `pub`): `ForkAncestor` is BIO's `pub(crate)`
+    /// carve-out-#5 struct — same-crate visibility avoids a
+    /// `private_interfaces` warning and is sufficient (the `bio` crate has
+    /// no external library consumer; serde (de)serialization is unaffected
+    /// by Rust field visibility, so the `modlists.json` round-trip is
+    /// identical).
+    #[serde(default)]
+    pub(crate) forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
     /// Workspace state file path **relative** to the orchestrator's config
     /// dir. Always `modlists/<id>/workspace.json` in practice.
     pub workspace_file_relpath: PathBuf,
@@ -133,6 +159,8 @@ impl Default for ModlistEntry {
             paused_at_step: None,
             total_size_bytes: None,
             latest_share_code: None,
+            author: None,
+            forked_from: Vec::new(),
             workspace_file_relpath: PathBuf::new(),
         }
     }
@@ -242,6 +270,56 @@ mod tests {
         }"#;
         let r: ModlistRegistry = serde_json::from_str(raw).expect("parse");
         assert_eq!(r.entries[0].state, ModlistState::InProgress);
+    }
+
+    #[test]
+    fn provenance_fields_serde_default_round_trip() {
+        use crate::app::modlist_share::ForkAncestor;
+
+        // Older `modlists.json` that predates the provenance fields must
+        // parse with `author == None` + `forked_from == []` (bit-for-bit
+        // backward-compatible — carve-out-#5 default semantics).
+        let raw = r#"{
+            "format_version": 1,
+            "entries": [{
+                "id": "ABCDEFGHIJKL",
+                "name": "legacy",
+                "game": "EET",
+                "state": "in_progress",
+                "workspace_file_relpath": "modlists/ABCDEFGHIJKL/workspace.json"
+            }]
+        }"#;
+        let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat parse");
+        assert_eq!(r.entries[0].author, None);
+        assert!(r.entries[0].forked_from.is_empty());
+
+        // A populated lineage round-trips losslessly (the reused BIO
+        // `ForkAncestor` derives Serialize+Deserialize per carve-out #5).
+        let mut reg = ModlistRegistry::default();
+        reg.entries.push(ModlistEntry {
+            id: "ZYXWVUTSRQPO".to_string(),
+            name: "Forked".to_string(),
+            game: Game::EET,
+            author: Some("@me".to_string()),
+            forked_from: vec![
+                ForkAncestor {
+                    name: "Original".to_string(),
+                    author: "@root".to_string(),
+                },
+                ForkAncestor {
+                    name: "Mid".to_string(),
+                    author: "@mid".to_string(),
+                },
+            ],
+            ..Default::default()
+        });
+        let s = serde_json::to_string_pretty(&reg).expect("serialize");
+        let back: ModlistRegistry = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(reg, back);
+        assert_eq!(back.entries[0].author.as_deref(), Some("@me"));
+        assert_eq!(back.entries[0].forked_from.len(), 2);
+        assert_eq!(back.entries[0].forked_from[0].name, "Original");
+        assert_eq!(back.entries[0].forked_from[1].author, "@mid");
     }
 
     #[test]

@@ -19,5 +19,6 @@ pub mod install;
 pub mod orchestrator;
 pub mod settings;
 pub mod shell;
+pub mod workspace;
 
 pub use run::run;

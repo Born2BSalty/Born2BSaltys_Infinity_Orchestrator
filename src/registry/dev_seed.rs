@@ -67,6 +67,10 @@ pub fn seed_demo_entry(
         paused_at_step: Some(3),
         total_size_bytes: None,
         latest_share_code: None,
+        // Phase-6 additive provenance fields (SPEC §13.3). A dev-seeded
+        // demo entry is a from-scratch modlist: no author, empty lineage.
+        author: None,
+        forked_from: Vec::new(),
         workspace_file_relpath: PathBuf::from(format!("modlists/{id}/workspace.json")),
     };
     registry.entries.push(entry.clone());
@@ -110,11 +114,12 @@ mod tests {
         assert_eq!(registry.entries.len(), 1);
         assert_eq!(entry.state, ModlistState::InProgress);
         assert!(registry_path.exists());
-        assert!(root
-            .join("modlists")
-            .join(&entry.id)
-            .join("workspace.json")
-            .exists());
+        assert!(
+            root.join("modlists")
+                .join(&entry.id)
+                .join("workspace.json")
+                .exists()
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }

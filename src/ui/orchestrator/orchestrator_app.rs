@@ -56,7 +56,9 @@
 //
 // SPEC: §2.1, §11, §13.1, §13.14, overview "Architecture" section.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
@@ -66,6 +68,7 @@ use tracing::warn;
 use crate::app::app_bootstrap_init;
 use crate::app::app_step1_github_oauth::GitHubOAuthFlowResult;
 use crate::app::state::WizardState;
+use crate::app::step2_worker::Step2ScanEvent;
 use crate::registry::errors::RegistryError;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::persistence_cycle::RegistryPersistenceCycle;
@@ -76,13 +79,13 @@ use crate::settings::model::AppSettings;
 use crate::settings::redesign_fields::{RedesignSettings, ThemeChoice};
 use crate::settings::redesign_store::RedesignSettingsStore;
 use crate::settings::store::SettingsStore;
+use crate::ui::home::state_home::HomeScreenState;
+use crate::ui::install::state_install::InstallScreenState;
 use crate::ui::orchestrator::left_rail;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::nav_status::{
     PathValidationKind, PathValidationSummary, compute_path_validation_summary,
 };
-use crate::ui::home::state_home::HomeScreenState;
-use crate::ui::install::state_install::InstallScreenState;
 use crate::ui::orchestrator::page_router;
 use crate::ui::orchestrator::stubs::home_stub::HomeStubState;
 use crate::ui::settings::oauth_glue;
@@ -90,6 +93,7 @@ use crate::ui::settings::state_settings::SettingsScreenState;
 use crate::ui::settings::validate_debounce;
 use crate::ui::shared::redesign_tokens::{REDESIGN_NAV_WIDTH_PX, ThemePalette};
 use crate::ui::shell::shell_chrome;
+use crate::ui::workspace::state_workspace::WorkspaceViewState;
 
 /// 1-second debounce on the redesign settings file (matches Phase 3's
 /// registry cycle cadence).
@@ -166,6 +170,62 @@ pub struct OrchestratorApp {
     /// drifts from the on-disk snapshot.
     pub bio_settings_last_saved: AppSettings,
     pub bio_settings_last_dirty_at: Option<Instant>,
+
+    // ---------- Phase 6 fields ----------
+    /// Per-modlist workspace view state (active step, completed steps,
+    /// loaded-modlist tracking, rename/fork/flash state). Replaces the
+    /// Phase-2 workspace stub once a modlist is opened (P6.T1 / P6.T12).
+    pub workspace_view: WorkspaceViewState,
+    /// Dirty bit for the per-modlist workspace state (`workspace.json`). Set
+    /// by `step_action_dispatch` on mutating Step 2/4 variants (and, in
+    /// Run 4, by the Step 3 fingerprint detector). The debounced workspace
+    /// write that consumes this flag lands in **Run 4 (P6.T11)** — Run 1
+    /// only adds the flag + setter; nothing reads it yet.
+    pub workspace_state_dirty: bool,
+
+    // The six Step 2 channel receivers `bio::app::app_update_cycle::
+    // poll_before_render` (`pub(crate)`) requires. Owned here exactly as
+    // `WizardApp` owns them (`src/ui/app.rs:46-52`): all start `None` /
+    // empty; `bio::app::app_step2_*` channel-creation functions populate
+    // them when the relevant background task starts (the action handlers
+    // take them by `&mut`, mirroring the BIO pattern — see
+    // `step_action_dispatch::dispatch_step2`). The poll/repaint wiring that
+    // drains them lands in Run 4 (Phase 6 persistence/runtime integration);
+    // Run 1 owns the fields so `handle_step2_action` can populate them.
+    //
+    // Visibility: `pub(crate)` (matching the sibling `github_auth_rx`
+    // channel field) — the update-event types are BIO `pub(crate)` enums
+    // reachable same-crate per the carve-out-#3 lib+bin split. `pub` would
+    // trip `private_interfaces`; the orchestrator binary is same-crate so
+    // `pub(crate)` is both correct and sufficient (`step_action_dispatch`
+    // and the Run-4 poll wiring are same-crate).
+    /// ① Step 2 TP2-scan worker event channel.
+    pub(crate) step2_scan_rx: Option<Receiver<Step2ScanEvent>>,
+    /// ② Step 2 scan cancellation flag.
+    pub(crate) step2_cancel: Option<Arc<AtomicBool>>,
+    /// ③ Step 2 scan progress queue `(done, total, label)`.
+    pub(crate) step2_progress_queue: VecDeque<(usize, usize, String)>,
+    /// ④ Step 2 update-check worker event channel.
+    pub(crate) step2_update_check_rx:
+        Option<Receiver<crate::app::app_step2_update_check_worker::Step2UpdateCheckEvent>>,
+    /// ⑤ Step 2 update-download worker event channel.
+    pub(crate) step2_update_download_rx:
+        Option<Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent>>,
+    /// ⑥ Step 2 update-extract worker event channel. (The 6th — the
+    /// historically-missed `_extract_rx`; `poll_before_render` requires it.)
+    ///
+    /// `#[allow(dead_code)]`: unlike receivers ①–⑤ (read by
+    /// `step_action_dispatch` via `handle_step2_action`), this one is only
+    /// consumed by `bio::app::app_update_cycle::poll_before_render`, whose
+    /// orchestrator-side wiring lands in **Run 4** (Phase-6 persistence /
+    /// runtime integration). It is owned now — per the brief it is "real and
+    /// required" so the field set is the correct 6 from the start — but read
+    /// only once the poll loop is wired. Scoped allow so the Run-1 build is
+    /// warning-clean (the gate permits only the 2 pre-existing `PromptInfo`
+    /// warnings).
+    #[allow(dead_code)]
+    pub(crate) step2_update_extract_rx:
+        Option<Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>>,
 }
 
 impl OrchestratorApp {
@@ -204,8 +264,7 @@ impl OrchestratorApp {
             }
         };
 
-        let persistence_cycle =
-            RegistryPersistenceCycle::new_with_baseline(registry.clone());
+        let persistence_cycle = RegistryPersistenceCycle::new_with_baseline(registry.clone());
 
         // ---------- Redesign settings init (Phase 4) ----------
         let redesign_settings_store = RedesignSettingsStore::new_default();
@@ -276,6 +335,19 @@ impl OrchestratorApp {
             accounts_stub_hint: None,
             bio_settings_last_saved: bio_settings_snapshot,
             bio_settings_last_dirty_at: None,
+
+            // Phase 6 — workspace spine. Same init shape as WizardApp's Step 2
+            // channels (`src/ui/app.rs:80-86`): all `None` / empty; the
+            // `bio::app::app_step2_*` action handlers populate them when a
+            // background task starts.
+            workspace_view: WorkspaceViewState::default(),
+            workspace_state_dirty: false,
+            step2_scan_rx: None,
+            step2_cancel: None,
+            step2_progress_queue: VecDeque::new(),
+            step2_update_check_rx: None,
+            step2_update_download_rx: None,
+            step2_update_extract_rx: None,
         };
 
         // NOTE: do NOT call `oauth_glue::load_persisted_login` here.
@@ -302,6 +374,15 @@ impl OrchestratorApp {
         app
     }
 
+    /// Mark the active modlist's workspace state dirty so the debounced
+    /// workspace write picks it up. Called by `step_action_dispatch` on
+    /// every mutating Step 2/4 variant (and, in Run 4, the Step 3 fingerprint
+    /// detector). **Run 1 only sets the flag** — the debounced write that
+    /// consumes it is wired in Run 4 (P6.T11); nothing drains it yet.
+    pub fn mark_workspace_dirty(&mut self) {
+        self.workspace_state_dirty = true;
+    }
+
     /// Per-frame poll: try to flush pending registry / workspace writes if
     /// their debounce has elapsed.
     fn tick_persistence(&mut self) {
@@ -309,19 +390,23 @@ impl OrchestratorApp {
             return;
         }
         let now = Instant::now();
-        if let Err(err) =
-            self.persistence_cycle
-                .persist_registry_if_needed(&self.registry, &self.registry_store, now)
-        {
-            warn!(target = "orchestrator", "persist_registry_if_needed failed: {err}");
+        if let Err(err) = self.persistence_cycle.persist_registry_if_needed(
+            &self.registry,
+            &self.registry_store,
+            now,
+        ) {
+            warn!(
+                target = "orchestrator",
+                "persist_registry_if_needed failed: {err}"
+            );
         }
         for (id, ws) in &self.workspace_state {
             let Some(store) = self.workspace_stores.get(id) else {
                 continue;
             };
-            if let Err(err) =
-                self.persistence_cycle
-                    .persist_workspace_if_needed(id, ws, store, now)
+            if let Err(err) = self
+                .persistence_cycle
+                .persist_workspace_if_needed(id, ws, store, now)
             {
                 warn!(
                     target = "orchestrator",
@@ -346,7 +431,10 @@ impl OrchestratorApp {
                         self.redesign_settings_last_dirty_at = None;
                     }
                     Err(err) => {
-                        warn!(target = "orchestrator", "redesign settings save failed: {err}");
+                        warn!(
+                            target = "orchestrator",
+                            "redesign settings save failed: {err}"
+                        );
                     }
                 }
             }
@@ -388,8 +476,7 @@ impl OrchestratorApp {
         }
         self.bio_settings_last_dirty_at.get_or_insert(now);
         if let Some(at) = self.bio_settings_last_dirty_at
-            && now.saturating_duration_since(at)
-                >= Duration::from_millis(BIO_SETTINGS_DEBOUNCE_MS)
+            && now.saturating_duration_since(at) >= Duration::from_millis(BIO_SETTINGS_DEBOUNCE_MS)
         {
             match self.settings_store.save(&snapshot) {
                 Ok(()) => {
@@ -420,7 +507,10 @@ impl OrchestratorApp {
         }
         if self.redesign_settings != self.redesign_settings_last_saved {
             if let Err(err) = self.redesign_settings_store.save(&self.redesign_settings) {
-                warn!(target = "orchestrator", "redesign settings flush failed: {err}");
+                warn!(
+                    target = "orchestrator",
+                    "redesign settings flush failed: {err}"
+                );
             } else {
                 self.redesign_settings_last_saved = self.redesign_settings.clone();
             }
@@ -461,16 +551,24 @@ impl eframe::App for OrchestratorApp {
         // If the screen's last full-validation report disagrees with the live
         // state, layer that into the rail summary so the rail reflects the
         // most recent edit.
-        if self.settings_screen_state.path_validation_results.issue_count > 0
+        if self
+            .settings_screen_state
+            .path_validation_results
+            .issue_count
+            > 0
             && self.path_validation.kind == PathValidationKind::Ok
         {
             self.path_validation = PathValidationSummary {
                 kind: PathValidationKind::Err(
-                    self.settings_screen_state.path_validation_results.issue_count,
+                    self.settings_screen_state
+                        .path_validation_results
+                        .issue_count,
                 ),
                 text: format!(
                     "\u{00D7} {} path issues",
-                    self.settings_screen_state.path_validation_results.issue_count
+                    self.settings_screen_state
+                        .path_validation_results
+                        .issue_count
                 ),
             };
         }
@@ -532,9 +630,8 @@ impl Drop for OrchestratorApp {
 /// request a precisely-timed repaint so the next `validate_debounce::tick`
 /// runs even without intervening user input.
 fn next_debounce_due_in(app: &OrchestratorApp) -> Option<std::time::Duration> {
-    let threshold = std::time::Duration::from_millis(
-        crate::ui::settings::validate_debounce::DEBOUNCE_MS,
-    );
+    let threshold =
+        std::time::Duration::from_millis(crate::ui::settings::validate_debounce::DEBOUNCE_MS);
     let now = Instant::now();
     app.settings_screen_state
         .path_edit_debounce
