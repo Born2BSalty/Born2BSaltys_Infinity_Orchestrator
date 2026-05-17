@@ -21,14 +21,19 @@
 //   - `operations`         → CRUD entry points (populated in Phase 5; the
 //                            module is declared here so visibility is stable
 //                            across phases).
+//   - `operations_rename`  → Phase 6 P6.T5: `rename_modlist` (registry-entry
+//                            rename ONLY — no on-disk folder rename, SPEC
+//                            §2.2; debounced via the registry persistence
+//                            path, NOT `workspace_state_dirty`).
 //
-// SPEC: §13.1, §13.14.
+// SPEC: §13.1, §13.14, §2.2.
 
 pub mod dev_seed;
 pub mod errors;
 pub mod ids;
 pub mod model;
 pub mod operations;
+pub mod operations_rename;
 pub mod persistence_cycle;
 pub mod store;
 pub mod store_workspace;

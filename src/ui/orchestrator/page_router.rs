@@ -25,6 +25,7 @@
 use eframe::egui;
 use tracing::warn;
 
+use crate::registry::model::ModlistEntry;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::home::page_home;
@@ -35,7 +36,7 @@ use crate::ui::orchestrator::registry_error_panel;
 use crate::ui::orchestrator::stubs;
 use crate::ui::settings::page_settings;
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
-use crate::ui::workspace::state_workspace::WorkspaceStep;
+use crate::ui::workspace::state_workspace::{ForkMeta, WorkspaceStep};
 use crate::ui::workspace::{workspace_state_loader, workspace_view};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
@@ -172,6 +173,14 @@ fn render_workspace(
         orchestrator.workspace_view.current_step = WorkspaceStep::Step2;
         orchestrator.workspace_view.completed_steps.clear();
         orchestrator.workspace_view.loaded_workspace_id = Some(id.to_string());
+        // P6.T5 — populate `fork_meta` from the registry entry. `Some` iff
+        // this modlist's `forked_from` chain is non-empty (SPEC §2.2 — the
+        // fork badge + `⑂ view fork details` show only then; `step2_tab_row`
+        // also keys "is this a fork" off `fork_meta.is_some()`). The
+        // immediate parent is the last `forked_from` ancestor (the append
+        // rule, SPEC §13.3). `mods`/`components` use the entry's cached
+        // counts (the honest available denormalised figures).
+        orchestrator.workspace_view.fork_meta = fork_meta_from_entry(&entry);
     }
 
     // 4. Render the workspace shell. Path sync is open-only (done once in
@@ -179,6 +188,26 @@ fn render_workspace(
     //    same in-memory `orchestrator.wizard_state.step1` this renders from,
     //    so paths are live by construction — no per-frame disk read.
     workspace_view::render(ui, orchestrator, id, ctx);
+}
+
+/// Build `WorkspaceViewState::fork_meta` from a registry entry (P6.T5).
+/// Returns `None` for a from-scratch (non-forked) modlist — `forked_from`
+/// empty — so the fork badge / sub-line / `⑂ view fork details` are all
+/// hidden (SPEC §2.2). For a forked modlist the immediate parent is the
+/// **last** `forked_from` ancestor (the append rule — SPEC §13.3); the full
+/// chain is carried through for the reused `ForkInfoPopup`.
+fn fork_meta_from_entry(entry: &ModlistEntry) -> Option<ForkMeta> {
+    if entry.forked_from.is_empty() {
+        return None;
+    }
+    let parent = entry.forked_from.last();
+    Some(ForkMeta {
+        parent_name: parent.map(|p| p.name.clone()).unwrap_or_default(),
+        parent_author: parent.map(|p| p.author.clone()).unwrap_or_default(),
+        mods: entry.mod_count,
+        components: entry.component_count,
+        forked_from: entry.forked_from.clone(),
+    })
 }
 
 /// Shown when the routed workspace id is not in the registry (e.g. a stale

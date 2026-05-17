@@ -10,13 +10,12 @@
 //   4. Active step's content area (`workspace_step_router::render`).
 //   5. `WorkspaceNavBar` (← Previous / step indicator / Next →).
 //
-// **Run-1 scope.** The header here is a **minimal title** (`Editing
-// <name>`). The full `workspace_header` (✎ inline rename + Fork badge +
-// `⑂ view fork details` + `save draft` / `Share import code`) is **Run 2
-// (P6.T5 / P6.T6)** — explicitly NOT this run. The `SharePasteCodeDialog` /
-// `ForkInfoPopup` overlays are Run 2/3, so `ctx` is unused this run (kept
-// in the signature for API stability — later runs render popups over the
-// shell with it).
+// **Run-2 scope.** The header is now the full `workspace_header`
+// (`Editing <name>` + ✎ inline rename + Fork badge + `⑂ view fork details`
+// + `save draft`), replacing Run-1's minimal title. `ctx` is now used (the
+// reused Phase-5 `ForkInfoPopup` is a non-blocking overlay rendered over
+// the shell). `SharePasteCodeDialog` (Step-5 `Share import code`) is
+// Phase 7 — `workspace_header` renders that button disabled until then.
 //
 // The nav bar's outcome drives step advancement + the progress-bar
 // checkmarks: crossing forward into a new step marks the step being left as
@@ -39,10 +38,10 @@ use eframe::egui;
 
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 use crate::ui::workspace::{
-    workspace_hint_line, workspace_nav_bar, workspace_progress_bar, workspace_step_router,
+    workspace_header, workspace_hint_line, workspace_nav_bar, workspace_progress_bar,
+    workspace_step_router,
 };
 
 /// Render the workspace shell for the modlist currently loaded into the
@@ -53,13 +52,14 @@ pub fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     _modlist_id: &str,
-    _ctx: &egui::Context,
+    ctx: &egui::Context,
 ) {
     let palette = orchestrator.theme_palette;
 
-    // ── 1. Header row — minimal `Editing <name>` (Run-1 scope; the full
-    //    rename/fork/save-draft header is Run 2's `workspace_header`). ──
-    render_minimal_header(ui, palette, &orchestrator.workspace_view.modlist_name);
+    // ── 1. Header row — the full workspace header (P6.T5/T6): `Editing
+    //    <name>` + ✎ inline rename + Fork badge + `⑂ view fork details`
+    //    (reused Phase-5 ForkInfoPopup) + `save draft`. ──
+    workspace_header::render(ui, orchestrator, ctx);
     ui.add_space(10.0);
 
     // ── 2. Progress bar. ──
@@ -184,23 +184,6 @@ fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {
         sync_step3_from_step2(state);
         state.set_last_step2_sync_signature(signature);
     }
-}
-
-/// The Run-1 minimal header: `Editing <name>` in the wireframe's small-caps
-/// title style (Poppins 13 / 500, muted). The ✎ rename affordance + Fork
-/// badge + right-side buttons are Run 2's `workspace_header`.
-fn render_minimal_header(ui: &mut egui::Ui, palette: ThemePalette, name: &str) {
-    let title = if name.trim().is_empty() {
-        "Editing modlist".to_string()
-    } else {
-        format!("Editing {name}")
-    };
-    ui.label(
-        egui::RichText::new(title)
-            .size(13.0)
-            .family(egui::FontFamily::Name("poppins_medium".into()))
-            .color(redesign_text_muted(palette)),
-    );
 }
 
 /// The vertical footprint the nav bar reserves at the bottom (exported so a

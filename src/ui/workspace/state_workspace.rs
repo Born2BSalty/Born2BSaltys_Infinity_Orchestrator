@@ -244,6 +244,14 @@ pub struct WorkspaceViewState {
     pub save_draft_flash_until: Option<Instant>,
     /// Share import code dialog open (Phase 7; inert this run).
     pub share_paste_open: bool,
+    /// `ForkInfoPopup` open (P6.T5 — Run 2). The exact analogue of
+    /// `share_paste_open` / `install/state_install.rs::fork_info_open`: a
+    /// persistent non-blocking-popup-open bool the header re-renders the
+    /// reused Phase-5 `ForkInfoPopup` from each frame, clearing it on the
+    /// popup's `Closed` outcome. Declared in Run 2 (the Run-1 spine fixed
+    /// the rest of the shape; this is the minimal additive field the
+    /// `⑂ view fork details` trigger needs, mirroring `share_paste_open`).
+    pub fork_info_open: bool,
     /// Flipped to `true` post-successful-install (Phase 7).
     pub install_complete: bool,
     /// Which modlist's data is currently loaded into the orchestrator's
@@ -272,6 +280,7 @@ impl Default for WorkspaceViewState {
             rename_temp: String::new(),
             save_draft_flash_until: None,
             share_paste_open: false,
+            fork_info_open: false,
             install_complete: false,
             loaded_workspace_id: None,
             step2: WorkspaceStep2State::default(),

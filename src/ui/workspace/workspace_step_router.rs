@@ -18,10 +18,13 @@
 //     (no `Step3Action` enum — the page handles its own intents via direct
 //     `WizardState` mutation: drag-reorder, undo/redo, block-select). The
 //     router calls it and ignores the return; no dispatch arm.
-//   - Step 4: a **minimal honest placeholder** this run. The real C4
-//     orchestrator-side Step 4 renderer is **Run 2 (P6.T2b)** — explicitly
-//     NOT Run 1. BIO's `page_step4::render` is never called by the
-//     workspace router (per C4).
+//   - Step 4: the **C4 orchestrator-side renderer** `bio::ui::workspace::
+//     step4::workspace_step4::render(ui, orchestrator) -> Option<Step4Action>`
+//     (P6.T2b). Net-new redesign chrome (Save row + EET game-tab strip +
+//     line-numbered three-colour review list / exact-log viewer). BIO's
+//     `page_step4::render` is **never** called by the workspace router (per
+//     C4 — it would double the Save button). Any returned action →
+//     `step_action_dispatch::dispatch_step4`.
 //   - Step 5: `workspace_step5_stub::render` (Phase 7 replaces the stub).
 //
 // To satisfy the borrow checker, Step 2's returned action is captured first
@@ -34,7 +37,6 @@
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint, redesign_text_muted};
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 use crate::ui::workspace::step_action_dispatch;
 use crate::ui::workspace::workspace_step5_stub;
@@ -64,33 +66,17 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             );
         }
         WorkspaceStep::Step4 => {
-            // Run 1: minimal honest placeholder. The C4 orchestrator-side
-            // Step 4 renderer (Save row + game tab strip + line-numbered
-            // review list / exact-log viewer) is Run 2 (P6.T2b). BIO's
-            // `page_step4::render` is intentionally NOT called (per C4).
-            render_step4_placeholder(ui, orchestrator.theme_palette);
+            // C4 orchestrator-side renderer (P6.T2b): net-new redesign
+            // chrome (Save row + EET game-tab strip + line-numbered
+            // three-colour review list / exact-log viewer). BIO's
+            // `page_step4::render` is intentionally NOT called (per C4 — it
+            // would render a second Save button). Any returned action →
+            // `dispatch_step4` (M11 — all dispatch at the router layer).
+            let action = crate::ui::workspace::step4::workspace_step4::render(ui, orchestrator);
+            if let Some(a) = action {
+                step_action_dispatch::dispatch_step4(a, orchestrator);
+            }
         }
         WorkspaceStep::Step5 => workspace_step5_stub::render(ui, orchestrator),
     }
-}
-
-/// The Run-1 Step 4 placeholder. Replaced by `workspace_step4::render`
-/// (P6.T2b — Run 2).
-fn render_step4_placeholder(ui: &mut egui::Ui, palette: ThemePalette) {
-    ui.label(
-        egui::RichText::new("Step 4 \u{2014} Review")
-            .size(15.0)
-            .family(egui::FontFamily::Name("poppins_medium".into()))
-            .color(redesign_text_muted(palette)),
-    );
-    ui.add_space(6.0);
-    ui.label(
-        egui::RichText::new(
-            "The full Step 4 review renderer (Save weidu.log's + game tab strip + line-numbered \
-             order list) lands in Run 2.",
-        )
-        .size(13.0)
-        .family(egui::FontFamily::Proportional)
-        .color(redesign_text_faint(palette)),
-    );
 }

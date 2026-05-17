@@ -29,15 +29,27 @@
 //   - `workspace_view`         → the top-level workspace renderer.
 //   - `workspace_step5_stub`   → the Step 5 placeholder (Phase 7 replaces it).
 //
-// Later Phase-6 runs add `workspace_header` (rename + fork badge + save
-// draft), `step4/` (the C4 orchestrator-side Step 4 renderer), and `widgets/`.
+// Phase 6 Run 2 (workspace header + Step-4 C4) adds:
+//   - `step4`                  → the C4 orchestrator-side Step-4 renderer
+//                                (Save row + game-tab strip + line-numbered
+//                                three-colour review list / exact-log
+//                                viewer). BIO's `page_step4::render` is NOT
+//                                called (per C4).
+//   - `widgets`                → workspace-local widgets (`weidu_line` —
+//                                the §6.7 three-colour line renderer).
+//   - `workspace_header`       → `Editing <name>` + ✎ inline rename + fork
+//                                badge + `⑂ view fork details` (reused
+//                                Phase-5 `ForkInfoPopup`) + `save draft`.
 //
-// SPEC: §2.2, §6, §7, §8, §13.1, §13.14.
+// SPEC: §2.2, §6, §6.7, §7, §8, §10.9, §13.1, §13.14.
 
 pub mod state_workspace;
 pub mod step2;
 pub mod step2_log_glue;
+pub mod step4;
 pub mod step_action_dispatch;
+pub mod widgets;
+pub mod workspace_header;
 pub mod workspace_hint_line;
 pub mod workspace_nav_bar;
 pub mod workspace_progress_bar;
