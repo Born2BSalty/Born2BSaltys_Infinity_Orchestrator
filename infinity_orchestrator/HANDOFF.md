@@ -15,7 +15,7 @@ The project is the redesign of the existing `bio` Rust crate (Born2BSalty's Infi
 | 3 | Modlist registry + per-modlist workspace state files | ✓ done, builds clean |
 | 4 | Settings screen (5 sub-tabs) + per-edit debounced path validation | ✓ done, builds clean |
 | 5 | Home + Install Modlist (paste / preview / download stages) | ✓ done — Runs 1–5 (Home + actions + Install shell/paste/Preview+provenance/stage-4 stub + Run 5 = §4.3 Downloading **chassis**). Live download data + per-install dirs + content-addressed staging deferred to Phase 7 P7.T17 (pipeline terminates in the install runtime) — SPEC §13.12a |
-| 6 | Create screen + Workspace shell (Steps 2–4) | not started |
+| 6 | Create screen + Workspace shell (Steps 2–4) | in progress — 4-run slice: **R1 done** (workspace spine + Step-2 C4 chrome, hardened 1b–1e), **R2 done** (Step-4 C4 renderer + workspace header/rename + save-draft + game tabs); R3 (Create + Load Draft) + R4 (fork + dirty-bit persistence + nav-away flush) remaining. Detail: overview.md 2026-05-16 revision log |
 | 7 | Step 5 install runtime + Reinstall + import-code auto-write + install concurrency + rail-nav lock | not started |
 | 8 | Popup reskins + state-aware theme reads across BIO surfaces + polish | not started |
 
