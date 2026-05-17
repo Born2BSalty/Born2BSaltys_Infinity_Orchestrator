@@ -796,11 +796,32 @@ fn paint_inline_fork(ui: &mut egui::Ui, color: egui::Color32) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
     use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
+    use crate::registry::store::RegistryStore;
+
+    /// Unique temp-path counter — the `store.rs` test precedent.
+    static HDRTEST_TMP: AtomicU64 = AtomicU64::new(0);
 
     fn orch_with_entry(name: &str) -> OrchestratorApp {
         let mut app = OrchestratorApp::new(false);
+        // TEST ISOLATION (data-loss guard): `OrchestratorApp::new` binds
+        // `registry_store` to the REAL `%APPDATA%/bio` config dir, and
+        // `impl Drop for OrchestratorApp` → `flush_all_now` → `flush_all`
+        // writes the in-memory registry to it when it differs from the
+        // baseline. A unit test that builds a real app therefore clobbers
+        // the user's `modlists.json` on `cargo test`. Repoint the store to a
+        // unique temp path so the Drop flush is harmless (the `store.rs`
+        // `temp_path()` precedent). NO unit test may keep the `new_default`
+        // store — see orchestrator-handoff "Gotchas".
+        let tmp = std::env::temp_dir().join(format!(
+            "bio_hdrtest_{}_{}.json",
+            std::process::id(),
+            HDRTEST_TMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        app.registry_store = RegistryStore::new_with_path(tmp);
         app.registry = ModlistRegistry::default();
         app.registry.entries.push(ModlistEntry {
             id: "HDRTEST00000".to_string(),
