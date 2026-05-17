@@ -2,7 +2,15 @@
 
 Changes committed but **never seen rendered by you** — every item below was committed while the app held the `infinity_orchestrator.exe` lock, so none has been visually verified. Work through this when you're back.
 
-_Last updated 2026-05-17 (Phase 6 Run 3 dispatched — see "In flight" section). Branch `overhaul/infinity_orchestrator`, all committed items pushed to origin._
+_Last updated 2026-05-17 (Phase 6 Run 3 SHIPPED + verified — items 5/6 promoted below). Branch `overhaul/infinity_orchestrator`, all committed items pushed to origin._
+
+---
+
+## ⚠️ Orchestrator note — read first (2026-05-17)
+
+**A process failure on the Run-3 commit (`8fa52f8`), disclosed not buried.** It is **53 files**, not the ~11-file Run-3 deliverable: I ran `git add -A` and did not reconcile `git status` against the expected set before committing, so ~42 redesign files of **pre-existing `rustfmt --edition 2024` + CRLF-normalization churn** got bundled in. **Verified safe:** zero protected BIO (BIO-guard = only the authorized carve-out #3 line), all 42 redesign-owned, every change formatting-only, **proven semantically inert by clean compile + `cargo test --lib` 254/0 + byte-identical `modlists.json`**. The Run-3 substance is correct + independently verified. The pushed commit is left as-is (formatting-only/green; un-bundling would need a disproportionate history rewrite) — full record in overview.md 2026-05-17.
+
+**Awaiting your call:** I propose hardening the orchestrator skill's commit step — *never `git add -A` for a run commit; stage an explicit file list; reconcile `git diff --cached --name-only` against the expected set immediately before commit; an unexpected staged-file delta is an ABORT-and-investigate gate like a BIO-guard hit.* I did **not** edit the skill unilaterally while you're away (it's the governance surface you control); approve/adjust on return.
 
 ---
 
