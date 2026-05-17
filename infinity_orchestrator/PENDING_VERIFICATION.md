@@ -2,7 +2,7 @@
 
 Changes committed but **never seen rendered by you** — every item below was committed while the app held the `infinity_orchestrator.exe` lock, so none has been visually verified. Work through this when you're back.
 
-_Last updated 2026-05-17. Branch `overhaul/infinity_orchestrator`, all items pushed to origin._
+_Last updated 2026-05-17 (Phase 6 Run 3 dispatched — see "In flight" section). Branch `overhaul/infinity_orchestrator`, all committed items pushed to origin._
 
 ---
 
@@ -56,6 +56,22 @@ If you skip step 2 you will be looking at the OLD build and will think nothing c
   - EET: switch BGEE↔BG2EE — count + pills + list track the active tab. Single-game: tab strip absent (like Step 4).
 
 ---
+
+## ⏳ In flight — Phase 6 Run 3 (NOT yet testable)
+
+Dispatched 2026-05-17 to a plan-implementer; **not yet implemented, built, or orchestrator-verified.** Do **not** test these until the orchestrator marks them ready (it will move them up into "Test items" with a commit + confirmed-fresh-binary note once the run returns and is independently verified). Listed now so the scope is visible; derived from the phase-06 acceptance criteria (the contract the run must meet).
+
+### ☐ 5. Create screen — choose-mode setup + starting-point cards
+- **Phase / Run:** Phase 6, **Run 3** — **P6.T7** + **P6.T13** (wire Create into `page_router`).
+- **Will check:** the Create rail item opens the real screen (not the stub): a setup Box with modlist **name**, **game** ComboBox (EET default / BGEE / BG2EE / IWDEE), destination FolderInput + the conditional DestinationNotEmptyWarning on a non-empty dir, partial-install option disabled. Two cards: `start →` (with name+game+valid existing destination → a new entry appears in `modlists.json` and the **Workspace opens at Step 2**, header `Editing <name>`) and `paste share code →` (Run-3 shows a deferred placeholder — the real fork flow is Run 4 / P6.T8).
+
+### ☐ 6. Load Draft dialog (Resume in-progress build)
+- **Phase / Run:** Phase 6, **Run 3** — **P6.T9** + **P6.T14** (Resume routing).
+- **Will check:** Home `load draft` (and the in-progress card `resume`) opens a **non-blocking dialog** (NOT a file picker — SPEC §5.2) listing in-progress builds as the shared Home card chassis (resume + Kebab Copy-import-code / Delete), empty-state copy when none, `Cancel`-only footer. `resume` closes it and opens the Workspace at Step 2 with that build's state.
+
+## Review of older items (2026-05-17, Run-3 dispatch)
+
+Reviewed items 1–4 against Run 3's surface (Create / Load Draft / routing — a distinct screen from the Step-2/3/4 workspace): **none are partial-from-an-old-run and none are superseded or made irrelevant by Run 3.** Items 1–4 are complete-and-committed, awaiting only the human visual sign-off; they stand as written. (This section is where future runs record any test item a later change makes moot — none yet.)
 
 ## Not in this list (and why)
 

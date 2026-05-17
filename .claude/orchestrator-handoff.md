@@ -8,7 +8,7 @@
 
 ## Active phase work order
 
-`infinity_orchestrator/plan/phase-05-home-install-paste.md` — the active phase work order. (Update this pointer as phases advance.)
+`infinity_orchestrator/plan/phase-06-create-workspace-shell.md` — the active phase work order (Phase 6 in progress: R1/R2 + Step-3 C4 P6.T2d shipped; **Run 3 = P6.T7/T9/T13/T14 dispatched 2026-05-17**; Run 4 = P6.T8 fork + P6.T11 dirty-bit + P6.T15 nav-flush). (Update this pointer as phases advance.)
 
 ## Where the thread is
 
