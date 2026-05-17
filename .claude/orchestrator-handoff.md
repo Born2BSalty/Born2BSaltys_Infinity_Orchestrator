@@ -2,6 +2,10 @@
 
 > **Role, the four principles, the run loop, the BIO-source guard, the gotchas, the fixture mechanism, and how to work with this user are NOT here** — they live in the **orchestrator skill** (`.claude/skills/orchestrator/SKILL.md`; invoke `/orchestrator` or read it first). **This file is ONLY the perishable live thread** — where the work is right now. Also distinct: `infinity_orchestrator/HANDOFF.md` = project/impl state.
 
+## Pending user verification
+
+`infinity_orchestrator/PENDING_VERIFICATION.md` — changes committed but **never seen rendered by the user** (all under the exe lock): Step-3 C4 chrome (`fad78c3`, P6.T2d) + the cosmetic set (alignment / uniform GameTab / rename pencil, `ab4453b`). Each item is tagged with its phase + run and exactly what to check. The user is away; do not mark these done until they visually sign off on a gate-fresh binary.
+
 ## Active phase work order
 
 `infinity_orchestrator/plan/phase-05-home-install-paste.md` — the active phase work order. (Update this pointer as phases advance.)
