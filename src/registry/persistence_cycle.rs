@@ -22,6 +22,26 @@
 // live in `operations.rs` in Phase 5; each takes `&mut ModlistRegistry +
 // &RegistryStore` and saves atomically.
 //
+// **P6.T11 — dirty-bit-gated workspace cadence (this run).** The per-modlist
+// `workspace.json` debounce (`persist_workspace_if_needed`, Phase 3) already
+// debounces a write once a workspace's in-memory state differs from the last
+// saved snapshot. What Run 4 adds is the **gating** so the live `WizardState`
+// → `ModlistWorkspaceState` extract is **only** performed when an explicit
+// dirty bit is set — never per frame (review finding **H1**: a per-frame
+// `extract_workspace_state_from_wizard` + full compare on every idle frame is
+// the cost H1 forbids). The dirty bit + the extract live on the orchestrator
+// (`OrchestratorApp::workspace_state_dirty` + `mark_workspace_dirty`, Run 1;
+// the extract is `workspace_state_loader::extract_workspace_state_from_wizard`
+// — a UI-layer module the registry layer must not import). This file owns
+// the cadence + a **debug counter** (`workspace_extract_debug_count`) the
+// orchestrator bumps each time it actually performs the gated extract — so
+// the H1 "zero idle cost" property is *observable*: an idle workspace leaves
+// it flat (the P6.T11 acceptance check). Mutating call sites that set the
+// dirty bit: `step_action_dispatch::dispatch_step2`/`dispatch_step4` (the
+// mutating Step 2/4 variants — Run 1) and the Step-3 fingerprint detector in
+// `workspace_step_router` (Step 3 has no action enum — H2). Rename sets the
+// *registry* dirty bit, never this one.
+//
 // SPEC: §13.14.
 
 // rationale: `#[must_use]` on a trivial query is churn (Cat 3); the test-only
@@ -58,6 +78,16 @@ pub struct RegistryPersistenceCycle {
     /// Per-key dirty timestamps. Key `"::registry::"` for the registry;
     /// `<modlist_id>` for each workspace.
     pub last_dirty_at: HashMap<String, Instant>,
+    /// **P6.T11 H1 observability counter.** Incremented (via
+    /// [`RegistryPersistenceCycle::note_workspace_extract`]) by the
+    /// orchestrator every time it actually performs the dirty-gated
+    /// `WizardState` → `ModlistWorkspaceState` extract+compare. It must stay
+    /// **flat while a workspace is idle** — that is the H1 "zero per-frame
+    /// extract overhead" property the P6.T11 acceptance verifies (the dirty
+    /// bit is `false` on an idle frame, so the orchestrator skips the
+    /// extract entirely and this never increments). Not persisted; purely a
+    /// runtime diagnostic.
+    pub workspace_extract_debug_count: u64,
 }
 
 impl Default for RegistryPersistenceCycle {
@@ -67,6 +97,7 @@ impl Default for RegistryPersistenceCycle {
             last_saved_workspaces: HashMap::new(),
             debounce_ms: DEFAULT_DEBOUNCE_MS,
             last_dirty_at: HashMap::new(),
+            workspace_extract_debug_count: 0,
         }
     }
 }
@@ -92,6 +123,16 @@ impl RegistryPersistenceCycle {
     /// Mark a single workspace dirty by id.
     pub fn mark_workspace_dirty(&mut self, modlist_id: &str, now: Instant) {
         self.last_dirty_at.insert(modlist_id.to_string(), now);
+    }
+
+    /// Record that the orchestrator performed one dirty-gated
+    /// `WizardState` → `ModlistWorkspaceState` extract+compare (P6.T11 / H1).
+    /// Bumps [`Self::workspace_extract_debug_count`]. Called by the
+    /// orchestrator **only on a frame where `workspace_state_dirty` was
+    /// `true`** — so the counter staying flat across idle frames is the
+    /// observable proof of the H1 "no per-frame extract" property.
+    pub fn note_workspace_extract(&mut self) {
+        self.workspace_extract_debug_count = self.workspace_extract_debug_count.saturating_add(1);
     }
 
     /// Persist the registry if (a) the in-memory copy differs from the last
@@ -274,6 +315,31 @@ mod tests {
             .expect("ok");
         assert!(wrote);
         assert!(path.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn workspace_extract_debug_count_starts_zero_and_only_bumps_when_noted() {
+        // P6.T11 / H1: the counter must start flat and only advance when the
+        // orchestrator explicitly notes a dirty-gated extract. An idle
+        // workspace (the orchestrator never calls `note_workspace_extract`)
+        // leaves it at 0 — the observable "zero per-frame extract" property.
+        let mut cycle = RegistryPersistenceCycle::default();
+        assert_eq!(cycle.workspace_extract_debug_count, 0);
+        // Persisting an unchanged workspace (the idle path) does NOT bump it.
+        let root = std::env::temp_dir().join(format!("bio_h1_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let store = WorkspaceStore::new_with_path(root.join("modlists/H1/workspace.json"));
+        let ws = ModlistWorkspaceState::default();
+        let _ = cycle.persist_workspace_if_needed("H1", &ws, &store, Instant::now());
+        assert_eq!(
+            cycle.workspace_extract_debug_count, 0,
+            "the cadence itself must never bump the H1 counter"
+        );
+        // Only an explicit note (the orchestrator's dirty-gated extract) does.
+        cycle.note_workspace_extract();
+        cycle.note_workspace_extract();
+        assert_eq!(cycle.workspace_extract_debug_count, 2);
         let _ = std::fs::remove_dir_all(&root);
     }
 

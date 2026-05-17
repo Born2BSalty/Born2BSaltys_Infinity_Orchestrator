@@ -20,7 +20,25 @@
 // `OrchestratorApp::update`'s shell layout outside this router); only the
 // main pane shows the error.
 //
-// SPEC: §2.1, §13.14.
+// **P6.T15 — nav-away flush (this run, SPEC §13.14 "On nav-away from the
+// workspace").** When the user navigates *out of* a workspace (left-rail
+// destination, a workspace-internal nav, Create's resume), the in-flight
+// workspace-state edits must be flushed to disk **before the screen
+// transitions** so the build is recoverable from Home / Resume even if the
+// app is closed immediately after. Detection: at the top of `render`, if a
+// workspace was loaded (`workspace_view.loaded_workspace_id == Some(id)`)
+// but `nav` is no longer that workspace, we have left it — synchronously
+// `extract_workspace_state_from_wizard` + `WorkspaceStore::save`, then clear
+// `loaded_workspace_id` (so re-entering reloads cleanly via P6.T12). The
+// rail renders *before* this router in `OrchestratorApp::update`, so a rail
+// click's new `nav` is already visible here; a workspace-internal nav (e.g.
+// Step-2 `← Previous` → Home) likewise set `nav` last frame / this frame.
+// Per H4 this synchronous write + the on-exit `flush_all` are the two
+// workspace persistence write paths (the debounced cadence is the third,
+// for in-workspace edits). C5: a nav-away while an install runs is
+// prevented by the rail-nav lock (Phase 7), so this never races an install.
+//
+// SPEC: §2.1, §13.14 (nav-away flush).
 
 use eframe::egui;
 use tracing::warn;
@@ -54,6 +72,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
         );
         return;
     }
+
+    // P6.T15 — nav-away-from-workspace flush. Detected before the nav match
+    // so the synchronous write completes *before* the new destination
+    // renders (the build is recoverable even if the app closes immediately).
+    flush_workspace_on_nav_away(orchestrator);
 
     match orchestrator.nav.clone() {
         // Phase 5 P5.T15 — Home stub replaced with the real Home screen.
@@ -204,6 +227,83 @@ fn render_workspace(
     //    same in-memory `orchestrator.wizard_state.step1` this renders from,
     //    so paths are live by construction — no per-frame disk read.
     workspace_view::render(ui, orchestrator, id, ctx);
+}
+
+/// P6.T15 — flush the active workspace's state to disk when the user has
+/// navigated away from it (SPEC §13.14 "On nav-away from the workspace").
+///
+/// "Navigated away" = a workspace is loaded (`loaded_workspace_id ==
+/// Some(id)`) but the current `nav` is **not** `Workspace { Some(id) }`
+/// (still inside the same workspace ⇒ no flush; the debounced cadence owns
+/// in-workspace edits). On nav-away: `extract_workspace_state_from_wizard`
+/// (carrying the prior file's egui-only fields through unchanged — the same
+/// non-drop guarantee save-draft / the debounce cycle give), write it
+/// **synchronously** via `WorkspaceStore::save`, sync the persistence-cycle
+/// baseline (so the debounced cadence doesn't immediately re-write the same
+/// bytes), and clear `loaded_workspace_id` so re-entering reloads cleanly
+/// (P6.T12). A save error is logged, not fatal — the in-memory state stays
+/// (the on-exit `flush_all`, H4, is the backstop).
+///
+/// Per C5 this is never reached mid-install: the rail-nav lock (Phase 7
+/// P7.T9b) prevents navigating out of a workspace while its install runs.
+fn flush_workspace_on_nav_away(orchestrator: &mut OrchestratorApp) {
+    let Some(id) = orchestrator.workspace_view.loaded_workspace_id.clone() else {
+        return; // no workspace loaded — nothing to flush.
+    };
+    // Still inside the same workspace ⇒ not a nav-away (the debounced
+    // cadence handles in-workspace edits).
+    if let NavDestination::Workspace {
+        modlist_id: Some(cur),
+    } = &orchestrator.nav
+        && cur == &id
+    {
+        return;
+    }
+
+    // Left the workspace — extract + synchronous write (the save-draft
+    // P6.T6 precedent, but triggered by the nav transition).
+    let prior = orchestrator
+        .workspace_state
+        .get(&id)
+        .cloned()
+        .unwrap_or_default();
+    let extracted = workspace_state_loader::extract_workspace_state_from_wizard(
+        &orchestrator.wizard_state,
+        &prior,
+    );
+    orchestrator
+        .workspace_state
+        .insert(id.clone(), extracted.clone());
+
+    if let Some(store) = orchestrator.workspace_stores.get(&id) {
+        match store.save(&extracted) {
+            Ok(()) => {
+                // Sync the persistence-cycle baseline so the debounced
+                // cadence sees "already saved" and doesn't re-write the
+                // identical bytes a frame later (idempotent — the
+                // save-draft P6.T6 baseline-sync precedent).
+                orchestrator
+                    .persistence_cycle
+                    .last_saved_workspaces
+                    .insert(id.clone(), extracted);
+            }
+            Err(err) => warn!(
+                target = "orchestrator",
+                "nav-away workspace flush for {id} failed: {err} \
+                 (in-memory state retained; on-exit flush_all is the backstop)"
+            ),
+        }
+    } else {
+        warn!(
+            target = "orchestrator",
+            "nav-away flush: no WorkspaceStore registered for {id} \
+             (state kept in memory; on-exit flush_all is the backstop)"
+        );
+    }
+
+    // Clear so re-entering this (or another) workspace reloads cleanly via
+    // P6.T12's loaded-id swap detection.
+    orchestrator.workspace_view.loaded_workspace_id = None;
 }
 
 /// Build `WorkspaceViewState::fork_meta` from a registry entry (P6.T5).

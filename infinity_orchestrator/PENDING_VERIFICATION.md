@@ -81,6 +81,22 @@ Shipped in the Phase-6 Run-3 commit (Create + Load Draft + routing — P6.T7/T9/
 
 Reviewed items 1–4 against Run 3's surface (Create / Load Draft / routing — a distinct screen from the Step-2/3/4 workspace): **none are partial-from-an-old-run and none are superseded or made irrelevant by Run 3.** Items 1–4 are complete-and-committed, awaiting only the human visual sign-off; they stand as written. (This section is where future runs record any test item a later change makes moot — none yet.)
 
+## Phase 6 Run 4 — SHIPPED + orchestrator-verified, pending your visual sign-off (**Phase 6 COMPLETE**)
+
+Shipped in the Run-4 commit (P6.T8 fork sub-flow + P6.T11 dirty-bit persistence + P6.T15 nav-away flush). Independently verified: BIO-guard empty, exactly the 11 expected files (the new explicit-reconcile staging gate's first code-run exercise), `cargo test --lib` 270/0, `modlists.json` byte-identical (no clobber), lineage-append premise-checked append-only. **The Precondition at the top of this doc applies** (close app → rebuild twice to a confirmed no-op → relaunch) before testing — exe was locked.
+
+### ☐ 7. Create → fork sub-flow (Import and modify)
+- **Phase / Run:** Phase 6, **Run 4** — **P6.T8**.
+- **Check:** Create → `paste share code →` → fork-paste (import-code Box; `Preview →` disabled until pasted) → paste a known BIO-MODLIST-V1 code → `Preview →` shows the **parent's** packed name/author + Overview + 6 tabs, **no draft banner / no disabled primary even for an `allow_auto_install=false` code** (forking is always allowed), `⑂ fork info` → the reused popup shows the **parent's** lineage → `Begin Import →` → the fork-download chassis (empty grid, live fetch is Phase 7 — forward-compatible, not a bug) → the forked Workspace opens at Step 2 with a `⑂ Fork` badge.
+
+### ☐ 8. Fork lineage / credit (`modlists.json`)
+- **Phase / Run:** Phase 6, **Run 4** — **P6.T8** (SPEC §13.3 credit guarantee).
+- **Check:** after a fork, the new `modlists.json` entry has `author` = your Settings → General user name (absent if blank) and `forked_from` = the **parent's chain + the immediate parent appended last** (append-only — every prior ancestor + author preserved verbatim; nothing rewritten).
+
+### ☐ 9. Workspace persistence — dirty-bit + nav-away flush
+- **Phase / Run:** Phase 6, **Run 4** — **P6.T11** + **P6.T15**.
+- **Check:** in a workspace, toggle a Step-2 checkbox → `modlists/<id>/workspace.json` written ~1 s later (debounce); drag/collapse/undo in Step 3 → same; leave it idle → no rewrite (zero idle cost). Then: edit a Step-2 checkbox, **immediately** click Home (before the 1 s debounce), quit, relaunch, reopen → the change **persisted** (the synchronous nav-away flush).
+
 ## Not in this list (and why)
 
 - `9b5b9d5` — destructive Select-via-WeiDU-Log rebuilding the imported tab's Step-3 order (Phase 6, Run 2 follow-up). Committed in a **prior** session; its message states user-verified end-to-end. Re-verify only if you want certainty given this project's stale-binary history.

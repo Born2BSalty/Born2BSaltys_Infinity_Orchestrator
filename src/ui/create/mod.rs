@@ -25,16 +25,36 @@
 //   - `destination_default` — pure default-destination computation
 //                             (`<config_dir>/modlists/installs/<slug>`).
 //
-// Phase 6 Run 4 adds the fork sub-flow renderers (`stage_fork_paste` /
-// `stage_fork_preview` / `stage_fork_download`) + the `operations_create`
-// lineage append (P6.T8) — NOT this run (the `Fork*` stages render a
-// deferred placeholder until then).
+// Phase 6 Run 4 adds the fork sub-flow renderers (P6.T8 / SPEC §5.3),
+// replacing Run 3's deferred placeholder:
+//   - `stage_fork_paste`    — `ForkPasteScreen`: the import-code Box +
+//                             `Back`/`Preview →` footer (the reused Phase-5
+//                             `sub_flow_footer`; the textarea is
+//                             wireframe-faithful net-new per the Run-3
+//                             module-private precedent).
+//   - `stage_fork_preview`  — `ForkPreviewScreen`: the parsed *parent*
+//                             code's packed name/author + `⑂ fork info`
+//                             (the **reused Phase-5 `ForkInfoPopup`**, parent
+//                             lineage) + the reused `preview_tabs` chassis;
+//                             `Begin Import →`, **no `allow_auto_install`
+//                             gate** (SPEC §13.3 — forking is always
+//                             allowed).
+//   - `stage_fork_download` — drives the **reused Phase-5
+//                             `stage_downloading` chassis** with the
+//                             fork copy; the live fetch is Phase 7 P7.T17
+//                             (SPEC §13.12a — chassis only here).
+// The `operations_create::create_forked_modlist` lineage append (SPEC §13.3
+// /§5.3) + the caller-anchored registry/workspace IO + the route into the
+// forked Workspace live in `page_create` (the `start_scratch` precedent).
 //
-// SPEC: §5 (Create), §5.1 (choose mode), §5.2 (Load Draft), §5.3 (fork —
-//       Run 4), §13.1, §13.14.
+// SPEC: §5 (Create), §5.1 (choose mode), §5.2 (Load Draft), §5.3 (fork
+//       sub-flow), §13.3 (Provenance / lineage append), §13.1, §13.14.
 
 pub mod destination_default;
 pub mod load_draft_dialog;
 pub mod page_create;
 pub mod stage_choose;
+pub mod stage_fork_download;
+pub mod stage_fork_paste;
+pub mod stage_fork_preview;
 pub mod state_create;

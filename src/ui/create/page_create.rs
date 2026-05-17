@@ -4,21 +4,30 @@
 // `page_create` — the Create destination's top-level renderer (SPEC §5).
 // Dispatches on `CreateScreenState::stage`.
 //
-// **Run 3 scope (the Create *entry path* only).** This run ships:
-//   - `CreateStage::Choose` → `stage_choose::render` (P6.T7): the setup Box
-//     (name + game ComboBox + destination FolderInput + conditional reused
-//     `DestinationNotEmptyWarning`) and the two starting-point cards.
-//   - The Load Draft dialog (P6.T9): a non-blocking `egui::Window` listing
-//     in-progress builds (the reused Phase-5 `modlist_card`), opened by the
-//     `load draft` button.
-//   - The `start →` / `resume` → Workspace routing (P6.T14): both set
-//     `orchestrator.nav = NavDestination::Workspace { Some(id) }`. The
-//     workspace loader/route is the **already-shipped** P6.T12
-//     `page_router::render_workspace` — this file only sets the nav.
-//   - `CreateStage::ForkPaste|ForkPreview|ForkDownload` → a **deferred
-//     placeholder** ("Import-and-modify lands in Run 4 (P6.T8)"). The fork
-//     sub-flow renderers + the `operations_create` lineage append are
-//     **Run 4 (P6.T8)**, explicitly NOT this run.
+// **Scope.** Run 3 shipped the Create *entry path*: `CreateStage::Choose`
+// → `stage_choose::render` (P6.T7); the Load Draft dialog (P6.T9); the
+// `start →` / `resume` → Workspace routing (P6.T14 — sets
+// `orchestrator.nav = Workspace { Some(id) }`; the workspace loader/route is
+// the already-shipped P6.T12 `page_router::render_workspace`). **Run 4
+// (P6.T8) replaces the `Fork*` deferred placeholder with the real fork
+// sub-flow:**
+//   - `ForkPaste`    → `stage_fork_paste::render` (the import-code Box; the
+//                       reused Phase-5 `sub_flow_footer`).
+//   - `ForkPreview`  → `stage_fork_preview::render` (parsed parent
+//                       name/author + the reused Phase-5 `ForkInfoPopup` /
+//                       `preview_tabs`; `Begin Import →`, no
+//                       `allow_auto_install` gate — SPEC §13.3).
+//   - `ForkDownload` → `stage_fork_download::render` (the reused Phase-5
+//                       `stage_downloading` chassis; live fetch is Phase 7
+//                       P7.T17 — SPEC §13.12a).
+// On fork-download `Import`: `create_forked_modlist` (the lineage append —
+// SPEC §13.3 / §5.3) + the **caller-anchored** empty `workspace.json` write
+// + the atomic `modlists.json` persist (SPEC §13.14) + the route into the
+// forked Workspace — the exact `start_scratch` precedent (this caller is
+// the only party with `OrchestratorApp` access + the post-mint id). The
+// share-code parse is one-shot on `ForkPaste → ForkPreview` (the
+// `page_install::run_preview_parse` precedent — cheap to keep, expensive
+// per-frame, the pasted code can't change on Preview).
 //
 // **Deferred-intent pattern** (mirrors `home/page_home.rs` +
 // `install/page_install.rs`): each stage / dialog renderer is state-only and
@@ -38,8 +47,9 @@
 // surfaces via the bottom-of-screen error path; the in-memory entry stays
 // (the workspace.json is already on disk, so the build is still recoverable).
 //
-// SPEC: §5 (Create), §5.1 (choose mode), §5.2 (Load Draft), §5.3 (fork —
-//       Run 4), §13.14 (atomic registry add).
+// SPEC: §5 (Create), §5.1 (choose mode), §5.2 (Load Draft), §5.3 (fork
+//       sub-flow), §13.3 (Provenance / lineage append), §13.12a (live fork
+//       fetch is Phase 7), §13.14 (atomic registry add — caller-anchored).
 
 // rationale: the doc-paragraph-length lint is subjective style (Cat 3).
 #![allow(clippy::too_long_first_doc_paragraph)]
@@ -49,18 +59,20 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 use tracing::warn;
 
+use crate::app::modlist_share::preview_modlist_share_code;
 use crate::registry::operations;
-use crate::registry::operations_create::create_modlist;
+use crate::registry::operations_create::{create_forked_modlist, create_modlist};
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::create::destination_default::default_destination;
 use crate::ui::create::load_draft_dialog::{self, LoadDraftOutcome};
 use crate::ui::create::stage_choose::{self, ChooseOutcome};
+use crate::ui::create::stage_fork_download::{self, ForkDownloadOutcome};
+use crate::ui::create::stage_fork_paste::{self, ForkPasteOutcome};
+use crate::ui::create::stage_fork_preview::{self, ForkPreviewOutcome};
 use crate::ui::create::state_create::CreateStage;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::render_screen_title;
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 
 /// How long the in-dialog `✓ Copied import code` confirmation shows
 /// (SPEC §5.2 — transient; the wireframe `setTimeout(…, 1600)`).
@@ -74,8 +86,25 @@ enum CreateRequest {
     /// `start →` — create a from-scratch modlist, persist the registry
     /// atomically, route into its workspace.
     StartScratch,
-    /// Enter the fork sub-flow (`CreateStage::ForkPaste` — Run 4).
+    /// `paste share code →` — enter the fork sub-flow at `ForkPaste`.
     GoForkPaste,
+    /// Fork-paste `Back` — return to the `choose` stage.
+    ForkPasteBack,
+    /// Fork-paste `Preview →` — run the share-code parse (one-shot) and
+    /// advance to `ForkPreview`.
+    ForkPastePreview,
+    /// Fork-preview `← Back` — return to `ForkPaste` (clears the cached
+    /// preview; the pasted code may change).
+    ForkPreviewBack,
+    /// Fork-preview `Begin Import →` — advance to the fork-download chassis
+    /// (`ForkDownload`).
+    ForkBeginImport,
+    /// Fork-download `← Cancel` — return to `ForkPreview` (drops the grid).
+    ForkDownloadCancel,
+    /// Fork-download completion — `create_forked_modlist` (the SPEC §13.3
+    /// lineage append) + the caller-anchored `workspace.json` write + the
+    /// atomic `modlists.json` persist + route into the forked Workspace.
+    ForkImport,
     /// Open the non-blocking Load Draft dialog.
     OpenLoadDraft,
     /// Close the Load Draft dialog (Cancel / done).
@@ -112,13 +141,42 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
                 ChooseOutcome::Stay => {}
             }
         }
-        // Run-4 deferred placeholders — the §4.3-chassis deferral pattern.
-        // No fork paste/preview/download is implemented this run; the screen
-        // renders a clear "lands in Run 4" message and a `← Back` to the
-        // choose stage (so it is never a dead end / blank).
-        CreateStage::ForkPaste | CreateStage::ForkPreview | CreateStage::ForkDownload => {
-            if render_fork_deferred(ui, palette) {
-                orchestrator.create_screen_state.stage = CreateStage::Choose;
+        // Fork sub-flow (P6.T8 / SPEC §5.3). Each stage is a pure renderer
+        // returning an outcome; the deferred `CreateRequest` below applies
+        // the transition / app-level effect after the render borrow ends
+        // (the established Run-3 pattern).
+        CreateStage::ForkPaste => {
+            match stage_fork_paste::render(ui, palette, &mut orchestrator.create_screen_state) {
+                ForkPasteOutcome::Back => request = Some(CreateRequest::ForkPasteBack),
+                ForkPasteOutcome::Preview => request = Some(CreateRequest::ForkPastePreview),
+                ForkPasteOutcome::Stay => {}
+            }
+        }
+        CreateStage::ForkPreview => {
+            match stage_fork_preview::render(
+                ui,
+                palette,
+                ctx,
+                &mut orchestrator.create_screen_state,
+            ) {
+                ForkPreviewOutcome::Back => request = Some(CreateRequest::ForkPreviewBack),
+                ForkPreviewOutcome::BeginImport => {
+                    request = Some(CreateRequest::ForkBeginImport);
+                }
+                ForkPreviewOutcome::Stay => {}
+            }
+        }
+        CreateStage::ForkDownload => {
+            match stage_fork_download::render(
+                ui,
+                palette,
+                &orchestrator.create_screen_state.fork_download_progress,
+            ) {
+                ForkDownloadOutcome::Cancel => {
+                    request = Some(CreateRequest::ForkDownloadCancel);
+                }
+                ForkDownloadOutcome::Import => request = Some(CreateRequest::ForkImport),
+                ForkDownloadOutcome::Stay => {}
             }
         }
     }
@@ -144,8 +202,47 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
         match req {
             CreateRequest::StartScratch => start_scratch(orchestrator),
             CreateRequest::GoForkPaste => {
+                // Entering the fork sub-flow fresh: start from a clean
+                // fork-paste (a stale code/preview from a prior abandoned
+                // fork must not leak in).
+                orchestrator.create_screen_state.fork_code.clear();
+                orchestrator.create_screen_state.clear_fork_preview();
                 orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
             }
+            CreateRequest::ForkPasteBack => {
+                orchestrator.create_screen_state.clear_fork_preview();
+                orchestrator.create_screen_state.stage = CreateStage::Choose;
+            }
+            CreateRequest::ForkPastePreview => {
+                // Parse-on-transition (one-shot — the `page_install`
+                // precedent). The result / error is cached on
+                // `create_screen_state`; the fork-preview stage renders the
+                // error honestly when the parse failed.
+                run_fork_preview_parse(&mut orchestrator.create_screen_state);
+                orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
+            }
+            CreateRequest::ForkPreviewBack => {
+                // Going back to fork-paste invalidates the cached preview
+                // (the pasted code may change before the next preview).
+                orchestrator.create_screen_state.clear_fork_preview();
+                orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
+            }
+            CreateRequest::ForkBeginImport => {
+                // Entering the fork-download chassis: drop any accumulated
+                // grid so a re-entry can't inherit a stale list (the
+                // `page_install` Downloading-Cancel precedent).
+                orchestrator.create_screen_state.fork_download_progress =
+                    crate::ui::install::stage_downloading::DownloadProgress::default();
+                orchestrator.create_screen_state.stage = CreateStage::ForkDownload;
+            }
+            CreateRequest::ForkDownloadCancel => {
+                // SPEC §5.3 / §4.3: `Cancel` (← back) returns to
+                // fork-preview. Drop the grid (no stale list on re-entry).
+                orchestrator.create_screen_state.fork_download_progress =
+                    crate::ui::install::stage_downloading::DownloadProgress::default();
+                orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
+            }
+            CreateRequest::ForkImport => fork_import(orchestrator),
             CreateRequest::OpenLoadDraft => {
                 orchestrator.create_screen_state.load_draft_open = true;
             }
@@ -298,35 +395,159 @@ fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id:
         Some(Instant::now() + Duration::from_millis(COPY_CONFIRM_MS));
 }
 
-/// The Run-4 deferred placeholder for the fork sub-flow stages (the
-/// §4.3-chassis deferral pattern — a clear "lands in Run 4" panel, never a
-/// blank screen or a panic). Returns `true` when `← Back to choose` is
-/// clicked so the dispatcher returns to `CreateStage::Choose`.
-fn render_fork_deferred(ui: &mut egui::Ui, palette: ThemePalette) -> bool {
-    render_screen_title(
-        ui,
-        palette,
-        "Import and modify another modlist",
-        Some("paste a share code, preview, then BIO downloads + preselects"),
-    );
-    ui.add_space(8.0);
-    ui.label(
-        egui::RichText::new(
-            "Import-and-modify lands in Run 4 (P6.T8): fork-paste \u{2192} fork-preview \u{2192} fork-download, the registry entry, and the lineage append. The live mod fetch is Phase 7 (SPEC \u{00A7}13.12a).",
-        )
-        .size(13.0)
-        .family(egui::FontFamily::Name("poppins_light".into()))
-        .color(redesign_text_faint(palette)),
-    );
-    ui.add_space(16.0);
-    crate::ui::orchestrator::widgets::redesign_btn(
-        ui,
-        palette,
-        "\u{2190} Back to choose",
-        crate::ui::orchestrator::widgets::BtnOpts {
-            small: true,
-            ..Default::default()
-        },
-    )
-    .clicked()
+/// SPEC §4.2-authoritative honest fallback for a parent code with no packed
+/// `name` (the same string `stage_fork_preview` / Install's preview use —
+/// never fabricate a parent name).
+const PARENT_FALLBACK_NAME: &str = "Shared modlist";
+
+/// Run the parent share-code parse for the just-pasted fork code and cache
+/// the result on `CreateScreenState`. One-shot on `ForkPaste → ForkPreview`
+/// (the `page_install::run_preview_parse` precedent — the pasted code can't
+/// change while on the preview). On success: `fork_preview = Some`, error
+/// cleared, the active tab reset. On failure: `fork_preview_parse_error =
+/// Some(msg)` (the fork-preview stage renders the error honestly).
+fn run_fork_preview_parse(state: &mut crate::ui::create::state_create::CreateScreenState) {
+    state.clear_fork_preview();
+    match preview_modlist_share_code(state.fork_code.trim()) {
+        Ok(preview) => {
+            state.fork_preview = Some(preview);
+            state.fork_active_preview_tab =
+                crate::ui::install::state_install::PreviewTab::default();
+        }
+        Err(msg) => {
+            state.fork_preview_parse_error = Some(msg);
+        }
+    }
+}
+
+/// Fork-download completion — create the **forked** modlist registry entry
+/// with the SPEC §13.3 / §5.3 lineage append, write the canonical empty
+/// `workspace.json`, persist `modlists.json` atomically (SPEC §13.14), and
+/// route into the forked workspace at Step 2 (the already-shipped P6.T12
+/// `render_workspace`, which builds the `⑂ Fork` badge from
+/// `entry.forked_from` via `fork_meta_from_entry`).
+///
+/// **The exact `start_scratch` shape** — `create_forked_modlist` does only
+/// the registry-side work + mints the id (zero IO); the empty
+/// `workspace.json` write + the atomic persist are caller-side here because
+/// only this caller can name the canonical id-bound path AND it must be
+/// written before the workspace opens (`page_router::render_workspace`
+/// `WorkspaceStore::load` errors on a missing file). Beyond that it differs
+/// only in: the fork name (`<parent name> (fork)` — SPEC §5.3 default), the
+/// game (the parent code's `game_install`), and the lineage args read off
+/// the parsed parent `ModlistSharePreview` (carve-out #5). **No share code
+/// is generated** (`pack_meta` is Phase 7).
+///
+/// Pre-P7.T17 (SPEC §13.12a) the live fork download/extract hasn't run, so
+/// the opened Workspace's Step-2 scan isn't populated by real fetched mods —
+/// forward-compatible, not a bug (the same model as Install's §4.3 chassis).
+fn fork_import(orchestrator: &mut OrchestratorApp) {
+    // The parsed parent preview is the source of the lineage + game. It is
+    // always `Some` here (the dispatcher only reaches `ForkDownload` after a
+    // successful `ForkPaste → ForkPreview` parse); stay total if it isn't.
+    let Some(preview) = orchestrator.create_screen_state.fork_preview.clone() else {
+        warn!(
+            target = "orchestrator",
+            "Create fork: import requested with no parsed parent preview \u{2014} ignored"
+        );
+        return;
+    };
+
+    // SPEC §5.3 — the parent's packed name; absent ⇒ the honest fallback
+    // (never fabricate). The fork's default name is `<parent name> (fork)`.
+    let parent_name = preview
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(PARENT_FALLBACK_NAME)
+        .to_string();
+    let parent_author = preview.author.as_deref().unwrap_or("").trim().to_string();
+    let fork_name = format!("{parent_name} (fork)");
+
+    // The fork's game = the parent code's `game_install` (the modlist's
+    // game travels in the share code; the fork installs the same game).
+    let game = crate::registry::model::Game::from_legacy_string(&preview.game_install);
+
+    // The fork flow has no destination input (it is choose → paste → preview
+    // → download; the wireframe collects no folder on the fork path). Use
+    // the computed per-modlist default (`<config>/modlists/installs/<slug>`)
+    // — the same affordance-forward fallback `start_scratch` uses for a
+    // blank destination.
+    let dest = default_destination(&fork_name);
+
+    // `author` ← the local user's handle (SPEC §13.3; trimmed-empty ⇒ None
+    // is handled inside `create_forked_modlist`).
+    let user_name = orchestrator.redesign_settings.user_name.clone();
+
+    // 1. Registry-side: mint the id + insert the in-memory `in_progress`
+    //    forked entry with the appended lineage (no IO — see
+    //    `operations_create`'s module header / `create_forked_modlist`).
+    let entry = match create_forked_modlist(
+        &fork_name,
+        game,
+        &dest,
+        &user_name,
+        &parent_name,
+        &parent_author,
+        &preview.forked_from,
+        &mut orchestrator.registry,
+    ) {
+        Ok(e) => e,
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "Create fork: create_forked_modlist failed: {err}"
+            );
+            return;
+        }
+    };
+
+    // 2. Write the empty `workspace.json` at the CANONICAL per-modlist path
+    //    the router's loader reads (it `Err`s on a missing file), and
+    //    register the store + state in the orchestrator maps.
+    let canonical_store = WorkspaceStore::new_for_id(&entry.id);
+    let empty = ModlistWorkspaceState::default();
+    if let Err(err) = canonical_store.save(&empty) {
+        warn!(
+            target = "orchestrator",
+            "Create fork: writing canonical workspace.json for {} failed: {err} \
+             (the router degrades to an empty workspace)",
+            entry.id
+        );
+    }
+    orchestrator.workspace_state.insert(entry.id.clone(), empty);
+    orchestrator
+        .workspace_stores
+        .insert(entry.id.clone(), canonical_store);
+
+    // 3. SPEC §13.14 — registry adds are atomic + non-queued. Persist
+    //    `modlists.json` immediately (the `delete_modlist`-caller
+    //    precedent), then anchor the persistence-cycle debounce so its diff
+    //    is a no-op afterward (idempotent).
+    if let Err(err) = orchestrator.registry_store.save(&orchestrator.registry) {
+        warn!(
+            target = "orchestrator",
+            "Create fork: atomic registry persist failed: {err} \
+             (entry is in memory + workspace.json is on disk; recoverable)"
+        );
+    }
+    orchestrator
+        .persistence_cycle
+        .mark_registry_dirty(Instant::now());
+
+    // 4. Reset the fork sub-flow form so returning to Create is a clean
+    //    slate, and route into the forked workspace at Step 2 (P6.T12
+    //    `render_workspace` builds the `⑂ Fork` badge from
+    //    `entry.forked_from`).
+    let new_id = entry.id;
+    orchestrator.create_screen_state.fork_code.clear();
+    orchestrator.create_screen_state.clear_fork_preview();
+    orchestrator.create_screen_state.fork_download_progress =
+        crate::ui::install::stage_downloading::DownloadProgress::default();
+    orchestrator.create_screen_state.stage = CreateStage::Choose;
+    orchestrator.create_screen_state.resumed_build_id = Some(new_id.clone());
+    orchestrator.nav = NavDestination::Workspace {
+        modlist_id: Some(new_id),
+    };
 }

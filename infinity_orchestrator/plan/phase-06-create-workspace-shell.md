@@ -354,6 +354,8 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
 
 ### P6.T8 — Create fork-paste / fork-preview / fork-download
 
+> **✅ SHIPPED Run 4 — 2026-05-17** (overview §6; orchestrator-independently verified; no SPEC change — implements already-specced §5.3/§13.3). `create_forked_modlist` mirrors the `create_modlist` zero-IO / caller-anchored precedent; lineage append verified append-only (credit guarantee). Fork-paste/preview/download net-new + the Phase-5 chassis (`sub_flow_footer`/`preview_tabs`/`stage_downloading`/`ForkInfoPopup`) reused verbatim; live fetch = Phase-7 P7.T17 (§13.12a chassis-only).
+
 - **What:** Reuse the same paste textarea + `preview_tabs` widget + `ImportDownloadScreen` from Phase 5, with different button labels and continueLabel. **Fork-preview** displays the parsed parent code's packed `name`/`author` as title/subline + the `⑂ fork info` affordance (the Phase-5 `ForkInfoPopup`, showing the *incoming parent's* lineage) — identical to the Install preview (P5.T10), differing only in the `Begin Import →` CTA and no `allow_auto_install` gate (forking is always allowed — SPEC §13.3). On fork-download completion, create the registry entry (the fork's name + game + default destination) and route to the Workspace.
 
   **Lineage append (the credit guarantee — SPEC §13.3 Provenance / §5.3).** When the registry entry is created, populate, in addition to name/game/destination:
@@ -381,6 +383,8 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
 - **SPEC:** §5.1 ("game choice immutable once the workspace opens"), overview "Architecture" section (per-modlist `WizardState`).
 
 ### P6.T11 — Persistence cycle integration (dirty-bit-gated)
+
+> **✅ SHIPPED Run 4 — 2026-05-17** (overview §6; orchestrator-verified; no SPEC change — §13.14). H1 honored: `sync_active_workspace_if_dirty` early-returns when `!workspace_state_dirty` (zero idle cost, verified) + the Step-3 cheap `step3_fingerprint` in `workspace_step_router` (H2 — Step 3 has no action enum) + the `persistence_cycle` H1 observability counter.
 
 - **What:** Extend `RegistryPersistenceCycle` (Phase 3) to also debounce-write the per-modlist workspace state. **Per H1 — use an explicit dirty bit, not per-frame extract+compare.** `OrchestratorApp` carries a `workspace_state_dirty: bool` flag. Mutating call sites set it to `true`:
   - `step_action_dispatch::dispatch_step2(action, orchestrator)` — every `Step2Action` variant that mutates `wizard_state.step2` or `wizard_state.step3` sets the flag.
@@ -423,6 +427,8 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
 - **SPEC:** §3.2, §5.2.
 
 ### P6.T15 — Nav-away flush
+
+> **✅ SHIPPED Run 4 — 2026-05-17** (overview §6; orchestrator-verified; no SPEC change — §13.14 / H4). `page_router::flush_workspace_on_nav_away` synchronously `extract_workspace_state_from_wizard` + `WorkspaceStore::save` on a Workspace→other transition (the second persistence write path; on-exit `flush_all` is the other). **Phase 6 COMPLETE** (R1/R2/Step-3-C4/R3/R4 all shipped).
 
 - **What:** When the user navigates from `Workspace` to any other destination, call `workspace_state_loader::extract_workspace_state_from_wizard` and write synchronously via `WorkspaceStore::save` before the screen transitions. Implemented in `page_router::render` by detecting the nav transition. Per H4, this is one of the persistence write paths; the on-exit `flush_all` (from `eframe::App::on_exit`) is the other.
 - **Where:** Edit `src/ui/orchestrator/page_router.rs`.

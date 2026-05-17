@@ -40,10 +40,29 @@
 // borrows must end before `dispatch_step2(&mut orchestrator)` runs). The
 // `exe_fingerprint` is cloned for the same reason.
 //
-// SPEC: §2.2, §6, §7, §8.
+// **P6.T11 — Step-3 dirty-bit fingerprint (this run).** Step 3 has no action
+// enum (H2) — drag-reorder / collapse-expand / undo-redo mutate
+// `wizard_state.step3` directly through BIO's internal handlers, so they
+// never flow through `step_action_dispatch` (which is where Step 2/4
+// mutations set `workspace_state_dirty`). To persist Step-3 edits this run
+// wraps the Step-3 render in a **cheap state fingerprint**: a `u64` over the
+// active tab's `step3.<tab>_items` (order-vec length + first/last element
+// ids + their `selected_order`) **and** its `<tab>_collapsed_blocks` (the
+// group-collapse state — persisted to `step3_group_collapse`). The
+// fingerprint is captured before the render and compared after; any change
+// (a reorder shifts the end ids; undo/redo / collapse change the vecs) sets
+// the dirty bit via `orchestrator.mark_workspace_dirty()`. This is the H1
+// "much cheaper than a full `ModlistWorkspaceState` extract+compare every
+// frame" detector the plan prescribes — O(1)-ish (length + the two end
+// items + the collapsed-block list), not a deep clone.
+//
+// SPEC: §2.2, §6, §7, §8, §13.14 (Step-3 persistence dirty-marking).
+
+use std::hash::{Hash, Hasher};
 
 use eframe::egui;
 
+use crate::app::state::WizardState;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 use crate::ui::workspace::step_action_dispatch;
@@ -74,8 +93,14 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             // `()`; no dispatch arm. The list + chrome mutate `WizardState`
             // directly and the dirty-bit fingerprint over
             // `wizard_state.step3.<tab>_items` picks up reorder/collapse/
-            // undo for persistence (unchanged by the C4 wrapper).
+            // undo for persistence (unchanged by the C4 wrapper). P6.T11:
+            // capture the cheap fingerprint before the render, compare
+            // after — any drag/collapse/undo changes it ⇒ mark dirty.
+            let before = step3_fingerprint(&orchestrator.wizard_state);
             crate::ui::workspace::step3::workspace_step3::render(ui, orchestrator);
+            if step3_fingerprint(&orchestrator.wizard_state) != before {
+                orchestrator.mark_workspace_dirty();
+            }
         }
         WorkspaceStep::Step4 => {
             // C4 orchestrator-side renderer (P6.T2b): net-new redesign
@@ -90,5 +115,136 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             }
         }
         WorkspaceStep::Step5 => workspace_step5_stub::render(ui, orchestrator),
+    }
+}
+
+/// A cheap `u64` fingerprint of the active Step-3 tab's persistable state
+/// (P6.T11 / H1). Hashes only:
+///   - the active tab's order-vec **length**,
+///   - the **first + last** items' `tp_file` / `component_id` /
+///     `selected_order` (a reorder shifts which item is at each end and/or
+///     changes `selected_order`; an undo/redo replaces the vec; add/remove
+///     changes the length),
+///   - the active tab's **collapsed-blocks** list (group-collapse is
+///     persisted to `ModlistWorkspaceState.step3_group_collapse`).
+///
+/// This is intentionally **not** a deep hash of every item — H1 requires the
+/// detector be far cheaper than a full `extract_workspace_state_from_wizard`
+/// + compare every frame. A pathological reorder that keeps the exact same
+/// first+last items AND identical end `selected_order`s AND the same length
+/// would not flip this; in practice BIO's drag-reorder renumbers
+/// `selected_order` and moves block boundaries, so a real reorder always
+/// changes the end items' `selected_order` or the block list. The worst case
+/// (a missed dirty) is bounded by the on-exit `flush_all` (H4) which always
+/// re-extracts and compares on shutdown, and by any *other* edit (a Step-2
+/// toggle, a different drag) re-dirtying. The active tab is
+/// `step3.active_game_tab`; BIO buckets non-BG2EE (incl. IWDEE) into the
+/// BGEE items, so anything not `"BG2EE"` reads `bgee_items`.
+fn step3_fingerprint(state: &WizardState) -> u64 {
+    let is_bg2ee = state.step3.active_game_tab == "BG2EE";
+    let (items, collapsed) = if is_bg2ee {
+        (
+            &state.step3.bg2ee_items,
+            &state.step3.bg2ee_collapsed_blocks,
+        )
+    } else {
+        (&state.step3.bgee_items, &state.step3.bgee_collapsed_blocks)
+    };
+
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    is_bg2ee.hash(&mut h);
+    items.len().hash(&mut h);
+    if let Some(first) = items.first() {
+        first.tp_file.hash(&mut h);
+        first.component_id.hash(&mut h);
+        first.selected_order.hash(&mut h);
+    }
+    if let Some(last) = items.last() {
+        last.tp_file.hash(&mut h);
+        last.component_id.hash(&mut h);
+        last.selected_order.hash(&mut h);
+    }
+    // Group-collapse state is persisted (SPEC §13.14 / the loader's
+    // `step3_group_collapse`), so a collapse/expand must dirty too.
+    collapsed.len().hash(&mut h);
+    for block in collapsed {
+        block.hash(&mut h);
+    }
+    h.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::state::Step3ItemState;
+
+    fn item(tp: &str, id: &str, order: usize) -> Step3ItemState {
+        Step3ItemState {
+            tp_file: tp.to_string(),
+            component_id: id.to_string(),
+            mod_name: tp.to_string(),
+            component_label: String::new(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: order,
+            block_id: tp.to_string(),
+            is_parent: false,
+            parent_placeholder: false,
+        }
+    }
+
+    #[test]
+    fn fingerprint_is_stable_when_nothing_changes() {
+        let mut s = WizardState::default();
+        s.step3.active_game_tab = "BGEE".to_string();
+        s.step3.bgee_items = vec![item("A/A.TP2", "0", 1), item("B/B.TP2", "2", 2)];
+        let a = step3_fingerprint(&s);
+        let b = step3_fingerprint(&s);
+        assert_eq!(a, b, "identical state ⇒ identical fingerprint");
+    }
+
+    #[test]
+    fn fingerprint_changes_on_reorder() {
+        // A drag-reorder swaps the end items + renumbers selected_order —
+        // the fingerprint must catch it (the P6.T11 Step-3 dirty path).
+        let mut s = WizardState::default();
+        s.step3.active_game_tab = "BGEE".to_string();
+        s.step3.bgee_items = vec![item("A/A.TP2", "0", 1), item("B/B.TP2", "2", 2)];
+        let before = step3_fingerprint(&s);
+        s.step3.bgee_items = vec![item("B/B.TP2", "2", 1), item("A/A.TP2", "0", 2)];
+        assert_ne!(before, step3_fingerprint(&s), "reorder must change it");
+    }
+
+    #[test]
+    fn fingerprint_changes_on_collapse_and_on_length() {
+        let mut s = WizardState::default();
+        s.step3.active_game_tab = "BGEE".to_string();
+        s.step3.bgee_items = vec![item("A/A.TP2", "0", 1)];
+        let base = step3_fingerprint(&s);
+        // Collapse a block (persisted via step3_group_collapse).
+        s.step3.bgee_collapsed_blocks = vec!["A/A.TP2".to_string()];
+        let after_collapse = step3_fingerprint(&s);
+        assert_ne!(base, after_collapse, "collapse must change it");
+        // Add an item (length changes).
+        s.step3.bgee_items.push(item("B/B.TP2", "2", 2));
+        assert_ne!(
+            after_collapse,
+            step3_fingerprint(&s),
+            "length change must change it"
+        );
+    }
+
+    #[test]
+    fn fingerprint_is_per_active_tab() {
+        // The same items under a different active tab hash differently
+        // (BG2EE reads bg2ee_items, everything else reads bgee_items).
+        let mut s = WizardState::default();
+        s.step3.bgee_items = vec![item("A/A.TP2", "0", 1)];
+        s.step3.active_game_tab = "BGEE".to_string();
+        let bgee = step3_fingerprint(&s);
+        s.step3.active_game_tab = "BG2EE".to_string();
+        let bg2ee = step3_fingerprint(&s);
+        assert_ne!(bgee, bg2ee, "active tab is part of the fingerprint");
     }
 }

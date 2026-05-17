@@ -463,6 +463,71 @@ impl OrchestratorApp {
             || !self.step2_progress_queue.is_empty()
     }
 
+    /// **P6.T11 — dirty-bit-gated workspace extract (the H1 gate).** Called
+    /// once per frame *before* `tick_persistence`. The contract:
+    ///
+    /// - `workspace_state_dirty == false` ⇒ **return immediately** — no
+    ///   `extract_workspace_state_from_wizard`, no compare, no map touch.
+    ///   This is the H1 "zero per-frame extract overhead for an idle
+    ///   workspace" property: an idle frame never reaches the extract, so
+    ///   `persistence_cycle.workspace_extract_debug_count` stays flat
+    ///   (observable in the P6.T11 acceptance).
+    /// - `workspace_state_dirty == true` and a workspace is loaded ⇒ perform
+    ///   exactly one extract: `note_workspace_extract()` (bumps the debug
+    ///   counter), read the prior persisted state for the loaded id, call
+    ///   `workspace_state_loader::extract_workspace_state_from_wizard`
+    ///   (carrying `prior`'s egui-only fields through — `expand_state` /
+    ///   `prompt_overrides` / `dev_scanned_mods_folder` / `last_share_code`),
+    ///   and if it differs from `prior` write it into `self.workspace_state`
+    ///   + `mark_workspace_dirty(id)` on the cycle so the existing per-id
+    ///   debounce (`persist_workspace_if_needed`, called from
+    ///   `tick_persistence`) flushes it ~`debounce_ms` later. If it does not
+    ///   differ, nothing is queued (the cadence's own diff is the second
+    ///   guard).
+    ///
+    /// The flag is **always cleared** once consumed (dirty or not) so the
+    /// extract runs at most once per dirtying burst, not every frame —
+    /// re-dirtying (the next mutating action / Step-3 fingerprint change)
+    /// re-arms it. Rename never sets this flag (it sets the *registry*
+    /// dirty bit), so a rename does not trigger a workspace extract.
+    ///
+    /// Per C5 the loader (and so this extract) is never reached mid-install
+    /// — the rail-nav lock (Phase 7) prevents nav-into-a-different-workspace
+    /// while an install runs.
+    fn sync_active_workspace_if_dirty(&mut self) {
+        // H1 gate: idle ⇒ zero work. No extract, no compare, no allocation.
+        if !self.workspace_state_dirty {
+            return;
+        }
+        // Consume the flag now (at most one extract per dirtying burst).
+        self.workspace_state_dirty = false;
+
+        // Only the currently-loaded workspace has live `WizardState` to
+        // extract. No loaded id (e.g. dirtied then navigated away before
+        // this tick — the nav-away flush already wrote it) ⇒ nothing to do.
+        let Some(id) = self.workspace_view.loaded_workspace_id.clone() else {
+            return;
+        };
+
+        // One dirty-gated extract performed → record it (H1 observability).
+        self.persistence_cycle.note_workspace_extract();
+
+        let prior = self.workspace_state.get(&id).cloned().unwrap_or_default();
+        let extracted =
+            crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+                &self.wizard_state,
+                &prior,
+            );
+        if extracted != prior {
+            self.workspace_state.insert(id.clone(), extracted);
+            // Queue the debounced per-id write (the existing Phase-3
+            // cadence in `persist_workspace_if_needed` does the actual
+            // throttled disk write from `tick_persistence`).
+            self.persistence_cycle
+                .mark_workspace_dirty(&id, Instant::now());
+        }
+    }
+
     /// Per-frame poll: try to flush pending registry / workspace writes if
     /// their debounce has elapsed.
     fn tick_persistence(&mut self) {
@@ -711,6 +776,13 @@ impl eframe::App for OrchestratorApp {
         // when the wizard state has it open. Must run **after** the shell so
         // the popup floats above the rail / page chrome.
         oauth_glue::render_github_popup_if_open(self, ctx);
+
+        // P6.T11 — dirty-bit-gated workspace extract (the H1 gate). MUST run
+        // before `tick_persistence` so a just-dirtied workspace's extracted
+        // state is in `self.workspace_state` before the debounce cadence
+        // diffs it. Idle (flag `false`) ⇒ this is a single bool check + an
+        // early return (no extract, the H1 property).
+        self.sync_active_workspace_if_dirty();
 
         // Per-frame persistence tick.
         self.tick_persistence();

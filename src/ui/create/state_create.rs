@@ -16,20 +16,27 @@
 //   const [destChoice, …]   = useState(null);              // DestChoice
 //   const [loadDraftOpen,…] = useState(false);
 //
-// ## Run 3 scope (this run)
+// ## Run 4 scope (this run)
 //
 // The stage machine is declared **whole** (`Choose | ForkPaste | ForkPreview
 // | ForkDownload`) so `page_create`'s dispatch + the fork back-navigation are
-// total. Run 3 implements only the `Choose` stage (the setup Box + the two
-// starting-point cards — P6.T7) and the Load Draft dialog (P6.T9). The three
-// `Fork*` stages render a **deferred placeholder** ("Import-and-modify lands
-// in Run 4 (P6.T8)") — the established §4.3-chassis deferral pattern. The
-// fork sub-flow renderers + the `operations_create` lineage append are
-// **Run 4 (P6.T8)**, NOT this run.
+// total. Run 3 shipped the `Choose` stage (P6.T7) + the Load Draft dialog
+// (P6.T9). **Run 4 (P6.T8) replaces the `Fork*` deferred placeholder with
+// the real fork sub-flow** — fork-paste / fork-preview / fork-download — plus
+// the `operations_create::create_forked_modlist` lineage append (SPEC §5.3 /
+// §13.3). The fork stages reuse the Phase-5 chassis (the
+// `sub_flow_footer` / `preview_tabs` / `stage_downloading` /
+// `ForkInfoPopup`); only the labels + the `Begin Import →` CTA differ and
+// there is **no `allow_auto_install` gate** (forking is always allowed —
+// SPEC §13.3).
 //
-// `fork_code` / `fork_preview` are the Run-4 fork-paste/fork-preview fields
-// (declared now, inert this run, mirroring the Phase-5 `InstallScreenState`
-// staged-field pattern — `parsed_preview` was likewise declared a run early).
+// `fork_code` carries the pasted parent share code; `fork_preview` carries
+// the parsed `ModlistSharePreview` (cached so the parse runs once on
+// `ForkPaste → ForkPreview`, not per-frame — the Install `parsed_preview`
+// precedent). `fork_preview_parse_error` / `fork_active_preview_tab` /
+// `fork_info_open` are the symmetric fork-preview UI fields (mirroring
+// `InstallScreenState`'s `preview_parse_error` / `active_preview_tab` /
+// `fork_info_open`).
 //
 // `resumed_build_id` records which in-progress build a `resume` (Home card or
 // Load Draft dialog) targeted. In the wireframe, `CreateScreen` short-circuits
@@ -44,8 +51,8 @@
 // the realized architecture routes via nav, never via a Create-local stage —
 // keeping a dead stage variant would be a no-op the router never reaches).
 //
-// SPEC: §5.1 (choose mode), §5.2 (Load Draft), §5.3 (fork sub-flow — Run 4),
-//       §13.3 (provenance — Run 4).
+// SPEC: §5.1 (choose mode), §5.2 (Load Draft), §5.3 (fork sub-flow),
+//       §13.3 (provenance / lineage append), §10.9 (ForkInfoPopup).
 
 // rationale: per-screen UI state struct + trivial query/ctor helpers —
 // `Self`/`const fn`/`#[must_use]` churn adds noise without behavior value;
@@ -59,29 +66,34 @@
 
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::registry::model::Game;
-use crate::ui::install::state_install::DestChoice;
+use crate::ui::install::stage_downloading::DownloadProgress;
+use crate::ui::install::state_install::{DestChoice, PreviewTab};
 
 /// The Create screen's stages (SPEC §5: choose → one of the fork sub-stages).
 /// The machine is whole so `page_create`'s dispatch + the fork
-/// back-navigation are total. **Run 3 implements `Choose` only;** the three
-/// `Fork*` stages render the Run-4 deferred placeholder (the §4.3-chassis
-/// deferral pattern). The fork sub-flow renderers are Run 4 (P6.T8).
+/// back-navigation are total. Run 3 shipped `Choose`; **Run 4 (P6.T8) ships
+/// the real `Fork*` sub-flow** (reusing the Phase-5 chassis).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CreateStage {
     /// Initial `choose` mode (SPEC §5.1): the setup Box (name + game +
     /// destination + conditional `DestinationNotEmptyWarning`) and the two
-    /// starting-point cards. Fully implemented this run (P6.T7).
+    /// starting-point cards (P6.T7 — Run 3).
     #[default]
     Choose,
-    /// Fork sub-flow stage 1 — paste a parent share code (SPEC §5.3). Run 4
-    /// (P6.T8). This run it renders the deferred placeholder.
+    /// Fork sub-flow stage 1 — paste a parent share code
+    /// (`ForkPasteScreen`, SPEC §5.3). `stage_fork_paste` (P6.T8 / Run 4).
     ForkPaste,
-    /// Fork sub-flow stage 2 — parsed parent preview (SPEC §5.3). Run 4
-    /// (P6.T8). Placeholder this run.
+    /// Fork sub-flow stage 2 — parsed parent preview (`ForkPreviewScreen`,
+    /// SPEC §5.3): packed parent `name`/`author` + `⑂ fork info` (the
+    /// incoming parent's lineage) + `Begin Import →`, no `allow_auto_install`
+    /// gate. `stage_fork_preview` (P6.T8 / Run 4).
     ForkPreview,
-    /// Fork sub-flow stage 3 — the fork-download chassis (SPEC §5.3). Run 4
-    /// (P6.T8) wires the navigation + the registry/lineage append; the live
-    /// fetch is Phase 7 P7.T17 (§13.12a). Placeholder this run.
+    /// Fork sub-flow stage 3 — the fork-download chassis (SPEC §5.3).
+    /// `stage_fork_download` wires the chassis navigation + the
+    /// post-completion `create_forked_modlist` registry/lineage append +
+    /// the route into the forked Workspace (P6.T8 / Run 4); the **live**
+    /// fork download/extract is Phase 7 P7.T17 (§13.12a) — the same
+    /// forward-compatible chassis model as Install's §4.3 Downloading stage.
     ForkDownload,
 }
 
@@ -114,25 +126,45 @@ pub struct CreateScreenState {
     /// open-bool the dialog re-renders from each frame.
     pub load_draft_open: bool,
 
-    // ── Run-4 fork fields (declared now, inert this run) ──
-    /// Pasted parent share code for the fork sub-flow (Run 4 — P6.T8).
+    // ── Fork sub-flow fields (P6.T8 / Run 4) ──
+    /// Pasted parent BIO-MODLIST-V1 share code (fork-paste stage). Empty
+    /// disables the fork-paste footer primary (SPEC §5.3 — the `Preview →`
+    /// gate, same as Install's paste stage).
     pub fork_code: String,
-    /// Parsed parent preview for the fork sub-flow (Run 4 — P6.T8).
+    /// Parsed parent preview (carve-out #5: carries the provenance trio
+    /// `name`/`author`/`forked_from` — the parent's lineage). `None` until
+    /// the parse runs on `ForkPaste → ForkPreview`; cached so the parse is
+    /// one-shot, not per-frame (the `InstallScreenState::parsed_preview`
+    /// precedent). Cleared when the user goes back to fork-paste.
     ///
     /// `pub(crate)` (the rest of the struct is `pub`): `ModlistSharePreview`
     /// is BIO's `pub(crate)` type (carve-out #5 keeps it at its existing
     /// field visibility — not a redesign decision), so this field cannot be
     /// more public than the type it holds (`private_interfaces`). Every
-    /// reader is in-crate. Exactly the `InstallScreenState::parsed_preview`
-    /// precedent.
-    ///
-    /// `#[allow(dead_code)]`: genuinely unread in Run 3 — the fork-preview
-    /// stage that populates + reads it is Run 4 (P6.T8). Field-scoped, with
-    /// the Run-4 reason inline, exactly the established staged-field pattern
-    /// (the Run-1 `step2_update_extract_rx` inert-behind-allow precedent —
-    /// HANDOFF "Lessons"). Removed when Run 4 wires the reader.
-    #[allow(dead_code)]
+    /// reader is in-crate.
     pub(crate) fork_preview: Option<ModlistSharePreview>,
+    /// Set when `preview_modlist_share_code` returned `Err` so the
+    /// fork-preview stage shows the failure instead of a blank box (mutually
+    /// exclusive with `fork_preview` — a parse yields a preview or an error).
+    /// The wireframe assumes a valid code; a real paste-stage parse failure
+    /// must be surfaced, not silently swallowed (the Install precedent).
+    pub fork_preview_parse_error: Option<String>,
+    /// The selected Content-Box tab on the fork-preview stage (SPEC §5.3 ⇒
+    /// "identical to Install's preview stage" ⇒ the same 6 tabs / §4.2).
+    pub fork_active_preview_tab: PreviewTab,
+    /// Whether the `ForkInfoPopup` (SPEC §10.9) is open on the fork-preview
+    /// stage — showing the *incoming parent's* lineage. Toggled by the
+    /// `⑂ fork info` button; the popup is Close-only + non-blocking.
+    pub fork_info_open: bool,
+    /// The fork-download per-mod progress model (SPEC §5.3 / §13.12a). Drives
+    /// the **reused Phase-5 `stage_downloading` chassis**. Empty until
+    /// Phase 7 P7.T17 binds the live fork download/extract pipeline (the
+    /// same forward-compatible model as `InstallScreenState::
+    /// download_progress`); the chassis renders the §4.3 surface with no
+    /// rows + never auto-advances until then. Cleared whenever the user
+    /// leaves fork-download back to fork-preview (a re-parse must not
+    /// inherit a stale grid).
+    pub fork_download_progress: DownloadProgress,
 
     /// The in-progress build id a `resume` targeted (Home card or Load Draft
     /// dialog). Recorded for traceability; the actual workspace open is the
@@ -164,6 +196,16 @@ impl CreateScreenState {
             ..Self::default()
         }
     }
+
+    /// Drop the cached fork preview + any parse error and close the fork
+    /// popup. Called when the user goes back to fork-paste (the pasted code
+    /// may change, so a stale preview must not survive) and just before a
+    /// fresh parse runs. The mirror of `InstallScreenState::clear_preview`.
+    pub fn clear_fork_preview(&mut self) {
+        self.fork_preview = None;
+        self.fork_preview_parse_error = None;
+        self.fork_info_open = false;
+    }
 }
 
 #[cfg(test)]
@@ -181,6 +223,25 @@ mod tests {
         assert_eq!(s.destination_choice, None);
         assert!(!s.load_draft_open);
         assert_eq!(s.resumed_build_id, None);
+        // Fork sub-flow defaults: clean.
+        assert!(s.fork_code.is_empty());
+        assert!(s.fork_preview.is_none());
+        assert!(s.fork_preview_parse_error.is_none());
+        assert_eq!(s.fork_active_preview_tab, PreviewTab::Summary);
+        assert!(!s.fork_info_open);
+    }
+
+    #[test]
+    fn clear_fork_preview_resets_fork_preview_state() {
+        // Mirrors `InstallScreenState::clear_preview` — back-to-fork-paste /
+        // pre-reparse must not leave a stale parent preview / open popup.
+        let mut s = CreateScreenState::new();
+        s.fork_preview_parse_error = Some("bad code".to_string());
+        s.fork_info_open = true;
+        s.clear_fork_preview();
+        assert!(s.fork_preview.is_none());
+        assert!(s.fork_preview_parse_error.is_none());
+        assert!(!s.fork_info_open);
     }
 
     #[test]
