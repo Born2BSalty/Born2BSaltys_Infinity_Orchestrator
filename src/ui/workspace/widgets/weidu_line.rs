@@ -25,15 +25,16 @@
 //
 // ## The three-colour split (SPEC §6.7, plan-pinned redesign-token mapping)
 //
-// SPEC §6.7 names the three parts (TP2 path / component numbers / comment).
-// Its literal hex values (`#d4a35c` / `#2f6fb7` / success-green) are BIO's
-// **legacy** renderer's colours; the redesign uses tokens. P6.T2b + the
-// phase-06 `weidu_line.rs` file-inventory row pin the redesign token mapping
-// (the work order is authoritative on which token paints each segment in the
-// orchestrator's net-new surface):
-//   - `<tp2_file>`   (`~...~`)         → `redesign_accent_deep`
-//   - `<component_id>` (`#0 #1030`)    → `redesign_text_muted`
-//   - `<component_label>` (`// ...`)   → `redesign_text_primary`
+// SPEC §6.7 + the canonical wireframe `WeiduLine` (`screens.jsx:797-800`)
+// pin THREE distinct hues. Amber/dark-blue are **palette-independent literal
+// hex** (the wireframe + §6.7 hardcode them); green is the theme-aware
+// success token. (An earlier plan/brief drift to neutral
+// `text-muted`/`text-primary` greys rendered 2-tone — resolved per the user,
+// overview 2026-05-16; SPEC §6.7 was the correct authority all along.)
+//   - `<tp2_file>`     (`~...~`)       → amber `#d4a35c` (literal)
+//   - `<component_id>`  (`#0 #1030`)   → dark-blue `#2f6fb7` (literal)
+//   - `<component_label>` (`// ...`)   → success-green `redesign_success`
+//                                        (= `var(--success)`, theme-aware)
 //   - optional line-number prefix      → `redesign_text_faint`
 //
 // Monospace (FiraCode Nerd) per the wireframe `WeiduLine`
@@ -52,10 +53,7 @@ use eframe::egui;
 
 use crate::app::state::Step3ItemState;
 use crate::app::step5::diagnostics::format_step4_item;
-use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_accent_deep, redesign_text_faint, redesign_text_muted,
-    redesign_text_primary,
-};
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_success, redesign_text_faint};
 
 /// Monospace font size for the WeiDU line (wireframe `WeiduLine` `fontSize:
 /// 13`).
@@ -149,9 +147,12 @@ fn build_weidu_job(ui: &egui::Ui, palette: ThemePalette, text: &str) -> egui::te
     job.wrap.max_width = f32::INFINITY;
     let _ = ui;
 
-    let path_color = redesign_accent_deep(palette); // <tp2_file>
-    let nums_color = redesign_text_muted(palette); // <component_id>
-    let comment_color = redesign_text_primary(palette); // <component_label>
+    // Wireframe `WeiduLine` (screens.jsx:797-800) + SPEC §6.7 — 3 distinct
+    // hues. Amber/dark-blue are palette-independent literals (the wireframe
+    // + §6.7 hardcode them); green is the theme-aware success token.
+    let path_color = egui::Color32::from_rgb(0xD4, 0xA3, 0x5C); // ~tp2~ amber #d4a35c
+    let nums_color = egui::Color32::from_rgb(0x2F, 0x6F, 0xB7); // #0 #id dark-blue #2f6fb7
+    let comment_color = redesign_success(palette); // // ... success-green (var(--success))
 
     // Pure-comment line (no `~...~`) → whole line in the comment colour
     // (BIO `render_weidu_colored_line`'s `starts_with("//")` early-out, plus
@@ -274,7 +275,7 @@ mod tests {
     /// comment) for a canonical line, and the runs must use the **redesign**
     /// tokens (SPEC §6.7 / P6.T2b mapping), NOT BIO's legacy palette.
     #[test]
-    fn three_colour_split_uses_redesign_tokens() {
+    fn three_colour_split_matches_wireframe_hues() {
         let palette = ThemePalette::Dark;
         // Build the job through a real (headless) egui context.
         let ctx = egui::Context::default();
@@ -293,12 +294,13 @@ mod tests {
             });
         });
         assert_eq!(produced.len(), 3, "path + numbers + comment = 3 runs");
+        // Wireframe `WeiduLine` (screens.jsx:797-800) + SPEC §6.7 — 3 hues.
         assert!(produced[0].0.starts_with('~') && produced[0].0.ends_with('~'));
-        assert_eq!(produced[0].1, redesign_accent_deep(palette));
+        assert_eq!(produced[0].1, egui::Color32::from_rgb(0xD4, 0xA3, 0x5C)); // amber #d4a35c
         assert!(produced[1].0.contains("#0 #2"));
-        assert_eq!(produced[1].1, redesign_text_muted(palette));
+        assert_eq!(produced[1].1, egui::Color32::from_rgb(0x2F, 0x6F, 0xB7)); // dark-blue #2f6fb7
         assert!(produced[2].0.contains("// Game Text Update"));
-        assert_eq!(produced[2].1, redesign_text_primary(palette));
+        assert_eq!(produced[2].1, redesign_success(palette)); // success-green
     }
 
     /// A pure-comment line renders as a single comment-coloured run (BIO's
@@ -319,6 +321,6 @@ mod tests {
             });
         });
         assert_eq!(runs, 1);
-        assert_eq!(color, redesign_text_primary(palette));
+        assert_eq!(color, redesign_success(palette)); // comment colour (SPEC §6.7)
     }
 }
