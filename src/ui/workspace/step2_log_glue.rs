@@ -98,6 +98,39 @@ pub fn apply_weidu_log_selection_for_orchestrator(orchestrator: &mut Orchestrato
     // (d) Underlying BIO state mutation (parse + apply the log selection) —
     // only ever reached with a user-picked path (cancel returned above).
     apply_weidu_log_selection_from_path(&mut orchestrator.wizard_state, bgee, Some(path));
+
+    // (e) Discard the imported tab's stale Step-3 ordering so the next
+    // Step2→Step3 sync rebuilds it **fresh in weidu.log order**.
+    //
+    // Redesign-only bug. `apply_*` just re-imported this tab's Step-2
+    // selection in weidu.log order, but `bio::app::app_step3_sync_flow::
+    // reconcile_step3_items` only adopts that fresh order when the selected
+    // *set* is unchanged; when the set differs (e.g. re-importing a log
+    // whose components differ from a resumed draft) it instead **preserves
+    // the existing Step-3 order** and only appends new components at the
+    // end. Plain BIO has no pre-existing Step-3 items (no resume) →
+    // reconcile's `current` is empty → pure weidu.log order, correct. The
+    // redesign's cold-resume pre-populates `state.step3.<tab>_items`, so
+    // reconcile anchors on that stale resumed order and a *destructive*
+    // re-import doesn't actually reorder Step 3. A confirmed destructive
+    // whole-tab re-import means "discard the old order, take the log's":
+    // clearing this tab's Step-3 items makes reconcile see an empty
+    // `current` (exactly BIO's no-resume path) and rebuild it fresh. Only
+    // the imported tab is cleared — the other tab's independent Step-3
+    // order is untouched. `reconcile_step3_items` is protected BIO and is
+    // left unchanged on purpose: its preserve-order behavior is correct
+    // for *incremental* Step-2 edits; only this destructive-import entry
+    // point needs the reset.
+    //
+    // EET note: the EET BGEE-via-log path additively pokes one component
+    // into the BG2EE tab without resetting it; we deliberately do NOT
+    // special-case that (it is the incremental case reconcile handles
+    // correctly) — to be verified separately, not pre-built for.
+    if bgee {
+        orchestrator.wizard_state.step3.bgee_items.clear();
+    } else {
+        orchestrator.wizard_state.step3.bg2ee_items.clear();
+    }
 }
 
 /// Replicates BIO's `pick_weidu_log_file` (`src/ui/app_step2_log.rs:36-50`)
