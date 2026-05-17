@@ -30,7 +30,7 @@ use eframe::egui;
 
 use crate::ui::home::game_installs_detected;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::{redesign_box, redesign_btn, BtnOpts};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_box, redesign_btn};
 use crate::ui::shared::redesign_tokens::redesign_accent_deep;
 
 /// Which CTA the user clicked this frame.

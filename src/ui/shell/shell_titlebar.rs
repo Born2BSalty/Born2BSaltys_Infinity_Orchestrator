@@ -32,8 +32,8 @@ use eframe::egui;
 #[cfg(not(target_os = "macos"))]
 use crate::ui::shared::redesign_tokens::redesign_text_muted;
 use crate::ui::shared::redesign_tokens::{
-    redesign_border_strong, redesign_chrome_bg, redesign_shell_bg, redesign_text_primary,
-    ThemePalette, REDESIGN_BORDER_WIDTH_PX, REDESIGN_TITLEBAR_HEIGHT_PX,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_border_strong,
+    redesign_chrome_bg, redesign_shell_bg, redesign_text_primary,
 };
 
 // macOS traffic-light colors (approximations of the standard system tints).

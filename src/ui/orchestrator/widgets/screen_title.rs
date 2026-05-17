@@ -14,7 +14,7 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_text_muted, redesign_text_primary, ThemePalette,
+    ThemePalette, redesign_text_muted, redesign_text_primary,
 };
 
 /// Render a `ScreenTitle` at the current `ui` cursor.

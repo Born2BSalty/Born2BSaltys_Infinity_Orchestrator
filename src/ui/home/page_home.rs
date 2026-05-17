@@ -44,7 +44,7 @@ use crate::registry::operations;
 use crate::ui::home::add_a_modlist::{self, AddAModlistAction};
 use crate::ui::home::confirm_delete;
 use crate::ui::home::modlist_card::ModlistCardActions;
-use crate::ui::home::state_home::{empty_filter_message, HomeFilter, ToastMessage};
+use crate::ui::home::state_home::{HomeFilter, ToastMessage, empty_filter_message};
 use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card, toast};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
@@ -52,7 +52,7 @@ use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOut
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::settings::state_settings::SettingsTab;
 use crate::ui::shared::format_relative::relative_time;
-use crate::ui::shared::redesign_tokens::{redesign_text_faint, ThemePalette};
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 
 /// Gap between the two columns + bottom margin (wireframe `gap:20`,
 /// `marginBottom:20`).

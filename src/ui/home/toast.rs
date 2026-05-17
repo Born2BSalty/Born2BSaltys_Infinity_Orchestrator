@@ -44,9 +44,9 @@ use eframe::egui;
 
 use crate::ui::home::state_home::{ToastMessage, ToastTone};
 use crate::ui::shared::redesign_tokens::{
-    redesign_border_strong, redesign_pill_danger, redesign_shadow, redesign_shell_bg,
-    redesign_success, ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
-    REDESIGN_SHADOW_OFFSET_BTN_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
+    ThemePalette, redesign_border_strong, redesign_pill_danger, redesign_shadow, redesign_shell_bg,
+    redesign_success,
 };
 
 /// Auto-dismiss window. SPEC §3.1 / §10.8: "auto-dismisses ~1.8s"; wireframe

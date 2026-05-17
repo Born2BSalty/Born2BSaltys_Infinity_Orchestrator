@@ -10,7 +10,7 @@
 use eframe::egui;
 
 use crate::ui::orchestrator::widgets::render_screen_title;
-use crate::ui::shared::redesign_tokens::{redesign_text_faint, ThemePalette};
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 
 pub fn render_create_stub(ui: &mut egui::Ui, palette: ThemePalette) {
     render_screen_title(

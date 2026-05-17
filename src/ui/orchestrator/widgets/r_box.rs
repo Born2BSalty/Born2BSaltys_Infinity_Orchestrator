@@ -20,8 +20,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_border_strong, redesign_shell_bg, redesign_text_muted, ThemePalette,
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_shell_bg, redesign_text_muted,
 };
 
 /// Render a `Box` chassis around a body callback.

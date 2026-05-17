@@ -12,7 +12,7 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent_deep, redesign_text_primary, ThemePalette,
+    ThemePalette, redesign_accent_deep, redesign_text_primary,
 };
 
 /// Regular label — 13px Poppins in primary text color.

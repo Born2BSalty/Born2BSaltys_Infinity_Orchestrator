@@ -30,9 +30,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent, redesign_border_strong, redesign_shadow, redesign_shell_bg,
-    redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
-    REDESIGN_SHADOW_OFFSET_BTN_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
+    ThemePalette, redesign_accent, redesign_border_strong, redesign_shadow, redesign_shell_bg,
+    redesign_text_primary,
 };
 
 /// Optional rendering options for `redesign_btn`. All default to `false`.

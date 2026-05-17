@@ -57,17 +57,17 @@ If you skip step 2 you will be looking at the OLD build and will think nothing c
 
 ---
 
-## ⏳ In flight — Phase 6 Run 3 (NOT yet testable)
+## Phase 6 Run 3 — SHIPPED + orchestrator-verified, pending your visual sign-off
 
-Dispatched 2026-05-17 to a plan-implementer; **not yet implemented, built, or orchestrator-verified.** Do **not** test these until the orchestrator marks them ready (it will move them up into "Test items" with a commit + confirmed-fresh-binary note once the run returns and is independently verified). Listed now so the scope is visible; derived from the phase-06 acceptance criteria (the contract the run must meet).
+Shipped in the Phase-6 Run-3 commit (Create + Load Draft + routing — P6.T7/T9/T13/T14). Orchestrator-independently verified pre-commit: BIO-source guard clean (only the authorized carve-out #3 `pub mod` line), zero scope creep, `cargo test --lib` **254/0** (+21 substantive), `modlists.json` byte-identical (no clobber), `cargo build --bin BIO` clean, the `create_modlist` PLAN-GAP + the SPEC §10.2 doc-drift premise-checked TRUE and fixed in the same commit. **The exe relink was blocked by your running app** — same as items 1–4: the **Precondition at the top of this doc applies** (close the app → rebuild twice to a confirmed no-op → relaunch) before testing these.
 
 ### ☐ 5. Create screen — choose-mode setup + starting-point cards
 - **Phase / Run:** Phase 6, **Run 3** — **P6.T7** + **P6.T13** (wire Create into `page_router`).
-- **Will check:** the Create rail item opens the real screen (not the stub): a setup Box with modlist **name**, **game** ComboBox (EET default / BGEE / BG2EE / IWDEE), destination FolderInput + the conditional DestinationNotEmptyWarning on a non-empty dir, partial-install option disabled. Two cards: `start →` (with name+game+valid existing destination → a new entry appears in `modlists.json` and the **Workspace opens at Step 2**, header `Editing <name>`) and `paste share code →` (Run-3 shows a deferred placeholder — the real fork flow is Run 4 / P6.T8).
+- **Check:** the Create rail item opens the real screen (not the stub): a setup Box with modlist **name**, **game** ComboBox (defaults to **EET**; options EET / BGEE / BG2EE / IWDEE), destination FolderInput + the conditional DestinationNotEmptyWarning on a non-empty dir (Clear / Backup only — **no** Continue-partial, SPEC §5.1). Two starting-point cards: `start →` (with a name + valid existing destination → a new entry appears in `%APPDATA%\bio\modlists.json`, `modlists\<id>\workspace.json` is created, and the **Workspace opens at Step 2**, header `Editing <name>`; blank destination falls back to `<config>\modlists\installs\<slug>`) and `paste share code →` (shows a clear "lands in Run 4 (P6.T8)" placeholder + `← Back to choose` — the real fork flow is Run 4, **not** a bug).
 
 ### ☐ 6. Load Draft dialog (Resume in-progress build)
 - **Phase / Run:** Phase 6, **Run 3** — **P6.T9** + **P6.T14** (Resume routing).
-- **Will check:** Home `load draft` (and the in-progress card `resume`) opens a **non-blocking dialog** (NOT a file picker — SPEC §5.2) listing in-progress builds as the shared Home card chassis (resume + Kebab Copy-import-code / Delete), empty-state copy when none, `Cancel`-only footer. `resume` closes it and opens the Workspace at Step 2 with that build's state.
+- **Check:** Create's `load draft` button opens a **non-blocking dialog** titled "Resume in-progress build" (it is **NOT** a file picker — SPEC §5.2/§10.2) listing in-progress builds as the shared Home card chassis (`resume` + Kebab `Copy import code` / `Delete`), empty-state copy when none, `Cancel`-only footer. `resume` closes it and opens the Workspace at Step 2 (`Editing <name>`). `Copy import code` → transient `✓ Copied…` (or an honest "no import code yet" for a pre-Phase-7 build). The Home in-progress card `resume` (already shipped) still routes to the Workspace too. **Note:** the dialog's `Delete` Kebab item is intentionally inert here (wireframe-faithful — in-progress deletion is done from Home; not a bug).
 
 ## Review of older items (2026-05-17, Run-3 dispatch)
 

@@ -21,6 +21,10 @@
 //   - `operations`         → CRUD entry points (populated in Phase 5; the
 //                            module is declared here so visibility is stable
 //                            across phases).
+//   - `operations_create`  → Phase 6 P6.T7: `create_modlist` (allocate id +
+//                            insert an `in_progress` entry + write the empty
+//                            workspace.json; SPEC §5.1 / §13.1). The fork
+//                            variant is Run 4 (P6.T8), not defined yet.
 //   - `operations_rename`  → Phase 6 P6.T5: `rename_modlist` (registry-entry
 //                            rename ONLY — no on-disk folder rename, SPEC
 //                            §2.2; debounced via the registry persistence
@@ -33,6 +37,7 @@ pub mod errors;
 pub mod ids;
 pub mod model;
 pub mod operations;
+pub mod operations_create;
 pub mod operations_rename;
 pub mod persistence_cycle;
 pub mod store;

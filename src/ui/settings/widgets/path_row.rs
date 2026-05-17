@@ -31,9 +31,9 @@ use eframe::egui;
 
 use crate::ui::settings::state_settings::PathStatusTone;
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent_deep, redesign_border_strong, redesign_input_bg, redesign_pill_danger,
-    redesign_success_soft, redesign_text_faint, redesign_text_primary, redesign_warning_soft,
-    ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
+    redesign_border_strong, redesign_input_bg, redesign_pill_danger, redesign_success_soft,
+    redesign_text_faint, redesign_text_primary, redesign_warning_soft,
 };
 
 /// Picker style.

@@ -25,7 +25,7 @@ use crate::settings::redesign_fields::{ThemeChoice, UiLanguage};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::widgets::{name_row, segmented_toggle, toggle_row};
 use crate::ui::shared::redesign_tokens::{
-    redesign_text_faint, redesign_text_muted, redesign_text_primary, ThemePalette,
+    ThemePalette, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {

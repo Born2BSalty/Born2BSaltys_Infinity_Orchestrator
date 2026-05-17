@@ -925,13 +925,15 @@ If the user wants a portable on-disk artifact instead of (or in addition to) reg
 
 ### 10.2 Resume in-progress build (LoadDraftDialog)
 
-Modal opened from Create's `load draft` button:
+> **Corrected 2026-05-17 (doc-drift fix).** This section previously described a *file picker* ("pick a saved .txt draft"). That contradicted the canonical wireframe `LoadDraftDialog`, [§5.2](#52-load-draft-dialog-resume-in-progress-build), and plan P6.T9 — and is **not** what shipped. [§5.2](#52-load-draft-dialog-resume-in-progress-build) is the authoritative detailed spec; this section now matches it.
 
-- Title: "Load draft"
-- Sub: "Pick a saved .txt draft. BIO reads the embedded share code and drops you straight on Step 2."
-- `FolderInput` labeled "draft file" with `browse`.
-- Preview card (appears once a file is chosen): name / game / mod count / component count from the parsed draft.
-- Footer: `Cancel` + **`Load → Step 2`** primary, disabled until a file is selected. On click: opens the workspace pre-populated.
+Non-blocking modal opened from Create's `load draft` button (the same chassis the Home `in-progress builds` view uses — both are views over the registry filtered to `in_progress`):
+
+- Title: "Resume in-progress build" + sub-line.
+- A vertical list of the in-progress builds rendered with the **shared `modlist_card`** chassis ([§3.2](#32-cards-shared-shape)): each card has a `resume` primary + a Kebab (`Copy import code`, `Delete`). **Not a file picker** (no `FolderInput`, no `.txt` browse).
+- Empty state: "No in-progress builds. Start a new modlist from Create."
+- Footer: `Cancel` only.
+- On `resume`: the dialog closes and the workspace opens at **Step 2** with that build's state (`Editing <name>`) — identical to the Home Resume button.
 
 ### 10.3 SharePasteCodeDialog
 

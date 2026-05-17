@@ -29,5 +29,5 @@ pub mod stubs;
 pub mod widgets;
 
 pub use nav_destination::NavDestination;
-pub use nav_status::{PathValidationSummary, PathValidationKind};
+pub use nav_status::{PathValidationKind, PathValidationSummary};
 pub use orchestrator_app::OrchestratorApp;

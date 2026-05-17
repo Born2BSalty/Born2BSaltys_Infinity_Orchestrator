@@ -38,10 +38,11 @@ use eframe::egui;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::nav_status::{PathValidationKind, PathValidationSummary};
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent, redesign_accent_deep, redesign_border_strong, redesign_hover_overlay,
-    redesign_rail_bg, redesign_shadow, redesign_shell_bg, redesign_status_dot, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX,
-    REDESIGN_BORDER_WIDTH_PX, REDESIGN_NAV_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, REDESIGN_NAV_WIDTH_PX,
+    REDESIGN_SHADOW_OFFSET_BTN_PX, ThemePalette, redesign_accent, redesign_accent_deep,
+    redesign_border_strong, redesign_hover_overlay, redesign_rail_bg, redesign_shadow,
+    redesign_shell_bg, redesign_status_dot, redesign_text_faint, redesign_text_muted,
+    redesign_text_primary,
 };
 
 /// Phase 7 C5 lock reason placeholder. Phase 2 callers pass `None`; the type

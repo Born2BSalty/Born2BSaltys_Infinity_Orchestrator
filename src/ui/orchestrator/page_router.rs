@@ -62,7 +62,10 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
         // Modlist screen (Run 3: paste stage + stage-4 stub; Preview /
         // Downloading render Run-4 / Run-5 placeholders).
         NavDestination::Install => page_install::render(ui, orchestrator, ctx),
-        NavDestination::Create => stubs::render_create_stub(ui, palette),
+        // Phase 6 P6.T13 — Create stub replaced with the real Create screen
+        // (Run 3: the `choose` mode + Load Draft dialog; the fork sub-flow
+        // renders the Run-4 deferred placeholder).
+        NavDestination::Create => crate::ui::create::page_create::render(ui, orchestrator, ctx),
         // Phase 4 P4.T8 — Settings stub replaced with the real 5-tab screen.
         NavDestination::Settings => page_settings::render(ui, orchestrator, ctx),
         NavDestination::Workspace { modlist_id } => match modlist_id {

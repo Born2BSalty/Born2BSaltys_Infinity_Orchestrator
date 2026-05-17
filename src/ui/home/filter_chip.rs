@@ -39,8 +39,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent, redesign_border_strong, redesign_shell_bg, redesign_text_faint,
-    redesign_text_primary, ThemePalette, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent, redesign_border_strong,
+    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
 /// 14px pill radius (wireframe `borderRadius: 14`).

@@ -57,11 +57,11 @@ use std::fmt::Write as _;
 use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
-use crate::ui::orchestrator::widgets::{redesign_btn, render_kebab, BtnOpts, KebabItem};
+use crate::ui::orchestrator::widgets::{BtnOpts, KebabItem, redesign_btn, render_kebab};
 use crate::ui::shared::format_relative::relative_time;
 use crate::ui::shared::redesign_tokens::{
-    redesign_border_strong, redesign_shell_bg, redesign_text_faint, redesign_text_primary,
-    ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
 /// What the user did on a card this frame. The primary button + the wired

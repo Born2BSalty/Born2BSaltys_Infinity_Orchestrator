@@ -25,9 +25,9 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{redesign_btn, BtnOpts};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    redesign_text_faint, redesign_text_primary, ThemePalette,
+    ThemePalette, redesign_text_faint, redesign_text_primary,
 };
 
 /// Render the first-launch CTA content. Returns `true` when `Open Settings`

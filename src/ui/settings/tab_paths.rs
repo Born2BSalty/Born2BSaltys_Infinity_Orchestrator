@@ -21,7 +21,7 @@ use crate::ui::settings::state_settings::{PathStatus, PathStatusTone};
 use crate::ui::settings::validate_debounce;
 use crate::ui::settings::validate_now;
 use crate::ui::settings::widgets::path_row::{self, PathRowMode};
-use crate::ui::shared::redesign_tokens::{redesign_text_faint, redesign_text_muted, ThemePalette};
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint, redesign_text_muted};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;

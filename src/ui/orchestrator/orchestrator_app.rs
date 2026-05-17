@@ -83,6 +83,7 @@ use crate::settings::model::AppSettings;
 use crate::settings::redesign_fields::{RedesignSettings, ThemeChoice};
 use crate::settings::redesign_store::RedesignSettingsStore;
 use crate::settings::store::SettingsStore;
+use crate::ui::create::state_create::CreateScreenState;
 use crate::ui::home::state_home::HomeScreenState;
 use crate::ui::install::state_install::InstallScreenState;
 use crate::ui::orchestrator::left_rail;
@@ -158,6 +159,14 @@ pub struct OrchestratorApp {
     /// Install screen (P5.T14). The 4-stage machine is whole; Run 3
     /// implements Paste + the stage-4 stub.
     pub install_screen_state: InstallScreenState,
+    /// Per-screen Create UI state (active stage, typed name, chosen game,
+    /// destination + `DestChoice`, Load Draft dialog open). Added in Phase 6
+    /// Run 3 alongside the real Create screen (P6.T13). The stage machine is
+    /// whole (`Choose | Fork*`); Run 3 implements `Choose` + the Load Draft
+    /// dialog, the `Fork*` stages render the Run-4 deferred placeholder.
+    /// Built via `CreateScreenState::new` so the game ComboBox defaults to
+    /// `EET` (SPEC §5.1 — `Game::default()` is `BGEE`).
+    pub create_screen_state: CreateScreenState,
 
     // ---------- Phase 4 fields ----------
     pub redesign_settings: RedesignSettings,
@@ -322,6 +331,9 @@ impl OrchestratorApp {
             home_stub_state: HomeStubState::default(),
             home_screen_state: HomeScreenState::default(),
             install_screen_state: InstallScreenState::default(),
+            // SPEC §5.1: the game ComboBox defaults to `EET`. `new()` forces
+            // it (the bare `Default` would be `Game::default()` == `BGEE`).
+            create_screen_state: CreateScreenState::new(),
 
             redesign_settings_last_saved: redesign_settings.clone(),
             redesign_settings,

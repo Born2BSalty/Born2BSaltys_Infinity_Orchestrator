@@ -24,7 +24,7 @@ use eframe::egui;
 use crate::registry::errors::RegistryError;
 use crate::ui::orchestrator::widgets::{redesign_box, redesign_label, render_screen_title};
 use crate::ui::shared::redesign_tokens::{
-    redesign_text_faint, redesign_text_muted, redesign_text_primary, ThemePalette,
+    ThemePalette, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 /// Render the terminal error panel.

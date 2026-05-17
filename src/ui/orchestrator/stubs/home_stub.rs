@@ -25,9 +25,9 @@ use crate::registry::store_workspace::WorkspaceStore;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::{
-    redesign_btn, redesign_label, render_screen_title, BtnOpts,
+    BtnOpts, redesign_btn, redesign_label, render_screen_title,
 };
-use crate::ui::shared::redesign_tokens::{redesign_text_faint, ThemePalette};
+use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 
 pub fn render_home_stub(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
@@ -40,7 +40,11 @@ pub fn render_home_stub(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     );
 
     ui.add_space(8.0);
-    faint_phase_note(ui, palette, "Home will list installed + in-progress modlists, an Add-a-modlist box, and the first-launch empty state.");
+    faint_phase_note(
+        ui,
+        palette,
+        "Home will list installed + in-progress modlists, an Add-a-modlist box, and the first-launch empty state.",
+    );
 
     if orchestrator.dev_mode {
         ui.add_space(20.0);

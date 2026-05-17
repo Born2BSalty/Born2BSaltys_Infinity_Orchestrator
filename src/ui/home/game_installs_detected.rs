@@ -36,7 +36,7 @@ use crate::ui::settings::validate_now::{
     FIELD_BG2EE_GAME_FOLDER, FIELD_BGEE_GAME_FOLDER, FIELD_IWDEE_GAME_FOLDER,
 };
 use crate::ui::shared::redesign_tokens::{
-    redesign_text_faint, redesign_text_primary, ThemePalette,
+    ThemePalette, redesign_text_faint, redesign_text_primary,
 };
 
 /// The three games the wireframe lists, in order, with their game-folder

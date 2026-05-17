@@ -22,8 +22,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_border_strong, redesign_chrome_bg, redesign_status_dot, redesign_text_muted,
-    ThemePalette, REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, ThemePalette, redesign_border_strong,
+    redesign_chrome_bg, redesign_status_dot, redesign_text_muted,
 };
 
 /// Paint the redesign statusbar inside the given `ui` (caller is expected to

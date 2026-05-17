@@ -13,8 +13,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent, redesign_border_strong, redesign_chrome_bg, redesign_text_faint,
-    redesign_text_primary, ThemePalette, REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_strong, redesign_chrome_bg, redesign_text_faint, redesign_text_primary,
 };
 
 pub fn render(

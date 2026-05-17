@@ -30,8 +30,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_pill_danger, redesign_pill_info, redesign_pill_neutral, redesign_pill_text,
-    redesign_pill_warn, ThemePalette, REDESIGN_BORDER_RADIUS_PX,
+    REDESIGN_BORDER_RADIUS_PX, ThemePalette, redesign_pill_danger, redesign_pill_info,
+    redesign_pill_neutral, redesign_pill_text, redesign_pill_warn,
 };
 
 /// Pill tone → fill color (SPEC §12.2, theme-invariant).

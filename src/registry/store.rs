@@ -140,7 +140,12 @@ mod tests {
     fn temp_path(label: &str) -> PathBuf {
         let n = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir()
-            .join(format!("bio_registry_test_{}_{}_{}", std::process::id(), n, label))
+            .join(format!(
+                "bio_registry_test_{}_{}_{}",
+                std::process::id(),
+                n,
+                label
+            ))
             .with_extension("json")
     }
 
@@ -214,7 +219,10 @@ mod tests {
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or_default();
-        assert!(name.contains("corrupt-"), "name `{name}` has timestamp suffix");
+        assert!(
+            name.contains("corrupt-"),
+            "name `{name}` has timestamp suffix"
+        );
         let _ = std::fs::remove_file(&new_path);
     }
 
