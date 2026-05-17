@@ -17,14 +17,21 @@
 
 use eframe::egui;
 
-use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
+use crate::ui::shared::redesign_tokens::{
+    ThemePalette, WORKSPACE_CONTENT_TEXT_INSET, redesign_text_faint,
+};
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 
 /// Render the current step's hint line.
 pub fn render(ui: &mut egui::Ui, palette: ThemePalette, current: WorkspaceStep) {
-    // Wireframe `marginLeft: 4`.
+    // Flush on the structural content edge (`WORKSPACE_CONTENT_TEXT_INSET`,
+    // 0 = `X_shell`) — the same left edge as the progress bar, the
+    // component pane, the Step-2 title and the search box, so the whole
+    // workspace content shares one vertical line. Wireframe `marginLeft:4`
+    // is the look-intent; the exact px is the single empirically-tuned knob
+    // (2026-05-17 user directive: align to the progress-bar / pane edge).
     ui.horizontal(|ui| {
-        ui.add_space(4.0);
+        ui.add_space(WORKSPACE_CONTENT_TEXT_INSET);
         ui.label(
             // `Label hand` is Poppins 14 in the wireframe; the explicit
             // `color: var(--text-faint)` override on this call site wins

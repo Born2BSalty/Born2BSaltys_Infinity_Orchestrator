@@ -93,10 +93,8 @@ use eframe::egui;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::{BtnOpts, KebabItem, redesign_btn, render_kebab};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
-    redesign_border_strong, redesign_chrome_bg, redesign_hover_overlay, redesign_pill_danger,
-    redesign_pill_text, redesign_pill_warn, redesign_shell_bg, redesign_text_muted,
-    redesign_text_primary,
+    ThemePalette, redesign_accent_deep, redesign_pill_danger, redesign_pill_text,
+    redesign_pill_warn,
 };
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::prompt_popup_step2::collect_step2_prompt_toolbar_entries;
@@ -105,11 +103,10 @@ use crate::ui::step2::toolbar_actions_step2;
 use crate::ui::step2::toolbar_compat_step2::{
     active_tab_compat_summary, first_active_tab_issue_target,
 };
+use crate::ui::workspace::widgets::game_tab::game_tab;
 
-/// Tab height — wireframe `GameTab` reaches the pane below (padding
-/// `5px 14px 8px 14px`); the action sub-row is `height: 30`.
-const TAB_H: f32 = 30.0;
-/// Gap between GameTabs (wireframe outer row `gap: 4`).
+/// Gap between GameTabs (wireframe outer row `gap: 4`). The tab geometry
+/// itself (height, padding) lives in the shared `widgets::game_tab` widget.
 const TAB_GAP: f32 = 4.0;
 /// Gap between action-row items (wireframe inner row `gap: 8`).
 const ITEM_GAP: f32 = 8.0;
@@ -506,109 +503,13 @@ fn details_label(open: bool) -> &'static str {
     }
 }
 
-/// A wireframe `GameTab` (`screens.jsx:1609-1637`; same shape as the
-/// Settings `tab_strip`, `screens.jsx:485-503`): a **tab**, not a closed
-/// button box. The box is drawn with **egui's native per-corner rounding**
-/// — a single rounded-top `RectShape` (`CornerRadius { nw:R, ne:R, sw:0,
-/// se:0 }`) for both the fill and the 1.5px border, so the two top corners
-/// are correct by construction (no hand-rolled arcs). The box extends 1.5px
-/// past its bottom into the seam above the tree pane (the wireframe
-/// `marginBottom: -1.5px`). The bottom border follows the wireframe
-/// `borderBottom: active ? shell-bg : border-strong`: for the **active**
-/// tab the bottom edge is over-painted in shell-bg so — together with the
-/// shell-bg fill overlap — it masks the tree pane's top border and the tab
-/// "flows into" the pane (`screens.jsx:1613-1616`); for an **idle** tab the
-/// border-strong bottom coincides with the pane's own top border (a single
-/// line, no double rule). Active = primary text, idle = muted text.
-fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut String) {
-    let active = current == label;
-    let font = egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into()));
-    let galley = ui.painter().layout_no_wrap(
-        label.to_string(),
-        font.clone(),
-        redesign_text_primary(palette),
-    );
-    // Wireframe `padding: 5px 14px` horizontal.
-    let tab_w = galley.size().x + 14.0 * 2.0;
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(tab_w, TAB_H), egui::Sense::click());
-    // Rounded TOP corners only (the wireframe `borderRadius: "4px 4px 0 0"`).
-    let corner = egui::CornerRadius {
-        nw: REDESIGN_BORDER_RADIUS_PX as u8,
-        ne: REDESIGN_BORDER_RADIUS_PX as u8,
-        sw: 0,
-        se: 0,
-    };
-    if ui.is_rect_visible(rect) {
-        let painter = ui.painter();
-        let fill = if active {
-            redesign_shell_bg(palette)
-        } else {
-            redesign_chrome_bg(palette)
-        };
-        // The tab box extends 1.5px past its bottom edge into the seam above
-        // the tree pane — the wireframe `GameTab` `marginBottom: -1.5px`
-        // (`screens.jsx:1630`). For the ACTIVE tab the shell-bg fill (and
-        // the shell-bg bottom border, below) overlaps & masks the pane's
-        // top border so the tab "flows into" the pane
-        // (`screens.jsx:1613-1616`). For an IDLE tab the box's bottom edge
-        // lands exactly on the pane's own top border, so the (border-strong)
-        // bottom border coincides with the pane border — a single line, no
-        // double rule.
-        let box_rect = egui::Rect::from_min_max(
-            rect.min,
-            egui::pos2(rect.max.x, rect.max.y + REDESIGN_BORDER_WIDTH_PX),
-        );
-        // Native per-corner rounding: rounded TOP only (`4px 4px 0 0`,
-        // wireframe `borderRadius`). `corner` already encodes `sw:0 se:0`,
-        // so egui rounds the two top corners by construction — no
-        // hand-rolled arcs (the #1 defect: the old `paint_corner_arc` used
-        // the wrong arc orientation and the manual edge strokes left a
-        // visible bottom segment).
-        painter.rect_filled(box_rect, corner, fill);
-        if !active && response.hovered() {
-            painter.rect_filled(box_rect, corner, redesign_hover_overlay(palette));
-        }
-        // Stroke the box natively (one `RectShape`, all four sides) with the
-        // correct rounded-top corners — the wireframe `border: 1.5px solid
-        // border-strong`. `StrokeKind::Inside` keeps the 1.5px line within
-        // `box_rect`.
-        let stroke = egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-        painter.rect_stroke(box_rect, corner, stroke, egui::StrokeKind::Inside);
-        if active {
-            // Wireframe `borderBottom: active ? shell-bg : border-strong`
-            // (`screens.jsx:1625`): the ACTIVE tab's bottom border is
-            // shell-bg, so over-paint just the bottom edge with the shell-bg
-            // fill. Combined with the 1.5px fill overlap this fully masks
-            // the pane's top border in the tab's x-range — the tab merges
-            // into the pane (no boxed-button bottom line). The IDLE tab
-            // keeps the border-strong bottom drawn above (it coincides with
-            // the pane's top border = one line).
-            let half = REDESIGN_BORDER_WIDTH_PX / 2.0;
-            painter.line_segment(
-                [
-                    egui::pos2(box_rect.left(), box_rect.bottom() - half),
-                    egui::pos2(box_rect.right(), box_rect.bottom() - half),
-                ],
-                egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, fill),
-            );
-        }
-        let text_color = if active {
-            redesign_text_primary(palette)
-        } else {
-            redesign_text_muted(palette)
-        };
-        painter.text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            label,
-            font,
-            text_color,
-        );
-    }
-    if response.clicked() {
-        *current = label.to_string();
-    }
-}
+// The Step-2 GameTab is the ONE shared
+// `crate::ui::workspace::widgets::game_tab::game_tab` widget (imported
+// above; called at the GameTabs row). No per-step duplicate painter, and it
+// has **no bottom bar in any state** — the prior all-four-sides stroke +
+// active-bottom-overpaint / idle-coincides-with-pane scheme (the source of
+// the reported bottom bar under idle tabs) is gone. Step 2 / 3 / 4 now
+// render this one widget identically.
 
 /// A clickable wireframe `Pill` (`screens.jsx:759-788` with `onClick`):
 /// rounded chip, tinted fill, fixed dark `pill_text`, `cursor: pointer`.

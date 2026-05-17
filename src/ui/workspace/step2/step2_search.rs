@@ -69,6 +69,14 @@ use crate::ui::workspace::step2::step2_dev_scan;
 const SEARCH_INPUT_H: f32 = 30.0;
 /// Gap between row items (wireframe search row `gap: 10`).
 const ROW_GAP: f32 = 10.0;
+/// The search input's **own internal text padding** — keeps the
+/// placeholder/text off the box border. This is the input's chrome, NOT the
+/// workspace content edge: the search *box* left-aligns at the structural
+/// content edge (`WORKSPACE_CONTENT_TEXT_INSET`, same as the progress bar /
+/// pane / title / hint); the text just sits this far *inside* that box, the
+/// way any bordered input does. Decoupled on purpose so aligning the
+/// content column never re-glues the search text to its border.
+const SEARCH_INPUT_TEXT_PAD: i8 = 8;
 
 /// Tooltip on the **disabled** production Rescan button (the #2 fix). States
 /// the §13.12a Phase-7 deferral plainly and points the developer at the dev
@@ -122,6 +130,14 @@ pub fn render(
                     .hint_text("Search mods or components...")
                     .text_color(redesign_text_primary(palette))
                     .background_color(redesign_input_bg(palette))
+                    // The input's own internal text padding
+                    // (`SEARCH_INPUT_TEXT_PAD`) — text sits this far inside
+                    // the box so it isn't glued to the border. The *box*
+                    // itself left-aligns at the structural content edge
+                    // (same as the progress bar / pane / title / hint);
+                    // this padding is the input's chrome, not that edge.
+                    // Vertical 4px keeps the text off the top/bottom border.
+                    .margin(egui::Margin::symmetric(SEARCH_INPUT_TEXT_PAD, 4))
                     .font(egui::FontId::new(
                         14.0,
                         egui::FontFamily::Name("poppins_medium".into()),

@@ -106,8 +106,8 @@ use eframe::egui;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_faint, redesign_text_primary,
-    redesign_warning_soft,
+    REDESIGN_BORDER_WIDTH_PX, WORKSPACE_CONTENT_TEXT_INSET, redesign_border_strong,
+    redesign_text_faint, redesign_text_primary, redesign_warning_soft,
 };
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::step2::{step2_log_confirm, step2_search, step2_tab_row};
@@ -201,7 +201,22 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     //    NO sub-hint follows (the #6 fix — the shell already renders the
     //    per-step hint under the progress bar; the wireframe `SourcesPanel`
     //    has only this title).
-    ui.scope_builder(egui::UiBuilder::new().max_rect(title_rect), |ui| {
+    //
+    //    The title is bare text and sits flush on the **structural content
+    //    edge** = `WORKSPACE_CONTENT_TEXT_INSET` (0 = `X_shell`), the SAME
+    //    left edge as the progress bar, the component pane, and the search
+    //    *box* — one clean vertical line in the rendered app (2026-05-17
+    //    user directive: align to the progress-bar / pane edge; wireframe
+    //    governs the look, this px is empirical). It does NOT chase the
+    //    search input's *inner* text — that text is padded inside its own
+    //    box by `step2_search::SEARCH_INPUT_TEXT_PAD` (input chrome); a
+    //    bordered input aligns by its box edge, which is on this same line.
+    //    One knob (`redesign_tokens`) shifts the whole title+hint column.
+    let title_text_rect = egui::Rect::from_min_max(
+        title_rect.min + egui::vec2(WORKSPACE_CONTENT_TEXT_INSET, 0.0),
+        title_rect.max,
+    );
+    ui.scope_builder(egui::UiBuilder::new().max_rect(title_text_rect), |ui| {
         ui.label(
             egui::RichText::new("Mods / Components")
                 .size(15.0)

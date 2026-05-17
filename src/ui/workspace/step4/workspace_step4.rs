@@ -55,15 +55,13 @@ use crate::app::state::{Step3ItemState, WizardState};
 use crate::app::step4_action::Step4Action;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_chrome_bg, redesign_hover_overlay, redesign_pill_danger, redesign_pill_text,
-    redesign_shell_bg, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_PX, ThemePalette, redesign_pill_danger, redesign_pill_text,
 };
 use crate::ui::workspace::step4::{step4_exact_log_viewer, step4_review_list, step4_save_row};
+use crate::ui::workspace::widgets::game_tab::game_tab;
 
-/// Tab height (wireframe `GameTab` action sub-row `height: 30`).
-const TAB_H: f32 = 30.0;
-/// Gap between GameTabs (wireframe outer row `gap: 4`).
+/// Gap between GameTabs (wireframe outer row `gap: 4`). The tab geometry
+/// itself (height, padding) lives in the shared `widgets::game_tab` widget.
 const TAB_GAP: f32 = 4.0;
 /// The tab row overlaps the body Box's top edge by 1.5px so the active
 /// tab's shell-bg fill masks the box's top border (wireframe `GameTab`
@@ -173,85 +171,12 @@ fn render_game_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active: &mut 
     });
 }
 
-/// A wireframe `GameTab` (`screens.jsx:1609-1637`) — a tab (not a closed
-/// button), rounded-top corners only, extending 1.5px past its bottom into
-/// the seam above the body Box. Active = shell-bg fill + primary text + a
-/// shell-bg bottom edge that masks the body Box's top border so the tab
-/// "flows into" the box; idle = chrome-bg fill + muted text + border-strong
-/// bottom. Same chassis the sibling `step2_tab_row::game_tab` paints (the
-/// established redesign rendering of this shared wireframe component).
-fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut String) {
-    let active = current == label;
-    let font = egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into()));
-    let galley = ui.painter().layout_no_wrap(
-        label.to_string(),
-        font.clone(),
-        redesign_text_primary(palette),
-    );
-    // Wireframe `padding: 5px 14px` horizontal.
-    let tab_w = galley.size().x + 14.0 * 2.0;
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(tab_w, TAB_H), egui::Sense::click());
-    // Rounded TOP corners only (wireframe `borderRadius: "4px 4px 0 0"`).
-    let corner = egui::CornerRadius {
-        nw: REDESIGN_BORDER_RADIUS_PX as u8,
-        ne: REDESIGN_BORDER_RADIUS_PX as u8,
-        sw: 0,
-        se: 0,
-    };
-    if ui.is_rect_visible(rect) {
-        let painter = ui.painter();
-        let fill = if active {
-            redesign_shell_bg(palette)
-        } else {
-            redesign_chrome_bg(palette)
-        };
-        // The tab box extends 1.5px past its bottom into the seam above the
-        // body Box (wireframe `marginBottom: -1.5px`). For the ACTIVE tab
-        // the shell-bg fill + shell-bg bottom edge (below) overlap & mask
-        // the box's top border. For an IDLE tab the box's bottom edge lands
-        // on the body Box's own top border (single line, no double rule).
-        let box_rect = egui::Rect::from_min_max(
-            rect.min,
-            egui::pos2(rect.max.x, rect.max.y + REDESIGN_BORDER_WIDTH_PX),
-        );
-        painter.rect_filled(box_rect, corner, fill);
-        if !active && response.hovered() {
-            painter.rect_filled(box_rect, corner, redesign_hover_overlay(palette));
-        }
-        let stroke = egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-        painter.rect_stroke(box_rect, corner, stroke, egui::StrokeKind::Inside);
-        if active {
-            // Wireframe `borderBottom: active ? shell-bg : border-strong`
-            // (`screens.jsx:1625`): over-paint the bottom edge in shell-bg
-            // so — with the 1.5px fill overlap — it fully masks the body
-            // Box's top border in the tab's x-range; the tab merges into
-            // the box.
-            let half = REDESIGN_BORDER_WIDTH_PX / 2.0;
-            painter.line_segment(
-                [
-                    egui::pos2(box_rect.left(), box_rect.bottom() - half),
-                    egui::pos2(box_rect.right(), box_rect.bottom() - half),
-                ],
-                egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, fill),
-            );
-        }
-        let text_color = if active {
-            redesign_text_primary(palette)
-        } else {
-            redesign_text_muted(palette)
-        };
-        painter.text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            label,
-            font,
-            text_color,
-        );
-    }
-    if response.clicked() {
-        *current = label.to_string();
-    }
-}
+// The Step-4 GameTab is the ONE shared
+// `crate::ui::workspace::widgets::game_tab::game_tab` widget (imported
+// above; called by `render_game_tab_strip`). No per-step duplicate painter,
+// and **no bottom bar in any state** — the former all-four-sides stroke +
+// active-bottom-overpaint scheme is gone. Step 2 / 3 / 4 render this one
+// widget identically (the uniform tab solution).
 
 /// Inline, non-blocking save-error notice. After a `SaveWeiduLog` dispatch,
 /// `auto_save_step4_weidu_logs` writes `Save weidu.log failed: …` into

@@ -335,6 +335,25 @@ pub const REDESIGN_PAGE_PADDING_X_PX: f32 = 28.0;
 /// Vertical page padding inside the body content area.
 pub const REDESIGN_PAGE_PADDING_Y_PX: f32 = 24.0;
 
+/// **Workspace content LEFT EDGE — single source of truth.** The progress
+/// bar, the component pane, and the Step-2 search **box** all left-align at
+/// the workspace content edge (`X_shell + 0` in the rendered app — verified:
+/// `workspace_progress_bar` `allocate_exact_size` at the cursor,
+/// `workspace_step2` `content_rect`/`search_rect` at `root.left()`). The
+/// Step-2 panel title (`workspace_step2` "Mods / Components") and the
+/// per-step hint line (`workspace_hint_line`) inset their **bare text** by
+/// THIS value so they sit flush on that same edge — one clean vertical line
+/// with the progress bar / pane / search-box borders. It is the structural
+/// content edge, NOT the search input's inner text padding: the search box
+/// aligns here, but its placeholder/text is separately padded inside the
+/// box by `step2_search::SEARCH_INPUT_TEXT_PAD` (the input's own chrome, so
+/// text isn't glued to its border) — a bordered input aligns by its box
+/// edge, not its inner text. `0.0` = flush with the structural edge (the
+/// 2026-05-17 user directive: align to the progress-bar / pane edge; the
+/// wireframe governs the look, this px is empirical). One knob — bump it to
+/// shift the whole title+hint column together; keep it an integer.
+pub const WORKSPACE_CONTENT_TEXT_INSET: f32 = 0.0;
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

@@ -553,57 +553,65 @@ fn pencil_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response {
         redesign_text_muted(palette)
     };
     if ui.is_rect_visible(rect) {
-        paint_pencil_glyph(ui.painter(), rect.center(), ink, color);
+        // Optical-center against the adjacent 13px label: a text label's
+        // visual midpoint sits above its layout-rect centre (ascent/descent
+        // asymmetry), so a box-centred glyph reads ~2px low next to it.
+        let optical_rise = egui::vec2(0.0, 2.0);
+        paint_pencil_glyph(ui.painter(), rect.center() - optical_rise, ink, color);
     }
     response.on_hover_text("Rename modlist")
 }
 
-/// Paint `✎` (pencil) as a recognisable vector glyph: a triangular writing
-/// nib at the lower-left, a rectangular body, a ferrule band, and an eraser
-/// cap at the upper-right — drawn along the lower-left → upper-right diagonal.
-/// Sized to fit an `ink`-px box centered on `center`. Same vector-glyph
-/// convention as `destination_not_empty.rs::paint_warning_triangle` /
+/// Paint `✎` (pencil) as a crisp **filled** vector glyph: a triangular
+/// writing nib at the lower-left, a solid rectangular body, and a thin
+/// ferrule band — along the lower-left → upper-right diagonal, sized to an
+/// `ink`-px box centred on `center`. Same vector-glyph convention as
+/// `destination_not_empty.rs::paint_warning_triangle` /
 /// `fork_info_popup.rs::paint_fork_glyph` (each widget paints its own).
 ///
-/// The previous implementation offset the body **parallel** to the pencil
-/// axis (`perp(vec2(2.4,2.4))` is collinear with the `(+1,-1)` axis), so the
-/// two "parallel edges" collapsed onto one line and the glyph rendered as a
-/// bare slash. This version derives the body width from a true unit
-/// perpendicular of the axis, so the pencil has visible thickness.
+/// Filled, not stroked outlines: at a ~13px box the previous thin
+/// `closed_line` polygons read as a chunky/blocky outline (the reported
+/// defect). Solid convex fills give a clean pencil silhouette at that size.
+/// Body width still derives from a true unit perpendicular of the axis (the
+/// earlier slash-collapse fix) so the body has real thickness.
 fn paint_pencil_glyph(painter: &egui::Painter, center: egui::Pos2, ink: f32, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.4, color);
     let h = ink / 2.0;
     // Pencil axis runs lower-left (nib) → upper-right (eraser) at ~45°.
     let tip = egui::pos2(center.x - h, center.y + h); // writing point
     let cap = egui::pos2(center.x + h, center.y - h); // eraser end
     let axis = normalize(cap - tip); // unit vector tip → cap
     let nrm = egui::vec2(-axis.y, axis.x); // true unit perpendicular
-    let w = ink * 0.18; // half-width of the pencil body
+    let w = ink * 0.16; // half-width of the pencil body
 
     // Pull the body back from the very tip so a triangular nib is visible.
-    let nib_len = ink * 0.26;
+    let nib_len = ink * 0.30;
     let body_start = tip + axis * nib_len;
     // Eraser cap sits a touch in from the box corner.
     let cap_end = cap - axis * (ink * 0.06);
 
-    // Triangular nib: the writing point + the two body-edge corners.
-    painter.add(egui::Shape::closed_line(
+    // Triangular nib (filled): writing point + the two body-edge corners.
+    painter.add(egui::Shape::convex_polygon(
         vec![tip, body_start + nrm * w, body_start - nrm * w],
-        stroke,
+        color,
+        egui::Stroke::NONE,
     ));
-    // Rectangular body (nib end → eraser end), as a closed quad.
-    painter.add(egui::Shape::closed_line(
+    // Rectangular body (filled quad), nib end → eraser end.
+    painter.add(egui::Shape::convex_polygon(
         vec![
             body_start + nrm * w,
             cap_end + nrm * w,
             cap_end - nrm * w,
             body_start - nrm * w,
         ],
-        stroke,
+        color,
+        egui::Stroke::NONE,
     ));
-    // Ferrule band: a short cross-line between the body and the eraser.
+    // Ferrule band: a thin cross-line between the body and the eraser.
     let ferrule = cap_end - axis * (ink * 0.22);
-    painter.line_segment([ferrule + nrm * w, ferrule - nrm * w], stroke);
+    painter.line_segment(
+        [ferrule + nrm * w, ferrule - nrm * w],
+        egui::Stroke::new(1.0, color),
+    );
 }
 
 /// Unit vector (safe for zero).
