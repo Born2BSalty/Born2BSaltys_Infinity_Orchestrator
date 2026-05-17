@@ -79,6 +79,22 @@ pub struct ModlistWorkspaceState {
 
     /// Last share / import code captured for this modlist.
     pub last_share_code: Option<String>,
+
+    /// **Dev-scan source folder** (Phase 6 / Run 2b — the #1 fix). When the
+    /// dev-only Step-2 scan affordance points BIO's scan at an arbitrary
+    /// folder, that folder is recorded here so a **cold resume** (save draft →
+    /// quit → relaunch) can re-point `wizard_state.step1.mods_folder` and
+    /// re-run BIO's scan (which reads its own persisted scan cache, skipping
+    /// WeiDU on a cache hit) to rebuild the scanned mod set the persisted
+    /// `order_<tab>` arrays match against.
+    ///
+    /// `None` for the production path: there is **no** dev scan; the
+    /// scannable mods folder is per-install, extracted at prep time by the
+    /// Phase-7 P7.T17 pipeline (SPEC §13.12a) — pre-Phase-7 production
+    /// legitimately has nothing here and resume legitimately finds nothing.
+    /// `#[serde(default)]` (the struct is `#[serde(default)]` already) keeps
+    /// older `workspace.json` files backward-compatible.
+    pub dev_scanned_mods_folder: Option<String>,
 }
 
 impl ModlistWorkspaceState {
@@ -91,6 +107,7 @@ impl ModlistWorkspaceState {
             && self.step3_group_collapse.is_empty()
             && self.prompt_overrides.is_empty()
             && self.last_share_code.is_none()
+            && self.dev_scanned_mods_folder.is_none()
     }
 }
 
@@ -126,5 +143,27 @@ mod tests {
         let raw = r"{}";
         let w: ModlistWorkspaceState = serde_json::from_str(raw).expect("parse");
         assert!(w.is_empty());
+    }
+
+    /// The #1-fix `dev_scanned_mods_folder` round-trips and `#[serde(default)]`
+    /// keeps older files (which lack the key) backward-compatible.
+    #[test]
+    fn dev_scanned_mods_folder_round_trips_and_defaults() {
+        // Older file without the key parses to `None` (no behavior change).
+        let legacy: ModlistWorkspaceState =
+            serde_json::from_str(r#"{"order_bgee":[]}"#).expect("parse legacy");
+        assert_eq!(legacy.dev_scanned_mods_folder, None);
+        assert!(legacy.is_empty());
+
+        let mut w = ModlistWorkspaceState::default();
+        w.dev_scanned_mods_folder = Some(r"D:\mods\test-corpus".to_string());
+        assert!(!w.is_empty(), "a recorded dev-scan folder is not 'empty'");
+        let s = serde_json::to_string(&w).expect("serialize");
+        let w2: ModlistWorkspaceState = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(
+            w2.dev_scanned_mods_folder.as_deref(),
+            Some(r"D:\mods\test-corpus")
+        );
+        assert_eq!(w, w2);
     }
 }

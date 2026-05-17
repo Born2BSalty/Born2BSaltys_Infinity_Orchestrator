@@ -51,10 +51,24 @@
 // No confirmation dialog (the reconcile is non-destructive by
 // construction — SPEC §6.3 / §6.10).
 //
-// SPEC: §6.3 (rescan reconcile + missing-mods warning), §1 (decision
-//       order: net-new sibling, BIO read-only), §13.12a (dev-scan is the
+// ## Cold-resume reuse (Phase 6 / Run 2b — the #1 fix)
+//
+// `step2_resume_scan` reuses this exact completion seam: on workspace open
+// it builds the snapshot from the **persisted order** (not an in-memory
+// selection) + sets `workspace_view.step2.resume_pending`, then dispatches
+// `StartScan`. `reconcile_on_scan_complete` re-applies that snapshot the
+// same way — and, **only** when `resume_pending` is set, additionally
+// rebuilds Step 3 via BIO's `step3_sync::build_step3_items` (the loader's
+// recipe) because a cold resume's `populate` built Step 3 on an empty
+// Step-2 set. A dev *rescan* leaves `resume_pending == false` and keeps
+// BIO's Step-3 clobber-protection (the user's reorder is preserved).
+//
+// SPEC: §6.3 (rescan reconcile + missing-mods warning), §13.1 (per-modlist
+//       workspace state — the #1 cold-resume path), §1 (decision order:
+//       net-new sibling, BIO read-only), §13.12a (dev-scan is the
 //       functional rescan path pre-Phase-7).
 
+use crate::app::controller::step3_sync;
 use crate::app::state::Step2ModState;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
@@ -146,6 +160,24 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
         max_selected_order(&orchestrator.wizard_state.step2.bg2ee_mods),
     );
     orchestrator.wizard_state.step2.next_selection_order = max_order + 1;
+
+    // (c′) **Cold-resume only** (the #1 fix): rebuild Step 3 from the
+    // re-marked Step-2 mods via BIO's canonical `step3_sync::build_step3_
+    // items` — the exact recipe `workspace_state_loader::populate` uses on
+    // workspace open. On a cold resume `populate` ran `build_step3_items`
+    // on an *empty* Step-2 set (the scan hadn't run yet), so Step 3 is
+    // empty; now that the snapshot has re-marked the freshly-scanned mods,
+    // Step 3 must be rebuilt. This is gated on `resume_pending` so a dev
+    // *rescan* (`resume_pending == false`) keeps BIO's clobber-protection —
+    // it deliberately does **not** rebuild Step 3, preserving the user's
+    // Step-3 reorder (SPEC §6.3). The Step-3 group-collapse vectors set by
+    // `populate` survive (`build_step3_items` only builds `*_items`).
+    if std::mem::take(&mut orchestrator.workspace_view.step2.resume_pending) {
+        orchestrator.wizard_state.step3.bgee_items =
+            step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bgee_mods);
+        orchestrator.wizard_state.step3.bg2ee_items =
+            step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bg2ee_mods);
+    }
 
     // (d) Drop / missing-mods accounting across both tabs.
     let mut dropped: Vec<&RescanSelection> = Vec::new();

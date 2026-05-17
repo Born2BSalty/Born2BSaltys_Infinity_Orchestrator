@@ -1496,6 +1496,7 @@ Workspace state stored per modlist:
 - Step 3 group collapse state
 - prompt-answer overrides scoped to this build (if any beyond global `prompt_answers.json`)
 - the most-recent BIO-MODLIST-V1 code (for the Home Kebab `Copy import code`)
+- the dev-scan source folder (dev-only; `None` in production — there is no per-install mods folder until the Phase-7 P7.T17 pipeline, [§13.12a](#1312a-directory-architecture-global-vs-per-install--content-addressed-archives)). It records where the dev-only Step-2 scan was pointed so a cold resume can re-point the scan and rebuild the scanned mod set the persisted order arrays match against (BIO's scan persists its own scan cache, so the resume scan is WeiDU-free when the cache is fresh).
 
 The modlist registry (`modlists.json`) for each entry stores: id, name, game, destination folder, state (`in-progress` | `installed`), creation date, last-touched date, install date (when installed), last-played date, mod count, component count, total size, and a pointer to the workspace-state file.
 

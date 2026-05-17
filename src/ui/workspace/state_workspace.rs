@@ -73,6 +73,21 @@ pub struct WorkspaceStep2State {
     /// when a completed rescan dropped at least one selected component;
     /// cleared on the next scan trigger.
     pub rescan_drop_warning: Option<String>,
+    /// **Cold-resume scan pending** (Phase 6 / Run 2b — the #1 fix). Set by
+    /// `step2_resume_scan::maybe_trigger_resume_scan` when a workspace opens
+    /// with a recorded dev-scan folder + a persisted order but an empty
+    /// scanned mod set: it re-points `step1.mods_folder`, stashes a
+    /// `rescan_snapshot` built from the **persisted order**, dispatches
+    /// `StartScan`, and sets this. On scan completion
+    /// `reconcile_on_scan_complete` re-applies the snapshot (the existing
+    /// rescan path) **and**, because this is a resume (no prior Step-3 order
+    /// to protect — `populate` rebuilt it empty), rebuilds Step 3 from the
+    /// re-marked Step-2 mods via BIO's `step3_sync::build_step3_items` (the
+    /// loader's own recipe), then clears this. Distinct from a dev *rescan*
+    /// (`rescan_snapshot` set, this `false`), which deliberately does **not**
+    /// rebuild Step 3 (it preserves the user's reorder — SPEC §6.3 / BIO's
+    /// clobber-protection).
+    pub resume_pending: bool,
     /// **Pending Select-via-WeiDU-Log destructive confirm** (SPEC §6.10 +
     /// wireframe `askWeiduImport`, `screens.jsx:2778-2784`). Select-via-Log
     /// replaces *every* component selection on the tab, so the tab-row

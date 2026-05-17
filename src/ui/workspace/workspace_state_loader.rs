@@ -274,6 +274,11 @@ pub fn extract_workspace_state_from_wizard(
         // `last_share_code` is regenerated post-install by Phase 7; carry
         // through whatever the prior file had.
         last_share_code: prior.last_share_code.clone(),
+        // The dev-scan source folder (the #1 fix) has no `WizardState`
+        // counterpart — it is set directly by the dev-scan trigger and
+        // persisted there. Carry the prior value through unchanged so an
+        // unrelated save (save-draft / debounce) never drops it.
+        dev_scanned_mods_folder: prior.dev_scanned_mods_folder.clone(),
     }
 }
 
@@ -560,6 +565,25 @@ mod tests {
 
         let extracted = extract_workspace_state_from_wizard(&ws, &workspace);
         assert_eq!(extracted.order_bgee, workspace.order_bgee);
+    }
+
+    /// The #1-fix `dev_scanned_mods_folder` has no `WizardState` counterpart;
+    /// `extract` must carry it through from `prior` unchanged so an unrelated
+    /// save (save-draft / debounce) never drops the dev-scan recording (the
+    /// same non-drop guarantee `expand_state` / `prompt_overrides` get).
+    #[test]
+    fn extract_carries_dev_scan_folder_through() {
+        let ws = WizardState::default();
+        let prior = ModlistWorkspaceState {
+            dev_scanned_mods_folder: Some(r"D:\corpus".to_string()),
+            ..Default::default()
+        };
+        let extracted = extract_workspace_state_from_wizard(&ws, &prior);
+        assert_eq!(
+            extracted.dev_scanned_mods_folder.as_deref(),
+            Some(r"D:\corpus"),
+            "extract must not drop the dev-scan folder"
+        );
     }
 
     /// Step 3 group-collapse round-trips through the prefixed flat map.

@@ -37,6 +37,7 @@ use crate::ui::orchestrator::stubs;
 use crate::ui::settings::page_settings;
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 use crate::ui::workspace::state_workspace::{ForkMeta, WorkspaceStep};
+use crate::ui::workspace::step2::step2_resume_scan;
 use crate::ui::workspace::{workspace_state_loader, workspace_view};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
@@ -181,6 +182,18 @@ fn render_workspace(
         // rule, SPEC §13.3). `mods`/`components` use the entry's cached
         // counts (the honest available denormalised figures).
         orchestrator.workspace_view.fork_meta = fork_meta_from_entry(&entry);
+
+        // Run 2b — the #1 fix: cold-resume Step-2 restore. `populate`
+        // applied the persisted `order_<tab>` onto the (empty, on a cold
+        // resume) scanned mod set, so nothing matched. If this workspace
+        // recorded a dev-scan folder + has a persisted order, re-point
+        // `step1.mods_folder` and re-run BIO's scan (which reads its own
+        // persisted scan cache — read-only — skipping WeiDU on a cache
+        // hit); the rescan-reconcile completion seam re-applies the
+        // persisted order + rebuilds Step 3 once the async scan lands.
+        // No-op in production (no dev-scan folder is ever recorded
+        // pre-Phase-7 — SPEC §13.12a) and outside dev mode.
+        step2_resume_scan::maybe_trigger_resume_scan(orchestrator, &workspace);
     }
 
     // 4. Render the workspace shell. Path sync is open-only (done once in

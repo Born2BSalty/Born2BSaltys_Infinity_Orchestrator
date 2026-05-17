@@ -48,6 +48,16 @@
 //                           `screens.jsx:2778-2784`). Owns only the
 //                           wireframe-verbatim title/body/label; the modal
 //                           itself is the shared `ConfirmDialog` Home reuses.
+//   - `step2_resume_scan` → the **cold-resume scan restore** (Phase 6 / Run
+//                           2b — the #1 fix). On workspace open, if the
+//                           workspace recorded a dev-scan folder + has a
+//                           persisted order but the scanned mod set is empty,
+//                           re-point `step1.mods_folder`, build a snapshot
+//                           from the persisted order, dispatch `StartScan`,
+//                           and let `step2_rescan_reconcile` re-apply it on
+//                           completion (reusing BIO's persisted scan cache —
+//                           read-only — so a cache hit skips WeiDU). Net-new
+//                           orchestrator glue; BIO read-only.
 //
 // SPEC: §6, §6.10, §1 (decision order; carve-out boundary), §13.12a, §2.2;
 //       wireframe `screens.jsx:2786-2880`.
@@ -55,6 +65,7 @@
 pub mod step2_dev_scan;
 pub mod step2_log_confirm;
 pub mod step2_rescan_reconcile;
+pub mod step2_resume_scan;
 pub mod step2_search;
 pub mod step2_tab_row;
 pub mod workspace_step2;
