@@ -14,10 +14,18 @@
 //     BIO's tree / details / popup sub-renderers. BIO's `page_step2` /
 //     `frame_step2` are **not** called. Any returned action →
 //     `step_action_dispatch::dispatch_step2`.
-//   - Step 3: `bio::ui::step3::page_step3::render(...)` returns `()` per H2
-//     (no `Step3Action` enum — the page handles its own intents via direct
-//     `WizardState` mutation: drag-reorder, undo/redo, block-select). The
-//     router calls it and ignores the return; no dispatch arm.
+//   - Step 3: the **C4 chrome wrapper** `bio::ui::workspace::step3::
+//     workspace_step3::render(ui, orchestrator)` (P6.T2d). Net-new redesign
+//     chrome (action-row count + shared redesign GameTabs + aggregate
+//     conflict/prompt pills + redesign Undo/Redo/Collapse/Expand, **no**
+//     Export-diagnostics, **no** BIO heading/hint) that reuses **only**
+//     BIO's drag-reorder list body (`list_step3::render`, read-only). BIO's
+//     `page_step3` / `content_step3` / `render_toolbar` are **not** called.
+//     Returns `()` per H2 (no `Step3Action` enum — the list + chrome
+//     mutate `WizardState` directly: drag-reorder, undo/redo, collapse,
+//     block-select). The router calls it and ignores the return; no
+//     dispatch arm. The dirty-bit fingerprint over `wizard_state.step3.
+//     <tab>_items` (in the persistence cycle) detects Step-3 mutations.
 //   - Step 4: the **C4 orchestrator-side renderer** `bio::ui::workspace::
 //     step4::workspace_step4::render(ui, orchestrator) -> Option<Step4Action>`
 //     (P6.T2b). Net-new redesign chrome (Save row + EET game-tab strip +
@@ -54,16 +62,20 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             }
         }
         WorkspaceStep::Step3 => {
-            let dev_mode = orchestrator.dev_mode;
-            let exe_fp = orchestrator.exe_fingerprint.clone();
-            // Per H2: Step 3 returns `()`; no action dispatch arm. The page
-            // handles its own intents via direct `WizardState` mutation.
-            crate::ui::step3::page_step3::render(
-                ui,
-                &mut orchestrator.wizard_state,
-                dev_mode,
-                &exe_fp,
-            );
+            // C4 orchestrator-side renderer (P6.T2d): net-new redesign
+            // chrome (action-row count + shared GameTabs + aggregate
+            // conflict/prompt pills + redesign Undo/Redo/Collapse/Expand)
+            // around BIO's reused drag-reorder list (`list_step3::render`,
+            // read-only). BIO's `page_step3::render` / `content_step3::
+            // render` / `render_toolbar` are intentionally NOT called (per
+            // C4 — they would reintroduce the old-BIO Step-3 top bar +
+            // heading + Export-diagnostics the wireframe replaced). Per H2:
+            // Step 3 has no action enum — `workspace_step3::render` returns
+            // `()`; no dispatch arm. The list + chrome mutate `WizardState`
+            // directly and the dirty-bit fingerprint over
+            // `wizard_state.step3.<tab>_items` picks up reorder/collapse/
+            // undo for persistence (unchanged by the C4 wrapper).
+            crate::ui::workspace::step3::workspace_step3::render(ui, orchestrator);
         }
         WorkspaceStep::Step4 => {
             // C4 orchestrator-side renderer (P6.T2b): net-new redesign

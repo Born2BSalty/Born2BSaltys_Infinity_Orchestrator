@@ -41,11 +41,29 @@
 //                                badge + `⑂ view fork details` (reused
 //                                Phase-5 `ForkInfoPopup`) + `save draft`.
 //
+// Phase 6 Step-3 C4 (P6.T2d) adds:
+//   - `step3`                  → the C4 orchestrator-side Step-3 chrome
+//                                (action-row count + shared redesign
+//                                GameTabs + aggregate conflict/prompt
+//                                pills + redesign Undo/Redo/Collapse/Expand
+//                                — **no** Export-diagnostics, **no** BIO
+//                                heading) wrapping BIO's reused
+//                                drag-reorder list (`list_step3::render`,
+//                                read-only) in an orchestrator-owned
+//                                hard-clipped rect. BIO's `page_step3` /
+//                                `content_step3` / `render_toolbar` are NOT
+//                                called (the 2026-05-17 SPEC-CONFLICT
+//                                resolution — the wireframe's Step 3 is
+//                                structurally different from BIO's and
+//                                colour-only carve-out #6 cannot
+//                                restructure `content_step3`).
+//
 // SPEC: §2.2, §6, §6.7, §7, §8, §10.9, §13.1, §13.14.
 
 pub mod state_workspace;
 pub mod step2;
 pub mod step2_log_glue;
+pub mod step3;
 pub mod step4;
 pub mod step_action_dispatch;
 pub mod widgets;
