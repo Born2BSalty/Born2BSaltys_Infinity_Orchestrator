@@ -6,7 +6,7 @@
 
 **Branch `overhaul/infinity_orchestrator` @ `28d9975`** (Fix-Run-4 code; Fix-Run-3 `0b9d53d` + doc-sync `c9a8bab` beneath it; doc-sync for Fix-Run-4 on top — see `git log`). Phase-7 prep branch `-p7` @ `da88f6d`. Option-B comms = skill doctrine.
 
-### ✅ DATA-LOSS regression FIXED by Fix-Run 3 **+ Fix-Run 4** (orchestrator-verified; awaiting the user's clean retest)
+### ✅ DATA-LOSS regression CLOSED — Fix-Run 3 + Fix-Run 4, **user-confirmed by retest** (2026-05-17)
 
 **Fix-Run 3 (`0b9d53d`) was INCOMPLETE — user testing exposed it.** It guarded the production/never-refilled path but keyed on `scanned_empty`; with a one-frame scan the cold-resume completion edge is missed, so the scanned set lands NON-empty while the order is empty → `scanned_empty=false` → Fix-Run-3 defeated → nav-away/dirty-sync persist empty. **Fix-Run 4 (`28d9975`) completes it:** Part 1 arms `was_scanning=true` at scan dispatch (shared helper, both the dev-rescan and cold-resume sites) so a one-frame completion is detected and the restore actually reconciles; Part 2 a `restore_pending` early-return in `flush_workspace_on_nav_away` + `sync_active_workspace_if_dirty` so NO save path can write while a cold-resume restore is pending. Fix-Run-3's `order_for_tab` retained for the production path. Verified independently (every diff spot-read, gate re-run): exactly 4 redesign files, BIO-guard empty, `cargo test --lib` **285/0** (278 +7 incl. the fail-before/pass-after missed-edge regression), both binaries build, **`modlists.json` + every seed `workspace.json` byte-identical across the test run**. The deselect-last/single-component edit-loss is a SEPARATE pre-existing limitation, DEFERRED (the "minimal" boundary) — test with ≥1 component kept selected, never by emptying to zero. The save-model redesign (Revert/dirty-indicator/autosave-toggle/prompts) was critiqued + deferred to a later phase.
 
@@ -14,10 +14,13 @@
 
 The `KRS5ZBMT0028` seed is good **only because the user ctrl-z-restored it in a text editor after Fix-Run-3 wiped it** — the app's save-draft did NOT durably persist it (that *is* the bug). The orchestrator backed that rescued state up outside the app's reach: `%APPDATA%\bio\workspace-KRS5ZBMT0028-GOOD-backup-20260517-233939.json` (sha `15A3092A…`, 12,602 B, both tabs). No on-disk artifact reconstructs a populated seed (`dev_seed` writes default-empty + a new id); regenerate via step-0 on the FIXED binary. "Oli's Test List" (`KRW4TGJ60080`) preserved.
 
-### Owed / open
-- **Process rule (user-flagged, now hard):** "the rebuild is your job — always rebuild before asking me to test." While a subagent is mid-flight / the tree is dirty the on-disk exe is NOT testable; the orchestrator re-runs the no-op gate **itself** as the final act and names the exact verified exe. Captured in the `feedback-auto-rebuild` memory.
-- **SKILL.md DATA-LOSS-sentinel hardening — STILL PENDING USER AUTHORIZATION** (recovery step 3; auto-blocked self-config edit; discipline lives in this file + overview until applied).
-- **Next:** orchestrator pushes Fix-Run-4 + doc-sync, runs the final no-op rebuild gate, then hands the user a retest naming the exact verified exe (step-0 reseed on the fixed binary → step-1 resume→nav-away race). Then Phase-6 visual sign-off, then Phase 7 (`-p7`).
+### Closed this round
+- **DATA-LOSS arc CLOSED** — Fix-Run 3 (`0b9d53d`) + Fix-Run 4 (`28d9975`), orchestrator-verified + **user-confirmed by retest** ("everything seems to hold up" across resume→nav-away/quit/save-draft cycles, 2026-05-17). The user's `15A3092A…` seed survived; backup retained.
+- **SKILL.md DATA-LOSS-sentinel hardening — APPLIED** (user-authorized 2026-05-17): the gotcha now reads "sentinel = `modlists.json` + every seed `modlists/<id>/workspace.json`, never `modlists.json` alone" + extends to any persistence-path audit.
+- **Process rule (user-flagged, now hard, in the `feedback-auto-rebuild` memory):** "the rebuild is your job — always rebuild before asking me to test." Subagent mid-flight / dirty tree ⇒ exe not testable; the orchestrator re-runs the no-op gate **itself** as the final act and names the exact verified exe.
+
+### Next
+Phase-6 visual sign-off is now **unblocked** (the seed-resume-dependent `PENDING_VERIFICATION.md` items were gated on this fix). Then Phase 7 (prep on `-p7` @ `da88f6d`). The deselect-last/single-component edit-loss + the save-model UX redesign remain DEFERRED (separate, recorded). Awaiting the user's cadence on which to take next.
 
 ### Phase-6 user-feedback round status (mostly closed, gated by the data-loss item)
 
