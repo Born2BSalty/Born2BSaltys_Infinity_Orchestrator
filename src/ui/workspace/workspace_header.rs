@@ -444,6 +444,13 @@ fn save_draft(orchestrator: &mut OrchestratorApp) {
     // default if not yet loaded). `extract` carries `prior`'s egui-side
     // fields (Step-2 expand map, prompt overrides, last_share_code) through
     // unchanged so an immediate save doesn't drop them.
+    // Fix-Run 1 (Bug A) — sync the live Step-2 selection into Step 3 before
+    // extracting (save-draft is a write path: SPEC §13.14). A Step-2
+    // checkbox toggled then `save draft` clicked — without first advancing
+    // to Step 3 — would otherwise persist the stale pre-toggle Step-3
+    // order. BIO-faithful + no-op when only Step 3 was reordered.
+    workspace_state_loader::sync_step3_from_step2_if_changed(&mut orchestrator.wizard_state);
+
     let prior = orchestrator
         .workspace_state
         .get(&id)

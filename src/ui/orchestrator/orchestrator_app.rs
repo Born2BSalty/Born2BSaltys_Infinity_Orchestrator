@@ -512,6 +512,17 @@ impl OrchestratorApp {
         // One dirty-gated extract performed → record it (H1 observability).
         self.persistence_cycle.note_workspace_extract();
 
+        // Fix-Run 1 (Bug A) — sync the live Step-2 selection into Step 3
+        // before extracting. The Step-2 checkbox path now marks the
+        // workspace dirty (so this debounced write fires), but the toggle
+        // only mutated `step2.<tab>_mods`; `extract` reads `step3.<tab>_
+        // items`. This BIO-faithful sync (no-op when only Step 3 was
+        // reordered — preserves the user's drag order) makes the debounced
+        // write capture the toggle.
+        crate::ui::workspace::workspace_state_loader::sync_step3_from_step2_if_changed(
+            &mut self.wizard_state,
+        );
+
         let prior = self.workspace_state.get(&id).cloned().unwrap_or_default();
         let extracted =
             crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(

@@ -118,6 +118,14 @@ fn record_dev_scan_folder(orchestrator: &mut OrchestratorApp, folder: &str) {
     // default if not yet loaded). `extract` carries `prior`'s egui-side
     // fields (Step-2 expand map, prompt overrides, last_share_code, and the
     // dev-scan folder itself) through unchanged.
+    // Fix-Run 1 (Bug A) — consistency with the other extract write paths:
+    // sync the live Step-2 selection into Step 3 before extracting so the
+    // `dev_scanned_mods_folder`-recording write doesn't snapshot a stale
+    // Step-3 order alongside the folder. BIO-faithful + no-op when only
+    // Step 3 was reordered (at scan-trigger time the selection is usually
+    // already synced, so this is typically a no-op anyway).
+    workspace_state_loader::sync_step3_from_step2_if_changed(&mut orchestrator.wizard_state);
+
     let prior = orchestrator
         .workspace_state
         .get(&id)

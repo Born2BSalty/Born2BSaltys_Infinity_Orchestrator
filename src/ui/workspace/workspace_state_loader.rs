@@ -99,12 +99,34 @@ pub fn populate_wizard_state_from_workspace(
     //    `wizard_state.step1` directly, so no per-frame sync is needed.
     sync_paths_from_settings(settings_store, wizard_state);
 
-    // 3. Step 2 selection reconstruction. Mark each persisted ComponentRef's
+    // 3. **Reset the in-memory scanned Step-2/3 set on every modlist
+    //    load/swap (Fix-Run 1, Bug B).** The orchestrator owns ONE shared
+    //    `WizardState`; a modlist swap must NOT inherit the previous
+    //    modlist's scanned mod vectors. `apply_order_to_mods` (below) only
+    //    re-marks `checked`/`selected_order` on whatever mods are *already
+    //    in memory* — so without this reset a **fresh** modlist (no scan
+    //    yet) would show the previously-open modlist's scanned mods, and a
+    //    **draft** swap's own re-scan would be blocked because
+    //    `step2_resume_scan::maybe_trigger_resume_scan` is gated on
+    //    "Step-2 set empty + no scan in flight" (`step2_resume_scan.rs`):
+    //    a stale non-empty set keeps it from re-firing. Clearing the
+    //    scanned set + its transients here makes a fresh modlist start
+    //    empty (its own scan runs when the user scans) and re-arms the
+    //    cold-resume gate so a draft restores its OWN scan + selections on
+    //    an A→B→A swap. Step 3 is rebuilt from the now-empty set just below
+    //    (and a second time by the resume-scan reconcile once a draft's
+    //    re-scan lands — the existing cold-resume path). SPEC §13.1
+    //    ("per-modlist … replaces single-workspace in-memory state").
+    reset_scanned_step2_set(wizard_state);
+
+    // 3b. Step 2 selection reconstruction. Mark each persisted ComponentRef's
     //    scanned component `checked` + `selected_order`; then re-derive the
-    //    per-mod tri-state. Components not present in the scan (mods not yet
-    //    downloaded — fork / fresh modlist before Phase 7 P7.T17 binds the
-    //    live pipeline) are simply not matched; the order list rebuilds from
-    //    whatever IS present, which is correct.
+    //    per-mod tri-state. After the reset above the scanned set is empty on
+    //    a cold resume / fresh modlist (nothing matches — correct: the
+    //    cold-resume re-scan in `step2_resume_scan` rebuilds the set and
+    //    re-applies the order via the reconcile seam). When the set IS
+    //    populated (the resume-scan completion seam already calls this
+    //    recipe) the persisted order marks onto it.
     apply_order_to_mods(&workspace.order_bgee, &mut wizard_state.step2.bgee_mods);
     apply_order_to_mods(&workspace.order_bg2ee, &mut wizard_state.step2.bg2ee_mods);
     // IWDEE: BIO routes IWDEE installs through the BGEE mod set / tab (single
@@ -148,6 +170,40 @@ pub fn populate_wizard_state_from_workspace(
     // 6. Step 5 reset — install state is per-active-install, gated by
     //    Phase 7's install concurrency policy, never per-workspace-load.
     wizard_state.step5 = crate::app::state::Step5State::default();
+}
+
+/// **Reset the in-memory scanned Step-2/3 set + its transients** (Fix-Run 1,
+/// Bug B). Called by `populate_wizard_state_from_workspace` on every modlist
+/// load/swap, *before* the persisted order is applied, so the orchestrator's
+/// single shared `WizardState` never carries one modlist's scanned mods into
+/// another's workspace.
+///
+/// Clears:
+///   - the scanned mod vectors (`step2.{bgee,bg2ee}_mods`) — the leak itself;
+///   - the derived Step-3 ordered item lists (`step3.{bgee,bg2ee}_items`) —
+///     they are a projection of the Step-2 set and would otherwise show the
+///     prior modlist's order until the next sync;
+///   - the per-tab Step-2 scan/selection transients (`selected`,
+///     `next_selection_order`, `selected_count`, `scan_status`,
+///     `last_scan_report`, `is_scanning`) so the cold-resume gate
+///     (`step2_resume_scan::maybe_trigger_resume_scan`, which requires an
+///     **empty** Step-2 set + **no scan in flight**) re-arms for the
+///     swapped-in modlist's own re-scan.
+///
+/// Step-3 group-collapse / undo-redo / selection transients are reset
+/// separately by `populate` itself (sections 5–6) — this helper owns only
+/// the *scanned-set* reset so the two concerns stay legible.
+fn reset_scanned_step2_set(wizard_state: &mut WizardState) {
+    wizard_state.step2.bgee_mods.clear();
+    wizard_state.step2.bg2ee_mods.clear();
+    wizard_state.step3.bgee_items.clear();
+    wizard_state.step3.bg2ee_items.clear();
+    wizard_state.step2.selected = None;
+    wizard_state.step2.next_selection_order = 1;
+    wizard_state.step2.selected_count = 0;
+    wizard_state.step2.scan_status.clear();
+    wizard_state.step2.last_scan_report = None;
+    wizard_state.step2.is_scanning = false;
 }
 
 /// Mark each `order` `ComponentRef` onto its matching scanned component:
@@ -212,6 +268,72 @@ fn collapsed_blocks_for_tab(workspace: &ModlistWorkspaceState, tab: &str) -> Vec
         .collect();
     out.sort();
     out
+}
+
+// ---------------------------------------------------------------------------
+// pre-extract Step-2 → Step-3 sync (Fix-Run 1, Bug A)
+// ---------------------------------------------------------------------------
+
+/// **Make the live Step-2 selection visible to `extract` (Fix-Run 1, Bug A).**
+///
+/// `extract_workspace_state_from_wizard` derives the persisted order
+/// **exclusively** from `wizard_state.step3.{bgee,bg2ee}_items` (via
+/// `order_from_items`). BIO's reused Step-2 component-tree checkbox
+/// (`bio::ui::step2::tree::tree_component_row_step2`) mutates only
+/// `wizard_state.step2.<tab>_mods[].components[].checked` /
+/// `.selected_order` — it emits **no `Step2Action`** and does **not** touch
+/// Step 3. BIO propagates a Step-2 selection into Step 3 only on the
+/// **Next-from-Step-2** nav edge (`sync_step3_from_step2`, gated by
+/// `bio::app::app_nav::decide_next_action`'s selection-change signature).
+/// So a user who toggles a Step-2 checkbox and then navigates **Home**
+/// (or save-draft / the debounced write) without first advancing to Step 3
+/// leaves Step 3 holding the *pre-toggle* order — and `extract` persists
+/// that stale order, silently dropping the edit (the reported round-trip
+/// bug). Every write path therefore calls this **immediately before**
+/// `extract_workspace_state_from_wizard` so the persisted order reflects
+/// the current Step-2 selection.
+///
+/// **BIO-faithful + Step-3-reorder-safe.** This replicates *exactly* the
+/// shipped, reviewed `workspace_view::sync_step3_from_step2_on_nav_edge`
+/// pattern: it asks BIO's own `pub(crate)` `decide_next_action` (a pure
+/// `&WizardState` read; `current_step` is briefly set to BIO's Step-2 index
+/// `1` so it evaluates the Step-2 branch, then restored) for the action,
+/// and runs BIO's own `pub(crate)` `sync_step3_from_step2` +
+/// `set_last_step2_sync_signature` **only** when it returns
+/// `SyncStep3AndAdvance` (i.e. the Step-2 selection changed since the last
+/// sync, or Step 3 has no real items). When the user only reordered in
+/// Step 3 and the Step-2 selection is unchanged, `decide_next_action`
+/// returns a non-sync variant ⇒ this is a **no-op** and the user's Step-3
+/// drag order is preserved (BIO's own clobber-protection — the `9b5b9d5`
+/// concern; never re-introduced here). Zero BIO edits; zero logic copied
+/// (the change-detection signature is BIO's own, carried in the enum
+/// payload).
+///
+/// Known narrow limitation (documented, out of this focused run's scope):
+/// `decide_next_action` first checks `can_advance_from_current_step`, which
+/// at Step 2 requires a non-empty selection — so if the user de-selects
+/// **every** component then navigates away, the sync does not run and the
+/// last non-empty order persists. That edge pre-exists identically in the
+/// shipped Next-from-Step-2 path; closing it would need either a BIO edit
+/// to expose `step2_selection_signature` (a PLAN GAP) or net-new signature
+/// logic that risks drift — neither is in scope for this round-trip fix.
+pub fn sync_step3_from_step2_if_changed(wizard_state: &mut WizardState) {
+    use crate::app::app_nav::{NextAction, decide_next_action};
+    use crate::app::app_step3_sync_flow::sync_step3_from_step2;
+
+    // Present "we are on Step 2" to BIO's pure decision fn (BIO's Step-2
+    // index is 1), then restore — `decide_next_action` does not mutate.
+    let saved_step = wizard_state.current_step;
+    wizard_state.current_step = 1;
+    let action = decide_next_action(wizard_state);
+    wizard_state.current_step = saved_step;
+
+    // Replicate ONLY `advance_after_next`'s `SyncStep3AndAdvance` arm
+    // (`app_nav_actions.rs:137-140`) — BIO's own sync + signature write.
+    if let NextAction::SyncStep3AndAdvance { signature } = action {
+        sync_step3_from_step2(wizard_state);
+        wizard_state.set_last_step2_sync_signature(signature);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -459,19 +581,6 @@ mod tests {
     #[test]
     fn populate_reconstructs_step2_and_step3_from_order() {
         let mut ws = WizardState::default();
-        // Two scanned mods, three components total, none checked yet.
-        ws.step2.bgee_mods = vec![
-            mod_state(
-                "EEFixPack",
-                "EEFIXPACK/EEFIXPACK.TP2",
-                vec![comp("0", "Core Fixes"), comp("2", "Game Text Update")],
-            ),
-            mod_state(
-                "BG1UB",
-                "BG1UB/SETUP-BG1UB.TP2",
-                vec![comp("0", "Restored")],
-            ),
-        ];
 
         // Persisted order: BG1UB #0 first, then EEFixPack #2 (deliberately
         // not the scan order, to prove order is honored).
@@ -496,7 +605,40 @@ mod tests {
             &mut ws,
         );
 
-        // game_install set.
+        // Fix-Run 1 (Bug B): populate RESETS the scanned set, so right
+        // after populate the set is empty (the cold-resume re-scan
+        // repopulates it in the live flow — modelled next).
+        assert!(
+            ws.step2.bgee_mods.is_empty(),
+            "Bug B: populate resets the scanned set (re-scan repopulates)"
+        );
+
+        // The cold-resume scan lands the scanned mods (BIO's cache-fed
+        // scan; supplied directly), then the reconcile/populate recipe
+        // re-applies the persisted order — exactly what
+        // `step2_rescan_reconcile`'s `resume_pending` branch does on the
+        // scan-completion edge in the live flow.
+        ws.step2.bgee_mods = vec![
+            mod_state(
+                "EEFixPack",
+                "EEFIXPACK/EEFIXPACK.TP2",
+                vec![comp("0", "Core Fixes"), comp("2", "Game Text Update")],
+            ),
+            mod_state(
+                "BG1UB",
+                "BG1UB/SETUP-BG1UB.TP2",
+                vec![comp("0", "Restored")],
+            ),
+        ];
+        apply_order_to_mods(&workspace.order_bgee, &mut ws.step2.bgee_mods);
+        recompute_mod_checked(&mut ws.step2.bgee_mods);
+        let max_order =
+            max_selected_order(&ws.step2.bgee_mods).max(max_selected_order(&ws.step2.bg2ee_mods));
+        ws.step2.next_selection_order = max_order + 1;
+        ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
+
+        // game_install set (by populate, before the reset — it's Step-1
+        // state, untouched by the Step-2 reset).
         assert_eq!(ws.step1.game_install, "BGEE");
 
         // Step 2: exactly the two ordered components are checked with the
@@ -538,11 +680,6 @@ mod tests {
     #[test]
     fn extract_is_inverse_of_populate_for_order() {
         let mut ws = WizardState::default();
-        ws.step2.bgee_mods = vec![mod_state(
-            "EEFixPack",
-            "EEFIXPACK/EEFIXPACK.TP2",
-            vec![comp("0", "Core"), comp("2", "GTU")],
-        )];
         let mut workspace = ModlistWorkspaceState::default();
         workspace.order_bgee = vec![
             ComponentRef {
@@ -562,6 +699,17 @@ mod tests {
             &SettingsStore::new_default(),
             &mut ws,
         );
+        // Fix-Run 1 (Bug B): populate resets the set; model the cold-resume
+        // scan landing + the populate/reconcile recipe re-applying the
+        // persisted order (the live flow) before the inverse extract.
+        ws.step2.bgee_mods = vec![mod_state(
+            "EEFixPack",
+            "EEFIXPACK/EEFIXPACK.TP2",
+            vec![comp("0", "Core"), comp("2", "GTU")],
+        )];
+        apply_order_to_mods(&workspace.order_bgee, &mut ws.step2.bgee_mods);
+        recompute_mod_checked(&mut ws.step2.bgee_mods);
+        ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
 
         let extracted = extract_workspace_state_from_wizard(&ws, &workspace);
         assert_eq!(extracted.order_bgee, workspace.order_bgee);
@@ -630,9 +778,11 @@ mod tests {
         );
     }
 
-    /// A modlist swap must not bleed checks across modlists: re-populating
-    /// with a different (empty) order clears the previously-checked
-    /// components.
+    /// A modlist swap must not bleed across modlists. **Fix-Run 1 (Bug B):**
+    /// the swapped-in modlist's scanned Step-2 set is now **fully reset**
+    /// (not merely unchecked-in-place) — a fresh modlist starts with NO
+    /// scanned mods until its own scan runs (the cold-resume re-scan path
+    /// for a draft, or a user scan for a from-scratch modlist).
     #[test]
     fn swap_clears_prior_selection() {
         let mut ws = WizardState::default();
@@ -653,9 +803,22 @@ mod tests {
             &SettingsStore::new_default(),
             &mut ws,
         );
-        assert!(ws.step2.bgee_mods[0].components[0].checked);
+        // NOTE: with the Bug-B scanned-set reset, A's order is applied onto
+        // an *empty* set here (the cold-resume re-scan would repopulate it
+        // in the real flow). The point of THIS test is the swap isolation,
+        // exercised below.
+        assert!(ws.step2.bgee_mods.is_empty());
 
-        // Swap to an empty modlist.
+        // Re-seed A's scanned set as if A's (cold-resume) scan had landed,
+        // so we have a non-empty set to prove the *next* swap clears it.
+        ws.step2.bgee_mods = vec![mod_state(
+            "EEFixPack",
+            "EEFIXPACK/EEFIXPACK.TP2",
+            vec![comp("0", "Core")],
+        )];
+        ws.step2.bgee_mods[0].components[0].checked = true;
+
+        // Swap to a different (empty) modlist.
         let b = ModlistWorkspaceState::default();
         populate_wizard_state_from_workspace(
             &b,
@@ -664,9 +827,238 @@ mod tests {
             &mut ws,
         );
         assert!(
-            !ws.step2.bgee_mods[0].components[0].checked,
-            "prior modlist's check must not bleed into the swapped-in modlist"
+            ws.step2.bgee_mods.is_empty(),
+            "Bug B: a swapped-in fresh modlist must NOT inherit the prior \
+             modlist's scanned mod set (it must be fully reset, not just \
+             unchecked-in-place)"
         );
         assert!(ws.step3.bgee_items.is_empty());
+    }
+
+    // ── Fix-Run 1 — the REQUIRED integration test of the real persistence
+    //    round-trip + the in-memory cross-modlist isolation. Pure
+    //    in-memory `WizardState` + a **temp** `WorkspaceStore`
+    //    (`new_with_path` under `std::env::temp_dir()`) — NEVER
+    //    `RegistryStore::new_default()` / the real config dir (the
+    //    directive-grade DATA-LOSS test-hygiene rule; the
+    //    `persistence_cycle` temp-path precedent). It fails on the pre-fix
+    //    code (no `sync_step3_from_step2_if_changed`, no scanned-set reset)
+    //    and passes after. ──
+    use crate::registry::store_workspace::WorkspaceStore;
+
+    /// Build a one-tab scanned mod set with two components, neither checked.
+    fn scanned_eefix() -> Vec<Step2ModState> {
+        vec![mod_state(
+            "EEFixPack",
+            "EEFIXPACK/EEFIXPACK.TP2",
+            vec![comp("0", "Core Fixes"), comp("2", "Game Text Update")],
+        )]
+    }
+
+    fn temp_ws_store(label: &str) -> WorkspaceStore {
+        let path = std::env::temp_dir().join(format!(
+            "bio_fixrun1_{}_{}_workspace.json",
+            std::process::id(),
+            label
+        ));
+        let _ = std::fs::remove_file(&path);
+        WorkspaceStore::new_with_path(path)
+    }
+
+    /// **Bug A — the real round-trip.** Load modlist A → toggle a Step-2
+    /// component **exactly as BIO's reused tree does** (mutate
+    /// `step2.<tab>_mods[].components[].checked` + `selected_order`
+    /// directly, WITHOUT advancing to Step 3 / syncing) → run the
+    /// nav-away write path (`sync_step3_from_step2_if_changed` + `extract`
+    /// + `WorkspaceStore::save`) → re-load A into a FRESH `WizardState`
+    /// (the cold-resume: `WorkspaceStore::load` + `populate`) → assert the
+    /// toggled component is restored, checked, in the persisted order.
+    ///
+    /// Pre-fix this fails: the toggle never reached `step3.<tab>_items`,
+    /// `extract` (which reads only Step 3) persisted the empty/stale order,
+    /// and the re-load came up unselected — the exact reported bug.
+    #[test]
+    fn bug_a_step2_toggle_round_trips_through_nav_away_write() {
+        let store = temp_ws_store("bug_a");
+        let a_entry = entry(Game::BGEE);
+
+        // (1) Cold open of A: empty persisted workspace; the resume scan
+        //     (not modelled here — pure state) would land the scanned set.
+        //     We simulate "A's scan landed" by seeding the scanned mods,
+        //     then `populate` (which now resets then no-op-applies the
+        //     empty order — the real flow's reconcile seam re-applies
+        //     order post-scan; here there is no prior order yet).
+        let mut ws = WizardState::default();
+        let empty_ws = ModlistWorkspaceState::default();
+        populate_wizard_state_from_workspace(
+            &empty_ws,
+            &a_entry,
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+        // The scan lands A's mods (BIO's scan-event handler; supplied
+        // directly — equivalent to the cache-fed scan).
+        ws.step2.bgee_mods = scanned_eefix();
+
+        // (2) User toggles "Game Text Update" (#2) ON — EXACTLY what BIO's
+        //     `tree_component_row_step2` does on a checkbox click: set
+        //     `checked` + a `selected_order`; NO Step-3 sync, NO action.
+        ws.step2.bgee_mods[0].components[1].checked = true;
+        ws.step2.bgee_mods[0].components[1].selected_order = Some(1);
+        ws.step2.bgee_mods[0].checked = true;
+        // Precondition that demonstrates the bug surface: Step 3 is still
+        // empty (the toggle did NOT propagate there on its own).
+        assert!(
+            ws.step3.bgee_items.is_empty(),
+            "the bare toggle must not have synced Step 3 (this is why a \
+             Step-3-only extract dropped it pre-fix)"
+        );
+
+        // (3) Nav-away write path, verbatim: pre-extract sync (the fix) →
+        //     extract → WorkspaceStore::save.
+        let prior = empty_ws.clone();
+        sync_step3_from_step2_if_changed(&mut ws);
+        let extracted = extract_workspace_state_from_wizard(&ws, &prior);
+        store.save(&extracted).expect("temp workspace save");
+
+        // The persisted order must now carry the toggled component (pre-fix
+        // this vec was empty — the round-trip failure).
+        assert_eq!(
+            extracted.order_bgee,
+            vec![ComponentRef {
+                tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
+                id: 2,
+                language: 0,
+            }],
+            "Bug A: the Step-2 toggle must reach the persisted order"
+        );
+
+        // (4) Cold resume of A: fresh WizardState + load + populate, then
+        //     the scan lands A's mods again (cold-resume re-scan) and the
+        //     reconcile/populate recipe re-applies the persisted order.
+        let reloaded = store.load().expect("temp workspace load");
+        let mut ws2 = WizardState::default();
+        populate_wizard_state_from_workspace(
+            &reloaded,
+            &a_entry,
+            &SettingsStore::new_default(),
+            &mut ws2,
+        );
+        ws2.step2.bgee_mods = scanned_eefix(); // the resume scan lands
+        // Re-apply the persisted order onto the freshly-scanned set — the
+        // exact `populate`/reconcile recipe (the cold-resume seam runs this
+        // post-scan in the live flow).
+        apply_order_to_mods(&reloaded.order_bgee, &mut ws2.step2.bgee_mods);
+        recompute_mod_checked(&mut ws2.step2.bgee_mods);
+        ws2.step3.bgee_items = step3_sync::build_step3_items(&ws2.step2.bgee_mods);
+
+        // (5) The toggle survived the full round-trip.
+        assert!(
+            ws2.step2.bgee_mods[0].components[1].checked,
+            "Bug A: the toggled component must be checked after resume"
+        );
+        assert!(
+            !ws2.step2.bgee_mods[0].components[0].checked,
+            "the untoggled component must stay off"
+        );
+        let leaves: Vec<&Step3ItemState> = ws2
+            .step3
+            .bgee_items
+            .iter()
+            .filter(|i| !i.is_parent)
+            .collect();
+        assert_eq!(leaves.len(), 1, "exactly the toggled component in Step 3");
+        assert_eq!(leaves[0].component_id, "2");
+    }
+
+    /// **Bug B — the in-memory scanned set must not leak across modlists.**
+    /// A has a scan + a persisted order; B is a fresh modlist (no scan, no
+    /// order). load A (restores A's selection) → swap to B (must be EMPTY —
+    /// no A leakage) → swap back to A (A's scan + selection restored).
+    ///
+    /// Pre-fix this fails at the B step: `populate` did not reset the
+    /// scanned set, so B inherited A's `step2.bgee_mods` (B would show A's
+    /// mods, just unchecked) and the cold-resume gate for A's later re-swap
+    /// stayed blocked.
+    #[test]
+    fn bug_b_scanned_set_does_not_leak_across_modlists() {
+        let a_entry = entry(Game::BGEE);
+        let b_entry = ModlistEntry {
+            id: "BBBBBBBBBBBB".to_string(),
+            name: "Fresh".to_string(),
+            game: Game::BGEE,
+            state: ModlistState::InProgress,
+            ..Default::default()
+        };
+
+        // A: a persisted order over EEFixPack #0.
+        let mut a_ws = ModlistWorkspaceState::default();
+        a_ws.order_bgee = vec![ComponentRef {
+            tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
+            id: 0,
+            language: 0,
+        }];
+
+        // ── Load A. populate resets then applies the order onto an empty
+        //    set; the (modelled) cold-resume scan then lands A's mods and
+        //    the populate/reconcile recipe re-applies the order. ──
+        let mut ws = WizardState::default();
+        populate_wizard_state_from_workspace(
+            &a_ws,
+            &a_entry,
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+        ws.step2.bgee_mods = scanned_eefix(); // A's scan lands
+        apply_order_to_mods(&a_ws.order_bgee, &mut ws.step2.bgee_mods);
+        recompute_mod_checked(&mut ws.step2.bgee_mods);
+        ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
+        assert!(
+            ws.step2.bgee_mods[0].components[0].checked,
+            "A's selection is live"
+        );
+
+        // ── Swap to B (fresh — empty order, no dev-scan). populate MUST
+        //    reset the scanned set so B does NOT inherit A's mods. ──
+        let b_ws = ModlistWorkspaceState::default();
+        populate_wizard_state_from_workspace(
+            &b_ws,
+            &b_entry,
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+        assert!(
+            ws.step2.bgee_mods.is_empty(),
+            "Bug B: fresh modlist B must start with NO scanned mods (A's \
+             scanned set must not leak across the swap)"
+        );
+        assert!(ws.step3.bgee_items.is_empty(), "Bug B: B's Step 3 empty");
+        assert!(
+            ws.step2.selected.is_none() && ws.step2.next_selection_order == 1,
+            "Bug B: B's Step-2 selection transients reset"
+        );
+
+        // ── Swap back to A. populate resets again; A's own scan re-lands
+        //    (the cold-resume gate is re-armed because the set was empty)
+        //    and A's persisted order + selection are restored. ──
+        populate_wizard_state_from_workspace(
+            &a_ws,
+            &a_entry,
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+        ws.step2.bgee_mods = scanned_eefix(); // A's re-scan lands
+        apply_order_to_mods(&a_ws.order_bgee, &mut ws.step2.bgee_mods);
+        recompute_mod_checked(&mut ws.step2.bgee_mods);
+        ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
+        assert!(
+            ws.step2.bgee_mods[0].components[0].checked,
+            "Bug B: swapping back to A restores A's OWN scan + selection"
+        );
+        assert_eq!(
+            ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
+            1,
+            "Bug B: A's Step 3 restored on the re-swap"
+        );
     }
 }

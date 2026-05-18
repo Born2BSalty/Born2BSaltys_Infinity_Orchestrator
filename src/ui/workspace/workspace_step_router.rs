@@ -75,7 +75,31 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
             // C4 chrome wrapper (P6.T2c): net-new redesign chrome around
             // BIO's reused tree / details / popup sub-renderers. BIO's
             // `page_step2` / `frame_step2` are NOT called.
+            //
+            // **Fix-Run 1 (Bug A) — Step-2 selection dirty fingerprint.**
+            // BIO's reused component-tree checkbox
+            // (`tree_component_row_step2`) mutates
+            // `wizard_state.step2.<tab>_mods[].components[].checked` /
+            // `.selected_order` **directly** and emits **no
+            // `Step2Action`** — so a checkbox toggle never flows through
+            // `dispatch_step2` (where the other Step-2 mutations call
+            // `mark_workspace_dirty()`) and the debounced workspace write
+            // (P6.T11 / SPEC §13.14 #1) would never fire for the most
+            // common Step-2 edit. The direct analogue of the shipped
+            // P6.T11 Step-3 fingerprint (H2 — Step 3 also has no action
+            // enum): capture a cheap selection fingerprint before the
+            // render and compare after; any checkbox toggle changes it ⇒
+            // mark dirty. (The returned-action path below still handles
+            // scan / log / update / compat variants; they additionally
+            // mark dirty in `dispatch_step2`. A doubly-marked frame is
+            // harmless — the extract+compare in the persistence cycle is
+            // the second guard.) Zero BIO edits — BIO's tree is reused
+            // read-only; only the orchestrator-owned router observes it.
+            let before = step2_selection_fingerprint(&orchestrator.wizard_state);
             let action = crate::ui::workspace::step2::workspace_step2::render(ui, orchestrator);
+            if step2_selection_fingerprint(&orchestrator.wizard_state) != before {
+                orchestrator.mark_workspace_dirty();
+            }
             if let Some(a) = action {
                 step_action_dispatch::dispatch_step2(a, orchestrator);
             }
@@ -169,6 +193,46 @@ fn step3_fingerprint(state: &WizardState) -> u64 {
     collapsed.len().hash(&mut h);
     for block in collapsed {
         block.hash(&mut h);
+    }
+    h.finish()
+}
+
+/// A `u64` fingerprint of the **persistable Step-2 selection** across both
+/// game tabs (Fix-Run 1, Bug A). Hashes every *checked* component's
+/// `tp_file` + `component_id` + `selected_order` on `step2.bgee_mods` and
+/// `step2.bg2ee_mods`.
+///
+/// Unlike `step3_fingerprint` (a cheap end-only hash — Step 3's persisted
+/// data is an *order* whose end items shift on any real reorder), the
+/// Step-2 persisted data is the **whole selection set**: a toggle anywhere
+/// in the tree must dirty, including one that doesn't change the first/last
+/// checked component. So this hashes the full checked set. It is still
+/// cheap — it iterates only the user's *selection* (the checked
+/// components), not the full scanned mod set, and runs once per frame while
+/// Step 2 is active (the same cadence as the shipped Step-3 fingerprint).
+/// It deliberately ignores `step2.selected` (row-highlight, not persisted)
+/// and `step2.search_query` (filter text, not persisted) so a row click or
+/// a search keystroke does not spuriously dirty (matching the
+/// `dispatch_step2` "`OpenSelected*` don't mark dirty" discipline; a
+/// spurious dirty would still be safe — the persistence cycle's
+/// extract+compare is the second guard — but staying tight avoids
+/// needless debounced writes).
+fn step2_selection_fingerprint(state: &WizardState) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for (tag, mods) in [
+        (0u8, &state.step2.bgee_mods),
+        (1u8, &state.step2.bg2ee_mods),
+    ] {
+        tag.hash(&mut h);
+        for m in mods {
+            for c in &m.components {
+                if c.checked {
+                    m.tp_file.hash(&mut h);
+                    c.component_id.hash(&mut h);
+                    c.selected_order.hash(&mut h);
+                }
+            }
+        }
     }
     h.finish()
 }

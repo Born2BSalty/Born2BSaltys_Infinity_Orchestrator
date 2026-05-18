@@ -199,6 +199,18 @@ fn render_workspace(
         orchestrator.workspace_view.game = entry.game;
         orchestrator.workspace_view.current_step = WorkspaceStep::Step2;
         orchestrator.workspace_view.completed_steps.clear();
+        // Fix-Run 1 (Bug B) — reset the orchestrator-owned Step-2 chrome
+        // transients on a modlist swap so a stale `rescan_snapshot` /
+        // `resume_pending` / `was_scanning` / drop-warning / Details-pane
+        // state from the *previous* modlist can't mis-fire the
+        // rescan-reconcile completion seam against the swapped-in modlist
+        // (the loader resets the `WizardState` Step-2/3 *set*;
+        // `WorkspaceStep2State::default()` is the documented "reset with
+        // the rest of the view state on a modlist swap" contract — see
+        // `state_workspace.rs`). `maybe_trigger_resume_scan` below sets a
+        // fresh snapshot for *this* modlist if it is a cold-resume draft.
+        orchestrator.workspace_view.step2 =
+            crate::ui::workspace::state_workspace::WorkspaceStep2State::default();
         orchestrator.workspace_view.loaded_workspace_id = Some(id.to_string());
         // P6.T5 — populate `fork_meta` from the registry entry. `Some` iff
         // this modlist's `forked_from` chain is non-empty (SPEC §2.2 — the
@@ -259,6 +271,15 @@ fn flush_workspace_on_nav_away(orchestrator: &mut OrchestratorApp) {
     {
         return;
     }
+
+    // Fix-Run 1 (Bug A) — make the live Step-2 selection visible to
+    // `extract`. A Step-2 checkbox toggle mutates only `step2.<tab>_mods`
+    // (BIO's reused tree emits no action and doesn't touch Step 3);
+    // `extract` reads the persisted order from `step3.<tab>_items`. Without
+    // this BIO-faithful, Step-3-reorder-safe sync, a toggle made on Step 2
+    // and then a nav Home would extract the stale pre-toggle order and the
+    // edit would be lost on resume.
+    workspace_state_loader::sync_step3_from_step2_if_changed(&mut orchestrator.wizard_state);
 
     // Left the workspace — extract + synchronous write (the save-draft
     // P6.T6 precedent, but triggered by the nav transition).
