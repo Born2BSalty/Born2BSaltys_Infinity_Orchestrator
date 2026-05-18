@@ -58,6 +58,27 @@
 // `auto_build_driver` / `stage_downloading::render_live` (Run 4a) — not
 // here.
 //
+// **Final P7 Fix-Run — the §13.13 bundle factored for the pipeline path.**
+// `on_install_start` is reached **only** from the in-Workspace Step-5
+// button (`page_workspace_step5.rs`). The **Install-Modlist-paste /
+// Reinstall** entry points route through `page_install.rs`'s `Preview →
+// Downloading` Advance into Run-4a's `auto_build_driver` pipeline
+// (`stage_downloading::render_live`), which **bypasses** `on_install_start`
+// — so its inline §13.13 artifact writing never ran for them (the P7.T11 /
+// SPEC §13.13 / Verification-#5 acceptance gap the Run-4a trigger-split
+// inadvertently opened). The fix factors the §13.13 bundle (steps 2 → 3 →
+// 6 → 4) out of `on_install_start` into the reusable
+// `write_install_start_artifacts` and invokes it ALSO from the
+// `page_install.rs` Install-click site (alongside Run-4b's
+// `reinstall_flip_at_install_click`, same split-borrow). `on_install_start`
+// now *calls* that helper, so the workspace path's behavior is
+// **byte-identical** (a pure extract, same statements / same order).
+// (Premise-check: Create-import / Load-Draft / Create → New route into the
+// **Workspace** — Step 5 → `on_install_start` → this helper — so they
+// already get the bundle and need no second invocation site; the brief's
+// "pipeline path for Create-import/Load-Draft" wording is a PLAN GAP, see
+// the run report.)
+//
 // Flipping `state.step5.start_install_requested = true` is the **caller's**
 // step (plan P7.T3 step 3) so the start hook stays a pure side-effecting
 // unit (registry + disk), independent of BIO's pipeline kick-off.
@@ -154,35 +175,73 @@ impl InstallButtonVariant {
     }
 }
 
-/// Run the install-start hook. See the module header for the ordered
-/// contract. Returns `Ok(())` on success; an `Err(String)` if the share
-/// code could not be generated or the registry write failed (the caller
-/// surfaces it per SPEC §13.14 and must **not** flip
-/// `start_install_requested` on `Err`). A failed `modlist-import-code.txt`
-/// write is logged but **not** fatal to the install (the artifact is a
-/// recovery convenience, not a precondition for WeiDU — SPEC §13.13
-/// frames it as the "I crashed, here's what I was trying" file).
+/// **The SPEC §13.13 install-start artifact bundle — factored so EVERY
+/// install entry point writes it.** Does exactly, in this order
+/// (`on_install_start`'s former inline steps 2 → 3 → 6 → 4):
 ///
-/// Borrow-order note: `flag_policies::apply_flags` mutates
-/// `wizard_state.step1`; `share_export::pack_meta` then reads
-/// `&*wizard_state` immutably. Sequenced so the immutable `pack_meta`
-/// borrow starts only after the mutable flag write ends (no overlap).
-#[allow(clippy::too_many_arguments)]
-pub fn on_install_start(
+///   2. Compute the share code via the net-new `registry::share_export
+///      ::pack_meta` envelope (SPEC §13.3 Generation) with
+///      `allow_auto_install = false` (install-start codes are unverified —
+///      SPEC §13.3 / §13.13) and the provenance trio read **off the
+///      registry `ModlistEntry`** (NOT `WizardState`).
+///   3. Update `entry.latest_share_code` to that value (the registry's
+///      snapshot of the in-progress code) and stamp `install_started_at`
+///      (always — every variant, every attempt; distinct from
+///      `install_date` which is clean-completion only, P7.T6).
+///   6. Atomic registry write (`RegistryStore::save`) — done before the
+///      disk write so the registry's record of the code is durable even if
+///      the file write below fails.
+///   4. Write `modlist-import-code.txt` to the destination, **variant-gated
+///      per SPEC §13.13** (`Install` / `Restart` / `Reinstall`
+///      write/overwrite; `Resume` skips — the prior attempt's file stays
+///      canonical). Written upfront (before WeiDU runs) so the artifact
+///      survives a crash/cancel/error. A write failure is logged but **not**
+///      fatal (the file is a recovery convenience — SPEC §13.13 frames it
+///      as the "I crashed, here's what I was trying" artifact).
+///
+/// **Deliberately does NOT do** (so it is safe to invoke from both the
+/// workspace-Step-5 path *and* the Install-Modlist/Reinstall pipeline path):
+/// the #1/#5 flag policies (`flag_policies::apply_flags` — applied on both
+/// paths already), the per-install directory derivation (Run-4a
+/// `auto_build_driver` / `per_install_dirs` — already done on the pipeline
+/// path by `stage_downloading::render_live`), the install-concurrency gate
+/// (workspace-only), and any `start_install_requested` flip (the caller's /
+/// the pipeline's `start_auto_build_install`'s job — a premature flip
+/// installs an empty per-install Mods folder, the documented P7.T17
+/// hazard).
+///
+/// Why factored: `on_install_start` is reached **only** from the in-
+/// Workspace Step-5 button (`page_workspace_step5.rs`). The Install-Modlist-
+/// paste / Reinstall entry points route through `page_install.rs`'s
+/// `Preview → Downloading` Advance into Run-4a's `auto_build_driver`
+/// pipeline (`stage_downloading::render_live`), which **bypasses**
+/// `on_install_start` — so without this factoring those entry points never
+/// write the §13.13 artifacts (the P7.T11 / SPEC §13.13 / Verification-#5
+/// gap the final P7 Fix-Run closes). The Create-import / Load-Draft / Create
+/// → New entry points route into the **Workspace** (Step 5 →
+/// `on_install_start`), so they already get the bundle via this same helper
+/// through `on_install_start` — they do **not** need a second invocation
+/// site (premise-checked against `page_create.rs`'s routing — see the run
+/// report's PLAN GAP on the brief's premise wording).
+///
+/// Returns `Ok(())` on success; an `Err(String)` if the share code could
+/// not be generated or the **registry** write failed (the caller surfaces
+/// it per SPEC §13.14 and must **not** flip `start_install_requested` /
+/// proceed-as-if-clean on `Err`). A failed `modlist-import-code.txt` write
+/// is **not** an `Err` — it is logged and the bundle still returns `Ok`
+/// (the artifact is a recovery convenience, not a precondition for WeiDU).
+///
+/// Borrow note: callers sequence any `&mut wizard_state` work (e.g.
+/// `flag_policies::apply_flags`) before this — `share_export::pack_meta`
+/// reads `&*wizard_state` immutably, so the immutable borrow must start
+/// only after any mutable one ends (no overlap).
+pub fn write_install_start_artifacts(
     modlist_id: &str,
     variant: InstallButtonVariant,
-    workflow: InstallWorkflow,
-    wizard_state: &mut WizardState,
+    wizard_state: &WizardState,
     registry: &mut ModlistRegistry,
     store: &RegistryStore,
-    settings: &Step1Settings,
 ) -> Result<(), String> {
-    // ── 1. Automatic flag policies #1/#5 (P7.T16) — write into the
-    //    orchestrator-owned WizardState.step1 BIO's runner reads. (mut
-    //    borrow of wizard_state.step1; ends before pack_meta's immut
-    //    borrow below.) ──
-    flag_policies::apply_flags(&mut wizard_state.step1, workflow, settings);
-
     // ── 2. Compute the share code via the net-new pack_meta envelope
     //    (SPEC §13.3 Generation). `allow_auto_install = false` — at
     //    install start the install has NOT succeeded (SPEC §13.3 / §13.13).
@@ -194,13 +253,13 @@ pub fn on_install_start(
     let meta = ShareMeta::from_entry(entry, /* allow_auto_install */ false);
     // `pack_meta` composes `bio::app::modlist_share::export_modlist_share_code`
     // read-only and round-trips the four keys — it NEVER patches BIO
-    // (carve-out #5). Immutable `wizard_state` borrow (the mut flag-policy
-    // borrow above has ended).
+    // (carve-out #5). Immutable `wizard_state` borrow (any mut flag-policy
+    // borrow at the call site has ended).
     let share_code = share_export::pack_meta(wizard_state, &meta)?;
 
     // ── 3. Update entry.latest_share_code to the in-progress code
     //    (allow_auto_install = false). Also stamp install_started_at
-    //    (step 5 — every variant, every attempt). ──
+    //    (every variant, every attempt). ──
     let entry_mut = registry
         .find_mut(modlist_id)
         .ok_or_else(|| format!("modlist {modlist_id} vanished from registry mid-hook"))?;
@@ -245,6 +304,71 @@ pub fn on_install_start(
     // Resume Install: the file is intentionally NOT overwritten — the
     // original from the prior (gracefully-cancelled) attempt remains the
     // canonical mid-install record (SPEC §13.13). No-op by design.
+
+    Ok(())
+}
+
+/// Run the install-start hook (the in-Workspace Step-5 path). See the
+/// module header for the ordered contract. Applies the #1/#5 flag policies,
+/// then writes the SPEC §13.13 install-start artifact bundle via
+/// [`write_install_start_artifacts`] (factored so the Install-Modlist /
+/// Reinstall pipeline path can invoke the SAME bundle from its authorized
+/// Install-click site — see that fn's doc), then derives the per-install
+/// directories (Run-4a P7.T17).
+///
+/// Returns `Ok(())` on success; an `Err(String)` if the share code could
+/// not be generated, the registry write failed, or the per-install dir
+/// derivation failed (the caller surfaces it per SPEC §13.14 and must
+/// **not** flip `start_install_requested` on `Err`). A failed
+/// `modlist-import-code.txt` write is logged but **not** fatal (see
+/// [`write_install_start_artifacts`]).
+///
+/// Borrow-order note: `flag_policies::apply_flags` mutates
+/// `wizard_state.step1`; `write_install_start_artifacts`'s
+/// `share_export::pack_meta` then reads `&*wizard_state` immutably.
+/// Sequenced so the immutable `pack_meta` borrow starts only after the
+/// mutable flag write ends (no overlap).
+#[allow(clippy::too_many_arguments)]
+pub fn on_install_start(
+    modlist_id: &str,
+    variant: InstallButtonVariant,
+    workflow: InstallWorkflow,
+    wizard_state: &mut WizardState,
+    registry: &mut ModlistRegistry,
+    store: &RegistryStore,
+    settings: &Step1Settings,
+) -> Result<(), String> {
+    // ── 1. Automatic flag policies #1/#5 (P7.T16) — write into the
+    //    orchestrator-owned WizardState.step1 BIO's runner reads. (mut
+    //    borrow of wizard_state.step1; ends before the §13.13 helper's
+    //    immut `pack_meta` borrow below.) **NOT part of the §13.13 helper**
+    //    — flag policies are applied on BOTH the workspace path (here) and
+    //    the pipeline path (`render_live`'s `auto_build_driver`), so the
+    //    factored §13.13 helper deliberately excludes them. ──
+    flag_policies::apply_flags(&mut wizard_state.step1, workflow, settings);
+
+    // ── Steps 2 → 3 → 6 → 4 — the SPEC §13.13 install-start artifact
+    //    bundle (pack_meta share code → entry.latest_share_code →
+    //    install_started_at → atomic save → variant-gated
+    //    modlist-import-code.txt write). Factored into
+    //    [`write_install_start_artifacts`] so the **pipeline entry points**
+    //    (Install-Modlist-paste / Reinstall — which route through
+    //    `page_install.rs`'s `Preview → Downloading` Advance and BYPASS
+    //    `on_install_start`) can invoke the SAME bundle from their
+    //    authorized Install-click site (the final P7 Fix-Run). The
+    //    workspace path's behavior is byte-identical — this is a pure
+    //    extract of the previously-inline statements, same order. ──
+    write_install_start_artifacts(modlist_id, variant, wizard_state, registry, store)?;
+
+    // The destination is needed again below for the per-install dir
+    // derivation (step 2b). Re-read it off the (post-save) entry — the
+    // §13.13 helper does not mutate it.
+    let destination = registry
+        .find(modlist_id)
+        .map(|e| e.destination_folder.trim().to_string())
+        .ok_or_else(|| {
+            format!("modlist {modlist_id} vanished from registry after §13.13 artifacts")
+        })?;
 
     // ── P7.T10 (Run 4b) — reinstall registry-flip.
     //
@@ -708,5 +832,155 @@ mod tests {
             "MOD-B's pending marker is untouched (only MOD-B's own \
              Install-click consumes it)"
         );
+    }
+
+    // ───── Final P7 Fix-Run — the factored §13.13 bundle helper ─────
+    //
+    // `write_install_start_artifacts` is the §13.13 install-start bundle
+    // (pack_meta share code → entry.latest_share_code → install_started_at
+    // → atomic save → variant-gated modlist-import-code.txt write) factored
+    // out of `on_install_start` so the Install-Modlist / Reinstall pipeline
+    // path can invoke the SAME bundle.
+    //
+    // The *full* success path needs `pack_meta`, which needs BIO's
+    // file-backed weidu-log / mod-download state a unit test cannot stand
+    // up (the exact constraint `share_export`'s own tests + the existing
+    // `start_hooks` tests document — `on_install_start` itself has no
+    // unit test for the same reason). What IS unit-testable additively,
+    // with a temp-path store (DATA-LOSS-safe — `write_install_start_
+    // artifacts` calls the real `RegistryStore::save`; a test MUST NEVER
+    // bind `%APPDATA%\bio`):
+    //
+    //   (a) the §13.14 error contract — a non-generatable share code
+    //       (`WizardState::default()` ⇒ `export_modlist_share_code` ⇒
+    //       `Err("No WeiDU entries available to export.")` ⇒ `pack_meta`
+    //       `Err`) makes the helper return `Err` **before** any registry
+    //       mutation / save / file write (the `?` on `pack_meta` precedes
+    //       steps 3/6/4). The caller must surface that and NOT
+    //       proceed-as-clean (SPEC §13.14). Proven side-effect-free: the
+    //       temp store file is never created, the entry is untouched.
+    //   (b) a missing registry entry ⇒ the helper's first `?`
+    //       (`registry.find(modlist_id)`) returns `Err` with the
+    //       documented message — no panic, no partial write. (This is
+    //       exactly why a brand-new Install-Modlist *paste*, which has no
+    //       registry entry at install-start, cannot be served by this
+    //       helper at the `page_install.rs` Advance — see the run report's
+    //       SPEC CONFLICT.)
+    //   (c) `on_install_start` and `write_install_start_artifacts` share
+    //       the SAME §13.13 write decision (`InstallButtonVariant
+    //       ::writes_import_code`) — proving the matrix governs both call
+    //       sites identically (the refactor is behavior-preserving for the
+    //       write/overwrite/skip gate the existing
+    //       `spec_13_13_matrix_holds_per_entry_point_and_variant` already
+    //       pins).
+
+    #[test]
+    fn write_install_start_artifacts_errs_cleanly_when_share_code_ungeneratable() {
+        // SPEC §13.14: a share-code-generation failure is an Err the caller
+        // must surface (and NOT flip start_install_requested / proceed as
+        // clean). `WizardState::default()` has no weidu entries, so
+        // `export_modlist_share_code` (inside `pack_meta`) returns
+        // `Err("No WeiDU entries available to export.")`. The helper must
+        // return `Err` BEFORE touching the registry (the `?` on `pack_meta`
+        // is step 2, before steps 3/6/4) and write NOTHING.
+        let (store, store_path) = temp_registry_store("artifacts_pack_err");
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(installed_entry("MODLIST-ART-1"));
+        let before = registry.find("MODLIST-ART-1").unwrap().clone();
+        let s = WizardState::default(); // ⇒ no weidu entries ⇒ pack_meta Err
+
+        let r = write_install_start_artifacts(
+            "MODLIST-ART-1",
+            InstallButtonVariant::Install, // a *writing* variant
+            &s,
+            &mut registry,
+            &store,
+        );
+
+        assert!(
+            r.is_err(),
+            "ungeneratable share code ⇒ Err (SPEC §13.14 — caller must not \
+             proceed-as-clean)"
+        );
+        // Side-effect-free: the entry is byte-identical (no
+        // latest_share_code / install_started_at mutation — the pack_meta
+        // `?` precedes steps 3/6/4).
+        let after = registry.find("MODLIST-ART-1").unwrap();
+        assert_eq!(
+            after.latest_share_code, before.latest_share_code,
+            "Err before any entry mutation — latest_share_code untouched"
+        );
+        assert_eq!(
+            after.install_started_at, before.install_started_at,
+            "Err before any entry mutation — install_started_at untouched"
+        );
+        // The atomic save (step 6) was never reached ⇒ no store file.
+        assert!(
+            !store_path.exists(),
+            "the §13.13 helper must not save the registry when it Errs early"
+        );
+    }
+
+    #[test]
+    fn write_install_start_artifacts_errs_when_modlist_not_in_registry() {
+        // The helper's FIRST `?` is `registry.find(modlist_id)`. A missing
+        // entry ⇒ the documented Err, no panic, no write. This is why a
+        // brand-new Install-Modlist *paste* (no registry entry at
+        // install-start — the established Phase-7 design) cannot be served
+        // by this helper at the page_install.rs Advance (run report SPEC
+        // CONFLICT).
+        let (store, store_path) = temp_registry_store("artifacts_no_entry");
+        let mut registry = ModlistRegistry::default(); // empty — no entry
+        let s = WizardState::default();
+
+        let r = write_install_start_artifacts(
+            "GHOST-MODLIST",
+            InstallButtonVariant::Reinstall,
+            &s,
+            &mut registry,
+            &store,
+        );
+
+        let msg = r.expect_err("a missing registry entry must Err");
+        assert!(
+            msg.contains("GHOST-MODLIST") && msg.contains("not in registry"),
+            "documented Err message naming the missing modlist; got: {msg}"
+        );
+        assert!(
+            !store_path.exists(),
+            "no registry save on the missing-entry early Err"
+        );
+    }
+
+    #[test]
+    fn on_install_start_and_helper_share_the_same_13_13_write_decision() {
+        // The refactor is behavior-preserving for the §13.13 write/overwrite
+        // /skip gate: BOTH `on_install_start` (which now calls the helper)
+        // and `write_install_start_artifacts` route the file write through
+        // the SAME `InstallButtonVariant::writes_import_code` predicate the
+        // existing `spec_13_13_matrix_holds_per_entry_point_and_variant`
+        // already pins. Re-assert the full matrix here from the variant the
+        // call sites resolve so a future change to EITHER the gate or the
+        // factoring is caught.
+        for (resume, has_run_once, reinstall, expect_write) in [
+            (false, false, false, true),  // Install      ⇒ write
+            (false, true, false, true),   // Restart      ⇒ overwrite
+            (true, true, false, false),   // Resume       ⇒ SKIP
+            (false, false, true, true),   // Reinstall    ⇒ write
+            (true, true, true, true),     // Reinstall wins over resume
+        ] {
+            let mut s = WizardState::default();
+            s.step5.resume_available = resume;
+            s.step5.has_run_once = has_run_once;
+            let variant = InstallButtonVariant::from_step5(&s, reinstall);
+            assert_eq!(
+                variant.writes_import_code(),
+                expect_write,
+                "the §13.13 write decision the factored helper + \
+                 on_install_start both use must match the matrix \
+                 (resume={resume}, has_run_once={has_run_once}, \
+                 reinstall={reinstall})"
+            );
+        }
     }
 }
