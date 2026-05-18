@@ -154,9 +154,20 @@ fn is_active(current: &NavDestination, dest: &NavDestination) -> bool {
         (NavDestination::Install, NavDestination::Install) => true,
         (NavDestination::Create, NavDestination::Create) => true,
         (NavDestination::Settings, NavDestination::Settings) => true,
-        // Per SPEC §2.1: when the user is in the workspace, the rail's
-        // "Home" stays highlighted (workspace is reached from a Home card).
-        (NavDestination::Workspace { .. }, NavDestination::Home) => true,
+        // When the user is in a Workspace, the rail highlights **Create**.
+        // Premise-checked against the canonical wireframe (the UI reference,
+        // authoritative over prose): `app.jsx:37-40` `resumeBuild` does
+        // `setActive("create")` and the workspace renders *inside* the
+        // Create screen (`CreateScreen` short-circuits to `<WorkspaceView>`
+        // when `resumedBuild` is set, `screens.jsx:3815`), so the rail's
+        // active item is `create`. (The earlier `=> Home` arm cited "SPEC
+        // §2.1", but §2.1's text only lists the 4 nav items + brand +
+        // status — it says nothing about the workspace rail state; the
+        // wireframe governs, and it shows Create.) The orchestrator routes
+        // resume via `nav = Workspace { id }` (not a Create-local stage —
+        // `state_create.rs`), so this arm maps that to the Create highlight
+        // to match the wireframe.
+        (NavDestination::Workspace { .. }, NavDestination::Create) => true,
         _ => false,
     }
 }

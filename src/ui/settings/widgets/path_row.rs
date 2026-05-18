@@ -29,11 +29,12 @@
 
 use eframe::egui;
 
+use crate::ui::orchestrator::widgets::{InputOpts, redesign_text_input};
 use crate::ui::settings::state_settings::PathStatusTone;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
-    redesign_border_strong, redesign_input_bg, redesign_pill_danger, redesign_success_soft,
-    redesign_text_faint, redesign_text_primary, redesign_warning_soft,
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep, redesign_border_strong,
+    redesign_input_bg, redesign_pill_danger, redesign_success_soft, redesign_text_faint,
+    redesign_text_primary, redesign_warning_soft,
 };
 
 /// Picker style.
@@ -90,22 +91,27 @@ pub fn render(
                 PathStatusTone::Error => redesign_pill_danger(palette),
             };
             let pre = mono_value.clone();
-            let response = ui.add_sized(
-                egui::vec2(edit_width, 24.0),
-                egui::TextEdit::singleline(mono_value)
-                    .font(egui::FontId::new(
-                        12.0,
-                        egui::FontFamily::Name("firacode_nerd".into()),
-                    ))
-                    .text_color(redesign_text_primary(palette))
-                    .background_color(redesign_input_bg(palette))
-                    .margin(egui::Margin::symmetric(6, 4)),
-            );
-            ui.painter().rect_stroke(
-                response.rect,
-                egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8),
-                egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, border_color),
-                egui::StrokeKind::Outside,
+            let margin = egui::Margin::symmetric(6, 4);
+            // Shared input primitive — sketchy border on the OUTER
+            // (allocated) box, not egui's margin-inset inner rect (the
+            // app-wide indented-input fix); the per-row status tone is
+            // passed through as the border color.
+            let response = redesign_text_input(
+                ui,
+                palette,
+                InputOpts {
+                    edit: egui::TextEdit::singleline(mono_value)
+                        .font(egui::FontId::new(
+                            12.0,
+                            egui::FontFamily::Name("firacode_nerd".into()),
+                        ))
+                        .text_color(redesign_text_primary(palette))
+                        .background_color(redesign_input_bg(palette))
+                        .margin(margin),
+                    margin,
+                    size: egui::vec2(edit_width, 24.0),
+                    border: Some(border_color),
+                },
             );
             input_x_range = Some((response.rect.left(), response.rect.right()));
 

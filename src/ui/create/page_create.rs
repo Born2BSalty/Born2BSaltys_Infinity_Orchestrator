@@ -71,8 +71,10 @@ use crate::ui::create::stage_fork_download::{self, ForkDownloadOutcome};
 use crate::ui::create::stage_fork_paste::{self, ForkPasteOutcome};
 use crate::ui::create::stage_fork_preview::{self, ForkPreviewOutcome};
 use crate::ui::create::state_create::CreateStage;
+use crate::ui::home::confirm_delete;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 
 /// How long the in-dialog `✓ Copied import code` confirmation shows
 /// (SPEC §5.2 — transient; the wireframe `setTimeout(…, 1600)`).
@@ -115,6 +117,9 @@ enum CreateRequest {
     /// Load Draft Kebab `Copy import code` — copy + show the in-dialog
     /// confirmation. Carries the modlist id.
     CopyImportCode(String),
+    /// Load Draft Kebab `Delete` (SPEC §5.2 — user-directed deviation) —
+    /// arm the danger `ConfirmDialog` over the dialog. Carries the id.
+    ArmDeleteDraft(String),
 }
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
@@ -193,8 +198,20 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             LoadDraftOutcome::CopyImportCode(id) => {
                 request = Some(CreateRequest::CopyImportCode(id));
             }
+            LoadDraftOutcome::Delete(id) => {
+                request = Some(CreateRequest::ArmDeleteDraft(id));
+            }
             LoadDraftOutcome::Pending => {}
         }
+
+        // ── Load Draft `Delete` confirm (SPEC §5.2 — user-directed
+        //    deviation). Rendered AFTER the dialog so the danger confirm
+        //    floats above it. Uses the EXACT Home delete machinery
+        //    (`confirm_delete` text/descriptor + the shared
+        //    `confirm_dialog` + `operations::delete_modlist`) — reused, not
+        //    reimplemented (the `home::page_home::render_delete_confirm`
+        //    path). ──
+        render_load_draft_delete_confirm(orchestrator, ctx);
     }
 
     // ── Apply the deferred app-level effect. ──
@@ -250,6 +267,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
                 orchestrator.create_screen_state.load_draft_open = false;
                 orchestrator.create_screen_state.load_draft_copied_name = None;
                 orchestrator.create_screen_state.load_draft_copied_until = None;
+                // A pending delete-confirm must not survive a dialog close.
+                orchestrator.create_screen_state.load_draft_delete_target = None;
             }
             CreateRequest::ResumeWorkspace(id) => {
                 // P6.T14 / SPEC §5.2 — close the dialog, open the workspace
@@ -264,7 +283,74 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
                 };
             }
             CreateRequest::CopyImportCode(id) => copy_import_code(orchestrator, ctx, &id),
+            CreateRequest::ArmDeleteDraft(id) => {
+                // SPEC §5.2 (user-directed deviation): arm the danger
+                // confirm; the actual delete runs on Confirm in
+                // `render_load_draft_delete_confirm` (the Home pattern).
+                orchestrator.create_screen_state.load_draft_delete_target = Some(id);
+            }
         }
+    }
+}
+
+/// Render the Load Draft `Delete` confirm if `load_draft_delete_target` is
+/// armed (SPEC §5.2 — user-directed deviation). This is the **exact
+/// `home::page_home::render_delete_confirm` flow, reused**: the same
+/// `confirm_delete::delete_dialog_text` / `delete_confirm` descriptor, the
+/// same shared `confirm_dialog::render`, and the same guarded
+/// `operations::delete_modlist` (registry entry + safe on-disk folder
+/// removal) + the persistence-cycle snapshot anchor so the debounced tick
+/// doesn't re-detect a phantom diff. On Confirm the entry is gone from the
+/// registry AND disk; the Load Draft list (re-derived from the registry each
+/// frame) reflects it immediately. On Cancel: clear the target, no change.
+fn render_load_draft_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
+    let Some(id) = orchestrator
+        .create_screen_state
+        .load_draft_delete_target
+        .clone()
+    else {
+        return;
+    };
+    let Some(entry) = orchestrator.registry.find(&id).cloned() else {
+        // Entry disappeared (deleted via another path) — disarm.
+        orchestrator.create_screen_state.load_draft_delete_target = None;
+        return;
+    };
+
+    let (title, body) = confirm_delete::delete_dialog_text(&entry);
+    // Distinct id-salt from Home's so the two confirm windows never collide
+    // if both code paths are ever live (`confirm_dialog` keys on id_salt).
+    let dialog = confirm_delete::delete_confirm("load_draft", &title, &body);
+    let outcome = confirm_dialog::render(ctx, orchestrator.theme_palette, &dialog);
+
+    match outcome {
+        ConfirmOutcome::Confirmed => {
+            orchestrator.create_screen_state.load_draft_delete_target = None;
+            match operations::delete_modlist(
+                &id,
+                &orchestrator.registry_store,
+                &mut orchestrator.registry,
+            ) {
+                Ok(_) => {
+                    // Keep the persistence cycle's snapshot consistent with
+                    // the just-written-through registry so the debounced
+                    // tick doesn't re-detect a phantom diff (the exact Home
+                    // `render_delete_confirm` post-step).
+                    orchestrator.persistence_cycle.last_saved_registry =
+                        orchestrator.registry.clone();
+                }
+                Err(err) => {
+                    warn!(
+                        target = "orchestrator",
+                        "Create Load Draft: delete_modlist failed for {id}: {err}"
+                    );
+                }
+            }
+        }
+        ConfirmOutcome::Cancelled => {
+            orchestrator.create_screen_state.load_draft_delete_target = None;
+        }
+        ConfirmOutcome::Pending => {}
     }
 }
 

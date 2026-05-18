@@ -23,10 +23,9 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, InputOpts, redesign_btn, redesign_text_input};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_input_bg, redesign_text_faint, redesign_text_primary,
+    ThemePalette, redesign_input_bg, redesign_text_faint, redesign_text_primary,
 };
 
 pub fn render(
@@ -39,28 +38,31 @@ pub fn render(
 ) {
     ui.horizontal(|ui| {
         if *editing {
-            let response = ui.add_sized(
-                egui::vec2(200.0, 28.0),
-                egui::TextEdit::singleline(edit_buffer)
-                    .font(egui::FontId::new(
-                        14.0,
-                        egui::FontFamily::Name("poppins_medium".into()),
-                    ))
-                    .text_color(redesign_text_primary(palette))
-                    .background_color(redesign_input_bg(palette))
-                    .margin(egui::Margin::symmetric(8, 4))
-                    .hint_text(
-                        egui::RichText::new("@yourhandle")
-                            .size(14.0)
-                            .family(egui::FontFamily::Name("poppins_medium".into()))
-                            .color(redesign_text_faint(palette)),
-                    ),
-            );
-            ui.painter().rect_stroke(
-                response.rect,
-                egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8),
-                egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-                egui::StrokeKind::Outside,
+            let margin = egui::Margin::symmetric(8, 4);
+            // Shared input primitive — border on the OUTER (allocated) box,
+            // not egui's margin-inset inner rect (app-wide indent fix).
+            let _response = redesign_text_input(
+                ui,
+                palette,
+                InputOpts {
+                    edit: egui::TextEdit::singleline(edit_buffer)
+                        .font(egui::FontId::new(
+                            14.0,
+                            egui::FontFamily::Name("poppins_medium".into()),
+                        ))
+                        .text_color(redesign_text_primary(palette))
+                        .background_color(redesign_input_bg(palette))
+                        .margin(margin)
+                        .hint_text(
+                            egui::RichText::new("@yourhandle")
+                                .size(14.0)
+                                .family(egui::FontFamily::Name("poppins_medium".into()))
+                                .color(redesign_text_faint(palette)),
+                        ),
+                    margin,
+                    size: egui::vec2(200.0, 28.0),
+                    border: None,
+                },
             );
             if redesign_btn(
                 ui,

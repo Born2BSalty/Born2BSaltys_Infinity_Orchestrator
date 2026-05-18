@@ -25,14 +25,17 @@
 // rect-agnostic `list_step3::render` (directive decision-order step 1).
 //
 //   - `workspace_step3` → the top-level Step-3 renderer + layout-rect
-//                          owner (the orchestrator owns the action-row /
+//                          owner (the orchestrator owns the body-hint /
 //                          tab-row / list rects so the list never bleeds
 //                          into the workspace nav bar — the Step-2
-//                          `clipped_pane` precedent).
-//   - `step3_action_row` → the net-new action-row count text
-//                          "_N_ components ready to install on _<tab>_ ·
-//                          across _M_ mods" (SPEC §7.1 — the same string
-//                          Step-4's `step4_save_row` renders).
+//                          `clipped_pane` precedent). It renders BOTH the
+//                          §7.1 body hint line (in addition to the shell
+//                          per-step hint — SPEC §7.1 amended) and the tab
+//                          row. **The Step-3 "_N_ components ready to
+//                          install …" count line is REMOVED (Step-4-only —
+//                          SPEC §7.1 amended; the wireframe
+//                          `ComponentsPanel` never drew it).** The former
+//                          `step3_action_row` module is deleted accordingly.
 //   - `step3_tab_row`    → the net-new redesign tab row (shared GameTabs +
 //                          aggregate conflict/prompt clickable Pills +
 //                          redesign Undo/Redo/Collapse All/Expand All).
@@ -44,6 +47,5 @@
 //       (decision order; carve-out boundary), §2.2, §6 (the Step-2 C4
 //       precedent); wireframe `screens.jsx:3023-3056`.
 
-pub mod step3_action_row;
 pub mod step3_tab_row;
 pub mod workspace_step3;

@@ -69,6 +69,24 @@ use crate::registry::model::Game;
 use crate::ui::install::stage_downloading::DownloadProgress;
 use crate::ui::install::state_install::{DestChoice, PreviewTab};
 
+/// Which starting point the user has selected in the `choose` mode's two
+/// **selectable boxes** (SPEC §5.1 — the user-directed UX: click a box to
+/// select it, then a single `Start →`). Defaults to `Scratch` so a fresh
+/// visit has a sensible selection (the from-scratch box is the primary
+/// path; the game ComboBox is meaningful in that state).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StartingPoint {
+    /// "New modlist from downloaded mods" — `start →` semantics. The game
+    /// ComboBox applies **only** in this state (SPEC §5.1).
+    #[default]
+    Scratch,
+    /// "Import and modify another modlist" — `paste share code →`
+    /// semantics. The game is **derived from the pasted share code**, not
+    /// user-selected (SPEC §5/§5.3), so the ComboBox is replaced by a
+    /// read-only contextual note in this state.
+    Import,
+}
+
 /// The Create screen's stages (SPEC §5: choose → one of the fork sub-stages).
 /// The machine is whole so `page_create`'s dispatch + the fork
 /// back-navigation are total. Run 3 shipped `Choose`; **Run 4 (P6.T8) ships
@@ -121,6 +139,11 @@ pub struct CreateScreenState {
     /// `Backup` are offered (the `allow_partial = false` arg to the reused
     /// Phase-5 `destination_not_empty::render`).
     pub destination_choice: Option<DestChoice>,
+    /// The selected starting point (SPEC §5.1 — the user-directed
+    /// selectable-box UX). Defaults to `Scratch`. Drives both which box
+    /// renders selected AND whether the game ComboBox (Scratch) or the
+    /// read-only "game comes from the imported modlist" note (Import) shows.
+    pub starting_point: StartingPoint,
     /// Whether the Load Draft dialog is open (wireframe `loadDraftOpen`).
     /// Non-blocking `egui::Window` per SPEC §10 — this is the persistent
     /// open-bool the dialog re-renders from each frame.
@@ -183,6 +206,16 @@ pub struct CreateScreenState {
     /// defaults to `None` (derive-`Default`-safe; `Instant` itself is not
     /// `Default`, the `Option` is).
     pub load_draft_copied_until: Option<std::time::Instant>,
+
+    /// **Load Draft `Delete` confirm target** (SPEC §5.2 — the user-directed
+    /// deviation: the wireframe left the LoadDraft `Delete` inert; the user
+    /// wants it to fully work via the SAME machinery the Home kebab uses).
+    /// `Some(id)` arms the danger `ConfirmDialog` over the dialog; on
+    /// Confirm `page_create` calls the shared `operations::delete_modlist`
+    /// (registry entry + guarded on-disk folder removal) — the exact Home
+    /// `delete_target` pattern, reused, not reimplemented. `None` = no
+    /// delete-confirm in flight.
+    pub load_draft_delete_target: Option<String>,
 }
 
 impl CreateScreenState {
@@ -223,6 +256,10 @@ mod tests {
         assert_eq!(s.destination_choice, None);
         assert!(!s.load_draft_open);
         assert_eq!(s.resumed_build_id, None);
+        // SPEC §5.1 — the selectable-box default is the from-scratch box.
+        assert_eq!(s.starting_point, StartingPoint::Scratch);
+        // SPEC §5.2 — no delete-confirm armed on a fresh state.
+        assert_eq!(s.load_draft_delete_target, None);
         // Fork sub-flow defaults: clean.
         assert!(s.fork_code.is_empty());
         assert!(s.fork_preview.is_none());
@@ -256,5 +293,13 @@ mod tests {
     #[test]
     fn stage_default_is_choose() {
         assert_eq!(CreateStage::default(), CreateStage::Choose);
+    }
+
+    #[test]
+    fn starting_point_default_is_scratch() {
+        // SPEC §5.1 — the from-scratch box is selected by default (its game
+        // ComboBox is the meaningful control in that state).
+        assert_eq!(StartingPoint::default(), StartingPoint::Scratch);
+        assert_ne!(StartingPoint::Scratch, StartingPoint::Import);
     }
 }

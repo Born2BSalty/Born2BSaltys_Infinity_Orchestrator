@@ -2,7 +2,11 @@
 
 Changes committed but **never seen rendered by you** — every item below was committed while the app held the `infinity_orchestrator.exe` lock, so none has been visually verified. Work through this when you're back.
 
-_Last updated 2026-05-17 (Phase 6 Run 3 SHIPPED + verified — items 5/6 promoted below). Branch `overhaul/infinity_orchestrator`, all committed items pushed to origin._
+_Last updated 2026-05-17 (Phase-6 user-feedback **Fix-Run 2** implemented — see the Fix-Run-2 section below; Fix-Run-1 persistence round-trip marked user-verified done). Branch `overhaul/infinity_orchestrator`._
+
+> **Fix-Run-1 (persistence round-trip + in-memory isolation, commit `8dfb905`) — ✅ USER-VERIFIED DONE.** The per-modlist cold-resume round-trip + save-draft + rename were user-verified end-to-end on a gate-confirmed binary (overview/HANDOFF 2026-05-17). Do not re-test; do not touch that code (`workspace_state_loader.rs`, the dirty-bit/nav-flush, `step2_resume_scan.rs`).
+
+> **Items 5 & 6 below are partially SUPERSEDED by Fix-Run 2** — see the Fix-Run-2 section. Specifically: item 5's "two starting-point **cards** with in-box CTAs" is replaced by the selectable-box + single `Start →` UX; item 6's "the dialog's `Delete` Kebab item is intentionally inert" is now **wired** (full Home delete machinery). Verify those via the Fix-Run-2 items, not the stale wording in 5/6.
 
 ---
 
@@ -96,6 +100,39 @@ Shipped in the Run-4 commit (P6.T8 fork sub-flow + P6.T11 dirty-bit persistence 
 ### ☐ 9. Workspace persistence — dirty-bit + nav-away flush
 - **Phase / Run:** Phase 6, **Run 4** — **P6.T11** + **P6.T15**.
 - **Check:** in a workspace, toggle a Step-2 checkbox → `modlists/<id>/workspace.json` written ~1 s later (debounce); drag/collapse/undo in Step 3 → same; leave it idle → no rewrite (zero idle cost). Then: edit a Step-2 checkbox, **immediately** click Home (before the 1 s debounce), quit, relaunch, reopen → the change **persisted** (the synchronous nav-away flush).
+
+## Phase-6 user-feedback Fix-Run 2 — implemented, pending your visual sign-off
+
+UI/UX cleanup + the SPEC cascade + a provenance test-code mint. **Implemented + self-verified; the orchestrator independently verifies + commits.** The Precondition at the top of this doc applies (close app → rebuild twice to a confirmed no-op → relaunch). `cargo test --lib` **275/0**; `%APPDATA%\bio\modlists.json` SHA256 byte-identical pre/post (`3d8212d7…`).
+
+### ☐ FR2-1. App-wide input border no longer indented
+- **What changed:** a single shared input primitive now strokes the **outer allocated box**, not egui's margin-inset inner galley rect (root cause: egui `TextEdit` returns the inner rect).
+- **Check:** the **modlist name** + **destination** inputs (Create), every **Settings → Paths / Advanced / General name** row input, and the **Step-2 search** box all have a border that **hugs the field box** — no dead inset / "indented" gap between the visible field and its border. Text still sits its normal padding inside the box.
+
+### ☐ FR2-2. No nav step-indicator on any workspace step
+- **Check:** on **all 4 steps** (2/3/4/5), the bottom nav row has `← Previous`, the `next: <label>` / `final step` forward hint, and `Next →` — **but NOT** the `on Step N · <Label> · step i of 4` line that used to sit between `← Previous` and the hint. (Deliberate — recorded in SPEC §2.2.)
+
+### ☐ FR2-3. Step 3 — two hint lines, no count line
+- **Check (resume the in-progress seed → Step 3):** **two** hint lines render — the shell hint *"Review and adjust install order. Drag to reorder; right-click for more actions."* (under the progress bar) **and** *"Right-click a component for more actions, including uncheck and prompt tools."* (above the tab row). The *"N components ready to install on <tab> · across M mods"* count line is **GONE** from Step 3 (it still shows in **Step 4**).
+
+### ☐ FR2-4. Create — new selectable-box choose UX
+- **Check (Create rail item):** a **`Choose one`** header; **two selectable boxes** (click anywhere on a box to select it — the selected box gets an accent border + faint tint; **no** in-box `start →` / `paste share code →` buttons); a single primary **`Start →`** at the **bottom-right**, styled like the workspace `Next →` button. `Start →` with the from-scratch box selected creates the modlist + opens the Workspace; with the import box selected it enters fork-paste. The **game ComboBox shows only when the from-scratch box is selected** (redesign chrome, EET default); selecting the **import box replaces it** with a read-only "comes from the imported modlist" note.
+
+### ☐ FR2-5. Glyphs render (no `?` tofu)
+- **Check:** the `Start →` arrow (Create) renders as a real `→` (not `?`); the Load-Draft `✓ Copied import code …` confirmation shows a real `✓` (not `?`).
+
+### ☐ FR2-6. Load Draft `Delete` fully works
+- **Check (Create → `load draft` → a build's Kebab → `Delete`):** a danger confirm (`Delete "<name>"?` + the install-folder body) appears; **Confirm** removes the entry from the list **and** from Home **and** deletes its on-disk install folder (guarded) — the exact Home delete. **Cancel** changes nothing. (SPEC §5.2 — user-directed deviation; the wireframe left this inert.)
+
+### ☐ FR2-7. Rail no longer stuck on Home in a Workspace
+- **Check:** from Home, `resume` an in-progress build → inside the Workspace the **left rail highlights `Create`**, not `Home`. (Matches the canonical wireframe — recorded SPEC §2.1.)
+
+### ☐ FR2-8. Minted forked share code (paste it to test forking)
+- **What:** the orchestrator hands you a `BIO-MODLIST-V1:` code minted by the 7c test helper (baked name/author + a 2-deep `⑂` lineage; format-correct by construction — round-tripped through BIO's own decoder).
+- **Check:** Create → select the **import** box → `Start →` → fork-paste → paste the minted code → `Preview →` → the preview shows the baked **name** (`Tactical EET 2026 (shared)`) + **author** (`@b2bs`), and `⑂ fork info` opens the lineage popup showing the 2-ancestor chain (`Born2BSalty's EET Basics` by @b2bs ↳ `EET Tactical Mid` by @olim ↳ this).
+
+### ☐ FR2-9. (KNOWN GAP — not fixed) Prompt popup vertical growth
+- **#4a is NOT fixed — `PLAN GAP` raised.** The per-component prompt popup still grows vertically as the mouse moves. Root cause is in **protected BIO source** (`src/ui/step2/prompt/prompt_popup_step2.rs` — `ui.set_min_size(ui.available_size())` self-feedback inside an `egui::Window`), which the CRITICAL DIRECTIVE forbids editing and no carve-out covers. Awaiting a directive decision (see the run report `PLAN GAP`). The aggregate (toolbar) prompt pill popup is unchanged (was not in scope).
 
 ## Not in this list (and why)
 

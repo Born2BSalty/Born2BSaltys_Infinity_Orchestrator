@@ -30,17 +30,27 @@
 // calls (directive decision-order step 1 — reuse, not reimplement; never
 // call BIO's `render_*`).
 //
-// SPEC §7.1: an action-row count line ("_N_ components ready to install on
-// _<tab>_ · across _M_ mods") sits **above** the tab row. The wireframe
-// `ComponentsPanel` does not draw it (only Step-4's `OrderPanel` does), but
-// SPEC §7.1 explicitly specifies it for Step 3 too, and SPEC prose wins
-// where the wireframe is silent (spec-authority order). It is the same
-// string Step-4 renders (`step3_action_row` reuses the shared
-// `workspace_step4::active_tab_items` resolver so the two never drift).
+// **SPEC §7.1 (amended — supersedes the earlier spec-over-wireframe
+//   drift):** Step 3 renders TWO hint lines and **NO count line**:
+//   - The shell per-step hint (`workspace_hint_line`, the WORKSPACE_STEPS
+//     Step-3 hint — "Review and adjust install order. Drag to reorder;
+//     right-click for more actions.") drawn by the workspace shell under
+//     the progress bar, AND
+//   - the §7.1 **body hint** ("Right-click a component for more actions,
+//     including uncheck and prompt tools." — wireframe `ComponentsPanel`
+//     `screens.jsx:3025`) drawn HERE.
+//   The Step-3 "_N_ components ready to install on _<tab>_ · across _M_
+//   mods" **count line is REMOVED** — it is Step-4-only (the wireframe
+//   `ComponentsPanel` never drew it; only Step-4's `OrderPanel` does).
+//   SPEC §7.1 is amended accordingly and the user is final authority on
+//   dropping the earlier spec-over-wireframe drift. The count still
+//   renders in Step 4 via `step4_save_row`; the former `step3_action_row`
+//   module is deleted.
 //
-// **Net-new chrome (this file + `step3_action_row` + `step3_tab_row`,
-//   redesign tokens, orchestrator-owned rects):**
-//   - The action-row count (SPEC §7.1) — `step3_action_row`.
+// **Net-new chrome (this file + `step3_tab_row`, redesign tokens,
+//   orchestrator-owned rects):**
+//   - The §7.1 body hint line (faint `<Label>` — wireframe inline
+//     `color:text-faint`), in ADDITION to the shell hint above.
 //   - The redesign tab row (`step3_tab_row`): the SHARED redesign GameTabs
 //     (reused verbatim — `crate::ui::workspace::widgets::game_tab`; single
 //     game skips the strip exactly like Step-4), the aggregate
@@ -49,10 +59,10 @@
 //   - **No** `Export diagnostics` / `Restart App With Diagnostics`. BIO
 //     paints those in `render_toolbar`, which is never called — so they
 //     are structurally absent (guaranteed by construction).
-//   - **No** BIO heading / hint. The workspace shell already renders the
-//     per-step hint under the progress bar (`workspace_hint_line`); the
-//     wireframe `ComponentsPanel` (`screens.jsx:3024-3025`) has only the
-//     shell hint — a second one here was the Step-2 #6 duplicate.
+//   - **No** BIO heading. The shell hint + the §7.1 body hint are the only
+//     two text lines above the tab row (SPEC §7.1 amended — both lines for
+//     Step 3; the earlier "shell-only, no duplicate" reasoning was wrong
+//     for Step 3).
 //
 // **Reused BIO surface (read-only — directive decision-order step 1; the
 //   heavy interaction surface, NOT reimplemented), matching
@@ -118,17 +128,22 @@
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::shared::redesign_tokens::redesign_text_faint;
 use crate::ui::step3::list_step3;
 use crate::ui::step3::state_step3;
 use crate::ui::step3::toolbar_support_step3;
-use crate::ui::workspace::step3::{step3_action_row, step3_tab_row};
+use crate::ui::workspace::step3::step3_tab_row;
 
-/// Action-row height (the count Label line; wireframe `<Label hand>` 14px
-/// ≈ 22 + a little slack).
-const ACTION_ROW_H: f32 = 24.0;
-/// Gap below the action row (wireframe `OrderPanel`/Step-4 action-row
-/// `marginBottom: 10`; Step 3's mirrors it for a consistent action row).
-const ACTION_ROW_GAP: f32 = 10.0;
+/// The §7.1 body hint line (wireframe `ComponentsPanel`,
+/// `screens.jsx:3025`), rendered VERBATIM here in addition to the shell
+/// per-step hint (`workspace_hint_line`, the WORKSPACE_STEPS Step-3 hint).
+/// SPEC §7.1 (amended) specifies BOTH lines for Step 3.
+const STEP3_BODY_HINT: &str =
+    "Right-click a component for more actions, including uncheck and prompt tools.";
+/// Height of the §7.1 body hint line (wireframe `<Label>` 14px ≈ 22).
+const BODY_HINT_H: f32 = 22.0;
+/// Gap below the body hint (wireframe `ComponentsPanel` `marginBottom: 10`).
+const BODY_HINT_GAP: f32 = 10.0;
 /// Tab-row height (wireframe action sub-row `height: 30`, same as the
 /// shared `game_tab::TAB_H`).
 const TAB_ROW_H: f32 = 30.0;
@@ -168,14 +183,17 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let w = root.width();
     let mut y = root.top();
 
-    // #6-style: NO per-step sub-hint here — the workspace shell already
-    // renders the per-step hint under the progress bar (`workspace_hint_
-    // line`); the wireframe `ComponentsPanel` (`screens.jsx:3024-3025`) has
-    // only the shell hint. A second hint here would be the Step-2 #6
-    // duplicate.
-
-    let action_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, ACTION_ROW_H));
-    y += ACTION_ROW_H + ACTION_ROW_GAP;
+    // §7.1 (amended): render the body hint line `Right-click a component
+    // for more actions, including uncheck and prompt tools.` (wireframe
+    // `ComponentsPanel`, `screens.jsx:3025`) HERE, in ADDITION to the shell
+    // per-step hint the workspace already draws under the progress bar
+    // (`workspace_hint_line`, the WORKSPACE_STEPS Step-3 hint). SPEC §7.1
+    // now specifies BOTH lines for Step 3 (the earlier "shell-only, no
+    // duplicate" reasoning was wrong for Step 3 — corrected per the
+    // dispatch brief; the wireframe `ComponentsPanel` does draw this body
+    // line). Faint `<Label>` per the wireframe inline `color:text-faint`.
+    let body_hint_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, BODY_HINT_H));
+    y += BODY_HINT_H + BODY_HINT_GAP;
 
     let tab_row_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, TAB_ROW_H));
     // The list box starts 1.5px ABOVE the tab row's bottom (negative seam)
@@ -189,9 +207,19 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let list_h = (root.bottom() - y).max(LIST_MIN_H);
     let list_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, list_h));
 
-    // ── 1. Net-new action-row count (SPEC §7.1). ──
-    ui.scope_builder(egui::UiBuilder::new().max_rect(action_rect), |ui| {
-        step3_action_row::render(ui, state, palette);
+    // ── 1. §7.1 body hint line. The Step-3 "_N_ components ready to
+    //    install …" count line is REMOVED entirely (it is Step-4-only —
+    //    SPEC §7.1 amended; the wireframe `ComponentsPanel` never drew it,
+    //    and the user is final authority on dropping the earlier
+    //    spec-over-wireframe drift). It still renders in Step 4 via
+    //    `step4_save_row`. ──
+    ui.scope_builder(egui::UiBuilder::new().max_rect(body_hint_rect), |ui| {
+        ui.label(
+            egui::RichText::new(STEP3_BODY_HINT)
+                .size(14.0)
+                .family(egui::FontFamily::Name("poppins_medium".into()))
+                .color(redesign_text_faint(palette)),
+        );
     });
 
     // ── 2. Net-new redesign tab row (shared GameTabs + aggregate

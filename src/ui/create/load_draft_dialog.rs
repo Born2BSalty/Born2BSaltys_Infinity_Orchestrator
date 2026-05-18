@@ -47,7 +47,7 @@
 // changes to reused widgets") is correct; forking it to drop one inert item
 // would be the violation.
 //
-// ## Wired actions (Run 3 = the Create *entry path*)
+// ## Wired actions
 //
 //   - `resume`           → live: closes the dialog + opens the Workspace at
 //     Step 2 for that build (P6.T14 — the dispatcher sets
@@ -56,15 +56,19 @@
 //   - `Copy import code` → live: copies the build's BIO-MODLIST-V1 code +
 //     shows the in-dialog `✓ Copied import code for "<name>"` confirmation
 //     (SPEC §5.2; the same `operations::share_code_for` + `ctx.copy_text`
-//     path Home uses).
-//   - `Delete`           → **not wired in Run 3.** This matches the canonical
-//     wireframe, where the LoadDraft Kebab Delete is `onClick: () => {}`
-//     (inert). In-progress build deletion is fully available from Home
-//     (shipped Phase 5, with the guarded `operations::delete_modlist` +
-//     danger confirm). Re-plumbing a delete-confirm flow *inside* this
-//     dialog is neither in the canonical wireframe nor in the Run-3 scope
-//     (the Create entry path); deferring it keeps the reuse verbatim and the
-//     footprint minimal. Recorded as a wireframe-faithful judgment call.
+//     path Home uses). The `✓` is rendered in `firacode_nerd` (U+2713 is
+//     cmap-ABSENT in the Latin-only Poppins subset → would tofu to `?`;
+//     PRESENT in the bundled full FiraCode Nerd build — the symbol-glyph
+//     rule, cmap-verified).
+//   - `Delete`           → **WIRED — user-directed deviation (SPEC §5.2
+//     amended).** The canonical wireframe left the LoadDraft Kebab `Delete`
+//     inert (`onClick: () => {}`); the user directed it to fully work via
+//     the **same machinery the Home kebab uses** — it is final authority on
+//     the directed deviation. This renderer (state-only) just emits
+//     `Delete(id)`; `page_create` arms a danger `ConfirmDialog` and, on
+//     Confirm, calls the shared `registry::operations::delete_modlist`
+//     (registry entry + guarded on-disk folder removal) — the exact Home
+//     `render_delete_confirm` path, **reused, not reimplemented**.
 //
 // **Non-blocking** per SPEC §10 — a borderless centered `egui::Window`
 // (`title_bar(false)`, no modal area / backdrop / focus trap), exactly the
@@ -113,6 +117,11 @@ pub enum LoadDraftOutcome {
     /// dispatcher resolves + copies the code and feeds the in-dialog
     /// confirmation back via [`render`]'s `copied_name` arg next frame.
     CopyImportCode(String),
+    /// A card's Kebab `Delete` clicked (SPEC §5.2 — user-directed
+    /// deviation). Carries the modlist id; `page_create` arms the danger
+    /// `ConfirmDialog` and runs the shared `operations::delete_modlist` on
+    /// Confirm — the exact Home delete machinery, reused.
+    Delete(String),
 }
 
 /// `maxWidth: 620` (wireframe). egui windows shrink-wrap; this caps width.
@@ -242,13 +251,16 @@ pub fn render(
                                     outcome =
                                         LoadDraftOutcome::CopyImportCode(entry.id.clone());
                                 }
-                                // `Delete` from the reused card's danger Kebab
-                                // is intentionally NOT wired here (matches the
-                                // canonical wireframe's inert `() => {}`;
-                                // in-progress deletion lives on Home — see the
-                                // module header). `Open`/`OpenInstallFolder`/
-                                // `Reinstall` cannot occur on an in-progress
-                                // card. `None` = no action.
+                                ModlistCardActions::Delete => {
+                                    // SPEC §5.2 (user-directed deviation):
+                                    // emit the id; `page_create` arms the
+                                    // danger confirm + runs the SAME
+                                    // `operations::delete_modlist` Home uses.
+                                    outcome = LoadDraftOutcome::Delete(entry.id.clone());
+                                }
+                                // `Open`/`OpenInstallFolder`/`Reinstall`
+                                // cannot occur on an in-progress card.
+                                // `None` = no action.
                                 _ => {}
                             }
                         }
@@ -298,14 +310,28 @@ pub fn render(
                         bottom: 6,
                     });
                 toast_frame.show(ui, |ui| {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "\u{2713} Copied import code for \"{name}\""
-                        ))
-                        .size(13.0)
-                        .family(egui::FontFamily::Name("poppins_light".into()))
-                        .color(redesign_success(palette)),
-                    );
+                    // The `✓` (U+2713) is cmap-ABSENT in the Latin-only
+                    // Poppins subset (renders as `?` tofu) but PRESENT in
+                    // the bundled full FiraCode Nerd build — so the glyph
+                    // rides in `firacode_nerd` while the prose stays
+                    // `poppins_light`, side by side (the symbol-glyph rule,
+                    // cmap-verified; the `home::toast` / `sub_flow_footer`
+                    // precedent).
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        ui.label(
+                            egui::RichText::new("\u{2713}")
+                                .size(13.0)
+                                .family(egui::FontFamily::Name("firacode_nerd".into()))
+                                .color(redesign_success(palette)),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!("Copied import code for \"{name}\""))
+                                .size(13.0)
+                                .family(egui::FontFamily::Name("poppins_light".into()))
+                                .color(redesign_success(palette)),
+                        );
+                    });
                 });
             }
         });

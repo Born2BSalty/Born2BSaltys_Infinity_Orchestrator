@@ -56,7 +56,7 @@
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, InputOpts, redesign_btn, redesign_text_input};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_input_bg, redesign_text_faint, redesign_text_primary,
@@ -124,32 +124,33 @@ pub fn render(
             };
             let search_w = (rect.width() - scan_btn_w - ROW_GAP - dev_w).max(80.0);
 
-            let resp = ui.add_sized(
-                [search_w, SEARCH_INPUT_H],
-                egui::TextEdit::singleline(&mut orchestrator.wizard_state.step2.search_query)
+            let search_margin = egui::Margin::symmetric(SEARCH_INPUT_TEXT_PAD, 4);
+            // Shared input primitive — the sketchy 1.5px border is painted
+            // on the OUTER (allocated) box, not egui's margin-inset inner
+            // rect (the app-wide indented-input fix). The box still
+            // left-aligns at the structural content edge; the text sits
+            // `SEARCH_INPUT_TEXT_PAD` inside *that box* (the input's own
+            // chrome) — a bordered input aligns by its box edge, with the
+            // border now correctly hugging that box.
+            let _resp = redesign_text_input(
+                ui,
+                palette,
+                InputOpts {
+                    edit: egui::TextEdit::singleline(
+                        &mut orchestrator.wizard_state.step2.search_query,
+                    )
                     .hint_text("Search mods or components...")
                     .text_color(redesign_text_primary(palette))
                     .background_color(redesign_input_bg(palette))
-                    // The input's own internal text padding
-                    // (`SEARCH_INPUT_TEXT_PAD`) — text sits this far inside
-                    // the box so it isn't glued to the border. The *box*
-                    // itself left-aligns at the structural content edge
-                    // (same as the progress bar / pane / title / hint);
-                    // this padding is the input's chrome, not that edge.
-                    // Vertical 4px keeps the text off the top/bottom border.
-                    .margin(egui::Margin::symmetric(SEARCH_INPUT_TEXT_PAD, 4))
+                    .margin(search_margin)
                     .font(egui::FontId::new(
                         14.0,
                         egui::FontFamily::Name("poppins_medium".into()),
                     )),
-            );
-            // Sketchy 1.5px border around the input to match the redesign
-            // `Input` chassis (egui's default frame is the wrong language).
-            ui.painter().rect_stroke(
-                resp.rect,
-                egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8),
-                egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-                egui::StrokeKind::Inside,
+                    margin: search_margin,
+                    size: egui::vec2(search_w, SEARCH_INPUT_H),
+                    border: None,
+                },
             );
 
             if is_scanning {

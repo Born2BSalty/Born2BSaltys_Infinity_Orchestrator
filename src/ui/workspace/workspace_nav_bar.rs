@@ -7,9 +7,6 @@
 //   container: marginTop 20, paddingTop 14, borderTop "1.5px dashed
 //              var(--border-soft)", flex row, alignItems center, gap 12.
 //     <Btn small disabled={disablePrev}>← Previous</Btn>
-//     <Label hand color:var(--text-faint) marginLeft:14>
-//        on {currentLabel} · step {currentIdx+1} of {total}
-//     </Label>
 //     <div marginLeft:auto gap:10>
 //       <Label hand color:var(--text-faint)>
 //          {isLast ? "final step" : `next: ${nextLabel}`}
@@ -17,9 +14,15 @@
 //       <Btn primary disabled={isLast}>Next →</Btn>
 //     </div>
 //
-// `currentLabel` is `${step.kicker} · ${step.label}` (wireframe
-// `${current.step} · ${current.label}`), so the indicator reads e.g.
-// "on Step 2 · Scan and Select · step 1 of 4".
+// **Nav step-indicator REMOVED (deliberate user-directed wireframe
+// deviation — SPEC §2.2 records it as intentional).** The wireframe also
+// drew a `<Label hand color:text-faint marginLeft:14>on {kicker} · {label}
+// · step {i} of {total}</Label>` between `← Previous` and the right
+// cluster; the user directed its removal on all 4 steps (final authority).
+// The progress bar above already shows the current step + number, so the
+// line was redundant chrome. Everything else is wireframe-faithful; the
+// right cluster's `next: <label>` / `final step` hint is kept (it is the
+// only forward-looking affordance, NOT the removed indicator).
 //
 // **Symbol-glyph rule (HANDOFF caveat).** `←` U+2190 / `→` U+2192 are
 // base-FiraCode glyphs the bundled full FiraCode Nerd build covers
@@ -83,8 +86,6 @@ pub fn render(
 ) -> NavBarOutcome {
     let mut outcome = NavBarOutcome::default();
 
-    let total = WorkspaceStep::ALL.len();
-    let idx = current.index();
     let is_last = current.next().is_none();
 
     // Wireframe: marginTop 20, paddingTop 14, 1.5px dashed top rule.
@@ -125,20 +126,18 @@ pub fn render(
             outcome.prev_clicked = true;
         }
 
-        // Step indicator (faint hand-style, marginLeft 14).
-        ui.add_space(14.0);
-        ui.label(
-            egui::RichText::new(format!(
-                "on {} \u{00B7} {} \u{00B7} step {} of {}",
-                current.step_kicker(),
-                current.label(),
-                idx + 1,
-                total
-            ))
-            .size(14.0)
-            .family(egui::FontFamily::Name("poppins_light".into()))
-            .color(redesign_text_faint(palette)),
-        );
+        // **Nav step-indicator REMOVED on all 4 steps — deliberate
+        // user-directed wireframe deviation (SPEC §2.2 records it as
+        // intentional so a future review does not restore it).** The
+        // wireframe (`screens.jsx:3376-3378`) draws a faint
+        // `on <Step N> · <Label> · step <i> of <total>` Label here; the
+        // user directed its removal (final authority on the directed
+        // deviation). The progress bar above already shows the current
+        // step + its number, so this line was redundant chrome. The
+        // forward `next: <label>` / `final step` hint (right cluster) is
+        // kept — it is the only forward-looking affordance and is NOT the
+        // removed indicator. (The right cluster's last-step logic uses
+        // `is_last`/`current.next()`, not the removed index/total.)
 
         // Right cluster (marginLeft auto): next-hint + `Next →` primary.
         // `right_to_left` lays the trailing edge first, so add the primary
@@ -172,6 +171,29 @@ pub fn render(
     });
 
     outcome
+}
+
+/// Render a primary forward button styled **exactly** like this nav bar's
+/// `Next →` (the same `glyph_btn` chassis: sketchy border, 2×2 primary
+/// shadow, active-press transform, `firacode_nerd` arrow + `poppins_medium`
+/// prose, theme-invariant `#1a2638` primary text). Exposed so Create's
+/// single `Start →` CTA reuses the workspace forward-button styling verbatim
+/// (the dispatch-brief mandate — one styling source, no fourth copy of the
+/// glyph-button chassis). `label` is the prose; the trailing glyph is the
+/// shared `→` (`ARROW_FWD`, cmap-present in `firacode_nerd`).
+pub(crate) fn forward_primary_button(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    label: &str,
+) -> egui::Response {
+    glyph_btn(
+        ui,
+        palette,
+        GlyphSide::Trailing(ARROW_FWD),
+        label,
+        true,  // primary (accent fill + 2×2 shadow) — same as `Next →`
+        false, // never disabled here (the choose CTA is always actionable)
+    )
 }
 
 /// Which side the arrow glyph sits on (mirrors `sub_flow_footer::GlyphSide`).

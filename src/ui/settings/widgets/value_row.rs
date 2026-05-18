@@ -16,9 +16,9 @@
 
 use eframe::egui;
 
+use crate::ui::orchestrator::widgets::{InputOpts, redesign_text_input};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_input_bg, redesign_text_faint, redesign_text_primary,
+    ThemePalette, redesign_input_bg, redesign_text_faint, redesign_text_primary,
 };
 
 pub fn render(
@@ -44,6 +44,7 @@ pub fn render(
 
         let pre = value.clone();
         let edit_width = 140.0;
+        let margin = egui::Margin::symmetric(6, 4);
         let mut edit = egui::TextEdit::singleline(value)
             .font(egui::FontId::new(
                 12.0,
@@ -51,7 +52,7 @@ pub fn render(
             ))
             .text_color(redesign_text_primary(palette))
             .background_color(redesign_input_bg(palette))
-            .margin(egui::Margin::symmetric(6, 4));
+            .margin(margin);
         if let Some(ph) = placeholder {
             edit = edit.hint_text(
                 egui::RichText::new(ph)
@@ -60,12 +61,17 @@ pub fn render(
                     .color(redesign_text_faint(palette)),
             );
         }
-        let response = ui.add_sized(egui::vec2(edit_width, 24.0), edit);
-        ui.painter().rect_stroke(
-            response.rect,
-            egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8),
-            egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-            egui::StrokeKind::Outside,
+        // Shared input primitive — border on the OUTER (allocated) box, not
+        // egui's margin-inset inner rect (the app-wide indented-input fix).
+        let response = redesign_text_input(
+            ui,
+            palette,
+            InputOpts {
+                edit,
+                margin,
+                size: egui::vec2(edit_width, 24.0),
+                border: None,
+            },
         );
         if response.changed() || *value != pre {
             on_change();
