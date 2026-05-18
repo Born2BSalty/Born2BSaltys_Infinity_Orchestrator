@@ -78,6 +78,7 @@ use crate::app::{
 };
 use crate::install_runtime::install_concurrency;
 use crate::install_runtime::rail_lock_reason::RailLockReason;
+use crate::install_runtime::registry_transition;
 use crate::registry::errors::RegistryError;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::persistence_cycle::RegistryPersistenceCycle;
@@ -224,6 +225,21 @@ pub struct OrchestratorApp {
     /// monotonically for a live "+MM:SS" readout, so this process-local
     /// `Instant` is the UI clock. `None` ⇒ no install running.
     pub install_running_since: Option<Instant>,
+
+    /// **P7.T6 — async install-folder size-worker receiver.** Set to
+    /// `Some(rx)` by `flip_to_installed` on the C3 clean-exit edge (the
+    /// worker thread walks the destination and reports
+    /// `(modlist_id, total_bytes)` once); drained every frame by
+    /// `drain_size_worker_result`, which does the SECOND atomic registry
+    /// write filling `total_size_bytes` (until then the Home card renders
+    /// `—`). Net-new orchestrator field, the established staged-field
+    /// pattern (the `WorkspaceStep5State` / `install_running_since`
+    /// precedents) — BIO state untouched. `None` ⇒ no size computation
+    /// pending. A worker-thread panic drops its `Sender` silently ⇒
+    /// `try_recv` yields `Disconnected` ⇒ the field is cleared and the
+    /// card keeps rendering `—` (plan P7.T6 panic mode).
+    pub(crate) install_size_worker_rx:
+        Option<crate::install_runtime::registry_transition::SizeWorkerReceiver>,
 
     // The Step-5 install-runtime fields the orchestrator owns exactly as
     // `WizardApp` owns them (`src/ui/app.rs:53-57`). The orchestrator's
@@ -439,6 +455,9 @@ impl OrchestratorApp {
             // the rail is unlocked from launch; the edge-detect in
             // `update` arms this if/when an install starts this run).
             install_running_since: None,
+            // No size computation pending at construction — armed by
+            // `flip_to_installed` on the first clean-exit edge this run.
+            install_size_worker_rx: None,
             step5_terminal: None,
             step5_terminal_error: None,
             step5_console_view: Step5ConsoleViewState::default(),
@@ -484,6 +503,151 @@ impl OrchestratorApp {
     /// consumes it is wired in Run 4 (P6.T11); nothing drains it yet.
     pub fn mark_workspace_dirty(&mut self) {
         self.workspace_state_dirty = true;
+    }
+
+    /// **P7.T6 — the C3 clean-exit registry flip (fired EXACTLY ONCE on the
+    /// edge).** Called from `update`'s existing `install_was_running &&
+    /// !install_running` transition — the SAME edge that clears
+    /// `install_running_since` (no second edge-detector is added; the brief
+    /// mandates reusing this one). Because that transition is, by
+    /// construction, true on exactly one frame per install run (the frame
+    /// BIO's `step5_runtime_status::process_exit_event` toggles
+    /// `install_running` false), this fires the `flip_to_installed`
+    /// transition once and only once per run.
+    ///
+    /// Gated on the **C3 triple** (`success_banner::clean_exit` — the one
+    /// shared predicate the banner / post-install row also gate on, so they
+    /// can never disagree about "the install completed cleanly"): only a
+    /// clean exit (`!install_running && last_exit_code == Some(0) &&
+    /// !last_install_failed`) flips the registry. A cancelled / failed /
+    /// nonzero exit returns without flipping — the entry stays
+    /// `InProgress` (SPEC §9.2 / plan C3-verification).
+    ///
+    /// `flip_to_installed` does the state/date/counts/true-bit-code mutate
+    /// + the atomic write + spawns the async size worker; its receiver is
+    /// stored in `install_size_worker_rx` for `drain_size_worker_result` to
+    /// fill `total_size_bytes` on a later frame.
+    fn maybe_flip_to_installed_on_clean_exit(&mut self) {
+        // C3 gate — the exact triple the success banner / post-install row
+        // use. Not a clean exit (cancel / failure / nonzero) ⇒ no flip; the
+        // entry stays in-progress.
+        if !crate::ui::workspace::step5::success_banner::clean_exit(&self.wizard_state) {
+            return;
+        }
+
+        // The modlist whose install just finished is the loaded workspace
+        // (the C5 rail lock pinned the user here for the whole install, so
+        // this is unambiguous — the same id `install_in_progress` reports).
+        let Some(id) = self.workspace_view.loaded_workspace_id.clone() else {
+            // No loaded workspace (defensive — a clean-exit edge with no
+            // workspace shouldn't occur given C5, but never flip a
+            // mystery entry).
+            warn!(
+                target = "orchestrator",
+                "clean-exit edge with no loaded workspace id; \
+                 flip_to_installed skipped"
+            );
+            return;
+        };
+
+        // Split the &mut borrow into the disjoint fields `flip_to_installed`
+        // needs (`registry` / `registry_store` / `wizard_state` are distinct
+        // struct fields — a sound split borrow, the same shape the Step-5
+        // chrome's multi-field calls already rely on).
+        let OrchestratorApp {
+            registry,
+            registry_store,
+            wizard_state,
+            ..
+        } = &mut *self;
+
+        // Fires once on this edge. On success it returns the size-worker
+        // receiver; store it so `drain_size_worker_result` does the second
+        // atomic write filling `total_size_bytes`. On any failure path it
+        // returns `None` (logged inside) — nothing to drain.
+        let rx = registry_transition::flip_to_installed(&id, registry, registry_store, wizard_state);
+        if rx.is_some() {
+            self.install_size_worker_rx = rx;
+        }
+    }
+
+    /// **P7.T6 — drain the async size-worker result (per frame).** Polls
+    /// `install_size_worker_rx` without blocking. On a value
+    /// `(modlist_id, bytes)`:
+    ///   - look the id up in the **live** registry — absent ⇒ the user
+    ///     deleted the modlist between worker start and result; discard
+    ///     silently (plan P7.T6 "modlist deleted" mode);
+    ///   - present ⇒ set `total_size_bytes = Some(bytes)` and do the
+    ///     SECOND atomic registry write. A write failure is logged and the
+    ///     receiver is **retained** so the next debounce cycle retries
+    ///     (plan P7.T6 "registry write failure ⇒ retry" mode — size is meta,
+    ///     not install-lifecycle-critical).
+    /// On `Disconnected` (the worker thread panicked, dropping its `Sender`,
+    /// or finished and the channel closed after delivery) the receiver is
+    /// cleared — `total_size_bytes` stays `None` and the Home card keeps
+    /// rendering `—` (plan P7.T6 "worker panic" mode). `Empty` (worker still
+    /// `du`-ing — can legitimately take > 5 min on a large EET install) ⇒
+    /// keep waiting, no abort.
+    fn drain_size_worker_result(&mut self) {
+        use std::sync::mpsc::TryRecvError;
+
+        let Some(rx) = self.install_size_worker_rx.as_ref() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok((modlist_id, bytes)) => {
+                if let Some(entry) = self.registry.find_mut(&modlist_id) {
+                    entry.total_size_bytes = Some(bytes);
+                    if let Err(err) = self.registry_store.save(&self.registry) {
+                        // Plan P7.T6: log + retry next debounce. Keep the
+                        // receiver? No — the value is already consumed from
+                        // the channel; instead leave the in-memory
+                        // `total_size_bytes` set and let the normal
+                        // debounced `persist_registry_if_needed`
+                        // (tick_persistence) flush it (it diffs the
+                        // registry against its baseline and writes when it
+                        // differs — exactly the "retry on next debounce"
+                        // the plan asks for, without re-running the
+                        // worker). Clear the receiver (worker is done).
+                        warn!(
+                            target = "orchestrator",
+                            "size-fill atomic write for {modlist_id} failed: \
+                             {err} (in-memory size set; debounced cycle will \
+                             retry the write — plan P7.T6)"
+                        );
+                    }
+                } else {
+                    // Deleted between worker start and result — discard
+                    // silently (plan P7.T6 "modlist deleted" mode).
+                    tracing::debug!(
+                        target = "orchestrator",
+                        "size result for {modlist_id} discarded — modlist no \
+                         longer in registry (deleted)"
+                    );
+                }
+                // Value consumed (delivered + handled or discarded). The
+                // worker sends exactly once then exits; the receiver is
+                // spent.
+                self.install_size_worker_rx = None;
+            }
+            Err(TryRecvError::Empty) => {
+                // Worker still walking the tree (recursive `du` on a large
+                // EET install can take minutes — plan P7.T6 ">5min ⇒ keep
+                // waiting"). Do nothing; poll again next frame.
+            }
+            Err(TryRecvError::Disconnected) => {
+                // Sender dropped without sending — the worker thread
+                // panicked (plan P7.T6 "worker panic" mode). Leave
+                // `total_size_bytes = None`; the Home card keeps rendering
+                // `—`. No retry, no user-visible error.
+                warn!(
+                    target = "orchestrator",
+                    "install size worker disconnected without a result \
+                     (thread panicked) — size stays — (plan P7.T6)"
+                );
+                self.install_size_worker_rx = None;
+            }
+        }
     }
 
     /// Drain the 6 Step-2 background-thread receivers every frame (P6.T2c —
@@ -932,6 +1096,17 @@ impl eframe::App for OrchestratorApp {
         // `0 jobs running` on the next frame.
         if install_was_running && !self.wizard_state.step5.install_running {
             self.install_running_since = None;
+            // P7.T6 — fire the C3 clean-exit registry flip on THIS edge
+            // (the same `install_was_running && !install_running`
+            // transition; no second edge-detector). It is internally
+            // C3-gated (`success_banner::clean_exit`): only a *clean* exit
+            // flips the registry to Installed + regenerates the
+            // `allow_auto_install = true` code + spawns the async size
+            // worker; a cancel / failure / nonzero exit returns without
+            // flipping (entry stays in-progress). Because this transition
+            // is true on exactly one frame per install run, the flip fires
+            // exactly once.
+            self.maybe_flip_to_installed_on_clean_exit();
         }
 
         // Per-frame path validation summary (left rail bottom).
@@ -1043,9 +1218,26 @@ impl eframe::App for OrchestratorApp {
         if !install_was_running && self.wizard_state.step5.install_running {
             self.step5_console_view.request_input_focus = true;
         }
+        // The async size worker (P7.T6) reports off-thread; without an
+        // explicit repaint request egui paints lazily and the deferred
+        // `total_size_bytes` fill (+ the Home card refresh from `—` to the
+        // real size) would stall until the next user input. Keep ticking
+        // while a size computation is pending (a recursive `du` is
+        // typically sub-second but can take minutes on a large EET tree —
+        // a slow ~250ms poll is plenty and avoids a busy 60fps spin).
         if step5_requested_repaint || self.step5_needs_repaint() {
             ctx.request_repaint_after(Duration::from_millis(16));
+        } else if self.install_size_worker_rx.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(250));
         }
+
+        // P7.T6 — drain the async install-folder size worker (non-blocking).
+        // On a result it fills `total_size_bytes` + does the second atomic
+        // write; MUST run before `tick_persistence` so the filled value is
+        // in `self.registry` for the debounce diff (and so a write-failure
+        // retry rides the same debounced cadence). No-op (single
+        // `Option::is_none` check) when no size computation is pending.
+        self.drain_size_worker_result();
 
         // P6.T11 — dirty-bit-gated workspace extract (the H1 gate). MUST run
         // before `tick_persistence` so a just-dirtied workspace's extracted

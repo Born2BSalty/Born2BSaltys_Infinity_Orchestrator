@@ -74,9 +74,12 @@ use tracing::warn;
 use crate::install_runtime::flag_policies::InstallWorkflow;
 use crate::install_runtime::install_concurrency;
 use crate::install_runtime::start_hooks::{self, InstallButtonVariant};
+use crate::registry::operations;
+use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::step5::action_step5::Step5Action;
-use crate::ui::workspace::step5::{post_install_actions, success_banner};
+use crate::ui::workspace::step5::state_workspace_step5::PostInstallAction;
+use crate::ui::workspace::step5::{post_install_actions, share_paste_code_dialog, success_banner};
 
 /// Render the workspace Step-5 chrome for `_modlist_id` (the routed +
 /// loaded modlist — already resolved by `page_router::render_workspace`;
@@ -101,16 +104,42 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
         orchestrator.workspace_step5.reset_for_modlist();
     }
 
-    // ── 1. Success-banner row (ABOVE the embedded panel). Empty
-    //    pre-install — the C3 clean-exit triple is false until an install
-    //    has completed cleanly (Run 3 / P7.T4 fills the body). ──
-    success_banner::render(ui, &orchestrator.wizard_state);
+    let palette = orchestrator.theme_palette;
+
+    // Snapshot the routed modlist's registry entry once for the chrome rows
+    // + the Share dialog (the success banner's counts/timestamps, the
+    // post-install row's identity, the dialog's `latest_share_code`). Clone
+    // so the immutable `orchestrator.registry` borrow ends before the
+    // `&mut orchestrator` action-apply / `page_step5::render` field-split
+    // below (the same clone-the-entry discipline `page_router
+    // ::render_workspace` uses). `flip_to_installed` (P7.T6) already ran in
+    // `OrchestratorApp::update`'s pre-render clean-exit edge, so by the time
+    // the C3 triple holds this snapshot already carries the flipped
+    // state/counts/`allow_auto_install = true` code.
+    let entry = orchestrator.registry.find(modlist_id).cloned();
+
+    // ── 1. Success-banner row (ABOVE the embedded panel). Renders nothing
+    //    until the C3 clean-exit triple holds (P7.T4): pre/during/failed
+    //    install ⇒ empty slot; clean exit ⇒ green `Installed` pill +
+    //    `<N> mods · <C> components · no errors` + `ran <MM:SS> ·
+    //    finished <relative>`. Counts/timestamps come off the registry
+    //    entry (P7.T6-written — mirror Step 4's own resolver). No entry
+    //    (a stale/deleted id) ⇒ skip the banner (the C3 gate would also
+    //    block it, but be explicit). ──
+    if let Some(e) = entry.as_ref() {
+        success_banner::render(ui, palette, &orchestrator.wizard_state, e);
+    }
 
     // ── 2. Post-install action row, immediately below the banner row and
     //    above the embedded panel (per H9 — visually adjacent to BIO's
-    //    Install button at the top of `page_step5::render`'s panel). Empty
-    //    pre-install (Run 3 / P7.T5 fills the buttons). ──
-    post_install_actions::render(ui, &orchestrator.wizard_state);
+    //    `✓ Installed` button at the top of `page_step5::render`'s panel).
+    //    Renders nothing until C3 holds (P7.T5); when it does, two primary
+    //    CTAs (`Return to Home` / `Open install folder`). The chosen action
+    //    is applied AFTER `page_step5::render` (no live `&mut orchestrator`
+    //    conflict). ──
+    let post_install_action: Option<PostInstallAction> = entry
+        .as_ref()
+        .and_then(|e| post_install_actions::render(ui, palette, &orchestrator.wizard_state, e));
 
     // ── 3. BIO's entire embedded Step-5 panel — called DIRECTLY (the
     //    verified public top-level renderer; BIO's Step-5 tree is reused
@@ -250,5 +279,55 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
                 );
             }
         }
+    }
+
+    // ── P7.T5 — apply the post-install action AFTER `page_step5::render`
+    //    (the `&mut orchestrator.wizard_state` / split-field render borrows
+    //    have ended, so the nav / open-folder side-effect is conflict-free).
+    //    `Return to Home` → `nav = NavDestination::Home` (the freshly-
+    //    installed modlist now shows under Home's Installed chip — P7.T12).
+    //    `Open install folder` → the SAME `registry::operations
+    //    ::open_install_folder` the Home Kebab uses; a failure (unset /
+    //    missing folder) surfaces in the standard bottom toast in its error
+    //    tone (SPEC §3.2 — do not attempt to create the folder), exactly
+    //    like `page_home::open_install_folder_for`. ──
+    match post_install_action {
+        Some(PostInstallAction::ReturnToHome) => {
+            orchestrator.nav = NavDestination::Home;
+        }
+        Some(PostInstallAction::OpenInstallFolder) => {
+            if let Some(e) = entry.as_ref() {
+                if let Err(msg) = operations::open_install_folder(e) {
+                    orchestrator.home_screen_state.toast =
+                        Some(crate::ui::home::state_home::ToastMessage::error(msg));
+                }
+            }
+        }
+        None => {}
+    }
+
+    // ── P7.T7 — the Share import code dialog (non-blocking `egui::Window`,
+    //    SPEC §10.3). Opened by the workspace header's `Share import code`
+    //    button (post-install only — `workspace_header` flips it
+    //    enabled/primary-teal + sets `share_dialog_open` when C3 holds).
+    //    Reads the code from `entry.latest_share_code` (the post-
+    //    `flip_to_installed` `allow_auto_install = true` snapshot — NOT
+    //    re-derived from `WizardState`). Rendered last so the popup floats
+    //    above the chrome + embedded panel. Borrow-split: the dialog needs
+    //    `&mut orchestrator.workspace_step5` + the cloned `entry` + `ctx`
+    //    (cloned — `ui.ctx()` borrows `ui`, which the embedded panel
+    //    already consumed). ──
+    if orchestrator.workspace_step5.share_dialog_open {
+        let ctx = ui.ctx().clone();
+        // A code only exists post-`flip_to_installed`; if the entry vanished
+        // (stale id) the dialog still renders its honest "no code" fallback
+        // rather than silently doing nothing — but only if it was opened.
+        let entry_for_dialog = entry.unwrap_or_default();
+        share_paste_code_dialog::render(
+            &ctx,
+            palette,
+            &mut orchestrator.workspace_step5,
+            &entry_for_dialog,
+        );
     }
 }

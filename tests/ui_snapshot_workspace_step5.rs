@@ -75,9 +75,10 @@
 // run) — the gate's job is to expose/verify the layout.
 
 use bio::app::state::WizardState;
+use bio::registry::model::ModlistEntry;
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{
-    REDESIGN_NAV_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX,
+    REDESIGN_NAV_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette,
 };
 use bio::ui::step5::state_step5::Step5ConsoleViewState;
 use bio::ui::workspace::step5::{post_install_actions, success_banner};
@@ -163,6 +164,14 @@ fn render_workspace_step5_pre_install_matrix() {
                 let mut console_view = Step5ConsoleViewState::default();
                 let dev_mode = false;
                 let exe_fingerprint = String::new();
+                // Run-3 signature update: the chrome rows now take
+                // `(palette, state, entry)`. A default `WizardState` has
+                // `last_exit_code == None` ⇒ the C3 triple is false ⇒ both
+                // rows early-return (the empty pre-install slot — the Run-1
+                // breakpoint property is unchanged). The entry is a pure
+                // default stand-in (NO registry/store — DATA-LOSS-safe).
+                let entry = ModlistEntry::default();
+                let palette = ThemePalette::Dark;
 
                 // ── Shell-faithful scaffold (structurally replicates
                 //    `shell_chrome::render_shell` + the orchestrator body
@@ -232,12 +241,20 @@ fn render_workspace_step5_pre_install_matrix() {
                                     .show(ui, |ui| {
                                         // 1. Empty pre-install success
                                         //    banner slot (C3 false).
-                                        success_banner::render(ui, &wizard_state);
+                                        success_banner::render(ui, palette, &wizard_state, &entry);
                                         // 2. Empty pre-install post-
                                         //    install action slot (C3
                                         //    false), per H9 above the
-                                        //    panel.
-                                        post_install_actions::render(ui, &wizard_state);
+                                        //    panel. The returned
+                                        //    `Option<PostInstallAction>`
+                                        //    is `None` (C3 false) — the
+                                        //    gate ignores it.
+                                        let _ = post_install_actions::render(
+                                            ui,
+                                            palette,
+                                            &wizard_state,
+                                            &entry,
+                                        );
                                         // 3. BIO's entire pre-install
                                         //    Step-5 panel — `terminal:
                                         //    None` ⇒ Command card, Summary

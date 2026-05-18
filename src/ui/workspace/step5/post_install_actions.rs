@@ -23,44 +23,108 @@
 // last_install_failed == false`). Pre-install and during-install the row
 // is empty/hidden.
 //
-// **Run 1 scope.** Run 1 ships the C3-gated component but it renders
-// **nothing** this run (the C3 triple is structurally false — no install
-// has run). The buttons + their handlers (`Return to Home` →
-// `orchestrator.nav = NavDestination::Home`; `Open install folder` →
-// platform open of the registry entry's `destination_folder`) are Run 3
-// (P7.T5); the `Share import code` button is flipped to primary teal by
-// `workspace_header.rs` separately (Run 3 — not this row).
+// **The buttons (SPEC §9.2 / wireframe `screens.jsx:3258-3262` action
+// row).** Two primary CTAs:
+//   - `Return to Home`      → the caller sets `orchestrator.nav =
+//                             NavDestination::Home` (the freshly-installed
+//                             modlist now appears under Home's Installed
+//                             chip).
+//   - `Open install folder` → the caller reveals the registry entry's
+//                             `destination_folder` via the existing
+//                             `registry::operations::open_install_folder`
+//                             helper (the SAME platform-open the Home Kebab
+//                             uses — `rfd`/`explorer`/`open`/`xdg-open`).
+// The `Share import code` button is rendered separately by
+// `workspace_header.rs` (Phase-6 file — Phase 7 just flips it
+// enabled/primary-teal when C3 holds); it is NOT in this row.
+//
+// **Why a returned action enum, not a `&mut OrchestratorApp`.** The
+// render-gate (`tests/ui_snapshot_*`) is DATA-LOSS-safe — it must NOT
+// construct an `OrchestratorApp`/store. Returning
+// `Option<PostInstallAction>` lets the gate render the row with just
+// `(palette, state, entry)` while the chrome dispatcher applies the action
+// against the live orchestrator (the same split-render pattern Step 2/4
+// use with their action enums).
 //
 // SPEC: §9.2 (H9 positioning).
 
+use eframe::egui;
+
 use crate::app::state::WizardState;
+use crate::registry::model::ModlistEntry;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::shared::redesign_tokens::ThemePalette;
+use crate::ui::workspace::step5::state_workspace_step5::PostInstallAction;
 use crate::ui::workspace::step5::success_banner;
 
 /// Render the post-install action row.
 ///
-/// **Run 1:** returns immediately unless the C3 triple holds. It is
-/// structurally false until an install has completed cleanly (Run 2 starts
-/// installs; the buttons are Run 3 / P7.T5), so this is a no-op slot this
-/// run — exactly the hidden pre-install post-install row the Run-1
-/// breakpoint requires. `_ui` is the chrome row's `Ui` (immediately above
-/// the embedded panel per H9); Run 3 paints the two primary buttons into
-/// it when `clean_exit` is true.
-pub fn render(_ui: &mut eframe::egui::Ui, state: &WizardState) {
+/// Returns `None` (renders nothing) unless the C3 triple holds — the empty
+/// pre-install / during-install / failed-install slot (the embedded
+/// `page_step5::render` panel renders directly below). When `clean_exit`
+/// holds, paints `Return to Home` + `Open install folder` as primary CTAs
+/// (per H9, immediately above BIO's now-disabled `✓ Installed` button) and
+/// returns the chosen [`PostInstallAction`] for the caller to apply.
+///
+/// `entry` is the routed modlist's registry entry — only its identity is
+/// used here (the open-folder target is resolved by the caller via
+/// `operations::open_install_folder(entry)`); it is taken so the row's
+/// gating/identity stays symmetric with `success_banner::render`.
+pub fn render(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &WizardState,
+    _entry: &ModlistEntry,
+) -> Option<PostInstallAction> {
     if !success_banner::clean_exit(state) {
         // Pre-install / during-install / failed install ⇒ empty/hidden
         // row. The embedded `page_step5::render` panel renders directly
         // below this slot.
-        return;
+        return None;
     }
 
-    // P7.T5 (Run 3): the two primary buttons land here, immediately above
-    // BIO's panel (per H9 — visually adjacent to BIO's now-disabled
-    // `✓ Installed` button at the top of that panel):
-    //   - `Return to Home`      → orchestrator.nav = NavDestination::Home
-    //   - `Open install folder` → platform-open the registry entry's
-    //                             `destination_folder`
-    // gated on `success_banner::clean_exit`. Run 1 renders nothing here —
-    // no install has completed.
+    let mut action: Option<PostInstallAction> = None;
+
+    // Wireframe action row (`screens.jsx:3257`): `display:flex; gap:8;
+    // marginBottom:8; flexWrap:wrap; alignItems:center`. Both are primary
+    // (teal fill + 2×2 shadow) — SPEC §9.2 "Two new primary actions".
+    let row_margin_bottom = 8.0;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+
+        if redesign_btn(
+            ui,
+            palette,
+            "Return to Home",
+            BtnOpts {
+                primary: true,
+                small: true,
+                ..Default::default()
+            },
+        )
+        .clicked()
+        {
+            action = Some(PostInstallAction::ReturnToHome);
+        }
+
+        if redesign_btn(
+            ui,
+            palette,
+            "Open install folder",
+            BtnOpts {
+                primary: true,
+                small: true,
+                ..Default::default()
+            },
+        )
+        .clicked()
+        {
+            action = Some(PostInstallAction::OpenInstallFolder);
+        }
+    });
+
+    ui.add_space(row_margin_bottom);
+    action
 }
 
 #[cfg(test)]
@@ -69,10 +133,10 @@ mod tests {
 
     #[test]
     fn hidden_until_clean_exit() {
-        // Run-1 property: with no install run, the post-install row is
-        // hidden (the C3 triple is false). Mirrors the success-banner gate
-        // — they share the one `clean_exit` predicate so they can never
-        // disagree about when the post-install chrome appears.
+        // With no install run, the post-install row is hidden (the C3
+        // triple is false). Mirrors the success-banner gate — they share
+        // the one `clean_exit` predicate so they can never disagree about
+        // when the post-install chrome appears.
         let s = WizardState::default();
         assert!(!success_banner::clean_exit(&s));
     }

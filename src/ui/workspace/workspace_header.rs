@@ -369,28 +369,48 @@ fn render_fork_subline(ui: &mut egui::Ui, orchestrator: &OrchestratorApp, palett
 
 /// The right-cluster `save draft` (Steps 2-4) / `Share import code` (Step 5)
 /// button. P6.T6: Steps 2-4 = `save draft` (immediate synchronous write +
-/// `✓ saved!` flash); Step 5 = `Share import code`, **disabled** here (it
-/// enables post-install — Phase 7; wireframe shows it disabled pre-install).
+/// `✓ saved!` flash). **P7.T5:** Step 5 = `Share import code` — **disabled
+/// + secondary** until the C3 clean-exit triple holds (wireframe
+/// pre-install state), then **enabled + primary teal** (SPEC §9.2 / the
+/// wireframe `screens.jsx:3540-3543` `primary={installComplete}
+/// disabled={!installComplete}`); clicking it opens the non-blocking
+/// `SharePasteCodeDialog` (rendered by `page_workspace_step5`).
 fn render_save_or_share_button(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
 ) {
     if orchestrator.workspace_view.current_step == WorkspaceStep::Step5 {
-        // Step 5: `Share import code`, disabled until a successful install
-        // (Phase 7 wires the dialog + the enable). Wireframe pre-install
-        // state: `disabled`, secondary.
-        let _ = redesign_btn(
+        // P7.T5 — the same C3 clean-exit predicate the success banner /
+        // post-install row gate on (the one shared `clean_exit` — they can
+        // never disagree about "the install completed cleanly"). C3 true ⇒
+        // enabled primary-teal CTA; otherwise the wireframe pre-install
+        // state (disabled, secondary).
+        let installed =
+            crate::ui::workspace::step5::success_banner::clean_exit(&orchestrator.wizard_state);
+        let resp = redesign_btn(
             ui,
             palette,
             "Share import code",
             BtnOpts {
                 small: true,
-                disabled: true,
+                primary: installed,
+                disabled: !installed,
                 ..Default::default()
             },
         )
-        .on_hover_text("Available after a successful install");
+        .on_hover_text(if installed {
+            "View and copy the import code for this modlist"
+        } else {
+            "Available after a successful install"
+        });
+        if installed && resp.clicked() {
+            // Open the non-blocking SharePasteCodeDialog (SPEC §10.3 —
+            // reads `entry.latest_share_code`, the post-`flip_to_installed`
+            // allow_auto_install=true snapshot). `page_workspace_step5
+            // ::render` renders the dialog when this flag is set.
+            orchestrator.workspace_step5.share_dialog_open = true;
+        }
         return;
     }
 

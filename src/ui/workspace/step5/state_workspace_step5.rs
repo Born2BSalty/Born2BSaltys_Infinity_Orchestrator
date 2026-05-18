@@ -21,6 +21,8 @@
 // SPEC: §9.2 (Previous lock), §9.2/§9.3 (post-install actions — Run 3),
 //       §10.3 (Share import code dialog — Run 3).
 
+use std::time::Instant;
+
 use crate::registry::model::Game;
 
 /// A pending post-install action chosen in the post-install action row.
@@ -52,15 +54,25 @@ pub struct WorkspaceStep5State {
     /// swap (see [`WorkspaceStep5State::reset_for_modlist`]).
     pub install_clicked: bool,
 
-    // ---------- Run-3 chrome state (declared now, inert this run) ----------
-    /// The Share import code dialog open (Run 3 / P7.T7). Declared now so
-    /// the model is stable; `share_paste_code_dialog::render` (Run 3) reads
-    /// it. **Unused in Run 1.**
+    // ---------- Run-3 chrome state (P7.T5 / P7.T7) ----------
+    /// The Share import code dialog open (P7.T7). Set `true` by the
+    /// workspace header's `Share import code` button (post-install, when
+    /// C3 holds — `workspace_header::render_save_or_share_button`) and the
+    /// Home Kebab `Copy import code` path is separate (it copies directly).
+    /// `share_paste_code_dialog::render` reads + clears it (Close / click
+    /// outside).
     pub share_dialog_open: bool,
     /// A post-install action chosen this frame, applied by the orchestrator
-    /// after the render borrows end (Run 3 / P7.T5 — `Return to Home` /
-    /// `Open install folder`). **Unused in Run 1.**
+    /// after the render borrows end (P7.T5 — `Return to Home` / `Open
+    /// install folder`). The chrome dispatcher consumes it post-render so
+    /// the nav/open side-effect has no live `&mut orchestrator` conflict.
     pub post_install_action_pending: Option<PostInstallAction>,
+    /// `✓ copied to clipboard` flash deadline for the Share dialog's `Copy`
+    /// button (SPEC §10.3 / wireframe `screens.jsx:1829` — shown inline for
+    /// ~1.5s after a copy, then auto-reverts). `Some(deadline)` while the
+    /// flash is visible; cleared once `Instant::now() >= deadline`. Mirrors
+    /// the `WorkspaceViewState::save_draft_flash_until` precedent.
+    pub copied_flash_until: Option<Instant>,
 }
 
 impl WorkspaceStep5State {
@@ -99,6 +111,7 @@ mod tests {
         );
         assert!(!s.share_dialog_open);
         assert!(s.post_install_action_pending.is_none());
+        assert!(s.copied_flash_until.is_none());
     }
 
     #[test]
@@ -107,6 +120,7 @@ mod tests {
             install_clicked: true,
             share_dialog_open: true,
             post_install_action_pending: Some(PostInstallAction::ReturnToHome),
+            copied_flash_until: Some(Instant::now()),
         };
         s.reset_for_modlist();
         assert!(
@@ -116,6 +130,10 @@ mod tests {
         );
         assert!(!s.share_dialog_open);
         assert!(s.post_install_action_pending.is_none());
+        assert!(
+            s.copied_flash_until.is_none(),
+            "a modlist swap clears the copied-flash too"
+        );
     }
 
     #[test]

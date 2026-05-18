@@ -26,6 +26,8 @@
 // rationale: `#[must_use]` on trivial formatting helpers is churn (Cat 3).
 #![allow(clippy::must_use_candidate)]
 
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 
 /// Average days per month used purely for the coarse "months ago" bucket.
@@ -84,6 +86,36 @@ fn plural(n: i64, unit: &str) -> String {
         format!("1 {unit} ago")
     } else {
         format!("{n} {unit}s ago")
+    }
+}
+
+/// Format an install **run duration** as the wireframe's `<MM:SS>` clock
+/// (per the Phase-7 plan P7.T4 / SPEC §9.2 success banner `ran <MM:SS> ·
+/// finished <relative>`). Lives here per L9 (the same `src/ui/shared/`
+/// file as `relative_time`, NOT a duplicate of Run-2's
+/// `shell_statusbar::format_elapsed` — that is a separate, not-refactored
+/// statusbar helper; any dedupe is a propose-only follow-up).
+///
+/// Buckets (plan P7.T4 — `<MM:SS>` for runs < 60 minutes; `<H:MM:SS>` for
+/// runs ≥ 60 minutes):
+///   - `< 60 min`  → `M:SS`  (minutes NOT zero-padded — wireframe
+///     `ran 4:12`, `screens.jsx:3234`; seconds always 2-digit)
+///   - `>= 60 min` → `H:MM:SS` (hours NOT zero-padded; minutes + seconds
+///     2-digit)
+///
+/// Sub-second precision is discarded (whole seconds — an install run is
+/// minutes-scale; the wireframe shows whole seconds).
+pub fn format_install_duration(d: Duration) -> String {
+    let total_secs = d.as_secs();
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+    if hours == 0 {
+        // `<MM:SS>` — minutes un-padded (wireframe `4:12`), seconds 2-digit.
+        format!("{minutes}:{seconds:02}")
+    } else {
+        // `<H:MM:SS>` — hours un-padded, minutes + seconds 2-digit.
+        format!("{hours}:{minutes:02}:{seconds:02}")
     }
 }
 
@@ -151,6 +183,58 @@ mod tests {
         assert_eq!(
             relative_time_from(n - Duration::days(75), n),
             "2 months ago"
+        );
+    }
+
+    #[test]
+    fn install_duration_under_an_hour_is_m_ss() {
+        use std::time::Duration as StdDuration;
+        // Wireframe `ran 4:12` (`screens.jsx:3234`): minutes un-padded,
+        // seconds always 2-digit.
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_secs(4 * 60 + 12)),
+            "4:12"
+        );
+        // Sub-minute: 0:SS.
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_secs(7)),
+            "0:07"
+        );
+        // Zero.
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_secs(0)),
+            "0:00"
+        );
+        // 59:59 is still the M:SS bucket (< 60 min).
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_secs(59 * 60 + 59)),
+            "59:59"
+        );
+        // Sub-second precision is discarded (whole seconds).
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_millis(12_900)),
+            "0:12"
+        );
+    }
+
+    #[test]
+    fn install_duration_at_or_over_an_hour_is_h_mm_ss() {
+        use std::time::Duration as StdDuration;
+        // Exactly 60 min flips to the H:MM:SS bucket (plan P7.T4: `>= 60
+        // minutes`).
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_secs(60 * 60)),
+            "1:00:00"
+        );
+        // 1h 02m 09s — hours un-padded, minutes + seconds 2-digit.
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_secs(3600 + 2 * 60 + 9)),
+            "1:02:09"
+        );
+        // Multi-hour EET install.
+        assert_eq!(
+            super::format_install_duration(StdDuration::from_secs(3 * 3600 + 45 * 60 + 5)),
+            "3:45:05"
         );
     }
 }
