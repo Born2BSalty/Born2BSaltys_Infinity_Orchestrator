@@ -2,6 +2,32 @@
 
 > **Role, the four principles, the run loop, the BIO-source guard, the gotchas, the fixture mechanism, and how to work with this user are NOT here** — they live in the **orchestrator skill** (`.claude/skills/orchestrator/SKILL.md`; invoke `/orchestrator` or read it first). **This file is ONLY the perishable live thread** — where the work is right now. Also distinct: `infinity_orchestrator/HANDOFF.md` = project/impl state.
 
+## ⏸ CURRENT STATE — pick up EXACTLY here (2026-05-17, session ended at 99% ctx)
+
+**Branch `overhaul/infinity_orchestrator` @ `4ec1c09`** (pushed, synced). Phase-7 prep branch `overhaul/infinity_orchestrator-p7` @ `da88f6d` exists (its 4-batch P7 slice is in that branch's handoff). All Option-B comms format = skill doctrine (`8f33173`).
+
+### 🔴 TOP PRIORITY — open DATA-LOSS regression (blocks ALL user testing)
+
+A **real destructive regression in the persistence path** (NOT a test clobber). `C:\Users\spany\AppData\Roaming\bio\modlists\KRS5ZBMT0028\workspace.json` (the demo-modlist-2 seed) was wiped: `order_bgee/bg2ee/iwdee` empty, `step3_group_collapse` survived, mtime this session. **Root cause:** Fix-Run-1's Bug-B reset `reset_scanned_step2_set` (`src/ui/workspace/workspace_state_loader.rs:120`) empties the in-memory scan on workspace open; the re-scan that refills it is **async** (BIO worker thread); any save in that gap — nav-away flush (`src/ui/orchestrator/page_router.rs:300 store.save`), debounced dirty-write, or save-draft — persists the EMPTY state over the real file. The synchronous integration test (`cold_resume_restores_step2_and_step3_after_scan_lands`) passes because it can't hit the async race. Registry (`modlists.json`) intact → the session sentinel (modlists.json only) showed clean = **the guard gap**. **The current binary will RE-WIPE demo-modlist-2 on resume — do NOT let the user test the seed-resume flow until the hotfix lands.**
+
+**Proposed 3-step plan (presented to user; AWAITING their confirm of sequencing + who re-preps — that was the open turn):**
+1. **Restore** `KRS5ZBMT0028/workspace.json` to the canonical seed via the **dev_seed re-prep** mechanism (skill "Test fixtures / runtime"; app-serializer-faithful). Do NOT restore from `%APPDATA%\bio\workspace-KRS5ZBMT0028-evidence-20260516-235903.json` — it's the *prior* (2026-05-16) corruption-incident evidence, possibly itself bad.
+2. **Hotfix run** (Fix-Run-1 follow-up; dispatch a plan-implementer): gate every extract/save path so it can NEVER persist a workspace "less than" what's on disk while a re-scan is pending for that modlist — **with a test of the ASYNC race** (the gap the synchronous test missed). The persistence fix is not safe until this lands.
+3. **Harden the data-loss guard (directive-grade — owed into the skill gotcha):** the sentinel must byte-watch the seed's `modlists/<id>/workspace.json` too, not only `modlists.json`. (Update SKILL.md Gotchas: the DATA-LOSS sentinel = modlists.json **+ every seed `modlists/<id>/workspace.json`**.)
+
+### Phase-6 user-feedback round status (mostly closed, gated by the data-loss item)
+
+- **Fix-Run 1** (persistence round-trip, `8dfb905`) — user-verified working earlier, BUT now known to carry the destructive async-race regression above. The round-trip *logic* is correct; the unsafe part is reset-before-async-scan + a save.
+- **Fix-Run 2** (UI/UX cleanup + SPEC cascade + 7c fork test-code, `41d70f7`) — done, orchestrator-independently verified (275/0, guard empty, exactly 21 files), committed. Items: indented-input root fix, Step-3 both hints + count removed, nav step-indicator removed (all 4 steps), Create choose-UX redesign, glyphs, Load-Draft real delete, rail-highlight=Create, the minted fork code (test `mint_emits_a_bio_decodable_forked_provenance_code`, verbatim in the Fix-Run-2 report / handed to user).
+- **Escalations RESOLVED** (`4ec1c09`, user decision): #7b (preview weidu 3-hue) + #4a (prompt-popup growth) **both → Phase 8** (phase-08 deferred backlog; PENDING_VERIFICATION FR2-9 flipped to Phase-8-deferred; overview 2026-05-17). Zero open Phase-6 escalations.
+- **`PENDING_VERIFICATION.md`** holds the Fix-Run-2 visual checklist for the user — but the seed-resume-dependent items are blocked until the data-loss hotfix.
+
+### Next action for the resuming session
+
+Execute the user's pending answer on the 3-step plan. **The data-loss hotfix is the top priority** — restore the seed, dispatch the async-race hotfix run (per the skill's "How to run a run" + the new explicit-reconciled-staging gate), harden the guard. Only after that: Phase-6 visual sign-off, then Phase 7 (prep on the `-p7` branch). The skill (`/orchestrator`) + the auto-memories are the operative directive set.
+
+> _Older blocks below are pre-this-session history — superseded by the block above; kept for audit, do not action them as "next"._
+
 ## Pending user verification
 
 `infinity_orchestrator/PENDING_VERIFICATION.md` — changes committed but **never seen rendered by the user** (all under the exe lock): Step-3 C4 chrome (`fad78c3`, P6.T2d) + the cosmetic set (alignment / uniform GameTab / rename pencil, `ab4453b`). Each item is tagged with its phase + run and exactly what to check. The user is away; do not mark these done until they visually sign off on a gate-fresh binary.
