@@ -27,7 +27,9 @@
 //   - `workspace_nav_bar`      → the back/next nav bar (SPEC §2.2).
 //   - `workspace_hint_line`    → the per-step hint line.
 //   - `workspace_view`         → the top-level workspace renderer.
-//   - `workspace_step5_stub`   → the Step 5 placeholder (Phase 7 replaces it).
+//   - `workspace_step5_stub`   → the Step 5 placeholder — **replaced by
+//                                `step5::page_workspace_step5` in Phase 7
+//                                P7.T2** (file removed).
 //
 // Phase 6 Run 2 (workspace header + Step-4 C4) adds:
 //   - `step4`                  → the C4 orchestrator-side Step-4 renderer
@@ -40,6 +42,17 @@
 //   - `workspace_header`       → `Editing <name>` + ✎ inline rename + fork
 //                                badge + `⑂ view fork details` (reused
 //                                Phase-5 `ForkInfoPopup`) + `save draft`.
+//
+// Phase 7 Run 1 (Step-5 runtime spine + workspace chrome) adds:
+//   - `step5`                  → the Step-5 install-runtime chrome tree
+//                                (`page_workspace_step5` wraps BIO's
+//                                `page_step5::render`; `success_banner` /
+//                                `post_install_actions` are the C3-gated
+//                                rows ABOVE the panel per H9 — empty
+//                                pre-install; `share_paste_code_dialog` /
+//                                `state_workspace_step5` are minimal until
+//                                Run 3). Replaces `workspace_step5_stub`
+//                                in `workspace_step_router`.
 //
 // Phase 6 Step-3 C4 (P6.T2d) adds:
 //   - `step3`                  → the C4 orchestrator-side Step-3 chrome
@@ -65,6 +78,11 @@ pub mod step2;
 pub mod step2_log_glue;
 pub mod step3;
 pub mod step4;
+// Phase 7 P7.T2 — the Step-5 install-runtime chrome tree. Net-new redesign
+// chrome that wraps BIO's `bio::ui::step5::page_step5::render` (read-only)
+// with the success-banner + post-install action rows (per H9, ABOVE the
+// embedded panel). Replaces `workspace_step5_stub`.
+pub mod step5;
 pub mod step_action_dispatch;
 pub mod widgets;
 pub mod workspace_header;
@@ -72,6 +90,9 @@ pub mod workspace_hint_line;
 pub mod workspace_nav_bar;
 pub mod workspace_progress_bar;
 pub mod workspace_state_loader;
-pub mod workspace_step5_stub;
+// `workspace_step5_stub` (Phase 6) was REPLACED by `step5::
+// page_workspace_step5` in Phase 7 P7.T2 (the brief: "Replace the
+// Phase-6 Step-5 stub with `page_workspace_step5::render`"). The dead
+// stub file is removed so no unreachable module lingers.
 pub mod workspace_step_router;
 pub mod workspace_view;

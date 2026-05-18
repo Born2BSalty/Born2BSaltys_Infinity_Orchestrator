@@ -69,9 +69,12 @@ use crate::app::app_bootstrap_init;
 use crate::app::app_step1_github_oauth::GitHubOAuthFlowResult;
 use crate::app::state::WizardState;
 use crate::app::step2_worker::Step2ScanEvent;
+use crate::app::step5::install_flow::PendingInstallStart;
+use crate::app::step5::log_files::TargetPrepResult;
+use crate::app::terminal::EmbeddedTerminal;
 use crate::app::{
     app_step2_saved_log_flow, app_step2_scan, app_step2_update_check, app_step2_update_download,
-    app_step2_update_extract,
+    app_step2_update_extract, app_step5_flow,
 };
 use crate::registry::errors::RegistryError;
 use crate::registry::model::ModlistRegistry;
@@ -98,7 +101,9 @@ use crate::ui::settings::state_settings::SettingsScreenState;
 use crate::ui::settings::validate_debounce;
 use crate::ui::shared::redesign_tokens::{REDESIGN_NAV_WIDTH_PX, ThemePalette};
 use crate::ui::shell::shell_chrome;
+use crate::ui::step5::state_step5::Step5ConsoleViewState;
 use crate::ui::workspace::state_workspace::WorkspaceViewState;
+use crate::ui::workspace::step5::state_workspace_step5::WorkspaceStep5State;
 
 /// 1-second debounce on the redesign settings file (matches Phase 3's
 /// registry cycle cadence).
@@ -195,6 +200,60 @@ pub struct OrchestratorApp {
     /// write that consumes this flag lands in **Run 4 (P6.T11)** — Run 1
     /// only adds the flag + setter; nothing reads it yet.
     pub workspace_state_dirty: bool,
+
+    // ---------- Phase 7 fields (P7.T1 — Step-5 install runtime) ----------
+    /// Per-modlist Step-5 chrome state (the success-banner / post-install
+    /// action-row wrap-around state + the Run-1 install-clicked marker that
+    /// drives the P7.T8 `← Previous` lock). Net-new orchestrator chrome
+    /// state — BIO's Step-5 state is untouched. Run 1 only uses the
+    /// install-clicked marker; the dialog/post-install fields are declared
+    /// inert (Run 3 behavior), mirroring the established staged-field
+    /// pattern (`WorkspaceViewState`'s Phase-7 fields).
+    pub workspace_step5: WorkspaceStep5State,
+
+    // The Step-5 install-runtime fields the orchestrator owns exactly as
+    // `WizardApp` owns them (`src/ui/app.rs:53-57`). The orchestrator's
+    // `update` loop drives them through the SAME `bio::app::*` call
+    // sequence `bio::ui::app::update_loop::run` uses (the H3 read-only
+    // reference path — `poll_step5_terminal` + `poll_step5_prep` before the
+    // render, `start_if_requested` after; see `poll_step5_before_render` /
+    // `start_step5_after_render` below). The orchestrator never invokes
+    // that private `update_loop` module — it replicates the sequence.
+    //
+    // Visibility: `step5_terminal` / `step5_terminal_error` /
+    // `step5_console_view` are `pub` (their types — `EmbeddedTerminal` /
+    // `String` / `Step5ConsoleViewState` — are all `pub`, and
+    // `page_workspace_step5::render` reads them by `&mut`).
+    // `step5_prep_rx` / `step5_pending_start` are `pub(crate)` because
+    // `PendingInstallStart` is a BIO `pub(crate)` struct (reachable
+    // same-crate via the carve-out-#3 lib+bin split); `pub` would trip
+    // `private_interfaces` — the same precedent as the Step-2 receivers
+    // and `github_auth_rx`.
+    /// The embedded WeiDU terminal (child process + stdout capture +
+    /// prompt detection). `None` until the first install starts; `None`
+    /// here makes `page_step5::render` render the pre-install panel
+    /// (Command card, Summary card, console box, prompt input) with no
+    /// live child — the Run-1 breakpoint state.
+    pub step5_terminal: Option<EmbeddedTerminal>,
+    /// Last terminal-construction error (surfaced inside BIO's panel).
+    pub step5_terminal_error: Option<String>,
+    /// Step-5 console UI state (filter selection, auto-scroll, prompt
+    /// answers panel open). One per-process instance, mirroring
+    /// `WizardApp.step5_console_view`. Passed `&mut` into
+    /// `page_step5::render`.
+    pub step5_console_view: Step5ConsoleViewState,
+    /// The target-prep worker channel BIO's `start_if_requested` populates
+    /// (and `poll_step5_prep` drains). BIO type, identical to
+    /// `WizardApp.step5_prep_rx`.
+    pub(crate) step5_prep_rx: Option<Receiver<Result<TargetPrepResult, String>>>,
+    /// BIO's pending-install handle, held between target-prep start and
+    /// completion. BIO type, identical to `WizardApp.step5_pending_start`.
+    /// (The plan's P7.T1 prose says `bool`; the binding requirement is to
+    /// mirror `WizardApp`'s field set so the SAME `bio::app::*` call
+    /// sequence type-checks — `bio::app::app_step5_flow::start_if_requested`
+    /// takes `&mut Option<PendingInstallStart>`. Reported as a PLAN GAP:
+    /// prose simplification, not a behavior change.)
+    pub(crate) step5_pending_start: Option<PendingInstallStart>,
 
     // The six Step 2 channel receivers the Step-2 background tasks use.
     // Owned here exactly as `WizardApp` owns them (`src/ui/app.rs:46-52`):
@@ -353,6 +412,20 @@ impl OrchestratorApp {
             // background task starts.
             workspace_view: WorkspaceViewState::default(),
             workspace_state_dirty: false,
+
+            // Phase 7 — Step-5 install runtime. Same init shape as
+            // WizardApp's Step-5 fields (`src/ui/app.rs:87-91`): no
+            // terminal / no error / fresh console view / no prep channel /
+            // no pending start. `step5_terminal == None` is the pre-install
+            // state — `page_step5::render` renders the Command/Summary
+            // cards + console box + prompt input with no live child.
+            workspace_step5: WorkspaceStep5State::default(),
+            step5_terminal: None,
+            step5_terminal_error: None,
+            step5_console_view: Step5ConsoleViewState::default(),
+            step5_prep_rx: None,
+            step5_pending_start: None,
+
             step2_scan_rx: None,
             step2_cancel: None,
             step2_progress_queue: VecDeque::new(),
@@ -448,6 +521,74 @@ impl OrchestratorApp {
             &mut self.step2_update_check_rx,
             &mut self.step2_update_download_rx,
         );
+    }
+
+    /// **P7.T1 — drive the Step-5 install runtime, pre-render portion.**
+    ///
+    /// Mirrors the Step-5 lines of `bio::app::app_update_cycle::
+    /// poll_before_render` (`app_update_cycle.rs:66-76`) — the exact two
+    /// calls `bio::ui::app::update_loop::run` makes before rendering Step 5
+    /// (the H3 read-only reference path; that private `update_loop` module
+    /// is never invoked — the sequence is replicated). Same rationale as
+    /// `poll_step2_channels`: `poll_before_render` is monolithic (it also
+    /// requires the Step-5 args and unconditionally calls these two
+    /// functions), so the orchestrator calls the **same narrower
+    /// `bio::app::app_step5_flow` functions `poll_before_render` itself
+    /// calls** (`poll_step5_terminal` then `poll_step5_prep`), in the same
+    /// order, with the orchestrator's owned Step-5 fields. Both callees are
+    /// `pub(crate) fn`, same-crate reachable via the carve-out-#3 lib+bin
+    /// split (the same reachability `poll_step2_channels` already relies
+    /// on). Returns whether Step 5 wants a repaint this frame.
+    fn poll_step5_before_render(&mut self) -> bool {
+        let mut step5_requested_repaint = false;
+        step5_requested_repaint |= app_step5_flow::poll_step5_terminal(
+            &mut self.wizard_state,
+            &mut self.step5_terminal,
+            &mut self.step5_terminal_error,
+        );
+        step5_requested_repaint |= app_step5_flow::poll_step5_prep(
+            &mut self.wizard_state,
+            &mut self.step5_prep_rx,
+            &mut self.step5_terminal,
+            &mut self.step5_terminal_error,
+            &mut self.step5_pending_start,
+        );
+        step5_requested_repaint
+    }
+
+    /// **P7.T1 — drive the Step-5 install runtime, post-render portion.**
+    ///
+    /// Mirrors `bio::app::app_update_cycle::start_after_render`
+    /// (`app_update_cycle.rs:79-93`), which is the single
+    /// `app_step5_flow::start_if_requested` call `bio::ui::app::update_loop::
+    /// run` makes *after* rendering Step 5 (so a `StartInstall` action
+    /// dispatched this frame — which flips `state.step5.start_install_
+    /// requested = true` — is picked up on the next poll, exactly as the
+    /// legacy wizard does). `start_if_requested` is `pub(crate) fn`,
+    /// same-crate reachable. Returns whether Step 5 wants a repaint.
+    fn start_step5_after_render(&mut self) -> bool {
+        app_step5_flow::start_if_requested(
+            &mut self.wizard_state,
+            &mut self.step5_terminal,
+            &mut self.step5_terminal_error,
+            &mut self.step5_prep_rx,
+            &mut self.step5_pending_start,
+        )
+    }
+
+    /// True when the Step-5 install runtime needs a repaint next frame
+    /// (terminal has new data, prep channel live, or an install is in
+    /// flight). Mirrors the Step-5 subset of `bio::app::app_update_cycle::
+    /// needs_repaint` (`app_update_cycle.rs:137-144`).
+    fn step5_needs_repaint(&self) -> bool {
+        self.step5_terminal
+            .as_ref()
+            .map(EmbeddedTerminal::has_new_data)
+            .unwrap_or(false)
+            || self.step5_prep_rx.is_some()
+            || self.wizard_state.step5.prep_running
+            || self.wizard_state.step5.install_running
+            || self.wizard_state.modlist_auto_build_active
     }
 
     /// True when a Step-2 background task is in flight, so the orchestrator
@@ -745,6 +886,23 @@ impl eframe::App for OrchestratorApp {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
 
+        // P7.T1 — drive the Step-5 install runtime BEFORE the render, in
+        // the SAME order `bio::ui::app::update_loop::run` does (the H3
+        // read-only reference path): `bio::app::app_update_cycle::
+        // poll_before_render` polls Step 2 first, then Step 5. The
+        // orchestrator polls Step 2 above (`poll_step2_channels`) and the
+        // Step-5 portion here (`poll_step5_before_render` = the exact
+        // `poll_step5_terminal` + `poll_step5_prep` lines of
+        // `poll_before_render`). BIO requests an input-focus when an
+        // install transitions to running across the poll boundary
+        // (`update_loop.rs:139-141`) — replicated so the prompt input
+        // grabs focus the frame the install starts.
+        let install_was_running = self.wizard_state.step5.install_running;
+        let mut step5_requested_repaint = self.poll_step5_before_render();
+        if !install_was_running && self.wizard_state.step5.install_running {
+            self.step5_console_view.request_input_focus = true;
+        }
+
         // Per-frame path validation summary (left rail bottom).
         self.path_validation = compute_path_validation_summary(&self.wizard_state);
         // If the screen's last full-validation report disagrees with the live
@@ -808,6 +966,26 @@ impl eframe::App for OrchestratorApp {
         // when the wizard state has it open. Must run **after** the shell so
         // the popup floats above the rail / page chrome.
         oauth_glue::render_github_popup_if_open(self, ctx);
+
+        // P7.T1 — drive the Step-5 install runtime AFTER the render, exactly
+        // as `bio::ui::app::update_loop::run` does: `bio::app::
+        // app_update_cycle::start_after_render` runs post-render so a
+        // `Step5Action::StartInstall` dispatched this frame by
+        // `page_workspace_step5::render` (which flips
+        // `state.step5.start_install_requested = true`) is picked up here
+        // and kicks off the install — identical to the legacy wizard. The
+        // same install-transition input-focus edge BIO applies
+        // (`update_loop.rs:152-154`). When Step 5 wants a repaint (terminal
+        // streaming / prep in flight / install running) request one, since
+        // egui paints lazily and the child process reports off-thread.
+        let install_was_running = self.wizard_state.step5.install_running;
+        step5_requested_repaint |= self.start_step5_after_render();
+        if !install_was_running && self.wizard_state.step5.install_running {
+            self.step5_console_view.request_input_focus = true;
+        }
+        if step5_requested_repaint || self.step5_needs_repaint() {
+            ctx.request_repaint_after(Duration::from_millis(16));
+        }
 
         // P6.T11 — dirty-bit-gated workspace extract (the H1 gate). MUST run
         // before `tick_persistence` so a just-dirtied workspace's extracted

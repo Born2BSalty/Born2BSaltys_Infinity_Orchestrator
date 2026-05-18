@@ -33,7 +33,17 @@
 //     `page_step4::render` is **never** called by the workspace router (per
 //     C4 — it would double the Save button). Any returned action →
 //     `step_action_dispatch::dispatch_step4`.
-//   - Step 5: `workspace_step5_stub::render` (Phase 7 replaces the stub).
+//   - Step 5: the **Step-5 install-runtime chrome** `bio::ui::workspace::
+//     step5::page_workspace_step5::render(ui, orchestrator, modlist_id)`
+//     (Phase 7 P7.T2 — replaces the Phase-6 `workspace_step5_stub`). Net-
+//     new redesign chrome (empty pre-install success-banner + post-install
+//     action rows ABOVE the panel per H9) that calls BIO's
+//     `bio::ui::step5::page_step5::render` directly (read-only) and
+//     dispatches its `Option<Step5Action>`. BIO's Step-5 module tree is
+//     **not** edited and **not** reached into. Returns `()` (the chrome
+//     dispatches the action internally — for `StartInstall`, Run 1 only
+//     sets the install-clicked marker; the real install-start hook is
+//     Run 2 P7.T3). No router dispatch arm.
 //
 // To satisfy the borrow checker, Step 2's returned action is captured first
 // (the `&mut orchestrator.wizard_state` + `&orchestrator.exe_fingerprint`
@@ -66,7 +76,7 @@ use crate::app::state::WizardState;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 use crate::ui::workspace::step_action_dispatch;
-use crate::ui::workspace::workspace_step5_stub;
+use crate::ui::workspace::step5::page_workspace_step5;
 
 /// Render the workspace's current step into `ui`.
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
@@ -138,7 +148,23 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
                 step_action_dispatch::dispatch_step4(a, orchestrator);
             }
         }
-        WorkspaceStep::Step5 => workspace_step5_stub::render(ui, orchestrator),
+        WorkspaceStep::Step5 => {
+            // Phase 7 P7.T2 — the Step-5 install-runtime chrome replaces
+            // the Phase-6 stub. Net-new redesign chrome wrapping BIO's
+            // `page_step5::render` (read-only; never edited) with the
+            // empty-pre-install success-banner + post-install action rows
+            // ABOVE the panel (per H9). The chrome dispatches the returned
+            // `Step5Action` internally (Run 1: `StartInstall` only sets
+            // the install-clicked marker that drives the P7.T8 Previous-
+            // lock; the real install-start hook is Run 2 P7.T3), so —
+            // like Step 3 (H2) — there is no router dispatch arm. The
+            // routed+loaded modlist's live id is
+            // `workspace_view.modlist_id` (set by
+            // `page_router::render_workspace`); cloned to end the borrow
+            // before the `&mut orchestrator` call.
+            let modlist_id = orchestrator.workspace_view.modlist_id.clone();
+            page_workspace_step5::render(ui, orchestrator, &modlist_id);
+        }
     }
 }
 

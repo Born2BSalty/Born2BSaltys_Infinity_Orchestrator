@@ -17,6 +17,14 @@
 // the shell). `SharePasteCodeDialog` (Step-5 `Share import code`) is
 // Phase 7 — `workspace_header` renders that button disabled until then.
 //
+// **Phase-7 Run-1 scope.** Step 5 now renders the real install-runtime
+// chrome (`step5::page_workspace_step5::render`, replacing the Phase-6
+// stub) and the nav bar's `← Previous` is locked once Install is clicked
+// (P7.T8 — `disable_prev` computed below from `install_complete ||
+// step5.install_running || workspace_step5.install_clicked`). The
+// `SharePasteCodeDialog` body is still Run 3; `workspace_header` keeps its
+// `Share import code` button disabled until then.
+//
 // The nav bar's outcome drives step advancement + the progress-bar
 // checkmarks: crossing forward into a new step marks the step being left as
 // completed (wireframe `goNext`: `if (!completed.includes(tab))
@@ -85,9 +93,26 @@ pub fn render(
             });
     });
 
-    // ── 5. Nav bar. `disable_prev` is `false` in Run 1 (the Phase-7
-    //    install-running / post-install gate sets it later). ──
-    let outcome = workspace_nav_bar::render(ui, palette, current, false);
+    // ── 5. Nav bar. **P7.T8 — `← Previous` lock.** Per SPEC §9.2 the
+    //    workspace `← Previous` is disabled "once Install has been clicked
+    //    — even before the install completes, and after it completes". The
+    //    lock condition OR-combines the three "Install was clicked"
+    //    signals:
+    //      - `WorkspaceViewState::install_complete` (Phase-6-provisioned;
+    //        flipped post-successful-install in Run 3 / P7.T6),
+    //      - `state.step5.install_running` (BIO's live install flag; set
+    //        once Run 2 wires the real install-start hook), and
+    //      - `workspace_step5.install_clicked` (the Run-1 marker — in Run 1
+    //        there is no real install, so this is the operative signal:
+    //        `page_workspace_step5::render`, run by the step router just
+    //        above, sets it the frame Install is clicked, so the nav bar —
+    //        rendered after the router — disables `← Previous` that same
+    //        frame).
+    //    The nav bar applies the VERBATIM SPEC §9.2 tooltip when disabled.
+    let disable_prev = orchestrator.workspace_view.install_complete
+        || orchestrator.wizard_state.step5.install_running
+        || orchestrator.workspace_step5.install_clicked;
+    let outcome = workspace_nav_bar::render(ui, palette, current, disable_prev);
 
     // Apply nav outcome after the render borrows end.
     if outcome.next_clicked {

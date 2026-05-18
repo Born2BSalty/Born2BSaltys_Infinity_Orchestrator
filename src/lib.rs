@@ -42,6 +42,18 @@ pub mod ui;
 // companion provision (additive `pub mod` lines for orchestrator-owned data).
 pub mod registry;
 
+// Phase 7 P7.T1 — install runtime. Net-new top-level orchestrator module
+// (the install-start hooks, import-code writer, registry transition,
+// concurrency gate, rail-lock reason, flag policies, reinstall route).
+// Registered here alongside `registry` under the same carve-out #3
+// companion provision — the plan's "alongside `mod registry;`" intent
+// (its "in `src/bin/infinity_orchestrator.rs`" prose is a PLAN GAP: that
+// binary is a thin shim with no `mod` block; `mod registry;` actually
+// lives here). Run 1 declares no submodules — later runs add theirs
+// (P7.T3 = `start_hooks` / `import_code_writer` / `registry_transition`;
+// P7.T9/T9b = `install_concurrency` / `rail_lock_reason`; etc.).
+pub mod install_runtime;
+
 // Redesign modules (Infinity Orchestrator) are registered in their natural
 // places in the BIO module tree per CRITICAL DIRECTIVE carve-out #3's
 // companion provision (additive `pub mod` lines in existing `mod.rs` files):

@@ -101,7 +101,7 @@ Each field is `pub` per `state_step5.rs:17-19`. `last_install_failed` is set fro
     - `step5_terminal_error: Option<String>`
     - `step5_console_view: Step5ConsoleViewState`
     - `step5_prep_rx: Option<Receiver<...>>` (the prep-task channel BIO's `start_after_render` populates)
-    - `step5_pending_start: bool` (BIO's pending-start flag)
+    - `step5_pending_start: Option<PendingInstallStart>` (BIO's pending-install handle, held between target-prep start and completion — mirrors `WizardApp.step5_pending_start`, `src/ui/app.rs:57`). **Corrected from the earlier `bool` prose (2026-05-18 Run-1 PLAN GAP, premise-checked):** BIO's `app_step5_flow::start_if_requested` / `poll_step5_prep` take `&mut Option<PendingInstallStart>`, so the field must mirror `WizardApp`'s type for the mandated `bio::app::*` call sequence to type-check — a prose simplification, no behavior change.
   - **Step 2 channel receivers** (`bio::app::app_update_cycle::poll_before_render` takes 6 channel receivers verified at `src/core/app/navigation/app_update_cycle.rs:19-37`):
     - `step2_scan_rx: Option<Receiver<Step2ScanEvent>>`
     - `step2_cancel_token: Option<Arc<AtomicBool>>` (or BIO's equivalent cancel handle)
@@ -111,8 +111,8 @@ Each field is `pub` per `state_step5.rs:17-19`. `last_install_failed` is set fro
     - `step2_update_extract_rx: Option<Receiver<Step2UpdateExtractEvent>>` **(per review M-new-1 — `poll_before_render` requires this 6th receiver; earlier draft enumerated only 5)**
 
   Each field type is BIO's existing `pub` type from `bio::app::terminal` / `bio::ui::step5::state_step5` / `bio::app::app_step2_*`. The orchestrator's `update` loop calls `bio::app::app_update_cycle::poll_before_render(...)` and `start_after_render(...)` with `&mut`-pointers to these fields, exactly as `bio::ui::app::update_loop::run` does (read-only reference path per H3 — the orchestrator never invokes that private module, it replicates the same `bio::app::*` call sequence).
-- **Module registration:** Register `install_runtime` as a top-level module via `mod install_runtime;` in `src/bin/infinity_orchestrator.rs` (alongside `mod registry;`). It does not appear in the existing `src/main.rs` because that binary uses only BIO's existing modules.
-- **Where:** Edit `src/bin/infinity_orchestrator.rs` (the orchestrator binary's `OrchestratorApp` struct lives in a module reachable from this entry) or wherever Phase 2 placed the struct.
+- **Module registration:** Register `install_runtime` as a top-level module via `pub mod install_runtime;` in **`src/lib.rs`** alongside `pub mod registry;` (the established CRITICAL-DIRECTIVE carve-out-#3 companion-provision pattern for orchestrator-owned data modules — purely additive `pub mod` lines). **Corrected from the earlier "in `src/bin/infinity_orchestrator.rs`" prose (2026-05-18 Run-1 PLAN GAP, premise-checked):** that binary is a thin shim with no `mod` block, and `mod registry;` actually lives at `src/lib.rs:43`; registering in the bin would not make it reachable as `crate::install_runtime` from the library-side orchestrator code. It does not appear in `src/main.rs` (the legacy `BIO` binary uses only BIO's existing modules).
+- **Where:** `src/lib.rs` (the additive `pub mod install_runtime;`) + wherever Phase 2 placed the `OrchestratorApp` struct (`src/ui/orchestrator/orchestrator_app.rs` — the field set + the `poll_step5_before_render` / `start_step5_after_render` update-loop wiring). The `src/bin/infinity_orchestrator.rs` shim is unchanged.
 - **Acceptance:** `cargo build --bin infinity_orchestrator --release` succeeds with the fields in place. The orchestrator's update loop polls Step 5 channels every frame.
 - **SPEC:** §9.3, §9.4.
 

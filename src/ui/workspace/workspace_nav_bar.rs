@@ -41,10 +41,16 @@
 // deviation from the wireframe's former first-step *disabled* state,
 // recorded SPEC §2.2 + overview 2026-05-16). The caller (`workspace_view`)
 // interprets a first-step `prev_clicked` as the Home route. `← Previous` is
-// force-disabled **only** by `disable_prev` — the Phase-7 install-running /
-// post-install gate (wireframe `disablePrev`; `false` until Phase 7).
+// force-disabled **only** by `disable_prev` — the **Phase-7 P7.T8**
+// install-running / post-install gate (wireframe `disablePrev`). When
+// disabled it carries the VERBATIM SPEC §9.2 lock tooltip
+// (`PREV_DISABLED_TOOLTIP`, read verbatim from the canonical wireframe
+// `WorkspaceNavBar`). `workspace_view` computes `disable_prev` as
+// `WorkspaceViewState::install_complete || state.step5.install_running ||
+// workspace_step5.install_clicked` (the Run-1 marker) — disabled the
+// moment Install is clicked, per SPEC §9.2.
 //
-// SPEC: §2.2 (workspace nav bar).
+// SPEC: §2.2 (workspace nav bar), §9.2 (`← Previous` lock + tooltip).
 
 // rationale: f32→u8 channel/alpha roundings + an intentional pixel-stepping
 // dashed-rule loop — correct by construction (Cat 2 / Cat 3).
@@ -65,6 +71,16 @@ use crate::ui::workspace::state_workspace::WorkspaceStep;
 
 const ARROW_BACK: &str = "\u{2190}"; // ←
 const ARROW_FWD: &str = "\u{2192}"; // →
+
+/// **SPEC §9.2 `← Previous` lock tooltip — VERBATIM.** P7.T8: when
+/// `disable_prev` is set (Install has been clicked — running or finished),
+/// the disabled `← Previous` carries this exact string. Read verbatim from
+/// the canonical UI reference (`wireframe-preview/screens.jsx:3374` /
+/// `build.html:6110` — `WorkspaceNavBar`'s `disablePrev ? "<this>" :
+/// undefined`), which wins over SPEC prose on copy and matches the
+/// Phase-7 plan P7.T8's quoted string exactly. Do not paraphrase.
+const PREV_DISABLED_TOOLTIP: &str =
+    "Disabled while install is running or after a successful install";
 
 /// What the nav bar did this frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -112,18 +128,26 @@ pub fn render(
         // `disable_prev` — the Phase-7 install-running / post-install gate
         // (wireframe `disablePrev`; `false` until Phase 7).
         let prev_disabled = disable_prev;
-        if glyph_btn(
+        let prev_resp = glyph_btn(
             ui,
             palette,
             GlyphSide::Leading(ARROW_BACK),
             "Previous",
             false,
             prev_disabled,
-        )
-        .clicked()
-            && !prev_disabled
-        {
+        );
+        if prev_resp.clicked() && !prev_disabled {
             outcome.prev_clicked = true;
+        }
+        // P7.T8 — when force-disabled (Install clicked, running or
+        // finished), the `← Previous` button carries the VERBATIM SPEC
+        // §9.2 lock tooltip (`PREV_DISABLED_TOOLTIP`). `glyph_btn` allocates
+        // the disabled button with `Sense::hover()`, so the response is
+        // hover-sensible and a plain `on_hover_text` shows the tooltip on
+        // hover (mirrors the wireframe `Btn`'s `title={disablePrev ? "…" :
+        // undefined}` — tooltip only when disabled).
+        if prev_disabled {
+            prev_resp.on_hover_text(PREV_DISABLED_TOOLTIP);
         }
 
         // **Nav step-indicator REMOVED on all 4 steps — deliberate
