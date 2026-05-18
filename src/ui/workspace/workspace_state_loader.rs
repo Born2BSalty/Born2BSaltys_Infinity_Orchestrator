@@ -355,13 +355,41 @@ pub fn extract_workspace_state_from_wizard(
     wizard_state: &WizardState,
     prior: &ModlistWorkspaceState,
 ) -> ModlistWorkspaceState {
-    let order_bgee = order_from_items(&wizard_state.step3.bgee_items);
-    let order_bg2ee = order_from_items(&wizard_state.step3.bg2ee_items);
+    // Per-tab open-path-reset guard (Fix-Run 3). `populate` RESETS the
+    // in-memory scanned Step-2 set + `step3.<tab>_items` on every workspace
+    // open (Fix-Run 1, Bug B — `reset_scanned_step2_set`); the refill is an
+    // ASYNC re-scan (dev-mode only, gated on a recorded
+    // `dev_scanned_mods_folder`) or NEVER (production / non-dev —
+    // `step2_resume_scan::maybe_trigger_resume_scan` returns early without
+    // `dev_mode`). Because the order below is derived SOLELY from
+    // `step3.<tab>_items`, any save that lands in the open→refill gap would
+    // otherwise persist an EMPTY order over the real file. So for each tab:
+    // if the freshly-derived order is empty AND the prior persisted order is
+    // NON-empty AND the scanned set for that tab is empty, the emptiness is
+    // an artifact of the open-path reset (nothing is loaded that the user
+    // could have selected/deselected) — preserve the prior persisted order,
+    // the same "don't destroy what this save can't legitimately reproduce"
+    // treatment this function already gives `expand_state` /
+    // `prompt_overrides` / `dev_scanned_mods_folder`. When the scanned set
+    // IS populated, a genuine deselect-everything edit is honored (the guard
+    // does not fire — the user could legitimately have produced the empty).
+    let order_bgee = order_for_tab(
+        order_from_items(&wizard_state.step3.bgee_items),
+        &prior.order_bgee,
+        wizard_state.step2.bgee_mods.is_empty(),
+    );
+    let order_bg2ee = order_for_tab(
+        order_from_items(&wizard_state.step3.bg2ee_items),
+        &prior.order_bg2ee,
+        wizard_state.step2.bg2ee_mods.is_empty(),
+    );
 
     // IWDEE shares the BGEE tab/mod set in BIO. When this is an IWDEE
-    // workspace mirror the BGEE-derived order into `order_iwdee` so the
-    // persisted file reflects the IWDEE selection; otherwise keep whatever
-    // the prior file held (non-IWDEE modlists never touch order_iwdee).
+    // workspace mirror the (already-guarded) BGEE-derived order into
+    // `order_iwdee` so the persisted file reflects the IWDEE selection
+    // without re-deriving a separate (un-guarded, possibly empty) order;
+    // otherwise keep whatever the prior file held (non-IWDEE modlists never
+    // touch order_iwdee).
     let order_iwdee = if wizard_state.step1.game_install == "IWDEE" {
         order_bgee.clone()
     } else {
@@ -427,6 +455,34 @@ fn order_from_items(items: &[Step3ItemState]) -> Vec<ComponentRef> {
             })
         })
         .collect()
+}
+
+/// Per-tab open-path-reset guard for the persisted order (Fix-Run 3).
+///
+/// `new_order` is the order freshly derived from `step3.<tab>_items`;
+/// `prior_order` is what the workspace file currently holds; `scanned_empty`
+/// is `wizard_state.step2.<tab>_mods.is_empty()`.
+///
+/// If `new_order` is empty **and** `prior_order` is non-empty **and** the
+/// scanned set is empty, the emptiness is an artifact of `populate`'s
+/// open-path reset (the scanned set hasn't been refilled by the async/never
+/// re-scan yet — nothing is loaded that the user could have
+/// selected/deselected), so the prior persisted order is preserved rather
+/// than wiped — the same "carry from prior when this save can't legitimately
+/// reproduce it" treatment `extract` already gives `expand_state` /
+/// `prompt_overrides` / `dev_scanned_mods_folder`. Otherwise `new_order` is
+/// used verbatim: a genuine deselect-everything edit (scanned set non-empty)
+/// or a Create-like first save (prior empty) still persists the empty order.
+fn order_for_tab(
+    new_order: Vec<ComponentRef>,
+    prior_order: &[ComponentRef],
+    scanned_empty: bool,
+) -> Vec<ComponentRef> {
+    if new_order.is_empty() && !prior_order.is_empty() && scanned_empty {
+        prior_order.to_vec()
+    } else {
+        new_order
+    }
 }
 
 /// Write the per-tab collapsed-block list into the flat persisted map under
@@ -1059,6 +1115,136 @@ mod tests {
             ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
             1,
             "Bug B: A's Step 3 restored on the re-swap"
+        );
+    }
+
+    // ── Fix-Run 3 — the per-tab open-path-reset guard. The existing suite
+    //    CANNOT express this bug: every test re-seeds `ws.step2.<tab>_mods`
+    //    AFTER `populate` (modelling the async re-scan as already landed —
+    //    see `bug_a_*` / `bug_b_*`). The regression test below does the
+    //    OPPOSITE — it calls `extract` in the exact open→save gap the suite
+    //    skips (scanned set NOT re-seeded), where production / non-dev never
+    //    refills it at all. ──
+
+    /// **Regression (fails before the guard, passes after).** A workspace
+    /// with a non-empty persisted `order_bgee` is opened (`populate` resets
+    /// the scanned set + `step3.bgee_items`), then a save runs IMMEDIATELY —
+    /// WITHOUT re-seeding the scanned set (the open→save gap the rest of the
+    /// suite skips by modelling the scan as already landed; in
+    /// production/non-dev nothing ever refills it). The guard must preserve
+    /// the prior persisted order rather than persist the reset-induced empty.
+    ///
+    /// Pre-guard `extract` derived `order_bgee` solely from the (empty)
+    /// `step3.bgee_items` and persisted an EMPTY order over the real file —
+    /// the reported data-loss regression. Post-guard the prior order is
+    /// preserved.
+    #[test]
+    fn fixrun3_open_then_save_gap_preserves_prior_order_not_wipes_it() {
+        // A real persisted order (≥2 component refs). NO matching scanned
+        // set is seeded — this is the cold-open state.
+        let prior = ModlistWorkspaceState {
+            order_bgee: vec![
+                ComponentRef {
+                    tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
+                    id: 0,
+                    language: 0,
+                },
+                ComponentRef {
+                    tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
+                    id: 2,
+                    language: 0,
+                },
+            ],
+            ..Default::default()
+        };
+
+        // Open the workspace. `populate` RESETS: `step2.bgee_mods` empty,
+        // `step3.bgee_items` empty (the scanned set is refilled by an ASYNC
+        // re-scan in dev-mode, or NEVER in production/non-dev).
+        let mut ws = WizardState::default();
+        populate_wizard_state_from_workspace(
+            &prior,
+            &entry(Game::BGEE),
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+        assert!(
+            ws.step2.bgee_mods.is_empty() && ws.step3.bgee_items.is_empty(),
+            "populate must have reset the scanned set + Step-3 items"
+        );
+
+        // The open→save gap: a save fires NOW, WITHOUT re-seeding the
+        // scanned set (the exact case the rest of the suite skips by
+        // modelling the re-scan as already landed; production/non-dev never
+        // refills it). With the guard line removed this asserts the
+        // data-loss regression (extracted.order_bgee == [] != prior); with
+        // it present the prior order is preserved.
+        let extracted = extract_workspace_state_from_wizard(&ws, &prior);
+        assert_eq!(
+            extracted.order_bgee, prior.order_bgee,
+            "Fix-Run 3: the open-path reset must NOT wipe the persisted order \
+             (the reported data-loss regression)"
+        );
+    }
+
+    /// **Negative — a genuine deselect must still persist empty.** When the
+    /// scanned set is NON-empty (all components unchecked → `step3` empty),
+    /// the user legitimately deselected everything; the guard must NOT
+    /// over-block — the real edit is honored and an empty order persists.
+    #[test]
+    fn fixrun3_genuine_deselect_all_still_persists_empty_order() {
+        let prior = ModlistWorkspaceState {
+            order_bgee: vec![ComponentRef {
+                tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
+                id: 0,
+                language: 0,
+            }],
+            ..Default::default()
+        };
+
+        // Scanned set IS present (the scan landed) but every component is
+        // unchecked, and Step 3 is empty — the "user deselected everything"
+        // state. This is a legitimate edit the guard must let through.
+        let mut ws = WizardState::default();
+        ws.step2.bgee_mods = scanned_eefix();
+        for c in &mut ws.step2.bgee_mods[0].components {
+            c.checked = false;
+            c.selected_order = None;
+        }
+        ws.step2.bgee_mods[0].checked = false;
+        assert!(
+            !ws.step2.bgee_mods.is_empty(),
+            "scanned set must be non-empty so the guard does NOT fire"
+        );
+        assert!(ws.step3.bgee_items.is_empty(), "Step 3 deselected → empty");
+
+        let extracted = extract_workspace_state_from_wizard(&ws, &prior);
+        assert!(
+            extracted.order_bgee.is_empty(),
+            "Fix-Run 3: a genuine deselect-everything edit must persist the \
+             empty order (guard must not over-block a non-empty scanned set)"
+        );
+    }
+
+    /// **Negative — Create-like (prior empty) still writes empty.** The
+    /// guard requires a NON-empty prior; a from-scratch save (prior empty,
+    /// scanned set empty, Step 3 empty) must persist the empty order.
+    #[test]
+    fn fixrun3_create_like_empty_prior_still_writes_empty_order() {
+        let prior = ModlistWorkspaceState::default();
+        let ws = WizardState::default();
+        assert!(
+            prior.order_bgee.is_empty()
+                && ws.step2.bgee_mods.is_empty()
+                && ws.step3.bgee_items.is_empty(),
+            "from-scratch precondition: prior + scanned + Step 3 all empty"
+        );
+
+        let extracted = extract_workspace_state_from_wizard(&ws, &prior);
+        assert!(
+            extracted.order_bgee.is_empty(),
+            "Fix-Run 3: an empty prior must not block an empty save \
+             (Create-like first write is allowed)"
         );
     }
 }
