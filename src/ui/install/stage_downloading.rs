@@ -71,6 +71,31 @@
 //  only arms it, interposes the boundary, and renders the feed. The
 //  preexisting parameterless `render` stays for the Phase-6 fork-download
 //  chassis (still chassis-only there until that path is wired).
+//
+//  **Final P7 Fix-Run (SPEC §13.13 / §13.1 / §13.3).** In `render_live`'s
+//  one-shot `pipeline_armed` arm, **after**
+//  `auto_build_driver::prepare_install_dirs_and_maybe_import` returns `Ok`
+//  (so `import_modlist_share_code` populated `WizardState` — the §13.13
+//  bundle's `pack_meta` exports from it), this screen calls
+//  `install_runtime::install_modlist_registration::register_and_write_
+//  install_start_artifacts`. That registers a net-new in-progress
+//  `ModlistEntry` for a fresh Install-Modlist *paste* (the exact
+//  `operations_create::create_modlist` convention — SPEC §13.1; a
+//  Reinstall reuses its existing `pending_reinstall_id` entry, no second
+//  registration), writes the committed `start_hooks::write_install_start_
+//  artifacts` §13.13 bundle for it (`modlist-import-code.txt` +
+//  install-start `latest_share_code` + `install_started_at`, variant-gated
+//  by the Run-2 matrix), and sets `OrchestratorApp::active_install_
+//  modlist_id` so the C3 clean-exit edge flips it InProgress → Installed
+//  (the Install-Modlist screen has no `loaded_workspace_id`). This closes
+//  the P7.T11 / SPEC §13.13 / Verification-#5 gap the Run-4a trigger-split
+//  opened (Install-Modlist-paste & Reinstall bypass `on_install_start`).
+//  It NEVER flips `start_install_requested` (the pipeline's
+//  `start_auto_build_install` owns that) and NEVER re-derives dirs /
+//  re-applies flag policies / does the Reinstall state-flip (all already
+//  done by `prepare_install_dirs_and_maybe_import` /
+//  `reinstall_flip_at_install_click`). One-shot via the same
+//  `pipeline_armed` latch. Zero BIO source.
 // ──────────────────────────────────────────────────────────────────────────
 //
 // SPEC: §4.3 (Downloading), §4.4 (the stage it auto-advances into — the
@@ -449,7 +474,46 @@ pub fn render_live(
             workflow,
             &code,
         ) {
-            Ok(_) => {}
+            Ok(_) => {
+                // ── Final P7 Fix-Run (SPEC §13.13 / §13.1 — resolution A).
+                //    The import succeeded ⇒ `WizardState` is populated, so
+                //    the §13.13 bundle's `pack_meta`
+                //    (`export_modlist_share_code(&wizard_state)`) now has the
+                //    imported weidu logs to export. This is the SAME one-shot
+                //    point as `arm_auto_build` (inside the `pipeline_armed`
+                //    latch, reset by the caller on Cancel→Preview), so it
+                //    fires exactly once per install start — never per frame.
+                //    `register_and_write_install_start_artifacts`:
+                //      • Reinstall (`pending_reinstall_id`) ⇒ reuse the
+                //        existing entry (NO second registration; its
+                //        Installed→InProgress flip is the Install-click
+                //        site's job, already wired);
+                //      • fresh Install-Modlist paste ⇒ register a net-new
+                //        in-progress `ModlistEntry` (the exact
+                //        `create_modlist` convention — SPEC §13.1) + write
+                //        the empty `workspace.json` + atomic `modlists.json`
+                //        save (the `start_scratch` precedent);
+                //      • both ⇒ write the SPEC §13.13 bundle
+                //        (`modlist-import-code.txt` + install-start
+                //        `latest_share_code` + `install_started_at`,
+                //        variant-gated by the Run-2 matrix) AFTER the import,
+                //        and set `active_install_modlist_id` so the C3
+                //        clean-exit edge flips THIS entry InProgress →
+                //        Installed (the Install screen has no
+                //        `loaded_workspace_id`). Closes the P7.T11 / SPEC
+                //        §13.13 / Verification-#5 gap the Run-4a
+                //        trigger-split opened. The `&mut orchestrator.wizard_
+                //        state` borrow above has ended (returned by value),
+                //        so the helper's `&mut OrchestratorApp` is sound.
+                //    NEVER flips `start_install_requested` (the pipeline's
+                //    `start_auto_build_install` owns that — a premature flip
+                //    installs an empty Mods folder, the P7.T17 hazard);
+                //    NEVER re-derives dirs / re-applies flag policies / does
+                //    the Reinstall state-flip (all already done above /
+                //    upstream). Zero BIO source.
+                crate::install_runtime::install_modlist_registration
+                    ::register_and_write_install_start_artifacts(orchestrator);
+            }
             Err(err) => {
                 // Surface in BIO's status line so the (otherwise empty)
                 // grid reflects the failure rather than spinning. The

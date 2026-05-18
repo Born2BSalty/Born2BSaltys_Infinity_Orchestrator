@@ -235,6 +235,25 @@ pub struct OrchestratorApp {
     /// (P7.T10 / L12) names this field explicitly.
     pub(crate) pending_reinstall_id: Option<String>,
 
+    /// **Final P7 Fix-Run — the Install-screen clean-exit flip anchor (SPEC
+    /// §13.1 / §13.13 / §9.2).** The registry id of the modlist whose install
+    /// was started **from the Install-Modlist screen** (a fresh paste — the
+    /// net-new entry `install_modlist_registration` just registered — or a
+    /// Reinstall, whose entry already exists). Set by
+    /// `install_modlist_registration::register_and_write_install_start_
+    /// artifacts` at the Downloading-stage one-shot arm, **after** the import
+    /// populated `WizardState`. `maybe_flip_to_installed_on_clean_exit` falls
+    /// back to this when `workspace_view.loaded_workspace_id` is `None` (it
+    /// always is on the Install screen — the Install-Modlist flow is not a
+    /// workspace), so the C3 clean-exit edge flips THIS entry `InProgress →
+    /// Installed` and it shows on Home Installed. Cleared (a) right after that
+    /// flip (so a later unrelated install can't re-flip a stale id), and (b)
+    /// by `page_router` on nav-away-from-Install if the install never reached
+    /// a clean exit — mirroring `pending_reinstall_id`'s lifecycle exactly.
+    /// `None` ⇒ no Install-screen install in flight. Net-new orchestrator
+    /// field, the same staged-field pattern; BIO state untouched.
+    pub(crate) active_install_modlist_id: Option<String>,
+
     /// **P7.T9 / T9b / T14 — install-start monotonic anchor.** Set to
     /// `Some(Instant::now())` the frame `wizard_state.step5.install_running`
     /// transitions `false → true`, cleared the frame it goes `true →
@@ -474,6 +493,13 @@ impl OrchestratorApp {
             // `reinstall_route::start_reinstall` on a confirmed Home Kebab
             // → Reinstall this run (P7.T10).
             pending_reinstall_id: None,
+            // No Install-screen install in flight at construction — armed
+            // only by `install_modlist_registration::register_and_write_
+            // install_start_artifacts` at the Downloading one-shot arm
+            // (a fresh Install-Modlist paste or a Reinstall). A force-quit-
+            // mid-install relaunch has a dead process ⇒ no flip fires from
+            // launch; the marker is re-armed if/when a new install starts.
+            active_install_modlist_id: None,
             // No install running at construction (a force-quit-mid-install
             // relaunch has a dead process ⇒ `install_running == false` ⇒
             // the rail is unlocked from launch; the edge-detect in
@@ -551,6 +577,24 @@ impl OrchestratorApp {
     /// + the atomic write + spawns the async size worker; its receiver is
     /// stored in `install_size_worker_rx` for `drain_size_worker_result` to
     /// fill `total_size_bytes` on a later frame.
+    ///
+    /// **The target modlist resolves from two anchors (the final P7 Fix-Run
+    /// closed the Install-screen lifecycle gap):**
+    ///   - the **Workspace path** — `workspace_view.loaded_workspace_id`
+    ///     (Create→New / Create-import / Load-Draft / Home-resume → Step 5;
+    ///     unchanged behavior);
+    ///   - the **Install-Modlist screen path** — `active_install_modlist_id`
+    ///     (a fresh Install-Modlist paste or a Reinstall; that screen is not
+    ///     a workspace so `loaded_workspace_id` is always `None` there). Set
+    ///     by `install_modlist_registration::register_and_write_install_
+    ///     start_artifacts`. Without this fallback the C3 clean-exit flip
+    ///     never fired for an Install-Modlist install — the broader
+    ///     lifecycle gap this fix closes.
+    /// The Workspace anchor wins when both are set (defensive — they cannot
+    /// both legitimately be set; C5 pins the user to one running install).
+    /// `active_install_modlist_id` is cleared right after a successful flip
+    /// (so a later unrelated install can't re-flip a stale id; the nav-away
+    /// clear in `page_router` handles the never-completed case).
     fn maybe_flip_to_installed_on_clean_exit(&mut self) {
         // C3 gate — the exact triple the success banner / post-install row
         // use. Not a clean exit (cancel / failure / nonzero) ⇒ no flip; the
@@ -559,17 +603,27 @@ impl OrchestratorApp {
             return;
         }
 
-        // The modlist whose install just finished is the loaded workspace
-        // (the C5 rail lock pinned the user here for the whole install, so
-        // this is unambiguous — the same id `install_in_progress` reports).
-        let Some(id) = self.workspace_view.loaded_workspace_id.clone() else {
-            // No loaded workspace (defensive — a clean-exit edge with no
-            // workspace shouldn't occur given C5, but never flip a
-            // mystery entry).
+        // The modlist whose install just finished is either the loaded
+        // workspace (Workspace path — the C5 rail lock pinned the user here
+        // for the whole install) or, when no workspace is loaded, the
+        // Install-Modlist-screen install (`active_install_modlist_id` — a
+        // fresh paste or a Reinstall; that screen is not a workspace). The
+        // Workspace anchor takes precedence (defensive — only one install
+        // runs at a time per C5, so at most one anchor is legitimately set).
+        let from_workspace = self.workspace_view.loaded_workspace_id.is_some();
+        let Some(id) = self
+            .workspace_view
+            .loaded_workspace_id
+            .clone()
+            .or_else(|| self.active_install_modlist_id.clone())
+        else {
+            // Neither anchor set (defensive — a clean-exit edge with no
+            // workspace AND no Install-screen install shouldn't occur, but
+            // never flip a mystery entry).
             warn!(
                 target = "orchestrator",
-                "clean-exit edge with no loaded workspace id; \
-                 flip_to_installed skipped"
+                "clean-exit edge with no loaded workspace id and no \
+                 active_install_modlist_id; flip_to_installed skipped"
             );
             return;
         };
@@ -593,6 +647,20 @@ impl OrchestratorApp {
             registry_transition::flip_to_installed(&id, registry, registry_store, wizard_state);
         if rx.is_some() {
             self.install_size_worker_rx = rx;
+        }
+
+        // Final P7 Fix-Run — clear the Install-screen anchor once this
+        // clean-exit edge has consumed it (only when it was the anchor used;
+        // the Workspace path does not own this field). Cleared
+        // unconditionally regardless of `rx` — the C3 edge fires exactly once
+        // per run, so a failed flip (entry stays InProgress, logged inside
+        // `flip_to_installed`) must NOT leave the marker set to be re-flipped
+        // by a later, unrelated install (the same "clear once consumed"
+        // discipline `reinstall_flip_at_install_click` uses for
+        // `pending_reinstall_id`). The nav-away clear in `page_router` covers
+        // the install-never-completed case.
+        if !from_workspace {
+            self.active_install_modlist_id = None;
         }
     }
 

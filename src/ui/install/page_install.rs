@@ -29,6 +29,27 @@
 //     authorized site — see the `start_hooks` module note + the run
 //     report's PLAN GAP). Zero BIO source.
 //
+// **Final P7 Fix-Run — the Install-Modlist-paste registry lifecycle +
+// §13.13 on the pipeline path (SPEC §13.13 / §13.1 / §13.3).** The
+// Install-Modlist-paste & Reinstall entry points reach the install via the
+// `Preview → Downloading` Advance into Run-4a's `auto_build_driver`
+// pipeline (`stage_downloading::render_live`), which **bypasses
+// `on_install_start`** — so the §13.13 install-start bundle never ran for
+// them, AND a brand-new Install-Modlist *paste* never created a registry
+// `ModlistEntry` at all (premise-checked: nothing in `src/ui/install/` did).
+// `stage_downloading::render_live` now, in its one-shot `pipeline_armed`
+// arm **after** the import succeeds, calls
+// `install_runtime::install_modlist_registration::register_and_write_
+// install_start_artifacts` — which registers a net-new in-progress entry
+// for a fresh paste (the exact `create_modlist` convention; Reinstall
+// reuses its existing entry), writes the committed
+// `start_hooks::write_install_start_artifacts` §13.13 bundle for it, and
+// sets `OrchestratorApp::active_install_modlist_id` so the C3 clean-exit
+// edge flips it `InProgress → Installed` (the Install screen has no
+// `loaded_workspace_id`). This dispatcher's only change for it is the
+// Preview→Downloading routing it already does (the §13.13/registration is
+// inside `render_live`, not added here). Zero BIO source.
+//
 // **Downloading live data is RESOLVED-DEFERRED to Phase 7 P7.T17 (SPEC
 // §13.12a) — not an open escalation.** `stage_downloading::render` ships the
 // full §4.3 chassis + state; `InstallScreenState::download_progress` has no

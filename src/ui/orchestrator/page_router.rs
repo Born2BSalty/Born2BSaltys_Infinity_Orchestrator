@@ -78,9 +78,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     // renders (the build is recoverable even if the app closes immediately).
     flush_workspace_on_nav_away(orchestrator);
 
-    // P7.T10 — clear the Reinstall route marker on nav-away-from-Install if
-    // the install never started. Detected here (before the nav match,
-    // alongside the workspace flush) for the same reason.
+    // P7.T10 + final P7 Fix-Run — clear the Install-screen route markers
+    // (`pending_reinstall_id` / `active_install_modlist_id`) on
+    // nav-away-from-Install if the install never reached a clean exit.
+    // Detected here (before the nav match, alongside the workspace flush)
+    // for the same reason.
     clear_pending_reinstall_on_nav_away_from_install(orchestrator);
 
     match orchestrator.nav.clone() {
@@ -367,54 +369,78 @@ fn flush_workspace_on_nav_away(orchestrator: &mut OrchestratorApp) {
     orchestrator.workspace_view.loaded_workspace_id = None;
 }
 
-/// P7.T10 — clear `pending_reinstall_id` on nav-away from
-/// `NavDestination::Install` **if the install has not started** (SPEC §3.1:
-/// "cancelling the preview leaves the modlist `installed`" — Back, a rail
-/// click elsewhere, or closing the app at the preview).
+/// P7.T10 + the final P7 Fix-Run — clear the Install-screen route markers on
+/// nav-away from `NavDestination::Install` **if the install has not reached a
+/// clean exit** (SPEC §3.1 / §13.1 — Back, a rail click elsewhere, or closing
+/// the app at the preview / a cancelled Downloading).
 ///
-/// The marker is armed by `reinstall_route::start_reinstall` (which also
-/// navigates to `NavDestination::Install` at the Preview stage) and is
-/// cleared at the preview's Install-click by
-/// `start_hooks::reinstall_flip_at_install_click` (after the `Installed →
-/// InProgress` flip). So if it is **still** `Some` while `nav` is no longer
-/// `Install`, the user left the Install-Modlist screen *before* clicking
-/// Install — a cancelled Reinstall: drop the marker so a later unrelated
-/// Install-Modlist paste is not mis-tagged `Reinstall` and the modlist
-/// stays `Installed` (the flip never happened).
+/// Two markers, same nav-away semantics (one detection point):
 ///
-/// Defensive `install_running` guard: if an install is somehow running with
-/// the marker still set (it should have been cleared at Install-click — but
-/// never strand a mid-install state on a stale-marker edge), do **not**
-/// clear here; the Install-click clear is authoritative and the C5 rail
-/// lock prevents navigating away mid-install anyway. Pure orchestrator
-/// state; no disk, no BIO.
+/// - **`pending_reinstall_id`** (P7.T10) — armed by
+///   `reinstall_route::start_reinstall`; cleared at the preview's
+///   Install-click by `start_hooks::reinstall_flip_at_install_click` (after
+///   the `Installed → InProgress` flip). Still `Some` while `nav` is no
+///   longer `Install` ⇒ the user left *before* Install-click — a cancelled
+///   Reinstall: drop it so a later unrelated paste is not mis-tagged
+///   `Reinstall` and the modlist stays `Installed`.
+///
+/// - **`active_install_modlist_id`** (final P7 Fix-Run) — armed by
+///   `install_modlist_registration::register_and_write_install_start_
+///   artifacts` at the Downloading one-shot arm; **consumed by the C3
+///   clean-exit flip** (`maybe_flip_to_installed_on_clean_exit`, which clears
+///   it itself on a successful/attempted flip). Still `Some` while `nav` is
+///   no longer `Install` AND no install in flight ⇒ the install never
+///   reached a clean exit (cancelled at Downloading / failed / app closed
+///   before completion): drop it so a later unrelated install can't be
+///   mis-flipped against this stale id. (A *registered* fresh-paste entry
+///   correctly stays in the registry as `InProgress` — it shows on Home
+///   In-progress; only the clean-exit *anchor* is dropped, not the entry.)
+///
+/// Defensive in-flight guard (both markers): if an install is somehow
+/// running / requested / prepping with a marker still set, do **not** clear
+/// — the Install-click clear / the C3-edge clear are authoritative and the
+/// C5 rail lock prevents navigating away mid-install anyway (never strand a
+/// mid-install state on a stale-marker edge). Pure orchestrator state; no
+/// disk, no BIO.
 fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut OrchestratorApp) {
-    if orchestrator.pending_reinstall_id.is_none() {
-        return; // not a Reinstall in flight — nothing to clear.
+    if orchestrator.pending_reinstall_id.is_none()
+        && orchestrator.active_install_modlist_id.is_none()
+    {
+        return; // no Install-screen route in flight — nothing to clear.
     }
     // Still on the Install-Modlist screen ⇒ NOT a nav-away (the user is
-    // still in the preview / downloading; the Install-click clear owns the
-    // marker once they proceed).
+    // still in the preview / downloading / installing; the Install-click
+    // clear / the C3-edge clear own the markers once they proceed).
     if matches!(orchestrator.nav, NavDestination::Install) {
         return;
     }
-    // Defensive: an install in flight with the marker still set — leave it
-    // (the Install-click clear is authoritative; C5 prevents this path).
+    // Defensive: an install in flight with a marker still set — leave both
+    // (the Install-click / C3-edge clears are authoritative; C5 prevents
+    // this path mid-install).
     if orchestrator.wizard_state.step5.install_running
         || orchestrator.wizard_state.step5.start_install_requested
         || orchestrator.wizard_state.step5.prep_running
     {
         return;
     }
-    // Navigated away from Install with the Reinstall never started —
-    // cancel the route (SPEC §3.1: the modlist stays `Installed`; the flip
-    // never happened).
-    orchestrator.pending_reinstall_id = None;
-    tracing::debug!(
-        target = "orchestrator",
-        "Reinstall cancelled (nav-away from Install before Install-click); \
-         pending_reinstall_id cleared — modlist stays Installed (SPEC §3.1)"
-    );
+    // Navigated away from Install with the route never reaching a clean
+    // exit — drop both markers.
+    if orchestrator.pending_reinstall_id.take().is_some() {
+        tracing::debug!(
+            target = "orchestrator",
+            "Reinstall cancelled (nav-away from Install before Install-click); \
+             pending_reinstall_id cleared — modlist stays Installed (SPEC §3.1)"
+        );
+    }
+    if orchestrator.active_install_modlist_id.take().is_some() {
+        tracing::debug!(
+            target = "orchestrator",
+            "Install-Modlist install did not reach a clean exit \
+             (nav-away from Install); active_install_modlist_id cleared — a \
+             registered fresh-paste entry stays InProgress on Home (only the \
+             clean-exit anchor is dropped, not the entry; SPEC §13.1)"
+        );
+    }
 }
 
 /// Build `WorkspaceViewState::fork_meta` from a registry entry (P6.T5).

@@ -83,11 +83,35 @@
 //                               is the Install-click site's job via
 //                               `registry_transition::flip_to_in_progress`).
 //                               Composes BIO read-only. ──
+//
+// ── Final P7 Fix-Run (user decision 2026-05-18 "Full correct fix",
+//    resolution A) submodule — the Install-Modlist-paste registry lifecycle
+//    + the §13.13 bundle on the pipeline path:
+//      - `install_modlist_registration` → registers a net-new in-progress
+//                               `ModlistEntry` for an Install-Modlist *paste*
+//                               (the exact `operations_create::create_modlist`
+//                               convention; SPEC §13.1) AND invokes the
+//                               committed `start_hooks::write_install_start_
+//                               artifacts` §13.13 bundle for it — for the
+//                               **Install-Modlist-paste & Reinstall** entry
+//                               points that route through Run-4a's
+//                               `auto_build_driver` pipeline and so bypass
+//                               `on_install_start` (the P7.T11 / SPEC §13.13
+//                               / Verification-#5 gap). Reinstall reuses its
+//                               existing entry (no second registration). Also
+//                               sets `OrchestratorApp::active_install_
+//                               modlist_id` so the C3 clean-exit flip fires
+//                               for the Install screen (no `loaded_workspace
+//                               _id` there). Composes `create_modlist`'s
+//                               convention + `write_install_start_artifacts`
+//                               — zero BIO source. SPEC §13.13/§13.1/§13.3/
+//                               §4.x/§3.1. ──
 pub mod archive_store;
 pub mod auto_build_driver;
 pub mod flag_policies;
 pub mod import_code_writer;
 pub mod install_concurrency;
+pub mod install_modlist_registration;
 pub mod per_install_dirs;
 pub mod rail_lock_reason;
 pub mod registry_transition;
