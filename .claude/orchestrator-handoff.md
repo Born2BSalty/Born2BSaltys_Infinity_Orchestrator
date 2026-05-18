@@ -29,7 +29,7 @@ Plan = `infinity_orchestrator/plan/phase-07-install-runtime.md` (P7.T1–T17 + V
 
 ## Pending user verification
 
-`infinity_orchestrator/PENDING_VERIFICATION.md` — changes committed but **never seen rendered by the user** (all under the exe lock): Step-3 C4 chrome (`fad78c3`, P6.T2d) + the cosmetic set (alignment / uniform GameTab / rename pencil, `ab4453b`). Each item is tagged with its phase + run and exactly what to check. The user is away; do not mark these done until they visually sign off on a gate-fresh binary.
+`infinity_orchestrator/PENDING_VERIFICATION.md` — **Phase-6 verification plate CLEARED (user, 2026-05-18).** #1 Workspace Step-2 alignment + #3 workspace rename-pencil + #4 Step-3 C4 chrome user-verified → Confirmed closed. FR2-4 (Create full one-pass) + #2 (residual grey bar under the GameTab strip = reused-BIO content-pane grey top — Phase-8 carve-out #6 grey-pane-border surface) punted to the **Phase-8** verification one-pass; the Phase-6 fixes are shipped and NOT reverted, only the live sign-off moves. **No open Phase-6 verification items.** Next user verification event = the **Phase-7** phase-end pass (`phase-07-install-runtime.md` Verification 1–11 + C3/C5) — do not test until the orchestrator signals Phase 7 complete.
 
 ## Active phase work order
 
