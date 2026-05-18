@@ -502,6 +502,27 @@ impl OrchestratorApp {
         // Consume the flag now (at most one extract per dirtying burst).
         self.workspace_state_dirty = false;
 
+        // Fix-Run 4 (Part 2) — restore-pending save guard. While a
+        // cold-resume restore is pending/unreconciled for the active modlist
+        // (`rescan_snapshot` set OR `resume_pending`), the in-memory
+        // `WizardState` Step-2/3 set is the empty post-`populate` shell — the
+        // resume-triggered scan + reconcile have not landed yet. Extracting
+        // it would overwrite the in-memory `workspace_state` map with that
+        // empty/poisoned value, which the debounce cadence (and the on-exit
+        // `flush_all` that writes the map) would then persist over the real,
+        // correct per-modlist `workspace.json`. The on-disk file is already
+        // correct and there is nothing legitimate to persist until the
+        // restore reconciles. The dirty flag is **consumed** (early return
+        // without extract): the resume reconcile rebuilds Step 3, and any
+        // genuine post-restore user edit re-dirties via `step_action_
+        // dispatch`, so nothing legitimate is lost — only the poisoning
+        // extract is skipped. (Fix-Run-3's `order_for_tab` guard still
+        // covers the production/never-refilled path; this covers the dev
+        // fast-scan window where the scanned set *will* be refilled.)
+        if crate::ui::orchestrator::page_router::restore_pending(&self.workspace_view.step2) {
+            return;
+        }
+
         // Only the currently-loaded workspace has live `WizardState` to
         // extract. No loaded id (e.g. dirtied then navigated away before
         // this tick — the nav-away flush already wrote it) ⇒ nothing to do.

@@ -54,7 +54,7 @@ use crate::ui::orchestrator::registry_error_panel;
 use crate::ui::orchestrator::stubs;
 use crate::ui::settings::page_settings;
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
-use crate::ui::workspace::state_workspace::{ForkMeta, WorkspaceStep};
+use crate::ui::workspace::state_workspace::{ForkMeta, WorkspaceStep, WorkspaceStep2State};
 use crate::ui::workspace::step2::step2_resume_scan;
 use crate::ui::workspace::{workspace_state_loader, workspace_view};
 
@@ -241,6 +241,21 @@ fn render_workspace(
     workspace_view::render(ui, orchestrator, id, ctx);
 }
 
+/// Fix-Run 4 (Part 2) — is a cold-resume restore pending/unreconciled for
+/// the active modlist? True when a `rescan_snapshot` is stashed (a
+/// snapshot/resume is in flight) **or** `resume_pending` is still set (the
+/// resume reconcile never consumed it). While either holds, the in-memory
+/// `WizardState` Step-2/3 set is not yet the restored set, so **no save
+/// path** may extract it over the real per-modlist `workspace.json` (the
+/// on-disk file is already the correct, complete state). Pure predicate so
+/// both orchestrator-owned save paths (`flush_workspace_on_nav_away` here,
+/// `OrchestratorApp::sync_active_workspace_if_dirty`) share one definition
+/// and it is unit-testable without an `OrchestratorApp` (the
+/// `order_for_tab` pure-helper precedent).
+pub(crate) fn restore_pending(step2: &WorkspaceStep2State) -> bool {
+    step2.rescan_snapshot.is_some() || step2.resume_pending
+}
+
 /// P6.T15 — flush the active workspace's state to disk when the user has
 /// navigated away from it (SPEC §13.14 "On nav-away from the workspace").
 ///
@@ -269,6 +284,26 @@ fn flush_workspace_on_nav_away(orchestrator: &mut OrchestratorApp) {
     } = &orchestrator.nav
         && cur == &id
     {
+        return;
+    }
+
+    // Fix-Run 4 (Part 2) — restore-pending save guard. While a cold-resume
+    // restore is pending/unreconciled for the active modlist
+    // (`rescan_snapshot` set OR `resume_pending`), the in-memory
+    // `WizardState` Step-2/3 set is the *empty post-`populate` shell* (the
+    // resume-triggered scan + reconcile have not landed yet). The on-disk
+    // `workspace.json` is already correct and there is nothing legitimate to
+    // persist until the restore reconciles. Extracting + saving here would
+    // write that empty shell over the real per-modlist file (and poison the
+    // in-memory `workspace_state` map). SKIP the extract/save/map-insert
+    // entirely — but still clear `loaded_workspace_id` so re-entering this
+    // (or another) workspace reloads cleanly via P6.T12's swap detection
+    // (preserving the existing post-flush behavior; only the write is
+    // dropped). The Fix-Run-3 `order_for_tab` guard remains correct for the
+    // production/never-refilled path; this covers the dev fast-scan window
+    // where the scanned set *will* be refilled but isn't yet.
+    if restore_pending(&orchestrator.workspace_view.step2) {
+        orchestrator.workspace_view.loaded_workspace_id = None;
         return;
     }
 
@@ -360,4 +395,107 @@ fn render_missing_modlist(ui: &mut egui::Ui, palette: ThemePalette, id: &str) {
         .family(egui::FontFamily::Proportional)
         .color(redesign_text_faint(palette)),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
+
+    // ── Fix-Run 4 Part 2 — the restore-pending save guard. ──
+    //
+    // Both orchestrator-owned save paths (`flush_workspace_on_nav_away`
+    // here, `OrchestratorApp::sync_active_workspace_if_dirty`) early-return
+    // before the extract/`workspace_state.insert`/`WorkspaceStore::save`
+    // when `restore_pending(&workspace_view.step2)` is true — so the
+    // in-memory `workspace_state` entry is left at its prior good value and
+    // nothing is written over the (already-correct) per-modlist
+    // `workspace.json` while a cold-resume restore is in flight. The gate is
+    // this pure predicate (the `order_for_tab` pure-helper precedent —
+    // tested without an `OrchestratorApp`, per the test-hygiene rule: no
+    // real-config-dir store). These pin the exact field combinations the
+    // resume/rescan paths set, and the negative (a genuine deselect-all with
+    // NO restore pending) proving the guard does not over-block.
+
+    fn snap() -> RescanSnapshot {
+        RescanSnapshot {
+            bgee: vec![RescanSelection {
+                tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
+                component_id: "0".to_string(),
+                selected_order: Some(1),
+            }],
+            bg2ee: Vec::new(),
+        }
+    }
+
+    /// Cold-resume in flight as `step2_resume_scan::maybe_trigger_resume_
+    /// scan` leaves it: `rescan_snapshot = Some`, `resume_pending = true`.
+    /// The empty post-`populate` wizard order must NOT be saved → the gate
+    /// fires. (No `OrchestratorApp` is constructed: the early return in both
+    /// save paths is driven solely by this predicate over `step2`.)
+    #[test]
+    fn fixrun4_resume_pending_blocks_the_save() {
+        let step2 = WorkspaceStep2State {
+            rescan_snapshot: Some(snap()),
+            resume_pending: true,
+            ..Default::default()
+        };
+        assert!(
+            restore_pending(&step2),
+            "resume in flight (snapshot + resume_pending) must block extract/save \
+             so the empty post-populate order is NOT written over workspace.json"
+        );
+    }
+
+    /// A dev *rescan* in flight (`rescan_snapshot` set, `resume_pending`
+    /// false — the §6.3 reconcile path): still pending, still must not save
+    /// the transient empty/mid-scan state.
+    #[test]
+    fn fixrun4_rescan_snapshot_alone_blocks_the_save() {
+        let step2 = WorkspaceStep2State {
+            rescan_snapshot: Some(snap()),
+            resume_pending: false,
+            ..Default::default()
+        };
+        assert!(
+            restore_pending(&step2),
+            "a snapshot in flight (rescan, no resume) must also block the save"
+        );
+    }
+
+    /// `resume_pending` still set but the snapshot already `.take()`-n by
+    /// the reconcile (the brief's OR arm): the resume reconcile has not
+    /// finished consuming `resume_pending` yet → still blocked.
+    #[test]
+    fn fixrun4_resume_pending_without_snapshot_still_blocks() {
+        let step2 = WorkspaceStep2State {
+            rescan_snapshot: None,
+            resume_pending: true,
+            ..Default::default()
+        };
+        assert!(
+            restore_pending(&step2),
+            "resume_pending set (snapshot taken, reconcile mid-flight) must still block"
+        );
+    }
+
+    /// **Negative — the guard must not over-block.** No restore pending
+    /// (`rescan_snapshot = None`, `resume_pending = false`) — a genuine
+    /// empty (scanned set non-empty, user deselected everything). The save
+    /// must proceed: the predicate is `false`, so neither save path
+    /// early-returns and the legitimate empty order is persisted (parity
+    /// with the Fix-Run-3 `fixrun3_genuine_deselect_all_*` negative).
+    #[test]
+    fn fixrun4_no_restore_pending_lets_the_save_proceed() {
+        let step2 = WorkspaceStep2State::default();
+        assert!(
+            !step2.rescan_snapshot.is_some() && !step2.resume_pending,
+            "precondition: nothing pending"
+        );
+        assert!(
+            !restore_pending(&step2),
+            "no restore pending ⇒ guard must NOT fire (a genuine deselect-all \
+             edit still persists; the guard must not over-block)"
+        );
+    }
 }

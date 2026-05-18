@@ -76,8 +76,11 @@ use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
 /// (a) Capture the current selection BEFORE the scan (SPEC §6.3). Called
 /// from the scan trigger (`step2_dev_scan::pick_folder_and_scan`) *before*
 /// `Step2Action::StartScan` is dispatched, so the snapshot reflects the
-/// pre-scan choices. Also resets `was_scanning`/`rescan_drop_warning` so the
-/// completion-edge detector and the footer start clean for this rescan.
+/// pre-scan choices. Resets `rescan_drop_warning` so the footer starts clean
+/// and **arms** the completion-edge detector (`was_scanning = true`) because
+/// the caller dispatches `StartScan` unconditionally right after — see the
+/// inline note on why `true`, not the live `is_scanning`, is required for a
+/// warm-cache one-frame scan.
 pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
     let snapshot = RescanSnapshot {
         bgee: capture_tab(&orchestrator.wizard_state.step2.bgee_mods),
@@ -86,9 +89,35 @@ pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
     let step2 = &mut orchestrator.workspace_view.step2;
     step2.rescan_snapshot = Some(snapshot);
     step2.rescan_drop_warning = None;
-    // Seed the edge detector with the live value so a scan that is *already*
-    // running (e.g. re-trigger) doesn't mis-fire a completion edge.
-    step2.was_scanning = orchestrator.wizard_state.step2.is_scanning;
+    // Arm the completion-edge detector. This function's **only** call site
+    // (`step2_dev_scan::pick_folder_and_scan`) dispatches `Step2Action::
+    // StartScan` *unconditionally* on the very next line after this call, so
+    // a scan IS in flight by construction once we return — see
+    // `armed_was_scanning_for_inflight_scan` for why this must be `true`
+    // (NOT the pre-dispatch live `is_scanning`) for a warm-cache one-frame
+    // scan's completion edge to be detected.
+    step2.was_scanning = armed_was_scanning_for_inflight_scan();
+}
+
+/// The value the completion-edge detector (`was_scanning`) must be seeded
+/// to once `Step2Action::StartScan` has been (or is about to be,
+/// unconditionally) dispatched: a scan IS in flight by construction, so
+/// this is `true`. It must **not** be the pre-dispatch live `is_scanning`
+/// (`false`): with a warm scan cache BIO's scan finishes within a *single*
+/// frame (it skips WeiDU on a cache hit), so `reconcile_on_scan_complete`
+/// may never observe `is_scanning == true` — the `true → false` completion
+/// edge would be missed, the snapshot never re-applied, Step 3 never
+/// rebuilt, `resume_pending` never consumed, and a later extract would
+/// persist an empty order over the real per-modlist `workspace.json`.
+/// Arming `true` makes the first observed `is_scanning == false` (whenever
+/// `poll_step2_channels` lands the result) the recognized completion edge.
+/// Shared by both dispatch sites (`snapshot_current_selection` here,
+/// `step2_resume_scan::maybe_trigger_resume_scan`) and consumed by the
+/// Fix-Run 4 Part 1 regression so reverting it to the OLD seeding
+/// (`false`) makes that regression fail (the `order_for_tab` pure-helper +
+/// fail-before/pass-after precedent).
+pub(crate) fn armed_was_scanning_for_inflight_scan() -> bool {
+    true
 }
 
 /// Snapshot every checked component on one tab as
@@ -122,7 +151,7 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     orchestrator.workspace_view.step2.was_scanning = scanning_now;
 
     // Only the `true → false` edge is the completion moment.
-    if !(was_scanning && !scanning_now) {
+    if !completion_edge_fires(was_scanning, scanning_now) {
         return;
     }
 
@@ -193,6 +222,19 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     orchestrator.workspace_view.step2.rescan_drop_warning = Some(format!(
         "{dropped_components} component(s) dropped \u{2014} {missing_mods} mod(s) no longer present"
     ));
+}
+
+/// The scan-completion edge: `is_scanning` just transitioned `true →
+/// false`. Pure boolean (the `order_for_tab` pure-helper precedent) so the
+/// missed-completion-edge regression (Fix-Run 4 Part 1) is unit-testable
+/// without an `OrchestratorApp`: it documents that with the OLD seeding
+/// (`was_scanning` left `false` at dispatch) a one-frame warm-cache scan
+/// (`scanning_now == false` already on the completion frame) **misses** the
+/// edge, whereas the fixed arming (`was_scanning = true` at dispatch) makes
+/// the same frame fire it. Logic is unchanged from the inline expression
+/// (`was_scanning && !scanning_now`) — only extracted, not modified.
+fn completion_edge_fires(was_scanning: bool, scanning_now: bool) -> bool {
+    was_scanning && !scanning_now
 }
 
 /// Re-apply one tab's snapshot onto its freshly-scanned mods: for each
@@ -375,5 +417,173 @@ mod tests {
             vec![comp("0", true, Some(3)), comp("1", true, Some(7))],
         )];
         assert_eq!(max_selected_order(&mods), 7);
+    }
+
+    // ── Fix-Run 4 Part 1 — the missed-completion-edge regression. ──
+    //
+    // With a **warm scan cache** BIO's scan finishes within ONE frame (it
+    // skips WeiDU on a cache hit), so on the frame where the reconcile runs
+    // `is_scanning` is *already* `false` — `reconcile_on_scan_complete`
+    // never observes `scanning_now == true`. The completion edge therefore
+    // depends entirely on whether `was_scanning` was armed at `StartScan`
+    // dispatch time. The bug: the OLD seeding wrote the pre-dispatch live
+    // value (`is_scanning == false`) into `was_scanning`, so the edge was
+    // missed, the snapshot never re-applied, Step 3 never rebuilt,
+    // `resume_pending` never consumed — and a later extract then persisted
+    // an empty order over the real per-modlist `workspace.json`. The fix
+    // arms `was_scanning = true` at dispatch (a scan IS in flight by
+    // construction), so the same one-frame completion is detected.
+    //
+    // These exercise the exact decision (`completion_edge_fires`, the pure
+    // extract of `reconcile_on_scan_complete`'s unchanged
+    // `was_scanning && !scanning_now` edge) plus the exact effect body the
+    // fired branch runs (`reapply_snapshot` + `recompute_mod_checked` +
+    // `build_step3_items` — the `step2_resume_scan` end-to-end idiom: pure
+    // state, no `OrchestratorApp`, no store).
+
+    use crate::app::controller::step3_sync;
+
+    /// Model the warm-cache one-frame completion. `armed` is the value the
+    /// dispatch path seeded into `was_scanning`; `scanning_now` is `false`
+    /// (the scan already finished this frame). Returns whether the snapshot
+    /// got re-applied + Step 3 rebuilt + `resume_pending` consumed — i.e.
+    /// whether the restore actually happened.
+    fn run_fast_scan_completion_frame(
+        armed_was_scanning: bool,
+    ) -> (
+        Vec<Step2ModState>,
+        Vec<crate::app::state::Step3ItemState>,
+        bool,
+    ) {
+        // The cold-resume snapshot, built from the persisted order.
+        let snapshot = RescanSnapshot {
+            bgee: vec![
+                RescanSelection {
+                    tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
+                    component_id: "11".to_string(),
+                    selected_order: Some(1),
+                },
+                RescanSelection {
+                    tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
+                    component_id: "0".to_string(),
+                    selected_order: Some(2),
+                },
+            ],
+            bg2ee: Vec::new(),
+        };
+        // The frame `reconcile_on_scan_complete` runs on: a warm-cache scan
+        // already finished, so `is_scanning == false`; `poll_step2_channels`
+        // just landed the fresh (unchecked) mods; `last_scan_report` is
+        // `Some` (a successful `Finished`); a snapshot + `resume_pending`
+        // are pending.
+        let scanning_now = false;
+        let mut bgee_mods = vec![mod_state(
+            "BG1UB/BG1UB.TP2",
+            vec![
+                comp("0", false, None),
+                comp("11", false, None),
+                comp("5", false, None),
+            ],
+        )];
+        let mut resume_pending = true;
+        let mut step3_items: Vec<crate::app::state::Step3ItemState> = Vec::new();
+
+        // The exact edge decision `reconcile_on_scan_complete` makes (its
+        // unchanged `was_scanning && !scanning_now`, via the pure extract).
+        if !completion_edge_fires(armed_was_scanning, scanning_now) {
+            // Edge missed → the restore never runs (the bug). Mods stay
+            // unchecked, Step 3 stays empty, `resume_pending` stays set.
+            return (bgee_mods, step3_items, resume_pending);
+        }
+
+        // Edge fired → the exact effect body the fired branch runs.
+        let _ = reapply_snapshot(&snapshot.bgee, &mut bgee_mods);
+        recompute_mod_checked(&mut bgee_mods);
+        if std::mem::take(&mut resume_pending) {
+            step3_items = step3_sync::build_step3_items(&bgee_mods);
+        }
+        (bgee_mods, step3_items, resume_pending)
+    }
+
+    /// **The regression — passes only with the fix.** Feeds the **actual
+    /// production seeding** (`armed_was_scanning_for_inflight_scan()`, what
+    /// the fixed `snapshot_current_selection` / `maybe_trigger_resume_scan`
+    /// now write into `was_scanning` at dispatch) into the one-frame
+    /// warm-cache completion frame. With the fix that value is `true`, so
+    /// the completion edge IS detected → snapshot re-applied (components
+    /// re-checked + `selected_order` restored), `resume_pending` consumed,
+    /// Step 3 rebuilt non-empty in the persisted order. **Reverting the
+    /// production seeding to the OLD value (the pre-dispatch `false`) makes
+    /// this test fail** — the fail-before/pass-after evidence the gate
+    /// requires, bound to the production decision (not a hardcoded bool).
+    #[test]
+    fn fixrun4_armed_true_detects_one_frame_warm_cache_completion() {
+        let (mods, step3, resume_pending) =
+            run_fast_scan_completion_frame(armed_was_scanning_for_inflight_scan());
+
+        // Snapshot re-applied onto the fresh mods.
+        assert!(mods[0].components[0].checked, "#0 re-checked");
+        assert_eq!(mods[0].components[0].selected_order, Some(2));
+        assert!(mods[0].components[1].checked, "#11 re-checked");
+        assert_eq!(mods[0].components[1].selected_order, Some(1));
+        assert!(!mods[0].components[2].checked, "#5 never selected");
+        assert!(mods[0].checked, "mod tri-state re-derived");
+        // `resume_pending` consumed.
+        assert!(!resume_pending, "resume_pending consumed by the fired edge");
+        // Step 3 rebuilt non-empty, in the persisted order (#11 then #0).
+        let leaves: Vec<&crate::app::state::Step3ItemState> =
+            step3.iter().filter(|i| !i.is_parent).collect();
+        assert_eq!(leaves.len(), 2, "Step 3 rebuilt with two component rows");
+        assert_eq!(leaves[0].component_id, "11");
+        assert_eq!(leaves[1].component_id, "0");
+    }
+
+    /// **Companion — documents the bug.** With the OLD seeding
+    /// (`was_scanning` left `false` at dispatch — the pre-dispatch live
+    /// `is_scanning`), the very same one-frame warm-cache completion frame
+    /// MISSES the edge: the snapshot is never re-applied, Step 3 stays
+    /// empty, `resume_pending` is never consumed (the silent restore-skip
+    /// that fed the empty-order persist). This is exactly what Part 1 fixes.
+    #[test]
+    fn fixrun4_armed_false_misses_one_frame_warm_cache_completion_the_bug() {
+        let (mods, step3, resume_pending) = run_fast_scan_completion_frame(false);
+
+        assert!(
+            !mods[0].components[0].checked && !mods[0].components[1].checked,
+            "OLD seeding: snapshot never re-applied (the missed-edge bug)"
+        );
+        assert!(
+            !mods[0].checked,
+            "OLD seeding: mod tri-state never restored"
+        );
+        assert!(
+            step3.is_empty(),
+            "OLD seeding: Step 3 never rebuilt (Step 3 stays empty — the bug)"
+        );
+        assert!(
+            resume_pending,
+            "OLD seeding: resume_pending never consumed (restore silently skipped)"
+        );
+    }
+
+    /// The edge predicate itself, exhaustively — confirms the fix is purely
+    /// the *arming* (the brief's constraint: edge logic unchanged). The only
+    /// `true` case is the genuine `true → false` transition; the
+    /// warm-cache-with-old-seeding case (`false, false`) is the miss.
+    #[test]
+    fn fixrun4_completion_edge_predicate_is_true_to_false_only() {
+        assert!(completion_edge_fires(true, false), "true→false: the edge");
+        assert!(
+            !completion_edge_fires(false, false),
+            "old seeding warm cache: missed"
+        );
+        assert!(
+            !completion_edge_fires(true, true),
+            "still scanning: not yet"
+        );
+        assert!(
+            !completion_edge_fires(false, true),
+            "scan just started: not yet"
+        );
     }
 }

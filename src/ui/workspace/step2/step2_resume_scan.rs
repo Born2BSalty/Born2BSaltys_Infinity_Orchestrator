@@ -78,6 +78,7 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
 use crate::ui::workspace::step_action_dispatch;
+use crate::ui::workspace::step2::step2_rescan_reconcile;
 
 /// Called from `page_router::render_workspace` **immediately after**
 /// `populate_wizard_state_from_workspace`, with the just-loaded workspace
@@ -161,9 +162,6 @@ pub fn maybe_trigger_resume_scan(
     step2.rescan_snapshot = Some(snapshot);
     step2.rescan_drop_warning = None;
     step2.resume_pending = true;
-    // Seed the completion-edge detector with the live value (mirrors
-    // `step2_rescan_reconcile::snapshot_current_selection`).
-    step2.was_scanning = orchestrator.wizard_state.step2.is_scanning;
 
     // Kick the scan through the **existing** dispatch path — identical to
     // what the dev-scan button / toolbar Rescan does (BIO's
@@ -171,6 +169,16 @@ pub fn maybe_trigger_resume_scan(
     // handle_step2_action` → `app_step2_scan::start_step2_scan`). BIO's scan
     // reads its own persisted cache; on a cache hit per tp2 it skips WeiDU.
     step_action_dispatch::dispatch_step2(Step2Action::StartScan, orchestrator);
+
+    // Arm the completion-edge detector **after** the dispatch: a scan is now
+    // in flight by construction. Shares the single definition with the
+    // dev-rescan site (`step2_rescan_reconcile::snapshot_current_selection`)
+    // — `true`, NOT the pre-dispatch live `is_scanning`; see
+    // `armed_was_scanning_for_inflight_scan` for the warm-cache one-frame
+    // rationale (a missed edge here silently skips the cold-resume restore
+    // and feeds the empty-order persist this Fix-Run 4 repairs).
+    orchestrator.workspace_view.step2.was_scanning =
+        step2_rescan_reconcile::armed_was_scanning_for_inflight_scan();
 }
 
 /// Build a per-tab `RescanSelection` list from a persisted `order` vector.
