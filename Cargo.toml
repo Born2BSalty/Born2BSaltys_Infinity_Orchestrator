@@ -56,3 +56,13 @@ keyring = { version = "3", features = ["sync-secret-service"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
+
+# Dev-only: headless rendered-snapshot gate for the redesign egui UI.
+# `wgpu` adds the wgpu test renderer (`Harness::render() -> RgbaImage`);
+# `snapshot` adds the dify-based image-snapshot utility (the permanent gate).
+# `image` is used directly to encode the rendered frame to deterministic
+# PNG paths. Purely additive — does not change/upgrade any runtime
+# dependency and does not touch the `[patch.crates-io]` egui_term entry.
+[dev-dependencies]
+egui_kittest = { version = "0.31", features = ["wgpu", "snapshot"] }
+image = { version = "0.25", features = ["png"] }
