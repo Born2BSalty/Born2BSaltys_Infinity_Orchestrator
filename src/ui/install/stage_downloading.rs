@@ -51,30 +51,26 @@
 // emoji glyph appears on this screen, so no vector painting is required here.
 //
 // ──────────────────────────────────────────────────────────────────────────
-//  Live data is RESOLVED-DEFERRED, not an open escalation. The Run-5
-//  escalation was decided by the user on 2026-05-16: SPEC §13.12a now
-//  defines the per-install/global directory model + content-addressed
-//  archive staging + the import→auto-build reuse contract, and assigns the
-//  *live* wiring to Phase 7 P7.T17 (the pipeline terminates in the install
-//  runtime). Phase 5 ships THIS §4.3 chassis only — that is the agreed
-//  scope, not a gap. See SPEC §13.12a + overview.md 2026-05-16 revision log.
-//
-//  Why the grid is empty until P7.T17 (context, not a TODO): the per-mod
-//  list is a byproduct of BIO's `modlist_auto_build` pipeline —
-//  `import_modlist_share_code` (writes logs/TOML to the game folders +
-//  resets the workflow) → scan → apply-saved-log → update-preview →
-//  update-check worker → download → extract → rescan → install — driven by
-//  `app_step2_saved_log_flow` through `app_update_cycle::poll_before_render`
-//  and gated on a fully configured Step 1. Per SPEC §13.12a the global game
-//  paths reach the orchestrator-owned `WizardState` via
-//  `sync_paths_from_settings` (Settings → Paths §11.2 — the Install screen
-//  never collected them), and a net-new content-addressed staging layer
-//  *wraps* `app_step2_update_download` / `_extract` with zero BIO edit —
-//  that is P7.T17's job, not a reimplementation or fork. Until it runs,
-//  `DownloadProgress` has no feed, so every row renders `queued` and
-//  auto-advance never fires: the screen stays navigable (Cancel → Preview)
-//  and lights up additively the moment P7.T17 feeds it (the same
-//  forward-compatible model Phase 5 used elsewhere).
+//  Live wiring — Phase 7 P7.T17 (SPEC §13.12a). Phase 5 shipped this §4.3
+//  chassis with an empty grid (the agreed forward-compatible scope after
+//  the user's 2026-05-16 SPEC-CONFLICT decision); P7.T17 now feeds it
+//  live. `render_live` (below) is the orchestrator-aware entry the
+//  Install-Modlist dispatcher calls: it derives the per-install dirs +
+//  arms BIO's import → auto-build pipeline via
+//  `install_runtime::auto_build_driver` (which composes
+//  `import_modlist_share_code` + BIO's saved-log/auto-build flow read-only
+//  — zero BIO edit), interposes the net-new content-addressed staging
+//  layer (`install_runtime::archive_store`) at the download/extract
+//  boundary AROUND `app_step2_update_download`/`_extract` (reused
+//  unchanged), builds `DownloadProgress` from the live BIO auto-build
+//  state every frame (`DownloadProgress::from_wizard_state`), and advances
+//  to the stage-4 seam when the pipeline reaches the install hand-off. The
+//  pipeline itself is driven by the orchestrator's existing per-frame
+//  `poll_step2_channels` (`advance_pending_saved_log_flow`) +
+//  `poll_step5_before_render`/`start_step5_after_render` — this screen
+//  only arms it, interposes the boundary, and renders the feed. The
+//  preexisting parameterless `render` stays for the Phase-6 fork-download
+//  chassis (still chassis-only there until that path is wired).
 // ──────────────────────────────────────────────────────────────────────────
 //
 // SPEC: §4.3 (Downloading), §4.4 (the stage it auto-advances into — the
@@ -97,6 +93,8 @@
 
 use eframe::egui;
 
+use crate::app::state::WizardState;
+use crate::install_runtime::archive_store;
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{
@@ -183,14 +181,93 @@ pub struct ModDownloadRow {
 }
 
 /// The Stage-3 download/extract progress model. Lives on
-/// `InstallScreenState`. Populated by the resolved download orchestration
-/// once the SPEC-CONFLICT escalation is decided (see the module header) — so
-/// this run it stays empty and the screen renders the SPEC §4.3 chassis with
-/// no rows / no progress (navigable + forward-compatible).
+/// `InstallScreenState`. Phase 7 P7.T17 feeds it live from BIO's
+/// auto-build state via [`DownloadProgress::from_wizard_state`] (the
+/// Phase-5 empty-grid chassis is still used by the not-yet-wired
+/// fork-download path).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DownloadProgress {
     /// Per-mod rows, modlist order.
     pub rows: Vec<ModDownloadRow>,
+}
+
+impl DownloadProgress {
+    /// **P7.T17 live feed (SPEC §4.3 / §13.12a).** Project BIO's
+    /// auto-build / update-download / extract state onto the §4.3 per-mod
+    /// grid. One row per resolved download asset
+    /// (`step2.update_selected_update_assets` — the mods the imported
+    /// share code resolved to a concrete archive), its status derived from
+    /// the same BIO progress signals the legacy update-selected popup
+    /// reads:
+    ///
+    ///   - in `update_selected_downloaded_sources` **and**
+    ///     `update_selected_extracted_sources` ⇒ `Staged` (✓).
+    ///   - in `update_selected_downloaded_sources` only ⇒ `Extracting`
+    ///     (downloaded, extract pending/running).
+    ///   - `update_selected_download_running` ⇒ the not-yet-done assets
+    ///     show `Downloading <agg>%`. BIO does **not** expose a per-asset
+    ///     download %, only an aggregate it writes into `scan_status` as
+    ///     `"Downloading updates: N/M"` (the *only* download-progress
+    ///     signal BIO emits — `app_step2_update_download::poll_step2_
+    ///     update_download` from the worker's `Progress { completed,
+    ///     total }`). The aggregate is parsed from there and mirrored onto
+    ///     each in-flight row — the most honest per-row value BIO's
+    ///     granularity allows (and it advances as batches complete, never
+    ///     a fake spinner).
+    ///   - otherwise ⇒ `Queued`.
+    ///
+    /// The `downloaded` / `extracted` source vectors are
+    /// `"<label> -> <path>"` / `"<label> -> <path>"` strings
+    /// (`app_step2_update_download.rs:140` / `_extract` `remove_extracted_
+    /// update_entries`), so membership is matched by the asset `label`
+    /// prefix — the same join BIO itself uses to reconcile them.
+    #[must_use]
+    pub fn from_wizard_state(state: &WizardState) -> Self {
+        let s2 = &state.step2;
+
+        // Aggregate download % parsed from BIO's `scan_status` — the ONLY
+        // download-progress signal BIO emits (it writes
+        // `"Downloading updates: N/M"` from the worker's
+        // `Progress { completed, total }`; there is no numeric field).
+        // `None` (status not in that form yet) ⇒ in-flight rows show 0%
+        // until the first batch reports — honest, never a fabricated %.
+        let agg_pct: u8 = parse_download_aggregate_pct(&s2.scan_status).unwrap_or(0);
+
+        let label_done = |list: &[String], label: &str| {
+            list.iter().any(|e| {
+                e.split(" -> ")
+                    .next()
+                    .map(str::trim)
+                    .is_some_and(|l| l == label)
+            })
+        };
+
+        let rows = s2
+            .update_selected_update_assets
+            .iter()
+            .map(|a| {
+                let downloaded = label_done(&s2.update_selected_downloaded_sources, &a.label);
+                let extracted = label_done(&s2.update_selected_extracted_sources, &a.label);
+                let status = if extracted {
+                    ModDownloadStatus::Staged
+                } else if downloaded {
+                    // Downloaded; extract pending or running.
+                    ModDownloadStatus::Extracting
+                } else if s2.update_selected_download_running {
+                    ModDownloadStatus::Downloading { progress: agg_pct }
+                } else {
+                    ModDownloadStatus::Queued
+                };
+                ModDownloadRow {
+                    name: a.label.clone(),
+                    source: a.source_id.clone(),
+                    status,
+                }
+            })
+            .collect();
+
+        Self { rows }
+    }
 }
 
 impl DownloadProgress {
@@ -272,15 +349,206 @@ pub enum DownloadingOutcome {
     Advance,
 }
 
-/// Render the Stage-3 download/extract screen. `progress` is the per-mod
-/// model (empty this run — see the module header SPEC-CONFLICT note). Returns
-/// what the dispatcher should do next.
+/// Render the Stage-3 download/extract **chassis** with a caller-supplied
+/// `progress` model. Used directly by the not-yet-wired Phase-6
+/// fork-download path (empty grid there) and by the render gate; the
+/// Install-Modlist live path uses [`render_live`] (which feeds `progress`
+/// from BIO's auto-build state + drives the pipeline). Auto-advances when
+/// every row is `Staged` (SPEC §4.3 production auto-advance — never the
+/// wireframe's `simulate complete →`, which is wireframe-only).
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     copy: DownloadScreenCopy,
     progress: &DownloadProgress,
 ) -> DownloadingOutcome {
+    let back_clicked = render_chrome(ui, palette, copy, progress);
+    if back_clicked {
+        DownloadingOutcome::Cancel
+    } else if progress.all_staged() {
+        DownloadingOutcome::Advance
+    } else {
+        DownloadingOutcome::Stay
+    }
+}
+
+/// **P7.T17 — the live Install-Modlist Downloading stage (SPEC §4.3 /
+/// §13.12a).** Orchestrator-aware: arms BIO's import → auto-build pipeline
+/// once, interposes the content-addressed staging layer at the
+/// download/extract boundary every frame (around BIO's reused-unchanged
+/// `app_step2_update_download` / `_extract`), feeds the §4.3 grid from the
+/// live BIO state, and advances to the stage-4 seam when the pipeline
+/// reaches the install hand-off.
+///
+/// The pipeline is **not** driven from here — the orchestrator's existing
+/// per-frame `OrchestratorApp::poll_step2_channels`
+/// (`advance_pending_saved_log_flow`) +
+/// `poll_step5_before_render`/`start_step5_after_render` already run it
+/// (P6.T2c / P7.T1). This screen only: (1) arms it once
+/// (`auto_build_driver::prepare_install_dirs_and_maybe_import` — derives
+/// the per-install dirs + `import_modlist_share_code` + `arm_auto_build`,
+/// **never** flipping `start_install_requested`; the pipeline's own
+/// `start_auto_build_install` does that after staging), (2) interposes
+/// `archive_store` at the boundary, (3) renders the live feed, (4)
+/// returns `Advance` at the stage-4 seam (P7.T15 / Run-4b consumes it —
+/// for Run-4a `stage_installing` is still the documented stub).
+///
+/// Returns `Cancel` if the user clicks `← Cancel` (the caller resets the
+/// arm latch + progress and returns to Preview), `Advance` at the seam,
+/// else `Stay`.
+pub fn render_live(
+    ui: &mut egui::Ui,
+    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+    copy: DownloadScreenCopy,
+) -> DownloadingOutcome {
+    use crate::install_runtime::auto_build_driver;
+
+    let palette = orchestrator.theme_palette;
+
+    // The Install-Modlist destination (paste-stage `FolderInput`) + the
+    // game from the parsed share-code preview (the redesign never collects
+    // the game on Install — SPEC §4 / §13.12a; it is the payload's game).
+    let destination = orchestrator
+        .install_screen_state
+        .destination
+        .trim()
+        .to_string();
+    let game = orchestrator
+        .install_screen_state
+        .parsed_preview
+        .as_ref()
+        .map(|p| crate::registry::model::Game::from_legacy_string(&p.game_install))
+        .unwrap_or_default();
+    // Install Modlist paste is a share-code-consuming workflow; the
+    // destination-not-empty `Continue` choice promotes it to
+    // Continue-Partial (still share-code-consuming — `--download` ON, plus
+    // `-s`/`-c`). Either way `auto_build_driver` imports + arms.
+    let workflow = if orchestrator.install_screen_state.is_partial() {
+        crate::install_runtime::flag_policies::InstallWorkflow::ContinuePartialInstall
+    } else {
+        crate::install_runtime::flag_policies::InstallWorkflow::ShareCodeConsuming
+    };
+    let code = orchestrator
+        .install_screen_state
+        .import_code
+        .trim()
+        .to_string();
+
+    // ── (1) Arm ONCE. Re-running the import / `arm_auto_build` every
+    //    frame would re-set the `pending_saved_log_*` flags and reset the
+    //    pipeline mid-flight. The latch lives on `InstallScreenState`
+    //    (reset by the caller on Cancel → Preview). A failure leaves the
+    //    latch true (do not spin-retry a bad code) + surfaces the BIO-
+    //    status text in the grid's empty state via the live feed. ──
+    if !orchestrator.install_screen_state.pipeline_armed {
+        orchestrator.install_screen_state.pipeline_armed = true;
+        match auto_build_driver::prepare_install_dirs_and_maybe_import(
+            &mut orchestrator.wizard_state,
+            &destination,
+            game,
+            workflow,
+            &code,
+        ) {
+            Ok(_) => {}
+            Err(err) => {
+                // Surface in BIO's status line so the (otherwise empty)
+                // grid reflects the failure rather than spinning. The
+                // pipeline simply never starts; Cancel → Preview lets the
+                // user fix the code/destination.
+                orchestrator.wizard_state.step2.scan_status =
+                    format!("Auto Build could not start: {err}");
+                tracing::warn!(
+                    target = "orchestrator",
+                    "P7.T17 pipeline arm failed: {err} (Downloading stays navigable)"
+                );
+            }
+        }
+    }
+
+    // ── (2) Content-addressed staging interposition AROUND BIO's
+    //    reused-unchanged download/extract (SPEC §13.12a). Both calls are
+    //    no-ops until there is something to act on, so running them every
+    //    frame is safe + idempotent:
+    //      • `stage_known_archives` BEFORE BIO downloads — drops assets
+    //        already in the store at this modlist's resolved hash (no
+    //        re-download) + places them at BIO's deterministic extract
+    //        path. Gated to BEFORE download starts (`!download_running &&
+    //        no downloaded sources yet`) so it does not race BIO mid-
+    //        fetch.
+    //      • `ingest_downloaded_archives` AFTER BIO's download lands —
+    //        hashes + content-addresses + records the per-install lock.
+    //        Gated to AFTER download finished
+    //        (`!download_running && some downloaded sources`). ──
+    let s2 = &orchestrator.wizard_state.step2;
+    let download_started =
+        s2.update_selected_download_running || !s2.update_selected_downloaded_sources.is_empty();
+    if orchestrator.install_screen_state.pipeline_armed
+        && !destination.is_empty()
+        && !download_started
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_update_assets
+            .is_empty()
+    {
+        archive_store::stage_known_archives(&mut orchestrator.wizard_state, &destination);
+    }
+    if !destination.is_empty()
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_download_running
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_downloaded_sources
+            .is_empty()
+    {
+        // Hash the asset set BIO just resolved. `archive_file_name` is the
+        // same logical name BIO's download/extract use, so re-deriving it
+        // from the (unchanged) asset list is exact.
+        let names: Vec<String> = orchestrator
+            .wizard_state
+            .step2
+            .update_selected_update_assets
+            .iter()
+            .map(crate::app::app_step2_update_download::archive_file_name)
+            .collect();
+        archive_store::ingest_downloaded_archives(&orchestrator.wizard_state, &destination, &names);
+    }
+
+    // ── (3) Build the live feed from BIO's auto-build state + render the
+    //    §4.3 chassis. ──
+    let progress = DownloadProgress::from_wizard_state(&orchestrator.wizard_state);
+    let back_clicked = render_chrome(ui, palette, copy, &progress);
+
+    // ── (4) Outcome. Cancel → caller resets latch + returns to Preview.
+    //    Advance when BIO's pipeline reached the install hand-off
+    //    (`start_auto_build_install` set current_step=4 +
+    //    start_install_requested / install_running) — the stage-4 seam
+    //    (P7.T15 / Run-4b). A *stopped* pipeline (preflight/source
+    //    failure) is finished-but-not-reached-install: stay, the grid's
+    //    BIO status line shows why (no silent advance). ──
+    if back_clicked {
+        return DownloadingOutcome::Cancel;
+    }
+    if auto_build_driver::pipeline_reached_install(&orchestrator.wizard_state) {
+        return DownloadingOutcome::Advance;
+    }
+    auto_build_driver::log_if_pipeline_stopped(&orchestrator.wizard_state);
+    DownloadingOutcome::Stay
+}
+
+/// The shared §4.3 chrome (title + overall-progress Box + 4-col grid +
+/// footer). Returns whether the footer's `← Cancel` was clicked. Used by
+/// both [`render`] (chassis) and [`render_live`] (live feed) so the visual
+/// is bit-identical regardless of data source.
+fn render_chrome(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    copy: DownloadScreenCopy,
+    progress: &DownloadProgress,
+) -> bool {
     render_screen_title(ui, palette, copy.title, Some(copy.sub));
     ui.add_space(12.0);
 
@@ -304,7 +572,7 @@ pub fn render(
     // wireframe's `simulate complete →` is wireframe-only. The footer always
     // paints a right-aligned primary, so we paint a disabled placeholder
     // (`Waiting…`) that never emits a click; the real forward transition is
-    // the `Advance` outcome below, driven by `progress.all_staged()`.
+    // the caller's `all_staged()` / pipeline-reached-install check.
     let footer = sub_flow_footer::render(
         ui,
         palette,
@@ -316,16 +584,7 @@ pub fn render(
             disabled: true,
         },
     );
-
-    if footer.back_clicked {
-        DownloadingOutcome::Cancel
-    } else if progress.all_staged() {
-        // Production auto-advance (SPEC §4.3). Never fires this run because
-        // `progress` is empty pending the SPEC-CONFLICT decision.
-        DownloadingOutcome::Advance
-    } else {
-        DownloadingOutcome::Stay
-    }
+    footer.back_clicked
 }
 
 /// `Box label="overall progress"` — the big "N / T mods · P%" label + the
@@ -604,6 +863,29 @@ fn paint_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Rect, frac: f64,
     );
 }
 
+/// Parse the aggregate download % out of BIO's `scan_status` line — the
+/// **only** download-progress signal BIO emits. `app_step2_update_
+/// download::poll_step2_update_download` sets it to exactly
+/// `"Downloading updates: N/M"` (from the worker's `Progress { completed,
+/// total }`). Returns `Some(0..=100)` only for that exact shape with
+/// `M > 0`; any other status (idle / scanning / extracting / a finished
+/// line) ⇒ `None` (the caller renders in-flight rows at 0%, never a
+/// fabricated value). Format-coupled to BIO's literal (read-only — if BIO
+/// ever changes the string this degrades to 0%, never to a wrong %).
+fn parse_download_aggregate_pct(status: &str) -> Option<u8> {
+    let rest = status.trim().strip_prefix("Downloading updates: ")?;
+    let (done, total) = rest.split_once('/')?;
+    let done: usize = done.trim().parse().ok()?;
+    let total: usize = total.trim().parse().ok()?;
+    if total == 0 {
+        return None;
+    }
+    let pct = ((done.min(total) as f32 / total as f32) * 100.0)
+        .round()
+        .clamp(0.0, 100.0) as u8;
+    Some(pct)
+}
+
 /// The shared sketchy Box chassis (shell-bg fill, 1.5px strong border, 3px
 /// radius, 14px inner padding — matches `redesign_box`; we use a local frame
 /// because this screen draws a section caption + custom interior layout
@@ -750,5 +1032,107 @@ mod tests {
             c.hint,
             Some("after download: install runs without further prompts (no review step)")
         );
+    }
+
+    #[test]
+    fn parse_download_aggregate_pct_only_matches_bios_literal() {
+        // BIO's exact `app_step2_update_download::poll_step2_update_download`
+        // status (`"Downloading updates: N/M"`).
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 0/7"),
+            Some(0)
+        );
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 7/7"),
+            Some(100)
+        );
+        // 3/7 → 42.857 → round → 43.
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 3/7"),
+            Some(43)
+        );
+        // Any other status ⇒ None (the caller renders 0%, never a fake %).
+        assert_eq!(parse_download_aggregate_pct("Idle"), None);
+        assert_eq!(parse_download_aggregate_pct("Scanning..."), None);
+        assert_eq!(
+            parse_download_aggregate_pct("Download updates finished: 7 downloaded, 0 failed"),
+            None
+        );
+        // Degenerate / malformed ⇒ None, never a panic or a wrong %.
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 1/0"),
+            None
+        );
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: x/y"),
+            None
+        );
+    }
+
+    #[test]
+    fn from_wizard_state_classifies_every_lifecycle_row() {
+        // SPEC §4.3 live feed: one row per resolved asset; status from the
+        // authoritative downloaded/extracted membership + the parsed
+        // aggregate download %.
+        let mut st = WizardState::default();
+        let asset = |label: &str, src: &str| crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: format!("{label}/{label}.TP2"),
+            label: label.to_string(),
+            source_id: src.to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{label}.zip"),
+            asset_url: format!("https://x/{label}.zip"),
+            installed_source_ref: None,
+        };
+        st.step2.update_selected_update_assets = vec![
+            asset("EET", "github:eet"),
+            asset("cdtweaks", "github:cdt"),
+            asset("stratagems", "github:scs"),
+            asset("spell_rev", "weasel:sr"),
+        ];
+        // EET fully done (downloaded + extracted) ⇒ Staged.
+        st.step2.update_selected_downloaded_sources = vec![
+            "EET -> C:/a/EET.zip".to_string(),
+            "cdtweaks -> C:/a/cdt.zip".to_string(),
+        ];
+        st.step2.update_selected_extracted_sources = vec!["EET -> C:/m/EET".to_string()];
+        // cdtweaks downloaded but not extracted ⇒ Extracting.
+        // stratagems / spell_rev not downloaded; a download is running ⇒
+        // stratagems shows Downloading <agg>, spell_rev too (no per-asset
+        // %, both mirror the aggregate).
+        st.step2.update_selected_download_running = true;
+        st.step2.scan_status = "Downloading updates: 2/4".to_string(); // → 50%
+
+        let p = DownloadProgress::from_wizard_state(&st);
+        assert_eq!(p.rows.len(), 4);
+        assert_eq!(p.rows[0].status, ModDownloadStatus::Staged, "EET staged");
+        assert_eq!(p.rows[0].source, "github:eet");
+        assert_eq!(
+            p.rows[1].status,
+            ModDownloadStatus::Extracting,
+            "cdtweaks downloaded, extract pending ⇒ Extracting"
+        );
+        assert_eq!(
+            p.rows[2].status,
+            ModDownloadStatus::Downloading { progress: 50 },
+            "in-flight row mirrors BIO's parsed aggregate %"
+        );
+        assert_eq!(
+            p.rows[3].status,
+            ModDownloadStatus::Downloading { progress: 50 }
+        );
+
+        // Not running, nothing downloaded ⇒ all Queued.
+        let mut idle = WizardState::default();
+        idle.step2.update_selected_update_assets = vec![asset("m", "s")];
+        let q = DownloadProgress::from_wizard_state(&idle);
+        assert_eq!(q.rows[0].status, ModDownloadStatus::Queued);
+
+        // No resolved assets ⇒ empty grid (the chassis' honest empty
+        // state; never auto-advances).
+        let empty = DownloadProgress::from_wizard_state(&WizardState::default());
+        assert!(empty.rows.is_empty());
+        assert!(!empty.all_staged());
     }
 }

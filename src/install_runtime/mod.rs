@@ -50,9 +50,35 @@
 //
 // Run 4 (P7.T17 / T10) adds `per_install_dirs` / `archive_store` /
 // `auto_build_driver` / `reinstall_route` in its run.
+//
+// ── Run 4a (P7.T17) submodules — the live download/extract/import
+//    pipeline (SPEC §13.12a). Per the per-run module-registration
+//    discipline, only the submodules this run implements are declared
+//    here:
+//      - `per_install_dirs`   → P7.T17 piece 1: derive the per-install
+//                               Mods + #2/#3/#4 clone dirs INSIDE the
+//                               destination + force the clone flags
+//                               (SPEC §13.12a / §13.12 #2/#3/#4).
+//      - `archive_store`      → P7.T17 piece 2: the net-new
+//                               content-addressed staging layer that
+//                               WRAPS BIO's reused-unchanged
+//                               `app_step2_update_download` / `_extract`
+//                               (SPEC §13.12a — dedupe / coexist /
+//                               extract-by-hash). Zero BIO edit.
+//      - `auto_build_driver`  → P7.T17 piece 3: drive BIO's import →
+//                               auto-build pipeline read-only
+//                               (`import_modlist_share_code` + the
+//                               saved-log/auto-build flow via the
+//                               orchestrator-owned receivers — SPEC
+//                               §13.12a pipeline-reuse contract). Zero
+//                               BIO edit.
+//    `reinstall_route` is Run 4b (P7.T10) — added in that run. ──
+pub mod archive_store;
+pub mod auto_build_driver;
 pub mod flag_policies;
 pub mod import_code_writer;
 pub mod install_concurrency;
+pub mod per_install_dirs;
 pub mod rail_lock_reason;
 pub mod registry_transition;
 pub mod start_hooks;

@@ -100,32 +100,43 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             }
         }
         InstallStage::Downloading => {
-            // SPEC §4.3 — the net-new `ImportDownloadScreen` surface
-            // (overall-progress Box + 4-col per-mod grid + footer). The
-            // per-mod model (`download_progress`) is empty this run: the
-            // live download/extract orchestration is escalated as a
-            // SPEC CONFLICT / PLAN GAP (see this file's + `stage_downloading`'s
-            // module headers) and is NOT wired pending the user's decision.
-            // The screen is fully navigable (Cancel → Preview) and the
-            // production auto-advance lights up automatically once the
-            // resolved orchestration feeds `download_progress`.
-            match stage_downloading::render(
-                ui,
-                palette,
-                DownloadScreenCopy::INSTALL,
-                &orchestrator.install_screen_state.download_progress,
-            ) {
+            // SPEC §4.3 — the net-new `ImportDownloadScreen` surface.
+            // **P7.T17 live (SPEC §13.12a):** `render_live` arms BIO's
+            // import → auto-build pipeline once (per-install dirs +
+            // `import_modlist_share_code` + `arm_auto_build`, NEVER
+            // pre-flipping `start_install_requested`), interposes the
+            // content-addressed staging layer at the download/extract
+            // boundary AROUND BIO's reused-unchanged
+            // `app_step2_update_download`/`_extract`, feeds the §4.3 grid
+            // from the live BIO auto-build state every frame, and advances
+            // to the stage-4 seam when the pipeline reaches the install
+            // hand-off. The pipeline itself is driven by the
+            // orchestrator's existing per-frame `poll_step2_channels` +
+            // Step-5 poll (P6.T2c / P7.T1) — this screen only arms +
+            // interposes + renders. (`render_live` takes `&mut
+            // OrchestratorApp`; the parameterless `render` cannot drive
+            // the pipeline — the minimal redesign-owned caller change for
+            // P7.T17's live wiring.)
+            match stage_downloading::render_live(ui, orchestrator, DownloadScreenCopy::INSTALL) {
                 DownloadingOutcome::Cancel => {
                     // SPEC §4.3: `Cancel` (← back) returns to Preview. Drop
-                    // any accumulated grid so a re-parse can't inherit a
-                    // stale list.
+                    // the live grid + reset the pipeline-armed latch so a
+                    // re-entry (possibly with a changed code/destination)
+                    // re-arms cleanly and cannot inherit a stale grid.
                     orchestrator.install_screen_state.download_progress =
                         crate::ui::install::stage_downloading::DownloadProgress::default();
+                    orchestrator.install_screen_state.pipeline_armed = false;
                     request = Some(InstallRequest::Stage(InstallStage::Preview));
                 }
                 DownloadingOutcome::Advance => {
-                    // Production auto-advance on download+extract completion
-                    // (SPEC §4.3 → §4.4). Never fires this run (empty model).
+                    // Production auto-advance: BIO's auto-build pipeline
+                    // reached the install hand-off (SPEC §4.3 → §4.4 — the
+                    // stage-4 seam). The real stage 4 (`stage_installing`)
+                    // is Run 4b; for Run 4a this enters the documented
+                    // §4.4 stub, which `start_step5_after_render` (already
+                    // wired, P7.T1) backs with BIO's live install runtime
+                    // (the pipeline already flipped `start_install_
+                    // requested`). The seam is intentional + documented.
                     request = Some(InstallRequest::Stage(InstallStage::InstallingStub));
                 }
                 DownloadingOutcome::Stay => {}

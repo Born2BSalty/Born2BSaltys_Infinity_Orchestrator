@@ -208,14 +208,44 @@ pub fn on_install_start(
     //    this run's scope — `reinstall_route` / `pending_reinstall_id`
     //    land in Run 4b. Deliberately not implemented here. ──
 
-    // ── P7.T17 (Run 4a): share-code-consuming pipeline — for
-    //    ShareCodeConsuming workflows, derive the per-install dirs +
-    //    force the clone flags + kick off the import → auto-build →
-    //    download/extract pipeline (content-addressed staging) HERE.
-    //    `on_install_start` is the trigger point; P7.T17 owns the
-    //    mechanism. Out of this run's scope — `per_install_dirs` /
-    //    `archive_store` / `auto_build_driver` land in Run 4a.
-    //    Deliberately not implemented here. ──
+    // ── P7.T17 (Run 4a) — per-install directory derivation (SPEC
+    //    §13.12a / §13.12 #2/#3/#4). EVERY install — regardless of
+    //    workflow — gets the per-install Mods + #2 `weidu_component_logs`
+    //    + #3/#4 forced game-clone dirs derived INSIDE the destination
+    //    before WeiDU runs (an install is install-critical-blocked
+    //    without them; SPEC §13.12a "clone is forced for every install").
+    //    A fresh Create → New gets exactly these (the plan: "skips the
+    //    import step but still gets the per-install dirs"); a
+    //    share-code-consuming entry flow (Install Modlist / Create-import
+    //    / Load-Draft) ALSO drives BIO's import → auto-build →
+    //    download/extract pipeline — but that kick-off lives in that
+    //    flow's own Downloading screen (`stage_downloading::render_live`
+    //    → `auto_build_driver::prepare_install_dirs_and_maybe_import`),
+    //    NOT here: the workspace Step-5 caller flips
+    //    `start_install_requested = true` on this `Ok`, which would
+    //    prematurely install before the auto-build staged anything (BIO's
+    //    `start_if_requested` gates only on `start_install_requested`).
+    //    So `on_install_start`'s P7.T17 contribution is the *directory*
+    //    derivation only — idempotent, so an entry flow that already
+    //    derived them via `render_live` re-derives harmlessly here (same
+    //    fixed paths, `create_dir_all` is a no-op). The clone flags are
+    //    forced ON; the no-clone path is never set (SPEC §13.12a).
+    //
+    //    Runs AFTER the flag policies (step 1) — `derive_per_install_dirs`
+    //    only writes the per-install *target* fields (`mods_folder`,
+    //    `eet_pre_dir`/`eet_new_dir`, `generate_directory`,
+    //    `weidu_log_folder`); the global *source* folders + the #1/#5
+    //    flags set above are untouched.
+    let game = registry
+        .find(modlist_id)
+        .map(|e| e.game)
+        .ok_or_else(|| format!("modlist {modlist_id} vanished from registry before dir derive"))?;
+    crate::install_runtime::per_install_dirs::derive_per_install_dirs(
+        &mut wizard_state.step1,
+        &destination,
+        game,
+    )
+    .map_err(|err| format!("per-install directory derivation failed for {modlist_id}: {err}"))?;
 
     Ok(())
 }

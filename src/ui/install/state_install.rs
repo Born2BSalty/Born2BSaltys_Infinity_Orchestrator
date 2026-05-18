@@ -247,17 +247,25 @@ pub struct InstallScreenState {
     /// `← Back to preview` target — SPEC §4.4: preview if cached, else
     /// paste). Set `true` when the parse succeeds.
     pub preview_cached: bool,
-    /// Stage-3 per-mod download/extract progress model (SPEC §4.3). Grown
-    /// in Run 5 / P5.T12 alongside `stage_downloading`, mirroring how Run 4
-    /// grew the preview state. Populated by the resolved download
-    /// orchestration once the Run-5 SPEC-CONFLICT escalation is decided
-    /// (see `stage_downloading.rs`'s module header) — until then it stays
-    /// `Default` (empty) so the Downloading screen renders the SPEC §4.3
-    /// chassis with no rows / no progress: navigable + forward-compatible
-    /// (same additive model the rest of Phase 5 used). Cleared whenever the
-    /// user leaves Downloading back to Preview (a re-parsed code must not
-    /// inherit a stale grid).
+    /// Stage-3 per-mod download/extract progress model (SPEC §4.3).
+    /// **Phase 7 P7.T17 feeds it live** each frame from BIO's auto-build
+    /// state (`DownloadProgress::from_wizard_state`) while on the
+    /// Downloading stage; the Phase-5 empty-grid chassis is the
+    /// pre-arm / fork-download fallback. Cleared whenever the user leaves
+    /// Downloading back to Preview (a re-parsed code must not inherit a
+    /// stale grid).
     pub download_progress: DownloadProgress,
+    /// **P7.T17 — pipeline-armed-once latch.** `false` until the
+    /// Downloading stage has run the import + per-install-dir derivation +
+    /// auto-build arm exactly once for this code; flipped `true` by
+    /// `stage_downloading::render_live` on first entry so the import /
+    /// `arm_auto_build` (which set the `pending_saved_log_*` flags) is not
+    /// re-run every frame (that would reset the pipeline mid-flight).
+    /// Reset to `false` whenever the user leaves Downloading back to
+    /// Preview (alongside `download_progress`) so a re-entry re-arms with
+    /// a possibly-changed code/destination. Not persisted (transient until
+    /// an install starts — Phase 7).
+    pub pipeline_armed: bool,
 }
 
 impl InstallScreenState {
@@ -271,12 +279,17 @@ impl InstallScreenState {
     /// Drop the cached preview + any parse error and close the fork popup.
     /// Called when the user goes back to Paste (the pasted code may change,
     /// so a stale preview must not survive) and when a fresh parse is about
-    /// to run.
+    /// to run. Also drops the live Downloading grid + the P7.T17
+    /// pipeline-armed latch so a re-parsed code re-arms the import →
+    /// auto-build pipeline from scratch (never inherits the prior code's
+    /// in-flight pipeline state).
     pub fn clear_preview(&mut self) {
         self.parsed_preview = None;
         self.preview_parse_error = None;
         self.fork_info_open = false;
         self.preview_cached = false;
+        self.download_progress = DownloadProgress::default();
+        self.pipeline_armed = false;
     }
 }
 
