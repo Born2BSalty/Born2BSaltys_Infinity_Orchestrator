@@ -215,6 +215,26 @@ pub struct OrchestratorApp {
     /// pattern (`WorkspaceViewState`'s Phase-7 fields).
     pub workspace_step5: WorkspaceStep5State,
 
+    /// **P7.T10 — the in-flight Reinstall route marker (Run 4b).** Set to
+    /// `Some(modlist_id)` by `reinstall_route::start_reinstall` when the
+    /// user confirms a Home Kebab → Reinstall (it also populates the
+    /// Install-Modlist preview + navigates there). It is **visible across
+    /// the screen transition** Home → Install-Modlist preview → Downloading
+    /// so the Install-click site knows this run is a Reinstall (the
+    /// `InstallButtonVariant::Reinstall` derivation + the `Installed →
+    /// InProgress` `registry_transition::flip_to_in_progress` at
+    /// Install-click — SPEC §3.1: the flip happens **only when the install
+    /// starts**, NOT at Reinstall-Kebab-click). Cleared (a) by the
+    /// Install-click site **after** the flip (so a second frame cannot
+    /// re-flip), or (b) by `page_router` on nav-away from
+    /// `NavDestination::Install` **if the install has not started**
+    /// (Cancel-at-preview ⇒ the modlist stays `Installed`, SPEC §3.1).
+    /// `None` ⇒ this is not a Reinstall. Net-new orchestrator field — the
+    /// established staged-field pattern (`WorkspaceStep5State` /
+    /// `install_running_since` precedents); BIO state untouched. The plan
+    /// (P7.T10 / L12) names this field explicitly.
+    pub(crate) pending_reinstall_id: Option<String>,
+
     /// **P7.T9 / T9b / T14 — install-start monotonic anchor.** Set to
     /// `Some(Instant::now())` the frame `wizard_state.step5.install_running`
     /// transitions `false → true`, cleared the frame it goes `true →
@@ -450,6 +470,10 @@ impl OrchestratorApp {
             // state — `page_step5::render` renders the Command/Summary
             // cards + console box + prompt input with no live child.
             workspace_step5: WorkspaceStep5State::default(),
+            // No Reinstall in flight at construction — armed only by
+            // `reinstall_route::start_reinstall` on a confirmed Home Kebab
+            // → Reinstall this run (P7.T10).
+            pending_reinstall_id: None,
             // No install running at construction (a force-quit-mid-install
             // relaunch has a dead process ⇒ `install_running == false` ⇒
             // the rail is unlocked from launch; the edge-detect in
@@ -565,7 +589,8 @@ impl OrchestratorApp {
         // receiver; store it so `drain_size_worker_result` does the second
         // atomic write filling `total_size_bytes`. On any failure path it
         // returns `None` (logged inside) — nothing to drain.
-        let rx = registry_transition::flip_to_installed(&id, registry, registry_store, wizard_state);
+        let rx =
+            registry_transition::flip_to_installed(&id, registry, registry_store, wizard_state);
         if rx.is_some() {
             self.install_size_worker_rx = rx;
         }

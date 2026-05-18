@@ -78,6 +78,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     // renders (the build is recoverable even if the app closes immediately).
     flush_workspace_on_nav_away(orchestrator);
 
+    // P7.T10 — clear the Reinstall route marker on nav-away-from-Install if
+    // the install never started. Detected here (before the nav match,
+    // alongside the workspace flush) for the same reason.
+    clear_pending_reinstall_on_nav_away_from_install(orchestrator);
+
     match orchestrator.nav.clone() {
         // Phase 5 P5.T15 — Home stub replaced with the real Home screen.
         NavDestination::Home => page_home::render(ui, orchestrator, ctx),
@@ -360,6 +365,56 @@ fn flush_workspace_on_nav_away(orchestrator: &mut OrchestratorApp) {
     // Clear so re-entering this (or another) workspace reloads cleanly via
     // P6.T12's loaded-id swap detection.
     orchestrator.workspace_view.loaded_workspace_id = None;
+}
+
+/// P7.T10 — clear `pending_reinstall_id` on nav-away from
+/// `NavDestination::Install` **if the install has not started** (SPEC §3.1:
+/// "cancelling the preview leaves the modlist `installed`" — Back, a rail
+/// click elsewhere, or closing the app at the preview).
+///
+/// The marker is armed by `reinstall_route::start_reinstall` (which also
+/// navigates to `NavDestination::Install` at the Preview stage) and is
+/// cleared at the preview's Install-click by
+/// `start_hooks::reinstall_flip_at_install_click` (after the `Installed →
+/// InProgress` flip). So if it is **still** `Some` while `nav` is no longer
+/// `Install`, the user left the Install-Modlist screen *before* clicking
+/// Install — a cancelled Reinstall: drop the marker so a later unrelated
+/// Install-Modlist paste is not mis-tagged `Reinstall` and the modlist
+/// stays `Installed` (the flip never happened).
+///
+/// Defensive `install_running` guard: if an install is somehow running with
+/// the marker still set (it should have been cleared at Install-click — but
+/// never strand a mid-install state on a stale-marker edge), do **not**
+/// clear here; the Install-click clear is authoritative and the C5 rail
+/// lock prevents navigating away mid-install anyway. Pure orchestrator
+/// state; no disk, no BIO.
+fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut OrchestratorApp) {
+    if orchestrator.pending_reinstall_id.is_none() {
+        return; // not a Reinstall in flight — nothing to clear.
+    }
+    // Still on the Install-Modlist screen ⇒ NOT a nav-away (the user is
+    // still in the preview / downloading; the Install-click clear owns the
+    // marker once they proceed).
+    if matches!(orchestrator.nav, NavDestination::Install) {
+        return;
+    }
+    // Defensive: an install in flight with the marker still set — leave it
+    // (the Install-click clear is authoritative; C5 prevents this path).
+    if orchestrator.wizard_state.step5.install_running
+        || orchestrator.wizard_state.step5.start_install_requested
+        || orchestrator.wizard_state.step5.prep_running
+    {
+        return;
+    }
+    // Navigated away from Install with the Reinstall never started —
+    // cancel the route (SPEC §3.1: the modlist stays `Installed`; the flip
+    // never happened).
+    orchestrator.pending_reinstall_id = None;
+    tracing::debug!(
+        target = "orchestrator",
+        "Reinstall cancelled (nav-away from Install before Install-click); \
+         pending_reinstall_id cleared — modlist stays Installed (SPEC §3.1)"
+    );
 }
 
 /// Build `WorkspaceViewState::fork_meta` from a registry entry (P6.T5).

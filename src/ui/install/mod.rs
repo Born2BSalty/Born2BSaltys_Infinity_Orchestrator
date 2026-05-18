@@ -42,15 +42,25 @@
 //                               decision). The screen renders the §4.3 chassis
 //                               with an empty grid (navigable: Cancel →
 //                               Preview) and is forward-compatible.
-//   - `stage_installing_stub` — Stage 4 stub (SPEC §4.4; full runtime is
-//                               Phase 7).
+//   - `stage_installing`      — Stage 4, the real install runtime (SPEC
+//                               §4.4 `InstallProgressScreen` / §9.3).
+//                               **Phase 7 P7.T15 (Run 4b)** — replaces the
+//                               Phase-5/Run-4a `stage_installing_stub`
+//                               (deleted, mirroring the Run-1
+//                               `workspace_step5_stub` "replace + delete
+//                               the stub" precedent). Its own minimal
+//                               chrome (simple header + back affordance +
+//                               the C3-gated post-install row) wrapping
+//                               BIO's embedded `page_step5::render`
+//                               (read-only) — NOT the workspace 4-step
+//                               progress bar / nav bar / Share header.
 
 pub mod destination_not_empty;
 pub mod page_install;
 pub mod preview_counts;
 pub mod preview_tabs;
 pub mod stage_downloading;
-pub mod stage_installing_stub;
+pub mod stage_installing;
 pub mod stage_paste;
 pub mod stage_preview;
 pub mod state_install;

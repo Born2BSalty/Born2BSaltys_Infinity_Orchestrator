@@ -14,9 +14,12 @@
 //     worker). Owned by **P7.T6 (Run 3 — this run)**.
 //   - `flip_to_in_progress(id, registry, store)` — the Reinstall
 //     install-start transition (`Installed → InProgress`). Owned by
-//     **P7.T10 (Run 4b)** and called from `start_hooks::on_install_start`'s
-//     reinstall branch — left as a deferred placeholder below (Run 3
-//     implements `flip_to_installed` ONLY).
+//     **P7.T10 (Run 4b — this run)**: the symmetric inverse of
+//     `flip_to_installed`'s state side (one field mutation + one atomic
+//     write, same logged-no-op edges + return/style). Called at the
+//     Reinstall route's **Install-click** (SPEC §3.1 — only when the
+//     install starts, NOT at Reinstall-Kebab-click); the caller clears
+//     `pending_reinstall_id`.
 //
 // **C3 fire-once contract.** `flip_to_installed` is called by the
 // orchestrator's `update` loop **exactly once** on the C3 clean-exit edge —
@@ -309,14 +312,98 @@ fn directory_size_bytes(root: &Path) -> u64 {
     total
 }
 
-// ── P7.T10 (Run 4b): `flip_to_in_progress(id, registry, store)` — the
-//    Reinstall install-start transition (`Installed → InProgress`), called
-//    from `start_hooks::on_install_start`'s reinstall branch when
-//    `pending_reinstall_id == Some(id)`. Out of THIS run's scope (Run 3
-//    implements `flip_to_installed` ONLY); `reinstall_route` /
-//    `pending_reinstall_id` land in Run 4b. Deliberately left as this
-//    documented placeholder rather than a half-implemented stub — the same
-//    per-run discipline the module used before this run. ──
+/// **P7.T10 — the Reinstall install-start registry transition
+/// (`Installed → InProgress`).** The exact symmetric inverse of
+/// [`flip_to_installed`]'s state side: one field mutation
+/// (`state = ModlistState::InProgress`) + one atomic
+/// [`RegistryStore::save`], same logged-no-op edges, same return/style.
+///
+/// Per SPEC §3.1 ("the modlist state flips to `in-progress` **only when the
+/// install starts**, not when the preview opens") this is called at the
+/// **Install-click** of the Reinstall route — NOT when the user clicks
+/// Reinstall in the Home Kebab (that only opens the confirm + populates the
+/// Install-Modlist preview via `reinstall_route::start_reinstall`). The
+/// caller (the Install-Modlist Install-click site) is responsible for
+/// clearing `pending_reinstall_id`; this fn touches **only** the registry
+/// (mirroring `flip_to_installed`'s pure-side-effecting-unit contract — it
+/// does not own the in-memory flag).
+///
+/// Returns `true` iff the entry existed AND the atomic write succeeded
+/// (i.e. the transition is durable). Returns `false` — logged, non-fatal,
+/// state left untouched — when:
+///   - the modlist is not in the registry (a delete raced the Reinstall);
+///   - it vanished between the read and the `&mut` borrow;
+///   - it was **not** in `Installed` (defensive: only `Installed →
+///     InProgress` is valid — Reinstall acts only on installed modlists per
+///     SPEC §3.1; a non-`Installed` entry is left as-is and logged);
+///   - the atomic `modlists.json` write failed (SPEC §13.14: surface +
+///     do not half-flip — the install simply does not begin, the entry
+///     stays `Installed`).
+///
+/// Asymmetry with `flip_to_installed` (intentional, not drift): there is no
+/// counts refresh / share-code regenerate / size worker — a Reinstall does
+/// **not** change the component set or produce a verified
+/// `allow_auto_install = true` code (that is exclusively
+/// `flip_to_installed`'s post-success job, SPEC §13.3); the install-start
+/// `latest_share_code` / `modlist-import-code.txt` are written by the
+/// install-start path (SPEC §13.13), not here. So this is a pure
+/// state-only flip + atomic write.
+pub fn flip_to_in_progress(
+    id: &str,
+    registry: &mut ModlistRegistry,
+    store: &RegistryStore,
+) -> bool {
+    let Some(entry) = registry.find_mut(id) else {
+        warn!(
+            target = "orchestrator",
+            "flip_to_in_progress: modlist {id} not in registry at Reinstall \
+             install-start (Reinstall aborted — nothing to flip)"
+        );
+        return false;
+    };
+
+    // Defensive: Reinstall only acts on `Installed` modlists (SPEC §3.1 —
+    // the Home Kebab `Reinstall` item only exists on an installed card).
+    // A non-`Installed` entry here is an inconsistent state; do NOT flip it
+    // (an `InProgress` entry is already where Reinstall would put it; a
+    // would-be flip to `InProgress` of something else is meaningless) —
+    // log + bail, mirroring `flip_to_installed`'s "vanished/raced" no-op
+    // discipline rather than silently mutating an unexpected state.
+    if entry.state != ModlistState::Installed {
+        warn!(
+            target = "orchestrator",
+            "flip_to_in_progress: modlist {id} is not Installed \
+             (state = {:?}); Reinstall flip skipped (only Installed → \
+             InProgress is valid — SPEC §3.1)",
+            entry.state
+        );
+        return false;
+    }
+
+    entry.state = ModlistState::InProgress;
+
+    // Atomic write. SPEC §13.14: if `modlists.json` is unwritable, do NOT
+    // proceed as if flipped — revert the in-memory mutation so the live
+    // registry view stays consistent with disk (the entry stays
+    // `Installed`; the caller will not have started the install on an
+    // `Err`). Symmetric to `flip_to_installed`'s write-failure bail, with
+    // the extra in-memory revert because this is a single-field flip with
+    // no other durable change to anchor it.
+    if let Err(err) = store.save(registry) {
+        warn!(
+            target = "orchestrator",
+            "flip_to_in_progress: atomic registry write for {id} failed: \
+             {err} (Reinstall NOT started; entry reverted to Installed — \
+             SPEC §13.14)"
+        );
+        if let Some(entry) = registry.find_mut(id) {
+            entry.state = ModlistState::Installed;
+        }
+        return false;
+    }
+
+    true
+}
 
 #[cfg(test)]
 mod tests {
@@ -483,6 +570,99 @@ mod tests {
         );
         // Nothing was written (the early return precedes the save).
         assert!(!path.exists());
+    }
+
+    // ───────────────────── flip_to_in_progress (P7.T10) ─────────────────────
+    //
+    // The Reinstall install-start transition — the symmetric inverse of
+    // `flip_to_installed`'s state side. Uses the SAME temp-path
+    // `RegistryStore` precedent (DATA-LOSS-safe — `flip_to_in_progress`
+    // calls the real `RegistryStore::save`; a test MUST NEVER bind
+    // `%APPDATA%\bio\modlists.json`).
+
+    #[test]
+    fn flip_to_in_progress_installed_to_inprogress_and_persists() {
+        let (store, path) = temp_registry_store("reinstall_happy");
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "REINSTALL0001".to_string(),
+            name: "Polished EET".to_string(),
+            game: Game::EET,
+            destination_folder: String::new(),
+            state: ModlistState::Installed,
+            // A verified post-success code: Reinstall must NOT touch it
+            // here (the install-start path rewrites it per SPEC §13.13;
+            // flip_to_in_progress is state-only).
+            latest_share_code: Some("BIO-MODLIST-V1:VERIFIED".to_string()),
+            mod_count: 9,
+            component_count: 136,
+            ..Default::default()
+        });
+
+        let ok = flip_to_in_progress("REINSTALL0001", &mut registry, &store);
+        assert!(ok, "Installed → InProgress flip succeeds + persists");
+
+        let entry = registry.find("REINSTALL0001").expect("entry present");
+        assert_eq!(
+            entry.state,
+            ModlistState::InProgress,
+            "state flipped Installed → InProgress (SPEC §3.1)"
+        );
+        // State-only: counts + the verified share code are untouched (the
+        // intentional asymmetry vs flip_to_installed — Reinstall does not
+        // change the component set or regenerate the code here).
+        assert_eq!(entry.mod_count, 9, "counts untouched (state-only flip)");
+        assert_eq!(entry.component_count, 136);
+        assert_eq!(
+            entry.latest_share_code.as_deref(),
+            Some("BIO-MODLIST-V1:VERIFIED"),
+            "the verified code is NOT rewritten by flip_to_in_progress \
+             (install-start path owns the code per SPEC §13.13)"
+        );
+        assert!(
+            path.exists(),
+            "registry written to the temp path (NOT %APPDATA%)"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flip_to_in_progress_missing_entry_is_a_logged_noop() {
+        let (store, path) = temp_registry_store("reinstall_missing");
+        let mut registry = ModlistRegistry::default();
+        let ok = flip_to_in_progress("DOES_NOT_EXIST", &mut registry, &store);
+        assert!(
+            !ok,
+            "no entry ⇒ false (no write) — Reinstall aborts, nothing to flip"
+        );
+        assert!(!path.exists(), "the early return precedes the save");
+    }
+
+    #[test]
+    fn flip_to_in_progress_non_installed_is_skipped() {
+        // Defensive (SPEC §3.1 — Reinstall only acts on Installed cards).
+        // An already-`InProgress` entry must NOT be re-flipped + must NOT
+        // be persisted (the no-op leaves disk untouched).
+        let (store, path) = temp_registry_store("reinstall_notinstalled");
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "NOTINSTALLED1".to_string(),
+            name: "Draft".to_string(),
+            game: Game::BGEE,
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+        let ok = flip_to_in_progress("NOTINSTALLED1", &mut registry, &store);
+        assert!(
+            !ok,
+            "non-Installed ⇒ false (skipped, only Installed→InProgress)"
+        );
+        assert_eq!(
+            registry.find("NOTINSTALLED1").unwrap().state,
+            ModlistState::InProgress,
+            "state left untouched"
+        );
+        assert!(!path.exists(), "a skipped flip does not write the registry");
     }
 
     #[test]

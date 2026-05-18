@@ -15,6 +15,12 @@
 // Run 2 ("Home — actions live") adds:
 //   - `confirm_delete`         — Delete + Reinstall confirm bodies (P5.T7 / T18).
 //   - `toast`                  — bottom-center transient toast (P5.T16).
+//
+// Phase 7 Run 4b (P7.T10) adds:
+//   - `reinstall_route_wire`   — wires the Reinstall confirm's Confirm
+//                                button to the real Install-Modlist
+//                                Reinstall route (replaces the Phase-5
+//                                placeholder-toast seam; SPEC §3.1).
 
 pub mod add_a_modlist;
 pub mod confirm_delete;
@@ -23,5 +29,6 @@ pub mod first_launch_setup_card;
 pub mod game_installs_detected;
 pub mod modlist_card;
 pub mod page_home;
+pub mod reinstall_route_wire;
 pub mod state_home;
 pub mod toast;

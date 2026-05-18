@@ -11,6 +11,24 @@
 // on `src/core/app/modlist_share.rs` (read here via
 // `preview_modlist_share_code`); **Run 5 modifies ZERO BIO source.**
 //
+// **Phase 7 Run 4b — the FINAL run.** Two redesign-owned edits land here:
+//   - **P7.T15 seam swap.** `InstallStage::InstallingStub` no longer
+//     renders the Phase-5 placeholder — it renders the real §4.4
+//     `InstallProgressScreen` (`stage_installing::render`, the net-new
+//     net-new Step-5-chrome screen that wraps BIO's embedded
+//     `page_step5::render`). Run-4a's `stage_downloading::render_live`
+//     still advances here at the stage-4 seam (the pipeline already
+//     flipped `start_install_requested`); `stage_installing` only renders
+//     + dispatches (gated so it cannot double-start).
+//   - **P7.T10 Reinstall flip at Install-click.** The `Preview →
+//     Downloading` transition (the literal SPEC §3.1 "clicks Reinstall →
+//     to actually run it") flips a Reinstall route's entry `Installed →
+//     InProgress` via `start_hooks::reinstall_flip_at_install_click`
+//     (variant-gated + idempotent; the Reinstall route does not pass
+//     through `on_install_start`, so the P7.T10 flip is invoked from this
+//     authorized site — see the `start_hooks` module note + the run
+//     report's PLAN GAP). Zero BIO source.
+//
 // **Downloading live data is RESOLVED-DEFERRED to Phase 7 P7.T17 (SPEC
 // §13.12a) — not an open escalation.** `stage_downloading::render` ships the
 // full §4.3 chassis + state; `InstallScreenState::download_progress` has no
@@ -40,8 +58,9 @@
 use eframe::egui;
 
 use crate::app::modlist_share::preview_modlist_share_code;
+use crate::install_runtime::start_hooks;
 use crate::ui::install::stage_downloading::{self, DownloadScreenCopy, DownloadingOutcome};
-use crate::ui::install::stage_installing_stub::{self, InstallingStubOutcome};
+use crate::ui::install::stage_installing::{self, StageInstallingOutcome};
 use crate::ui::install::stage_paste::{self, PasteOutcome};
 use crate::ui::install::stage_preview::{self, PreviewOutcome};
 use crate::ui::install::state_install::InstallStage;
@@ -94,6 +113,46 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
                     request = Some(InstallRequest::Nav(NavDestination::Create));
                 }
                 PreviewOutcome::Advance => {
+                    // **P7.T10 — Reinstall `Installed → InProgress` flip at
+                    //   the Install-click (SPEC §3.1).** This `Preview →
+                    //   Downloading` transition IS the Install-Modlist
+                    //   "clicks Reinstall → to actually run it" — the
+                    //   install starts now. If this run is a Reinstall
+                    //   (`pending_reinstall_id == Some(<this modlist>)`,
+                    //   armed by `reinstall_route::start_reinstall`),
+                    //   `reinstall_flip_at_install_click` flips the entry
+                    //   `Installed → InProgress` (state-only + atomic) and
+                    //   clears `pending_reinstall_id` (idempotent — a
+                    //   subsequent frame cannot re-flip; a non-Reinstall
+                    //   paste is a no-op). The Reinstall route does not
+                    //   pass through `on_install_start` (Run-4a's
+                    //   pipeline-driven Install-Modlist path), so the
+                    //   P7.T10 flip is invoked here from the authorized
+                    //   seam — see the `start_hooks` module note + the run
+                    //   report's PLAN GAP. Cancel-at-preview never reaches
+                    //   this arm, so the modlist stays `Installed` (SPEC
+                    //   §3.1). Borrow: `match orchestrator
+                    //   .install_screen_state.stage` copies the `Copy`
+                    //   discriminant (no live borrow), and
+                    //   `stage_preview::render`'s `&mut` borrow has ended
+                    //   (outcome returned by value) — so the split-field
+                    //   `&mut` is sound.
+                    if let Some(reinstall_id) = orchestrator.pending_reinstall_id.clone() {
+                        let OrchestratorApp {
+                            wizard_state,
+                            registry,
+                            registry_store,
+                            pending_reinstall_id,
+                            ..
+                        } = &mut *orchestrator;
+                        start_hooks::reinstall_flip_at_install_click(
+                            &reinstall_id,
+                            wizard_state,
+                            registry,
+                            registry_store,
+                            pending_reinstall_id,
+                        );
+                    }
                     request = Some(InstallRequest::Stage(InstallStage::Downloading));
                 }
                 PreviewOutcome::Stay => {}
@@ -143,11 +202,30 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             }
         }
         InstallStage::InstallingStub => {
-            match stage_installing_stub::render(ui, palette, &orchestrator.install_screen_state) {
-                InstallingStubOutcome::Back(stage) => {
+            // **P7.T15 — the real Stage-4 install runtime (SPEC §4.4
+            //   `InstallProgressScreen`).** Run-4a's `stage_downloading
+            //   ::render_live` advances here at the stage-4 seam once
+            //   BIO's auto-build pipeline reached the install hand-off
+            //   (the pipeline ITSELF already flipped
+            //   `start_install_requested` — `start_auto_build_install`).
+            //   `stage_installing::render` renders the §4.4 screen — its
+            //   own simple header + back affordance, the C3-gated
+            //   post-install row ABOVE the panel (Return to Home / Open
+            //   install folder — NO Share, the user pasted the code), and
+            //   BIO's embedded `page_step5::render` panel (the EXACT Run-1
+            //   reuse/borrow pattern) — and dispatches its
+            //   `Step5Action::StartInstall` GATED so it cannot double-start
+            //   (the pipeline already started it). It returns only the
+            //   nav/back intent (post-install nav + Open-folder are applied
+            //   inside, where the `&mut orchestrator` borrow is free).
+            match stage_installing::render(ui, orchestrator) {
+                StageInstallingOutcome::Back(stage) => {
                     request = Some(InstallRequest::Stage(stage));
                 }
-                InstallingStubOutcome::Stay => {}
+                StageInstallingOutcome::Nav(dest) => {
+                    request = Some(InstallRequest::Nav(dest));
+                }
+                StageInstallingOutcome::Stay => {}
             }
         }
     }

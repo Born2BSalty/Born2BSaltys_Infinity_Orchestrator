@@ -44,6 +44,7 @@ use crate::registry::operations;
 use crate::ui::home::add_a_modlist::{self, AddAModlistAction};
 use crate::ui::home::confirm_delete;
 use crate::ui::home::modlist_card::ModlistCardActions;
+use crate::ui::home::reinstall_route_wire;
 use crate::ui::home::state_home::{HomeFilter, ToastMessage, empty_filter_message};
 use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card, toast};
 use crate::ui::orchestrator::nav_destination::NavDestination;
@@ -333,9 +334,13 @@ fn render_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context
     }
 }
 
-/// Render the Reinstall confirm if `reinstall_target` is armed. Phase 5 is
-/// preview-only (P5.T18): on confirm, show the placeholder toast. No
-/// reinstall / no Install-preview route — that is Phase 7.
+/// Render the Reinstall confirm if `reinstall_target` is armed. **P7.T10
+/// (Run 4b):** on confirm, route through the Install-Modlist preview via
+/// `reinstall_route_wire::confirm_reinstall` (populate the preview from the
+/// stored share code + force overwrite-install + arm `pending_reinstall_id`
+/// + navigate to the Preview stage — SPEC §3.1; the registry is **not**
+/// flipped here, only at the preview's Install-click). Replaces the Phase-5
+/// `queue_reinstall_stub` placeholder-toast seam.
 fn render_reinstall_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
     let Some(id) = orchestrator.home_screen_state.reinstall_target.clone() else {
         return;
@@ -352,8 +357,15 @@ fn render_reinstall_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Cont
     match outcome {
         ConfirmOutcome::Confirmed => {
             orchestrator.home_screen_state.reinstall_target = None;
-            let msg = operations::queue_reinstall_stub(&id, &orchestrator.registry);
-            orchestrator.home_screen_state.toast = Some(ToastMessage::success(msg));
+            // P7.T10 — route through the Install-Modlist preview (SPEC §3.1).
+            // `confirm_reinstall` re-resolves the entry from the live
+            // registry, populates the preview from its stored share code,
+            // forces overwrite-install, arms `pending_reinstall_id`, and
+            // navigates to the Preview stage. It does **not** flip the
+            // registry — the modlist stays `Installed` until the user
+            // clicks Install in the preview (cancel-at-preview leaves it
+            // `Installed`; SPEC §3.1).
+            reinstall_route_wire::confirm_reinstall(orchestrator, &id);
         }
         ConfirmOutcome::Cancelled => {
             orchestrator.home_screen_state.reinstall_target = None;

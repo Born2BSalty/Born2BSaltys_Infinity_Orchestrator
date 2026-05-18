@@ -72,7 +72,17 @@
 //                               orchestrator-owned receivers — SPEC
 //                               §13.12a pipeline-reuse contract). Zero
 //                               BIO edit.
-//    `reinstall_route` is Run 4b (P7.T10) — added in that run. ──
+// ── Run 4b (P7.T10) submodule — the Reinstall route (SPEC §3.1). Per the
+//    per-run module-registration discipline, declared in the run that
+//    implements it:
+//      - `reinstall_route`    → P7.T10: `start_reinstall` — populate the
+//                               Install-Modlist preview from the stored
+//                               code + force overwrite-install +
+//                               `pending_reinstall_id` + navigate to the
+//                               Preview stage. **No registry flip** (that
+//                               is the Install-click site's job via
+//                               `registry_transition::flip_to_in_progress`).
+//                               Composes BIO read-only. ──
 pub mod archive_store;
 pub mod auto_build_driver;
 pub mod flag_policies;
@@ -81,4 +91,5 @@ pub mod install_concurrency;
 pub mod per_install_dirs;
 pub mod rail_lock_reason;
 pub mod registry_transition;
+pub mod reinstall_route;
 pub mod start_hooks;
