@@ -307,3 +307,16 @@ These three items surfaced during the Phase-6 user-feedback Fix-Run 2 (2026-05-1
 12. Confirm `modlist-import-code.txt` appears in destination on every install start.
 13. Hover every tree row / pill / button — the hover-overlay tint reads redesign palette (because egui's runtime visuals are updated by the orchestrator at frame start). The orchestrator-side widgets additionally show the 2px drop-shadow + 1px hover-lift per SPEC §12.3; the BIO-file pills retain egui's default hover (no drop-shadow upgrade — SPEC §12.3 doesn't require it for in-BIO pills).
 14. Visual diff against `wireframe-preview/build.html` for every workspace surface (Step 2 tree + Details, Step 3 list + toolbar, Step 5 console + status + install row + dev header + cancel-confirm, every popup) — no regressions.
+
+### Create-screen UI cleanup — deferred from Phase-6 verification (user, 2026-05-18)
+Screens: ![form](../phase8-evidence/create-form-2026-05-18.png) ![boxes](../phase8-evidence/create-boxes-2026-05-18.png) (paths relative to plan/).
+
+1. Too much gap between box title and input box (e.g. modlist name ↔ input). Wireframe is cleaner.
+2. Game input box still not the same height as modlist name.
+3. Game input box text is not vertically center-aligned. Same with the "imported" text.
+4. Destination folder box height still not the same as modlist name box.
+5. Browse button height should also increase to match — all 4 input controls in this section must be the same height.
+
+> Box-equal-height (the two side-by-side "Choose one" boxes): on click-into-create they're misaligned until a window resize, then off by a pixel or two. User directive: "Do not fixate on your way of fixing it. Think of what goes into implementing any standard ui design needing two side by side boxes that share the same height regardless of the text contents." Implement the standard equal-height technique, not another ad-hoc measured-max pass.
+
+These are minor; verified via the egui_kittest render gate in Phase 8. The Fix-Run-6 changes (footer pin, right-margin, selected-box contrast, P1–P5) are NOT reverted — these are residual refinements on top.
