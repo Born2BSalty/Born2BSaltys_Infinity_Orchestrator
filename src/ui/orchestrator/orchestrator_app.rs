@@ -76,6 +76,8 @@ use crate::app::{
     app_step2_saved_log_flow, app_step2_scan, app_step2_update_check, app_step2_update_download,
     app_step2_update_extract, app_step5_flow,
 };
+use crate::install_runtime::install_concurrency;
+use crate::install_runtime::rail_lock_reason::RailLockReason;
 use crate::registry::errors::RegistryError;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::persistence_cycle::RegistryPersistenceCycle;
@@ -101,6 +103,7 @@ use crate::ui::settings::state_settings::SettingsScreenState;
 use crate::ui::settings::validate_debounce;
 use crate::ui::shared::redesign_tokens::{REDESIGN_NAV_WIDTH_PX, ThemePalette};
 use crate::ui::shell::shell_chrome;
+use crate::ui::shell::shell_statusbar::RunningInstallStatus;
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
 use crate::ui::workspace::state_workspace::WorkspaceViewState;
 use crate::ui::workspace::step5::state_workspace_step5::WorkspaceStep5State;
@@ -210,6 +213,17 @@ pub struct OrchestratorApp {
     /// inert (Run 3 behavior), mirroring the established staged-field
     /// pattern (`WorkspaceViewState`'s Phase-7 fields).
     pub workspace_step5: WorkspaceStep5State,
+
+    /// **P7.T9 / T9b / T14 — install-start monotonic anchor.** Set to
+    /// `Some(Instant::now())` the frame `wizard_state.step5.install_running`
+    /// transitions `false → true`, cleared the frame it goes `true →
+    /// false`. The statusbar's `<elapsed>` segment (P7.T14) and the C5
+    /// rail-lock reason (P7.T9b) both tick against this monotonic clock —
+    /// the persisted `ModlistEntry.install_started_at` is a wall-clock
+    /// `DateTime<Utc>` (recoverable across runs) and cannot be subtracted
+    /// monotonically for a live "+MM:SS" readout, so this process-local
+    /// `Instant` is the UI clock. `None` ⇒ no install running.
+    pub install_running_since: Option<Instant>,
 
     // The Step-5 install-runtime fields the orchestrator owns exactly as
     // `WizardApp` owns them (`src/ui/app.rs:53-57`). The orchestrator's
@@ -420,6 +434,11 @@ impl OrchestratorApp {
             // state — `page_step5::render` renders the Command/Summary
             // cards + console box + prompt input with no live child.
             workspace_step5: WorkspaceStep5State::default(),
+            // No install running at construction (a force-quit-mid-install
+            // relaunch has a dead process ⇒ `install_running == false` ⇒
+            // the rail is unlocked from launch; the edge-detect in
+            // `update` arms this if/when an install starts this run).
+            install_running_since: None,
             step5_terminal: None,
             step5_terminal_error: None,
             step5_console_view: Step5ConsoleViewState::default(),
@@ -901,6 +920,18 @@ impl eframe::App for OrchestratorApp {
         let mut step5_requested_repaint = self.poll_step5_before_render();
         if !install_was_running && self.wizard_state.step5.install_running {
             self.step5_console_view.request_input_focus = true;
+            // P7.T9b/T14 — install just started: anchor the monotonic
+            // clock the rail-lock reason + the statusbar `<elapsed>` tick
+            // against. (The persisted wall-clock start time is
+            // `ModlistEntry.install_started_at`, written by
+            // `start_hooks::on_install_start`; this is the live UI clock.)
+            self.install_running_since = Some(Instant::now());
+        }
+        // Install just ended (clean exit / cancel / failure): drop the
+        // anchor so the rail unlocks + the statusbar resets to
+        // `0 jobs running` on the next frame.
+        if install_was_running && !self.wizard_state.step5.install_running {
+            self.install_running_since = None;
         }
 
         // Per-frame path validation summary (left rail bottom).
@@ -931,9 +962,38 @@ impl eframe::App for OrchestratorApp {
         }
 
         let modlist_count = self.registry.entries.len();
-        let jobs_running = 0usize;
 
-        shell_chrome::render_shell(ctx, palette, modlist_count, jobs_running, |ui| {
+        // P7.T9 / T9b / T14 — derive the single install-concurrency state
+        // ONCE per frame (SPEC §13.15: only one install at a time). It
+        // powers BOTH the C5 rail-nav lock (`RailLockReason`, P7.T9b) and
+        // the statusbar's `1 job running · <modlist> · <elapsed>` readout
+        // (P7.T14). The running modlist's display **name** (for the
+        // verbatim SPEC §13.15 tooltip + the statusbar) is resolved from
+        // the registry here (the rail/statusbar have no registry handle).
+        let running = install_concurrency::install_in_progress(self);
+        let rail_lock: Option<RailLockReason> = running.as_ref().map(|r| {
+            let modlist_label = self
+                .registry
+                .find(&r.modlist_id)
+                .map_or_else(|| r.modlist_id.clone(), |e| e.name.clone());
+            RailLockReason::InstallRunning {
+                modlist_id: r.modlist_id.clone(),
+                modlist_label,
+                started_at: r.started_at,
+            }
+        });
+        let running_status: Option<RunningInstallStatus> = running.as_ref().map(|r| {
+            let modlist_name = self
+                .registry
+                .find(&r.modlist_id)
+                .map_or_else(|| r.modlist_id.clone(), |e| e.name.clone());
+            RunningInstallStatus {
+                modlist_name,
+                elapsed: r.started_at.elapsed(),
+            }
+        });
+
+        shell_chrome::render_shell(ctx, palette, modlist_count, running_status.as_ref(), |ui| {
             egui::SidePanel::left("orchestrator_left_rail")
                 .exact_width(REDESIGN_NAV_WIDTH_PX)
                 .resizable(false)
@@ -946,7 +1006,7 @@ impl eframe::App for OrchestratorApp {
                         &mut self.nav,
                         self.dev_mode,
                         &self.path_validation,
-                        None,
+                        rail_lock.as_ref(),
                     );
                 });
 

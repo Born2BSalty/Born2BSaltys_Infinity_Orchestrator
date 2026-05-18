@@ -28,18 +28,33 @@
 //      child (the Run-1 breakpoint state).
 //   4. Dispatch the returned `Option<Step5Action>`.
 //
-// **Run 1 scope (Step-5 runtime spine + workspace chrome).** This run
-// implements ONLY the chrome scaffold:
-//   - The banner / post-install rows render nothing (C3 false — no install
-//     has run).
-//   - The embedded panel is BIO's pre-install view (no terminal).
-//   - For the returned `Step5Action::StartInstall`, Run 1 ONLY sets the
-//     install-clicked marker (`orchestrator.workspace_step5
-//     .install_clicked = true`) that drives P7.T8's `← Previous` lock —
-//     it does **not** start the install (no `state.step5
-//     .start_install_requested = true`, no install-start hook). The real
-//     install-start hook + the concurrency gate are Run 2 (P7.T3 / P7.T9),
-//     flagged with the commented placeholder below.
+// **Run-1 chrome scaffold (still in force).** The banner / post-install
+// rows render nothing until the C3 clean-exit triple holds (Run 3 fills
+// their bodies); the embedded panel is BIO's pre-install view until the
+// terminal exists.
+//
+// **Run 2 scope (install-start + concurrency gate).** On the returned
+// `Step5Action::StartInstall` the dispatcher now, in order:
+//   (a) **P7.T9 concurrency gate** — `install_concurrency
+//       ::install_in_progress`; if a *different* modlist's install is
+//       running, refuse (SPEC §13.15 verbatim tooltip) and bail (no start
+//       hook, no `start_install_requested`).
+//   (b) **P7.T3 install-start hook** — `start_hooks::on_install_start`:
+//       apply the #1/#5 flag policies (P7.T16) into the orchestrator-owned
+//       `WizardState.step1`, compute the share code via `registry
+//       ::share_export::pack_meta` (`allow_auto_install = false` — SPEC
+//       §13.3 / §13.13), update `entry.latest_share_code`, write
+//       `modlist-import-code.txt` variant-gated per SPEC §13.13, record
+//       `install_started_at`, atomic registry write.
+//   (c) flip `state.step5.start_install_requested = true` (only on the
+//       hook's `Ok`) so BIO's `app_update_cycle::start_after_render`
+//       (driven every frame by `OrchestratorApp::start_step5_after_render`,
+//       P7.T1) kicks off the install — a fresh Create → New reaches here
+//       and BIO's existing pipeline starts.
+//   The install-clicked marker (P7.T8 `← Previous` lock) is still set on
+//   the click. The Reinstall registry-flip (P7.T10) + the share-code-
+//   consuming download pipeline (P7.T17) are out of Run-2 scope — left as
+//   commented placeholders in `start_hooks`.
 //
 // **Borrow discipline.** `page_step5::render` borrows five disjoint
 // `orchestrator` fields simultaneously (`wizard_state`,
@@ -54,7 +69,11 @@
 // SPEC: §9.1, §9.2, §9.3 (H9 positioning), §13.13.
 
 use eframe::egui;
+use tracing::warn;
 
+use crate::install_runtime::flag_policies::InstallWorkflow;
+use crate::install_runtime::install_concurrency;
+use crate::install_runtime::start_hooks::{self, InstallButtonVariant};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::step5::action_step5::Step5Action;
 use crate::ui::workspace::step5::{post_install_actions, success_banner};
@@ -66,7 +85,7 @@ use crate::ui::workspace::step5::{post_install_actions, success_banner};
 /// modlist_id)` signature stable for the Run-2/Run-3 hooks (install-start,
 /// registry transition, post-install actions) even though the Run-1
 /// scaffold does not yet need it.
-pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _modlist_id: &str) {
+pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id: &str) {
     // Per-modlist guard: if the chrome's install-clicked marker is set but
     // the *workspace* identity has moved on (a modlist swap — the loader
     // resets `WorkspaceStep2State`/`WorkspaceViewState` the same way; see
@@ -117,29 +136,119 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, _modlist_id
     //    ever returns `Step5Action::StartInstall` (the single-variant enum
     //    — verified `action_step5.rs`). ──
     if let Some(Step5Action::StartInstall) = action {
-        // **Run 1 ONLY: set the install-clicked marker.** Per SPEC §9.2
-        // the workspace `← Previous` is disabled "once Install has been
-        // clicked — even before the install completes". In Run 1 there is
-        // no real install, so this marker is the sole "Install was
-        // clicked" signal; P7.T8's lock OR-combines it with
+        // **Per SPEC §9.2: mark the click for the P7.T8 `← Previous`
+        // lock.** Disabled "once Install has been clicked — even before
+        // the install completes". P7.T8's lock OR-combines this with
         // `WorkspaceViewState::install_complete` and
-        // `state.step5.install_running` (the real signals wired Run 2/3).
+        // `state.step5.install_running`. Set unconditionally on the click
+        // (the workspace stays the running install's workspace; the C5
+        // rail lock + this marker keep `← Previous` disabled).
         orchestrator.workspace_step5.install_clicked = true;
 
-        // P7.T3 (Run 2): install-start hooks + concurrency gate land here.
-        // The Run-2 dispatcher will, in order: (a) check the
-        // `install_concurrency::install_in_progress` gate (refuse + SPEC
-        // §13.15 tooltip if a *different* modlist's install is running);
-        // (b) run `install_runtime::start_hooks::on_install_start`
-        // (compute the share code via `registry::share_export::pack_meta`
-        // with `allow_auto_install = false`, write `modlist-import-code
-        // .txt` variant-gated per SPEC §13.13, record `install_started_at`,
-        // flip Reinstall registry state); (c) `state.step5
-        // .start_install_requested = true` so BIO's
-        // `app_update_cycle::start_after_render` (already driven every
-        // frame by `OrchestratorApp::start_step5_after_render`, P7.T1)
-        // kicks off the install. **Run 1 deliberately does NOT do (a)/(b)/
-        // (c)** — it only marks the click for the Previous-lock. Do not
-        // implement the install-start hook here.
+        // ── (a) P7.T9 — install-concurrency gate (SPEC §13.15: only one
+        //    install at a time). If an install is already running for a
+        //    *different* modlist, refuse: do NOT run the start hooks, do
+        //    NOT flip `start_install_requested`. (The C5 rail lock + the
+        //    workspace-swap refusal normally make this unreachable from a
+        //    second workspace; this is the documented defensive case —
+        //    P7.T9 acceptance — for the same-frame race where this Install
+        //    button is somehow clickable while another install runs.) ──
+        if let Some(running) = install_concurrency::install_in_progress(orchestrator)
+            && running.modlist_id != modlist_id
+        {
+            // SPEC §13.15 verbatim per-button tooltip; surfaced as a warn
+            // here (the disabled-button-with-tooltip surface is the
+            // primary UX — this is the belt-and-braces refusal so a race
+            // window cannot start a second concurrent install).
+            let running_name = orchestrator
+                .registry
+                .find(&running.modlist_id)
+                .map_or_else(|| running.modlist_id.clone(), |e| e.name.clone());
+            warn!(
+                target = "orchestrator",
+                "Install refused for {modlist_id}: {}",
+                install_concurrency::per_button_gate_tooltip(&running_name)
+            );
+            return;
+        }
+
+        // ── (b) P7.T3 — install-start hook. Variant from BIO's live
+        //    `state.step5` (the same logic BIO's install-row uses for the
+        //    button label) + the orchestrator reinstall flag. P7.T10's
+        //    `pending_reinstall_id` is Run 4b (commented placeholder in
+        //    `start_hooks`), so `reinstall = false` this run. ──
+        let variant = InstallButtonVariant::from_step5(&orchestrator.wizard_state, false);
+
+        // Workflow for the workspace Step-5 path (SPEC §13.12 #5): a
+        // modlist with a non-empty `forked_from` lineage was created via
+        // Create → Import-and-modify (a share-code-consuming workflow ⇒
+        // `--download` ON); an empty lineage is a fresh Create → New ⇒
+        // `--download` follows Settings → Advanced. (Continue Partial
+        // Install is the Install-Modlist destination-not-empty path, not
+        // the workspace Step-5 path, so it never applies here.) The
+        // share-code-consuming *download pipeline* itself is Run 4
+        // (P7.T17); Run 2 only sets the correct flag — harmless for a
+        // fresh Create → New (nothing to download yet).
+        let workflow = orchestrator
+            .registry
+            .find(modlist_id)
+            .filter(|e| !e.forked_from.is_empty())
+            .map_or(InstallWorkflow::FreshCreate, |_| {
+                InstallWorkflow::ShareCodeConsuming
+            });
+
+        // `Step1Settings` snapshot for the #5 fresh-create `--download`
+        // fallback (the orchestrator-owned `wizard_state.step1` already
+        // carries the Settings → Advanced values via the open-time
+        // `sync_paths_from_settings`; the `From<Step1State>` projection is
+        // the settings-model shape `compute_flags` expects).
+        let settings: crate::settings::model::Step1Settings =
+            orchestrator.wizard_state.step1.clone().into();
+
+        // Split the `&mut orchestrator` borrow into the disjoint fields
+        // `on_install_start` needs (`wizard_state` / `registry` are
+        // distinct struct fields; `registry_store` is a third — a sound
+        // split borrow, the same shape `page_step5::render`'s five-field
+        // call above relies on).
+        let OrchestratorApp {
+            wizard_state,
+            registry,
+            registry_store,
+            ..
+        } = &mut *orchestrator;
+
+        match start_hooks::on_install_start(
+            modlist_id,
+            variant,
+            workflow,
+            wizard_state,
+            registry,
+            registry_store,
+            &settings,
+        ) {
+            Ok(()) => {
+                // ── (c) Flip `state.step5.start_install_requested = true`.
+                //    BIO's `app_update_cycle::start_after_render` (driven
+                //    every frame by `OrchestratorApp
+                //    ::start_step5_after_render`, P7.T1) picks this up on
+                //    the next poll and kicks off the install — identical
+                //    to the legacy wizard. A fresh Create → New install
+                //    reaches here, so BIO's existing pipeline starts. ──
+                orchestrator.wizard_state.step5.start_install_requested = true;
+            }
+            Err(err) => {
+                // SPEC §13.14: the install-start hook failed (share-code
+                // generation or the atomic registry write). Do NOT flip
+                // `start_install_requested` — surfacing the failure to the
+                // user is the success-path run's job (Run 3); Run 2 logs
+                // it and aborts the start (the install simply does not
+                // begin, leaving the workspace usable).
+                warn!(
+                    target = "orchestrator",
+                    "install-start hook failed for {modlist_id}: {err} \
+                     (install not started)"
+                );
+            }
+        }
     }
 }

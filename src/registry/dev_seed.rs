@@ -59,6 +59,9 @@ pub fn seed_demo_entry(
         creation_date: now,
         last_touched_date: now,
         install_date: None,
+        // P7.T3 additive field — a dev-seeded entry has never been
+        // install-started.
+        install_started_at: None,
         last_played_date: None,
         // Demo values mirror the wireframe's in-progress card mock so the
         // seeded entry renders a realistic Home meta line.

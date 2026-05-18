@@ -93,6 +93,23 @@ pub struct ModlistEntry {
     pub last_touched_date: DateTime<Utc>,
     /// When the install completed (None for in-progress entries).
     pub install_date: Option<DateTime<Utc>>,
+    /// When the most recent install **attempt started** (UTC). Set by the
+    /// P7.T3 install-start hook on every attempt regardless of variant
+    /// (Install / Restart / Resume / Reinstall) — every attempt is
+    /// timestamped (plan P7.T3 acceptance). Distinct from `install_date`
+    /// (which is set only on a *clean* completion by `flip_to_installed`,
+    /// P7.T6); `install_started_at` persists even if the install crashes /
+    /// is cancelled / errors, so the elapsed-since-start is recoverable.
+    /// `#[serde(default)]` so older `modlists.json` (which lacks the key)
+    /// parses to `None` — bit-for-bit backward-compatible, the same
+    /// additive-schema pattern as `author` / `forked_from`. Net-new
+    /// orchestrator-owned field (this struct is Phase-3 redesign source —
+    /// NOT a BIO-source edit, NOT a carve-out). The plan's "the registry
+    /// `ModlistEntry` already carries `install_started_at`" prose was a
+    /// PLAN GAP (the field did not exist); pre-provisioned here the same
+    /// way the model's other Run-2/4 additive fields were.
+    #[serde(default)]
+    pub install_started_at: Option<DateTime<Utc>>,
     /// When the user last clicked "Play" / opened the install folder.
     pub last_played_date: Option<DateTime<Utc>>,
     /// Cached mod count for the Home card meta line.
@@ -153,6 +170,7 @@ impl Default for ModlistEntry {
             creation_date: now,
             last_touched_date: now,
             install_date: None,
+            install_started_at: None,
             last_played_date: None,
             mod_count: 0,
             component_count: 0,
@@ -292,6 +310,10 @@ mod tests {
         let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat parse");
         assert_eq!(r.entries[0].author, None);
         assert!(r.entries[0].forked_from.is_empty());
+        // P7.T3 additive field: older files lacking `install_started_at`
+        // parse to `None` (bit-for-bit backward-compatible, same pattern as
+        // the provenance trio).
+        assert_eq!(r.entries[0].install_started_at, None);
 
         // A populated lineage round-trips losslessly (the reused BIO
         // `ForkAncestor` derives Serialize+Deserialize per carve-out #5).

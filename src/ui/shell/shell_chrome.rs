@@ -16,7 +16,8 @@ use eframe::egui;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_page_bg,
 };
-use crate::ui::shell::{shell_statusbar, shell_titlebar};
+use crate::ui::shell::shell_statusbar::{self, RunningInstallStatus};
+use crate::ui::shell::shell_titlebar;
 
 /// Render the redesign shell around an arbitrary body callback.
 ///
@@ -29,7 +30,7 @@ pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
     ctx: &egui::Context,
     palette: ThemePalette,
     modlist_count: usize,
-    jobs_running: usize,
+    running_install: Option<&RunningInstallStatus>,
     body: F,
 ) {
     egui::TopBottomPanel::top("redesign_titlebar")
@@ -45,7 +46,7 @@ pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
         .show_separator_line(false)
         .frame(egui::Frame::NONE)
         .show(ctx, |ui| {
-            shell_statusbar::render(ui, palette, modlist_count, jobs_running);
+            shell_statusbar::render(ui, palette, modlist_count, running_install);
         });
 
     egui::CentralPanel::default()

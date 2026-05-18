@@ -11,10 +11,19 @@
 // `redesign_border_strong`. Active nav item paints with `redesign_accent`
 // fill + a 2px drop shadow; inactive items show a hover overlay.
 //
-// **No window-drag wiring**, **no rail-lock** (the `rail_locked: Option<&_>`
-// parameter is reserved for Phase 7 C5 — Phase 2 callers pass `None`).
+// **No window-drag wiring.** The `rail_locked: Option<&RailLockReason>`
+// parameter is the **C5 rail-nav lock** (Phase 7 P7.T9b): when `Some`,
+// every nav item renders disabled with the verbatim SPEC §13.15 tooltip
+// and a click is a no-op (the user stays in the running install's
+// workspace until cancel/completion — so `populate_wizard_state_from_workspace`
+// is never reached mid-install). The canonical `RailLockReason` lives in
+// `install_runtime::rail_lock_reason` (re-exported here so the existing
+// `left_rail::RailLockReason` import paths the Phase-2 callers used keep
+// working — the premise-checked PLAN GAP resolution: the plan named a
+// non-existent `nav_rail.rs`; `left_rail.rs` IS the real renderer, and its
+// Phase-2 placeholder enum is replaced by the one canonical type).
 //
-// SPEC: §2.1.
+// SPEC: §2.1, §13.15 (C5 rail-lock tooltip).
 
 // rationale: `f32 as u8` casts are colour-channel / pixel roundings, correct
 // by construction (Cat 2). The `0.7071` unit-vector literals are hand-tuned
@@ -35,6 +44,8 @@
 
 use eframe::egui;
 
+pub use crate::install_runtime::rail_lock_reason::RailLockReason;
+use crate::install_runtime::rail_lock_reason::rail_lock_tooltip;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::nav_status::{PathValidationKind, PathValidationSummary};
 use crate::ui::shared::redesign_tokens::{
@@ -45,28 +56,25 @@ use crate::ui::shared::redesign_tokens::{
     redesign_text_primary,
 };
 
-/// Phase 7 C5 lock reason placeholder. Phase 2 callers pass `None`; the type
-/// is defined here so the signature is stable across phases.
-#[derive(Debug, Clone)]
-pub enum RailLockReason {
-    /// Install is in flight; navigation away is blocked until the install
-    /// finishes (or is cancelled).
-    InstallRunning { modlist_label: String },
-}
-
 /// Render the left rail and update `*current` when a rail item is clicked.
 ///
 /// - `current`           — the active destination (mutated on click).
 /// - `dev_mode`          — reserved for future dev-only rail affordances.
 /// - `validation`        — path-validation summary for the bottom status row.
-/// - `rail_locked`       — Phase 7 C5; Phase 2 passes `None`.
+/// - `rail_locked`       — **C5 rail-nav lock** (P7.T9b). When `Some`, all
+///   four nav items render disabled (idle visual, no hover, no active
+///   highlight) and a click is a **no-op**; each carries the verbatim SPEC
+///   §13.15 tooltip naming the running modlist. The user cannot leave the
+///   running install's workspace until cancel/completion — this is what
+///   guarantees `populate_wizard_state_from_workspace` is not reached
+///   mid-install. `None` ⇒ normal interactive rail.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     current: &mut NavDestination,
     _dev_mode: bool,
     validation: &PathValidationSummary,
-    _rail_locked: Option<&RailLockReason>,
+    rail_locked: Option<&RailLockReason>,
 ) {
     let rect = ui.max_rect();
     let painter = ui.painter();
@@ -112,12 +120,28 @@ pub fn render(
             );
             ui.add_space(10.0);
 
-            // 3. Nav items.
+            // 3. Nav items. **C5 rail-nav lock (P7.T9b):** when
+            //    `rail_locked` is `Some`, every item renders disabled
+            //    (idle visual — no active fill, no hover) with the
+            //    verbatim SPEC §13.15 tooltip, and a click is a no-op so
+            //    the user stays in the running install's workspace
+            //    (guaranteeing `populate_wizard_state_from_workspace` is
+            //    never reached mid-install). The tooltip names the running
+            //    modlist (the reason carries the registry-resolved label).
+            let lock_tooltip = rail_locked.map(|reason| match reason {
+                RailLockReason::InstallRunning { modlist_label, .. } => {
+                    rail_lock_tooltip(modlist_label)
+                }
+            });
             for dest in NavDestination::rail_items() {
-                let active = is_active(current, &dest);
-                let clicked = render_nav_item(ui, palette, &dest, active);
-                if clicked {
-                    *current = dest;
+                if let Some(tip) = lock_tooltip.as_deref() {
+                    render_nav_item_locked(ui, palette, &dest, tip);
+                } else {
+                    let active = is_active(current, &dest);
+                    let clicked = render_nav_item(ui, palette, &dest, active);
+                    if clicked {
+                        *current = dest;
+                    }
                 }
                 ui.add_space(4.0);
             }
@@ -293,6 +317,50 @@ fn render_nav_item(
     );
 
     response.clicked()
+}
+
+/// **C5 rail-nav lock (P7.T9b)** — render one nav item *disabled*: the
+/// idle visual (no active accent fill, no hover overlay, no border — the
+/// same "no fill, no border" idle treatment `render_nav_item` uses for an
+/// inactive un-hovered item, but here unconditionally), the label + icon
+/// dimmed to `redesign_text_faint` so it reads visibly inert, and the
+/// verbatim SPEC §13.15 tooltip on hover. The click `Sense` is omitted
+/// (`Sense::hover()`) so clicking is structurally a **no-op** — the user
+/// cannot navigate away from the running install's workspace. Returns
+/// nothing (locked items never mutate `current`).
+fn render_nav_item_locked(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    dest: &NavDestination,
+    tooltip: &str,
+) {
+    let height = 36.0;
+    // `Sense::hover()` (NOT `click`) — a click cannot register, so the
+    // rail lock is enforced by construction, not by an `if` the caller
+    // could forget. The hover sense is kept only to surface the tooltip.
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height),
+        egui::Sense::hover(),
+    );
+
+    // Idle visual only (no accent fill / hover overlay / border) — the
+    // disabled state. The dimmed text is what communicates "locked".
+    let text_color = redesign_text_faint(palette);
+    let painter = ui.painter();
+    let icon_center = egui::pos2(rect.left() + 20.0, rect.center().y);
+    paint_nav_icon(painter, dest, icon_center, text_color);
+    let label_x = rect.left() + 38.0;
+    painter.text(
+        egui::pos2(label_x, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        dest.label(),
+        egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into())),
+        text_color,
+    );
+
+    // Verbatim SPEC §13.15 tooltip (the running modlist's name is already
+    // baked into `tooltip` by the caller via `rail_lock_tooltip`).
+    response.on_hover_text(tooltip);
 }
 
 /// Paint a nav-item icon as vector strokes. We paint rather than rely on a

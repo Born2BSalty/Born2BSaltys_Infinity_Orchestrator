@@ -29,8 +29,18 @@
 //                            rename ONLY — no on-disk folder rename, SPEC
 //                            §2.2; debounced via the registry persistence
 //                            path, NOT `workspace_state_dirty`).
+//   - `share_export`       → Phase 7 P7.T3: `pack_meta` (the net-new
+//                            BIO-MODLIST-V1 generation envelope — composes
+//                            BIO's `export_modlist_share_code` read-only +
+//                            a standard zlib/base64url/`serde_json::Value`
+//                            round-trip injecting the four carve-out-#5
+//                            sibling keys; SPEC §13.3 "Generation
+//                            mechanism", §1 carve-out #5 "generation is not
+//                            a BIO modification"). Net-new orchestrator
+//                            sibling — never patches `bio::app
+//                            ::modlist_share`.
 //
-// SPEC: §13.1, §13.14, §2.2.
+// SPEC: §13.1, §13.14, §2.2, §13.3.
 
 pub mod dev_seed;
 pub mod errors;
@@ -40,6 +50,7 @@ pub mod operations;
 pub mod operations_create;
 pub mod operations_rename;
 pub mod persistence_cycle;
+pub mod share_export;
 pub mod store;
 pub mod store_workspace;
 pub mod workspace_model;
