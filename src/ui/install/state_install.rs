@@ -266,6 +266,18 @@ pub struct InstallScreenState {
     /// a possibly-changed code/destination. Not persisted (transient until
     /// an install starts — Phase 7).
     pub pipeline_armed: bool,
+    /// **Non-masking arm-failure surface (the "it just sits there, no
+    /// feedback" fix).** Set to the error string when
+    /// `auto_build_driver::prepare_install_dirs_and_maybe_import` returns
+    /// `Err` on the one-shot arm: the latch stays `true` (no per-frame
+    /// re-import / I/O churn of a bad code — the original design intent),
+    /// but the Downloading chrome renders this prominently instead of the
+    /// failure being buried in the empty-grid-hidden `step2.scan_status`
+    /// sub-text (the reported permanent inert "0 / 0 mods" mystery). Mirror
+    /// of `preview_parse_error` (same `Option<String>` lifecycle). Cleared
+    /// by `clear_preview()` alongside `pipeline_armed` so a re-entry from
+    /// Preview re-arms cleanly. Not persisted.
+    pub pipeline_arm_error: Option<String>,
 }
 
 impl InstallScreenState {
@@ -290,6 +302,7 @@ impl InstallScreenState {
         self.preview_cached = false;
         self.download_progress = DownloadProgress::default();
         self.pipeline_armed = false;
+        self.pipeline_arm_error = None;
     }
 }
 

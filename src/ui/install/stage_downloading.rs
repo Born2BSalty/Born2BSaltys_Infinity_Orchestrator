@@ -124,8 +124,8 @@ use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
 use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_input_bg, redesign_shell_bg, redesign_success,
-    redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    redesign_border_strong, redesign_input_bg, redesign_pill_danger, redesign_shell_bg,
+    redesign_success, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 /// The `✓` staged-checkmark glyph. U+2713 IS present in the full FiraCode
@@ -387,7 +387,9 @@ pub fn render(
     copy: DownloadScreenCopy,
     progress: &DownloadProgress,
 ) -> DownloadingOutcome {
-    let back_clicked = render_chrome(ui, palette, copy, progress);
+    // The chassis path (Phase-6 fork-download) has no pipeline-arm step →
+    // no arm-error surface.
+    let back_clicked = render_chrome(ui, palette, copy, progress, None);
     if back_clicked {
         DownloadingOutcome::Cancel
     } else if progress.all_staged() {
@@ -563,15 +565,24 @@ pub fn render_live(
                     ::register_and_write_install_start_artifacts(orchestrator);
             }
             Err(err) => {
-                // Surface in BIO's status line so the (otherwise empty)
-                // grid reflects the failure rather than spinning. The
-                // pipeline simply never starts; Cancel → Preview lets the
-                // user fix the code/destination.
+                // ── Non-masking arm-failure surface (the "it just sits
+                //    there, no feedback" fix). Keep the one-shot latch
+                //    `true` (do NOT spin-retry a bad code — re-importing
+                //    every frame churns I/O; the original design intent)
+                //    but record the error so `render_chrome` paints it
+                //    PROMINENTLY. Previously only `step2.scan_status` was
+                //    set — the empty grid hides it, so the screen looked
+                //    like a permanent inert mystery "0 / 0 mods · no mods
+                //    queued". Cancel → Preview (`clear_preview`) resets the
+                //    latch + this error so the user can fix the
+                //    code/destination and re-arm. ──
+                orchestrator.install_screen_state.pipeline_arm_error = Some(err.clone());
                 orchestrator.wizard_state.step2.scan_status =
                     format!("Auto Build could not start: {err}");
                 tracing::warn!(
                     target = "orchestrator",
-                    "P7.T17 pipeline arm failed: {err} (Downloading stays navigable)"
+                    "P7.T17 pipeline arm failed: {err} (Downloading stays navigable; \
+                     surfaced on-screen)"
                 );
             }
         }
@@ -631,8 +642,12 @@ pub fn render_live(
 
     // ── (3) Build the live feed from BIO's auto-build state + render the
     //    §4.3 chassis. ──
+    // `from_wizard_state` returns an owned `DownloadProgress` (the
+    // `&wizard_state` borrow ends here), so reading the arm-error off
+    // `install_screen_state` next is borrow-sound.
     let progress = DownloadProgress::from_wizard_state(&orchestrator.wizard_state);
-    let back_clicked = render_chrome(ui, palette, copy, &progress);
+    let arm_error = orchestrator.install_screen_state.pipeline_arm_error.clone();
+    let back_clicked = render_chrome(ui, palette, copy, &progress, arm_error.as_deref());
 
     // ── (4) Outcome. Cancel → caller resets latch + returns to Preview.
     //    Advance when BIO's pipeline reached the install hand-off
@@ -655,14 +670,32 @@ pub fn render_live(
 /// footer). Returns whether the footer's `← Cancel` was clicked. Used by
 /// both [`render`] (chassis) and [`render_live`] (live feed) so the visual
 /// is bit-identical regardless of data source.
+///
+/// `arm_error` is the **non-masking arm-failure surface**: `Some` only on
+/// the live path when `prepare_install_dirs_and_maybe_import` returned
+/// `Err` (the one-shot latch stays armed — no per-frame re-import — but the
+/// failure is painted PROMINENTLY here instead of being buried in the
+/// empty-grid-hidden `step2.scan_status`, which made the screen look like a
+/// permanent inert mystery). `None` for the chassis / happy path → the
+/// chrome is bit-identical to before.
 fn render_chrome(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     copy: DownloadScreenCopy,
     progress: &DownloadProgress,
+    arm_error: Option<&str>,
 ) -> bool {
     render_screen_title(ui, palette, copy.title, Some(copy.sub));
     ui.add_space(12.0);
+
+    // ── Non-masking arm-failure banner (only when the pipeline arm
+    //    failed). Danger-bordered, full-width, above the (empty) progress
+    //    box so it cannot be missed — the fix for "it just sits there, no
+    //    feedback". ──
+    if let Some(err) = arm_error {
+        render_arm_error_banner(ui, palette, err);
+        ui.add_space(14.0);
+    }
 
     // ── Box label="overall progress" ──────────────────────────────────────
     render_overall_progress(ui, palette, copy.hint, progress);
@@ -996,6 +1029,50 @@ fn parse_download_aggregate_pct(status: &str) -> Option<u8> {
         .round()
         .clamp(0.0, 100.0) as u8;
     Some(pct)
+}
+
+/// **The non-masking arm-failure banner.** A full-width danger-bordered
+/// box (same chassis as `box_frame` but a danger stroke + a danger-toned
+/// caption) that states the import / per-install-dir failure in plain
+/// view, plus a quiet "Cancel → fix the code/destination → retry" hint.
+/// Painted only when `prepare_install_dirs_and_maybe_import` returned
+/// `Err`. This is what makes the screen diagnosable instead of a permanent
+/// inert "0 / 0 mods · no mods queued" with the real reason hidden in the
+/// empty grid's status sub-text.
+fn render_arm_error_banner(ui: &mut egui::Ui, palette: ThemePalette, err: &str) {
+    egui::Frame::default()
+        .fill(redesign_shell_bg(palette))
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            redesign_pill_danger(palette),
+        ))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
+        .inner_margin(egui::Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                egui::RichText::new("could not start the download")
+                    .size(13.0)
+                    .family(egui::FontFamily::Name("poppins_bold".into()))
+                    .color(redesign_pill_danger(palette)),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new(err)
+                    .size(13.0)
+                    .family(egui::FontFamily::Name("poppins_medium".into()))
+                    .color(redesign_text_primary(palette)),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new(
+                    "Click Cancel, fix the import code or destination, and try again.",
+                )
+                .size(12.0)
+                .family(egui::FontFamily::Name("poppins_medium".into()))
+                .color(redesign_text_faint(palette)),
+            );
+        });
 }
 
 /// The shared sketchy Box chassis (shell-bg fill, 1.5px strong border, 3px
