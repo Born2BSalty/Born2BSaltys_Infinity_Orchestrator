@@ -453,6 +453,7 @@ pub fn on_install_start(
         .ok_or_else(|| format!("modlist {modlist_id} vanished from registry before dir derive"))?;
     crate::install_runtime::per_install_dirs::derive_per_install_dirs(
         &mut wizard_state.step1,
+        modlist_id,
         &destination,
         game,
     )
@@ -963,11 +964,11 @@ mod tests {
         // call sites resolve so a future change to EITHER the gate or the
         // factoring is caught.
         for (resume, has_run_once, reinstall, expect_write) in [
-            (false, false, false, true),  // Install      ⇒ write
-            (false, true, false, true),   // Restart      ⇒ overwrite
-            (true, true, false, false),   // Resume       ⇒ SKIP
-            (false, false, true, true),   // Reinstall    ⇒ write
-            (true, true, true, true),     // Reinstall wins over resume
+            (false, false, false, true), // Install      ⇒ write
+            (false, true, false, true),  // Restart      ⇒ overwrite
+            (true, true, false, false),  // Resume       ⇒ SKIP
+            (false, false, true, true),  // Reinstall    ⇒ write
+            (true, true, true, true),    // Reinstall wins over resume
         ] {
             let mut s = WizardState::default();
             s.step5.resume_available = resume;

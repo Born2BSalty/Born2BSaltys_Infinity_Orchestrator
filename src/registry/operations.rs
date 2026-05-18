@@ -194,8 +194,43 @@ pub fn open_install_folder(entry: &ModlistEntry) -> Result<(), String> {
     })
 }
 
+/// Open the modlist's **per-modlist appdata data folder**
+/// (`%APPDATA%\bio\modlists\<id>\`) in the OS file manager (T-B / SPEC §3
+/// Home Kebab — "Open data folder", both in-progress AND installed cards).
+///
+/// This is the directory that holds `workspace.json` **and** (post Fix A)
+/// the per-install `-u` `weidu_component_logs/` — i.e. the modlist's
+/// orchestrator-owned working data, distinct from the install folder
+/// ("Open install folder" opens `destination_folder`). It resolves via the
+/// **canonical** `registry::store_workspace::modlist_data_dir` (the SAME
+/// resolver `WorkspaceStore::new_for_id` / `per_install_dirs` use — never
+/// hand-join `%APPDATA%`), so the folder this opens is byte-identical to
+/// where `workspace.json` lives and where the install wrote the `-u` logs.
+///
+/// The data dir is created lazily by the registry/workspace machinery (the
+/// first `WorkspaceStore::save` / first install). If it does not yet exist
+/// (e.g. a brand-new in-progress modlist before its first persisted
+/// workspace write), surface an error rather than spawning on / creating a
+/// missing path — the same posture as `open_install_folder` (SPEC §3.2:
+/// "do not attempt to open or recreate the folder"). Returns `Ok(())` on a
+/// successful spawn; `Err(message)` (user-facing) otherwise — the caller
+/// surfaces it via the bottom-of-screen toast in its error tone.
+pub fn open_modlist_data_folder(entry: &ModlistEntry) -> Result<(), String> {
+    let dir = crate::registry::store_workspace::modlist_data_dir(&entry.id);
+    if !dir.is_dir() {
+        return Err(format!(
+            "Data folder for \"{}\" not found yet: {}",
+            entry.name,
+            dir.display()
+        ));
+    }
+    open_path_in_file_manager(&dir)
+        .map_err(|e| format!("Couldn't open the data folder for \"{}\": {e}", entry.name))
+}
+
 /// Platform-native "reveal this directory in the file manager". Never called
-/// on an unvalidated path — `open_install_folder` gates this.
+/// on an unvalidated path — `open_install_folder` / `open_modlist_data_
+/// folder` gate this.
 fn open_path_in_file_manager(path: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     let mut cmd = {
@@ -438,6 +473,43 @@ mod tests {
         let res = open_install_folder(&e);
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("not found on disk"));
+    }
+
+    // ──────────────────── open_modlist_data_folder (T-B) ────────────────────
+
+    #[test]
+    fn open_modlist_data_folder_resolves_the_canonical_per_modlist_root() {
+        // T-B: the data folder MUST be the SAME root
+        // `registry::store_workspace::modlist_data_dir` yields (the parent
+        // of `workspace.json` + the Fix-A `-u` logs) — never a hand-joined
+        // `%APPDATA%` path. Asserting the error message carries exactly that
+        // canonical path proves the resolver is reused (DATA-LOSS-safe: a
+        // random id ⇒ the dir does not exist ⇒ the error path, which never
+        // creates / opens / touches the real config dir; no spawn).
+        let e = entry("DATAFOLDERID", "");
+        let res = open_modlist_data_folder(&e);
+        assert!(
+            res.is_err(),
+            "a never-persisted modlist has no data dir yet"
+        );
+        let msg = res.unwrap_err();
+        assert!(msg.contains("Data folder for"), "got: {msg}");
+        let canonical = crate::registry::store_workspace::modlist_data_dir("DATAFOLDERID");
+        assert!(
+            msg.contains(&canonical.display().to_string()),
+            "the error must name the canonical per-modlist data dir ({}); got: {msg}",
+            canonical.display()
+        );
+        // And that canonical dir is exactly `workspace.json`'s parent (the
+        // single source of truth both T-A and T-B reuse).
+        assert_eq!(
+            crate::registry::store_workspace::WorkspaceStore::new_for_id("DATAFOLDERID")
+                .path()
+                .parent()
+                .unwrap(),
+            canonical,
+            "the data folder == workspace.json's parent (one resolver, no divergence)"
+        );
     }
 
     // ─────────────────────── queue_reinstall_stub ───────────────────────

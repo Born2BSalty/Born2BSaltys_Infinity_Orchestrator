@@ -214,17 +214,43 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
     //    never edited. While the install runs the panel shows the live
     //    console + Cancel Install + Actions/Diagnostics/Prompt Answers +
     //    the prompt input row (BIO's own renderers — the orchestrator does
-    //    not duplicate them). ──
+    //    not duplicate them).
+    //
+    //    **T-C — right-edge underflow fix (redesign-owned chrome only).**
+    //    BIO's `page_step5::render` (protected) lays its console + cards
+    //    out from `ui.available_width()`; on this Install-Modlist screen
+    //    the wrapper previously handed it the bare `ui`, whose
+    //    `available_rect` extends to the egui surface edge (no right bound)
+    //    — so a long console line / wide card stretched past the app's
+    //    right edge / underflowed the window. The fix bounds the panel to
+    //    the **window-available rect** here (the wrapper's layout/clip
+    //    rect — NOT a BIO edit) via the established `clipped_pane`
+    //    containment helper (the verbatim `workspace_step2::clipped_pane`
+    //    pattern): a child UI whose `max_rect` + hard-set `clip_rect` are
+    //    the window-available rect, after which the parent placer is
+    //    advanced by exactly that rect. BIO's panel keeps its full internal
+    //    behavior (its own `ScrollArea`, the prompt input row, etc.) but
+    //    can no longer paint past the window's right edge. `clip_rect`
+    //    intersects the inherited clip so it also respects any ancestor
+    //    bound. ──
     let exe_fingerprint = orchestrator.exe_fingerprint.clone();
-    let action: Option<Step5Action> = crate::ui::step5::page_step5::render(
-        ui,
-        &mut orchestrator.wizard_state,
-        &mut orchestrator.step5_console_view,
-        orchestrator.step5_terminal.as_mut(),
-        orchestrator.step5_terminal_error.as_deref(),
-        orchestrator.dev_mode,
-        &exe_fingerprint,
-    );
+    // The window-bounded rect for the panel: full remaining height, width
+    // clamped to what the screen actually offers (never the unbounded egui
+    // surface). `available_rect_before_wrap` is the post-header remaining
+    // area the dispatcher/shell already constrained horizontally.
+    let panel_rect = ui.available_rect_before_wrap();
+    let mut action: Option<Step5Action> = None;
+    clipped_pane(ui, panel_rect, |ui| {
+        action = crate::ui::step5::page_step5::render(
+            ui,
+            &mut orchestrator.wizard_state,
+            &mut orchestrator.step5_console_view,
+            orchestrator.step5_terminal.as_mut(),
+            orchestrator.step5_terminal_error.as_deref(),
+            orchestrator.dev_mode,
+            &exe_fingerprint,
+        );
+    });
 
     // ── 4. Dispatch the returned action — GATED so it cannot double-start.
     //    Run-4a's auto-build pipeline (`start_auto_build_install`) already
@@ -294,6 +320,36 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
     }
 
     outcome
+}
+
+/// **T-C containment** — run BIO's reused `page_step5::render` inside a
+/// **hard-clipped, fixed-size** child UI bounded to `rect` (the
+/// window-available area). Verbatim of the established
+/// `workspace_step2::clipped_pane` pattern (that fn is module-private to
+/// `workspace_step2`; this is the same net-new local helper, no
+/// shared-widget / BIO edit).
+///
+/// `ui.new_child` makes a child that does **not** advance the parent's
+/// placer; its `clip_rect` is hard-set to `rect ∩ ancestor-clip` so BIO's
+/// panel (its console lines, wide cards) physically cannot paint outside
+/// the window's right edge; then the parent is advanced by **exactly
+/// `rect`** so a tall panel can never push the layout. The panel keeps its
+/// full internal behavior (its own `ScrollArea`, prompt input row, menus);
+/// only the unbounded horizontal overflow is contained.
+fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    // Intersect with the inherited clip so we never paint OUTSIDE the rect
+    // (nor outside any ancestor clip).
+    let clip = rect.intersect(ui.clip_rect());
+    child.set_clip_rect(clip);
+    add(&mut child);
+    // Advance the parent by EXACTLY the bounded rect — discard the child's
+    // (possibly overgrown) min_rect so the layout after it is never pushed.
+    ui.allocate_rect(rect, egui::Sense::hover());
 }
 
 /// The wireframe `InstallProgressScreen` back affordance

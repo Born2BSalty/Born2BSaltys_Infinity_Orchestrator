@@ -21,15 +21,17 @@
 //       {hint && <Label hand color:text-faint fontSize:14>{hint}</Label>}
 //     </Box>
 //     <Box label="mod progress" padding:12 minHeight:360>
-//       <div grid cols:"1.8fr 1fr 130px 120px" gap:"6px 12px" align:center
-//            fontSize:14>
-//         mod / source / status / progress  (column headers, hand,text-muted)
+//       (D2) the rows live inside a vertical ScrollArea so 50+ mods are
+//       all reachable; the overall-progress box above stays fixed.
+//       (D4) 3 columns — the fabricated per-row progress-bar column is
+//       removed (BIO emits no per-asset %, so a per-row bar would be fake;
+//       the lone honest bar is the single overall one in the box above).
+//       <div grid cols:"1.8fr 1fr 130px" gap:"6px 12px" align:center>
+//         mod / source / status            (column headers, hand,text-muted)
 //         {rows.map(m => (
 //           <Label color:{queued? text-faint : text}>{m.name}</Label>
 //           <Label fontSize:13 color:text-faint>{m.source}</Label>
 //           <Label color:{statusColor}>{statusText}</Label>
-//           <div height:8 ...sketchyBorder bg:input-bg overflow:hidden>
-//             <div width:{barPct} bg:{queued? transparent : accent} />
 //         ))}
 //     </Box>
 //     <div flex:1 />
@@ -37,11 +39,17 @@
 //                    onPrimary={onContinue} primaryLabel={continueLabel} />
 //   </div>
 //
-// Wireframe `statusText` / `statusColor` / `barPct` (verbatim mapping):
-//   done       → "✓ staged"        · success-green · bar 100%
-//   extracting → "extracting..."   · text (normal) · bar 80%
-//   downloading→ "downloading N%"  · text (normal) · bar N%
-//   queued     → "queued"          · text-faint    · bar 0% (transparent fill)
+// `statusText` / `statusColor` (D4 — status only, no per-row %):
+//   done       → "✓ staged"        · success-green
+//   extracting → "extracting..."   · text (normal)
+//   downloading→ "downloading"     · text (normal)   [no fabricated N%]
+//   queued     → "queued"          · text-faint
+//
+// The single overall bar (the fixed box above) = the average of each
+// row's **monotonic** `phase_fraction` (Queued 0 ≤ Downloading .45 ≤
+// Extracting .80 ≤ Staged 1.0) — D3: it never regresses (fixes the
+// reported 100→80 stall), and the "N / T" count counts download-complete
+// rows so it advances through the phases (fixes the "stuck 0/51").
 //
 // **Symbol-glyph rule (cmap-verified, HANDOFF caveat).** The `✓` U+2713 in
 // "✓ staged" IS present in the full FiraCode Nerd build (math/dingbat-check
@@ -137,31 +145,38 @@ const CHECK_STAGED: &str = "\u{2713}"; // ✓
 /// Per-mod download/extract lifecycle (SPEC §4.3; wireframe `m.status`).
 /// Ordered as the row progresses: `Queued` → `Downloading` → `Extracting`
 /// → `Staged`.
+///
+/// **D4 — status-only, no fabricated per-row %.** BIO emits ONLY an
+/// aggregate download % (no per-asset progress — see
+/// `DownloadProgress::from_wizard_state`); the old `Downloading { progress
+/// }` mirrored that single aggregate onto *every* in-flight row, so 51
+/// rows all showed an identical "downloading 6%" (the user's "confusing"
+/// complaint) and a meaningless per-row bar. The redesign drops the
+/// fabricated per-row % entirely: a row carries **status only**
+/// (`Downloading` has no number); the lone honest progress signal is the
+/// single overall bar (the aggregate) plus the advancing count.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModDownloadStatus {
-    /// Not started yet. Faint text, empty (transparent-fill) bar.
+    /// Not started yet. Faint text.
     #[default]
     Queued,
-    /// Archive fetch in progress. Normal text, bar at `progress`%.
-    Downloading {
-        /// 0..=100 — clamped on render.
-        progress: u8,
-    },
-    /// Archive extraction in progress. Normal text, bar held at 80%
-    /// (wireframe `barPct`).
+    /// Archive fetch in progress (status only — no per-row %).
+    Downloading,
+    /// Archive extraction in progress.
     Extracting,
-    /// Downloaded + extracted + staged. Success-green text, full bar.
+    /// Downloaded + extracted + staged. Success-green text.
     Staged,
 }
 
 impl ModDownloadStatus {
-    /// Wireframe `statusText(m)` — the verbatim per-row status caption.
+    /// The per-row status caption (D4 — status only, **no** "N%"). The
+    /// wireframe's `statusText` had a `downloading <p>%`; the redesign
+    /// drops the fabricated per-row number (BIO has no per-asset %), so a
+    /// downloading row reads just `downloading`.
     pub fn status_text(self) -> String {
         match self {
             ModDownloadStatus::Queued => "queued".to_string(),
-            ModDownloadStatus::Downloading { progress } => {
-                format!("downloading {}%", progress.min(100))
-            }
+            ModDownloadStatus::Downloading => "downloading".to_string(),
             ModDownloadStatus::Extracting => "extracting...".to_string(),
             // The check is a separate glyph (firacode_nerd) laid before the
             // word at the call site — `status_text` returns the prose only so
@@ -170,38 +185,68 @@ impl ModDownloadStatus {
         }
     }
 
-    /// Wireframe `barPct(m)` as a 0.0..=1.0 fraction (the wireframe's "0%" /
-    /// "80%" / "100%" / "N%").
-    pub fn bar_fraction(self) -> f32 {
+    /// **D3 — strictly monotonic non-decreasing phase fraction** (Queued ≤
+    /// Downloading ≤ Extracting ≤ Staged) used only to compute the single
+    /// overall bar. Because each later phase's fraction is ≥ the previous
+    /// one, a row advancing (Downloading → Extracting → Staged) can only
+    /// raise the average — the overall bar **never regresses** (this is the
+    /// fix for the reported 100→80 stall, which was caused by the old
+    /// `Downloading{100}` = 1.0 dropping to `Extracting` = 0.80 when a row
+    /// moved from download to extract). There is no per-row bar any more
+    /// (D4); this is purely an input to `DownloadProgress::overall_pct`.
+    pub fn phase_fraction(self) -> f32 {
         match self {
             ModDownloadStatus::Queued => 0.0,
-            ModDownloadStatus::Downloading { progress } => f32::from(progress.min(100)) / 100.0,
+            // Downloading contributes partial progress so the bar moves
+            // during the (longest) fetch phase instead of being 0 until
+            // the first archive stages.
+            ModDownloadStatus::Downloading => 0.45,
+            // ≥ Downloading (monotonic — extraction is strictly more
+            // progress than downloading, never less).
             ModDownloadStatus::Extracting => 0.80,
             ModDownloadStatus::Staged => 1.0,
         }
     }
 
-    /// `true` only for `Staged` — the bar/text use success-green (wireframe
-    /// `s === "done"`).
+    /// `true` only for `Staged` — the row's text uses success-green
+    /// (wireframe `s === "done"`).
     pub fn is_done(self) -> bool {
         matches!(self, ModDownloadStatus::Staged)
     }
 
+    /// **D3 — a row counts toward the advancing "N / T" once its archive
+    /// has finished downloading** (`Extracting` or `Staged`). This makes
+    /// the count advance *through* the phases (download → extract → stage)
+    /// instead of being stuck `0 / 51` until the very last archive stages
+    /// (the reported complaint). It is honest: the archive really is
+    /// fetched once a row reaches Extracting; the remaining work is local
+    /// unpacking. (`all_staged()` — the production auto-advance — still
+    /// keys on *every* row being truly `Staged`, so correctness of "fully
+    /// done" is unchanged.)
+    pub fn download_complete(self) -> bool {
+        matches!(
+            self,
+            ModDownloadStatus::Extracting | ModDownloadStatus::Staged
+        )
+    }
+
     /// `true` only for `Queued` — the row's name + status use `text-faint`
-    /// and the bar fill is transparent (wireframe `s === "queued"`).
+    /// (wireframe `s === "queued"`).
     pub fn is_queued(self) -> bool {
         matches!(self, ModDownloadStatus::Queued)
     }
 }
 
-/// One row of the SPEC §4.3 4-column grid (mod / source / status / progress).
+/// One row of the SPEC §4.3 grid. **D4: 3 columns now** (mod / source /
+/// status) — the fabricated per-row progress-bar column is removed (BIO has
+/// no per-asset %; the only honest bar is the single overall one).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModDownloadRow {
     /// Mod display name (wireframe `m.name`).
     pub name: String,
     /// Source label, e.g. a repo or page host (wireframe `m.source`).
     pub source: String,
-    /// Lifecycle status driving the status text + bar.
+    /// Lifecycle status driving the status text (D4 — status only).
     pub status: ModDownloadStatus,
 }
 
@@ -229,16 +274,14 @@ impl DownloadProgress {
     ///     `update_selected_extracted_sources` ⇒ `Staged` (✓).
     ///   - in `update_selected_downloaded_sources` only ⇒ `Extracting`
     ///     (downloaded, extract pending/running).
-    ///   - `update_selected_download_running` ⇒ the not-yet-done assets
-    ///     show `Downloading <agg>%`. BIO does **not** expose a per-asset
-    ///     download %, only an aggregate it writes into `scan_status` as
-    ///     `"Downloading updates: N/M"` (the *only* download-progress
-    ///     signal BIO emits — `app_step2_update_download::poll_step2_
-    ///     update_download` from the worker's `Progress { completed,
-    ///     total }`). The aggregate is parsed from there and mirrored onto
-    ///     each in-flight row — the most honest per-row value BIO's
-    ///     granularity allows (and it advances as batches complete, never
-    ///     a fake spinner).
+    ///   - `update_selected_download_running` ⇒ `Downloading` (**status
+    ///     only — D4**). BIO does **not** expose a per-asset download %
+    ///     (only an aggregate `"Downloading updates: N/M"` in
+    ///     `scan_status`), so the old code mirrored that single aggregate
+    ///     onto *every* in-flight row → 51 identical "downloading 6%" (the
+    ///     user's "confusing" complaint). The redesign shows status only;
+    ///     the aggregate drives the **single overall bar** instead (see
+    ///     `overall_pct`), the one honest progress signal.
     ///   - otherwise ⇒ `Queued`.
     ///
     /// The `downloaded` / `extracted` source vectors are
@@ -249,14 +292,6 @@ impl DownloadProgress {
     #[must_use]
     pub fn from_wizard_state(state: &WizardState) -> Self {
         let s2 = &state.step2;
-
-        // Aggregate download % parsed from BIO's `scan_status` — the ONLY
-        // download-progress signal BIO emits (it writes
-        // `"Downloading updates: N/M"` from the worker's
-        // `Progress { completed, total }`; there is no numeric field).
-        // `None` (status not in that form yet) ⇒ in-flight rows show 0%
-        // until the first batch reports — honest, never a fabricated %.
-        let agg_pct: u8 = parse_download_aggregate_pct(&s2.scan_status).unwrap_or(0);
 
         let label_done = |list: &[String], label: &str| {
             list.iter().any(|e| {
@@ -279,7 +314,8 @@ impl DownloadProgress {
                     // Downloaded; extract pending or running.
                     ModDownloadStatus::Extracting
                 } else if s2.update_selected_download_running {
-                    ModDownloadStatus::Downloading { progress: agg_pct }
+                    // D4 — status only; NO fabricated per-row %.
+                    ModDownloadStatus::Downloading
                 } else {
                     ModDownloadStatus::Queued
                 };
@@ -296,10 +332,19 @@ impl DownloadProgress {
 }
 
 impl DownloadProgress {
-    /// Count of rows that have finished (reached `Staged`) — the "N" in the
-    /// wireframe's "N / T mods".
+    /// **D3 — the advancing "N" in "N / T mods".** Counts rows whose
+    /// archive has finished downloading (`Extracting` or `Staged`), so the
+    /// count climbs *through* the phases (download → extract → stage)
+    /// instead of being stuck `0 / 51` until the very last archive stages
+    /// (the reported "stuck 0/51" complaint). Honest — the archive really
+    /// is fetched once a row reaches Extracting. (`all_staged()`, the
+    /// production auto-advance, still requires *every* row truly `Staged`,
+    /// so "fully complete" correctness is unchanged.)
     pub fn completed(&self) -> usize {
-        self.rows.iter().filter(|r| r.status.is_done()).count()
+        self.rows
+            .iter()
+            .filter(|r| r.status.download_complete())
+            .count()
     }
 
     /// Total row count — the "T" in the wireframe's "N / T mods".
@@ -307,19 +352,22 @@ impl DownloadProgress {
         self.rows.len()
     }
 
-    /// Overall completion percentage 0..=100 (integer, like the wireframe's
-    /// `overall`). Empty list ⇒ 0 (no divide-by-zero; also the "nothing to
-    /// do / not started" rendering).
+    /// **D3 — the single honest overall bar, monotonic non-decreasing.**
+    /// 0..=100 integer = the average of each row's **monotonic**
+    /// `phase_fraction` (Queued 0 ≤ Downloading .45 ≤ Extracting .80 ≤
+    /// Staged 1.0). Because every later phase's fraction is ≥ the earlier
+    /// one, a row only ever *raises* the average as it advances — so the
+    /// bar **cannot regress** (the fix for the reported 100→80 stall, which
+    /// the old non-monotonic `Downloading{100}`=1.0 → `Extracting`=0.80
+    /// drop caused). Empty ⇒ 0 (no divide-by-zero; also the "not started"
+    /// rendering). This is the lone honest progress bar (D4 — no per-row
+    /// bars).
     pub fn overall_pct(&self) -> u32 {
         let total = self.total();
         if total == 0 {
             return 0;
         }
-        // Average of each row's bar fraction → a smooth overall bar (a
-        // downloading row contributes partial progress, not 0/1). Matches
-        // the wireframe's single accent bar that moves before any row is
-        // fully staged.
-        let sum: f32 = self.rows.iter().map(|r| r.status.bar_fraction()).sum();
+        let sum: f32 = self.rows.iter().map(|r| r.status.phase_fraction()).sum();
         ((sum / total as f32) * 100.0).round() as u32
     }
 
@@ -469,8 +517,44 @@ pub fn render_live(
     //    status text in the grid's empty state via the live feed. ──
     if !orchestrator.install_screen_state.pipeline_armed {
         orchestrator.install_screen_state.pipeline_armed = true;
+
+        // ── Fix A (the PLAN-GAP resolution — modlist id at derive time).
+        //    The `-u` `weidu_component_logs` dir now lives at
+        //    `%APPDATA%\bio\modlists\<id>\weidu_component_logs` (no-space,
+        //    program-controlled — WeiDU's `-u` preflight rejects a
+        //    space-containing destination). That needs the modlist id
+        //    *before* `derive_per_install_dirs` runs:
+        //      • Reinstall ⇒ the id is `pending_reinstall_id` (set by
+        //        `reinstall_route::start_reinstall` before this screen).
+        //      • Fresh Install-Modlist paste ⇒ the entry (and its id) was
+        //        previously minted *inside* `register_install_modlist_
+        //        paste`, which runs AFTER the derivation. Mint it ONCE here
+        //        (same one-shot `pipeline_armed` latch) and thread the SAME
+        //        id into BOTH the derivation and
+        //        `register_and_write_install_start_artifacts` (which reuses
+        //        it instead of re-minting) — behavior-neutral: the entry is
+        //        byte-identical; only the id's birthplace moves one call
+        //        earlier. Stored on `install_screen_state` so the
+        //        registration step reads the SAME id. ──
+        let modlist_id: String = orchestrator
+            .pending_reinstall_id
+            .clone()
+            .unwrap_or_else(|| {
+                orchestrator
+                    .install_screen_state
+                    .install_modlist_id
+                    .clone()
+                    .unwrap_or_else(crate::registry::ids::new_modlist_id)
+            });
+        // Persist the resolved id so the post-import registration reuses it
+        // (only meaningful for the fresh-paste path; harmless for Reinstall,
+        // whose registration step ignores it in favor of
+        // `pending_reinstall_id`).
+        orchestrator.install_screen_state.install_modlist_id = Some(modlist_id.clone());
+
         match auto_build_driver::prepare_install_dirs_and_maybe_import(
             &mut orchestrator.wizard_state,
+            &modlist_id,
             &destination,
             game,
             workflow,
@@ -589,23 +673,35 @@ pub fn render_live(
     }
 
     // ── (2) Content-addressed staging interposition AROUND BIO's
-    //    reused-unchanged download/extract (SPEC §13.12a). Both calls are
-    //    no-ops until there is something to act on, so running them every
-    //    frame is safe + idempotent:
-    //      • `stage_known_archives` BEFORE BIO downloads — drops assets
-    //        already in the store at this modlist's resolved hash (no
-    //        re-download) + places them at BIO's deterministic extract
-    //        path. Gated to BEFORE download starts (`!download_running &&
-    //        no downloaded sources yet`) so it does not race BIO mid-
-    //        fetch.
-    //      • `ingest_downloaded_archives` AFTER BIO's download lands —
-    //        hashes + content-addresses + records the per-install lock.
-    //        Gated to AFTER download finished
-    //        (`!download_running && some downloaded sources`). ──
+    //    reused-unchanged download/extract (SPEC §13.12a).
+    //
+    //    **D1 — these are ONE-SHOT per state transition, NOT per render
+    //    frame (the reported freeze/hang fix).** Both calls are idempotent
+    //    (running once is correct), but they do real disk I/O and
+    //    `ingest_downloaded_archives` **FNV-hashes every downloaded
+    //    archive**. Running `ingest` on the egui render path *every frame*
+    //    for the whole post-download window (which spans extraction)
+    //    re-hashed all archives every frame → the egui loop blocked → the
+    //    reported hang (worst at extraction). The fix: gate each behind a
+    //    one-shot latch on `InstallScreenState` so it fires exactly once at
+    //    its state transition; the dedupe/coexist/lock semantics are
+    //    unchanged (the functions themselves are untouched — only the
+    //    scheduling changes). The latches reset on Cancel→Preview
+    //    (`clear_preview`) so a re-entry re-stages from scratch.
+    //      • `stage_known_archives` — runs ONCE, BEFORE BIO downloads
+    //        (drops assets already in the store at this modlist's resolved
+    //        hash + places them at BIO's deterministic extract path). Gated
+    //        to before download starts so it does not race BIO mid-fetch.
+    //      • `ingest_downloaded_archives` — runs ONCE, AFTER BIO's download
+    //        lands (hashes + content-addresses + records the per-install
+    //        lock). Gated to after download finished. Doing this single
+    //        pass is the same total hashing BIO's download already did once
+    //        — it is the *repeated per-frame* hashing that froze the UI. ──
     let s2 = &orchestrator.wizard_state.step2;
     let download_started =
         s2.update_selected_download_running || !s2.update_selected_downloaded_sources.is_empty();
-    if orchestrator.install_screen_state.pipeline_armed
+    if !orchestrator.install_screen_state.archives_staged
+        && orchestrator.install_screen_state.pipeline_armed
         && !destination.is_empty()
         && !download_started
         && !orchestrator
@@ -614,9 +710,14 @@ pub fn render_live(
             .update_selected_update_assets
             .is_empty()
     {
+        // One-shot: the moment there are resolved assets and download has
+        // not started, place any store-known archives and latch — never
+        // re-run per frame.
+        orchestrator.install_screen_state.archives_staged = true;
         archive_store::stage_known_archives(&mut orchestrator.wizard_state, &destination);
     }
-    if !destination.is_empty()
+    if !orchestrator.install_screen_state.archives_ingested
+        && !destination.is_empty()
         && !orchestrator
             .wizard_state
             .step2
@@ -627,6 +728,11 @@ pub fn render_live(
             .update_selected_downloaded_sources
             .is_empty()
     {
+        // One-shot: the first frame BIO's download has finished, hash +
+        // content-address the resolved set exactly once, then latch (the
+        // priority freeze fix — no per-frame re-hash of GB archives across
+        // the whole extraction window).
+        orchestrator.install_screen_state.archives_ingested = true;
         // Hash the asset set BIO just resolved. `archive_file_name` is the
         // same logical name BIO's download/extract use, so re-deriving it
         // from the (unchanged) asset list is exact.
@@ -787,8 +893,18 @@ fn render_overall_progress(
     });
 }
 
-/// `Box label="mod progress"` — the 4-column grid (wireframe lines
-/// 3734-3755). `gridTemplateColumns: "1.8fr 1fr 130px 120px"`.
+/// `Box label="mod progress"` — the per-mod grid.
+///
+/// **D2 — the grid is vertically scrollable.** With 50+ mods the list
+/// previously overflowed the box and the lower rows were unreachable. It is
+/// now wrapped in a vertical `egui::ScrollArea` (the overall-progress box
+/// stays fixed above — it is rendered separately by `render_chrome`).
+///
+/// **D4 — 3 columns** (mod / source / status); the fabricated per-row
+/// progress-bar column is removed (BIO emits no per-asset %; the only
+/// honest bar is the single overall one in the fixed box above). Columns:
+/// status fixed at 130px, the two flexible columns split the remainder
+/// 1.8 : 1 (the wireframe's `1.8fr 1fr`), 12px gap.
 fn render_mod_progress(ui: &mut egui::Ui, palette: ThemePalette, progress: &DownloadProgress) {
     box_frame(palette).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -800,56 +916,66 @@ fn render_mod_progress(ui: &mut egui::Ui, palette: ThemePalette, progress: &Down
         );
         ui.add_space(8.0);
 
-        // Column widths: the two fixed columns are wireframe-exact (130 / 120
-        // px); the two flexible columns split the remainder 1.8 : 1 (wireframe
-        // `1.8fr 1fr`). 12px inter-column gap (wireframe grid `gap:"6px 12px"`).
         let col_gap = 12.0;
         let status_w = 130.0;
-        let prog_w = 120.0;
-        let flex_total = (ui.available_width() - status_w - prog_w - col_gap * 3.0).max(120.0);
+        // D4: only 3 columns now — the remainder (after the fixed status
+        // column + 2 inter-column gaps) splits 1.8 : 1.
+        let flex_total = (ui.available_width() - status_w - col_gap * 2.0).max(120.0);
         let mod_w = flex_total * (1.8 / 2.8);
         let src_w = flex_total * (1.0 / 2.8);
 
-        egui::Grid::new("stage_downloading_mod_grid")
-            .num_columns(4)
+        // Header row stays fixed above the scrolled body so the columns
+        // are always labelled while the rows scroll.
+        egui::Grid::new("stage_downloading_mod_grid_header")
+            .num_columns(3)
             .spacing(egui::vec2(col_gap, 6.0))
             .min_col_width(0.0)
             .show(ui, |ui| {
-                // Header row (wireframe: hand, text-muted).
                 grid_header(ui, palette, "mod", mod_w);
                 grid_header(ui, palette, "source", src_w);
                 grid_header(ui, palette, "status", status_w);
-                grid_header(ui, palette, "progress", prog_w);
                 ui.end_row();
+            });
 
-                if progress.rows.is_empty() {
-                    // No rows yet (this run: always — see the module header
-                    // SPEC-CONFLICT note). Render an honest, faint placeholder
-                    // line rather than a blank box (the redesign's
-                    // honest-empty-state stance; consistent with
-                    // stage_preview's parse-error path).
-                    ui.label(
-                        egui::RichText::new("no mods queued")
-                            .size(13.0)
-                            .family(egui::FontFamily::Name("poppins_light".into()))
-                            .color(redesign_text_faint(palette)),
-                    );
-                    ui.label("");
-                    ui.label("");
-                    ui.label("");
-                    ui.end_row();
-                    return;
-                }
+        if progress.rows.is_empty() {
+            // No rows yet (e.g. the not-yet-wired fork-download chassis, or
+            // before the pipeline resolves assets). Honest faint placeholder
+            // rather than a blank box (the redesign's honest-empty-state
+            // stance; consistent with stage_preview's parse-error path).
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new("no mods queued")
+                    .size(13.0)
+                    .family(egui::FontFamily::Name("poppins_light".into()))
+                    .color(redesign_text_faint(palette)),
+            );
+            return;
+        }
 
-                for row in &progress.rows {
-                    render_grid_row(ui, palette, row, mod_w, src_w, status_w, prog_w);
-                    ui.end_row();
-                }
+        // D2: the rows scroll. `auto_shrink([false, true])` keeps the
+        // scroll area full-width but only as tall as needed (capped by the
+        // box's available height — `render_chrome` reserved the footer's
+        // footprint so this never overruns the visible area).
+        egui::ScrollArea::vertical()
+            .id_salt("stage_downloading_mod_scroll")
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                egui::Grid::new("stage_downloading_mod_grid")
+                    .num_columns(3)
+                    .spacing(egui::vec2(col_gap, 6.0))
+                    .min_col_width(0.0)
+                    .show(ui, |ui| {
+                        for row in &progress.rows {
+                            render_grid_row(ui, palette, row, mod_w, src_w, status_w);
+                            ui.end_row();
+                        }
+                    });
             });
     });
 }
 
-/// One data row of the 4-column grid (wireframe lines 3741-3752).
+/// One data row of the D4 3-column grid (mod / source / status — no per-row
+/// progress bar).
 fn render_grid_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -857,7 +983,6 @@ fn render_grid_row(
     mod_w: f32,
     src_w: f32,
     status_w: f32,
-    prog_w: f32,
 ) {
     // Column 1 — mod name. `text-faint` while queued, else normal text
     // (wireframe `color: statusColor === text-faint ? text-faint : text`).
@@ -878,10 +1003,11 @@ fn render_grid_row(
         redesign_text_faint(palette),
     );
 
-    // Column 3 — status. Color per wireframe `statusColor`: done →
-    // success-green, queued → text-faint, else normal text. The `Staged`
-    // case lays the `✓` glyph (firacode_nerd) before the prose
-    // (poppins_medium), mirroring `sub_flow_footer`'s glyph/prose split.
+    // Column 3 — status (D4 — the row's only state signal: queued →
+    // downloading → extracting... → ✓ staged). Color: done → success-green,
+    // queued → text-faint, else normal text. The `Staged` case lays the
+    // `✓` glyph (firacode_nerd) before the prose (poppins_medium),
+    // mirroring `sub_flow_footer`'s glyph/prose split.
     let status_color = if row.status.is_done() {
         redesign_success(palette)
     } else if row.status.is_queued() {
@@ -901,17 +1027,6 @@ fn render_grid_row(
             status_color,
         );
     }
-
-    // Column 4 — the per-row progress bar (wireframe height:8, sketchy
-    // border, input-bg track; fill transparent while queued, else accent).
-    let (track, _) = ui.allocate_exact_size(egui::vec2(prog_w, 8.0), egui::Sense::hover());
-    paint_bar(
-        ui,
-        palette,
-        track,
-        f64::from(row.status.bar_fraction()),
-        !row.status.is_queued(),
-    );
 }
 
 /// The `✓ staged` cell — glyph in `firacode_nerd` (U+2713 is present,
@@ -1008,28 +1123,13 @@ fn paint_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Rect, frac: f64,
     );
 }
 
-/// Parse the aggregate download % out of BIO's `scan_status` line — the
-/// **only** download-progress signal BIO emits. `app_step2_update_
-/// download::poll_step2_update_download` sets it to exactly
-/// `"Downloading updates: N/M"` (from the worker's `Progress { completed,
-/// total }`). Returns `Some(0..=100)` only for that exact shape with
-/// `M > 0`; any other status (idle / scanning / extracting / a finished
-/// line) ⇒ `None` (the caller renders in-flight rows at 0%, never a
-/// fabricated value). Format-coupled to BIO's literal (read-only — if BIO
-/// ever changes the string this degrades to 0%, never to a wrong %).
-fn parse_download_aggregate_pct(status: &str) -> Option<u8> {
-    let rest = status.trim().strip_prefix("Downloading updates: ")?;
-    let (done, total) = rest.split_once('/')?;
-    let done: usize = done.trim().parse().ok()?;
-    let total: usize = total.trim().parse().ok()?;
-    if total == 0 {
-        return None;
-    }
-    let pct = ((done.min(total) as f32 / total as f32) * 100.0)
-        .round()
-        .clamp(0.0, 100.0) as u8;
-    Some(pct)
-}
+// (D4) `parse_download_aggregate_pct` was removed: BIO's aggregate
+// `"Downloading updates: N/M"` was only ever used to fabricate a per-row
+// "downloading N%" mirrored onto every in-flight row. D4 drops that fake
+// per-row %; the single honest overall bar is now the monotonic
+// `phase_fraction` average (`DownloadProgress::overall_pct`), so the
+// status-string parser is dead and has been deleted (no per-frame string
+// parse either).
 
 /// **The non-masking arm-failure banner.** A full-width danger-bordered
 /// box (same chassis as `box_frame` but a danger stroke + a danger-toned
@@ -1095,52 +1195,67 @@ mod tests {
     use super::*;
 
     #[test]
-    fn status_text_is_wireframe_verbatim() {
-        // screens.jsx:3711-3714 `statusText` — exact strings (the `Staged`
-        // case returns prose only; the `✓` glyph is laid separately).
+    fn status_text_is_status_only_no_fabricated_pct() {
+        // D4: status only — a downloading row reads just "downloading"
+        // (NOT "downloading N%"; BIO has no per-asset %).
         assert_eq!(ModDownloadStatus::Queued.status_text(), "queued");
-        assert_eq!(
-            ModDownloadStatus::Downloading { progress: 42 }.status_text(),
-            "downloading 42%"
-        );
+        assert_eq!(ModDownloadStatus::Downloading.status_text(), "downloading");
         assert_eq!(ModDownloadStatus::Extracting.status_text(), "extracting...");
         assert_eq!(ModDownloadStatus::Staged.status_text(), "staged");
+        // No status caption carries a '%' anywhere (the D4 guarantee).
+        for s in [
+            ModDownloadStatus::Queued,
+            ModDownloadStatus::Downloading,
+            ModDownloadStatus::Extracting,
+            ModDownloadStatus::Staged,
+        ] {
+            assert!(
+                !s.status_text().contains('%'),
+                "D4: no fabricated per-row % in any status caption ({:?})",
+                s
+            );
+        }
     }
 
     #[test]
-    fn downloading_progress_is_clamped_to_100() {
-        // A misbehaving worker reporting >100 must not render "downloading
-        // 250%" nor a bar past the track.
-        assert_eq!(
-            ModDownloadStatus::Downloading { progress: 250 }.status_text(),
-            "downloading 100%"
-        );
-        let f = ModDownloadStatus::Downloading { progress: 250 }.bar_fraction();
-        assert!((f - 1.0).abs() < f32::EPSILON);
+    fn phase_fraction_is_strictly_monotonic_non_decreasing() {
+        // D3: Queued ≤ Downloading ≤ Extracting ≤ Staged — the property
+        // that makes the overall bar never regress (a row advancing can
+        // only raise the average). Pin the exact ordering + the boundary
+        // values.
+        let q = ModDownloadStatus::Queued.phase_fraction();
+        let d = ModDownloadStatus::Downloading.phase_fraction();
+        let e = ModDownloadStatus::Extracting.phase_fraction();
+        let s = ModDownloadStatus::Staged.phase_fraction();
+        assert!(q <= d, "Queued ≤ Downloading ({q} ≤ {d})");
+        assert!(d <= e, "Downloading ≤ Extracting ({d} ≤ {e})");
+        assert!(e <= s, "Extracting ≤ Staged ({e} ≤ {s})");
+        assert!((q - 0.0).abs() < f32::EPSILON);
+        assert!((s - 1.0).abs() < f32::EPSILON);
+        // Strictly increasing across the four phases (no two phases share a
+        // fraction — so progress is always visible as a row advances).
+        assert!(q < d && d < e && e < s, "strictly increasing per phase");
     }
 
     #[test]
-    fn bar_fraction_matches_wireframe_barpct() {
-        // screens.jsx:3715-3718 `barPct`: queued 0%, extracting 80%, done
-        // 100%, downloading N%.
-        assert!((ModDownloadStatus::Queued.bar_fraction() - 0.0).abs() < f32::EPSILON);
-        assert!((ModDownloadStatus::Extracting.bar_fraction() - 0.80).abs() < f32::EPSILON);
-        assert!((ModDownloadStatus::Staged.bar_fraction() - 1.0).abs() < f32::EPSILON);
-        assert!(
-            (ModDownloadStatus::Downloading { progress: 50 }.bar_fraction() - 0.50).abs()
-                < f32::EPSILON
-        );
-    }
-
-    #[test]
-    fn is_done_and_is_queued_are_exclusive_and_correct() {
+    fn is_done_and_is_queued_and_download_complete_are_correct() {
         assert!(ModDownloadStatus::Queued.is_queued());
         assert!(!ModDownloadStatus::Queued.is_done());
+        assert!(!ModDownloadStatus::Queued.download_complete());
         assert!(ModDownloadStatus::Staged.is_done());
         assert!(!ModDownloadStatus::Staged.is_queued());
+        assert!(ModDownloadStatus::Staged.download_complete());
         assert!(!ModDownloadStatus::Extracting.is_queued());
         assert!(!ModDownloadStatus::Extracting.is_done());
-        assert!(!ModDownloadStatus::Downloading { progress: 1 }.is_queued());
+        assert!(
+            ModDownloadStatus::Extracting.download_complete(),
+            "D3: a row past download (Extracting) counts toward the advancing N"
+        );
+        assert!(
+            !ModDownloadStatus::Downloading.download_complete(),
+            "D3: a still-downloading row is NOT yet download-complete"
+        );
+        assert!(!ModDownloadStatus::Downloading.is_queued());
     }
 
     fn row(name: &str, status: ModDownloadStatus) -> ModDownloadRow {
@@ -1153,8 +1268,6 @@ mod tests {
 
     #[test]
     fn empty_progress_is_zero_and_not_complete() {
-        // The "not started / pending the SPEC-CONFLICT decision" rendering:
-        // no divide-by-zero, 0%, never auto-advances.
         let p = DownloadProgress::default();
         assert_eq!(p.completed(), 0);
         assert_eq!(p.total(), 0);
@@ -1166,36 +1279,68 @@ mod tests {
     }
 
     #[test]
-    fn completed_counts_only_staged_rows() {
+    fn completed_counts_download_complete_rows_so_it_advances_through_phases() {
+        // D3: "N" counts Extracting + Staged (download finished) so it
+        // climbs through the phases instead of being stuck 0/T until the
+        // last archive stages.
         let p = DownloadProgress {
             rows: vec![
                 row("a", ModDownloadStatus::Staged),
-                row("b", ModDownloadStatus::Downloading { progress: 10 }),
-                row("c", ModDownloadStatus::Staged),
+                row("b", ModDownloadStatus::Extracting), // counts (downloaded)
+                row("c", ModDownloadStatus::Downloading), // not yet
                 row("d", ModDownloadStatus::Queued),
             ],
         };
-        assert_eq!(p.completed(), 2);
+        assert_eq!(
+            p.completed(),
+            2,
+            "Staged + Extracting both count toward N (download complete)"
+        );
         assert_eq!(p.total(), 4);
     }
 
     #[test]
-    fn overall_pct_averages_row_fractions() {
-        // 4 rows: staged(1.0) + extracting(0.8) + downloading50(0.5) +
-        // queued(0.0) → (2.3 / 4) * 100 = 57.5 → round → 58.
+    fn overall_pct_uses_monotonic_phase_fractions() {
+        // 4 rows: staged(1.0) + extracting(0.80) + downloading(0.45) +
+        // queued(0.0) → (2.25 / 4) * 100 = 56.25 → round → 56.
         let p = DownloadProgress {
             rows: vec![
                 row("a", ModDownloadStatus::Staged),
                 row("b", ModDownloadStatus::Extracting),
-                row("c", ModDownloadStatus::Downloading { progress: 50 }),
+                row("c", ModDownloadStatus::Downloading),
                 row("d", ModDownloadStatus::Queued),
             ],
         };
-        assert_eq!(p.overall_pct(), 58);
+        assert_eq!(p.overall_pct(), 56);
     }
 
     #[test]
-    fn all_staged_only_when_every_row_done() {
+    fn overall_bar_never_regresses_as_a_row_advances_phases() {
+        // THE D3 regression-fix proof (the reported 100→80 stall): a single
+        // row walking Queued → Downloading → Extracting → Staged must yield
+        // a non-decreasing overall %.
+        let mut p = DownloadProgress {
+            rows: vec![row("a", ModDownloadStatus::Queued)],
+        };
+        let q = p.overall_pct();
+        p.rows[0].status = ModDownloadStatus::Downloading;
+        let d = p.overall_pct();
+        p.rows[0].status = ModDownloadStatus::Extracting;
+        let e = p.overall_pct();
+        p.rows[0].status = ModDownloadStatus::Staged;
+        let s = p.overall_pct();
+        assert!(
+            q <= d && d <= e && e <= s,
+            "overall % must be monotonic non-decreasing across phases \
+             (got {q} → {d} → {e} → {s}) — the 100→80 stall must not recur"
+        );
+        assert_eq!(s, 100, "all-staged ⇒ 100%");
+    }
+
+    #[test]
+    fn all_staged_only_when_every_row_truly_staged() {
+        // Correctness of the production auto-advance is UNCHANGED by D3 —
+        // it still requires every row Staged (Extracting is not enough).
         let mut p = DownloadProgress {
             rows: vec![
                 row("a", ModDownloadStatus::Staged),
@@ -1205,7 +1350,10 @@ mod tests {
         assert!(p.all_staged());
         assert_eq!(p.overall_pct(), 100);
         p.rows[1].status = ModDownloadStatus::Extracting;
-        assert!(!p.all_staged());
+        assert!(
+            !p.all_staged(),
+            "an Extracting row (download-complete but not staged) must NOT auto-advance"
+        );
     }
 
     #[test]
@@ -1224,45 +1372,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_download_aggregate_pct_only_matches_bios_literal() {
-        // BIO's exact `app_step2_update_download::poll_step2_update_download`
-        // status (`"Downloading updates: N/M"`).
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 0/7"),
-            Some(0)
-        );
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 7/7"),
-            Some(100)
-        );
-        // 3/7 → 42.857 → round → 43.
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 3/7"),
-            Some(43)
-        );
-        // Any other status ⇒ None (the caller renders 0%, never a fake %).
-        assert_eq!(parse_download_aggregate_pct("Idle"), None);
-        assert_eq!(parse_download_aggregate_pct("Scanning..."), None);
-        assert_eq!(
-            parse_download_aggregate_pct("Download updates finished: 7 downloaded, 0 failed"),
-            None
-        );
-        // Degenerate / malformed ⇒ None, never a panic or a wrong %.
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 1/0"),
-            None
-        );
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: x/y"),
-            None
-        );
-    }
-
-    #[test]
-    fn from_wizard_state_classifies_every_lifecycle_row() {
+    fn from_wizard_state_classifies_every_lifecycle_row_status_only() {
         // SPEC §4.3 live feed: one row per resolved asset; status from the
-        // authoritative downloaded/extracted membership + the parsed
-        // aggregate download %.
+        // authoritative downloaded/extracted membership. D4: in-flight rows
+        // are `Downloading` (status only — NOT a mirrored aggregate %).
         let mut st = WizardState::default();
         let asset = |label: &str, src: &str| crate::app::state::Step2UpdateAsset {
             game_tab: "BGEE".to_string(),
@@ -1288,10 +1401,10 @@ mod tests {
         st.step2.update_selected_extracted_sources = vec!["EET -> C:/m/EET".to_string()];
         // cdtweaks downloaded but not extracted ⇒ Extracting.
         // stratagems / spell_rev not downloaded; a download is running ⇒
-        // stratagems shows Downloading <agg>, spell_rev too (no per-asset
-        // %, both mirror the aggregate).
+        // both `Downloading` (status only — NO per-row %, NO 51-identical-%
+        // confusion).
         st.step2.update_selected_download_running = true;
-        st.step2.scan_status = "Downloading updates: 2/4".to_string(); // → 50%
+        st.step2.scan_status = "Downloading updates: 2/4".to_string();
 
         let p = DownloadProgress::from_wizard_state(&st);
         assert_eq!(p.rows.len(), 4);
@@ -1304,13 +1417,14 @@ mod tests {
         );
         assert_eq!(
             p.rows[2].status,
-            ModDownloadStatus::Downloading { progress: 50 },
-            "in-flight row mirrors BIO's parsed aggregate %"
+            ModDownloadStatus::Downloading,
+            "D4: in-flight row is status-only Downloading (no fabricated %)"
         );
-        assert_eq!(
-            p.rows[3].status,
-            ModDownloadStatus::Downloading { progress: 50 }
-        );
+        assert_eq!(p.rows[3].status, ModDownloadStatus::Downloading);
+        // The two in-flight rows are byte-identical in status (no
+        // per-row-% divergence) — exactly the "51 identical 6%" confusion
+        // the redesign removes (now they are an honest plain "downloading").
+        assert_eq!(p.rows[2].status, p.rows[3].status);
 
         // Not running, nothing downloaded ⇒ all Queued.
         let mut idle = WizardState::default();
@@ -1318,8 +1432,7 @@ mod tests {
         let q = DownloadProgress::from_wizard_state(&idle);
         assert_eq!(q.rows[0].status, ModDownloadStatus::Queued);
 
-        // No resolved assets ⇒ empty grid (the chassis' honest empty
-        // state; never auto-advances).
+        // No resolved assets ⇒ empty grid (honest empty state).
         let empty = DownloadProgress::from_wizard_state(&WizardState::default());
         assert!(empty.rows.is_empty());
         assert!(!empty.all_staged());

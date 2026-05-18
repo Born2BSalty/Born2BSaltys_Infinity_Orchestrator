@@ -20,11 +20,33 @@
 //     here and this is what "scan mods folder" reads. Removed on a clean
 //     successful install (`cleanup_per_install_mods_folder`); a failed /
 //     cancelled install leaves it for diagnosis/resume.
-//   - **#2 `-u` per-component logs** — `<dest>/weidu_component_logs`, with
-//     `weidu_log_log_component = true` (and `weidu_log_mode_enabled` stays
-//     BIO's default `true`). BIO derives `-u` from `weidu_log_folder` +
-//     `weidu_log_log_component` (`state_validation_paths.rs:77-92`); the
-//     user does not configure the path (SPEC §13.12 #2).
+//   - **#2 `-u` per-component logs** —
+//     `%APPDATA%\bio\modlists\<id>\weidu_component_logs` (the per-modlist
+//     **appdata** dir that already holds `workspace.json`, resolved via
+//     `registry::store_workspace::modlist_data_dir` — **NOT** the user's
+//     destination), with `weidu_log_log_component = true` (and
+//     `weidu_log_mode_enabled` stays BIO's default `true`). BIO derives
+//     `-u` from `weidu_log_folder` + `weidu_log_log_component`
+//     (`state_validation_paths.rs:77-92`); the user does not configure the
+//     path (SPEC §13.12 #2).
+//
+//     **Why this dir — and ONLY this dir — moved out of the destination
+//     (user-approved Fix A, 2026-05-18).** BIO's `-u`-mode preflight
+//     (`state_validation_paths.rs:84-92`) rejects a `weidu_log_folder`
+//     containing a space ("WeiDU log folder in -u mode cannot contain
+//     spaces on this backend"). Destinations are user-free-form (e.g.
+//     `…\test oli rp`), so `<dest>/weidu_component_logs` inherits any space
+//     in the destination ⇒ the preflight fails ⇒ auto-build stops ⇒ a
+//     permanent inert 0/0. The per-modlist appdata dir is program-
+//     controlled (`%APPDATA%\bio\modlists\<id>` — `<id>` is a generated
+//     12-char ULID-style token, `%APPDATA%` is `…\Roaming\…`, none of
+//     which contain spaces on a sane Windows profile), so the `-u` dir
+//     gets a no-space anchor while the modlist's reproducibility data
+//     (`workspace.json`) already lives in the same place. **Premise-checked
+//     (run report):** `run_path_check` has exactly ONE no-space-class
+//     preflight and it is `weidu_log_folder`-only — the Mods folder, the
+//     WeiDU-log SOURCE folders, and the game-clone dirs are NOT
+//     space-restricted, so they all correctly stay in the destination.
 //   - **WeiDU-log SOURCE folders** (§13.12a per-install derived set) —
 //     `<dest>/weidu_log_source/bgee` + `<dest>/weidu_log_source/bg2ee`.
 //     The share-code importer (`modlist_share.rs`
@@ -87,7 +109,11 @@ use crate::registry::model::Game;
 pub const MODS_DIRNAME: &str = "mods";
 
 /// The fixed per-install **`-u` per-component WeiDU log** folder name
-/// (SPEC §13.12 #2). `<destination>/weidu_component_logs`.
+/// (SPEC §13.12 #2). Joined onto the per-modlist **appdata** dir
+/// (`%APPDATA%\bio\modlists\<id>\weidu_component_logs`) — **not** the
+/// destination — because WeiDU's `-u` backend forbids spaces and the
+/// destination is user-free-form (user-approved Fix A; see the module
+/// header). Resolved via `registry::store_workspace::modlist_data_dir`.
 pub const WEIDU_COMPONENT_LOGS_DIRNAME: &str = "weidu_component_logs";
 
 /// The fixed per-install **WeiDU-log SOURCE** parent folder name
@@ -187,19 +213,53 @@ impl PerInstallDirs {
     }
 }
 
-/// Resolve the per-install directory set for `destination` + `game`
-/// (pure — no disk I/O, no state mutation; the `Step1State` write +
-/// `fs::create_dir_all` are [`derive_per_install_dirs`]).
+/// Resolve the per-install directory set for `modlist_id` + `destination`
+/// + `game` (pure — no disk I/O, no state mutation; the `Step1State` write
+/// + `fs::create_dir_all` are [`derive_per_install_dirs`]).
 ///
-/// `destination` is the modlist's `ModlistEntry.destination_folder`.
-/// Per SPEC §13.12a everything lives inside it with the fixed §13.12
-/// #2/#3/#4 names; the WeiDU-log source folders are two phase subfolders
-/// of `weidu_log_source/`.
+/// `destination` is the modlist's `ModlistEntry.destination_folder`;
+/// `modlist_id` is the registry entry id (the same id `workspace.json` is
+/// keyed by). Per SPEC §13.12a the Mods folder, the WeiDU-log SOURCE
+/// folders, and the game-clone dirs live **inside the destination** with
+/// the fixed §13.12 #3/#4 names; the **`-u` `weidu_component_logs` dir is
+/// the lone exception** — it resolves to the per-modlist **appdata** dir
+/// (`%APPDATA%\bio\modlists\<id>\weidu_component_logs`, via
+/// `registry::store_workspace::modlist_data_dir` — the SAME resolver that
+/// yields `workspace.json`'s parent) so WeiDU's no-space `-u` preflight is
+/// not defeated by a space in the user's free-form destination
+/// (user-approved Fix A — see the module header).
 #[must_use]
-pub fn resolve(destination: &str, game: Game) -> PerInstallDirs {
+pub fn resolve(modlist_id: &str, destination: &str, game: Game) -> PerInstallDirs {
+    // SPEC §13.12 #2 / §13.12a + Fix A: the `-u` `weidu_component_logs` dir
+    // is the ONLY per-install dir NOT under the destination — it lives in
+    // the per-modlist appdata dir (no-space, program-controlled) alongside
+    // `workspace.json`. Resolve that dir via the **canonical**
+    // `registry::store_workspace::modlist_data_dir` (the SAME resolver that
+    // yields `workspace.json`'s parent) — never hand-join `%APPDATA%` (the
+    // brief's hard constraint). The pure path-join is factored into
+    // [`resolve_with_data_dir`] so tests can exercise the relocation logic
+    // against a throwaway temp data-dir without touching the real
+    // `%APPDATA%\bio\` (DATA-LOSS-safe by construction).
+    let modlist_data_dir = crate::registry::store_workspace::modlist_data_dir(modlist_id);
+    resolve_with_data_dir(&modlist_data_dir, destination, game)
+}
+
+/// Pure core of [`resolve`]: given the **already-resolved per-modlist
+/// appdata data dir** (`<app_config_dir>/modlists/<id>/`) and the
+/// destination, compute the per-install dir set. The `-u`
+/// `weidu_component_logs` dir is `<modlist_data_dir>/weidu_component_logs`
+/// (Fix A — no-space anchor); every other per-install dir is under
+/// `destination`. No disk I/O, no `app_config_dir()` call ⇒ tests pass a
+/// temp `modlist_data_dir` and never bind the real `%APPDATA%\bio\`.
+#[must_use]
+pub fn resolve_with_data_dir(
+    modlist_data_dir: &Path,
+    destination: &str,
+    game: Game,
+) -> PerInstallDirs {
     let dest = Path::new(destination.trim());
     let mods_folder = dest.join(MODS_DIRNAME);
-    let weidu_component_logs = dest.join(WEIDU_COMPONENT_LOGS_DIRNAME);
+    let weidu_component_logs = modlist_data_dir.join(WEIDU_COMPONENT_LOGS_DIRNAME);
     let weidu_log_source_root = dest.join(WEIDU_LOG_SOURCE_DIRNAME);
     let weidu_log_source_bgee = weidu_log_source_root.join(WEIDU_LOG_SOURCE_BGEE_SUBDIR);
     let weidu_log_source_bg2ee = weidu_log_source_root.join(WEIDU_LOG_SOURCE_BG2EE_SUBDIR);
@@ -272,8 +332,49 @@ pub fn resolve(destination: &str, game: Game) -> PerInstallDirs {
 /// (single-game `bgee/bg2ee_log_folder` AND EET `eet_*_log_folder`)
 /// because the importer/applier branch on the post-import payload game,
 /// not the `game` arg here.
+///
+/// `modlist_id` is the registry entry id. It anchors **only** the `-u`
+/// `weidu_component_logs` dir to the per-modlist appdata dir
+/// (`%APPDATA%\bio\modlists\<id>\weidu_component_logs` — the no-space,
+/// program-controlled Fix-A relocation; every other per-install dir still
+/// derives from `destination`). It must be the **same id** the modlist's
+/// `workspace.json` is keyed by, so the `-u` logs sit beside the
+/// reproducibility data. The caller supplies it from whichever anchor it
+/// owns (the Workspace path's `modlist_id`; the Reinstall path's
+/// `pending_reinstall_id`; the fresh Install-Modlist-paste path mints it
+/// once and threads the same id here and into the registration — see the
+/// run-report PLAN GAP).
 pub fn derive_per_install_dirs(
     wizard_state_step1: &mut Step1State,
+    modlist_id: &str,
+    destination: &str,
+    game: Game,
+) -> Result<PerInstallDirs, String> {
+    if modlist_id.trim().is_empty() {
+        return Err(
+            "modlist id is empty — cannot resolve the per-modlist appdata `-u` log dir \
+             (SPEC §13.12 #2 / Fix A)"
+                .to_string(),
+        );
+    }
+    // Canonical per-modlist appdata data dir (the SAME resolver that yields
+    // `workspace.json`'s parent — never hand-join `%APPDATA%`). The pure
+    // I/O + `Step1State`-write core is [`derive_per_install_dirs_with_data_
+    // dir`] so tests inject a temp data dir (DATA-LOSS-safe — no real
+    // `%APPDATA%\bio\` write).
+    let modlist_data_dir = crate::registry::store_workspace::modlist_data_dir(modlist_id);
+    derive_per_install_dirs_with_data_dir(wizard_state_step1, &modlist_data_dir, destination, game)
+}
+
+/// Pure I/O + `Step1State`-write core of [`derive_per_install_dirs`]: takes
+/// the **already-resolved per-modlist appdata data dir** so it never calls
+/// `app_config_dir()` (tests pass a throwaway temp dir ⇒ the relocated `-u`
+/// `weidu_component_logs` dir + every other per-install dir land under
+/// temp paths, never the real `%APPDATA%\bio\`). Production reaches this
+/// only through [`derive_per_install_dirs`] (canonical resolver).
+pub fn derive_per_install_dirs_with_data_dir(
+    wizard_state_step1: &mut Step1State,
+    modlist_data_dir: &Path,
     destination: &str,
     game: Game,
 ) -> Result<PerInstallDirs, String> {
@@ -282,7 +383,7 @@ pub fn derive_per_install_dirs(
             "destination folder is empty — cannot derive per-install directories".to_string(),
         );
     }
-    let dirs = resolve(destination, game);
+    let dirs = resolve_with_data_dir(modlist_data_dir, destination, game);
 
     // Create every per-install dir (idempotent; a re-attempt / resume
     // re-creates harmlessly). The destination itself is the user's chosen
@@ -299,7 +400,13 @@ pub fn derive_per_install_dirs(
     // SPEC §13.12a Mods folder — extract/stage + scan target.
     wizard_state_step1.mods_folder = path_string(&dirs.mods_folder);
 
-    // SPEC §13.12 #2 `-u` — per-component logs dir, always ON.
+    // SPEC §13.12 #2 `-u` — per-component logs dir, always ON. Points at
+    // the per-modlist APPDATA dir (`%APPDATA%\bio\modlists\<id>\
+    // weidu_component_logs`), NOT the destination (Fix A — WeiDU's `-u`
+    // no-space preflight `state_validation_paths.rs:84-92` would reject a
+    // space-containing destination; the appdata path is program-controlled
+    // and space-free). `resolve` already routed `dirs.weidu_component_logs`
+    // through `modlist_data_dir(modlist_id)`.
     wizard_state_step1.weidu_log_log_component = true;
     wizard_state_step1.weidu_log_folder = path_string(&dirs.weidu_component_logs);
 
@@ -435,8 +542,10 @@ mod tests {
 
     fn td() -> std::path::PathBuf {
         // DATA-LOSS-safe: a unique temp path; this module never binds the
-        // real `%APPDATA%\bio\` (it derives dirs under an arbitrary
-        // destination — here a throwaway temp dir).
+        // real `%APPDATA%\bio\` (every test goes through the
+        // `_with_data_dir` cores with a throwaway temp data dir + a
+        // throwaway temp destination — `app_config_dir()` is never called,
+        // so `cargo test --lib` cannot touch the user's `%APPDATA%\bio\`).
         use std::sync::atomic::{AtomicU64, Ordering};
         static C: AtomicU64 = AtomicU64::new(0);
         std::env::temp_dir().join(format!(
@@ -446,19 +555,47 @@ mod tests {
         ))
     }
 
+    /// A throwaway temp **per-modlist data dir** — what
+    /// `registry::store_workspace::modlist_data_dir(id)` resolves to in
+    /// production (`%APPDATA%\bio\modlists\<id>\`), here a temp path so the
+    /// Fix-A `-u`-dir relocation is exercised WITHOUT writing the real
+    /// config dir (DATA-LOSS-safe). The `pure-core _with_data_dir` entry
+    /// points take this explicitly so no test ever calls `app_config_dir()`.
+    fn dd() -> std::path::PathBuf {
+        td().join("modlists").join("TESTMODLISTID")
+    }
+
     #[test]
     fn resolve_eet_uses_two_fixed_clone_dirs_no_single_game() {
         // SPEC §13.12 #3: EET clones to the BGEE-named + BG2EE-named dirs
         // (verbatim fixed names) inside the destination; no `-g` dir.
-        let d = resolve(r"C:\games\my-eet", Game::EET);
+        let data = dd();
+        let d = resolve_with_data_dir(&data, r"C:\games\my-eet", Game::EET);
         let (pre, fin) = d.eet_clone_dirs.expect("EET has two clone dirs");
         assert!(pre.ends_with(BGEE_CLONE_DIRNAME));
         assert!(fin.ends_with(BG2EE_CLONE_DIRNAME));
         assert_eq!(d.single_game_clone_dir, None);
+        // Mods + clone + WeiDU-log SOURCE dirs stay under the destination.
+        assert!(d.mods_folder.starts_with(r"C:\games\my-eet"));
         assert!(d.mods_folder.ends_with(MODS_DIRNAME));
+        // ── Fix A: the `-u` `weidu_component_logs` dir is the LONE per-
+        //    install dir NOT under the destination — it is under the
+        //    per-modlist appdata data dir (`modlist_data_dir(id)`), so
+        //    WeiDU's no-space `-u` preflight cannot be defeated by a space
+        //    in the user's free-form destination. ──
         assert!(
             d.weidu_component_logs
                 .ends_with(WEIDU_COMPONENT_LOGS_DIRNAME)
+        );
+        assert!(
+            d.weidu_component_logs.starts_with(&data),
+            "Fix A: -u dir under the per-modlist appdata data dir ({}), got {}",
+            data.display(),
+            d.weidu_component_logs.display()
+        );
+        assert!(
+            !d.weidu_component_logs.starts_with(r"C:\games\my-eet"),
+            "Fix A: the -u dir must NOT be under the destination"
         );
     }
 
@@ -466,15 +603,18 @@ mod tests {
     fn resolve_single_game_names_match_game_no_eet() {
         // SPEC §13.12 #4: one `-g` clone dir named per the game; no EET
         // `-p`/`-n` dirs.
+        let data = dd();
         for (game, name) in [
             (Game::BGEE, BGEE_CLONE_DIRNAME),
             (Game::BG2EE, BG2EE_CLONE_DIRNAME),
             (Game::IWDEE, IWDEE_CLONE_DIRNAME),
         ] {
-            let d = resolve("/games/x", game);
+            let d = resolve_with_data_dir(&data, "/games/x", game);
             assert_eq!(d.eet_clone_dirs, None, "{game:?} has no EET dirs");
             let g = d.single_game_clone_dir.expect("single-game clone dir");
             assert!(g.ends_with(name), "{game:?} → {name}");
+            // Fix A: -u dir under the appdata data dir regardless of game.
+            assert!(d.weidu_component_logs.starts_with(&data));
         }
     }
 
@@ -482,6 +622,7 @@ mod tests {
     fn derive_eet_forces_p_n_flags_and_creates_dirs_leaving_source_untouched() {
         let dest = td();
         let dest_s = dest.to_string_lossy().into_owned();
+        let data = dd();
         let mut step1 = Step1State {
             // Source folders come from Settings → Paths — must survive.
             bgee_game_folder: r"S:\src\BGEE".to_string(),
@@ -493,7 +634,8 @@ mod tests {
             ..Default::default()
         };
 
-        let dirs = derive_per_install_dirs(&mut step1, &dest_s, Game::EET).expect("derive EET");
+        let dirs = derive_per_install_dirs_with_data_dir(&mut step1, &data, &dest_s, Game::EET)
+            .expect("derive EET");
 
         // #3 flags forced ON; source folders untouched.
         assert!(step1.new_pre_eet_dir_enabled);
@@ -514,23 +656,31 @@ mod tests {
             dirs.eet_clone_dirs.as_ref().unwrap().1.to_string_lossy()
         );
         assert_eq!(step1.mods_folder, dest.join(MODS_DIRNAME).to_string_lossy());
-        // #2 `-u` forced ON + dir under destination.
+        // #2 `-u` forced ON. Fix A: `weidu_log_folder` is set to the
+        // per-modlist APPDATA dir (no-space), NOT the destination.
         assert!(step1.weidu_log_log_component);
         assert_eq!(
             step1.weidu_log_folder,
-            dest.join(WEIDU_COMPONENT_LOGS_DIRNAME).to_string_lossy()
+            data.join(WEIDU_COMPONENT_LOGS_DIRNAME).to_string_lossy(),
+            "Fix A: -u dir = <modlist appdata data dir>/weidu_component_logs"
+        );
+        assert!(
+            !step1.weidu_log_folder.starts_with(&dest_s),
+            "Fix A: the -u dir must not be inside the (space-prone) destination"
         );
         for d in dirs.all_dirs() {
             assert!(d.exists(), "dir created: {}", d.display());
         }
 
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]
     fn derive_single_game_forces_g_flag_and_clears_stale_eet() {
         let dest = td();
         let dest_s = dest.to_string_lossy().into_owned();
+        let data = dd();
         let mut step1 = Step1State {
             bgee_game_folder: r"S:\src\BGEE".to_string(),
             // Stale EET leftovers — must be cleared for a single-game
@@ -541,7 +691,8 @@ mod tests {
             ..Default::default()
         };
 
-        let dirs = derive_per_install_dirs(&mut step1, &dest_s, Game::BGEE).expect("derive BGEE");
+        let dirs = derive_per_install_dirs_with_data_dir(&mut step1, &data, &dest_s, Game::BGEE)
+            .expect("derive BGEE");
 
         assert!(step1.generate_directory_enabled, "#4 -g forced ON");
         assert!(
@@ -556,11 +707,14 @@ mod tests {
                 .unwrap()
                 .to_string_lossy()
         );
+        // Fix A: -u dir under the appdata data dir, not the destination.
+        assert!(dirs.weidu_component_logs.starts_with(&data));
         for d in dirs.all_dirs() {
             assert!(d.exists());
         }
 
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]
@@ -571,8 +725,10 @@ mod tests {
         for game in [Game::BGEE, Game::BG2EE, Game::IWDEE, Game::EET] {
             let dest = td();
             let dest_s = dest.to_string_lossy().into_owned();
+            let data = dd();
             let mut step1 = Step1State::default();
-            derive_per_install_dirs(&mut step1, &dest_s, game).expect("derive");
+            derive_per_install_dirs_with_data_dir(&mut step1, &data, &dest_s, game)
+                .expect("derive");
             let eet_on = step1.new_pre_eet_dir_enabled && step1.new_eet_dir_enabled;
             let single_on = step1.generate_directory_enabled;
             assert!(
@@ -580,13 +736,115 @@ mod tests {
                 "{game:?}: exactly one clone mode must be ON (no-clone never set)"
             );
             let _ = std::fs::remove_dir_all(&dest);
+            let _ = std::fs::remove_dir_all(&data);
         }
     }
 
     #[test]
     fn empty_destination_is_an_error() {
         let mut step1 = Step1State::default();
-        assert!(derive_per_install_dirs(&mut step1, "   ", Game::EET).is_err());
+        let data = dd();
+        assert!(
+            derive_per_install_dirs_with_data_dir(&mut step1, &data, "   ", Game::EET).is_err()
+        );
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn empty_modlist_id_is_an_error() {
+        // Fix A: the `-u` dir is keyed by the modlist id (its appdata data
+        // dir) — an empty id cannot resolve it, so `derive_per_install_dirs`
+        // (the canonical entry that resolves the id → data dir) rejects it.
+        let mut step1 = Step1State::default();
+        let r = derive_per_install_dirs(&mut step1, "   ", r"C:\some\dest", Game::EET);
+        assert!(
+            r.is_err(),
+            "empty modlist id must error (SPEC §13.12 #2 / Fix A)"
+        );
+        assert!(r.unwrap_err().contains("modlist id is empty"));
+    }
+
+    #[test]
+    fn fix_a_space_containing_destination_yields_space_free_minus_u_dir() {
+        // THE Fix-A acceptance (the user's empirical bug): a destination
+        // containing a space (e.g. `…\test oli rp`) previously produced
+        // `<dest>/weidu_component_logs` — a space-containing `-u` path that
+        // BIO's no-space `-u` preflight (`state_validation_paths.rs:84-92`)
+        // rejects, stopping auto-build → permanent inert 0/0. After Fix A
+        // the `-u` dir is `<modlist appdata data dir>/weidu_component_logs`
+        // — the data dir is program-controlled (no spaces), so the `-u`
+        // path is space-free even when the destination has a space.
+        let dest_with_space = r"C:\Games\test oli rp";
+        // A realistic, space-free per-modlist appdata data dir (what
+        // `modlist_data_dir(id)` yields under `%APPDATA%\bio\modlists\<id>`).
+        let space_free_data = std::env::temp_dir()
+            .join("bio_appdata_modlists")
+            .join("ABCDEFGHIJKL");
+        let d = resolve_with_data_dir(&space_free_data, dest_with_space, Game::EET);
+
+        // The destination's space is irrelevant to the -u dir now.
+        assert!(
+            !d.weidu_component_logs.to_string_lossy().contains(' '),
+            "Fix A: the -u dir is space-free ({}) even with a space-containing destination",
+            d.weidu_component_logs.display()
+        );
+        assert!(
+            d.weidu_component_logs.starts_with(&space_free_data),
+            "the -u dir resolves under the per-modlist appdata data dir, not the destination"
+        );
+        assert!(
+            !d.weidu_component_logs.starts_with(dest_with_space),
+            "the -u dir must NOT be under the space-prone destination"
+        );
+
+        // BIO's exact `-u` no-space preflight (replicated verbatim from
+        // `state_validation_paths.rs:84-92`) must now PASS for the derived
+        // `weidu_log_folder`. Pre-Fix-A this Errd for a space destination.
+        let mut step1 = Step1State::default();
+        let dd_dir = dd();
+        derive_per_install_dirs_with_data_dir(&mut step1, &dd_dir, dest_with_space, Game::EET)
+            .expect("derive (dirs land under temp paths — DATA-LOSS-safe)");
+        let log_dir = step1.weidu_log_folder.trim();
+        assert!(
+            !log_dir.is_empty() && !log_dir.contains(' '),
+            "BIO's -u no-space preflight would now PASS (log dir {log_dir:?} is space-free)"
+        );
+        assert!(
+            step1.weidu_log_log_component,
+            "#2 `-u` per-component logging stays forced ON"
+        );
+        let _ = std::fs::remove_dir_all(&dd_dir);
+    }
+
+    #[test]
+    fn weidu_log_source_dirs_still_stay_in_the_destination_after_fix_a() {
+        // Fix A relocates ONLY the `-u` `weidu_component_logs` dir. The
+        // WeiDU-log SOURCE folders are a DIFFERENT code path (not subject to
+        // the no-space `-u` preflight — premise-checked) and MUST stay
+        // inside the destination (committed f84fdcb behavior — explicitly
+        // out of Fix-A scope).
+        let dest = td();
+        let dest_s = dest.to_string_lossy().into_owned();
+        let data = dd();
+        let mut s = Step1State::default();
+        let dirs = derive_per_install_dirs_with_data_dir(&mut s, &data, &dest_s, Game::EET)
+            .expect("derive");
+        assert!(
+            dirs.weidu_log_source_bgee.starts_with(&dest),
+            "WeiDU-log SOURCE (BGEE) stays in the destination (NOT relocated)"
+        );
+        assert!(
+            dirs.weidu_log_source_bg2ee.starts_with(&dest),
+            "WeiDU-log SOURCE (BG2EE) stays in the destination (NOT relocated)"
+        );
+        assert!(
+            s.bgee_log_folder.starts_with(&dest_s) || s.eet_bgee_log_folder.starts_with(&dest_s),
+            "the WeiDU-log SOURCE Step1State fields still point inside the destination"
+        );
+        // And the -u dir is the lone exception (under the data dir).
+        assert!(dirs.weidu_component_logs.starts_with(&data));
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     // ───── SPEC §13.12a WeiDU-log SOURCE folders (the Install-Modlist-
@@ -603,7 +861,7 @@ mod tests {
         // two phase folders must be DISTINCT (an EET import writes a
         // BGEE-phase AND a BG2EE-phase log — a shared folder ⇒ the second
         // clobbers the first).
-        let d = resolve(r"C:\games\m", Game::EET);
+        let d = resolve_with_data_dir(&dd(), r"C:\games\m", Game::EET);
         assert!(
             d.weidu_log_source_bgee.ends_with(format!(
                 "{WEIDU_LOG_SOURCE_DIRNAME}/{WEIDU_LOG_SOURCE_BGEE_SUBDIR}"
@@ -697,8 +955,10 @@ mod tests {
             {
                 let dest = td();
                 let dest_s = dest.to_string_lossy().into_owned();
+                let data = dd();
                 let mut s = Step1State::default();
-                derive_per_install_dirs(&mut s, &dest_s, Game::BGEE).expect("derive BGEE");
+                derive_per_install_dirs_with_data_dir(&mut s, &data, &dest_s, Game::BGEE)
+                    .expect("derive BGEE");
                 // Simulate `import_modlist_share_code`'s post-derive state
                 // handling: it sets game/mode from the payload then
                 // `sync_install_mode_flags()` (recomputes `have_weidu_logs`).
@@ -719,13 +979,16 @@ mod tests {
                     w.display()
                 );
                 let _ = std::fs::remove_dir_all(&dest);
+                let _ = std::fs::remove_dir_all(&data);
             }
             // ── EET (BGEE-phase AND BG2EE-phase, distinct, no clobber) ──
             {
                 let dest = td();
                 let dest_s = dest.to_string_lossy().into_owned();
+                let data = dd();
                 let mut s = Step1State::default();
-                derive_per_install_dirs(&mut s, &dest_s, Game::EET).expect("derive EET");
+                derive_per_install_dirs_with_data_dir(&mut s, &data, &dest_s, Game::EET)
+                    .expect("derive EET");
                 s.game_install = "EET".to_string();
                 s.install_mode = mode.to_string();
                 s.sync_install_mode_flags();
@@ -746,6 +1009,7 @@ mod tests {
                 assert!(wb.starts_with(dest.join(WEIDU_LOG_SOURCE_DIRNAME)));
                 assert!(w2.starts_with(dest.join(WEIDU_LOG_SOURCE_DIRNAME)));
                 let _ = std::fs::remove_dir_all(&dest);
+                let _ = std::fs::remove_dir_all(&data);
             }
         }
     }
@@ -760,15 +1024,19 @@ mod tests {
         // reads them).
         let dest = td();
         let dest_s = dest.to_string_lossy().into_owned();
+        let data = dd();
         let mut s = Step1State::default(); // build_from_scanned_mods
-        let dirs = derive_per_install_dirs(&mut s, &dest_s, Game::EET).expect("derive");
+        let dirs = derive_per_install_dirs_with_data_dir(&mut s, &data, &dest_s, Game::EET)
+            .expect("derive");
         assert!(
             !s.have_weidu_logs,
             "build_from_scanned_mods ⇒ have_weidu_logs false (mode-consistent)"
         );
         // Exact-log mode ⇒ true.
+        let data2 = dd();
         let mut s2 = Step1State::default();
-        derive_per_install_dirs(&mut s2, &dest_s, Game::BGEE).expect("derive");
+        derive_per_install_dirs_with_data_dir(&mut s2, &data2, &dest_s, Game::BGEE)
+            .expect("derive");
         s2.install_mode = Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
         s2.sync_install_mode_flags();
         assert!(
@@ -783,7 +1051,17 @@ mod tests {
                 .contains(&dirs.weidu_log_source_bgee.as_path()),
             "the WeiDU-log source folders must be in the created set"
         );
+        // Fix A: the relocated `-u` dir was also created (under the data
+        // dir) — `all_dirs()` includes it; `create_dir_all` made the
+        // `<temp>/modlists/<id>/` parent chain.
+        assert!(
+            dirs.weidu_component_logs.exists(),
+            "the relocated -u dir is created under the per-modlist data dir"
+        );
+        assert!(dirs.weidu_component_logs.starts_with(&data));
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&data2);
     }
 
     #[test]
@@ -797,8 +1075,10 @@ mod tests {
         // — the derivation runs BEFORE the import by contract).
         let dest = td();
         let dest_s = dest.to_string_lossy().into_owned();
+        let data = dd();
         let mut s = crate::app::state::WizardState::default();
-        derive_per_install_dirs(&mut s.step1, &dest_s, Game::EET).expect("derive");
+        derive_per_install_dirs_with_data_dir(&mut s.step1, &data, &dest_s, Game::EET)
+            .expect("derive");
         let snap = (
             s.step1.bgee_log_folder.clone(),
             s.step1.bg2ee_log_folder.clone(),
@@ -832,14 +1112,17 @@ mod tests {
              clone + sync_install_mode_flags + reset_workflow_keep_step1"
         );
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]
     fn cleanup_removes_only_the_mods_folder() {
         let dest = td();
         let dest_s = dest.to_string_lossy().into_owned();
+        let data = dd();
         let mut step1 = Step1State::default();
-        let dirs = derive_per_install_dirs(&mut step1, &dest_s, Game::BGEE).expect("derive");
+        let dirs = derive_per_install_dirs_with_data_dir(&mut step1, &data, &dest_s, Game::BGEE)
+            .expect("derive");
         assert!(dirs.mods_folder.exists());
         let clone = dirs.single_game_clone_dir.clone().unwrap();
         assert!(clone.exists());
@@ -854,10 +1137,21 @@ mod tests {
             clone.exists(),
             "the cloned game folder (#4) is the install product — must NOT be removed"
         );
+        // Fix A: the relocated `-u` dir lives in the per-modlist APPDATA
+        // dir, NOT under the destination — `cleanup_per_install_mods_folder`
+        // only removes `<dest>/mods`, so the `-u` logs survive the clean-up
+        // (they were never in the destination to begin with). The previous
+        // `<dest>/weidu_component_logs` was likewise not removed; this just
+        // confirms the relocated path is also untouched.
+        assert!(
+            dirs.weidu_component_logs.exists(),
+            "the relocated -u dir (appdata, not <dest>) is untouched by Mods-folder cleanup"
+        );
         // Idempotent: a second cleanup on an already-removed folder is a
         // silent no-op (not an error).
         cleanup_per_install_mods_folder(&dest_s);
 
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
     }
 }

@@ -79,6 +79,10 @@ enum CardIntent {
     CopyImportCode(String),
     /// Open the install folder in the OS file manager (P5.T17 / §3.2).
     OpenInstallFolder(String),
+    /// Open the per-modlist appdata data folder
+    /// (`%APPDATA%\bio\modlists\<id>\`) in the OS file manager (T-B / §3 —
+    /// both in-progress and installed cards).
+    OpenDataFolder(String),
     /// Arm the Delete confirm dialog (P5.T7 / §3.1).
     RequestDelete(String),
     /// Arm the Reinstall confirm dialog (P5.T18 / §3.1).
@@ -255,6 +259,7 @@ fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, in
             }
         }
         CardIntent::OpenInstallFolder(id) => open_install_folder_for(orchestrator, &id),
+        CardIntent::OpenDataFolder(id) => open_data_folder_for(orchestrator, &id),
         CardIntent::RequestDelete(id) => {
             orchestrator.home_screen_state.delete_target = Some(id);
         }
@@ -273,6 +278,21 @@ fn open_install_folder_for(orchestrator: &mut OrchestratorApp, id: &str) {
         return;
     };
     if let Err(msg) = operations::open_install_folder(&entry) {
+        orchestrator.home_screen_state.toast = Some(ToastMessage::error(msg));
+    }
+}
+
+/// T-B — open the per-modlist appdata data folder
+/// (`%APPDATA%\bio\modlists\<id>\` — holds `workspace.json` + the post-Fix-A
+/// `-u` `weidu_component_logs/`) via the OS file manager. On failure (data
+/// dir not created yet) surface the error in the bottom-of-screen toast in
+/// its error tone — same posture as `open_install_folder_for` (SPEC §3:
+/// never open / recreate a missing folder).
+fn open_data_folder_for(orchestrator: &mut OrchestratorApp, id: &str) {
+    let Some(entry) = orchestrator.registry.find(id).cloned() else {
+        return;
+    };
+    if let Err(msg) = operations::open_modlist_data_folder(&entry) {
         orchestrator.home_screen_state.toast = Some(ToastMessage::error(msg));
     }
 }
@@ -531,6 +551,9 @@ fn render_card_list(
                 // folder` (SPEC §3.2 / HANDOFF M6 — v1 alpha opens the folder).
                 ModlistCardActions::Open | ModlistCardActions::OpenInstallFolder => {
                     intent = Some(CardIntent::OpenInstallFolder(entry.id.clone()));
+                }
+                ModlistCardActions::OpenDataFolder => {
+                    intent = Some(CardIntent::OpenDataFolder(entry.id.clone()));
                 }
                 ModlistCardActions::CopyImportCode => {
                     intent = Some(CardIntent::CopyImportCode(entry.id.clone()));

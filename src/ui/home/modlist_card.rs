@@ -11,10 +11,16 @@
 //     left:  <Label>{name}</Label>
 //            <Label hand style={fontSize:14, color:var(--text-faint)}>{meta}</Label>
 //     right (in-progress): <Btn small primary>resume</Btn> + <Kebab .../>
-//            Kebab: Copy import code / Rename / Delete
+//            Kebab: Copy import code / Open data folder / Rename / Delete
 //     right (installed):   <Btn small>play</Btn> + <Kebab .../>
-//            Kebab: Copy import code / Open install folder / Rename /
-//                   Reinstall / Delete
+//            Kebab: Copy import code / Open install folder / Open data
+//                   folder / Rename / Reinstall / Delete
+//
+// **T-B (SPEC §3):** "Open data folder" is a net-new Kebab action on
+// **both** card states — it opens the per-modlist appdata dir
+// `%APPDATA%\bio\modlists\<id>\` (holds `workspace.json` + the post-Fix-A
+// `-u` `weidu_component_logs/`), distinct from the installed card's "Open
+// install folder" (which opens the on-disk install destination).
 //
 // Per SPEC §3.2 + HANDOFF M6 the installed action button is **`open`** (not
 // the wireframe's `play`) for v1 alpha — there is no game launcher yet, so
@@ -83,6 +89,12 @@ pub enum ModlistCardActions {
     /// Kebab → `Open install folder` (P5.T17). Same effect as the installed
     /// card's `open` button; distinct variant for traceability.
     OpenInstallFolder,
+    /// Kebab → `Open data folder` (T-B / SPEC §3) — opens the per-modlist
+    /// appdata dir `%APPDATA%\bio\modlists\<id>\` (holds `workspace.json` +
+    /// post-Fix-A the `-u` `weidu_component_logs/`). Available on **both**
+    /// in-progress AND installed cards; distinct from `OpenInstallFolder`
+    /// (which opens the destination).
+    OpenDataFolder,
     /// Kebab → `Reinstall` (P5.T18) — opens the danger Reinstall confirm.
     Reinstall,
     /// Kebab → `Delete` (P5.T7) — opens the danger Delete confirm.
@@ -211,6 +223,15 @@ fn render_action_cluster(
                 KebabItem::new("Copy import code", || {
                     picked.set(ModlistCardActions::CopyImportCode);
                 }),
+                // T-B (SPEC §3): "Open data folder" on in-progress cards too
+                // — opens `%APPDATA%\bio\modlists\<id>\` (workspace.json +
+                // the relocated `-u` logs). There is no "Open install
+                // folder" here (in-progress has no completed install), so
+                // this is the only folder affordance on the in-progress
+                // Kebab.
+                KebabItem::new("Open data folder", || {
+                    picked.set(ModlistCardActions::OpenDataFolder);
+                }),
                 // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
@@ -242,6 +263,14 @@ fn render_action_cluster(
                 }),
                 KebabItem::new("Open install folder", || {
                     picked.set(ModlistCardActions::OpenInstallFolder);
+                }),
+                // T-B (SPEC §3): "Open data folder" — sits right after
+                // "Open install folder" so the two folder affordances are
+                // adjacent and clearly distinct (install = the destination;
+                // data = `%APPDATA%\bio\modlists\<id>\`, workspace.json +
+                // the relocated `-u` logs).
+                KebabItem::new("Open data folder", || {
+                    picked.set(ModlistCardActions::OpenDataFolder);
                 }),
                 // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),

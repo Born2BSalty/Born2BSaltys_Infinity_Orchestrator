@@ -90,6 +90,16 @@ pub enum PrepOutcome {
 /// share-code-consuming workflow, run `import_modlist_share_code` and arm
 /// BIO's auto-build pipeline.
 ///
+/// `modlist_id` is the registry entry id; it anchors **only** the `-u`
+/// `weidu_component_logs` dir to the per-modlist appdata dir
+/// (`%APPDATA%\bio\modlists\<id>\weidu_component_logs` — Fix A; every other
+/// per-install dir still derives from `destination`). The caller resolves
+/// it from whatever anchor it owns (Reinstall ⇒ `pending_reinstall_id`; a
+/// fresh Install-Modlist paste ⇒ the id minted once in `render_live` and
+/// threaded to BOTH this fn and `register_and_write_install_start_
+/// artifacts` so the dir and the registered entry share one id — see the
+/// run-report PLAN GAP).
+///
 /// `share_code` is the code to import for a share-code-consuming workflow
 /// (the pasted Install-Modlist code / the Create-import / Load-Draft
 /// code). It is ignored for `FreshCreate` (no import).
@@ -114,6 +124,43 @@ pub enum PrepOutcome {
 /// construction.)
 pub fn prepare_install_dirs_and_maybe_import(
     wizard_state: &mut WizardState,
+    modlist_id: &str,
+    destination: &str,
+    game: Game,
+    workflow: InstallWorkflow,
+    share_code: &str,
+) -> Result<PrepOutcome, String> {
+    // Resolve the per-modlist appdata data dir via the canonical resolver
+    // (Fix A — the `-u` dir's no-space anchor; never hand-join `%APPDATA%`).
+    // The pure core takes it explicitly so the dir-derivation tests stay
+    // DATA-LOSS-safe (temp data dir, no real `%APPDATA%\bio\`).
+    if modlist_id.trim().is_empty() {
+        return Err(
+            "per-install directory derivation failed: modlist id is empty (SPEC §13.12 #2 / \
+             Fix A)"
+                .to_string(),
+        );
+    }
+    let modlist_data_dir = crate::registry::store_workspace::modlist_data_dir(modlist_id);
+    prepare_install_dirs_and_maybe_import_with_data_dir(
+        wizard_state,
+        &modlist_data_dir,
+        destination,
+        game,
+        workflow,
+        share_code,
+    )
+}
+
+/// Pure-data-dir core of [`prepare_install_dirs_and_maybe_import`]: takes
+/// the **already-resolved per-modlist appdata data dir** (Fix A) so it
+/// never calls `app_config_dir()`. Production reaches it only through
+/// [`prepare_install_dirs_and_maybe_import`] (canonical resolver); the
+/// FreshCreate / no-code dir-derivation tests call it with a throwaway
+/// temp data dir + temp destination ⇒ no real `%APPDATA%\bio\` write.
+pub fn prepare_install_dirs_and_maybe_import_with_data_dir(
+    wizard_state: &mut WizardState,
+    modlist_data_dir: &std::path::Path,
     destination: &str,
     game: Game,
     workflow: InstallWorkflow,
@@ -122,10 +169,17 @@ pub fn prepare_install_dirs_and_maybe_import(
     // ── 1. Per-install dirs — ALWAYS (SPEC §13.12a: clone forced for
     //    every install; a fresh Create → New still gets these). Runs
     //    BEFORE import so import's `reset_workflow_keep_step1` keeps the
-    //    derived targets. ──
-    let dirs =
-        per_install_dirs::derive_per_install_dirs(&mut wizard_state.step1, destination, game)
-            .map_err(|err| format!("per-install directory derivation failed: {err}"))?;
+    //    derived targets. The data dir anchors ONLY the `-u`
+    //    `weidu_component_logs` dir (Fix A — WeiDU's `-u` no-space
+    //    preflight would reject a space-containing destination; every other
+    //    per-install dir still derives from `destination`). ──
+    let dirs = per_install_dirs::derive_per_install_dirs_with_data_dir(
+        &mut wizard_state.step1,
+        modlist_data_dir,
+        destination,
+        game,
+    )
+    .map_err(|err| format!("per-install directory derivation failed: {err}"))?;
 
     // ── 2. Import + arm — only for a share-code-consuming workflow. ──
     if !is_share_code_consuming(workflow) {
@@ -330,6 +384,13 @@ mod tests {
         ))
     }
 
+    /// A throwaway temp per-modlist appdata data dir (Fix A — the `-u`
+    /// dir's anchor). Using the `_with_data_dir` core with this keeps the
+    /// dir-derivation tests DATA-LOSS-safe (no real `%APPDATA%\bio\`).
+    fn dd() -> std::path::PathBuf {
+        td().join("modlists").join("TESTMODLISTID")
+    }
+
     #[test]
     fn fresh_create_derives_dirs_no_import_no_arm() {
         // SPEC §13.12a: a fresh Create → New still gets per-install dirs
@@ -337,9 +398,11 @@ mod tests {
         // start_install_requested normally for this arm).
         let dest = td();
         let dest_s = dest.to_string_lossy().into_owned();
+        let data = dd();
         let mut st = WizardState::default();
-        let out = prepare_install_dirs_and_maybe_import(
+        let out = prepare_install_dirs_and_maybe_import_with_data_dir(
             &mut st,
+            &data,
             &dest_s,
             Game::BGEE,
             InstallWorkflow::FreshCreate,
@@ -358,15 +421,24 @@ mod tests {
         // Dirs were still derived (clone forced — SPEC §13.12a).
         assert!(st.step1.generate_directory_enabled);
         assert!(!st.step1.mods_folder.is_empty());
+        // Fix A: the `-u` dir is under the (temp) per-modlist appdata data
+        // dir, not the destination.
+        assert!(
+            std::path::Path::new(st.step1.weidu_log_folder.trim()).starts_with(&data),
+            "Fix A: -u dir under the per-modlist appdata data dir"
+        );
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]
     fn share_code_consuming_without_code_is_error() {
         let dest = td();
+        let data = dd();
         let mut st = WizardState::default();
-        let r = prepare_install_dirs_and_maybe_import(
+        let r = prepare_install_dirs_and_maybe_import_with_data_dir(
             &mut st,
+            &data,
             &dest.to_string_lossy(),
             Game::EET,
             InstallWorkflow::ShareCodeConsuming,
@@ -374,6 +446,7 @@ mod tests {
         );
         assert!(r.is_err(), "share-code-consuming needs a code");
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]
