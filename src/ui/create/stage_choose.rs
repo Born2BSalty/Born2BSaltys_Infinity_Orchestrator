@@ -55,6 +55,53 @@
 //   - Changing the destination resets `destination_choice` to `None`
 //     (`screens.jsx:3776-3779` `handleBrowse` clears `destChoice`).
 //
+// ## Unified form chassis (Fix-Run 5 #4 a–g — user directive: MATCH THE
+//    WIREFRAME)
+//
+// The wireframe is one consistent input chassis: a `1fr auto` name|game row
+// bottom-aligned (`align-items: end`, `screens.jsx:3828`), the destination
+// `FolderInput` (`screens.jsx:91-121`), two equal-height boxes, and a
+// bottom footer. Two tuned px constants are the single shared knob
+// (`feedback_wireframe_look_not_px` — the wireframe governs the look; the
+// exact px is tuned empirically against the real app via these two
+// constants — this is NOT a SPEC change):
+//
+//   - `FORM_ROW_H_PX` — the one shared control height. The modlist-name
+//     input, the destination input, the `browse…` button, and the game
+//     control (the ComboBox frame AND the import-note frame) are all
+//     exactly this tall, so the top-right game control and the bottom-right
+//     browse button share a right edge / vertically align and both inputs
+//     read as the same chassis.
+//   - `RIGHT_COL_W_PX` — the one shared right-column width. The game column
+//     width == the `browse…`-button column width, so the game control and
+//     the browse button line up on a single right edge (wireframe
+//     `gridTemplateColumns: "1fr auto"` — the `auto` column is content-
+//     sized; here both right-edge controls share this one tuned width).
+//
+// Both the name and destination inputs route through the shared
+// `redesign_text_input` primitive with the **same** internal text margin
+// (the wireframe `FolderInput` `padding: 8px 12px`), so they are the same
+// input chassis/size. The name input keeps Poppins (wireframe name `<input>`
+// is Poppins); the destination keeps `firacode_nerd` (the wireframe
+// `FolderInput` is `mono`) — same chassis, wireframe-faithful per-field
+// font. The game ComboBox keeps its redesign-token chrome and `Start →`
+// keeps `workspace_nav_bar::forward_primary_button` styling (it now sits in
+// the shared create-flow footer — see below).
+//
+// ## `Start →` lives in the shared create-flow footer (Fix-Run 5 #4 e)
+//
+// `Start →` is rendered inside `crate::ui::install::sub_flow_footer` (the
+// exact bottom-pinned footer the fork paste/preview/download stages use:
+// 1.5px dashed top rule, `marginTop:20; paddingTop:14`, flush-right
+// primary). The footer is invoked with no Back / no secondary / no hint and
+// a single `PrimaryBtn { label: "Start" }`; its primary `glyph_btn` chassis
+// is **pixel-identical** to `workspace_nav_bar::forward_primary_button`
+// (same accent fill, 2×2 shadow, active-press transform, `firacode_nerd`
+// `→` + `poppins_medium` prose, theme-invariant `#1a2638` text) — so the
+// SPEC §5.1 "styled exactly like the workspace nav-bar forward button"
+// mandate is preserved; only the placement gains the dashed-divider footer
+// chrome (consistent with every other create-flow stage).
+//
 // This renderer is **state-only** (takes `&mut CreateScreenState`, no
 // `OrchestratorApp`) and returns the intent; `page_create` applies the
 // app-level effects (create + registry persist + nav) after the borrow ends
@@ -81,6 +128,7 @@ use eframe::egui;
 use crate::registry::model::Game;
 use crate::ui::create::state_create::{CreateScreenState, StartingPoint};
 use crate::ui::install::destination_not_empty;
+use crate::ui::install::sub_flow_footer::{self, PrimaryBtn};
 use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, redesign_box, redesign_btn, redesign_text_input, render_screen_title,
 };
@@ -89,7 +137,6 @@ use crate::ui::shared::redesign_tokens::{
     redesign_border_strong, redesign_input_bg, redesign_selection_highlight, redesign_shell_bg,
     redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
-use crate::ui::workspace::workspace_nav_bar;
 
 /// What the choose stage wants the dispatcher (`page_create`) to do this
 /// frame. Exactly one intent per click (mutually exclusive).
@@ -114,6 +161,48 @@ pub enum ChooseOutcome {
 /// selection (SPEC §5.1).
 const GAME_OPTIONS: [Game; 4] = [Game::EET, Game::BGEE, Game::BG2EE, Game::IWDEE];
 
+/// **The one shared control height** (Fix-Run 5 #4 a–e). The modlist-name
+/// input, the destination input, the `browse…` button, and the game control
+/// (the ComboBox frame AND the import-note frame) are all exactly this tall
+/// so the top-right game control and the bottom-right browse button share a
+/// right edge and both inputs read as one chassis. Tuned empirically against
+/// the real app (`feedback_wireframe_look_not_px`): the wireframe inputs are
+/// `padding: 8px 12px` on a ~14px line — ~30px box; 30 keeps the dominant
+/// `8px 12px` chassis (everything aligned **up**, not down to the old 26).
+/// NOT a SPEC change — the wireframe governs the look; this is the shared
+/// knob that matches it.
+const FORM_ROW_H_PX: f32 = 30.0;
+
+/// **The one shared right-column width** (Fix-Run 5 #4 a–e). The game column
+/// width == the `browse…`-button column width, so the game control (top
+/// right) and the browse button (bottom right) line up on a single right
+/// edge. Wireframe `gridTemplateColumns: "1fr auto"` — the `auto` column is
+/// content-sized; the user directive makes both right-edge controls share
+/// this one tuned width. Tuned empirically: wide enough for `BG2EE` + the
+/// combo arrow and for `browse…`, both 12px Poppins, with padding (the old
+/// browse was 90; 96 gives both a comfortable fit on a shared edge).
+const RIGHT_COL_W_PX: f32 = 96.0;
+
+/// The shared internal text padding for BOTH form inputs — the wireframe
+/// `FolderInput` `padding: 8px 12px` (`screens.jsx:100`). Using the same
+/// margin on the name input and the destination input is what makes them
+/// read as the same input chassis (same border-hugging `redesign_text_input`
+/// box, same internal padding); only the per-field font differs (Poppins for
+/// the name `<input>`, mono for the `FolderInput`), exactly as the wireframe.
+const FORM_INPUT_MARGIN: egui::Margin = egui::Margin {
+    left: 12,
+    right: 12,
+    top: 8,
+    bottom: 8,
+};
+
+/// Vertical inner padding of the game ComboBox / import-note frames. The
+/// frame's outer box height = inner content + `2 * GAME_FRAME_PAD_Y`; the
+/// inner content is forced to `FORM_ROW_H_PX - 2*GAME_FRAME_PAD_Y` so the
+/// game control is exactly `FORM_ROW_H_PX` tall (same as the inputs + the
+/// browse button — the shared right edge / form-row height).
+const GAME_FRAME_PAD_Y: i8 = 4;
+
 /// Render the choose stage. Mutates `state` (name / game / destination /
 /// destination_choice / starting_point) in place; returns the user's intent.
 pub fn render(
@@ -123,6 +212,60 @@ pub fn render(
 ) -> ChooseOutcome {
     let mut outcome = ChooseOutcome::Stay;
 
+    // ── Bottom-pin the shared create-flow footer (the exact pattern the
+    //    fork stages use: reserve `FOOTER_HEIGHT_PX`, render the page body in
+    //    the remaining height, then the footer last). Keeps `Start →` flush
+    //    to the bottom with the dashed divider above it, consistent with
+    //    every other create-flow stage. ──
+    let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(120.0);
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_width(), body_h),
+        egui::Layout::top_down(egui::Align::Min),
+        |ui| {
+            render_body(ui, palette, state, &mut outcome);
+        },
+    );
+
+    // ── Single primary `Start →` in the shared create-flow footer
+    //    (`sub_flow_footer`: 1.5px dashed top rule, `marginTop:20;
+    //    paddingTop:14`, flush-right primary). No Back / no secondary / no
+    //    hint — just the primary. Its `glyph_btn` chassis is pixel-identical
+    //    to `workspace_nav_bar::forward_primary_button` (SPEC §5.1 — styled
+    //    exactly like the workspace forward button; the one styling source),
+    //    so only the placement gains the footer chrome. Dispatches per the
+    //    selected box. ──
+    let footer = sub_flow_footer::render(
+        ui,
+        palette,
+        None::<sub_flow_footer::BackBtn<'_>>,
+        None::<sub_flow_footer::SecondaryBtn<'_>>,
+        None,
+        PrimaryBtn {
+            label: "Start",
+            disabled: false,
+        },
+    );
+    if footer.primary_clicked {
+        outcome = match state.starting_point {
+            StartingPoint::Scratch => ChooseOutcome::StartScratch,
+            StartingPoint::Import => ChooseOutcome::GoForkPaste,
+        };
+    }
+
+    outcome
+}
+
+/// The Create `choose` page body (everything above the bottom-pinned
+/// footer): the title row, the Setup Box, the `Choose one` header, and the
+/// two selectable boxes. Split out so the footer can be bottom-pinned via
+/// the fork-stage `allocate_ui_with_layout` pattern. `outcome` is threaded
+/// so `load draft` / box-selection intents bubble back to `render`.
+fn render_body(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut CreateScreenState,
+    outcome: &mut ChooseOutcome,
+) {
     // ── Title row: ScreenTitle (left, grows) + `load draft` (right). ──
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
@@ -153,7 +296,7 @@ pub fn render(
             )
             .clicked()
             {
-                outcome = ChooseOutcome::OpenLoadDraft;
+                *outcome = ChooseOutcome::OpenLoadDraft;
             }
         });
     });
@@ -163,21 +306,27 @@ pub fn render(
         ui.spacing_mut().item_spacing.y = 14.0; // wireframe grid `gap: 14`
 
         // Split row: name (flex 1) | game-or-note (auto). Wireframe
-        // `gridTemplateColumns: "1fr auto"; align-items: end`.
+        // `gridTemplateColumns: "1fr auto"; align-items: end` — the game
+        // column == the browse-button column (`RIGHT_COL_W_PX`) so the game
+        // control and the browse button below share one right edge.
+        // **Bottom-align (`align-items: end`):** both columns are one label
+        // line + the same `add_space(4)` + a `FORM_ROW_H_PX`-tall control,
+        // so laid out `horizontal_top` their control bottoms line up.
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = 16.0; // wireframe grid `gap: 16`
 
-            const GAME_COL_W_PX: f32 = 220.0;
-            let name_w = (ui.available_width() - GAME_COL_W_PX - 16.0).max(160.0);
+            let name_w = (ui.available_width() - RIGHT_COL_W_PX - 16.0).max(160.0);
 
-            // ── modlist name (flex 1). ──
+            // ── modlist name (flex 1). Same chassis/size as the destination
+            //    input: shared `redesign_text_input`, shared
+            //    `FORM_INPUT_MARGIN` (wireframe `padding: 8px 12px`), shared
+            //    `FORM_ROW_H_PX`. Poppins font (wireframe name `<input>`). ──
             ui.allocate_ui_with_layout(
                 egui::vec2(name_w, 0.0),
                 egui::Layout::top_down(egui::Align::LEFT),
                 |ui| {
                     field_label(ui, palette, "modlist name");
                     ui.add_space(4.0);
-                    let name_margin = egui::Margin::symmetric(12, 8);
                     // Shared input primitive — border on the OUTER box (the
                     // app-wide indented-input fix).
                     let _resp = redesign_text_input(
@@ -196,21 +345,23 @@ pub fn render(
                                 )
                                 .text_color(redesign_text_primary(palette))
                                 .background_color(redesign_input_bg(palette))
-                                .margin(name_margin),
-                            margin: name_margin,
-                            size: egui::vec2(ui.available_width(), 30.0),
+                                .margin(FORM_INPUT_MARGIN),
+                            margin: FORM_INPUT_MARGIN,
+                            size: egui::vec2(ui.available_width(), FORM_ROW_H_PX),
                             border: None,
                         },
                     );
                 },
             );
 
-            // ── game (auto width). Scratch ⇒ the styled ComboBox; Import ⇒
-            //    a read-only "game comes from the imported modlist" note
-            //    (SPEC §5/§5.3 — the import path derives the game from the
-            //    pasted share code, not a user selection). ──
+            // ── game (RIGHT_COL_W_PX — shares the browse-button right edge).
+            //    Scratch ⇒ the styled ComboBox; Import ⇒ a read-only
+            //    "imported" note (SPEC §5/§5.3 — the import path derives the
+            //    game from the pasted share code, not a user selection).
+            //    Both controls are forced to `FORM_ROW_H_PX` so their bottom
+            //    edge aligns with the name input's. ──
             ui.allocate_ui_with_layout(
-                egui::vec2(GAME_COL_W_PX, 0.0),
+                egui::vec2(RIGHT_COL_W_PX, 0.0),
                 egui::Layout::top_down(egui::Align::LEFT),
                 |ui| {
                     field_label(ui, palette, "game");
@@ -266,9 +417,24 @@ pub fn render(
 
     // ── Two SELECTABLE boxes (grid "1fr 1fr", gap 14). Clicking anywhere on
     //    a box selects it; NO in-box sub-buttons. ──
+    //
+    // Fix-Run 5 #4 f — **equal height**. The wireframe gets equal-height
+    // columns free via CSS grid + `flex:1` on the description; egui sizes
+    // each Box to its own content, so the shorter (left) box was shorter.
+    // Measure BOTH boxes' natural content heights at `card_w` and force
+    // both chassis to the max — if one description wraps to more lines the
+    // other grows to match (the CSS-grid behavior, made explicit for egui).
+    const SCRATCH_TITLE: &str = "New modlist from downloaded mods";
+    const SCRATCH_DESC: &str = "Scan your local mods folder, pick components, reorder, then install. Starts from an empty selection.";
+    const IMPORT_TITLE: &str = "Import and modify another modlist";
+    const IMPORT_DESC: &str = "Paste a share code. BIO downloads the mods, preselects components, applies the order, then drops you on Step 2 to review and adjust.";
+
     let avail_w = ui.available_width();
     let gap = 14.0;
     let card_w = ((avail_w - gap) / 2.0).max(160.0);
+    let box_h = selectable_box_natural_height(ui, card_w, SCRATCH_TITLE, SCRATCH_DESC).max(
+        selectable_box_natural_height(ui, card_w, IMPORT_TITLE, IMPORT_DESC),
+    );
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
 
@@ -276,8 +442,9 @@ pub fn render(
             ui,
             palette,
             card_w,
-            "New modlist from downloaded mods",
-            "Scan your local mods folder, pick components, reorder, then install. Starts from an empty selection.",
+            box_h,
+            SCRATCH_TITLE,
+            SCRATCH_DESC,
             state.starting_point == StartingPoint::Scratch,
             "create_box_scratch",
         ) {
@@ -288,8 +455,9 @@ pub fn render(
             ui,
             palette,
             card_w,
-            "Import and modify another modlist",
-            "Paste a share code. BIO downloads the mods, preselects components, applies the order, then drops you on Step 2 to review and adjust.",
+            box_h,
+            IMPORT_TITLE,
+            IMPORT_DESC,
             state.starting_point == StartingPoint::Import,
             "create_box_import",
         ) {
@@ -297,20 +465,8 @@ pub fn render(
         }
     });
 
-    // ── Single primary `Start →` at the bottom-right, styled EXACTLY like
-    //    the workspace nav-bar forward (`Next →`) button (reused verbatim).
-    //    Dispatches per the selected box. ──
-    ui.add_space(18.0);
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        if workspace_nav_bar::forward_primary_button(ui, palette, "Start").clicked() {
-            outcome = match state.starting_point {
-                StartingPoint::Scratch => ChooseOutcome::StartScratch,
-                StartingPoint::Import => ChooseOutcome::GoForkPaste,
-            };
-        }
-    });
-
-    outcome
+    // (The single primary `Start →` is rendered by the caller (`render`)
+    // inside the shared create-flow footer, bottom-pinned below this body.)
 }
 
 /// A hand-style, muted field label (wireframe `<Label hand color:text-muted
@@ -335,6 +491,10 @@ fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) {
 
     // Redesign chrome: a sketchy-bordered, input-bg frame hosting the
     // ComboBox so it reads as a redesign `Input`, not egui's default combo.
+    // `inner_margin` vertical = `GAME_FRAME_PAD_Y`; the inner content is
+    // forced to `FORM_ROW_H_PX - 2*GAME_FRAME_PAD_Y` so the OUTER frame box
+    // is exactly `FORM_ROW_H_PX` tall — same height as the name/destination
+    // inputs + the browse button (the shared form-row height).
     let frame = egui::Frame::default()
         .fill(redesign_input_bg(palette))
         .stroke(egui::Stroke::new(
@@ -342,9 +502,13 @@ fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) {
             redesign_border_strong(palette),
         ))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
-        .inner_margin(egui::Margin::symmetric(10, 4));
+        .inner_margin(egui::Margin::symmetric(10, GAME_FRAME_PAD_Y));
 
     frame.show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        // Force the inner content height so the framed box matches the
+        // shared `FORM_ROW_H_PX` (outer = inner + 2*pad).
+        ui.set_min_height(FORM_ROW_H_PX - 2.0 * f32::from(GAME_FRAME_PAD_Y));
         // Make egui's own combo button frameless so only our sketchy frame
         // (above) draws the chrome — no double border / default egui fill.
         let v = ui.visuals_mut();
@@ -391,6 +555,13 @@ fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) {
 /// pasted share code (the modlist's game travels in the code), so the user
 /// does not pick it here — a faint, sketchy-bordered note states that
 /// plainly (affordance-forward over a disabled-looking dropdown).
+///
+/// Fix-Run 5 #4 g: the copy is the single word **"imported"** (the column is
+/// labeled `game`, so "imported" reads as "game: imported" — terse and
+/// unambiguous in the narrow shared right column), and the frame is **not**
+/// stretched full-width (no `ui.set_width(ui.available_width())`); it
+/// shrink-wraps to the word, consistent with the shared right-column width,
+/// at the shared `FORM_ROW_H_PX` height (same as the ComboBox it replaces).
 fn game_from_code_note(ui: &mut egui::Ui, palette: ThemePalette) {
     let frame = egui::Frame::default()
         .fill(redesign_shell_bg(palette))
@@ -399,11 +570,14 @@ fn game_from_code_note(ui: &mut egui::Ui, palette: ThemePalette) {
             redesign_border_strong(palette),
         ))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
-        .inner_margin(egui::Margin::symmetric(10, 6));
+        .inner_margin(egui::Margin::symmetric(10, GAME_FRAME_PAD_Y));
     frame.show(ui, |ui| {
-        ui.set_width(ui.available_width());
+        // Size to content (no full-width stretch — Fix-Run 5 #4 g); only the
+        // height is pinned to the shared form-row height so the note's
+        // bottom edge aligns with the name input's, exactly as the ComboBox.
+        ui.set_min_height(FORM_ROW_H_PX - 2.0 * f32::from(GAME_FRAME_PAD_Y));
         ui.label(
-            egui::RichText::new("comes from the imported modlist")
+            egui::RichText::new("imported")
                 .size(12.0)
                 .family(egui::FontFamily::Name("poppins_light".into()))
                 .color(redesign_text_faint(palette)),
@@ -453,14 +627,22 @@ fn folder_input(
     ui.add_space(4.0);
 
     ui.horizontal(|ui| {
+        // Wireframe `FolderInput` row `gap: 8` (`screens.jsx:94`). The
+        // browse button is `RIGHT_COL_W_PX` wide — the SAME width as the
+        // game control above — and both rows span the same Setup-Box
+        // content width, so the browse button and the game control share
+        // one right edge (vertically aligned), per Fix-Run 5 #4 a–e.
         ui.spacing_mut().item_spacing.x = 8.0;
 
-        const BROWSE_W_PX: f32 = 90.0;
-        let reserved = BROWSE_W_PX + 8.0;
+        let reserved = RIGHT_COL_W_PX + 8.0;
         let edit_width = (ui.available_width() - reserved).max(120.0);
 
         let pre = value.clone();
-        let fi_margin = egui::Margin::symmetric(8, 5);
+        // Same chassis/size as the modlist-name input: shared
+        // `redesign_text_input`, shared `FORM_INPUT_MARGIN` (the wireframe
+        // `FolderInput` `padding: 8px 12px`), shared `FORM_ROW_H_PX`. The
+        // font stays `firacode_nerd` — the wireframe `FolderInput` is `mono`
+        // (`screens.jsx:97`), unlike the Poppins name `<input>`.
         let response = redesign_text_input(
             ui,
             palette,
@@ -477,9 +659,9 @@ fn folder_input(
                     )
                     .text_color(redesign_text_primary(palette))
                     .background_color(redesign_input_bg(palette))
-                    .margin(fi_margin),
-                margin: fi_margin,
-                size: egui::vec2(edit_width, 26.0),
+                    .margin(FORM_INPUT_MARGIN),
+                margin: FORM_INPUT_MARGIN,
+                size: egui::vec2(edit_width, FORM_ROW_H_PX),
                 border: None,
             },
         );
@@ -489,7 +671,7 @@ fn folder_input(
 
         if ui
             .add_sized(
-                egui::vec2(BROWSE_W_PX, 26.0),
+                egui::vec2(RIGHT_COL_W_PX, FORM_ROW_H_PX),
                 egui::Button::new(
                     egui::RichText::new("browse\u{2026}")
                         .size(12.0)
@@ -526,6 +708,7 @@ fn selectable_box(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     width: f32,
+    min_h: f32,
     title: &str,
     desc: &str,
     selected: bool,
@@ -549,10 +732,10 @@ fn selectable_box(
         .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, border_color))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
         .inner_margin(egui::Margin {
-            left: 22,
-            right: 22,
-            top: 20,
-            bottom: 20,
+            left: SBOX_PAD_X,
+            right: SBOX_PAD_X,
+            top: SBOX_PAD_Y,
+            bottom: SBOX_PAD_Y,
         });
 
     let inner = ui.allocate_ui_with_layout(
@@ -561,21 +744,27 @@ fn selectable_box(
         |ui| {
             chassis.show(ui, |ui| {
                 ui.set_width(ui.available_width());
+                // Force the inner content area to the shared equalized
+                // height (`min_h` − the two inner-margin paddings) so BOTH
+                // boxes are exactly `min_h` tall regardless of which
+                // description wraps to more lines (Fix-Run 5 #4 f — the
+                // CSS-grid `flex:1` behavior made explicit for egui).
+                ui.set_min_height(min_h - 2.0 * f32::from(SBOX_PAD_Y));
                 // Title — hand-style 18px (wireframe `<Label hand
                 // fontSize:18 marginBottom:8>`).
                 ui.label(
                     egui::RichText::new(title)
-                        .size(18.0)
+                        .size(SBOX_TITLE_SIZE)
                         .family(egui::FontFamily::Name("poppins_light".into()))
                         .color(redesign_text_primary(palette)),
                 );
-                ui.add_space(8.0);
+                ui.add_space(SBOX_TITLE_GAP);
                 // Description — muted (wireframe `<Label
                 // color:text-muted>`). No in-box CTA (removed per the
-                // directed UX — the single `Start →` lives below).
+                // directed UX — the single `Start →` lives in the footer).
                 ui.label(
                     egui::RichText::new(desc)
-                        .size(13.0)
+                        .size(SBOX_DESC_SIZE)
                         .family(egui::FontFamily::Name("poppins_light".into()))
                         .color(redesign_text_muted(palette)),
                 );
@@ -593,6 +782,47 @@ fn selectable_box(
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     resp.clicked()
+}
+
+// ── Selectable-box layout constants (shared by the renderer AND the
+//    natural-height measurer so equalization stays exact). ──
+/// Horizontal inner padding (wireframe `<Box padding: "20px 22px">`).
+const SBOX_PAD_X: i8 = 22;
+/// Vertical inner padding (wireframe `<Box padding: "20px 22px">`).
+const SBOX_PAD_Y: i8 = 20;
+/// Title font size (wireframe `<Label hand fontSize: 18>`).
+const SBOX_TITLE_SIZE: f32 = 18.0;
+/// Gap below the title (wireframe title `marginBottom: 8`).
+const SBOX_TITLE_GAP: f32 = 8.0;
+/// Description font size (wireframe muted `<Label>` default body size).
+const SBOX_DESC_SIZE: f32 = 13.0;
+
+/// The natural (content-driven) total height of a selectable box at
+/// `card_w`: both inner-margin paddings + the wrapped title galley height +
+/// the title→desc gap + the wrapped description galley height. Measured for
+/// BOTH boxes so the renderer can force them to the max — the explicit
+/// egui equivalent of the wireframe's CSS-grid equal-height columns
+/// (Fix-Run 5 #4 f). Uses the SAME fonts / sizes / paddings the renderer
+/// uses (the `SBOX_*` constants) so the measured height matches the drawn
+/// box exactly.
+fn selectable_box_natural_height(ui: &egui::Ui, card_w: f32, title: &str, desc: &str) -> f32 {
+    let inner_w = (card_w - 2.0 * f32::from(SBOX_PAD_X)).max(1.0);
+    let title_h = wrapped_text_height(ui, title, SBOX_TITLE_SIZE, "poppins_light", inner_w);
+    let desc_h = wrapped_text_height(ui, desc, SBOX_DESC_SIZE, "poppins_light", inner_w);
+    2.0 * f32::from(SBOX_PAD_Y) + title_h + SBOX_TITLE_GAP + desc_h
+}
+
+/// Lay out `text` in the given Poppins family + size, wrapped to `wrap_w`,
+/// and return the resulting galley height (the same metric egui uses when
+/// it draws the `RichText` label). Used to equalize the two selectable
+/// boxes to the taller one's natural content height.
+fn wrapped_text_height(ui: &egui::Ui, text: &str, size: f32, family: &str, wrap_w: f32) -> f32 {
+    let font = egui::FontId::new(size, egui::FontFamily::Name(family.into()));
+    ui.fonts(|f| {
+        f.layout(text.to_string(), font, egui::Color32::PLACEHOLDER, wrap_w)
+            .size()
+            .y
+    })
 }
 
 #[cfg(test)]
@@ -647,5 +877,56 @@ mod tests {
         };
         assert_eq!(pick(StartingPoint::Scratch), ChooseOutcome::StartScratch);
         assert_eq!(pick(StartingPoint::Import), ChooseOutcome::GoForkPaste);
+    }
+
+    /// Fix-Run 5 #4 a–e: the two shared form-chassis constants are the
+    /// single tuned knob (`feedback_wireframe_look_not_px`). Pinned so a
+    /// future edit can't silently re-diverge the form-row heights / the
+    /// shared right-edge width (a deliberate wireframe match, recorded —
+    /// NOT a SPEC value). The name/destination inputs, the browse button,
+    /// and the game control all derive their height from `FORM_ROW_H_PX`;
+    /// the game column and the browse column are both `RIGHT_COL_W_PX`.
+    #[test]
+    fn shared_form_chassis_constants_are_the_tuned_knob() {
+        assert_eq!(FORM_ROW_H_PX, 30.0);
+        assert_eq!(RIGHT_COL_W_PX, 96.0);
+        // Wireframe `FolderInput` `padding: 8px 12px` — the shared input
+        // chassis margin both inputs use (so they read as one chassis).
+        assert_eq!(FORM_INPUT_MARGIN.left, 12);
+        assert_eq!(FORM_INPUT_MARGIN.right, 12);
+        assert_eq!(FORM_INPUT_MARGIN.top, 8);
+        assert_eq!(FORM_INPUT_MARGIN.bottom, 8);
+        // The game frame's forced inner height + its two paddings must
+        // equal the shared row height (so the framed game control is the
+        // same height as the inputs / browse button — the shared edge).
+        assert_eq!(
+            FORM_ROW_H_PX - 2.0 * f32::from(GAME_FRAME_PAD_Y) + 2.0 * f32::from(GAME_FRAME_PAD_Y),
+            FORM_ROW_H_PX
+        );
+    }
+
+    /// Fix-Run 5 #4 f: the two selectable boxes are equalized to the MAX of
+    /// their natural content heights. The natural-height formula is
+    /// monotonic in the description's wrapped height, so the box whose
+    /// description wraps taller drives the shared height and the other is
+    /// grown to match (never shrunk below its own content). This asserts
+    /// the equalization arithmetic the renderer applies (`max` of the two
+    /// `selectable_box_natural_height`s) without needing an egui context:
+    /// taller-desc ⇒ taller natural height ⇒ it is the `max`.
+    #[test]
+    fn equalized_box_height_is_the_taller_boxs_natural_height() {
+        // Same paddings/gap for both boxes; the only differing input is the
+        // wrapped desc height. natural = 2*PAD_Y + title_h + GAP + desc_h.
+        let nat = |title_h: f32, desc_h: f32| {
+            2.0 * f32::from(SBOX_PAD_Y) + title_h + SBOX_TITLE_GAP + desc_h
+        };
+        let short = nat(20.0, 40.0);
+        let tall = nat(20.0, 72.0); // a longer-wrapping description
+        let equalized = short.max(tall);
+        assert_eq!(equalized, tall, "the taller box drives the shared height");
+        assert!(
+            equalized >= short,
+            "the shorter box is grown to match, never clipped"
+        );
     }
 }
