@@ -61,10 +61,10 @@
 // The wireframe is one consistent input chassis: a `1fr auto` name|game row
 // bottom-aligned (`align-items: end`, `screens.jsx:3828`), the destination
 // `FolderInput` (`screens.jsx:91-121`), two equal-height boxes, and a
-// bottom footer. Two tuned px constants are the single shared knob
+// bottom footer. Three tuned px constants are the single shared knob
 // (`feedback_wireframe_look_not_px` — the wireframe governs the look; the
-// exact px is tuned empirically against the real app via these two
-// constants — this is NOT a SPEC change):
+// exact px is tuned empirically against the real app via these constants —
+// this is NOT a SPEC change):
 //
 //   - `FORM_ROW_H_PX` — the one shared control height. The modlist-name
 //     input, the destination input, the `browse…` button, and the game
@@ -77,6 +77,13 @@
 //     the browse button line up on a single right edge (wireframe
 //     `gridTemplateColumns: "1fr auto"` — the `auto` column is content-
 //     sized; here both right-edge controls share this one tuned width).
+//   - `FORM_ROW_GAP_PX` — the one shared input↔right-column gap. The SAME
+//     gap on the `modlist name | game` row and the `destination | browse…`
+//     row, so the name input is the **exact same width** as the destination
+//     input (Fix-Run 6 P3) and both right-column controls (game control,
+//     browse button) share **one** right edge in BOTH starting-point
+//     states (the import "imported" note is the shared right-column box,
+//     not a content-shrink box — Fix-Run 6 P3 reconciling #4 a + #4 g).
 //
 // Both the name and destination inputs route through the shared
 // `redesign_text_input` primitive with the **same** internal text margin
@@ -101,6 +108,22 @@
 // SPEC §5.1 "styled exactly like the workspace nav-bar forward button"
 // mandate is preserved; only the placement gains the dashed-divider footer
 // chrome (consistent with every other create-flow stage).
+//
+// **Bottom-pin mechanism (Fix-Run 6 P1 — the REAL fork-stage pattern).**
+// The body is rendered DIRECTLY on the page `ui` (natural height), then a
+// flexible spacer `ui.add_space(available_height − FOOTER_HEIGHT_PX)`
+// (computed *after* the body, the wireframe `<div flex:1 />`), then the
+// footer — exactly `stage_fork_preview::render_parse_error` (L405-408). The
+// earlier "wrap the whole body in `vec2(available_width, body_h)` then
+// render the footer after" did NOT pin: egui advances the parent by the
+// child's `min_rect` (the *natural* content height, not the requested
+// `body_h` — egui-0.31 `ui.rs:1434`), so the footer jammed up under the
+// content with dead space *below* it. Rendering directly on the page `ui`
+// + spacer + footer fixes P1. The separate P2 right-margin collapse
+// (`Start →` clipped at narrow widths) was the game `ComboBox` falling
+// back to egui's default `Spacing::combo_width` (~100px) and overflowing
+// the `RIGHT_COL_W_PX` column, which expanded the page content rect; fixed
+// in `game_combo` by pinning `ComboBox::width` to the shared right column.
 //
 // This renderer is **state-only** (takes `&mut CreateScreenState`, no
 // `OrchestratorApp`) and returns the intent; `page_create` applies the
@@ -134,8 +157,8 @@ use crate::ui::orchestrator::widgets::{
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_input_bg, redesign_selection_highlight, redesign_shell_bg,
-    redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    redesign_border_strong, redesign_input_bg, redesign_shell_bg, redesign_text_faint,
+    redesign_text_muted, redesign_text_primary,
 };
 
 /// What the choose stage wants the dispatcher (`page_create`) to do this
@@ -203,6 +226,20 @@ const FORM_INPUT_MARGIN: egui::Margin = egui::Margin {
 /// browse button — the shared right edge / form-row height).
 const GAME_FRAME_PAD_Y: i8 = 4;
 
+/// **The one shared form-row gap** (Fix-Run 6 P3). The gap between the input
+/// (flex 1) and the right-column control is identical on BOTH the
+/// `modlist name | game` row and the `destination | browse…` row, so the two
+/// inputs are the **exact same width** (`available − RIGHT_COL_W_PX −
+/// FORM_ROW_GAP_PX`) and the game control + the browse button share **one**
+/// right edge. The wireframe uses two gaps (the name|game grid `gap: 16`,
+/// the `FolderInput` row `gap: 8`); the user directive (#4 a–g — MATCH THE
+/// WIREFRAME as one chassis) makes both rows one chassis, so a single gap is
+/// the faithful realization. 8 == the `FolderInput` input↔button gap
+/// (`screens.jsx:94`) — the gap that sits between an input and its
+/// right-column control, applied uniformly. Tuned empirically via this
+/// shared knob (`feedback_wireframe_look_not_px`) — NOT a SPEC change.
+const FORM_ROW_GAP_PX: f32 = 8.0;
+
 /// Render the choose stage. Mutates `state` (name / game / destination /
 /// destination_choice / starting_point) in place; returns the user's intent.
 pub fn render(
@@ -212,19 +249,41 @@ pub fn render(
 ) -> ChooseOutcome {
     let mut outcome = ChooseOutcome::Stay;
 
-    // ── Bottom-pin the shared create-flow footer (the exact pattern the
-    //    fork stages use: reserve `FOOTER_HEIGHT_PX`, render the page body in
-    //    the remaining height, then the footer last). Keeps `Start →` flush
-    //    to the bottom with the dashed divider above it, consistent with
-    //    every other create-flow stage. ──
-    let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(120.0);
-    ui.allocate_ui_with_layout(
-        egui::vec2(ui.available_width(), body_h),
-        egui::Layout::top_down(egui::Align::Min),
-        |ui| {
-            render_body(ui, palette, state, &mut outcome);
-        },
-    );
+    // ── Bottom-pin the shared create-flow footer — the REAL fork-stage
+    //    mechanism (Fix-Run 6 P1). The fork stages (`stage_fork_paste`,
+    //    `stage_fork_preview`) do NOT wrap the whole body in a
+    //    `vec2(available_width, body_h)` allocation and render the footer
+    //    after the (shorter) content — that does not pin (egui advances the
+    //    parent by the child's `min_rect`, i.e. the natural content height,
+    //    not the requested `body_h`; egui-0.31 `ui.rs:1434` —
+    //    `allocate_new_ui_dyn` advances by `child_ui.min_rect()`), so the
+    //    footer jams up under the content with dead space *below* it.
+    //
+    //    `stage_fork_preview::render_parse_error` (L405-408) is the exact
+    //    precedent for "natural-height content at the top + a flexible
+    //    spacer + the footer flush at the bottom": it renders its content
+    //    directly on the page `ui`, then `ui.add_space(available_height −
+    //    FOOTER_HEIGHT_PX)` (the wireframe `<div flex:1 />` spacer), then
+    //    `sub_flow_footer::render` directly on `ui`. We replicate THAT:
+    //    render the body directly on the page `ui` (no whole-body width
+    //    wrapper), then the flexible spacer, then the footer — so the
+    //    content sits at the top, the empty space is BELOW it, and the
+    //    dashed divider + `Start →` are flush at the bottom of the content
+    //    area at every window size. (The separate P2 right-margin collapse —
+    //    `Start →` clipped at narrow widths — was the game `ComboBox`
+    //    falling back to egui's default `Spacing::combo_width`; fixed in
+    //    `game_combo` by pinning `ComboBox::width` to the shared right
+    //    column so nothing overflows the page content rect.) ──
+    render_body(ui, palette, state, &mut outcome);
+
+    // The wireframe `<div flex:1 />` spacer (`screens.jsx` fork branches):
+    // computed AFTER the body so `available_height()` is the space that
+    // remains, then consumed so the footer lands flush at the bottom — the
+    // exact `stage_fork_preview::render_parse_error` spacer.
+    let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
+    if spacer > 0.0 {
+        ui.add_space(spacer);
+    }
 
     // ── Single primary `Start →` in the shared create-flow footer
     //    (`sub_flow_footer`: 1.5px dashed top rule, `marginTop:20;
@@ -257,9 +316,11 @@ pub fn render(
 
 /// The Create `choose` page body (everything above the bottom-pinned
 /// footer): the title row, the Setup Box, the `Choose one` header, and the
-/// two selectable boxes. Split out so the footer can be bottom-pinned via
-/// the fork-stage `allocate_ui_with_layout` pattern. `outcome` is threaded
-/// so `load draft` / box-selection intents bubble back to `render`.
+/// two selectable boxes. Rendered DIRECTLY on the page `ui` (no whole-body
+/// width/height wrapper — the fork-stage precedent: natural-height content
+/// at the top, then `render`'s flexible spacer + footer pin it to the
+/// bottom). `outcome` is threaded so `load draft` / box-selection intents
+/// bubble back to `render`.
 fn render_body(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -307,15 +368,18 @@ fn render_body(
 
         // Split row: name (flex 1) | game-or-note (auto). Wireframe
         // `gridTemplateColumns: "1fr auto"; align-items: end` — the game
-        // column == the browse-button column (`RIGHT_COL_W_PX`) so the game
-        // control and the browse button below share one right edge.
+        // column == the browse-button column (`RIGHT_COL_W_PX`) AND the
+        // input↔right-column gap == `FORM_ROW_GAP_PX` (the SAME gap the
+        // destination row uses), so the name input is the **exact same
+        // width** as the destination input and the game control + the browse
+        // button below share **one** right edge (Fix-Run 6 P3).
         // **Bottom-align (`align-items: end`):** both columns are one label
         // line + the same `add_space(4)` + a `FORM_ROW_H_PX`-tall control,
         // so laid out `horizontal_top` their control bottoms line up.
         ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 16.0; // wireframe grid `gap: 16`
+            ui.spacing_mut().item_spacing.x = FORM_ROW_GAP_PX;
 
-            let name_w = (ui.available_width() - RIGHT_COL_W_PX - 16.0).max(160.0);
+            let name_w = (ui.available_width() - RIGHT_COL_W_PX - FORM_ROW_GAP_PX).max(160.0);
 
             // ── modlist name (flex 1). Same chassis/size as the destination
             //    input: shared `redesign_text_input`, shared
@@ -509,6 +573,15 @@ fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) {
         // Force the inner content height so the framed box matches the
         // shared `FORM_ROW_H_PX` (outer = inner + 2*pad).
         ui.set_min_height(FORM_ROW_H_PX - 2.0 * f32::from(GAME_FRAME_PAD_Y));
+        // The framed box's inner content width (the shared right column
+        // minus the frame's symmetric(10) padding). The ComboBox is pinned
+        // to EXACTLY this so it can NOT fall back to egui's default
+        // `Spacing::combo_width` (~100px) and overflow the `RIGHT_COL_W_PX`
+        // column — that overflow expanded the page content rect and
+        // collapsed the 28px right gutter / clipped `Start →` (Fix-Run 6
+        // P2; the rendered-PNG-gate root cause). With this the game control
+        // stays inside the shared right column at every window width.
+        let combo_w = ui.available_width();
         // Make egui's own combo button frameless so only our sketchy frame
         // (above) draws the chrome — no double border / default egui fill.
         let v = ui.visuals_mut();
@@ -525,6 +598,7 @@ fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) {
         v.widgets.open.bg_stroke = egui::Stroke::NONE;
 
         egui::ComboBox::from_id_salt("create_game_combo")
+            .width(combo_w)
             .selected_text(
                 egui::RichText::new(game_label(selected))
                     .size(12.0)
@@ -556,12 +630,17 @@ fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) {
 /// does not pick it here — a faint, sketchy-bordered note states that
 /// plainly (affordance-forward over a disabled-looking dropdown).
 ///
-/// Fix-Run 5 #4 g: the copy is the single word **"imported"** (the column is
-/// labeled `game`, so "imported" reads as "game: imported" — terse and
-/// unambiguous in the narrow shared right column), and the frame is **not**
-/// stretched full-width (no `ui.set_width(ui.available_width())`); it
-/// shrink-wraps to the word, consistent with the shared right-column width,
-/// at the shared `FORM_ROW_H_PX` height (same as the ComboBox it replaces).
+/// Fix-Run 6 P3 (reconciling Fix-Run 5 #4 a + #4 g exactly): the copy is the
+/// single word **"imported"** (the column is labeled `game`, so "imported"
+/// reads as "game: imported" — terse and unambiguous), left-aligned, in a
+/// box that is the **shared right-column size** (`RIGHT_COL_W_PX` ×
+/// `FORM_ROW_H_PX` — the SAME box the from-scratch ComboBox occupies) so its
+/// **right edge lines up with `browse…`** (the #4 a alignment requirement).
+/// #4 g ("not wordy / not absurdly wide") is satisfied by the *short word*
+/// in a normal aligned box — NOT by shrink-wrapping the frame to the text
+/// (the earlier shrink-wrap is exactly what broke the alignment). It is
+/// `FORM_ROW_H_PX` tall (outer = inner + `2*GAME_FRAME_PAD_Y`), same as the
+/// ComboBox it replaces, so its bottom edge aligns with the name input's.
 fn game_from_code_note(ui: &mut egui::Ui, palette: ThemePalette) {
     let frame = egui::Frame::default()
         .fill(redesign_shell_bg(palette))
@@ -572,9 +651,13 @@ fn game_from_code_note(ui: &mut egui::Ui, palette: ThemePalette) {
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
         .inner_margin(egui::Margin::symmetric(10, GAME_FRAME_PAD_Y));
     frame.show(ui, |ui| {
-        // Size to content (no full-width stretch — Fix-Run 5 #4 g); only the
+        // Fill the shared right column (`RIGHT_COL_W_PX`) — the SAME box the
+        // ComboBox occupies — so the import-state right edge == the
+        // from-scratch right edge == `browse…`'s right edge (Fix-Run 6 P3 /
+        // #4 a). NOT a content-shrink box (that broke the alignment). The
         // height is pinned to the shared form-row height so the note's
         // bottom edge aligns with the name input's, exactly as the ComboBox.
+        ui.set_width(ui.available_width());
         ui.set_min_height(FORM_ROW_H_PX - 2.0 * f32::from(GAME_FRAME_PAD_Y));
         ui.label(
             egui::RichText::new("imported")
@@ -627,14 +710,16 @@ fn folder_input(
     ui.add_space(4.0);
 
     ui.horizontal(|ui| {
-        // Wireframe `FolderInput` row `gap: 8` (`screens.jsx:94`). The
-        // browse button is `RIGHT_COL_W_PX` wide — the SAME width as the
-        // game control above — and both rows span the same Setup-Box
-        // content width, so the browse button and the game control share
-        // one right edge (vertically aligned), per Fix-Run 5 #4 a–e.
-        ui.spacing_mut().item_spacing.x = 8.0;
+        // Wireframe `FolderInput` row gap == `FORM_ROW_GAP_PX` (the SAME gap
+        // the `modlist name | game` row uses — Fix-Run 6 P3). The browse
+        // button is `RIGHT_COL_W_PX` wide — the SAME width as the game
+        // control above — and the input↔button gap is the SAME, so the
+        // destination input is the **exact same width** as the name input
+        // and the browse button + the game control share **one** right edge
+        // (vertically aligned), per Fix-Run 5 #4 a–e + Fix-Run 6 P3.
+        ui.spacing_mut().item_spacing.x = FORM_ROW_GAP_PX;
 
-        let reserved = RIGHT_COL_W_PX + 8.0;
+        let reserved = RIGHT_COL_W_PX + FORM_ROW_GAP_PX;
         let edit_width = (ui.available_width() - reserved).max(120.0);
 
         let pre = value.clone();
@@ -720,9 +805,21 @@ fn selectable_box(
         redesign_border_strong(palette)
     };
     let fill = if selected {
-        // Faint accent tint over the shell so the selected box reads as
-        // chosen without shouting (the §12.3 selection-highlight token).
-        redesign_selection_highlight(palette)
+        // SPEC §5.1: "an **accent** border + a **faint accent tint**". The
+        // §12.3 `selection_highlight` token is a *premultiplied* rgba whose
+        // `Frame::fill` composite renders as a near-opaque strong teal block
+        // (Fix-Run 6 P4 — the orchestrator's rendered-PNG finding: the
+        // selected box's title/description washed out on it, while the
+        // unselected box stayed crisp). The token is `pub(crate)` /
+        // read-only (not in scope to change), so the *faint accent tint* is
+        // realized here as an **opaque** low-ratio blend of `accent` over
+        // the same `shell_bg` the unselected box uses — a subtly teal-tinted
+        // dark surface. Because it is essentially `shell_bg` nudged toward
+        // accent, `text_primary` (title) + `text_muted` (description) read
+        // exactly as legibly as on the unselected box (the legibility
+        // reference), while the accent **border** still makes the selection
+        // unmistakable — the SPEC §5.1 affordance preserved, just legible.
+        faint_accent_tint(palette)
     } else {
         redesign_shell_bg(palette)
     };
@@ -782,6 +879,37 @@ fn selectable_box(
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     resp.clicked()
+}
+
+/// The blend ratio of `accent` over `shell_bg` for the selected box's
+/// **faint accent tint** (SPEC §5.1). Low enough that the tinted surface is
+/// still essentially `shell_bg` (so `text_primary`/`text_muted` stay as
+/// legible as on the unselected box — Fix-Run 6 P4), high enough that the
+/// teal cast is perceptible alongside the accent border. Tuned empirically
+/// against the real app via the rendered-PNG gate
+/// (`feedback_wireframe_look_not_px`) — NOT a SPEC value (the SPEC says
+/// "faint accent tint"; this is the px-level realization of "faint").
+const SELECTED_TINT_RATIO: f32 = 0.14;
+
+/// SPEC §5.1's "faint accent tint" for the selected box, as an **opaque**
+/// color: `shell_bg` linearly nudged `SELECTED_TINT_RATIO` of the way toward
+/// `accent`. Opaque (not an alpha overlay) so the composite is deterministic
+/// and the text on top reads exactly as it does over the unselected box's
+/// `shell_bg` — the §12.3 premultiplied `selection_highlight` token rendered
+/// near-opaque via `Frame::fill` and washed the box text out (Fix-Run 6 P4);
+/// that token is `pub(crate)`/read-only, so the faint tint is realized here.
+fn faint_accent_tint(palette: ThemePalette) -> egui::Color32 {
+    let bg = redesign_shell_bg(palette);
+    let ac = redesign_accent(palette);
+    let mix = |b: u8, a: u8| -> u8 {
+        let v = f32::from(b) + (f32::from(a) - f32::from(b)) * SELECTED_TINT_RATIO;
+        v.round().clamp(0.0, 255.0) as u8
+    };
+    egui::Color32::from_rgb(
+        mix(bg.r(), ac.r()),
+        mix(bg.g(), ac.g()),
+        mix(bg.b(), ac.b()),
+    )
 }
 
 // ── Selectable-box layout constants (shared by the renderer AND the
@@ -928,5 +1056,56 @@ mod tests {
             equalized >= short,
             "the shorter box is grown to match, never clipped"
         );
+    }
+
+    /// Fix-Run 6 P3: the SAME `FORM_ROW_GAP_PX` is used as the input↔
+    /// right-column gap on BOTH form rows, so the name input width
+    /// (`available − RIGHT_COL_W_PX − FORM_ROW_GAP_PX`) is **identical** to
+    /// the destination input width (`available − RIGHT_COL_W_PX −
+    /// FORM_ROW_GAP_PX`) at any container width, and both right-column
+    /// controls share one right edge. Pinned so a future edit can't
+    /// re-introduce the old two-gap (16 vs 8) divergence that made the name
+    /// input 8px narrower than the destination input.
+    #[test]
+    fn shared_form_row_gap_makes_inputs_equal_width() {
+        assert_eq!(FORM_ROW_GAP_PX, 8.0);
+        // Both inputs reserve the SAME right slice → identical widths.
+        let name_w = |avail: f32| (avail - RIGHT_COL_W_PX - FORM_ROW_GAP_PX).max(160.0);
+        let dest_w = |avail: f32| (avail - (RIGHT_COL_W_PX + FORM_ROW_GAP_PX)).max(120.0);
+        for avail in [400.0_f32, 600.0, 968.0, 1224.0] {
+            assert_eq!(
+                name_w(avail),
+                dest_w(avail),
+                "name input width must equal destination input width at avail={avail}"
+            );
+        }
+    }
+
+    /// Fix-Run 6 P4: the selected box's faint accent tint is **opaque**
+    /// (alpha 255 — a deterministic composite, not the near-opaque
+    /// premultiplied `selection_highlight` token that washed the text out)
+    /// and stays very close to `shell_bg` (the unselected box's surface, the
+    /// legibility reference), only nudged toward `accent`. So the title /
+    /// description over it read as legibly as over the unselected box, while
+    /// the accent border still signals the selection.
+    #[test]
+    fn faint_accent_tint_is_opaque_and_near_shell_bg() {
+        for palette in [ThemePalette::Dark, ThemePalette::Light] {
+            let tint = faint_accent_tint(palette);
+            assert_eq!(tint.a(), 255, "the selected tint must be opaque");
+            let bg = redesign_shell_bg(palette);
+            let ac = redesign_accent(palette);
+            // Each channel is `bg` moved exactly SELECTED_TINT_RATIO toward
+            // `ac` (the "faint" in SPEC §5.1's "faint accent tint").
+            let expect = |b: u8, a: u8| -> i32 {
+                (f32::from(b) + (f32::from(a) - f32::from(b)) * SELECTED_TINT_RATIO).round() as i32
+            };
+            assert_eq!(i32::from(tint.r()), expect(bg.r(), ac.r()));
+            assert_eq!(i32::from(tint.g()), expect(bg.g(), ac.g()));
+            assert_eq!(i32::from(tint.b()), expect(bg.b(), ac.b()));
+            // "faint": the tint stays much closer to bg than to accent
+            // (ratio < 0.5 on every channel by construction).
+            assert!(SELECTED_TINT_RATIO < 0.5);
+        }
     }
 }

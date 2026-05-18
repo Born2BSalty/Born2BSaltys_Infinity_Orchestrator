@@ -8,38 +8,56 @@
 //
 // `stage_choose::render` has user-confirmed *layout* bugs (margin collapse
 // at narrow widths, footer not bottom-pinned, unequal input widths/heights,
-// unequal box heights when shrunk). Code review, diffing, and
-// `cargo test --lib` are structurally blind to layout — nothing rendered
-// the screen before the user did. This test stands up `egui_kittest`'s
-// wgpu test renderer, paints the *actual* `stage_choose::render` egui code
-// inside a faithful reproduction of the real app shell, and writes a PNG
-// per matrix cell so the orchestrator can SEE the screen before the user.
+// unequal box heights when shrunk, selected-box text washed out). Code
+// review, diffing, and `cargo test --lib` are structurally blind to layout —
+// nothing rendered the screen before the user did. This test stands up
+// `egui_kittest`'s wgpu test renderer, paints the *actual*
+// `stage_choose::render` egui code inside a **shell-faithful** reproduction
+// of the real app shell, and writes a PNG per matrix cell so the
+// orchestrator can SEE the screen before the user.
 //
-// ## Faithful shell (this is load-bearing)
+// ## Shell-faithful scaffold (this is load-bearing — Fix-Run 6 Task 1)
 //
 // `stage_choose::render` bottom-pins its footer from `ui.available_height()`
 // and computes its column widths from `ui.available_width()`. In the real
-// app (`orchestrator_app.rs` ~L778-805) the screen is painted inside:
-//   - a left `SidePanel` of exactly `REDESIGN_NAV_WIDTH_PX` (200px), then
-//   - a `CentralPanel` with `inner_margin { left:28, right:28, top:24,
-//     bottom:24 }`.
-// So we reproduce *exactly that* panel structure on a real `egui::Context`
-// (via `Harness::builder().build(|ctx| ...)`). egui itself then derives the
-// content rect: width = window_w − 200 (rail) − 56 (L/R margin); height =
-// window_h − 48 (T/B margin) — i.e. the brief's
-// `window_width − 200 − 56` content width, computed by egui rather than
-// hardcoded, so the snapshot reproduces the SAME margin / footer / clip
-// behavior the user sees. Painting `stage_choose` in a bare full-window
-// `Ui` would NOT reproduce the margin-collapse / clip bug, which is the
-// whole point of the gate.
+// app the screen is painted inside `shell_chrome::render_shell`
+// (`shell/shell_chrome.rs` L35-55) → `orchestrator_app.rs` L778-805:
 //
-// ## Test hygiene (directive-grade)
+//   - `egui::TopBottomPanel::top("titlebar").exact_height(34)`   (titlebar)
+//   - `egui::TopBottomPanel::bottom("statusbar").exact_height(26)` (statusbar)
+//   - `egui::CentralPanel::default()` (the shell body), and **inside** it:
+//       - `egui::SidePanel::left("rail").exact_width(200)`  (left nav rail)
+//       - `egui::CentralPanel::default()
+//             .frame(Frame::NONE.inner_margin({28,28,24,24}))` (the page)
+//
+// Earlier this gate only painted the SidePanel + page CentralPanel and
+// **omitted the titlebar / statusbar bands**, so the content rect was the
+// wrong *height* and its right/bottom edges had no visible relationship to
+// the window frame — the user's "right margin collapses / `Start →` clipped
+// at narrow width" bug was out of frame and unverifiable. This scaffold
+// reproduces *exactly* that panel structure on a real `egui::Context` (via
+// `Harness::builder().build(|ctx| ...)`), reusing the read-only shell
+// constants (`REDESIGN_TITLEBAR_HEIGHT_PX` 34, `REDESIGN_STATUSBAR_HEIGHT_PX`
+// 26, `REDESIGN_NAV_WIDTH_PX` 200) and the exact CentralPanel inner margin.
+// egui itself then derives the content rect (width = window_w − 200 (rail) −
+// 56 (L/R margin); height = window_h − 34 (titlebar) − 26 (statusbar) − 48
+// (T/B margin)) — so the snapshot reproduces the SAME margin / footer / clip
+// behavior the user sees. **The right edge of every PNG is the window
+// edge**, so a collapsed right gutter shows as content touching the frame.
+//
+// The titlebar / statusbar / rail bands are painted with a flat fill (NO
+// `poppins_*` / `firacode_nerd` text — see the font note below) purely so
+// the window-edge ↔ 28px page-gutter relationship is unmistakable in the
+// PNG; their content is irrelevant to the `stage_choose` layout bug.
+//
+// ## Test hygiene (directive-grade — DATA-LOSS)
 //
 // Pure `CreateScreenState::new()` + `ThemePalette::Dark` + the public
 // `install_redesign_fonts` (the exact font wiring `infinity_orchestrator`'s
 // `main` does, so Poppins / FiraCode-Nerd resolve instead of tofu/fallback).
 // This test constructs **no** `RegistryStore` / `WorkspaceStore` /
-// `OrchestratorApp` and touches **no** `%APPDATA%` / real config dir.
+// `OrchestratorApp` and calls **no** `render_shell` (it replicates the panel
+// scaffold structurally) and touches **no** `%APPDATA%` / real config dir.
 //
 // ## Output
 //
@@ -47,25 +65,24 @@
 // git-ignored, absolute path) so the orchestrator can open them directly.
 // This is intentionally an *unconditional render-to-PNG* (not a
 // baseline-diff `snapshot()` that panics on first run): the spike's job is
-// to expose the current bug, not to lock a known-good baseline. Promoting
-// this to a strict committed diff-gate (golden baselines under
+// to expose / verify the layout, not to lock a known-good baseline.
+// Promoting this to a strict committed diff-gate (golden baselines under
 // `tests/snapshots/`) is a deliberate follow-up the orchestrator decides
-// once the layout is fixed — the renderer here is built to be that gate,
-// not throwaway.
+// once the layout is fixed — the renderer here is built to be that gate.
 
 use bio::ui::create::stage_choose;
 use bio::ui::create::state_create::{CreateScreenState, StartingPoint};
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
-use bio::ui::shared::redesign_tokens::ThemePalette;
+use bio::ui::shared::redesign_tokens::{
+    REDESIGN_NAV_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette,
+};
 
 use eframe::egui;
 use egui_kittest::Harness;
 
-/// The real left-rail width (`REDESIGN_NAV_WIDTH_PX`), reproduced so the
-/// content rect width matches the app exactly.
-const NAV_WIDTH_PX: f32 = 200.0;
-
-/// The real `CentralPanel` inner margin (`orchestrator_app.rs` ~L796-801).
+/// The real `CentralPanel` inner margin (`orchestrator_app.rs` L796-801 —
+/// the exact page-content margin inside the shell body, reproduced so the
+/// content rect matches the app pixel-for-pixel).
 const CENTRAL_MARGIN: egui::Margin = egui::Margin {
     left: 28,
     right: 28,
@@ -91,6 +108,11 @@ fn render_create_choose_matrix() {
     let out_dir = snapshot_out_dir();
     std::fs::create_dir_all(&out_dir).expect("create target/ui-snapshots dir");
 
+    // Fix-Run 6 render matrix (full window dimensions; the shell scaffold
+    // derives the page content rect exactly as the live app does). scratch
+    // AND import at the wide / mid / narrow widths the user reported;
+    // scratch-only at the two intermediate widths. 960×680 adds the
+    // narrower cell to check the box-shrink case (P5).
     let cells = [
         // 1280x820 default window — both starting points.
         Cell {
@@ -113,7 +135,7 @@ fn render_create_choose_matrix() {
             sp_tag: "scratch",
         },
         // ≈ the narrower screenshot where the right margin collapsed +
-        //   `Start →` clipped — MUST reproduce the bug if the gate is faithful.
+        //   `Start →` clipped — MUST stay within the 28px page gutter now.
         Cell {
             w: 1021,
             h: 680,
@@ -122,6 +144,28 @@ fn render_create_choose_matrix() {
         },
         Cell {
             w: 1021,
+            h: 680,
+            starting_point: StartingPoint::Import,
+            sp_tag: "import",
+        },
+        // A 1px-wider sibling of 1021 — checks the calc is stable across the
+        // boundary the user reported (no off-by-one collapse).
+        Cell {
+            w: 1024,
+            h: 680,
+            starting_point: StartingPoint::Scratch,
+            sp_tag: "scratch",
+        },
+        // Narrowest cell — the box-shrink case (P5: the two selectable
+        // boxes must stay equal height when the column is narrow).
+        Cell {
+            w: 960,
+            h: 680,
+            starting_point: StartingPoint::Scratch,
+            sp_tag: "scratch",
+        },
+        Cell {
+            w: 960,
             h: 680,
             starting_point: StartingPoint::Import,
             sp_tag: "import",
@@ -140,10 +184,11 @@ fn render_create_choose_matrix() {
         let w = cell.w as f32;
         let h = cell.h as f32;
 
-        // Real `egui::Context` so we can reproduce the real panel shell
-        // (SidePanel 200 + CentralPanel inner_margin 28/28/24/24). egui then
-        // derives the content rect, so the snapshot shows the SAME
-        // margin/footer behavior the user sees.
+        // Real `egui::Context` so we can reproduce the real shell scaffold
+        // (titlebar 34 + statusbar 26 + SidePanel 200 + CentralPanel
+        // inner_margin 28/28/24/24). egui then derives the page content
+        // rect, so the snapshot shows the SAME margin/footer/clip behavior
+        // the user sees.
         //
         // NOTE on font binding: `Context::set_fonts` queues new
         // `FontDefinitions` that egui only applies at the START of the
@@ -154,11 +199,12 @@ fn render_create_choose_matrix() {
         // tries to lay out `poppins_medium` → "not bound to any fonts" panic.
         // The faithful fix (matching `infinity_orchestrator`'s `main`, where
         // `install_redesign_fonts` runs in the creation callback *before* the
-        // first `update`): on frame 0 ONLY install the fonts + paint blank
-        // panels that use NO `poppins_*`/`firacode_nerd` family; from frame 1
-        // on, the queued fonts are bound and we paint the real screen. The
-        // settle loop below then runs enough frames for the font atlas + the
-        // equalized-box galley wrapping to stabilize before the capture.
+        // first `update`): on frame 0 ONLY install the fonts + paint a blank
+        // panel that uses NO `poppins_*`/`firacode_nerd` family; from frame 1
+        // on, the queued fonts are bound and we paint the real shell + the
+        // real screen. The settle loop below then runs enough frames for the
+        // font atlas + the equalized-box galley wrapping to stabilize before
+        // the capture.
         let mut frame: u64 = 0;
         let mut harness = Harness::builder()
             .with_size(egui::vec2(w, h))
@@ -166,7 +212,7 @@ fn render_create_choose_matrix() {
             .build(move |ctx| {
                 if frame == 0 {
                     // Queue the redesign fonts (applied at the next pass)
-                    // and paint a font-neutral blank shell this frame so
+                    // and paint a font-neutral blank panel this frame so
                     // nothing references an as-yet-unbound family.
                     install_redesign_fonts(ctx);
                     egui::CentralPanel::default().show(ctx, |ui| {
@@ -177,26 +223,73 @@ fn render_create_choose_matrix() {
                 }
                 frame += 1;
 
-                egui::SidePanel::left("rail_repro")
-                    .exact_width(NAV_WIDTH_PX)
+                // ── Shell-faithful scaffold — structurally replicates
+                //    `shell_chrome::render_shell` + the orchestrator_app
+                //    body (SidePanel 200 + page CentralPanel margin
+                //    28/28/24/24) WITHOUT constructing a real
+                //    OrchestratorApp / store / calling render_shell. ──
+
+                // Titlebar (34px exact) — `render_shell` L35-41.
+                egui::TopBottomPanel::top("scaffold_titlebar")
+                    .exact_height(REDESIGN_TITLEBAR_HEIGHT_PX)
                     .resizable(false)
                     .show_separator_line(false)
                     .frame(egui::Frame::NONE)
                     .show(ctx, |ui| {
-                        // The rail content is irrelevant to the
-                        // stage_choose layout bug; reserve the exact width
-                        // (so the CentralPanel's available width matches the
-                        // app) and leave it blank.
-                        ui.set_min_width(NAV_WIDTH_PX);
+                        // Flat band (no Poppins/FiraCode text) so the
+                        // titlebar's vertical footprint is visible in-frame.
+                        let r = ui.max_rect();
+                        ui.painter()
+                            .rect_filled(r, 0.0, egui::Color32::from_rgb(0x15, 0x22, 0x2B));
                         ui.allocate_space(ui.available_size());
                     });
-                egui::CentralPanel::default()
-                    .frame(egui::Frame::NONE.inner_margin(CENTRAL_MARGIN))
+
+                // Statusbar (26px exact) — `render_shell` L43-49.
+                egui::TopBottomPanel::bottom("scaffold_statusbar")
+                    .exact_height(REDESIGN_STATUSBAR_HEIGHT_PX)
+                    .resizable(false)
+                    .show_separator_line(false)
+                    .frame(egui::Frame::NONE)
                     .show(ctx, |ui| {
-                        // The screen under test, painted with the SAME call
-                        // shape `page_create` uses: render(ui, palette,
+                        let r = ui.max_rect();
+                        ui.painter()
+                            .rect_filled(r, 0.0, egui::Color32::from_rgb(0x15, 0x22, 0x2B));
+                        ui.allocate_space(ui.available_size());
+                    });
+
+                // Shell body CentralPanel — `render_shell` L51-55. Inside it
+                // the orchestrator_app paints the rail + the page.
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(0x0B, 0x11, 0x16)))
+                    .show(ctx, |ui| {
+                        // Left nav rail (200px exact) —
+                        // `orchestrator_app.rs` L779-793.
+                        egui::SidePanel::left("scaffold_rail")
+                            .exact_width(REDESIGN_NAV_WIDTH_PX)
+                            .resizable(false)
+                            .show_separator_line(false)
+                            .frame(egui::Frame::NONE)
+                            .show_inside(ui, |ui| {
+                                let r = ui.max_rect();
+                                ui.painter().rect_filled(
+                                    r,
+                                    0.0,
+                                    egui::Color32::from_rgb(0x15, 0x22, 0x2B),
+                                );
+                                ui.set_min_width(REDESIGN_NAV_WIDTH_PX);
+                                ui.allocate_space(ui.available_size());
+                            });
+
+                        // Page CentralPanel with the EXACT app inner margin
+                        // — `orchestrator_app.rs` L795-804. The screen under
+                        // test is painted with the SAME call shape
+                        // `page_create` uses: render(ui, palette,
                         // &mut CreateScreenState).
-                        let _ = stage_choose::render(ui, palette, &mut state);
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::NONE.inner_margin(CENTRAL_MARGIN))
+                            .show_inside(ui, |ui| {
+                                let _ = stage_choose::render(ui, palette, &mut state);
+                            });
                     });
             });
 
@@ -242,8 +335,8 @@ fn render_create_choose_matrix() {
     }
     assert_eq!(
         written.len(),
-        5,
-        "expected 5 matrix-cell PNGs (the brief's render matrix)"
+        8,
+        "expected 8 matrix-cell PNGs (the Fix-Run 6 render matrix)"
     );
 }
 
