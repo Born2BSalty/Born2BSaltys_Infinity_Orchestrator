@@ -4,6 +4,25 @@
 
 ## ⏸ CURRENT STATE — pick up EXACTLY here (2026-05-18)
 
+### 🌙 AUTONOMOUS ARC IN FLIGHT — Phase 7 full-phase completion (user-authorized 2026-05-18; user asleep; verifies ALL at end)
+
+**This block supersedes the `@4451e2b pushed/synced` line and the `🎯 NEXT … PREPPED, NOT STARTED` block below — Phase 7 is now IN FLIGHT.** User directive 2026-05-18: complete ALL of Phase 7 tonight, in runs, orchestrator-verified each run with ALL gates incl. the egui_kittest render gate (orchestrator personally opens the PNGs and acts on them), per-run verification points written to `PENDING_VERIFICATION.md` separated by run, **a local commit per run as it proceeds**; user verifies the whole phase in one pass on waking. Answered Q: download/extract = **this phase, Run 4** (P7.T17 pipeline + P7.T15), NOT a separate next phase; Phase 8 = reskin/polish only.
+
+**Run plan (Run 4 pre-split for focus): 1 · 2 · 3 · 4a · 4b.** 1 = P7.T1/T2/T8 (Step-5 spine + chrome + Previous-lock). 2 = P7.T3/T9/T9b/T16/T14 (install-start + concurrency + C5 rail-lock + flags + statusbar). 3 = P7.T4/T5/T6/T7/T12/T13 (post-install banner/actions/registry-flip/share dialog). 4a = P7.T17 (live download/extract/import pipeline + per-install dirs + content-addressed staging). 4b = P7.T15/T10/T11 (Install-Modlist stage-4 real + Reinstall + import-code matrix).
+
+**Per-run loop (orchestrator):** dispatch `plan-implementer` bg → independent verify [BIO-source guard empty · fresh `cargo build --bin infinity_orchestrator --release` · `cargo test --lib` vs **289/0** baseline · `cargo build --bin BIO --release` · **DATA-LOSS sentinel byte-check** (baseline below) · high-risk spot-read · premise-check any escalation] → **egui_kittest render gate for every UI-bearing run, orchestrator opens the PNGs itself** → scoped rustfmt → **local commit per run, Xgatt-only, NO `Co-Authored-By`** → append Run-N verification points to `PENDING_VERIFICATION.md` "Phase 7" section → next run. Final no-op rebuild gate before the end-of-arc handoff.
+
+**NO PUSH** — user said "commit each run", did not authorize push; push is outward-facing; user asleep. All commits LOCAL; surface push authorization when the user verifies. **A genuine `SPEC CONFLICT` needing the user's spec decision HALTS that run** (premise-check vs the plan first); do not guess on spec — leave it for the user's waking.
+
+**DATA-LOSS sentinel baseline (pre-arc, 2026-05-18 — re-hash after every run's `cargo test --lib`; any change = directive-grade ABORT):**
+- `modlists.json` = `3D8212D7E4416606BF17DB69F6B49B655BA65CE8DB875133DCC0F6DDD07C7B12`
+- `KRS5ZBMT0028/workspace.json` = `AE702C9AF1FAEC79785653125D7F5699742BE24B2D311210816D0F9CAFE1E959`
+- `KRW34EKV007H` / `KRW3FV80004H` / `KRWY3GJC000D` / `KRWYJGKH00CX` each `…/workspace.json` = `BF4541F7F1E899A226C57D4BE73AA97C621762A7DFBC55E106CC2ED2A18B5C70` (all four identical)
+- `KRW4TGJ60080/workspace.json` = `9C429FF8DCABE41471DBB9C27E1F3EDACF6B82D927E8C820E03A08B7B1A9E482`
+- (matches the Fix-Run-6 record — seed stable; not the canonical 2-entry seed but stable, which is all the sentinel needs. User re-preps canonical seed before the end-of-phase manual pass.)
+
+**Status:** local HEAD = doc-sync `4464634` (verification-plate clear) + this arc-setup doc commit on top, **NOT pushed**. **Run 1 dispatched** (bg `plan-implementer`) — P7.T1/T2/T8 + net-new `tests/ui_snapshot_workspace_step5.rs` render gate; awaiting completion → orchestrator verifies (incl. opening the Step-5 chrome PNGs) → local commit → Run-1 verification points to `PENDING_VERIFICATION.md` → dispatch Run 2. On resume with summarized context: if a `plan-implementer` completion notification arrives, that is the active run — verify per the loop above against the sentinel baseline, commit locally, append per-run verification points, advance the run plan.
+
 **Branch `overhaul/infinity_orchestrator` @ `4451e2b`** (pushed, synced; tree clean). The old `overhaul/infinity_orchestrator-p7` branch is **DISREGARDED** (user 2026-05-18 — Phase 7 builds in this branch). Operative directive set = the orchestrator skill (`/orchestrator`) + the `feedback-*` auto-memories — INCLUDING the new **`feedback-ui-render-gate`** (any redesign-UI change is verified by an `egui_kittest` rendered PNG the orchestrator opens itself, full-shell, multi-width — `cargo test --test ui_snapshot_create`, `tests/ui_snapshot_create.rs`).
 
 ### ✅ Closed (Phase-6 + post-completion hardening)
