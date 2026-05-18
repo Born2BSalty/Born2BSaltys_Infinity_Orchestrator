@@ -131,8 +131,8 @@ UI/UX cleanup + the SPEC cascade + a provenance test-code mint. **Implemented + 
 - **What:** the orchestrator hands you a `BIO-MODLIST-V1:` code minted by the 7c test helper (baked name/author + a 2-deep `⑂` lineage; format-correct by construction — round-tripped through BIO's own decoder).
 - **Check:** Create → select the **import** box → `Start →` → fork-paste → paste the minted code → `Preview →` → the preview shows the baked **name** (`Tactical EET 2026 (shared)`) + **author** (`@b2bs`), and `⑂ fork info` opens the lineage popup showing the 2-ancestor chain (`Born2BSalty's EET Basics` by @b2bs ↳ `EET Tactical Mid` by @olim ↳ this).
 
-### ☐ FR2-9. (KNOWN GAP — not fixed) Prompt popup vertical growth
-- **#4a is NOT fixed — `PLAN GAP` raised.** The per-component prompt popup still grows vertically as the mouse moves. Root cause is in **protected BIO source** (`src/ui/step2/prompt/prompt_popup_step2.rs` — `ui.set_min_size(ui.available_size())` self-feedback inside an `egui::Window`), which the CRITICAL DIRECTIVE forbids editing and no carve-out covers. Awaiting a directive decision (see the run report `PLAN GAP`). The aggregate (toolbar) prompt pill popup is unchanged (was not in scope).
+### FR2-9. (DEFERRED TO PHASE 8 — do not expect fixed here) Prompt popup vertical growth (#4a)
+- **Resolved as deferred (user decision 2026-05-17): moved to Phase 8.** The per-component prompt popup still grows as the mouse moves; root cause is one line in **protected BIO** (`src/ui/step2/prompt/prompt_popup_step2.rs:31`). Phase 8 likely introduces a new carve-out for important-but-small BIO bug fixes — this is the first candidate. Recorded in `plan/phase-08-popup-reskins-polish.md` deferred backlog + overview 2026-05-17. **Not a Phase-6 gap any more — do not re-flag; do not test for it here.** (Decision-1 sibling: #7b preview-weidu-3-hue is also Phase-8-deferred, same backlog — it was never a Phase-6 testable item.)
 
 ## Not in this list (and why)
 
