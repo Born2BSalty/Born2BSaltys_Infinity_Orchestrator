@@ -36,10 +36,21 @@
 // **`pack_meta` composes BIO read-only** — `flip_to_installed` is the ONLY
 // Infinity-Orchestrator code path that produces an `allow_auto_install =
 // true` code (SPEC §13.3). It NEVER patches `bio::app::modlist_share`
-// (carve-out #5 "generation is not a BIO modification"). The on-disk
-// `modlist-import-code.txt` is **not** rewritten on success (SPEC §13.13
-// closing paragraph) — it remains the install-start `allow_auto_install =
-// false` artifact; only the registry's `latest_share_code` is regenerated.
+// (carve-out #5 "generation is not a BIO modification"). On a clean exit
+// the on-disk `<destination>/modlist-import-code.txt` **is** rewritten with
+// that regenerated `allow_auto_install = true` code (SPEC §13.13 — the file
+// on disk next to the install IS the verified, auto-install-eligible code
+// once the install succeeds, so forwarding the file recreates a directly-
+// installable modlist). Only the **import-code file** is rewritten — H8
+// still holds (no registry snapshot is ever written to disk; the live
+// `orchestrator.registry` stays the only registry view). It is the SAME
+// destination + filename `start_hooks::write_install_start_artifacts` wrote
+// at install start (reuses `import_code_writer::write_modlist_import_code_txt`
+// — the one canonical path/filename derivation, no divergent name). The
+// disk write is **non-fatal** (logged, never panics) on a missing/empty
+// destination or an I/O error — the registry's regenerated
+// `latest_share_code` is the canonical "verified" code the Share dialog
+// reads; the on-disk file is the recovery convenience.
 //
 // **Async size computation (plan P7.T6).** Recursive `du` on a large EET
 // install can take minutes (worse on Windows with anti-virus scanning), so
@@ -68,6 +79,7 @@ use chrono::Utc;
 use tracing::warn;
 
 use crate::app::state::WizardState;
+use crate::install_runtime::import_code_writer;
 use crate::registry::model::{ModlistRegistry, ModlistState};
 use crate::registry::share_export::{self, ShareMeta};
 use crate::registry::store::RegistryStore;
@@ -144,10 +156,20 @@ pub fn count_mods_and_components(state: &WizardState) -> (u32, u32) {
 ///      ::pack_meta` with **`allow_auto_install = true`** (SPEC §13.3 — the
 ///      only auto-install-eligible code path), provenance read off the
 ///      entry. This OVERWRITES the install-start `allow_auto_install =
-///      false` snapshot. The on-disk `modlist-import-code.txt` is **NOT**
-///      rewritten (SPEC §13.13 closing para).
+///      false` snapshot.
 ///   4. `total_size_bytes = None` (the async worker fills it later).
 ///   5. Atomic registry write (`RegistryStore::save`).
+///   5b. Rewrite `<destination>/modlist-import-code.txt` with the same
+///      regenerated `allow_auto_install = true` code (SPEC §13.13 — on a
+///      clean exit the on-disk artifact becomes the verified, directly-
+///      installable code). Reuses
+///      `import_code_writer::write_modlist_import_code_txt` (the same path
+///      / filename `write_install_start_artifacts` used at install start —
+///      no divergent name). Non-fatal: a missing/empty destination or an
+///      I/O failure is logged and skipped (the registry's
+///      `latest_share_code` is canonical; mirrors
+///      `write_install_start_artifacts`'s error handling). **H8: only the
+///      import-code file is written — never a registry snapshot.**
 ///   6. Spawn the async size worker; return its [`SizeWorkerReceiver`] for
 ///      the orchestrator to drain.
 ///
@@ -218,6 +240,10 @@ pub fn flip_to_installed(
     entry.install_date = Some(Utc::now());
     entry.mod_count = mod_count;
     entry.component_count = component_count;
+    // Keep a copy of the regenerated true-bit code for the on-disk
+    // `modlist-import-code.txt` rewrite (step 5b) — the entry takes
+    // ownership of the original below.
+    let verified_code = new_code.clone();
     entry.latest_share_code = Some(new_code);
     // The async worker computes the real footprint; until it reports the
     // Home card renders `—` (per SPEC §13.1 / plan P7.T6 — `total_size_bytes
@@ -237,6 +263,46 @@ pub fn flip_to_installed(
              SPEC §13.14)"
         );
         return None;
+    }
+
+    // ── 5b. Rewrite the on-disk `<destination>/modlist-import-code.txt`
+    //    with the regenerated `allow_auto_install = true` code (SPEC
+    //    §13.13). At install start `write_install_start_artifacts` wrote
+    //    this file with the draft (`allow_auto_install = false`) code; on a
+    //    clean exit the on-disk artifact becomes the verified, directly-
+    //    installable code so forwarding the file recreates an
+    //    auto-install-eligible modlist (matching the registry's
+    //    `latest_share_code`). Reuses the SAME path/filename derivation
+    //    `write_install_start_artifacts` used (`import_code_writer
+    //    ::write_modlist_import_code_txt` → `<dest>/IMPORT_CODE_FILENAME`)
+    //    — no divergent name. **H8: ONLY the import-code file is written —
+    //    never a registry snapshot to disk; the live `orchestrator.registry`
+    //    stays the only registry view.** Non-fatal + defensive, mirroring
+    //    `write_install_start_artifacts`'s handling: an empty/missing
+    //    destination or an I/O failure is logged and skipped (never panics)
+    //    — the registry's `latest_share_code` (already persisted by step 5)
+    //    is the canonical verified code the Share dialog reads; the on-disk
+    //    file is the recovery convenience. Done AFTER the atomic registry
+    //    write so the registry's record is durable first (the exact
+    //    registry-then-disk order `write_install_start_artifacts` uses). ──
+    if destination.is_empty() {
+        warn!(
+            target = "orchestrator",
+            "flip_to_installed: modlist {id} has no destination_folder on \
+             clean exit — skipping the modlist-import-code.txt rewrite \
+             (nothing to write it next to; registry latest_share_code is \
+             canonical — SPEC §13.13)"
+        );
+    } else if let Err(err) =
+        import_code_writer::write_modlist_import_code_txt(Path::new(&destination), &verified_code)
+    {
+        warn!(
+            target = "orchestrator",
+            "flip_to_installed: rewriting modlist-import-code.txt to \
+             {destination} on clean exit failed: {err} (non-fatal — the \
+             registry holds the verified allow_auto_install=true code; the \
+             on-disk file stays the install-start draft — SPEC §13.13/§13.14)"
+        );
     }
 
     // ── 6. Spawn the async size worker. It walks `destination` recursively
@@ -682,6 +748,211 @@ mod tests {
             "non-existent path ⇒ 0 (honest 'nothing measurable')"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ───────── FIX 2 — on-disk modlist-import-code.txt rewrite ─────────
+    //
+    // SPEC §13.13 (FIX 2 reversal): on a clean exit `flip_to_installed`
+    // rewrites `<destination>/modlist-import-code.txt` with the regenerated
+    // `allow_auto_install = true` code (matching the registry's
+    // `latest_share_code`). Pre-fix the on-disk file stayed the install-
+    // start draft forever. `flip_to_installed` is ONLY called on the C3
+    // clean-exit edge (the caller's gate, preserved — these tests do not
+    // change that), so:
+    //   - calling it (clean exit) ⇒ the file IS rewritten with the true-bit
+    //     code, byte-equal to the entry's regenerated `latest_share_code`;
+    //   - NOT calling it (a non-clean exit — the C3 gate never fires) ⇒ the
+    //     install-start draft on disk is UNCHANGED (the rewrite lives
+    //     exclusively inside `flip_to_installed`); proven additionally by
+    //     the early-`None` paths (regen failure / missing entry) NOT
+    //     touching the file.
+    // Temp-path `RegistryStore` + temp destination (DATA-LOSS-safe — never
+    // `%APPDATA%\bio`).
+
+    /// A unique temp destination dir (DATA-LOSS hygiene — never %APPDATA%).
+    fn temp_destination(label: &str) -> std::path::PathBuf {
+        let n = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "bio_flip_dest_test_{}_{}_{}",
+            std::process::id(),
+            n,
+            label
+        ))
+    }
+
+    /// An EET `WizardState` with Step-3 leaves on both tabs — sufficient
+    /// for a non-empty `export_modlist_share_code` (the same construction
+    /// the existing happy test uses; no `state.step2` log fields read on
+    /// this path).
+    fn eet_state_with_leaves() -> WizardState {
+        let mut s = WizardState::default();
+        s.step1.game_install = "EET".to_string();
+        s.step3.bgee_items = vec![leaf("A.TP2", "0"), leaf("A.TP2", "1")];
+        s.step3.bg2ee_items = vec![leaf("B.TP2", "0")];
+        s
+    }
+
+    #[test]
+    fn flip_to_installed_rewrites_ondisk_import_code_with_true_bit() {
+        let (store, store_path) = temp_registry_store("ondisk_rewrite");
+        let dest = temp_destination("rewrite");
+        std::fs::create_dir_all(&dest).unwrap();
+        // Simulate the install-start artifact: the draft
+        // (allow_auto_install=false) code already written to disk by
+        // `write_install_start_artifacts`.
+        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+        std::fs::write(&draft_path, "BIO-MODLIST-V1:INSTALL-START-DRAFT").unwrap();
+
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "ONDISK000001".to_string(),
+            name: "Polished EET".to_string(),
+            game: Game::EET,
+            destination_folder: dest.to_string_lossy().into_owned(),
+            state: ModlistState::InProgress,
+            latest_share_code: Some("BIO-MODLIST-V1:STALE".to_string()),
+            ..Default::default()
+        });
+        let s = eet_state_with_leaves();
+
+        let rx = flip_to_installed("ONDISK000001", &mut registry, &store, &s);
+        assert!(rx.is_some(), "clean-exit flip succeeded");
+
+        // The on-disk file was REWRITTEN (no longer the install-start
+        // draft) — SPEC §13.13 FIX 2.
+        let on_disk = std::fs::read_to_string(&draft_path).expect("file still present");
+        assert_ne!(
+            on_disk, "BIO-MODLIST-V1:INSTALL-START-DRAFT",
+            "the install-start draft on disk must be overwritten on clean exit"
+        );
+        assert!(
+            on_disk.starts_with("BIO-MODLIST-V1:"),
+            "rewritten with a BIO-MODLIST-V1 code"
+        );
+        // It is byte-equal to the registry's regenerated latest_share_code
+        // (the SAME verified code — they cannot disagree).
+        let entry = registry.find("ONDISK000001").unwrap();
+        assert_eq!(
+            Some(on_disk.as_str()),
+            entry.latest_share_code.as_deref(),
+            "on-disk file == registry latest_share_code (the verified code)"
+        );
+        // And that code carries allow_auto_install = true (FIX 2's whole
+        // point — the on-disk file becomes the directly-installable code).
+        assert!(
+            decoded_allow_auto_install(&on_disk),
+            "on-disk modlist-import-code.txt carries allow_auto_install=true \
+             on clean exit (SPEC §13.13 FIX 2)"
+        );
+
+        // Drain the size worker so the thread is joined before cleanup.
+        let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_file(&store_path);
+    }
+
+    #[test]
+    fn ondisk_import_code_unchanged_on_non_clean_exit() {
+        // A non-clean exit ⇒ the orchestrator's C3 gate never calls
+        // `flip_to_installed` (the rewrite lives EXCLUSIVELY inside it). So
+        // the install-start draft on disk must remain byte-identical. We
+        // assert the contract two ways without changing the C3 gate:
+        //
+        //   (a) NOT calling flip_to_installed leaves the file unchanged
+        //       (trivially — nothing else writes it); and
+        //   (b) the internal early-`None` paths that a degenerate clean
+        //       call can still hit (share-code regeneration failure,
+        //       missing entry) ALSO do not touch the on-disk file — so even
+        //       if the edge fired on bad state, the draft is preserved.
+        let dest = temp_destination("noclean");
+        std::fs::create_dir_all(&dest).unwrap();
+        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+        std::fs::write(&draft_path, "BIO-MODLIST-V1:INSTALL-START-DRAFT").unwrap();
+
+        // (a) No flip_to_installed call at all (the non-clean-exit reality —
+        // the C3 triple did not hold so the orchestrator never invoked it).
+        // The file is, of course, still the draft.
+        assert_eq!(
+            std::fs::read_to_string(&draft_path).unwrap(),
+            "BIO-MODLIST-V1:INSTALL-START-DRAFT",
+            "no flip call ⇒ on-disk draft untouched (rewrite is only inside \
+             flip_to_installed, gated by the caller's C3 triple)"
+        );
+
+        // (b) Share-code regeneration failure: `WizardState::default()` has
+        // no weidu entries ⇒ `export_modlist_share_code` (inside pack_meta)
+        // Errs ⇒ flip_to_installed returns None at step 3 — BEFORE step 5b.
+        // The on-disk draft must be untouched (and the registry not
+        // flipped).
+        let (store, store_path) = temp_registry_store("noclean_regenfail");
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "NOCLEAN00001".to_string(),
+            name: "Draft".to_string(),
+            game: Game::EET,
+            destination_folder: dest.to_string_lossy().into_owned(),
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+        let empty = WizardState::default(); // ⇒ pack_meta Err
+        let rx = flip_to_installed("NOCLEAN00001", &mut registry, &store, &empty);
+        assert!(
+            rx.is_none(),
+            "share-code regen failure ⇒ None (no flip, no step 5b)"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&draft_path).unwrap(),
+            "BIO-MODLIST-V1:INSTALL-START-DRAFT",
+            "an early-None flip_to_installed must NOT rewrite the on-disk \
+             draft (step 5b is reached only after a successful regen + save)"
+        );
+        assert_eq!(
+            registry.find("NOCLEAN00001").unwrap().state,
+            ModlistState::InProgress,
+            "entry not flipped on the regen-failure path"
+        );
+
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_file(&store_path);
+    }
+
+    #[test]
+    fn flip_to_installed_empty_destination_skips_ondisk_write_no_panic() {
+        // Defensive (mirrors write_install_start_artifacts): an empty
+        // destination_folder ⇒ the step-5b rewrite is a logged no-op, never
+        // a panic; the state/counts/true-bit-code flip still succeeds and a
+        // size worker is still returned (the existing happy test already
+        // covers the flip itself with an empty destination; this pins that
+        // FIX 2's added on-disk write does not break or panic that path).
+        let (store, store_path) = temp_registry_store("empty_dest");
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "EMPTYDEST001".to_string(),
+            name: "Polished EET".to_string(),
+            game: Game::EET,
+            destination_folder: String::new(), // empty ⇒ skip 5b, no panic
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+        let s = eet_state_with_leaves();
+
+        let rx = flip_to_installed("EMPTYDEST001", &mut registry, &store, &s);
+        assert!(
+            rx.is_some(),
+            "the flip still succeeds with an empty destination (5b skipped, \
+             not fatal)"
+        );
+        let entry = registry.find("EMPTYDEST001").unwrap();
+        assert_eq!(entry.state, ModlistState::Installed, "state still flipped");
+        assert!(
+            entry
+                .latest_share_code
+                .as_deref()
+                .is_some_and(|c| c.starts_with("BIO-MODLIST-V1:")),
+            "latest_share_code still regenerated (5b skip is independent)"
+        );
+        let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
+        let _ = std::fs::remove_file(&store_path);
     }
 
     /// Test-only inverse of `pack_meta`'s envelope: strip prefix,

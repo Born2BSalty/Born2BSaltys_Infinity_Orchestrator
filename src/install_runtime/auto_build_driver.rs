@@ -169,6 +169,69 @@ pub fn is_share_code_consuming(workflow: InstallWorkflow) -> bool {
     }
 }
 
+/// **Arm the download-archive policy for the Install-Modlist-paste /
+/// Reinstall pipeline path (the §13.12a always-content-addressed-stage
+/// model + §13.12 #5 `--download`-forced-ON).**
+///
+/// BIO's `app_step2_update_download::start_step2_update_download`
+/// early-returns unless **both** `step1.download_archive == true` **and**
+/// `step1.mods_archive_folder` is non-empty (BIO defaults: `false` / `""`).
+/// The Install-Modlist-paste / Reinstall pipeline reaches the download tick
+/// via `stage_downloading::render_live` → this module — it **never** runs
+/// the workspace `on_install_start` (the sole `flag_policies::apply_flags`
+/// caller, which only sets `step1.download`, never the archive fields) and
+/// **never** runs the workspace-open `sync_paths_from_settings` (which
+/// copies `mods_archive_folder` but never `download_archive`). So on this
+/// path all three are unset and BIO's downloader silently no-ops ("the
+/// downloading never starts"). This sets them so BIO's reused-unchanged
+/// downloader runs:
+///
+///   - `download_archive = true` — the orchestrator's SPEC §13.12a
+///     model: the global Mods-archive stage is **always** used (the
+///     content-addressed staging layer interposes unconditionally — "all
+///     downloaded mod archives for all modlists always land here, never
+///     per-install"). It is **not** a user toggle in the redesign; it is
+///     the fixed staging model, so it is set unconditionally here (NOT
+///     gated on a Settings field).
+///   - `mods_archive_folder = <global Mods-archive folder>` — the value
+///     **must** be sourced by the caller exactly as
+///     `sync_paths_from_settings` reads it (Settings → Paths, the
+///     `Step1Settings → Step1State` conversion's `mods_archive_folder`).
+///     Passed in as `mods_archive_folder` so this fn stays
+///     `WizardState`-only + unit-testable (no `SettingsStore` coupling) —
+///     the caller mirrors the mapping, this fn never invents a path.
+///     `archive_store::{stage_known_archives,…}` + BIO's downloader both
+///     read this exact field, so they stay consistent.
+///   - `download = true` — SPEC §13.12 #5: `--download` is forced ON for
+///     share-code-consuming workflows. `flag_policies::apply_flags`
+///     already sets this on the workspace path, but it is **not** invoked
+///     on this pipeline path (verified: `apply_flags`'s only call site is
+///     `start_hooks::on_install_start`), so it is set here too.
+///
+/// Idempotent + side-effect-free beyond these three `step1` fields — safe
+/// to call inside the one-shot `pipeline_armed` latch (the caller does).
+/// Runs *after* `prepare_install_dirs_and_maybe_import`'s import so it is
+/// the final word before the per-frame poll's first
+/// `advance_pending_saved_log_flow` download tick (and survives
+/// `import_modlist_share_code`, which clones `step1`, mutates only
+/// game/mode, and `reset_workflow_keep_step1` — it never touches these
+/// three; verified — but ordering it last removes any doubt).
+///
+/// SPEC: §13.12a (always-content-addressed Mods-archive stage), §13.12 #5
+/// (`--download` forced ON for share-code-consuming workflows).
+pub fn arm_download_archive_policy(state: &mut WizardState, mods_archive_folder: &str) {
+    // SPEC §13.12a — the Mods-archive stage is always used (not a toggle).
+    state.step1.download_archive = true;
+    // The global Mods-archive folder, sourced by the caller exactly as
+    // `sync_paths_from_settings` does (Settings → Paths). Trimmed to match
+    // BIO's own `start_step2_update_download` emptiness check + the
+    // `archive_store` reads (both `.trim()` this field).
+    state.step1.mods_archive_folder = mods_archive_folder.trim().to_string();
+    // SPEC §13.12 #5 — `--download` forced ON for share-code-consuming
+    // workflows (the pipeline path does not run `apply_flags`).
+    state.step1.download = true;
+}
+
 /// Arm BIO's saved-log / auto-build pipeline — the **exact**
 /// `bio::ui::step1::page_step1::start_modlist_auto_build` field set
 /// (`page_step1.rs:250-265`) **minus** `start_install_requested` (the
@@ -389,5 +452,116 @@ mod tests {
         ));
         assert!(is_share_code_consuming(InstallWorkflow::Reinstall));
         assert!(!is_share_code_consuming(InstallWorkflow::FreshCreate));
+    }
+
+    // ───────────── FIX 1 — arm_download_archive_policy ─────────────
+    //
+    // The Install-Modlist-paste / Reinstall pipeline path's
+    // download-archive arming. In-memory `WizardState` only (no store, no
+    // `%APPDATA%\bio` — DATA-LOSS-safe by construction). Proves the three
+    // `step1` fields BIO's `start_step2_update_download` guards on are set
+    // (`download_archive`/`mods_archive_folder` empty by default would make
+    // the downloader silently no-op — "downloading never starts").
+
+    #[test]
+    fn arm_download_archive_policy_sets_the_three_step1_fields() {
+        // BIO `Step1State::default()`: `download_archive == false` AND
+        // `mods_archive_folder == ""` — these two are the EXACT guards
+        // `start_step2_update_download` early-returns on (so the pipeline
+        // download silently never starts). (`download` defaults `true` in
+        // BIO's `Step1State::default()`, verified — it is NOT one of the
+        // download-blocking guards; FIX 1 still re-asserts it ON per SPEC
+        // §13.12 #5 since the pipeline path skips `apply_flags`, and that
+        // assertion is idempotent here.)
+        let mut st = WizardState::default();
+        assert!(
+            !st.step1.download_archive,
+            "precondition: download_archive defaults false (a download guard)"
+        );
+        assert!(
+            st.step1.mods_archive_folder.is_empty(),
+            "precondition: mods_archive_folder defaults empty (a download guard)"
+        );
+
+        arm_download_archive_policy(&mut st, r"D:\BG\ModsArchive");
+
+        // SPEC §13.12a: the Mods-archive stage is always used (unconditional
+        // — not a user toggle).
+        assert!(
+            st.step1.download_archive,
+            "download_archive forced ON (SPEC §13.12a always-content-addressed stage)"
+        );
+        // Sourced value lands verbatim (the caller mirrors
+        // sync_paths_from_settings; this fn never invents it).
+        assert_eq!(
+            st.step1.mods_archive_folder, r"D:\BG\ModsArchive",
+            "mods_archive_folder = the Settings → Paths value"
+        );
+        // SPEC §13.12 #5: --download forced ON for share-code-consuming.
+        assert!(
+            st.step1.download,
+            "download forced ON (SPEC §13.12 #5 — pipeline path skips apply_flags)"
+        );
+    }
+
+    #[test]
+    fn arm_download_archive_policy_trims_archive_folder() {
+        // BIO's own `start_step2_update_download` + `archive_store` both
+        // `.trim()` this field — the arming must store the trimmed value so
+        // a whitespace-padded Settings path does not defeat BIO's emptiness
+        // guard (or worse, a whitespace-only path passing it).
+        let mut st = WizardState::default();
+        arm_download_archive_policy(&mut st, "  C:\\Mods Archive  ");
+        assert_eq!(
+            st.step1.mods_archive_folder, "C:\\Mods Archive",
+            "leading/trailing whitespace trimmed (matches BIO's trim check)"
+        );
+
+        // A whitespace-only Settings value ⇒ stored empty ⇒ BIO's
+        // downloader still honestly no-ops ("Mods Archive folder is empty")
+        // rather than trying to download into a junk path. (FIX 1 makes the
+        // download START when a real folder is configured; an unconfigured
+        // one is still a no-op with BIO's own status — not a regression.)
+        let mut st2 = WizardState::default();
+        arm_download_archive_policy(&mut st2, "   ");
+        assert!(
+            st2.step1.mods_archive_folder.is_empty(),
+            "whitespace-only ⇒ empty (BIO's own empty-archive guard still applies)"
+        );
+        // download_archive / download are still forced ON regardless — the
+        // §13.12a / §13.12 #5 policy is not contingent on the path being
+        // configured (BIO's own guard handles the empty-path case).
+        assert!(st2.step1.download_archive);
+        assert!(st2.step1.download);
+    }
+
+    #[test]
+    fn arm_download_archive_policy_survives_reset_workflow_keep_step1() {
+        // FIX 1 relies on `import_modlist_share_code` preserving these
+        // `step1` fields: it does `step1 = state.step1.clone()`, mutates
+        // ONLY game/mode, writes it back, then `reset_workflow_keep_step1()`
+        // (which never touches `self.step1`). This pins that invariant so a
+        // future BIO change to the import/reset path that clobbered the
+        // archive fields would fail here (FIX 1 sets the policy AFTER the
+        // import as the final word, but this proves the order is also safe
+        // the other way — defense in depth, zero BIO edit).
+        let mut st = WizardState::default();
+        arm_download_archive_policy(&mut st, r"D:\BG\ModsArchive");
+        // Simulate BIO's import_modlist_share_code step1 handling.
+        let cloned = st.step1.clone();
+        st.step1 = cloned; // (game/mode mutation omitted — irrelevant here)
+        st.reset_workflow_keep_step1();
+        assert!(
+            st.step1.download_archive,
+            "download_archive survives the clone + reset_workflow_keep_step1"
+        );
+        assert_eq!(
+            st.step1.mods_archive_folder, r"D:\BG\ModsArchive",
+            "mods_archive_folder survives the import path's step1 handling"
+        );
+        assert!(
+            st.step1.download,
+            "download survives reset_workflow_keep_step1 (it keeps step1)"
+        );
     }
 }

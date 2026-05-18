@@ -475,6 +475,54 @@ pub fn render_live(
             &code,
         ) {
             Ok(_) => {
+                // ── FIX 1 (SPEC §13.12a / §13.12 #5) — arm the
+                //    download-archive policy so BIO's reused-unchanged
+                //    `start_step2_update_download` actually runs (it
+                //    early-returns unless `step1.download_archive == true`
+                //    AND `step1.mods_archive_folder` is non-empty — BIO
+                //    defaults `false` / `""`). The Install-Modlist-paste /
+                //    Reinstall pipeline reaches the download tick via THIS
+                //    `render_live` arm and never runs the workspace
+                //    `on_install_start` (the sole `apply_flags` caller,
+                //    which only sets `download`, never the archive fields)
+                //    nor the workspace-open `sync_paths_from_settings`
+                //    (which copies `mods_archive_folder` but never
+                //    `download_archive`) — so without this the downloader
+                //    silently no-ops ("downloading never starts"). The
+                //    Mods-archive value is sourced EXACTLY as
+                //    `sync_paths_from_settings` reads it (Settings → Paths;
+                //    `Step1Settings → Step1State` conversion's
+                //    `mods_archive_folder`) — mirrored, never invented; a
+                //    `SettingsStore::load()` failure ⇒ empty string ⇒ the
+                //    BIO downloader still no-ops with its own honest "Mods
+                //    Archive folder is empty" status (no panic). Set AFTER
+                //    `prepare_install_dirs_and_maybe_import`'s import so it
+                //    is the final word before the per-frame poll's first
+                //    `advance_pending_saved_log_flow` download tick (and
+                //    survives `import_modlist_share_code`). The `&mut
+                //    orchestrator.wizard_state` borrow taken by
+                //    `prepare_install_dirs_and_maybe_import` above has ended
+                //    (returned by value into this `match`), so reading
+                //    `orchestrator.settings_store` here is sound. Covers
+                //    BOTH Install-Modlist-paste and Reinstall (Reinstall
+                //    routes Home→confirm→Install-Modlist preview→this
+                //    Downloading screen). SPEC §13.12a settles the
+                //    `download_archive`-unconditional question (the
+                //    Mods-archive stage is "always" used, "never
+                //    per-install" — not a user toggle), so no PLAN GAP.
+                let mods_archive_folder = orchestrator
+                    .settings_store
+                    .load()
+                    .map(|settings| {
+                        let from: crate::app::state::Step1State = settings.step1.into();
+                        from.mods_archive_folder
+                    })
+                    .unwrap_or_default();
+                auto_build_driver::arm_download_archive_policy(
+                    &mut orchestrator.wizard_state,
+                    &mods_archive_folder,
+                );
+
                 // ── Final P7 Fix-Run (SPEC §13.13 / §13.1 — resolution A).
                 //    The import succeeded ⇒ `WizardState` is populated, so
                 //    the §13.13 bundle's `pack_meta`
