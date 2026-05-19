@@ -248,13 +248,29 @@ pub fn flip_to_installed(
         return None;
     };
     let destination = entry_ref.destination_folder.trim().to_string();
+
+    // ── Export-time hashing (the Wabbajack-compile step — the PRIMARY bake
+    //    point per the run brief). This is a clean exit: the just-
+    //    downloaded+verified archives are on disk and `archive_store`'s
+    //    per-install lock recorded `name → hash` for THIS modlist. Bake
+    //    those `{name, size, hash}` triples into the verified,
+    //    re-shareable code so a recipient's install-time checksum-then-skip
+    //    can avoid re-downloading archives they already have (SPEC §13.3 /
+    //    §13.12a). Empty (no lock / not on disk) ⇒ the key is omitted (a
+    //    code with no archive meta — today's-behavior fallback; never an
+    //    error). Read-only on the lock + the archive dir; zero BIO edit. ──
+    let archive_dir =
+        std::path::PathBuf::from(wizard_state.step1.mods_archive_folder.trim().to_string());
+    let archive_meta =
+        share_export::build_archive_meta_from_install_lock(&destination, &archive_dir);
+
     let new_code = if let Some(src) = share_code_override {
         // Install-Modlist paste / Reinstall — flip the held code's bit to
         // true (NOT `pack_meta`). Verbatim fallback if it does not decode
         // (the real code is the priority — SPEC §13.13 / the user's
         // resolution); this never `None`s the flip (a degenerate code still
         // becomes the verified on-disk artifact + registry snapshot).
-        match share_export::set_allow_auto_install(src.trim(), true) {
+        let bit_flipped = match share_export::set_allow_auto_install(src.trim(), true) {
             Ok(code) => code,
             Err(err) => {
                 warn!(
@@ -265,11 +281,35 @@ pub fn flip_to_installed(
                 );
                 src.trim().to_string()
             }
+        };
+        // Bake the per-archive `{size,hash}` into the verified code the
+        // same opaque way provenance rides (`bake_archive_meta_into_code` =
+        // the `set_allow_auto_install` envelope with `archive_meta` instead
+        // of the bit — every other key, incl. provenance, preserved
+        // verbatim). Empty ⇒ a lossless re-encode (key omitted). A
+        // non-decodable code ⇒ keep the bit-flipped/verbatim form (the
+        // real code is the priority; the skip just won't help recipients).
+        match share_export::bake_archive_meta_into_code(&bit_flipped, &archive_meta) {
+            Ok(code) => code,
+            Err(err) => {
+                warn!(
+                    target = "orchestrator",
+                    "flip_to_installed: could not bake archive_meta into the \
+                     held code for {id} ({err}) — keeping it without the \
+                     per-archive {{size,hash}} (recipients fall back to \
+                     always-download; the real code is preserved)"
+                );
+                bit_flipped
+            }
         }
     } else {
         // Workspace / build-from-scanned-mods — UNCHANGED: regenerate via
-        // `pack_meta` (provenance off the entry; BIO base read-only).
-        let meta = ShareMeta::from_entry(entry_ref, /* allow_auto_install */ true);
+        // `pack_meta` (provenance off the entry; BIO base read-only) — now
+        // ALSO carrying the per-archive `{size,hash}` baked the SAME opaque
+        // way provenance is (the `ShareMeta::with_archive_meta` builder
+        // feeds `pack_meta`'s shared `insert_archive_meta`).
+        let meta = ShareMeta::from_entry(entry_ref, /* allow_auto_install */ true)
+            .with_archive_meta(archive_meta.clone());
         match share_export::pack_meta(wizard_state, &meta) {
             Ok(code) => code,
             Err(err) => {
@@ -951,6 +991,7 @@ mod tests {
                 name: "Root".to_string(),
                 author: "@root".to_string(),
             }],
+            archive_meta: vec![],
         };
         let generated = share_export::pack_meta(&eet_state_with_leaves(), &provenance)
             .expect("fixture: pack_meta over a populated WizardState");

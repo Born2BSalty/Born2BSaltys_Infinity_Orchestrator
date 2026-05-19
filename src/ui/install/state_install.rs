@@ -298,6 +298,31 @@ pub struct InstallScreenState {
     /// (idempotent) content-addressing pass executes exactly once. Reset by
     /// `clear_preview()`. Not persisted.
     pub archives_ingested: bool,
+    /// **Download-Overhaul Run 1 — the per-archive `{name,size,hash}`
+    /// expected hashes decoded from the pasted share code** (the Wabbajack
+    /// "expected" input — `share_export::decode_archive_meta`). Decoded
+    /// once at the same one-shot boundary as the skip pass and cached so
+    /// the post-download verify uses the SAME expected set. Empty for a
+    /// fieldless / pre-redesign / third-party code (⇒ today's
+    /// always-download fallback). Reset by `clear_preview()`. Not
+    /// persisted.
+    pub expected_archive_meta: Vec<crate::registry::share_export::ArchiveMeta>,
+    /// **Download-Overhaul Run 1 — the pre-skip resolved asset set**,
+    /// captured the frame the checksum-then-skip pass runs (before it
+    /// drops already-present archives from
+    /// `update_selected_update_assets`). The post-download verify hashes
+    /// exactly what the streamer *could* have fetched against
+    /// `expected_archive_meta`, so it must see the full pre-skip list (a
+    /// skipped archive was already content-verified to be present; a
+    /// fetched one must be verified). Reset by `clear_preview()`. Not
+    /// persisted.
+    pub pre_skip_assets: Vec<crate::app::state::Step2UpdateAsset>,
+    /// **Download-Overhaul Run 1 — post-download verify is one-shot.** The
+    /// Wabbajack mismatch pass (`archive_skip::verify_downloaded_archives`)
+    /// hashes every just-downloaded archive once; like the ingest it must
+    /// run exactly once (not per frame across the extraction window). Set
+    /// `true` the frame it runs. Reset by `clear_preview()`. Not persisted.
+    pub archives_verified: bool,
 }
 
 impl InstallScreenState {
@@ -327,6 +352,13 @@ impl InstallScreenState {
         // pipeline) — drop the one-shot latches.
         self.archives_staged = false;
         self.archives_ingested = false;
+        // Download-Overhaul Run 1: a re-parsed code must re-decode its
+        // expected hashes + re-run the checksum-then-skip / verify from
+        // scratch (never inherit the prior code's expected set / skip
+        // decisions).
+        self.expected_archive_meta = Vec::new();
+        self.pre_skip_assets = Vec::new();
+        self.archives_verified = false;
     }
 }
 

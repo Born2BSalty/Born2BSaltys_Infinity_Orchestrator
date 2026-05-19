@@ -833,6 +833,59 @@ pub fn render_live(
         // re-run per frame.
         orchestrator.install_screen_state.archives_staged = true;
         archive_store::stage_known_archives(&mut orchestrator.wizard_state, &destination);
+
+        // ── Download-Overhaul Run 1 — **the Wabbajack-installer
+        //    checksum-then-skip core** (SPEC §13.12a / §13.3 / §13.12 #2).
+        //    `archive_store::stage_known_archives` above only reuses an
+        //    archive when THIS modlist's per-install lock recorded a hash
+        //    (a *prior attempt* of the same modlist). The real bug the user
+        //    hit is a **first** install re-downloading archives whose exact
+        //    bytes are already in the global Mods-archive folder. This pass
+        //    closes it: decode the per-archive `{name,size,hash}` the
+        //    exporter baked into the pasted code
+        //    (`share_export::decode_archive_meta`), size-pre-filter +
+        //    hash-through-the-persistent-cache the on-disk archives, and
+        //    DROP every wanted asset whose expected hash is already present
+        //    (placing those bytes at BIO's deterministic extract path so
+        //    BIO's reused-unchanged extract `.exists()` gate is satisfied)
+        //    — so the parallel `stream_downloader`, which fetches exactly
+        //    `update_selected_update_assets`, **never re-downloads them**.
+        //    Empty (fieldless / pre-redesign / third-party code) ⇒ a pure
+        //    no-op (today's always-download — never an error). Composes
+        //    with `stage_known_archives`: that runs first (prior-attempt
+        //    lock reuse), this then skips anything else already on disk by
+        //    content. ONE-SHOT via the same `archives_staged` latch (it is
+        //    set above) — `clear_preview` resets it for a re-entry. The
+        //    decoded expected set + the pre-skip asset list are cached on
+        //    `install_screen_state` so the post-download VERIFY uses the
+        //    exact same expected set + can hash exactly what the streamer
+        //    could have fetched. Zero BIO source. ──
+        let expected =
+            crate::registry::share_export::decode_archive_meta(&code).unwrap_or_default();
+        // Capture the pre-skip resolved set for the post-download verify
+        // (a skipped archive was content-verified present; a fetched one
+        // must be verified — both come from this full list).
+        orchestrator.install_screen_state.pre_skip_assets = orchestrator
+            .wizard_state
+            .step2
+            .update_selected_update_assets
+            .clone();
+        let skip = crate::install_runtime::archive_skip::skip_present_archives(
+            &mut orchestrator.wizard_state,
+            &expected,
+        );
+        orchestrator.install_screen_state.expected_archive_meta = expected;
+        tracing::info!(
+            target = "orchestrator",
+            "checksum-then-skip: {} already-present (not downloaded), {} \
+             missing (will fetch), {} no-expected-hash, {} candidates hashed \
+             ({} persistent-cache hits)",
+            skip.skipped_present,
+            skip.missing_on_disk,
+            skip.no_expected_hash,
+            skip.hashed_candidates,
+            skip.cache_hits
+        );
     }
 
     // ── (2b) **#1 — kick the net-new PARALLEL streaming downloader**
@@ -929,6 +982,54 @@ pub fn render_live(
                     .len()
             );
         }
+    }
+
+    // ── Download-Overhaul Run 1 — **post-download verify + mismatch (the
+    //    Wabbajack integrity rule)**, run BEFORE the content-addressed
+    //    ingest so a hash-mismatched archive is deleted + recorded failed
+    //    and is therefore NEVER content-addressed/stored (so a corrupt
+    //    download cannot poison the store / be presented to extract). For
+    //    every PRE-SKIP asset with a recorded expected hash, hash the
+    //    just-downloaded archive: match ⇒ accept + register in the
+    //    persistent cache (so the NEXT install skips it); mismatch ⇒
+    //    delete the bad file + append a BIO-shaped failed-source string
+    //    (BIO's unchanged `auto_build_blocker_before_install` then stops
+    //    the auto-build for it and extract — gated on `.exists()` — never
+    //    sees it). One-shot via `archives_verified` (same first-frame-
+    //    after-download gate as the ingest; `clear_preview` resets it).
+    //    Empty expected set ⇒ a pure no-op (today's behavior). Zero BIO
+    //    source. ──
+    if !orchestrator.install_screen_state.archives_verified
+        && !destination.is_empty()
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_download_running
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_downloaded_sources
+            .is_empty()
+    {
+        orchestrator.install_screen_state.archives_verified = true;
+        let expected = orchestrator
+            .install_screen_state
+            .expected_archive_meta
+            .clone();
+        let pre_skip = orchestrator.install_screen_state.pre_skip_assets.clone();
+        let v = crate::install_runtime::archive_skip::verify_downloaded_archives(
+            &mut orchestrator.wizard_state,
+            &expected,
+            &pre_skip,
+        );
+        tracing::info!(
+            target = "orchestrator",
+            "post-download verify: {} verified, {} hash-mismatched \
+             (deleted + recorded failed, NOT installed), {} unverifiable",
+            v.verified,
+            v.mismatched,
+            v.unverifiable
+        );
     }
 
     if !orchestrator.install_screen_state.archives_ingested

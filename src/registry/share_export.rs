@@ -73,6 +73,46 @@ use crate::registry::model::ModlistEntry;
 /// The same prefix BIO's `modlist_share` uses (`SHARE_CODE_PREFIX`).
 const SHARE_CODE_PREFIX: &str = "BIO-MODLIST-V1:";
 
+/// The schema-additive sibling key carrying the per-archive `{name, size,
+/// hash}` triples (the **Wabbajack-compile analog** — SPEC §13.3 / §13.12a).
+/// Injected at the top level of the decoded payload object by [`pack_meta`]
+/// / [`bake_archive_meta_into_code`] **exactly like the provenance trio**
+/// (an opaque `serde_json::Value` round-trip in this orchestrator-owned
+/// envelope — NOT a BIO edit; SPEC §13.3 "generation is not a BIO
+/// modification"). Absent ⇒ [`decode_archive_meta`] yields an empty vec ⇒
+/// "no expected hashes known" ⇒ the install-time skip falls back to today's
+/// always-download for those archives (never an error — older /
+/// third-party / pre-redesign codes decode and behave bit-for-bit as
+/// today).
+const ARCHIVE_META_KEY: &str = "archive_meta";
+
+/// One archive's content-identity record, baked into the share code by the
+/// machine that **has** the archive bytes (the Wabbajack-compile model: the
+/// author/exporter hashes each archive and ships `{size, hash}` in the
+/// modlist). The installer size-prefilters then hash-matches local files
+/// against these (see `install_runtime::archive_skip`).
+///
+/// - `name` — the **logical archive name** (`bio::app::app_step2_update_
+///   download::archive_file_name(asset)` — the SAME key the content-
+///   addressed store / index / per-install lock use). Stable, deterministic
+///   from the resolved asset; the join key between the decoded share code
+///   and the resolved asset set on the install side.
+/// - `size` — the archive's exact byte length (the cheap pre-filter: skip
+///   hashing any on-disk candidate whose length differs).
+/// - `hash` — the archive's content hash, the **same** stable seedless
+///   128-bit FNV-1a (`archive_store::hash_file`, 32 hex chars) used
+///   everywhere else for content-addressing (one hashing path, zero drift —
+///   it is an identity/dedupe hash, not a security primitive).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ArchiveMeta {
+    /// The logical archive name (`archive_file_name(asset)`).
+    pub name: String,
+    /// Exact archive byte length (the size pre-filter).
+    pub size: u64,
+    /// Content hash (`archive_store::hash_file` — FNV-1a-128, 32 hex).
+    pub hash: String,
+}
+
 /// The four schema-additive sibling keys the orchestrator injects (SPEC
 /// §13.3). Provenance is captured **off the registry entry** by
 /// [`ShareMeta::from_entry`] — never re-derived from `WizardState`.
@@ -107,6 +147,19 @@ pub struct ShareMeta {
     /// in-crate (`ShareMeta::from_entry`, `pack_meta`, the orchestrator
     /// generate paths), so `pub(crate)` is correct and sufficient.
     pub(crate) forked_from: Vec<ForkAncestor>,
+    /// The per-archive `{name, size, hash}` triples (the Wabbajack-compile
+    /// analog — SPEC §13.3 / §13.12a). Baked into the emitted code as the
+    /// schema-additive [`ARCHIVE_META_KEY`] sibling **exactly like the
+    /// provenance trio** (an opaque `serde_json::Value` round-trip in this
+    /// orchestrator-owned envelope — never a BIO edit). Empty ⇒ the key is
+    /// **omitted** (today's-behavior fallback: a code with no archive meta
+    /// decodes/behaves bit-for-bit as today; the install-time skip then
+    /// falls back to always-download for those archives). On the Workspace /
+    /// build-from-scanned-mods `pack_meta` path the caller fills this from
+    /// the on-disk resolved archives ([`build_archive_meta_for_assets`]);
+    /// on a generation point that structurally lacks the files it is left
+    /// empty.
+    pub archive_meta: Vec<ArchiveMeta>,
 }
 
 impl ShareMeta {
@@ -131,7 +184,23 @@ impl ShareMeta {
             name,
             author,
             forked_from: entry.forked_from.clone(),
+            // Default empty — a caller that has the resolved archives on
+            // disk (the Workspace / build-from-scanned-mods path) sets this
+            // explicitly via `with_archive_meta`; a generation point that
+            // structurally lacks the files leaves it empty (the key is then
+            // omitted ⇒ today's-behavior fallback).
+            archive_meta: Vec::new(),
         }
+    }
+
+    /// Builder: attach the per-archive `{name, size, hash}` triples (the
+    /// Wabbajack-compile analog). The caller computes these from the
+    /// on-disk resolved archives via [`build_archive_meta_for_assets`] at a
+    /// generation point where the machine **has** the bytes.
+    #[must_use]
+    pub fn with_archive_meta(mut self, archive_meta: Vec<ArchiveMeta>) -> Self {
+        self.archive_meta = archive_meta;
+        self
     }
 }
 
@@ -191,6 +260,12 @@ pub fn pack_meta(wizard_state: &WizardState, meta: &ShareMeta) -> Result<String,
             .collect::<Vec<_>>();
         obj.insert("forked_from".to_string(), Value::Array(lineage));
     }
+    // The per-archive `{name, size, hash}` sibling (the Wabbajack-compile
+    // analog) — injected the SAME opaque way as the provenance trio. Empty
+    // ⇒ key omitted (today's-behavior fallback; a fieldless code decodes
+    // bit-for-bit as today). NOT a BIO edit (SPEC §13.3 "generation is not
+    // a BIO modification").
+    insert_archive_meta(obj, &meta.archive_meta);
 
     // 4. Re-serialize → zlib-deflate → base64url-encode → re-attach prefix.
     let out_bytes =
@@ -281,6 +356,224 @@ pub fn set_allow_auto_install(code: &str, allow_auto_install: bool) -> Result<St
         "{SHARE_CODE_PREFIX}{}",
         base64url_encode(&recompressed)
     ))
+}
+
+/// Insert the [`ARCHIVE_META_KEY`] sibling into the decoded payload object.
+/// **The one place the key is written** (both `pack_meta` and
+/// [`bake_archive_meta_into_code`] call this — one shape, no drift). Empty
+/// ⇒ the key is **omitted** so a code with no archive meta is byte-for-byte
+/// what today's BIO produces (the install-time skip then falls back to
+/// always-download for those archives — never an error). Each element is
+/// the flat `{ "name": String, "size": u64, "hash": String }` object.
+fn insert_archive_meta(obj: &mut serde_json::Map<String, Value>, archive_meta: &[ArchiveMeta]) {
+    if archive_meta.is_empty() {
+        return;
+    }
+    let arr = archive_meta
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "name": m.name,
+                "size": m.size,
+                "hash": m.hash,
+            })
+        })
+        .collect::<Vec<_>>();
+    obj.insert(ARCHIVE_META_KEY.to_string(), Value::Array(arr));
+}
+
+/// **Bake the per-archive `{name, size, hash}` sibling into an
+/// ALREADY-EXISTING BIO-MODLIST-V1 code — the Wabbajack-compile analog for
+/// the Install-Modlist-paste / Reinstall path** (where the install machine
+/// has just downloaded+verified the archives, so it *has* the bytes, but
+/// per SPEC §13.3 it **persists the held code** rather than regenerating).
+///
+/// This is the [`set_allow_auto_install`] envelope with `archive_meta`
+/// injected instead of `allow_auto_install`: it decodes the held code to an
+/// **opaque `serde_json::Value`**, inserts ONLY the [`ARCHIVE_META_KEY`]
+/// sibling (every other key — incl. the provenance trio + the
+/// `allow_auto_install` bit + every BIO payload field — rides through
+/// **verbatim**, opaque), and re-encodes with the same byte-format BIO's
+/// own decoder round-trips. Composes — never patches — BIO (it does not
+/// call `export_modlist_share_code` at all; SPEC §1 carve-out #5 / §13.3
+/// "generation is not a BIO modification").
+///
+/// Empty `archive_meta` ⇒ the code is returned **unchanged** (re-encoded
+/// through the same lossless codec; the key is omitted). A non-decodable
+/// `code` ⇒ `Err` (the caller falls back to persisting the code verbatim —
+/// the established "the real code is the priority" rule).
+pub fn bake_archive_meta_into_code(
+    code: &str,
+    archive_meta: &[ArchiveMeta],
+) -> Result<String, String> {
+    let encoded = code
+        .trim()
+        .strip_prefix(SHARE_CODE_PREFIX)
+        .ok_or_else(|| "share code did not start with BIO-MODLIST-V1:".to_string())?;
+    let compressed = base64url_decode(encoded)?;
+    let json_bytes = zlib_decompress(&compressed)?;
+    let mut payload: Value = serde_json::from_slice(&json_bytes)
+        .map_err(|err| format!("share payload was not valid JSON: {err}"))?;
+    let obj = payload
+        .as_object_mut()
+        .ok_or_else(|| "share payload was not a JSON object".to_string())?;
+    // Insert ONLY archive_meta — every other key (provenance trio,
+    // allow_auto_install, all BIO fields) is preserved bit-for-bit (opaque
+    // Value). Empty ⇒ key omitted (the code is then a lossless re-encode).
+    insert_archive_meta(obj, archive_meta);
+    let out_bytes =
+        serde_json::to_vec(&payload).map_err(|err| format!("re-serialize failed: {err}"))?;
+    let recompressed = zlib_compress(&out_bytes)?;
+    Ok(format!(
+        "{SHARE_CODE_PREFIX}{}",
+        base64url_encode(&recompressed)
+    ))
+}
+
+/// **Decode the per-archive `{name, size, hash}` sibling out of a
+/// BIO-MODLIST-V1 code** (the install-side read — the Wabbajack-installer
+/// "expected hashes" input). Orchestrator-owned: it reads the key off the
+/// **opaque** decoded payload exactly the way [`pack_meta`] *wrote* it — it
+/// does **not** add a field to BIO's `ModlistSharePayload` (BIO does not
+/// need it; SPEC §13.3 "generation is not a BIO modification" — the
+/// symmetric consume side is equally orchestrator-owned and equally
+/// not-a-BIO-edit).
+///
+/// **Backward-compatible by construction:** a code with no
+/// [`ARCHIVE_META_KEY`] (pre-redesign, third-party, or any code generated
+/// before this ships) ⇒ `Ok(vec![])` (NOT an error) ⇒ the caller treats it
+/// as "no expected hashes known" and falls back to today's always-download
+/// for those archives. A malformed key (wrong type / missing fields) is
+/// skipped element-wise (a best-effort dedupe accelerator must never harden
+/// into a parse failure that blocks an install). A `code` that is not a
+/// decodable BIO-MODLIST-V1 string ⇒ `Err` (the caller already had to
+/// decode it to preview/import, so this only fails on a genuinely broken
+/// input — handled the same as today).
+pub fn decode_archive_meta(code: &str) -> Result<Vec<ArchiveMeta>, String> {
+    let encoded = code
+        .trim()
+        .strip_prefix(SHARE_CODE_PREFIX)
+        .ok_or_else(|| "share code did not start with BIO-MODLIST-V1:".to_string())?;
+    let compressed = base64url_decode(encoded)?;
+    let json_bytes = zlib_decompress(&compressed)?;
+    let payload: Value = serde_json::from_slice(&json_bytes)
+        .map_err(|err| format!("share payload was not valid JSON: {err}"))?;
+    let Some(arr) = payload.get(ARCHIVE_META_KEY).and_then(Value::as_array) else {
+        // Absent (or not an array) ⇒ today's-behavior fallback: no expected
+        // hashes known. NOT an error.
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::with_capacity(arr.len());
+    for el in arr {
+        let (Some(name), Some(size), Some(hash)) = (
+            el.get("name").and_then(Value::as_str),
+            el.get("size").and_then(Value::as_u64),
+            el.get("hash").and_then(Value::as_str),
+        ) else {
+            // Skip a malformed element rather than failing the whole decode
+            // (the worst case is a redundant re-download of that one
+            // archive — never a blocked install).
+            continue;
+        };
+        if name.is_empty() || hash.is_empty() {
+            continue;
+        }
+        out.push(ArchiveMeta {
+            name: name.to_string(),
+            size,
+            hash: hash.to_string(),
+        });
+    }
+    Ok(out)
+}
+
+/// **Export-time hashing (the Wabbajack-compile step).** For every resolved
+/// update asset whose archive is on disk at BIO's deterministic path
+/// (`<archive_dir>/<archive_file_name(asset)>`), compute `{name, size,
+/// hash}` — `name` = `archive_file_name(asset)` (the SAME logical key the
+/// content-addressed store / lock / the install-time skip use), `size` =
+/// the file's exact byte length, `hash` = `archive_store::hash_file` (the
+/// ONE stable seedless FNV-1a-128 used everywhere — one hashing path, zero
+/// drift).
+///
+/// An asset whose archive is **absent** on disk is simply skipped (no
+/// entry) — the share code then carries no expected hash for it and the
+/// recipient's install-time skip falls back to always-download for that one
+/// (honest, never wrong). This is read-only on the archive dir and reuses
+/// BIO's `archive_file_name` **read-only** (zero BIO edit).
+#[must_use]
+pub fn build_archive_meta_for_assets(
+    assets: &[crate::app::state::Step2UpdateAsset],
+    archive_dir: &std::path::Path,
+) -> Vec<ArchiveMeta> {
+    use crate::app::app_step2_update_download::archive_file_name;
+    let mut out = Vec::new();
+    for asset in assets {
+        let name = archive_file_name(asset);
+        let path = archive_dir.join(&name);
+        let Ok(meta) = std::fs::metadata(&path) else {
+            continue; // absent ⇒ no expected hash baked for this archive
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let size = meta.len();
+        // The SAME content hash everything else uses (one hashing path —
+        // the brief's premise-check outcome: reuse `archive_store`'s stable
+        // seedless FNV-1a-128, do NOT introduce a second algorithm).
+        match crate::install_runtime::archive_store::hash_file(&path) {
+            Ok(hash) => out.push(ArchiveMeta { name, size, hash }),
+            Err(_) => continue, // unreadable ⇒ skip (honest "no hash")
+        }
+    }
+    out
+}
+
+/// **Export-time hashing from the per-install lock (the primary
+/// clean-exit bake source).** At a clean exit the just-downloaded+verified
+/// archives are on disk and `archive_store`'s per-install lock
+/// (`<destination>/.bio-install-lock.json`) records exactly `name → hash`
+/// for THIS modlist (written by `ingest_downloaded_archives` /
+/// `verify_downloaded_archives`). This turns that authoritative record into
+/// the `{name, size, hash}` triples to bake into the verified, re-shareable
+/// code — `name`/`hash` straight from the lock, `size` by stat-ing the
+/// archive on disk (the content-addressed `<name>.<hash>.<ext>` copy, or
+/// the deterministic `<name>`).
+///
+/// An entry whose archive cannot be stat-ed on disk is **omitted** (honest
+/// — the recipient then always-downloads that one; never wrong). Empty lock
+/// ⇒ empty vec (the key is then omitted by [`insert_archive_meta`] — a code
+/// with no archive meta, today's-behavior fallback). Read-only on the lock
+/// + the archive dir; zero BIO edit.
+#[must_use]
+pub fn build_archive_meta_from_install_lock(
+    destination: &str,
+    archive_dir: &std::path::Path,
+) -> Vec<ArchiveMeta> {
+    use crate::install_runtime::archive_store::{InstallArchiveLock, stored_filename};
+    let lock = InstallArchiveLock::load(destination);
+    let mut out = Vec::with_capacity(lock.resolved.len());
+    for (name, hash) in &lock.resolved {
+        // Prefer the content-addressed stored copy (it is the canonical,
+        // hash-pinned file `ingest` wrote); fall back to the deterministic
+        // path. Whichever exists, its byte length is the archive's size.
+        let stored = archive_dir.join(stored_filename(name, hash));
+        let deterministic = archive_dir.join(name);
+        let size = std::fs::metadata(&stored)
+            .or_else(|_| std::fs::metadata(&deterministic))
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .map(|m| m.len());
+        let Some(size) = size else {
+            continue; // not on disk ⇒ omit (recipient always-downloads it)
+        };
+        out.push(ArchiveMeta {
+            name: name.clone(),
+            size,
+            hash: hash.clone(),
+        });
+    }
+    out
 }
 
 // ── Standard zlib + base64url codec (only `flate2` + std; byte-identical
@@ -445,6 +738,10 @@ mod tests {
                 .collect::<Vec<_>>();
             obj.insert("forked_from".to_string(), Value::Array(lineage));
         }
+        // Mirror `pack_meta`'s archive_meta injection (the SAME shared
+        // injector the production path uses) so the envelope-only test
+        // reflects the real shape.
+        insert_archive_meta(obj, &meta.archive_meta);
         let out_bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         Ok(format!(
             "{SHARE_CODE_PREFIX}{}",
@@ -480,6 +777,7 @@ mod tests {
             name: None,
             author: None,
             forked_from: vec![],
+            archive_meta: vec![],
         };
         let code = pack_meta_envelope_only(&base, &meta).expect("pack");
         let v = decode_payload(&code);
@@ -519,6 +817,7 @@ mod tests {
                     author: "@b2bs".to_string(),
                 },
             ],
+            archive_meta: vec![],
         };
         let code = pack_meta_envelope_only(&base, &meta).expect("pack");
         let v = decode_payload(&code);
@@ -582,6 +881,7 @@ mod tests {
                 name: Some("X".to_string()),
                 author: None,
                 forked_from: vec![],
+                archive_meta: vec![],
             },
         )
         .unwrap();
@@ -592,6 +892,7 @@ mod tests {
                 name: Some("X".to_string()),
                 author: Some("@me".to_string()),
                 forked_from: vec![],
+                archive_meta: vec![],
             },
         )
         .unwrap();
@@ -730,5 +1031,244 @@ mod tests {
         assert_eq!(v["allow_auto_install"], json!(true));
         assert_eq!(v["game_install"], json!("BG2EE"));
         assert_eq!(v["x"], json!([1, 2, 3]));
+    }
+
+    // ───── Download-Overhaul Run 1 — the per-archive {name,size,hash}
+    //       sibling (the Wabbajack-compile/-install model) ─────
+    //
+    // The share code carries `{name, size, hash}` per archive, injected the
+    // SAME opaque way as the provenance trio (not a BIO edit). These pin:
+    // the key round-trips byte-exact, it rides through `set_allow_auto_
+    // install` verbatim (the Install-Modlist path), a fieldless code decodes
+    // to an empty vec (today's-behavior fallback — never an error), and a
+    // malformed element is skipped (a dedupe accelerator never blocks an
+    // install).
+
+    fn am(name: &str, size: u64, hash: &str) -> ArchiveMeta {
+        ArchiveMeta {
+            name: name.to_string(),
+            size,
+            hash: hash.to_string(),
+        }
+    }
+
+    #[test]
+    fn pack_meta_bakes_archive_meta_and_decode_recovers_it_byte_exact() {
+        let base = make_base(&json!({ "format_version": 1, "game_install": "EET" }));
+        let meta = ShareMeta {
+            allow_auto_install: false,
+            name: Some("Tactical".to_string()),
+            author: None,
+            forked_from: vec![],
+            archive_meta: vec![
+                am("a__github__v1.zip", 17, "deadbeef00000000deadbeef00000000"),
+                am("b__weasel__v2.7z", 4096, "0123456789abcdef0123456789abcdef"),
+            ],
+        };
+        let code = pack_meta_envelope_only(&base, &meta).expect("pack");
+        // The raw JSON object carries the flat sibling array.
+        let v = decode_payload(&code);
+        assert_eq!(
+            v["archive_meta"],
+            json!([
+                { "name": "a__github__v1.zip", "size": 17, "hash": "deadbeef00000000deadbeef00000000" },
+                { "name": "b__weasel__v2.7z", "size": 4096, "hash": "0123456789abcdef0123456789abcdef" },
+            ]),
+            "archive_meta is a flat sibling key (like forked_from), NOT a wrapper"
+        );
+        // The orchestrator-owned decoder recovers the triples byte-exact.
+        let decoded = decode_archive_meta(&code).expect("decode");
+        assert_eq!(decoded, meta.archive_meta, "round-trip byte-exact");
+    }
+
+    #[test]
+    fn empty_archive_meta_omits_the_key_and_decodes_as_today() {
+        // A code with no archive meta is byte-for-byte what today's BIO
+        // produces (the key is OMITTED, not an empty array) ⇒ decode yields
+        // an empty vec (NOT an error) ⇒ the install-time skip falls back to
+        // always-download for those archives.
+        let base = make_base(&json!({ "format_version": 1, "game_install": "BGEE" }));
+        let meta = ShareMeta {
+            allow_auto_install: true,
+            name: None,
+            author: None,
+            forked_from: vec![],
+            archive_meta: vec![],
+        };
+        let code = pack_meta_envelope_only(&base, &meta).expect("pack");
+        let v = decode_payload(&code);
+        assert!(
+            v.get("archive_meta").is_none(),
+            "empty ⇒ key omitted (today's-behavior fallback, no schema noise)"
+        );
+        assert_eq!(
+            decode_archive_meta(&code).expect("decode"),
+            Vec::<ArchiveMeta>::new(),
+            "no key ⇒ empty vec, NOT an error (backward-compatible)"
+        );
+        // A genuinely pre-redesign / third-party code (built straight, no
+        // envelope at all) also decodes to empty — never an error.
+        let raw_old = make_base(&json!({ "format_version": 1, "game_install": "EET" }));
+        assert_eq!(
+            decode_archive_meta(&raw_old).expect("old code decodes"),
+            Vec::<ArchiveMeta>::new(),
+            "pre-redesign code (no archive_meta) ⇒ empty vec, not an error"
+        );
+    }
+
+    #[test]
+    fn bake_archive_meta_into_code_preserves_every_other_key_verbatim() {
+        // The Install-Modlist-paste / Reinstall path: the machine HAS the
+        // bytes but persists the held code. `bake_archive_meta_into_code`
+        // adds ONLY the archive_meta sibling; every other key (provenance,
+        // the allow_auto_install bit, all BIO payload fields) rides through
+        // verbatim (opaque Value — exactly like set_allow_auto_install).
+        let original = make_base(&json!({
+            "format_version": 1,
+            "bio_version": "0.1.0-test",
+            "game_install": "EET",
+            "weidu_logs": { "bgee": "// log\n~A~ #0", "bg2ee": null },
+            "allow_auto_install": false,
+            "name": "Tactical EET 2026",
+            "author": "@sharer",
+            "forked_from": [{ "name": "Root", "author": "@root" }],
+        }));
+        let metas = vec![am("m__gh__v1.zip", 123, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")];
+        let out = bake_archive_meta_into_code(&original, &metas).expect("bake ok");
+        let v = decode_payload(&out);
+        // archive_meta added.
+        assert_eq!(decode_archive_meta(&out).unwrap(), metas);
+        // EVERY other key preserved bit-for-bit.
+        assert_eq!(v["allow_auto_install"], json!(false));
+        assert_eq!(v["name"], json!("Tactical EET 2026"));
+        assert_eq!(v["author"], json!("@sharer"));
+        assert_eq!(
+            v["forked_from"],
+            json!([{ "name": "Root", "author": "@root" }])
+        );
+        assert_eq!(v["game_install"], json!("EET"));
+        assert_eq!(v["weidu_logs"]["bgee"], json!("// log\n~A~ #0"));
+        assert_eq!(v["bio_version"], json!("0.1.0-test"));
+    }
+
+    #[test]
+    fn archive_meta_survives_set_allow_auto_install_flip() {
+        // The Install-Modlist lifecycle: install-start bakes the archive
+        // meta + flips the bit false; clean-exit flips it true. The
+        // archive_meta must ride through BOTH flips verbatim (opaque Value)
+        // — `set_allow_auto_install` only touches the one bit.
+        let base = make_base(&json!({ "format_version": 1, "game_install": "EET" }));
+        let metas = vec![
+            am("x__gh__v1.zip", 10, "11111111111111111111111111111111"),
+            am("y__wm__v2.zip", 20, "22222222222222222222222222222222"),
+        ];
+        let with_meta = bake_archive_meta_into_code(&base, &metas).expect("bake");
+        let at_start = set_allow_auto_install(&with_meta, false).expect("flip false");
+        assert_eq!(
+            decode_archive_meta(&at_start).unwrap(),
+            metas,
+            "archive_meta survives the install-start false-flip"
+        );
+        let at_clean = set_allow_auto_install(&at_start, true).expect("flip true");
+        assert_eq!(
+            decode_archive_meta(&at_clean).unwrap(),
+            metas,
+            "archive_meta survives the clean-exit true-flip too (every key \
+             but the bit is opaque-preserved)"
+        );
+        assert_eq!(decode_payload(&at_clean)["allow_auto_install"], json!(true));
+    }
+
+    #[test]
+    fn bake_empty_archive_meta_is_a_lossless_reencode_and_errs_on_non_bio() {
+        // Empty ⇒ the code is returned unchanged (re-encoded losslessly;
+        // key omitted). A non-BIO string ⇒ Err (caller falls back to
+        // verbatim — the established "the real code is the priority" rule).
+        let base = make_base(&json!({ "format_version": 1, "game_install": "BGEE", "k": 9 }));
+        let out = bake_archive_meta_into_code(&base, &[]).expect("empty ⇒ lossless re-encode");
+        let v = decode_payload(&out);
+        assert!(v.get("archive_meta").is_none(), "empty ⇒ key omitted");
+        assert_eq!(v["k"], json!(9), "payload otherwise identical");
+        assert!(bake_archive_meta_into_code("not a code", &[]).is_err());
+        assert!(
+            bake_archive_meta_into_code("BIO-MODLIST-V1:!!!bad!!!", &[]).is_err(),
+            "a prefixed-but-undecodable code Errs (caller persists verbatim)"
+        );
+    }
+
+    #[test]
+    fn decode_archive_meta_skips_malformed_elements_not_fails() {
+        // A best-effort dedupe accelerator must never harden into a parse
+        // failure that blocks an install: a malformed element (wrong type /
+        // missing field / empty name) is skipped element-wise; the good
+        // ones still decode.
+        let code = make_base(&json!({
+            "format_version": 1,
+            "archive_meta": [
+                { "name": "ok.zip", "size": 5, "hash": "ffffffffffffffffffffffffffffffff" },
+                { "name": "missing-size.zip", "hash": "00000000000000000000000000000000" },
+                { "size": 7, "hash": "11111111111111111111111111111111" },
+                { "name": "", "size": 1, "hash": "22222222222222222222222222222222" },
+                "not even an object",
+                { "name": "good2.7z", "size": 99, "hash": "33333333333333333333333333333333" },
+            ],
+        }));
+        let decoded = decode_archive_meta(&code).expect("never fails on malformed elements");
+        assert_eq!(
+            decoded,
+            vec![
+                am("ok.zip", 5, "ffffffffffffffffffffffffffffffff"),
+                am("good2.7z", 99, "33333333333333333333333333333333"),
+            ],
+            "only the well-formed elements survive; the rest are skipped \
+             (a redundant re-download at worst, never a blocked install)"
+        );
+    }
+
+    #[test]
+    fn build_archive_meta_for_assets_hashes_only_on_disk_archives() {
+        // The Wabbajack-compile step: hash the resolved archives that are
+        // on disk; an absent archive ⇒ no entry (the recipient then
+        // always-downloads that one — honest, never wrong). `name` ==
+        // `archive_file_name(asset)`, `hash` == `archive_store::hash_file`
+        // (the ONE hashing path — same as everywhere else).
+        use crate::app::app_step2_update_download::archive_file_name;
+        use crate::app::state::Step2UpdateAsset;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static C: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "bio_build_archive_meta_test_{}_{}",
+            std::process::id(),
+            C.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mk = |tp: &str, src: &str, tag: &str, name: &str| Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp.to_string(),
+            label: tp.to_string(),
+            source_id: src.to_string(),
+            tag: tag.to_string(),
+            asset_name: name.to_string(),
+            asset_url: format!("https://example/{name}"),
+            installed_source_ref: None,
+        };
+        let present = mk("AMOD/AMOD.TP2", "github", "v1", "A.zip");
+        let absent = mk("BMOD/BMOD.TP2", "weasel", "v2", "B.zip");
+        let present_name = archive_file_name(&present);
+        std::fs::write(dir.join(&present_name), b"ARCHIVE-BYTES-123").unwrap();
+
+        let metas = build_archive_meta_for_assets(&[present.clone(), absent], &dir);
+        assert_eq!(metas.len(), 1, "only the on-disk archive is hashed");
+        assert_eq!(metas[0].name, present_name);
+        assert_eq!(metas[0].size, "ARCHIVE-BYTES-123".len() as u64);
+        // The hash is EXACTLY archive_store::hash_file (one hashing path).
+        assert_eq!(
+            metas[0].hash,
+            crate::install_runtime::archive_store::hash_file(&dir.join(&present_name)).unwrap(),
+            "the baked hash is the SAME stable FNV-1a-128 the content-\
+             addressed store uses (one hashing path, zero drift)"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -117,6 +117,7 @@
 //                               convention + `write_install_start_artifacts`
 //                               — zero BIO source. SPEC §13.13/§13.1/§13.3/
 //                               §4.x/§3.1. ──
+pub mod archive_skip;
 pub mod archive_store;
 pub mod auto_build_driver;
 pub mod flag_policies;
