@@ -815,6 +815,109 @@ mod tests {
     }
 
     #[test]
+    fn amendment_b_compose_importer_applier_under_space_destination() {
+        // **Phase-7 fix-arc Run 5 (integration) — the composed-flow
+        // assertion for the `pub(crate)` importer↔applier leg.** This pins
+        // the AMENDMENT + B + the real saved-log-applier composing under a
+        // destination whose path CONTAINS A SPACE (the case the upstream
+        // `a38e360` WeiDU-no-space-preflight removal unblocked — a real
+        // user dest like `…\test oli rp`):
+        //
+        //   - AMENDMENT: every per-install dir resolves INSIDE the
+        //     space-containing destination (no appdata exception);
+        //   - importer write target (the `import_log_target_path`
+        //     contract-replica — that BIO fn is private; the established
+        //     split replicates its observable contract) == the **real**
+        //     `pub(crate)` saved-log applier read path
+        //     (`app_step2_log::resolve_*_weidu_log_path`), so the imported
+        //     `weidu.log` write + the auto-build read agree (no inert 0/0);
+        //   - B: the rebuilt `weidu_log_mode` `log <folder>` token is
+        //     EXACTLY AMENDMENT's derived `weidu_component_logs` dir under
+        //     the SAME space dest — they compose (same path), not conflict.
+        //
+        // In-memory `Step1State` + the real pure `resolve_*` reader; the
+        // only I/O is `create_dir_all` under a throwaway temp dest —
+        // DATA-LOSS-safe by construction (never `%APPDATA%\bio`).
+        let dest = td(); // a temp dest …
+        let dest_str = format!("{} with space", dest.to_string_lossy()); // … made space-containing
+        let dest_path = std::path::PathBuf::from(&dest_str);
+        let mut s = Step1State::default();
+        let dirs = derive_per_install_dirs(&mut s, &dest_str, Game::EET).expect("derive EET");
+
+        // AMENDMENT — every per-install dir is under the SPACE dest.
+        for d in dirs.all_dirs() {
+            assert!(
+                d.starts_with(&dest_path),
+                "AMENDMENT: {} must be inside the space-containing destination (no appdata exception)",
+                d.display()
+            );
+        }
+        assert_eq!(
+            dirs.weidu_component_logs,
+            dest_path.join(WEIDU_COMPONENT_LOGS_DIRNAME),
+            "AMENDMENT: weidu_component_logs == <space dest>/weidu_component_logs"
+        );
+
+        // importer write target == real applier read path, under the
+        // space dest, for EVERY install mode the payload can carry.
+        for mode in [
+            Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS,
+            Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS,
+            Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT,
+        ] {
+            // EET: BGEE-phase AND BG2EE-phase, distinct (no clobber).
+            s.game_install = "EET".to_string();
+            s.install_mode = mode.to_string();
+            s.sync_install_mode_flags();
+            let wb = importer_write_target(&s, true).expect("EET BGEE importer write target");
+            let rb = crate::app::app_step2_log::resolve_bgee_weidu_log_path(&s)
+                .expect("EET BGEE real applier read path");
+            let w2 = importer_write_target(&s, false).expect("EET BG2EE importer write target");
+            let r2 = crate::app::app_step2_log::resolve_bg2_weidu_log_path(&s)
+                .expect("EET BG2EE real applier read path");
+            assert_eq!(
+                wb, rb,
+                "{mode}: BGEE importer write target == real applier read path"
+            );
+            assert_eq!(
+                w2, r2,
+                "{mode}: BG2EE importer write target == real applier read path"
+            );
+            assert_ne!(
+                wb, w2,
+                "{mode}: the two EET phase logs write to distinct files"
+            );
+            assert!(
+                wb.starts_with(&dest_path) && w2.starts_with(&dest_path),
+                "{mode}: importer/applier targets are inside the SPACE destination"
+            );
+        }
+
+        // B composes with AMENDMENT: the `weidu_log_mode` `log <folder>`
+        // token is EXACTLY the derived `weidu_component_logs` dir (the
+        // same path AMENDMENT placed under the space dest) PLUS the base
+        // tokens (additive — never a clobber).
+        let ulog = dirs.weidu_component_logs.to_string_lossy().into_owned();
+        assert_eq!(
+            s.weidu_log_mode,
+            format!("autolog,logapp,log-extern,log {}", ulog.trim()),
+            "B+AMENDMENT compose: weidu_log_mode == base tokens + `log <weidu_component_logs>` \
+             where that folder IS AMENDMENT's derived dir under the space dest (same path, not a conflict)"
+        );
+        assert_eq!(
+            s.weidu_log_folder, ulog,
+            "B's source-of-truth weidu_log_folder == AMENDMENT's weidu_component_logs under the space dest"
+        );
+        assert!(
+            s.weidu_log_log_component,
+            "#2 per-component logging forced ON"
+        );
+
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&dest_path);
+    }
+
+    #[test]
     fn derive_sets_have_weidu_logs_consistently_and_creates_the_source_dirs() {
         // `have_weidu_logs` is mode-consistent post-derive (the import's
         // `sync_install_mode_flags()` re-derives it identically from the
