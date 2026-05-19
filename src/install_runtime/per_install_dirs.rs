@@ -20,11 +20,21 @@
 //     here and this is what "scan mods folder" reads. Removed on a clean
 //     successful install (`cleanup_per_install_mods_folder`); a failed /
 //     cancelled install leaves it for diagnosis/resume.
-//   - **#2 `-u` per-component logs** — `<dest>/weidu_component_logs`, with
-//     `weidu_log_log_component = true` (and `weidu_log_mode_enabled` stays
-//     BIO's default `true`). BIO derives `-u` from `weidu_log_folder` +
-//     `weidu_log_log_component` (`state_validation_paths.rs:77-92`); the
-//     user does not configure the path (SPEC §13.12 #2).
+//   - **#2 per-component logs** — `<dest>/weidu_component_logs`. The
+//     mechanism is BIO's `weidu_log_mode` **`log <folder>` token** (there
+//     is NO `-u` arg anywhere in BIO — `weidu_exec.rs::build_args` emits
+//     `--log/--autolog/--logapp/--log-extern` parsed from the
+//     `weidu_log_mode` token string). Set `weidu_log_log_component = true`
+//     + `weidu_log_folder = <dest>/weidu_component_logs`, then rebuild
+//     `weidu_log_mode` via BIO's own `pub fn`
+//     `service_step1::sync_weidu_log_mode` (read-only reuse — not a BIO
+//     edit, no carve-out). `step5_command_common_args::append_common_args`
+//     already emits `--weidu-log-mode <weidu_log_mode>` (gated on
+//     `weidu_log_mode_enabled`, BIO's default `true`); the rebuild is
+//     additive (`autolog,logapp,log-extern` are preserved — those three
+//     booleans are `true` on every redesign install path — and `log
+//     <folder>` is appended) and idempotent. The user does not configure
+//     the path (SPEC §13.12 #2).
 //   - **WeiDU-log SOURCE folders** (§13.12a per-install derived set) —
 //     `<dest>/weidu_log_source/bgee` + `<dest>/weidu_log_source/bg2ee`.
 //     The share-code importer (`modlist_share.rs`
@@ -86,13 +96,15 @@ use crate::registry::model::Game;
 /// (SPEC §13.12a). `<destination>/mods`.
 pub const MODS_DIRNAME: &str = "mods";
 
-/// The fixed per-install **`-u` per-component WeiDU log** folder name
-/// (SPEC §13.12 #2). `<destination>/weidu_component_logs`.
+/// The fixed per-install **per-component WeiDU log** folder name (SPEC
+/// §13.12 #2). `<destination>/weidu_component_logs`. Conveyed to WeiDU via
+/// the `weidu_log_mode` `log <folder>` token (NOT a `-u` flag — see the
+/// module header), set by `derive_per_install_dirs`.
 pub const WEIDU_COMPONENT_LOGS_DIRNAME: &str = "weidu_component_logs";
 
 /// The fixed per-install **WeiDU-log SOURCE** parent folder name
 /// (SPEC §13.12a — per-install, inside the destination, derived, never
-/// asked). This is **distinct from** the `-u` per-component logs dir
+/// asked). This is **distinct from** the per-component logs dir
 /// (`weidu_component_logs`, SPEC §13.12 #2) and from the game-clone dirs:
 /// it is where the share-code importer writes the code's baked-in
 /// `weidu.log` and where BIO's saved-log/auto-build flow reads it back.
@@ -129,7 +141,9 @@ pub const IWDEE_CLONE_DIRNAME: &str = "Icewind Dale Enhanced Edition";
 pub struct PerInstallDirs {
     /// `<dest>/mods` — extract/stage + scan target (SPEC §13.12a).
     pub mods_folder: PathBuf,
-    /// `<dest>/weidu_component_logs` — `-u` target (SPEC §13.12 #2).
+    /// `<dest>/weidu_component_logs` — per-component WeiDU-log target
+    /// (SPEC §13.12 #2; conveyed via the `weidu_log_mode` `log <folder>`
+    /// token, not a `-u` flag — see the module header).
     pub weidu_component_logs: PathBuf,
     /// `<dest>/weidu_log_source/bgee` — the BGEE/BG1-phase WeiDU-log
     /// SOURCE folder (SPEC §13.12a). The importer writes
@@ -299,9 +313,58 @@ pub fn derive_per_install_dirs(
     // SPEC §13.12a Mods folder — extract/stage + scan target.
     wizard_state_step1.mods_folder = path_string(&dirs.mods_folder);
 
-    // SPEC §13.12 #2 `-u` — per-component logs dir, always ON.
+    // SPEC §13.12 #2 — per-component WeiDU logs. The mechanism is BIO's
+    // `weidu_log_mode` `log <folder>` token (NOT a `-u` CLI flag — there is
+    // no `-u` arg anywhere in BIO; `weidu_exec.rs::build_args` emits
+    // `--log/--autolog/--logapp/--log-extern` parsed from the
+    // `weidu_log_mode` token string, and `step5_command_common_args::
+    // append_common_args` already emits `--weidu-log-mode
+    // <step1.weidu_log_mode>` whenever `weidu_log_mode_enabled` — true on
+    // this path by `Step1State::default()`). Set the two source-of-truth
+    // fields BIO's own Step-1 `sync_weidu_log_mode` reads…
     wizard_state_step1.weidu_log_log_component = true;
     wizard_state_step1.weidu_log_folder = path_string(&dirs.weidu_component_logs);
+    // …then rebuild `weidu_log_mode` via BIO's OWN canonical function
+    // (`bio::ui::step1::service_step1::sync_weidu_log_mode`). This is
+    // **read-only reuse of an existing `pub fn`** — the established
+    // orchestrator pattern (the same way the WeiDU-log SOURCE block below
+    // reuses BIO's `pub(crate)` `resolve_*_weidu_log_path`); it is NOT a
+    // BIO edit and needs NO carve-out (the file is never modified). The
+    // redesign `install_runtime` is the ONLY thing on the auto-build /
+    // workspace install paths that produces a `log <folder>` token — BIO's
+    // `sync_weidu_log_mode` is otherwise wired *only* into the BIO Step-1
+    // GUI (`content_step1.rs:340` / `page_step1.rs:26`), which the redesign
+    // never enters — so without this call `weidu_log_mode` keeps its
+    // base-token default and `weidu_component_logs` stays empty on every
+    // redesign install (the whole P7 #2 root cause).
+    //
+    // **Additive, not a clobber (verified in source — the brief's gate for
+    // choosing this mechanism over the fallback fold).** `sync_weidu_log_
+    // mode` rebuilds `weidu_log_mode` from the four booleans
+    // (`weidu_log_autolog`/`weidu_log_logapp`/`weidu_log_logextern` +
+    // `weidu_log_log_component`). On BOTH redesign install paths
+    // (`auto_build_driver::prepare_install_dirs_and_maybe_import` and
+    // `start_hooks::on_install_start`) the three base booleans are `true`
+    // here: `Step1State::default()`/`Step1Settings::default()` set all three
+    // `true`; `state_convert.rs`'s `Step1Settings → Step1State` copies them
+    // 1:1; `workspace_state_loader::sync_paths_from_settings` copies ONLY
+    // path/tool fields (it never touches these booleans nor
+    // `weidu_log_mode`); the redesign Settings UI (`src/ui/settings/`) has
+    // ZERO references to any `weidu_log_*` boolean — they are flipped *only*
+    // by BIO's Step-1 GUI, never reached on a redesign install. So the
+    // rebuilt value is `"autolog,logapp,log-extern,log <folder>"` — the
+    // exact pre-existing `weidu_log_mode` default PLUS the new token (the
+    // base tokens are preserved, never dropped). **Idempotent**:
+    // `sync_weidu_log_mode` rebuilds from the flags from scratch (it does
+    // NOT append to the current `weidu_log_mode`), so a second
+    // `derive_per_install_dirs` produces an identical string — no doubled
+    // `log` token. This MUST run before `build_install_command_config`
+    // copies `step1.weidu_log_mode` into `InstallCommandConfig`; it does, by
+    // contract — `derive_per_install_dirs` runs at install-prep
+    // (`auto_build_driver`/`on_install_start`) while
+    // `build_install_command_config` runs much later at install kick-off
+    // (`app_step5::install_flow`).
+    crate::ui::step1::service_step1::sync_weidu_log_mode(wizard_state_step1);
 
     // ── SPEC §13.12a WeiDU-log SOURCE folders (the download-never-starts
     //    root-cause fix). The share-code importer's write target
@@ -429,6 +492,7 @@ fn path_string(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
+/// **Run-3 acceptance trace helper (orchestrator-owned, in-crate reuse).**
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -894,13 +958,18 @@ mod tests {
         assert!(d.weidu_log_source_bgee.starts_with(dest_with_space));
         assert!(d.weidu_log_source_bg2ee.starts_with(dest_with_space));
 
-        // And the `Step1State` field BIO's `-u` derivation reads
-        // (`weidu_log_folder`) points at that same in-destination path.
+        // And the `Step1State` field BIO's `sync_weidu_log_mode` reads to
+        // build the `weidu_log_mode` `log <folder>` token (`weidu_log_
+        // folder` — the actual #2 mechanism, NOT a `-u` flag) points at
+        // that same in-destination path.
         let dest = td();
         let dest_s = dest.to_string_lossy().into_owned();
         let mut step1 = Step1State::default();
         let dirs = derive_per_install_dirs(&mut step1, &dest_s, Game::BGEE).expect("derive");
-        assert!(step1.weidu_log_log_component, "#2 `-u` stays forced ON");
+        assert!(
+            step1.weidu_log_log_component,
+            "#2 per-component logging stays forced ON"
+        );
         assert_eq!(
             step1.weidu_log_folder,
             dirs.weidu_component_logs.to_string_lossy(),
@@ -909,6 +978,163 @@ mod tests {
         assert!(
             step1.weidu_log_folder.starts_with(&dest_s),
             "AMENDMENT: weidu_log_folder is inside the destination"
+        );
+        let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    // ───── P7 #2 — the `weidu_log_mode` `log <folder>` token (Run 3) ─────
+    //
+    // The actual SPEC §13.12 #2 mechanism: `derive_per_install_dirs` must
+    // leave `step1.weidu_log_mode` carrying a `log <weidu_component_logs>`
+    // token so BIO's existing `step5_command_common_args::append_common_
+    // args` (`--weidu-log-mode <weidu_log_mode>`, gated on
+    // `weidu_log_mode_enabled` = default `true`) conveys per-component
+    // logging to WeiDU — there is NO `-u` flag. The fold reuses BIO's own
+    // `pub fn sync_weidu_log_mode`; these prove it is **additive** (the
+    // `autolog,logapp,log-extern` base tokens survive — those three
+    // booleans are `true` on every redesign install path) and
+    // **idempotent**. In-memory `Step1State` only + a throwaway temp
+    // destination — DATA-LOSS-safe by construction (no `%APPDATA%\bio`).
+
+    /// Split the BIO `weidu_log_mode` CSV the same way WeiDU's token parser
+    /// does, so an assertion is on the *token set* not raw substring order.
+    fn mode_tokens(s: &str) -> Vec<String> {
+        s.split(',').map(|t| t.trim().to_string()).collect()
+    }
+
+    #[test]
+    fn derive_folds_an_additive_log_folder_token_into_weidu_log_mode() {
+        // Pre-state: BIO's default `weidu_log_mode` is exactly the three
+        // base tokens (the value `append_common_args` would emit WITHOUT
+        // this fix — proving per-component logging would be absent).
+        let mut step1 = Step1State::default();
+        assert_eq!(
+            step1.weidu_log_mode, "autolog,logapp,log-extern",
+            "precondition: default weidu_log_mode is the base tokens only \
+             (no `log <folder>` ⇒ weidu_component_logs would stay empty — \
+             the whole P7 #2 root cause)"
+        );
+        assert!(
+            step1.weidu_log_autolog && step1.weidu_log_logapp && step1.weidu_log_logextern,
+            "precondition: the three base booleans are true on this path \
+             (so the rebuild is additive, not a clobber)"
+        );
+
+        let dest = td();
+        let dest_s = dest.to_string_lossy().into_owned();
+        let dirs = derive_per_install_dirs(&mut step1, &dest_s, Game::BGEE).expect("derive");
+
+        let folder = dirs.weidu_component_logs.to_string_lossy().into_owned();
+        let tokens = mode_tokens(&step1.weidu_log_mode);
+        // ADDITIVE: every base token is still present …
+        for base in ["autolog", "logapp", "log-extern"] {
+            assert!(
+                tokens.iter().any(|t| t == base),
+                "base token `{base}` MUST survive the fold (additive, not a \
+                 clobber to just `log <folder>`); got {:?}",
+                step1.weidu_log_mode
+            );
+        }
+        // … AND the `log <weidu_component_logs>` token was appended (BIO's
+        // exact `format!(\"log {}\", folder.trim())` shape).
+        let expected_log_token = format!("log {}", folder.trim());
+        assert!(
+            tokens.iter().any(|t| t == &expected_log_token),
+            "the `log <folder>` token MUST be present (this is the #2 \
+             mechanism `append_common_args` carries via --weidu-log-mode); \
+             expected `{expected_log_token}` in {:?}",
+            step1.weidu_log_mode
+        );
+        // Concretely the exact string BIO's sync_weidu_log_mode produces
+        // from (autolog,logapp,log-extern,log_component=true) here.
+        assert_eq!(
+            step1.weidu_log_mode,
+            format!("autolog,logapp,log-extern,log {}", folder.trim()),
+            "the rebuilt weidu_log_mode is the base default PLUS the `log \
+             <folder>` token — preserved, not replaced"
+        );
+        assert!(
+            step1.weidu_log_log_component,
+            "#2 per-component logging stays forced ON (the source-of-truth \
+             flag sync_weidu_log_mode reads)"
+        );
+        let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn derive_weidu_log_mode_fold_is_idempotent() {
+        // A re-attempt / resume re-derives; `sync_weidu_log_mode` rebuilds
+        // from the booleans (it does NOT append to the current value), so a
+        // second derive yields an IDENTICAL string — no doubled `log` token.
+        let dest = td();
+        let dest_s = dest.to_string_lossy().into_owned();
+        let mut step1 = Step1State::default();
+        derive_per_install_dirs(&mut step1, &dest_s, Game::EET).expect("derive #1");
+        let after_first = step1.weidu_log_mode.clone();
+        derive_per_install_dirs(&mut step1, &dest_s, Game::EET).expect("derive #2");
+        assert_eq!(
+            step1.weidu_log_mode, after_first,
+            "idempotent: a second derive must not change weidu_log_mode \
+             (no doubled `log` token)"
+        );
+        assert_eq!(
+            step1
+                .weidu_log_mode
+                .matches("log ")
+                .filter(|_| true)
+                .count(),
+            // exactly one `log ` token (the `log-extern` token is `log-`,
+            // not `log ` — the trailing space disambiguates).
+            1,
+            "exactly one `log <folder>` token after repeated derives"
+        );
+        let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn emitted_install_args_carry_additive_weidu_log_mode() {
+        // End-to-end through BIO's REAL command builder (the same path the
+        // install pipeline uses): after derive, `build_install_command_
+        // config` → `build_install_invocation` must emit `--weidu-log-mode`
+        // with a value that BOTH contains the `log <weidu_component_logs>`
+        // token AND still contains the base tokens (proving the fold
+        // survives all the way to the emitted arg vector).
+        let dest = td();
+        let dest_s = dest.to_string_lossy().into_owned();
+        let mut step1 = Step1State::default();
+        let dirs = derive_per_install_dirs(&mut step1, &dest_s, Game::BGEE).expect("derive");
+        let folder = dirs.weidu_component_logs.to_string_lossy().into_owned();
+
+        // In-crate, so call BIO's real `pub(crate)` install-command builders
+        // directly — the same path the install pipeline uses.
+        let config = crate::app::step5::command_config::build_install_command_config(&step1);
+        let (_program, args) =
+            crate::install::step5_command_install::build_install_invocation(&config);
+        let mode = step1.weidu_log_mode.clone();
+
+        let idx = args
+            .iter()
+            .position(|a| a == "--weidu-log-mode")
+            .expect("--weidu-log-mode MUST be emitted (weidu_log_mode_enabled is default true)");
+        let value = &args[idx + 1];
+        assert_eq!(
+            value, &mode,
+            "the emitted --weidu-log-mode value is exactly step1.weidu_log_mode"
+        );
+        let tokens = mode_tokens(value);
+        for base in ["autolog", "logapp", "log-extern"] {
+            assert!(
+                tokens.iter().any(|t| t == base),
+                "emitted --weidu-log-mode MUST still carry base token \
+                 `{base}` (additive); got `{value}`"
+            );
+        }
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t == &format!("log {}", folder.trim())),
+            "emitted --weidu-log-mode MUST carry the `log <weidu_component_\
+             logs>` token; got `{value}`"
         );
         let _ = std::fs::remove_dir_all(&dest);
     }
