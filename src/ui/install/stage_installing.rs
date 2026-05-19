@@ -23,20 +23,38 @@
 //      honest-fallback `Shared modlist` `stage_preview` uses); the back
 //      affordance routes to Preview (if a parse is cached) else Paste —
 //      the SAME target `stage_installing_stub` used (SPEC §4.4 acceptance).
-//   2. The C3-gated post-install action row ABOVE the panel (per H9 —
-//      visually adjacent to BIO's now-disabled `✓ Installed` button at the
-//      top of `page_step5::render`'s panel). **Reuses the redesign-owned
+//   2. The C3-gated **success banner** ABOVE the panel (SPEC §4.4 routes
+//      the post-success state to §9.2, whose FIRST element IS the green
+//      `Installed` pill + `<N> mods · <C> components · no errors` +
+//      `ran <MM:SS> · finished <relative>`). The §9.2-vs-§9.3 split is by
+//      install state (finished vs. during), NOT by entry point — the only
+//      §4.4-specific exclusion is the Share-import-code button (SPEC §4.4:
+//      "the user is not offered a Share import code button from this entry
+//      point"). So this screen shows the SAME §9.2 banner the workspace
+//      Step-5 completion shows. **Reuses the redesign-owned
+//      `success_banner::render` AS-IS** (the counts-based,
+//      name-independent component — it renders correctly even with the
+//      legitimate `Shared modlist` fallback title since the banner reads
+//      `entry.mod_count` / `component_count` / timestamps, not the name).
+//      Same gate / counts source as the workspace path
+//      (`page_workspace_step5::render`). Empty pre/during/failed install
+//      (the shared C3 predicate `success_banner::clean_exit` is false).
+//   3. The C3-gated post-install action row, immediately BELOW the banner
+//      and ABOVE the panel (per H9 — visually adjacent to BIO's
+//      now-disabled `✓ Installed` button at the top of
+//      `page_step5::render`'s panel). **Reuses the redesign-owned
 //      `post_install_actions::render`** (`Return to Home` + `Open install
 //      folder` — exactly the SPEC §4.4 / §9.2 post-install actions; it
-//      already renders NO Share, so it IS this screen's "own simpler
-//      post-install row"). Empty pre/during/failed install (C3 false).
-//   3. BIO's entire embedded Step-5 panel via the **EXACT Run-1 reuse +
+//      renders NO Share, which IS the one §4.4-specific exclusion). Empty
+//      pre/during/failed install (C3 false). Banner-then-row is the EXACT
+//      order `page_workspace_step5::render` uses.
+//   4. BIO's entire embedded Step-5 panel via the **EXACT Run-1 reuse +
 //      borrow pattern** (`page_workspace_step5.rs`): clone
 //      `exe_fingerprint`, five disjoint field borrows
 //      (`wizard_state` / `step5_console_view` / `step5_terminal` /
 //      `step5_terminal_error` / `dev_mode` + the cloned fingerprint). BIO's
 //      Step-5 tree is reused **READ-ONLY** — never edited.
-//   4. Dispatch the returned `Step5Action::StartInstall` the SAME way
+//   5. Dispatch the returned `Step5Action::StartInstall` the SAME way
 //      `page_workspace_step5` does — **gated so it does not double-start**:
 //      Run-4a's pipeline (`start_auto_build_install`) already flipped
 //      `start_install_requested` before advancing to this seam, and the
@@ -78,8 +96,8 @@ use crate::ui::shared::redesign_tokens::{
     redesign_shell_bg, redesign_text_primary,
 };
 use crate::ui::step5::action_step5::Step5Action;
-use crate::ui::workspace::step5::post_install_actions;
 use crate::ui::workspace::step5::state_workspace_step5::PostInstallAction;
+use crate::ui::workspace::step5::{post_install_actions, success_banner};
 
 /// SPEC §4.2/§4.4 honest fallback when the share code carries no packed
 /// `name` (the exact string `stage_preview`'s `FALLBACK_TITLE` uses — never
@@ -189,25 +207,55 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         .find(|e| e.destination_folder.trim() == dest && !dest.is_empty())
         .cloned();
 
-    // ── 2. C3-gated post-install action row ABOVE the panel (per H9). The
-    //    redesign-owned `post_install_actions::render` IS this screen's
-    //    "own simpler post-install row" — it renders exactly `Return to
-    //    Home` + `Open install folder` (NO Share — SPEC §4.4: the user
-    //    pasted the code). Renders nothing until the C3 clean-exit triple
-    //    holds (pre/during/failed install ⇒ empty slot, the embedded panel
-    //    below shows the live console). `post_install_actions::render`
-    //    takes a `&ModlistEntry` only for gating/identity symmetry with
-    //    `success_banner`; when there is no registry entry (a fresh paste)
-    //    pass a default — the row's gate is the C3 triple, and the
-    //    open-folder target is resolved below from the entry-or-destination.
-    //    NO success banner here: §4.4's `InstallProgressScreen` has only
-    //    the simple header + the post-install action row (the green
-    //    `Installed`-pill banner is the *workspace* §9.2 chrome). ──
+    // The registry entry (or a default when a fresh paste has none) — the
+    // banner's counts/timestamps + the post-install row's gating/identity.
+    // The banner reads `entry.mod_count` / `component_count` /
+    // `install_started_at` / `install_date`, NOT the modlist name, so the
+    // (correct) `Shared modlist` fallback title for a nameless pasted code
+    // does not affect it. Cloned so the immutable `registry` borrow ends
+    // before the `&mut orchestrator` field-split / `page_step5::render`.
     let entry_for_row = entry.clone().unwrap_or_default();
+
+    // ── 2. C3-gated success banner ABOVE the panel (SPEC §4.4 line ~343
+    //    routes the post-success state to §9.2, Appendix B.2; SPEC §9.2's
+    //    FIRST element IS the green `Installed` pill + `<N> mods · <C>
+    //    components · no errors` + `ran <MM:SS> · finished <relative>`).
+    //    The §9.2-vs-§9.3 split is by install state (finished vs. during),
+    //    NOT by entry point — the ONLY §4.4-specific exclusion is the
+    //    Share-import-code button (SPEC §4.4: "the user is not offered a
+    //    Share import code button from this entry point"; that button lives
+    //    in the workspace header, not in this screen's chrome — already
+    //    correctly absent here). So this Install-Modlist completion screen
+    //    shows the SAME §9.2 banner the workspace Step-5 completion shows.
+    //    Reuses the redesign-owned `success_banner::render` **AS-IS** with
+    //    the SAME args/gate/counts source the workspace path uses
+    //    (`page_workspace_step5::render`: `(ui, palette,
+    //    &orchestrator.wizard_state, &entry)` — the shared
+    //    `WizardState`/registry entry, which now persists on the
+    //    Install-Modlist path thanks to A-1). It renders nothing until the
+    //    shared C3 clean-exit predicate `success_banner::clean_exit` holds
+    //    (pre/during/failed install ⇒ empty slot; the embedded panel below
+    //    shows the live console), so this is purely additive — no behavior
+    //    change to the during-install / pre-install / failed states. ──
+    success_banner::render(ui, palette, &orchestrator.wizard_state, &entry_for_row);
+
+    // ── 3. C3-gated post-install action row, immediately BELOW the banner
+    //    and ABOVE the panel (per H9 — banner-then-row is the EXACT order
+    //    `page_workspace_step5::render` uses). The redesign-owned
+    //    `post_install_actions::render` renders exactly `Return to Home` +
+    //    `Open install folder` (NO Share — the one §4.4-specific exclusion,
+    //    SPEC §4.4: the user pasted the code). Renders nothing until the
+    //    SAME C3 clean-exit triple holds (pre/during/failed install ⇒ empty
+    //    slot, the embedded panel below shows the live console).
+    //    `post_install_actions::render` takes a `&ModlistEntry` only for
+    //    gating/identity symmetry with `success_banner`; when there is no
+    //    registry entry (a fresh paste) it is a default — the row's gate is
+    //    the C3 triple, and the open-folder target is resolved below from
+    //    the entry-or-destination. ──
     let post_install_action: Option<PostInstallAction> =
         post_install_actions::render(ui, palette, &orchestrator.wizard_state, &entry_for_row);
 
-    // ── 3. BIO's entire embedded Step-5 panel — the EXACT Run-1
+    // ── 4. BIO's entire embedded Step-5 panel — the EXACT Run-1
     //    reuse/borrow pattern (`page_workspace_step5.rs`): clone
     //    `exe_fingerprint`, then five disjoint struct-field borrows (a
     //    sound split borrow). BIO's Step-5 tree is reused READ-ONLY and
@@ -252,7 +300,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         );
     });
 
-    // ── 4. Dispatch the returned action — GATED so it cannot double-start.
+    // ── 5. Dispatch the returned action — GATED so it cannot double-start.
     //    Run-4a's auto-build pipeline (`start_auto_build_install`) already
     //    flipped `start_install_requested` before advancing to this seam,
     //    and `start_step5_after_render` (P7.T1) started the install. So if
