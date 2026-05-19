@@ -25,9 +25,22 @@ Orchestrator-decided run-slicing (acceptance = the SMOOTH FULL FLOW, not per-fix
 
 ---
 
-### ✅ ARC COMPLETE — orchestrator's job RIGHT NOW = stand by for the user's manual test. Do NOT push without an explicit ask.
+### ✅ ARC COMPLETE + 🔧 POST-ARC USER-TEST FOLLOW-UP IN PROGRESS (do NOT "stand by"; do NOT push). 
 
-**State:** all 5 runs + interleaved ledger commits **LOCAL & UNPUSHED** (HEAD `837bef2`). Tree clean. Both binaries gate-fresh no-op; `cargo test --lib` 408/0; DATA-LOSS sentinel byte-identical to the fresh reference below. The ENTIRE Phase-7 arc is local — **push remains gated on the user's explicit authorization.**
+**The 5-run arc is done & local. The user ran a live install and it functionally works** (import-code in dir, modlists.json correct, install completes exit 0) **but reported 4 issues → a user-approved follow-up fix-set is now in flight.** Orchestrator owns it autonomously (same loop), back to the user when ready to test; push still gated.
+
+**Live-test findings + the approved Wabbajack-model fix-set (user 2026-05-19):**
+1. **Download window janky** — per-mod bars jerk in pool-size clumps 20%→100%, not smooth byte-by-byte. → Run 2.
+2. **Overall bar wrong/conflated** — 70% at 51/51 + extracting; wants Download 0→100 then a separate Extract 0→100, both smooth. → Run 2.
+3. **Checksum dedupe absent** — re-downloads everything (orchestrator-verified: **BIO never had checksum-skip**; SPEC §13.12a content-addressing was never effectively wired; #1's direct-write bypassed it; every prior runtime trace started with an EMPTY archive folder so the blind spot was never caught). User studied Wabbajack and **approved its model**: per-archive `{size,hash}` baked into the share code by the exporter (who has the files), installer size-prefilters + persistent path+mtime hash cache + **skip-if-present**, content-addressed store, mismatch=delete. → Run 1.
+4. **§4.4 success banner missing** — orchestrator-verified **defect, not spec-correct**: Phase-7-arc Run-2's "§4.4 has no banner" premise-correction was WRONG and was accepted without checking; SPEC §4.4 line 343 routes post-success to §9.2, whose first bullet IS the banner; §9.2/§9.3 split is install-state not entry-point; wireframe `InstallProgressScreen` only mocked the during state so spec prose governs. → Run 3.
+
+**Orchestrator-decided slicing (acceptance = the integrated Wabbajack-grade flow, runtime-instrumented; Run 1's trace MUST exercise a PRE-POPULATED archive store — the exact prior blind spot):**
+- **DL-Run 1 — checksum/dedupe core + share-code `{size,hash}` schema** (zero BIO, no carve-out; envelope rides like provenance; export-hash baked at the clean-exit true-bit rewrite + workspace/save-draft; size-prefilter + persistent cache + skip; content-addressed store + BIO-name copy/hardlink for extract; mismatch=delete) — ⏳ **DISPATCHED** (this session).
+- **DL-Run 2 — Downloading-window UX** (frame-by-frame per-mod byte bars via a per-job atomic counter the bar reads every frame; distinct Download 0→100 then Extract 0→100; coexists with Run-1 skip) — pending.
+- **DL-Run 3 — §4.4 success banner** (invoke the existing C3-gated `success_banner` in `stage_installing.rs`; render-gate PNG; correct the wrong premise-record in docs) — pending.
+
+**State:** all 5 arc runs + interleaved ledger commits **LOCAL & UNPUSHED** (HEAD `837bef2`). Tree clean at dispatch. Both binaries gate-fresh no-op; `cargo test --lib` 408/0; DATA-LOSS sentinel byte-identical to the fresh reference below. The ENTIRE Phase-7 arc **and** this follow-up are local — **push remains gated on the user's explicit authorization.**
 
 **Arc commit map (local, unpushed):** `7339e4e` R1 AMENDMENT · `6f7f771` R2 A-1 persist-held-code · `1c36856` R3 B zero-BIO log-token · `3d2ffed` R4 #1 parallel streamer · `837bef2` R5 integration+consolidated-doc-sync · interleaved `f5e8511`/`3b31e4d`/`30678fc` ledger doc commits.
 
