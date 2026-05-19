@@ -33,12 +33,25 @@
 // same `install_was_running && !install_running` transition the
 // `install_running_since` reset uses.
 //
-// **`pack_meta` composes BIO read-only** — `flip_to_installed` is the ONLY
-// Infinity-Orchestrator code path that produces an `allow_auto_install =
-// true` code (SPEC §13.3). It NEVER patches `bio::app::modlist_share`
-// (carve-out #5 "generation is not a BIO modification"). On a clean exit
+// **`flip_to_installed` is the ONLY Infinity-Orchestrator code path that
+// produces an `allow_auto_install = true` code** (SPEC §13.3). It NEVER
+// patches `bio::app::modlist_share` (carve-out #5 "generation is not a BIO
+// modification"). The true-bit code comes from one of **two sources by
+// entry point** (the user's resolution, 2026-05-18 — see `flip_to_installed`
+// step 3):
+//   • **Workspace / build-from-scanned-mods** (`share_code_override ==
+//     None`) — `share_export::pack_meta` regeneration (UNCHANGED;
+//     `state.step3` is populated there, so regenerating is correct).
+//   • **Install-Modlist paste / Reinstall** (`share_code_override ==
+//     Some`) — the orchestrator's already-held code (the install-start
+//     `latest_share_code`), bit-flipped to `true` via
+//     `share_export::set_allow_auto_install` (NOT `pack_meta` —
+//     `state.step3` is empty on that path; the pasted code's baked-in
+//     provenance rides through verbatim). Both composers are
+//     `share_export`'s own envelope; neither patches BIO.
+// On a clean exit
 // the on-disk `<destination>/modlist-import-code.txt` **is** rewritten with
-// that regenerated `allow_auto_install = true` code (SPEC §13.13 — the file
+// that `allow_auto_install = true` code (SPEC §13.13 — the file
 // on disk next to the install IS the verified, auto-install-eligible code
 // once the install succeeds, so forwarding the file recreates a directly-
 // installable modlist). Only the **import-code file** is rewritten — H8
@@ -152,11 +165,16 @@ pub fn count_mods_and_components(state: &WizardState) -> (u32, u32) {
 ///   2. Refresh `mod_count` / `component_count` from the live `WizardState`
 ///      via [`count_mods_and_components`] (the same source Step 4 shows —
 ///      never an invented count).
-///   3. Regenerate `latest_share_code` via `registry::share_export
-///      ::pack_meta` with **`allow_auto_install = true`** (SPEC §13.3 — the
-///      only auto-install-eligible code path), provenance read off the
-///      entry. This OVERWRITES the install-start `allow_auto_install =
-///      false` snapshot.
+///   3. Produce the `allow_auto_install = true` `latest_share_code` (SPEC
+///      §13.3 — the only auto-install-eligible code path), from one of two
+///      sources by entry point (`share_code_override`): `None` ⇒ Workspace
+///      path — regenerate via `registry::share_export::pack_meta`,
+///      provenance off the entry (UNCHANGED); `Some(src)` ⇒ Install-Modlist
+///      paste / Reinstall — bit-flip the orchestrator's already-held code
+///      `src` via `share_export::set_allow_auto_install` (NOT `pack_meta` —
+///      `state.step3` is empty there; provenance rides through verbatim;
+///      verbatim fallback if undecodable). This OVERWRITES the install-start
+///      `allow_auto_install = false` snapshot.
 ///   4. `total_size_bytes = None` (the async worker fills it later).
 ///   5. Atomic registry write (`RegistryStore::save`).
 ///   5b. Rewrite `<destination>/modlist-import-code.txt` with the same
@@ -188,17 +206,39 @@ pub fn flip_to_installed(
     registry: &mut ModlistRegistry,
     store: &RegistryStore,
     wizard_state: &WizardState,
+    share_code_override: Option<&str>,
 ) -> Option<SizeWorkerReceiver> {
     // ── 2. Counts from the live WizardState (same source as Step 4 —
     //    computed BEFORE the &mut entry borrow so the immutable
     //    `wizard_state` read does not overlap). ──
     let (mod_count, component_count) = count_mods_and_components(wizard_state);
 
-    // ── 3. Regenerate the share code with allow_auto_install = TRUE
-    //    (SPEC §13.3 — flip_to_installed is the ONLY true-bit path).
-    //    Provenance off the entry; the BIO base is composed read-only.
-    //    Done while only an immutable `registry` borrow is live (the
-    //    &mut entry borrow starts after). ──
+    // ── 3. Produce the post-success `allow_auto_install = TRUE` code
+    //    (SPEC §13.3 — `flip_to_installed` is the ONLY true-bit path).
+    //    TWO sources, by entry point (the user's resolution, 2026-05-18):
+    //
+    //      • **Workspace / build-from-scanned-mods** (`share_code_override
+    //        == None`) — UNCHANGED: regenerate via `share_export::pack_meta`
+    //        (`export_modlist_share_code` read-only + provenance off the
+    //        entry). `state.step3` IS populated on that path (built in the
+    //        workspace), so regeneration is correct — it was never the
+    //        broken case.
+    //      • **Install-Modlist paste / Reinstall** (`share_code_override ==
+    //        Some(src)`) — the orchestrator PERSISTS the code it already has
+    //        (the install-start `latest_share_code` / the pasted code; `src`
+    //        is passed by `maybe_flip_to_installed_on_clean_exit`), only
+    //        flipping its decoded payload's bit to `true` via
+    //        `share_export::set_allow_auto_install`. `pack_meta` is
+    //        impossible here — `state.step3` is empty on the Install-Modlist
+    //        path (the import's `reset_workflow_keep_step1` cleared it; even
+    //        post-scan the resolution is "persist the held code, do NOT
+    //        regenerate from internal state"). The pasted code's baked-in
+    //        `name`/`author`/`forked_from` ride through verbatim (SPEC
+    //        §13.3). A non-decodable `src` ⇒ persist it VERBATIM (the user's
+    //        priority: the real code over the false→true draft nicety).
+    //
+    //    Done while only an immutable `registry` borrow is live (the &mut
+    //    entry borrow starts after). ──
     let Some(entry_ref) = registry.find(id) else {
         warn!(
             target = "orchestrator",
@@ -208,20 +248,43 @@ pub fn flip_to_installed(
         return None;
     };
     let destination = entry_ref.destination_folder.trim().to_string();
-    let meta = ShareMeta::from_entry(entry_ref, /* allow_auto_install */ true);
-    let new_code = match share_export::pack_meta(wizard_state, &meta) {
-        Ok(code) => code,
-        Err(err) => {
-            // SPEC §13.14: the install itself completed; only the
-            // post-success code regeneration failed. Log + bail (do NOT
-            // half-flip the state). The install-start `latest_share_code`
-            // (allow_auto_install = false) stays as-is.
-            warn!(
-                target = "orchestrator",
-                "flip_to_installed: share-code regeneration for {id} failed: \
-                 {err} (registry NOT flipped — install already completed)"
-            );
-            return None;
+    let new_code = if let Some(src) = share_code_override {
+        // Install-Modlist paste / Reinstall — flip the held code's bit to
+        // true (NOT `pack_meta`). Verbatim fallback if it does not decode
+        // (the real code is the priority — SPEC §13.13 / the user's
+        // resolution); this never `None`s the flip (a degenerate code still
+        // becomes the verified on-disk artifact + registry snapshot).
+        match share_export::set_allow_auto_install(src.trim(), true) {
+            Ok(code) => code,
+            Err(err) => {
+                warn!(
+                    target = "orchestrator",
+                    "flip_to_installed: could not decode the held code for \
+                     {id} to set allow_auto_install=true ({err}) — persisting \
+                     it VERBATIM (the real code is the priority; SPEC §13.13)"
+                );
+                src.trim().to_string()
+            }
+        }
+    } else {
+        // Workspace / build-from-scanned-mods — UNCHANGED: regenerate via
+        // `pack_meta` (provenance off the entry; BIO base read-only).
+        let meta = ShareMeta::from_entry(entry_ref, /* allow_auto_install */ true);
+        match share_export::pack_meta(wizard_state, &meta) {
+            Ok(code) => code,
+            Err(err) => {
+                // SPEC §13.14: the install itself completed; only the
+                // post-success code regeneration failed. Log + bail (do NOT
+                // half-flip the state). The install-start `latest_share_code`
+                // (allow_auto_install = false) stays as-is.
+                warn!(
+                    target = "orchestrator",
+                    "flip_to_installed: share-code regeneration for {id} \
+                     failed: {err} (registry NOT flipped — install already \
+                     completed)"
+                );
+                return None;
+            }
         }
     };
 
@@ -580,7 +643,9 @@ mod tests {
         s.step3.bgee_items = vec![leaf("A.TP2", "0"), leaf("A.TP2", "1")];
         s.step3.bg2ee_items = vec![leaf("B.TP2", "0")];
 
-        let rx = flip_to_installed("FLIPME000001", &mut registry, &store, &s);
+        // Workspace path: no override ⇒ `pack_meta` regeneration (the
+        // existing, UNCHANGED behavior — `state.step3` is populated here).
+        let rx = flip_to_installed("FLIPME000001", &mut registry, &store, &s, None);
 
         let entry = registry.find("FLIPME000001").expect("entry present");
         assert_eq!(entry.state, ModlistState::Installed, "state flipped");
@@ -629,7 +694,7 @@ mod tests {
         let (store, path) = temp_registry_store("missing");
         let mut registry = ModlistRegistry::default();
         let s = WizardState::default();
-        let rx = flip_to_installed("DOES_NOT_EXIST", &mut registry, &store, &s);
+        let rx = flip_to_installed("DOES_NOT_EXIST", &mut registry, &store, &s, None);
         assert!(
             rx.is_none(),
             "no entry ⇒ None (no worker, no write) — SPEC §13.14 non-fatal"
@@ -815,7 +880,7 @@ mod tests {
         });
         let s = eet_state_with_leaves();
 
-        let rx = flip_to_installed("ONDISK000001", &mut registry, &store, &s);
+        let rx = flip_to_installed("ONDISK000001", &mut registry, &store, &s, None);
         assert!(rx.is_some(), "clean-exit flip succeeded");
 
         // The on-disk file was REWRITTEN (no longer the install-start
@@ -846,6 +911,195 @@ mod tests {
         );
 
         // Drain the size worker so the thread is joined before cleanup.
+        let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_file(&store_path);
+    }
+
+    #[test]
+    fn flip_to_installed_install_modlist_override_uses_held_code_not_pack_meta() {
+        // Run 2 (re-scoped) — the Install-Modlist paste / Reinstall path:
+        // `share_code_override = Some(the install-start held code)`.
+        // `flip_to_installed` must (a) NOT regenerate via `pack_meta` (the
+        // WizardState here has NO step3 leaves — `pack_meta` would `Err`;
+        // the OLD behavior would then `None` the flip and starve the
+        // lifecycle, the exact pinned symptom), (b) bit-flip the held code
+        // to `allow_auto_install = true`, (c) carry the held code's
+        // baked-in provenance verbatim, (d) write that to the registry +
+        // the on-disk file. (`share_export` / `ShareMeta` are in scope via
+        // the module-level `use super::*`.)
+
+        let (store, store_path) = temp_registry_store("im_override");
+        let dest = temp_destination("im_override");
+        std::fs::create_dir_all(&dest).unwrap();
+        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+
+        // The install-start held code: a real BIO-MODLIST-V1 code with
+        // `allow_auto_install=false` + baked-in provenance — the exact form
+        // `write_install_start_artifacts_with_code` persists from the pasted
+        // code. Built via the REAL generate path (`pack_meta` over a
+        // populated WizardState + a `ShareMeta` carrying the provenance)
+        // then `set_allow_auto_install(.., false)` — i.e. precisely what a
+        // pasted code that had once been generated looks like at
+        // install-start. (This is just *constructing the fixture*; the
+        // production override path never calls `pack_meta`.)
+        let provenance = ShareMeta {
+            allow_auto_install: false,
+            name: Some("Tactical EET 2026".to_string()),
+            author: Some("@sharer".to_string()),
+            forked_from: vec![crate::app::modlist_share::ForkAncestor {
+                name: "Root".to_string(),
+                author: "@root".to_string(),
+            }],
+        };
+        let generated = share_export::pack_meta(&eet_state_with_leaves(), &provenance)
+            .expect("fixture: pack_meta over a populated WizardState");
+        // false-form (install-start) held code — the form persisted by
+        // `write_install_start_artifacts_with_code`.
+        let held_false = share_export::set_allow_auto_install(&generated, false).unwrap();
+        std::fs::write(&draft_path, &held_false).unwrap();
+
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "IMOVR0000001".to_string(),
+            name: "Tactical EET 2026".to_string(),
+            game: Game::EET,
+            destination_folder: dest.to_string_lossy().into_owned(),
+            state: ModlistState::InProgress,
+            // the install-start snapshot the Install-Modlist path persisted
+            latest_share_code: Some(held_false.clone()),
+            ..Default::default()
+        });
+        // Deliberately EMPTY step3 — `pack_meta` would `Err` here. The
+        // override path must NOT touch `pack_meta` at all.
+        let empty_step3 = WizardState::default();
+
+        let rx = flip_to_installed(
+            "IMOVR0000001",
+            &mut registry,
+            &store,
+            &empty_step3,
+            Some(held_false.as_str()), // the Install-Modlist override
+        );
+        assert!(
+            rx.is_some(),
+            "the Install-Modlist override path flips even with EMPTY step3 \
+             (it does NOT regenerate via pack_meta — the pinned symptom fix)"
+        );
+
+        let entry = registry.find("IMOVR0000001").unwrap();
+        assert_eq!(entry.state, ModlistState::Installed, "state flipped");
+        let code = entry.latest_share_code.as_deref().expect("code");
+        assert!(decoded_allow_auto_install(code), "true-bit on clean exit");
+
+        // The on-disk file == registry latest_share_code (the verified
+        // code) and carries allow_auto_install=true.
+        let on_disk = std::fs::read_to_string(&draft_path).unwrap();
+        assert_eq!(Some(on_disk.as_str()), entry.latest_share_code.as_deref());
+        assert!(decoded_allow_auto_install(&on_disk));
+
+        // Provenance from the PASTED code rode through verbatim (SPEC
+        // §13.3 — the real code carries the name; the "Shared modlist"
+        // fallback stops). Decode and assert.
+        let encoded = on_disk.strip_prefix("BIO-MODLIST-V1:").unwrap();
+        let mut vals: Vec<u8> = Vec::new();
+        for ch in encoded.chars().filter(|c| !c.is_whitespace()) {
+            vals.push(match ch {
+                'A'..='Z' => ch as u8 - b'A',
+                'a'..='z' => ch as u8 - b'a' + 26,
+                '0'..='9' => ch as u8 - b'0' + 52,
+                '-' => 62,
+                '_' => 63,
+                _ => panic!("bad b64url"),
+            });
+        }
+        let mut bytes = Vec::new();
+        for chunk in vals.chunks(4) {
+            let c0 = chunk[0];
+            let c1 = *chunk.get(1).unwrap_or(&0);
+            let c2 = *chunk.get(2).unwrap_or(&0);
+            let c3 = *chunk.get(3).unwrap_or(&0);
+            bytes.push((c0 << 2) | (c1 >> 4));
+            if chunk.len() > 2 {
+                bytes.push(((c1 & 0x0F) << 4) | (c2 >> 2));
+            }
+            if chunk.len() > 3 {
+                bytes.push(((c2 & 0x03) << 6) | c3);
+            }
+        }
+        let mut json = String::new();
+        {
+            use flate2::read::ZlibDecoder;
+            use std::io::Read;
+            ZlibDecoder::new(&bytes[..])
+                .read_to_string(&mut json)
+                .unwrap();
+        }
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            v["name"],
+            serde_json::json!("Tactical EET 2026"),
+            "the pasted code's packed name rode through verbatim"
+        );
+        assert_eq!(v["author"], serde_json::json!("@sharer"));
+        assert_eq!(
+            v["forked_from"],
+            serde_json::json!([{ "name": "Root", "author": "@root" }]),
+            "the pasted code's lineage rode through verbatim (every \
+             ancestor stays credited — SPEC §13.3)"
+        );
+
+        let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_file(&store_path);
+    }
+
+    #[test]
+    fn flip_to_installed_override_verbatim_fallback_on_undecodable_held_code() {
+        // The user's priority: persisting the real code beats the
+        // false→true draft nicety. A non-decodable held code ⇒ persist it
+        // VERBATIM (NOT a `None`/failed flip).
+        let (store, store_path) = temp_registry_store("im_verbatim");
+        let dest = temp_destination("im_verbatim");
+        std::fs::create_dir_all(&dest).unwrap();
+        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "IMVERB000001".to_string(),
+            name: "Shared modlist".to_string(),
+            game: Game::BGEE,
+            destination_folder: dest.to_string_lossy().into_owned(),
+            state: ModlistState::InProgress,
+            latest_share_code: Some("BIO-MODLIST-V1:undecodable!!!".to_string()),
+            ..Default::default()
+        });
+        let empty_step3 = WizardState::default();
+
+        let rx = flip_to_installed(
+            "IMVERB000001",
+            &mut registry,
+            &store,
+            &empty_step3,
+            Some("BIO-MODLIST-V1:undecodable!!!"),
+        );
+        assert!(
+            rx.is_some(),
+            "an undecodable held code still flips (verbatim fallback — the \
+             real code is the priority; never a None/failed flip)"
+        );
+        let entry = registry.find("IMVERB000001").unwrap();
+        assert_eq!(entry.state, ModlistState::Installed);
+        assert_eq!(
+            entry.latest_share_code.as_deref(),
+            Some("BIO-MODLIST-V1:undecodable!!!"),
+            "the held code persisted VERBATIM (the user's priority)"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&draft_path).unwrap(),
+            "BIO-MODLIST-V1:undecodable!!!",
+            "on-disk file == the verbatim held code"
+        );
         let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
         let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_file(&store_path);
@@ -895,7 +1149,7 @@ mod tests {
             ..Default::default()
         });
         let empty = WizardState::default(); // ⇒ pack_meta Err
-        let rx = flip_to_installed("NOCLEAN00001", &mut registry, &store, &empty);
+        let rx = flip_to_installed("NOCLEAN00001", &mut registry, &store, &empty, None);
         assert!(
             rx.is_none(),
             "share-code regen failure ⇒ None (no flip, no step 5b)"
@@ -936,7 +1190,7 @@ mod tests {
         });
         let s = eet_state_with_leaves();
 
-        let rx = flip_to_installed("EMPTYDEST001", &mut registry, &store, &s);
+        let rx = flip_to_installed("EMPTYDEST001", &mut registry, &store, &s, None);
         assert!(
             rx.is_some(),
             "the flip still succeeds with an empty destination (5b skipped, \

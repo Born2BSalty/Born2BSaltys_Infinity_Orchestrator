@@ -202,6 +202,87 @@ pub fn pack_meta(wizard_state: &WizardState, meta: &ShareMeta) -> Result<String,
     ))
 }
 
+/// **Set `allow_auto_install` on an ALREADY-EXISTING BIO-MODLIST-V1 code's
+/// payload — without re-deriving the payload from `WizardState`.**
+///
+/// This is `pack_meta`'s envelope (steps 2 → 3 → 4) **minus step 1**: it
+/// does NOT call `bio::app::modlist_share::export_modlist_share_code`. It
+/// takes a code the orchestrator already holds (the user-pasted Install-
+/// Modlist code, or a registry entry's stored `latest_share_code`), decodes
+/// its payload to an **opaque `serde_json::Value`**, sets *only* the
+/// `allow_auto_install` sibling key, and re-encodes via the same standard
+/// zlib + base64url codec `pack_meta` uses (byte-identical to BIO's private
+/// codec, so BIO's own `preview_modlist_share_code` / `import_modlist_share
+/// _code` round-trip it unchanged).
+///
+/// **Why this exists (the Install-Modlist-paste / Reinstall path).** SPEC
+/// §13.13 needs the install-start `modlist-import-code.txt` written with
+/// `allow_auto_install = false` and the clean-exit rewrite with `= true`.
+/// For the **Install-Modlist** entry points the user already has the code
+/// (they pasted it); regenerating it via `pack_meta` is impossible there —
+/// BIO's `export_modlist_share_code` reads `state.step3.{bgee,bg2ee}_items`
+/// (build-from-scanned-mods) or the exact-WeiDU-log source, and at the
+/// install-start arm point `state.step3` is empty (the share-code import's
+/// `reset_workflow_keep_step1` clears it, and the async scan→apply-log has
+/// not run yet) ⇒ `export_modlist_share_code` `Err`s. So the orchestrator
+/// **persists the code it already has**, only flipping the
+/// `allow_auto_install` bit on its decoded payload — the path BIO's
+/// `import_modlist_share_code` can re-consume, with the pasted code's
+/// baked-in `name` / `author` / `forked_from` riding through **verbatim**
+/// (the payload is opaque — provenance + every other key is preserved
+/// bit-for-bit; this is the SPEC §13.3 Provenance "the real code carries the
+/// name" property, achieved by *not* rewriting it).
+///
+/// The **Workspace / build-from-scanned-mods** path is UNCHANGED — there
+/// `state.step3` IS populated (built in the workspace) so `pack_meta`
+/// regeneration is correct; this fn is **not** used on that path.
+///
+/// Returns the re-encoded `BIO-MODLIST-V1:` string, or an `Err(String)` if
+/// `code` is not a decodable BIO-MODLIST-V1 code (the caller falls back to
+/// persisting `code` **verbatim** — per the user's resolution, persisting
+/// the real code is the priority over the false→true draft nicety).
+///
+/// **Never patches BIO** — the envelope is `share_export`'s own standard
+/// codec; `export_modlist_share_code` is not called here at all (SPEC §1
+/// carve-out #5).
+pub fn set_allow_auto_install(code: &str, allow_auto_install: bool) -> Result<String, String> {
+    // 1. Strip prefix → base64url-decode → zlib-inflate → opaque Value
+    //    (identical to `pack_meta` step 2, but the input is the code the
+    //    orchestrator already has — NOT a freshly-built BIO base).
+    let encoded = code
+        .trim()
+        .strip_prefix(SHARE_CODE_PREFIX)
+        .ok_or_else(|| "share code did not start with BIO-MODLIST-V1:".to_string())?;
+    let compressed = base64url_decode(encoded)?;
+    let json_bytes = zlib_decompress(&compressed)?;
+    let mut payload: Value = serde_json::from_slice(&json_bytes)
+        .map_err(|err| format!("share payload was not valid JSON: {err}"))?;
+
+    // 2. Set ONLY the `allow_auto_install` sibling key. Every other key —
+    //    incl. the provenance trio `name` / `author` / `forked_from` baked
+    //    into the pasted code — rides through **untouched** (opaque Value;
+    //    SPEC §13.3 Provenance: the real code carries the name, so the
+    //    "Shared modlist" fallback stops because we did NOT rewrite it).
+    let obj = payload
+        .as_object_mut()
+        .ok_or_else(|| "share payload was not a JSON object".to_string())?;
+    obj.insert(
+        "allow_auto_install".to_string(),
+        Value::Bool(allow_auto_install),
+    );
+
+    // 3. Re-serialize → zlib-deflate → base64url-encode → re-attach prefix
+    //    (identical to `pack_meta` step 4 — the same byte-format BIO's own
+    //    decoder round-trips).
+    let out_bytes =
+        serde_json::to_vec(&payload).map_err(|err| format!("re-serialize failed: {err}"))?;
+    let recompressed = zlib_compress(&out_bytes)?;
+    Ok(format!(
+        "{SHARE_CODE_PREFIX}{}",
+        base64url_encode(&recompressed)
+    ))
+}
+
 // ── Standard zlib + base64url codec (only `flate2` + std; byte-identical
 //    to BIO's private `zlib_*` / `base64url_*` so BIO's own decoder
 //    round-trips the augmented code). ──
@@ -520,5 +601,134 @@ mod tests {
         // Still a single object, keys not duplicated.
         assert!(v.is_object());
         assert_eq!(v["game_install"], json!("EET"));
+    }
+
+    // ───── Run 2 (re-scoped) — `set_allow_auto_install` (the
+    //       Install-Modlist-paste / Reinstall decode-flip path) ─────
+    //
+    // The user's resolution (2026-05-18): for the Install-Modlist paste /
+    // Reinstall entry points the orchestrator PERSISTS the code it already
+    // has (the pasted code / the entry's stored code) — it does NOT
+    // regenerate via `pack_meta` (impossible there: `state.step3` is empty
+    // at install-start). Only the `allow_auto_install` bit is flipped on the
+    // already-existing code's decoded payload (false at install-start, true
+    // at clean exit), with the pasted code's baked-in provenance riding
+    // through verbatim. These pin: the bit is set, every other key
+    // (incl. the provenance trio) is byte-preserved, a non-decodable code
+    // Errs (so the caller can fall back to verbatim), and BIO's own decoder
+    // round-trips the result.
+
+    #[test]
+    fn set_allow_auto_install_flips_bit_and_preserves_all_other_keys() {
+        // A code carrying full provenance + arbitrary BIO payload keys
+        // (built via the same codec the real pasted code uses).
+        let original = make_base(&json!({
+            "format_version": 1,
+            "bio_version": "0.1.0-test",
+            "game_install": "EET",
+            "install_mode": "build_from_scanned_mods",
+            "weidu_logs": { "bgee": "// log\n~A~ #0 #1", "bg2ee": null },
+            "allow_auto_install": true,
+            "name": "Tactical EET 2026",
+            "author": "@sharer",
+            "forked_from": [{ "name": "Root", "author": "@root" }],
+        }));
+
+        // Install-start posture: flip to false.
+        let at_start = set_allow_auto_install(&original, false).expect("decode-flip ok");
+        let v = decode_payload(&at_start);
+        assert_eq!(
+            v["allow_auto_install"],
+            json!(false),
+            "install-start code carries allow_auto_install=false (SPEC §13.13)"
+        );
+        // EVERY other key is preserved bit-for-bit — the pasted code's
+        // baked-in provenance + payload ride through verbatim (SPEC §13.3:
+        // the real code carries the name, so the 'Shared modlist' fallback
+        // stops because we did NOT rewrite it).
+        assert_eq!(v["name"], json!("Tactical EET 2026"));
+        assert_eq!(v["author"], json!("@sharer"));
+        assert_eq!(
+            v["forked_from"],
+            json!([{ "name": "Root", "author": "@root" }])
+        );
+        assert_eq!(v["game_install"], json!("EET"));
+        assert_eq!(v["install_mode"], json!("build_from_scanned_mods"));
+        assert_eq!(v["weidu_logs"]["bgee"], json!("// log\n~A~ #0 #1"));
+        assert_eq!(v["bio_version"], json!("0.1.0-test"));
+
+        // Clean-exit posture: flip the SAME code to true (the
+        // `flip_to_installed` rewrite for the Install-Modlist path).
+        let at_clean = set_allow_auto_install(&at_start, true).expect("re-flip ok");
+        let v2 = decode_payload(&at_clean);
+        assert_eq!(
+            v2["allow_auto_install"],
+            json!(true),
+            "clean-exit rewrite carries allow_auto_install=true (SPEC §13.13)"
+        );
+        // Provenance STILL verbatim after the second flip.
+        assert_eq!(v2["name"], json!("Tactical EET 2026"));
+        assert_eq!(v2["author"], json!("@sharer"));
+        assert_eq!(
+            v2["forked_from"],
+            json!([{ "name": "Root", "author": "@root" }])
+        );
+    }
+
+    #[test]
+    fn set_allow_auto_install_adds_the_bit_when_absent_pre_redesign_code() {
+        // A pre-redesign / third-party code with NO allow_auto_install key
+        // (and no provenance) — set_allow_auto_install must ADD the key
+        // (not error), leaving the rest opaque-untouched.
+        let pre_redesign = make_base(&json!({
+            "format_version": 1,
+            "game_install": "BGEE",
+            "install_mode": "install_exactly_from_weidu_logs",
+        }));
+        assert!(
+            decode_payload(&pre_redesign)
+                .get("allow_auto_install")
+                .is_none(),
+            "precondition: the source code has no allow_auto_install key"
+        );
+        let flipped = set_allow_auto_install(&pre_redesign, false).expect("ok");
+        let v = decode_payload(&flipped);
+        assert_eq!(v["allow_auto_install"], json!(false), "key added");
+        assert_eq!(v["game_install"], json!("BGEE"), "rest opaque-preserved");
+        assert_eq!(v["install_mode"], json!("install_exactly_from_weidu_logs"));
+    }
+
+    #[test]
+    fn set_allow_auto_install_errs_on_non_bio_code_so_caller_can_fallback() {
+        // A non-BIO-MODLIST-V1 string ⇒ Err (the caller persists the code
+        // VERBATIM instead — the user's resolution: the real code is the
+        // priority over the false→true draft nicety).
+        assert!(set_allow_auto_install("not a share code", false).is_err());
+        assert!(
+            set_allow_auto_install("BIO-MODLIST-V1:!!!not-base64!!!", true).is_err(),
+            "a prefixed-but-undecodable code Errs so the caller falls back \
+             to verbatim"
+        );
+    }
+
+    #[test]
+    fn set_allow_auto_install_output_is_bio_decoder_round_trippable() {
+        // The re-encoded code uses the SAME byte-format `pack_meta` emits
+        // (zlib + URL-safe base64, no padding) — so BIO's own decoder
+        // round-trips it. Proven here by the inverse codec yielding the
+        // exact mutated payload (the codec round-trip `pack_meta`'s tests
+        // already prove BIO-decoder-equivalent).
+        let original =
+            make_base(&json!({ "format_version": 1, "game_install": "BG2EE", "x": [1, 2, 3] }));
+        let out = set_allow_auto_install(&original, true).expect("ok");
+        assert!(out.starts_with(SHARE_CODE_PREFIX));
+        assert!(
+            !out.contains('='),
+            "URL-safe base64, no '=' padding (BIO-format parity)"
+        );
+        let v = decode_payload(&out);
+        assert_eq!(v["allow_auto_install"], json!(true));
+        assert_eq!(v["game_install"], json!("BG2EE"));
+        assert_eq!(v["x"], json!([1, 2, 3]));
     }
 }

@@ -32,9 +32,8 @@
 //
 // The single orchestration seam the Install-Modlist Downloading screen calls
 // **once** (gated by `InstallScreenState::pipeline_armed`) **after**
-// `auto_build_driver::prepare_install_dirs_and_maybe_import` returned `Ok`
-// (so `import_modlist_share_code` has populated `WizardState` — `pack_meta`
-// inside the §13.13 bundle exports from it). In order:
+// `auto_build_driver::prepare_install_dirs_and_maybe_import` returned `Ok`.
+// In order:
 //
 //   1. **Resolve / register the target entry.**
 //      - **Reinstall** (`pending_reinstall_id == Some(id)` AND that id is in
@@ -49,9 +48,21 @@
 //        `start_scratch` precedent uses). Idempotent: if an entry for this
 //        destination was already registered this run (the latch should
 //        prevent a re-call, but be defensive) reuse it.
-//   2. **Write the SPEC §13.13 install-start bundle** for that entry via the
-//      committed `start_hooks::write_install_start_artifacts` (variant from
-//      `InstallButtonVariant::from_step5_and_reinstall` — Reinstall ⇒
+//   2. **Write the SPEC §13.13 install-start bundle** for that entry via
+//      `start_hooks::write_install_start_artifacts_with_code` — sourced
+//      from **the code the orchestrator ALREADY HAS**, NOT regenerated via
+//      `pack_meta` (the user's resolution, 2026-05-18). The source is the
+//      Reinstall entry's stored `latest_share_code`, else the raw
+//      user-pasted `install_screen_state.import_code`; the bit is set to
+//      `allow_auto_install=false` on its decoded payload, the pasted code's
+//      baked-in provenance riding through verbatim. **Why the source
+//      changed:** `pack_meta` → `export_modlist_share_code` reads
+//      `state.step3`, which is empty at this point (the import's
+//      `reset_workflow_keep_step1` cleared it; the async scan has not run)
+//      — so the old regeneration `?`-bailed BEFORE writing
+//      `install_started_at` / `latest_share_code` / the on-disk file (the
+//      pinned symptom). Variant from
+//      `InstallButtonVariant::from_step5_and_reinstall` (Reinstall ⇒
 //      overwrite, a fresh paste ⇒ `Install` ⇒ write; the Run-2 matrix
 //      governs). An `Err` is logged + non-fatal (mirrors `on_install_start`
 //      / SPEC §13.14 — the install proceeds; the registry already holds the
@@ -68,8 +79,10 @@
 // dirs / applies flag policies / does the Reinstall state-flip** (those are
 // already done on the pipeline path — `render_live` /
 // `reinstall_flip_at_install_click`). **Zero BIO source** — composes
-// `create_modlist`'s convention + the committed `write_install_start_
-// artifacts` (which composes `pack_meta`, which composes BIO read-only).
+// `create_modlist`'s convention + `write_install_start_artifacts_with_code`
+// (which uses `share_export::set_allow_auto_install`, the
+// `pack_meta`-envelope-minus-`export_modlist_share_code` — it never calls
+// BIO's generator at all).
 //
 // SPEC: §13.13 (import code auto-write — every entry point), §13.1 (registry
 //        lifecycle — an Install-Modlist paste registers an in-progress
@@ -370,41 +383,75 @@ pub fn register_and_write_install_start_artifacts(orchestrator: &mut Orchestrato
     };
 
     // ── 2. Write the SPEC §13.13 install-start bundle for the resolved
-    //    entry (pack_meta `allow_auto_install=false` → entry
-    //    .latest_share_code → install_started_at → atomic save →
-    //    variant-gated modlist-import-code.txt). The variant comes from the
-    //    shared `from_step5_and_reinstall` (Reinstall ⇒ overwrite; a fresh
-    //    paste's `state.step5` is `!resume_available && !has_run_once` ⇒
-    //    `Install` ⇒ write — the Run-2 matrix governs). An `Err` is logged +
-    //    non-fatal (the install proceeds; SPEC §13.14 — mirrors
-    //    `on_install_start`). This runs AFTER `import_modlist_share_code`
-    //    (the caller's precondition) so `pack_meta`'s
-    //    `export_modlist_share_code(&wizard_state)` sees the imported logs.
-    //    Split the disjoint &mut fields (the established split-borrow shape).
+    //    entry — **sourced from the code the orchestrator ALREADY HAS, NOT
+    //    regenerated via `pack_meta`** (the user's resolution, 2026-05-18).
+    //
+    //    Why the source changed (regeneration → held code): `pack_meta` →
+    //    `export_modlist_share_code` reads `state.step3.{bgee,bg2ee}_items`
+    //    (or the exact-WeiDU-log source), but at THIS point — right after
+    //    `prepare_install_dirs_and_maybe_import`'s `import_modlist_share
+    //    _code` (which `reset_workflow_keep_step1`s) and BEFORE the async
+    //    scan→apply-log — `state.step3` is **empty**, so the old
+    //    `write_install_start_artifacts` `?`-bailed on `export_modlist
+    //    _share_code` `Err("No WeiDU entries available to export.")` BEFORE
+    //    writing `install_started_at` / `latest_share_code` / the on-disk
+    //    file (the pinned symptom). For the Install-Modlist entry points the
+    //    user already HAS the code, so persist THAT (bit set to
+    //    `allow_auto_install=false` on its decoded payload via
+    //    `share_export::set_allow_auto_install` — the pasted code's baked-in
+    //    `name`/`author`/`forked_from` ride through verbatim; SPEC §13.3).
+    //
+    //    **Code source (the user's two bullets):**
+    //      • **Reinstall** — reuse the registry entry's existing
+    //        `latest_share_code` (set at its first install). A legacy entry
+    //        lacking it falls through to the pasted/preview code below.
+    //      • **Fresh Install-Modlist paste** — the raw user-pasted code
+    //        (`install_screen_state.import_code`; a fresh-paste entry has no
+    //        `latest_share_code` yet — it is `None` until this very step).
+    //    Unified: prefer the resolved entry's existing non-empty
+    //    `latest_share_code` (Reinstall reuse); else
+    //    `install_screen_state.import_code` (the raw pasted / Reinstall-
+    //    preview code — `start_reinstall` already copied a Reinstall's
+    //    stored code into it, so they agree). The Workspace /
+    //    build-from-scanned-mods path is UNCHANGED — it never reaches here
+    //    (it routes through `on_install_start`, where `state.step3` IS
+    //    populated and `pack_meta` regeneration is correct).
+    //
+    //    The variant comes from the shared `from_step5_and_reinstall`
+    //    (Reinstall ⇒ overwrite; a fresh paste's `state.step5` is
+    //    `!resume_available && !has_run_once` ⇒ `Install` ⇒ write — the
+    //    Run-2 matrix governs). An `Err` (registry write only — the held
+    //    code never makes it `Err`) is logged + non-fatal (the install
+    //    proceeds; SPEC §13.14 — mirrors `on_install_start`).
     let variant = InstallButtonVariant::from_step5_and_reinstall(
         &orchestrator.wizard_state,
         &modlist_id,
         orchestrator.pending_reinstall_id.as_deref(),
     );
+    let code_source = orchestrator
+        .registry
+        .find(&modlist_id)
+        .and_then(|e| e.latest_share_code.clone())
+        .filter(|c| !c.trim().is_empty())
+        .unwrap_or_else(|| orchestrator.install_screen_state.import_code.clone());
     {
         let OrchestratorApp {
-            wizard_state,
             registry,
             registry_store,
             ..
         } = &mut *orchestrator;
-        if let Err(err) = start_hooks::write_install_start_artifacts(
+        if let Err(err) = start_hooks::write_install_start_artifacts_with_code(
             &modlist_id,
             variant,
-            wizard_state,
+            &code_source,
             registry,
             registry_store,
         ) {
             warn!(
                 target = "orchestrator",
-                "Install start: write_install_start_artifacts for {modlist_id} \
-                 failed: {err} (non-fatal — the install proceeds; SPEC §13.14 / \
-                 mirrors on_install_start's handling)"
+                "Install start: write_install_start_artifacts_with_code for \
+                 {modlist_id} failed: {err} (non-fatal — the install proceeds; \
+                 SPEC §13.14 / mirrors on_install_start's handling)"
             );
         }
     }

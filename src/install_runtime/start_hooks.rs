@@ -308,6 +308,132 @@ pub fn write_install_start_artifacts(
     Ok(())
 }
 
+/// **The SPEC §13.13 install-start artifact bundle, sourced from a code the
+/// orchestrator ALREADY HAS — NOT regenerated via `pack_meta`.** The
+/// Install-Modlist-paste / Reinstall variant of [`write_install_start_
+/// artifacts`].
+///
+/// **Why this exists (the user's resolution, 2026-05-18).** For the
+/// **Install-Modlist** entry points the user already has the code (they
+/// pasted it; a Reinstall has the entry's stored `latest_share_code`).
+/// Regenerating it via `pack_meta` is **impossible** there:
+/// `pack_meta` → `bio::app::modlist_share::export_modlist_share_code` reads
+/// `state.step3.{bgee,bg2ee}_items` (build-from-scanned-mods) or the
+/// exact-WeiDU-log source, and at the install-start arm point `state.step3`
+/// is empty (the share-code import's `reset_workflow_keep_step1` clears it,
+/// and the async scan→apply-log has not run yet) ⇒ `export_modlist_share
+/// _code` `Err`s ⇒ the whole §13.13 bundle aborted before writing
+/// `install_started_at` / `latest_share_code` / the on-disk file. The
+/// resolution: **persist the code the orchestrator already has** (the
+/// `code_source` arg), only setting the `allow_auto_install` bit on its
+/// decoded payload (`share_export::set_allow_auto_install`, the
+/// `pack_meta`-envelope-minus-step-1 — no `export_modlist_share_code`,
+/// **zero BIO source**). The pasted code's baked-in `name` / `author` /
+/// `forked_from` ride through **verbatim** (the payload is opaque) — this is
+/// the SPEC §13.3 Provenance property "the real code carries the name"
+/// (achieved by *not* rewriting it), so the "Shared modlist" fallback stops.
+///
+/// Does exactly [`write_install_start_artifacts`]'s steps **3 → 6 → 4**,
+/// with step **2** replaced by the decode-flip:
+///
+///   2′. `code = share_export::set_allow_auto_install(code_source, false)`
+///      (install-start codes are unverified — SPEC §13.3 / §13.13). If the
+///      `code_source` is somehow not a decodable BIO-MODLIST-V1 string (it
+///      always is — it parsed at Preview), persist it **verbatim** (per the
+///      user's resolution: persisting the real code is the priority over the
+///      false→true draft nicety; the bit defaults to `true` for a code that
+///      lacks the key, which is the *consume*-side default — acceptable, and
+///      a degenerate input anyway).
+///   3.  `entry.latest_share_code = Some(code)` + stamp `install_started_at`
+///      (always — every variant; distinct from `install_date`, P7.T6).
+///   6.  Atomic registry write (`RegistryStore::save`) — before the disk
+///      write so the registry record is durable even if the file fails.
+///   4.  Write `modlist-import-code.txt`, **variant-gated per SPEC §13.13**
+///      (`Install` / `Restart` / `Reinstall` write/overwrite; `Resume`
+///      skips — the prior attempt's file stays canonical). A file-write
+///      failure is logged, **not** fatal.
+///
+/// **Deliberately does NOT** regenerate from `WizardState` (the whole point
+/// — `state.step3` is empty here), nor do the #1/#5 flag policies / dir
+/// derivation / Reinstall state-flip / `start_install_requested` flip (all
+/// owned by the pipeline path — see [`write_install_start_artifacts`]).
+///
+/// Returns `Ok(())` on success; `Err(String)` only if the **registry write**
+/// failed (the caller surfaces it per SPEC §13.14; the code source itself
+/// never makes this `Err` — a non-decodable code is persisted verbatim, not
+/// an error). A failed `modlist-import-code.txt` write is **not** an `Err`.
+pub fn write_install_start_artifacts_with_code(
+    modlist_id: &str,
+    variant: InstallButtonVariant,
+    code_source: &str,
+    registry: &mut ModlistRegistry,
+    store: &RegistryStore,
+) -> Result<(), String> {
+    // ── 2′. The install-start code = the code the orchestrator ALREADY HAS,
+    //    with `allow_auto_install = false` set on its decoded payload (SPEC
+    //    §13.3 / §13.13 — install-start codes are unverified). NOT
+    //    `pack_meta` (no `export_modlist_share_code`; `state.step3` is empty
+    //    here). A non-decodable source ⇒ persist VERBATIM (the user's
+    //    resolution: the real code is the priority; this input always parsed
+    //    at Preview, so the fallback is purely defensive). ──
+    let entry = registry
+        .find(modlist_id)
+        .ok_or_else(|| format!("modlist {modlist_id} not in registry at install start"))?;
+    let destination = entry.destination_folder.trim().to_string();
+    let trimmed_source = code_source.trim();
+    let share_code = match share_export::set_allow_auto_install(trimmed_source, false) {
+        Ok(code) => code,
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "install-start: could not decode the held code for {modlist_id} \
+                 to set allow_auto_install=false ({err}) — persisting it \
+                 VERBATIM (the real code is the priority; SPEC §13.13)"
+            );
+            trimmed_source.to_string()
+        }
+    };
+
+    // ── 3. Update entry.latest_share_code to the in-progress code +
+    //    stamp install_started_at (every variant, every attempt). ──
+    let entry_mut = registry
+        .find_mut(modlist_id)
+        .ok_or_else(|| format!("modlist {modlist_id} vanished from registry mid-hook"))?;
+    entry_mut.latest_share_code = Some(share_code.clone());
+    entry_mut.install_started_at = Some(Utc::now());
+
+    // ── 6. Atomic registry write (before the disk write so the registry
+    //    record is durable even if the file write fails). ──
+    store
+        .save(registry)
+        .map_err(|err| format!("registry write at install start failed: {err}"))?;
+
+    // ── 4. Variant-gated `modlist-import-code.txt` write (SPEC §13.13:
+    //    Install/Restart/Reinstall write/overwrite; Resume skips). Upfront,
+    //    non-fatal on failure. ──
+    if variant.writes_import_code() {
+        if destination.is_empty() {
+            warn!(
+                target = "orchestrator",
+                "modlist {modlist_id} has no destination_folder at install start — \
+                 skipping modlist-import-code.txt (nothing to write it next to)"
+            );
+        } else if let Err(err) =
+            import_code_writer::write_modlist_import_code_txt(Path::new(&destination), &share_code)
+        {
+            warn!(
+                target = "orchestrator",
+                "writing modlist-import-code.txt to {destination} failed: {err} \
+                 (non-fatal — the install proceeds; the registry holds the code)"
+            );
+        }
+    }
+    // Resume Install: the file is intentionally NOT overwritten (SPEC
+    // §13.13) — no-op by design.
+
+    Ok(())
+}
+
 /// Run the install-start hook (the in-Workspace Step-5 path). See the
 /// module header for the ordered contract. Applies the #1/#5 flag policies,
 /// then writes the SPEC §13.13 install-start artifact bundle via

@@ -628,6 +628,35 @@ impl OrchestratorApp {
             return;
         };
 
+        // The post-success share-code SOURCE, by entry point (the user's
+        // resolution, 2026-05-18):
+        //   • **Workspace path** (`from_workspace`) — `None` ⇒
+        //     `flip_to_installed` regenerates via `pack_meta` (UNCHANGED;
+        //     `state.step3` is populated there, so regeneration is correct
+        //     — this was never the broken case).
+        //   • **Install-Modlist paste / Reinstall** (`!from_workspace`,
+        //     anchored by `active_install_modlist_id`) — the orchestrator's
+        //     already-held code: the entry's install-start
+        //     `latest_share_code` (the `allow_auto_install=false` form
+        //     `write_install_start_artifacts_with_code` persisted from the
+        //     pasted/stored code). `flip_to_installed` only flips its bit to
+        //     `true` (NOT `pack_meta` — `state.step3` is empty on the
+        //     Install-Modlist path; the pasted code's baked-in provenance
+        //     rides through verbatim, SPEC §13.3). If the entry somehow has
+        //     no `latest_share_code` (the §13.13 install-start write failed)
+        //     fall back to `None` — `pack_meta` will then honestly `Err`
+        //     (no code to persist; the entry stays as-is, logged) rather
+        //     than fabricate one.
+        // Read before the split-borrow (immutable `self.registry`).
+        let share_code_override: Option<String> = if from_workspace {
+            None
+        } else {
+            self.registry
+                .find(&id)
+                .and_then(|e| e.latest_share_code.clone())
+                .filter(|c| !c.trim().is_empty())
+        };
+
         // Split the &mut borrow into the disjoint fields `flip_to_installed`
         // needs (`registry` / `registry_store` / `wizard_state` are distinct
         // struct fields — a sound split borrow, the same shape the Step-5
@@ -643,8 +672,13 @@ impl OrchestratorApp {
         // receiver; store it so `drain_size_worker_result` does the second
         // atomic write filling `total_size_bytes`. On any failure path it
         // returns `None` (logged inside) — nothing to drain.
-        let rx =
-            registry_transition::flip_to_installed(&id, registry, registry_store, wizard_state);
+        let rx = registry_transition::flip_to_installed(
+            &id,
+            registry,
+            registry_store,
+            wizard_state,
+            share_code_override.as_deref(),
+        );
         if rx.is_some() {
             self.install_size_worker_rx = rx;
         }
