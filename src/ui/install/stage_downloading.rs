@@ -185,25 +185,27 @@ impl ModDownloadStatus {
         }
     }
 
-    /// **D3 — strictly monotonic non-decreasing phase fraction** (Queued ≤
-    /// Downloading ≤ Extracting ≤ Staged) used only to compute the single
-    /// overall bar. Because each later phase's fraction is ≥ the previous
-    /// one, a row advancing (Downloading → Extracting → Staged) can only
-    /// raise the average — the overall bar **never regresses** (this is the
-    /// fix for the reported 100→80 stall, which was caused by the old
-    /// `Downloading{100}` = 1.0 dropping to `Extracting` = 0.80 when a row
-    /// moved from download to extract). There is no per-row bar any more
-    /// (D4); this is purely an input to `DownloadProgress::overall_pct`.
+    /// **The per-mod progress-bar fill (0.0..=1.0) — phase-based, strictly
+    /// monotonic.** Restores the per-mod bar (a core requirement): each
+    /// mod's bar reflects *that mod's* lifecycle position and advances
+    /// **individually** — mod A can be `Staged` (full) while mod B is still
+    /// `Queued` (empty), independent of the overall bar. BIO exposes per-mod
+    /// *completion* (the downloaded/extracted membership), not a per-mod
+    /// byte-%, so the downloading sub-phase is one determinate step rather
+    /// than a continuous fill; each row still steps forward on its own
+    /// schedule as its archive lands / extracts. Strictly increasing
+    /// (Queued 0 < Downloading < Extracting < Staged 1.0) so a row's own bar
+    /// never regresses. (The *overall* bar is separate — `overall_pct`,
+    /// driven by BIO's real aggregate.)
     pub fn phase_fraction(self) -> f32 {
         match self {
             ModDownloadStatus::Queued => 0.0,
-            // Downloading contributes partial progress so the bar moves
-            // during the (longest) fetch phase instead of being 0 until
-            // the first archive stages.
-            ModDownloadStatus::Downloading => 0.45,
-            // ≥ Downloading (monotonic — extraction is strictly more
-            // progress than downloading, never less).
-            ModDownloadStatus::Extracting => 0.80,
+            // Archive fetch in flight — a small determinate nub (BIO emits
+            // no finer per-mod download signal); the bar jumps forward when
+            // THIS mod's archive lands.
+            ModDownloadStatus::Downloading => 0.15,
+            // Archive downloaded; local unpack in progress.
+            ModDownloadStatus::Extracting => 0.65,
             ModDownloadStatus::Staged => 1.0,
         }
     }
@@ -259,6 +261,14 @@ pub struct ModDownloadRow {
 pub struct DownloadProgress {
     /// Per-mod rows, modlist order.
     pub rows: Vec<ModDownloadRow>,
+    /// BIO's **aggregate** download progress (0..=100) parsed from
+    /// `step2.scan_status` `"Downloading updates: N/M"` — the only real,
+    /// moving download signal BIO emits (a per-mod byte-% does not exist).
+    /// Drives the single overall bar so it tracks real download progress
+    /// instead of a flat per-phase constant (the "stuck at 45%" fix). `0`
+    /// when the status is not in that shape (idle / scanning / extracting /
+    /// the empty fork-download chassis).
+    pub dl_aggregate_pct: u8,
 }
 
 impl DownloadProgress {
@@ -327,7 +337,15 @@ impl DownloadProgress {
             })
             .collect();
 
-        Self { rows }
+        // BIO's only real download-progress signal (the aggregate "N/M" it
+        // writes into scan_status). 0 when absent — `overall_pct` then
+        // rests on the extract/stage completion component (still monotonic).
+        let dl_aggregate_pct = parse_download_aggregate_pct(&s2.scan_status).unwrap_or(0);
+
+        Self {
+            rows,
+            dl_aggregate_pct,
+        }
     }
 }
 
@@ -352,23 +370,38 @@ impl DownloadProgress {
         self.rows.len()
     }
 
-    /// **D3 — the single honest overall bar, monotonic non-decreasing.**
-    /// 0..=100 integer = the average of each row's **monotonic**
-    /// `phase_fraction` (Queued 0 ≤ Downloading .45 ≤ Extracting .80 ≤
-    /// Staged 1.0). Because every later phase's fraction is ≥ the earlier
-    /// one, a row only ever *raises* the average as it advances — so the
-    /// bar **cannot regress** (the fix for the reported 100→80 stall, which
-    /// the old non-monotonic `Downloading{100}`=1.0 → `Extracting`=0.80
-    /// drop caused). Empty ⇒ 0 (no divide-by-zero; also the "not started"
-    /// rendering). This is the lone honest progress bar (D4 — no per-row
-    /// bars).
+    /// **The single overall bar — driven by BIO's real aggregate, monotonic
+    /// non-decreasing.** 0..=100. The earlier version averaged a flat
+    /// per-phase constant (every downloading row = .45) so while all N mods
+    /// were downloading the bar sat frozen at 45% (the reported "stuck at
+    /// 45%"). It now blends BIO's **real** aggregate download progress
+    /// (`dl_aggregate_pct`, the live "N/M archives downloaded") with the
+    /// extract/stage completion, so the bar actually climbs through the
+    /// (longest) download phase. Monotonic: every input (`dl_aggregate_pct`,
+    /// the past-download count, the staged count) is non-decreasing within a
+    /// run and `max`/weighted-sum of non-decreasing values is
+    /// non-decreasing — the bar never regresses. Reaches 100 only when every
+    /// row is `Staged`. Empty ⇒ 0.
     pub fn overall_pct(&self) -> u32 {
         let total = self.total();
         if total == 0 {
             return 0;
         }
-        let sum: f32 = self.rows.iter().map(|r| r.status.phase_fraction()).sum();
-        ((sum / total as f32) * 100.0).round() as u32
+        let total_f = total as f32;
+        let staged = self.rows.iter().filter(|r| r.status.is_done()).count() as f32;
+        let past_dl = self
+            .rows
+            .iter()
+            .filter(|r| r.status.download_complete())
+            .count() as f32;
+        // Download component: BIO's live aggregate while archives are still
+        // landing, OR the count already past download — whichever is
+        // greater (keeps it monotonic once scan_status stops showing the
+        // "Downloading updates" line after the batch finishes).
+        let dl_component = (f32::from(self.dl_aggregate_pct) / 100.0).max(past_dl / total_f);
+        // Download is the bulk of the work; extraction/staging the tail.
+        let frac = 0.70 * dl_component + 0.30 * (staged / total_f);
+        (frac.clamp(0.0, 1.0) * 100.0).round() as u32
     }
 
     /// `true` when there is at least one row and every row is `Staged` — the
@@ -807,13 +840,18 @@ fn render_chrome(
     render_overall_progress(ui, palette, copy.hint, progress);
     ui.add_space(14.0);
 
-    // ── Box label="mod progress" — the 4-column grid ──────────────────────
-    render_mod_progress(ui, palette, progress);
+    // ── Box label="mod progress" — the per-mod grid ───────────────────────
+    // Reserve the footer row UP-FRONT and pass the remaining height as the
+    // grid's budget so its internal ScrollArea is bounded and the footer
+    // stays on-screen. (The prior code ran an UNBOUNDED ScrollArea and only
+    // computed the footer spacer AFTER it — with 50+ rows the scroll area
+    // ate all the height and the footer was pushed off the frame.)
+    let footer_h = sub_flow_footer::FOOTER_HEIGHT_PX;
+    let grid_budget = (ui.available_height() - footer_h - 8.0).max(140.0);
+    render_mod_progress(ui, palette, progress, grid_budget);
 
-    // Bottom-pin the footer (wireframe `<div flex:1 />` spacer) while
-    // reserving its footprint so it never overflows the visible area —
-    // identical chassis to every other Install stage.
-    let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
+    // The grid box is now bounded ⇒ this reclaims exactly the footer row.
+    let spacer = (ui.available_height() - footer_h).max(0.0);
     if spacer > 0.0 {
         ui.add_space(spacer);
     }
@@ -895,17 +933,25 @@ fn render_overall_progress(
 
 /// `Box label="mod progress"` — the per-mod grid.
 ///
-/// **D2 — the grid is vertically scrollable.** With 50+ mods the list
-/// previously overflowed the box and the lower rows were unreachable. It is
-/// now wrapped in a vertical `egui::ScrollArea` (the overall-progress box
-/// stays fixed above — it is rendered separately by `render_chrome`).
+/// **Vertically scrollable + footer-safe.** With 50+ mods the list overflows
+/// the box; the rows live in a vertical `egui::ScrollArea` whose height is
+/// **bounded by `max_h`** (the budget `render_chrome` computes *after*
+/// reserving the footer row). This is the fix for the footer being pushed
+/// off-frame: the scroll area can no longer grow unbounded to the full
+/// 50-row content height.
 ///
-/// **D4 — 3 columns** (mod / source / status); the fabricated per-row
-/// progress-bar column is removed (BIO emits no per-asset %; the only
-/// honest bar is the single overall one in the fixed box above). Columns:
-/// status fixed at 130px, the two flexible columns split the remainder
-/// 1.8 : 1 (the wireframe's `1.8fr 1fr`), 12px gap.
-fn render_mod_progress(ui: &mut egui::Ui, palette: ThemePalette, progress: &DownloadProgress) {
+/// **4 columns** (mod / source / status / progress). The per-mod progress
+/// bar is restored (a core requirement — it must function individually per
+/// mod, separate from the overall bar): its fill is the row's own
+/// `phase_fraction`, so each mod advances on its own schedule. `progress`
+/// fixed 150px, `status` fixed 120px; the two flexible columns split the
+/// remainder 1.8 : 1 (wireframe `1.8fr 1fr`), 12px gap.
+fn render_mod_progress(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    progress: &DownloadProgress,
+    max_h: f32,
+) {
     box_frame(palette).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.label(
@@ -917,23 +963,25 @@ fn render_mod_progress(ui: &mut egui::Ui, palette: ThemePalette, progress: &Down
         ui.add_space(8.0);
 
         let col_gap = 12.0;
-        let status_w = 130.0;
-        // D4: only 3 columns now — the remainder (after the fixed status
-        // column + 2 inter-column gaps) splits 1.8 : 1.
-        let flex_total = (ui.available_width() - status_w - col_gap * 2.0).max(120.0);
+        let status_w = 120.0;
+        let prog_w = 150.0;
+        // The remainder (after the two fixed columns + 3 inter-column gaps)
+        // splits 1.8 : 1.
+        let flex_total = (ui.available_width() - status_w - prog_w - col_gap * 3.0).max(120.0);
         let mod_w = flex_total * (1.8 / 2.8);
         let src_w = flex_total * (1.0 / 2.8);
 
         // Header row stays fixed above the scrolled body so the columns
         // are always labelled while the rows scroll.
         egui::Grid::new("stage_downloading_mod_grid_header")
-            .num_columns(3)
+            .num_columns(4)
             .spacing(egui::vec2(col_gap, 6.0))
             .min_col_width(0.0)
             .show(ui, |ui| {
                 grid_header(ui, palette, "mod", mod_w);
                 grid_header(ui, palette, "source", src_w);
                 grid_header(ui, palette, "status", status_w);
+                grid_header(ui, palette, "progress", prog_w);
                 ui.end_row();
             });
 
@@ -952,21 +1000,25 @@ fn render_mod_progress(ui: &mut egui::Ui, palette: ThemePalette, progress: &Down
             return;
         }
 
-        // D2: the rows scroll. `auto_shrink([false, true])` keeps the
-        // scroll area full-width but only as tall as needed (capped by the
-        // box's available height — `render_chrome` reserved the footer's
-        // footprint so this never overruns the visible area).
+        // The rows scroll inside a HEIGHT-BOUNDED area. `max_h` is the
+        // budget `render_chrome` reserved (it subtracted the footer row),
+        // minus this box's label + header + paddings (~64px). Capping the
+        // ScrollArea's height is what keeps the footer on-screen — without
+        // it `auto_shrink([_, true])` let the area grow to the full 50-row
+        // content height and shoved the footer off the frame.
+        let scroll_h = (max_h - 64.0).max(80.0);
         egui::ScrollArea::vertical()
             .id_salt("stage_downloading_mod_scroll")
+            .max_height(scroll_h)
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 egui::Grid::new("stage_downloading_mod_grid")
-                    .num_columns(3)
+                    .num_columns(4)
                     .spacing(egui::vec2(col_gap, 6.0))
                     .min_col_width(0.0)
                     .show(ui, |ui| {
                         for row in &progress.rows {
-                            render_grid_row(ui, palette, row, mod_w, src_w, status_w);
+                            render_grid_row(ui, palette, row, mod_w, src_w, status_w, prog_w);
                             ui.end_row();
                         }
                     });
@@ -974,8 +1026,9 @@ fn render_mod_progress(ui: &mut egui::Ui, palette: ThemePalette, progress: &Down
     });
 }
 
-/// One data row of the D4 3-column grid (mod / source / status — no per-row
-/// progress bar).
+/// One data row of the 4-column grid (mod / source / status / per-mod
+/// progress bar). The bar fill is the row's own `phase_fraction`, so it
+/// advances individually per mod, separate from the overall bar.
 fn render_grid_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -983,6 +1036,7 @@ fn render_grid_row(
     mod_w: f32,
     src_w: f32,
     status_w: f32,
+    prog_w: f32,
 ) {
     // Column 1 — mod name. `text-faint` while queued, else normal text
     // (wireframe `color: statusColor === text-faint ? text-faint : text`).
@@ -1027,6 +1081,19 @@ fn render_grid_row(
             status_color,
         );
     }
+
+    // Column 4 — the per-mod progress bar (restored core requirement). Fill
+    // = THIS mod's `phase_fraction`, so it advances individually (queued
+    // empty → downloading nub → extracting → ✓ full) independent of the
+    // overall bar above. Queued rows show an empty track (filled = false).
+    let (bar_rect, _) = ui.allocate_exact_size(egui::vec2(prog_w, 14.0), egui::Sense::hover());
+    paint_bar(
+        ui,
+        palette,
+        bar_rect,
+        f64::from(row.status.phase_fraction()),
+        !row.status.is_queued(),
+    );
 }
 
 /// The `✓ staged` cell — glyph in `firacode_nerd` (U+2713 is present,
@@ -1130,6 +1197,30 @@ fn paint_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Rect, frac: f64,
 // `phase_fraction` average (`DownloadProgress::overall_pct`), so the
 // status-string parser is dead and has been deleted (no per-frame string
 // parse either).
+
+/// Parse the aggregate download % out of BIO's `scan_status` line — the
+/// **only** download-progress signal BIO emits. `app_step2_update_
+/// download::poll_step2_update_download` sets it to exactly
+/// `"Downloading updates: N/M"` (from the worker's `Progress { completed,
+/// total }`). Returns `Some(0..=100)` only for that exact shape with
+/// `M > 0`; any other status (idle / scanning / extracting / a finished
+/// line) ⇒ `None` (the caller treats it as 0 — the overall bar then rests
+/// on the extract/stage component, never a fabricated value). Format-coupled
+/// to BIO's literal (read-only — if BIO ever changes the string this
+/// degrades to 0, never to a wrong %).
+fn parse_download_aggregate_pct(status: &str) -> Option<u8> {
+    let rest = status.trim().strip_prefix("Downloading updates: ")?;
+    let (done, total) = rest.split_once('/')?;
+    let done: usize = done.trim().parse().ok()?;
+    let total: usize = total.trim().parse().ok()?;
+    if total == 0 {
+        return None;
+    }
+    let pct = ((done.min(total) as f32 / total as f32) * 100.0)
+        .round()
+        .clamp(0.0, 100.0) as u8;
+    Some(pct)
+}
 
 /// **The non-masking arm-failure banner.** A full-width danger-bordered
 /// box (same chassis as `box_frame` but a danger stroke + a danger-toned
@@ -1238,6 +1329,74 @@ mod tests {
     }
 
     #[test]
+    fn parse_download_aggregate_pct_only_matches_bios_literal() {
+        // BIO's exact `app_step2_update_download::poll_step2_update_download`
+        // status (`"Downloading updates: N/M"`) — the only real download
+        // signal; it drives the overall bar (the "stuck at 45%" fix).
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 0/7"),
+            Some(0)
+        );
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 7/7"),
+            Some(100)
+        );
+        // 3/7 → 42.857 → round → 43.
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 3/7"),
+            Some(43)
+        );
+        // Any other status ⇒ None (the overall bar then rests on the
+        // extract/stage component, never a fabricated %).
+        assert_eq!(parse_download_aggregate_pct("Idle"), None);
+        assert_eq!(parse_download_aggregate_pct("Scanning..."), None);
+        assert_eq!(
+            parse_download_aggregate_pct("Download updates finished: 7 downloaded, 0 failed"),
+            None
+        );
+        // Degenerate / malformed ⇒ None, never a panic or a wrong %.
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: 1/0"),
+            None
+        );
+        assert_eq!(
+            parse_download_aggregate_pct("Downloading updates: x/y"),
+            None
+        );
+    }
+
+    #[test]
+    fn overall_pct_tracks_bio_aggregate_and_is_monotonic_not_stuck() {
+        // The "stuck at 45%" fix: with every row Downloading, the bar must
+        // follow BIO's real aggregate (dl_aggregate_pct), NOT a flat phase
+        // constant. And it must never regress as rows advance.
+        let dl = |status, agg| DownloadProgress {
+            rows: vec![row("a", status), row("b", status), row("c", status)],
+            dl_aggregate_pct: agg,
+        };
+        // All downloading, BIO says 0/ N ⇒ ~0 (not a frozen 45).
+        assert!(dl(ModDownloadStatus::Downloading, 0).overall_pct() < 5);
+        // BIO aggregate climbs ⇒ the bar climbs (the core complaint).
+        let p20 = dl(ModDownloadStatus::Downloading, 20).overall_pct();
+        let p60 = dl(ModDownloadStatus::Downloading, 60).overall_pct();
+        assert!(
+            p20 > 0 && p60 > p20,
+            "bar moves with BIO's aggregate ({p20} < {p60})"
+        );
+        // Monotonic across the lifecycle, ending at 100 only when all staged.
+        let q = dl(ModDownloadStatus::Queued, 0).overall_pct();
+        let d = dl(ModDownloadStatus::Downloading, 50).overall_pct();
+        let e = dl(ModDownloadStatus::Extracting, 0).overall_pct();
+        let s = dl(ModDownloadStatus::Staged, 0).overall_pct();
+        assert!(
+            q <= d && d <= e && e <= s,
+            "never regresses ({q}≤{d}≤{e}≤{s})"
+        );
+        assert_eq!(q, 0);
+        assert_eq!(s, 100, "100 only when every row is Staged");
+    }
+
+    #[test]
     fn is_done_and_is_queued_and_download_complete_are_correct() {
         assert!(ModDownloadStatus::Queued.is_queued());
         assert!(!ModDownloadStatus::Queued.is_done());
@@ -1290,6 +1449,7 @@ mod tests {
                 row("c", ModDownloadStatus::Downloading), // not yet
                 row("d", ModDownloadStatus::Queued),
             ],
+            ..Default::default()
         };
         assert_eq!(
             p.completed(),
@@ -1300,9 +1460,11 @@ mod tests {
     }
 
     #[test]
-    fn overall_pct_uses_monotonic_phase_fractions() {
-        // 4 rows: staged(1.0) + extracting(0.80) + downloading(0.45) +
-        // queued(0.0) → (2.25 / 4) * 100 = 56.25 → round → 56.
+    fn overall_pct_blends_bio_aggregate_with_extract_stage_completion() {
+        // The overall bar is NO LONGER a flat phase-fraction average (that
+        // was the "stuck at 45%" bug). 4 rows [Staged, Extracting,
+        // Downloading, Queued], BIO aggregate 0: past-download = 2/4 = .5,
+        // staged = 1/4 = .25 ⇒ 0.70*.5 + 0.30*.25 = .425 ≈ 42–43%.
         let p = DownloadProgress {
             rows: vec![
                 row("a", ModDownloadStatus::Staged),
@@ -1310,8 +1472,21 @@ mod tests {
                 row("c", ModDownloadStatus::Downloading),
                 row("d", ModDownloadStatus::Queued),
             ],
+            ..Default::default()
         };
-        assert_eq!(p.overall_pct(), 56);
+        let pct = p.overall_pct();
+        assert!((42..=43).contains(&pct), "blend ≈ 42–43, got {pct}");
+        // Same rows but BIO reports 80% downloaded ⇒ the bar is strictly
+        // higher (it tracks BIO's real aggregate, not a frozen constant).
+        let p2 = DownloadProgress {
+            dl_aggregate_pct: 80,
+            ..p.clone()
+        };
+        assert!(
+            p2.overall_pct() > pct,
+            "the overall bar tracks BIO's aggregate ({} > {pct})",
+            p2.overall_pct()
+        );
     }
 
     #[test]
@@ -1321,6 +1496,7 @@ mod tests {
         // a non-decreasing overall %.
         let mut p = DownloadProgress {
             rows: vec![row("a", ModDownloadStatus::Queued)],
+            ..Default::default()
         };
         let q = p.overall_pct();
         p.rows[0].status = ModDownloadStatus::Downloading;
@@ -1346,6 +1522,7 @@ mod tests {
                 row("a", ModDownloadStatus::Staged),
                 row("b", ModDownloadStatus::Staged),
             ],
+            ..Default::default()
         };
         assert!(p.all_staged());
         assert_eq!(p.overall_pct(), 100);
