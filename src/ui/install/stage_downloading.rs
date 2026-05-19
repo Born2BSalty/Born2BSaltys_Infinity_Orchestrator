@@ -23,15 +23,17 @@
 //     <Box label="mod progress" padding:12 minHeight:360>
 //       (D2) the rows live inside a vertical ScrollArea so 50+ mods are
 //       all reachable; the overall-progress box above stays fixed.
-//       (D4) 3 columns — the fabricated per-row progress-bar column is
-//       removed (BIO emits no per-asset %, so a per-row bar would be fake;
-//       the lone honest bar is the single overall one in the box above).
-//       <div grid cols:"1.8fr 1fr 130px" gap:"6px 12px" align:center>
-//         mod / source / status            (column headers, hand,text-muted)
+//       4 columns (mod / source / status / **per-mod byte bar**) — the
+//       per-mod bar carries this mod's *own live byte fraction* during
+//       download, advancing frame-by-frame (Wabbajack-grade), independent
+//       of the 4-wide pool.
+//       <div grid cols:"1.8fr 1fr 120px 150px" gap:"6px 12px" align:center>
+//         mod / source / status / progress (column headers, hand,text-muted)
 //         {rows.map(m => (
 //           <Label color:{queued? text-faint : text}>{m.name}</Label>
 //           <Label fontSize:13 color:text-faint>{m.source}</Label>
 //           <Label color:{statusColor}>{statusText}</Label>
+//           <Bar frac={m.bar_fraction()} />
 //         ))}
 //     </Box>
 //     <div flex:1 />
@@ -39,17 +41,36 @@
 //                    onPrimary={onContinue} primaryLabel={continueLabel} />
 //   </div>
 //
-// `statusText` / `statusColor` (D4 — status only, no per-row %):
-//   done       → "✓ staged"        · success-green
-//   extracting → "extracting..."   · text (normal)
-//   downloading→ "downloading"     · text (normal)   [no fabricated N%]
-//   queued     → "queued"          · text-faint
+// `statusText` / `statusColor`:
+//   done       → "✓ staged"            · success-green
+//   skipped    → "✓ already downloaded"· success-green (DL-Run 1 cached)
+//   extracting → "extracting..."       · text (normal)
+//   downloading→ "downloading"         · text (normal)
+//   queued     → "queued"              · text-faint
 //
-// The single overall bar (the fixed box above) = the average of each
-// row's **monotonic** `phase_fraction` (Queued 0 ≤ Downloading .45 ≤
-// Extracting .80 ≤ Staged 1.0) — D3: it never regresses (fixes the
-// reported 100→80 stall), and the "N / T" count counts download-complete
-// rows so it advances through the phases (fixes the "stuck 0/51").
+// **DL-Run 2 — Wabbajack-grade two-phase model (this reverses the prior
+// "D4 status-only / one-determinate-step" interim rationale; that was true
+// of BIO's serial worker, which the redesign no longer uses for the
+// download).** The screen is two explicit ordered phases, each its own
+// independent 0→100, NEVER sharing a bar:
+//   • **Download** overall = `Σ downloaded_bytes ÷ Σ expected_bytes`
+//     across every to-fetch mod (a TRUE byte aggregate from the parallel
+//     `stream_downloader`'s per-asset byte deltas — NOT N/M, NOT a
+//     heuristic blend). DL-Run-1-skipped (already-present-by-hash) mods
+//     count instantly-complete (their full size in both numerator and
+//     denominator) so a mostly-cached install feels smooth/fast/honest
+//     ("48 of 51 already present, downloading 3"). Monotonic.
+//   • **Extract** overall = a SEPARATE bar that starts at 0 when the
+//     extract phase begins and climbs `extracted ÷ total` to 100,
+//     independently — it NEVER inherits the download value. (BIO's extract
+//     exposes per-archive completion, not bytes, so it is count-granular
+//     but rendered as its own clean monotonic 0→100.)
+// The per-mod bar = THIS mod's live `downloaded_bytes / expected_size`,
+// the WHOLE 0→1 fill during download (no artificial band-clamp), read
+// fresh every egui frame from the byte map the drain keeps current — so a
+// row at 37% renders beside a sibling at 81%, never a clump snapping
+// 20→100. No-Content-Length ⇒ a graceful animated indeterminate fill.
+// A clear phase label tells the user which phase + the N/M · P%.
 //
 // **Symbol-glyph rule (cmap-verified, HANDOFF caveat).** The `✓` U+2713 in
 // "✓ staged" IS present in the full FiraCode Nerd build (math/dingbat-check
@@ -144,35 +165,44 @@ const CHECK_STAGED: &str = "\u{2713}"; // ✓
 
 /// Per-mod download/extract lifecycle (SPEC §4.3; wireframe `m.status`).
 /// Ordered as the row progresses: `Queued` → `Downloading` → `Extracting`
-/// → `Staged`.
+/// → `Staged`. `Skipped` is the DL-Run-1 already-present-by-hash terminal
+/// (the Wabbajack "already have it" — never downloaded, presented straight
+/// to extract / staged).
 ///
-/// **D4 — status-only, no fabricated per-row %.** BIO emits ONLY an
-/// aggregate download % (no per-asset progress — see
-/// `DownloadProgress::from_wizard_state`); the old `Downloading { progress
-/// }` mirrored that single aggregate onto *every* in-flight row, so 51
-/// rows all showed an identical "downloading 6%" (the user's "confusing"
-/// complaint) and a meaningless per-row bar. The redesign drops the
-/// fabricated per-row % entirely: a row carries **status only**
-/// (`Downloading` has no number); the lone honest progress signal is the
-/// single overall bar (the aggregate) plus the advancing count.
+/// **DL-Run 2.** The in-flight `Downloading` row's bar is NOT a phase nub
+/// — it is the mod's *own live byte fraction* (`bytes / Content-Length`),
+/// the whole 0→1 fill, read fresh every frame from `ModDownloadRow
+/// ::per_byte` (see [`ModDownloadRow::bar_fraction`]). `phase_fraction`
+/// here is only the non-byte fallback (chassis / fork-download / a
+/// pre-first-byte frame / a no-Content-Length row).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModDownloadStatus {
     /// Not started yet. Faint text.
     #[default]
     Queued,
-    /// Archive fetch in progress (status only — no per-row %).
+    /// Archive fetch in progress. The per-mod bar is this mod's live
+    /// `bytes / Content-Length` (`ModDownloadRow::bar_fraction`), not a
+    /// phase nub.
     Downloading,
     /// Archive extraction in progress.
     Extracting,
     /// Downloaded + extracted + staged. Success-green text.
     Staged,
+    /// **DL-Run 1 — already present on disk by content hash** (the
+    /// Wabbajack skip): never downloaded, the bytes were placed at BIO's
+    /// extract path. Renders instantly-satisfied (full bar, success-green
+    /// "✓ already downloaded") and counts complete in the download byte
+    /// aggregate so a mostly-cached install does not lurch / sit at a false
+    /// low.
+    Skipped,
 }
 
 impl ModDownloadStatus {
-    /// The per-row status caption (D4 — status only, **no** "N%"). The
-    /// wireframe's `statusText` had a `downloading <p>%`; the redesign
-    /// drops the fabricated per-row number (BIO has no per-asset %), so a
-    /// downloading row reads just `downloading`.
+    /// The per-row status caption. `Downloading` reads just `downloading`
+    /// (the live fraction is on the per-mod bar, not the caption);
+    /// `Skipped` reads `already downloaded` (prose only — the `✓` glyph is
+    /// laid by the call site, mirroring `sub_flow_footer`'s glyph/prose
+    /// split, the same as `Staged`).
     pub fn status_text(self) -> String {
         match self {
             ModDownloadStatus::Queued => "queued".to_string(),
@@ -182,53 +212,47 @@ impl ModDownloadStatus {
             // word at the call site — `status_text` returns the prose only so
             // the glyph/prose split mirrors `sub_flow_footer`.
             ModDownloadStatus::Staged => "staged".to_string(),
+            ModDownloadStatus::Skipped => "already downloaded".to_string(),
         }
     }
 
-    /// **The per-mod progress-bar fill (0.0..=1.0) — phase-based, strictly
-    /// monotonic.** Restores the per-mod bar (a core requirement): each
-    /// mod's bar reflects *that mod's* lifecycle position and advances
-    /// **individually** — mod A can be `Staged` (full) while mod B is still
-    /// `Queued` (empty), independent of the overall bar. BIO exposes per-mod
-    /// *completion* (the downloaded/extracted membership), not a per-mod
-    /// byte-%, so the downloading sub-phase is one determinate step rather
-    /// than a continuous fill; each row still steps forward on its own
-    /// schedule as its archive lands / extracts. Strictly increasing
-    /// (Queued 0 < Downloading < Extracting < Staged 1.0) so a row's own bar
-    /// never regresses. (The *overall* bar is separate — `overall_pct`,
-    /// driven by BIO's real aggregate.)
+    /// **The non-byte fallback per-mod fill (0.0..=1.0).** The live path
+    /// uses [`ModDownloadRow::bar_fraction`], which prefers the mod's real
+    /// byte fraction; this is only reached when there is NO byte signal
+    /// (chassis / fork-download / a frame before the first byte delta / a
+    /// no-Content-Length row). Strictly monotonic across the lifecycle
+    /// (Queued 0 < Downloading < Extracting < Staged/Skipped 1.0) so a
+    /// fallback row never visually regresses.
     pub fn phase_fraction(self) -> f32 {
         match self {
             ModDownloadStatus::Queued => 0.0,
-            // Archive fetch in flight — a small determinate nub (BIO emits
-            // no finer per-mod download signal); the bar jumps forward when
-            // THIS mod's archive lands.
+            // No byte signal yet — a small determinate nub so the row reads
+            // as active (the live byte fraction takes over the moment the
+            // first delta arrives via `ModDownloadRow::per_byte`).
             ModDownloadStatus::Downloading => 0.15,
             // Archive downloaded; local unpack in progress.
             ModDownloadStatus::Extracting => 0.65,
-            ModDownloadStatus::Staged => 1.0,
+            // Staged and Skipped are both fully-satisfied terminals.
+            ModDownloadStatus::Staged | ModDownloadStatus::Skipped => 1.0,
         }
     }
 
-    /// `true` only for `Staged` — the row's text uses success-green
-    /// (wireframe `s === "done"`).
+    /// `true` for the fully-satisfied terminals (`Staged` or DL-Run-1
+    /// `Skipped`) — the row's text uses success-green.
     pub fn is_done(self) -> bool {
-        matches!(self, ModDownloadStatus::Staged)
+        matches!(self, ModDownloadStatus::Staged | ModDownloadStatus::Skipped)
     }
 
-    /// **D3 — a row counts toward the advancing "N / T" once its archive
-    /// has finished downloading** (`Extracting` or `Staged`). This makes
-    /// the count advance *through* the phases (download → extract → stage)
-    /// instead of being stuck `0 / 51` until the very last archive stages
-    /// (the reported complaint). It is honest: the archive really is
-    /// fetched once a row reaches Extracting; the remaining work is local
-    /// unpacking. (`all_staged()` — the production auto-advance — still
-    /// keys on *every* row being truly `Staged`, so correctness of "fully
-    /// done" is unchanged.)
+    /// **A row whose archive is no longer being fetched** — `Extracting`,
+    /// `Staged`, or DL-Run-1 `Skipped` (its bytes are on disk; nothing left
+    /// to download for it). Drives the Download-phase "N" count and the
+    /// download-byte-aggregate "complete" treatment. (`all_staged()` — the
+    /// production auto-advance — still keys on *every* row being a
+    /// fully-extracted terminal.)
     pub fn download_complete(self) -> bool {
         matches!(
             self,
-            ModDownloadStatus::Extracting | ModDownloadStatus::Staged
+            ModDownloadStatus::Extracting | ModDownloadStatus::Staged | ModDownloadStatus::Skipped
         )
     }
 
@@ -236,6 +260,12 @@ impl ModDownloadStatus {
     /// (wireframe `s === "queued"`).
     pub fn is_queued(self) -> bool {
         matches!(self, ModDownloadStatus::Queued)
+    }
+
+    /// `true` only for the DL-Run-1 already-present-by-hash terminal — the
+    /// status cell reads "✓ already downloaded" instead of "✓ staged".
+    pub fn is_skipped(self) -> bool {
+        matches!(self, ModDownloadStatus::Skipped)
     }
 }
 
@@ -258,7 +288,7 @@ pub struct ModDownloadRow {
     pub name: String,
     /// Source label, e.g. a repo or page host (wireframe `m.source`).
     pub source: String,
-    /// Lifecycle status driving the status text (D4 — status only).
+    /// Lifecycle status driving the status text + tone.
     pub status: ModDownloadStatus,
     /// **#1 — live per-mod byte progress** from
     /// `install_runtime::stream_downloader`. `Some((downloaded_bytes,
@@ -268,52 +298,177 @@ pub struct ModDownloadRow {
     /// fallback). Drained into here by `OrchestratorApp::
     /// drain_stream_download` each frame.
     pub per_byte: Option<(u64, Option<u64>)>,
+    /// **DL-Run 2 — this mod's expected archive size in bytes** (from the
+    /// share code's per-archive `{name,size,hash}` the DL-Run-1 exporter
+    /// baked in — matched by `archive_file_name`). `Some` ⇒ the download
+    /// byte aggregate uses it as this mod's denominator share (and a
+    /// `Skipped` row contributes its full size to both numerator and
+    /// denominator). `None` ⇒ no baked size (pre-redesign / third-party /
+    /// un-hashable code) — the aggregate falls back to this row's live
+    /// `Content-Length` for the denominator (and an indeterminate row is
+    /// excluded from the determinate denominator). Carried through the
+    /// per-frame rebuild from `DownloadProgress::expected_sizes`.
+    pub expected_size: Option<u64>,
 }
 
 impl ModDownloadRow {
-    /// **#1 — the per-mod progress-bar fill (0.0..=1.0).** Prefers the
-    /// REAL byte fraction the parallel `stream_downloader` reports; falls
-    /// back to the determinate phase step when there is no byte signal
-    /// (the chassis / fork-download path, or before the first byte delta):
+    /// **DL-Run 2 — the per-mod progress-bar fill (0.0..=1.0), the WHOLE
+    /// byte fraction (no artificial band-clamp).** Read fresh every egui
+    /// frame from `per_byte` (the value `OrchestratorApp::
+    /// drain_stream_download` keeps current from the parallel
+    /// `stream_downloader`'s per-asset byte deltas), so the bar grows
+    /// frame-by-frame, decoupled from the 4-wide pool — a row at 0.37 next
+    /// to a sibling at 0.81, never a clump snapping 0.20→1.0:
     ///
-    ///   - `Downloading` + `per_byte = Some((b, Some(t)))`, `t > 0` ⇒
-    ///     `b / t` — the real per-mod byte fraction (SPEC §4.3 core
-    ///     requirement). Clamped into the downloading band so a row that
-    ///     is byte-complete but not yet flipped to `Extracting` does not
-    ///     paint a full bar (the lifecycle advances it on the next
-    ///     `from_wizard_state` reclassification).
-    ///   - `Downloading` + `per_byte = Some((_, None))` ⇒ the
-    ///     `Downloading` phase nub (no `Content-Length` — an honest
-    ///     active-but-unmeasured fill, SPEC §4.3 "graceful").
-    ///   - any other case (Queued / Extracting / Staged, or no byte
-    ///     signal) ⇒ `status.phase_fraction()` (the prior monotonic
-    ///     phase step — Extracting/Staged are post-download so a byte
-    ///     fraction would be ≈1.0 anyway; phase is the right signal
-    ///     there).
+    ///   - `Downloading` with a determinate size (a live `Content-Length`
+    ///     OR a share-code-baked `expected_size`) ⇒ `bytes / size` over
+    ///     the **entire** bar, **including 0** before the first byte (an
+    ///     empty track that fills as bytes arrive). This is STRICTLY
+    ///     monotonic from 0 — no artificial "starting nub" the real first
+    ///     chunk could fall *below* (a 64 KiB chunk of a 600 KB archive is
+    ///     0.107 — a 0.15 nub would jerk backward to it; the source of a
+    ///     subtle reverse-jank). The prior 0.64 band-ceiling is also gone
+    ///     (it made a byte-complete row paint ~64% then jerk to full when
+    ///     the lifecycle flipped it to `Extracting`). The status-vector
+    ///     reclassification (Downloading → Extracting → Staged) advances
+    ///     the *row's phase*; the bar simply tracks bytes 0→1.
+    ///   - `Downloading` with **no determinate size at all** (no
+    ///     `Content-Length`, no baked size) ⇒ the indeterminate active
+    ///     fill: `is_indeterminate()` is true and the caller paints a
+    ///     moving marquee (honest active-but-unmeasured — SPEC §4.3
+    ///     "graceful"; never a fake %, never a frozen bar). The value
+    ///     returned here is just the marquee's placeholder.
+    ///   - any other case (Queued / Extracting / Staged / Skipped) ⇒
+    ///     `status.phase_fraction()` (Extracting/Staged/Skipped are
+    ///     post-download so the byte fraction is ≈1.0 anyway — phase is
+    ///     the right signal there; a Queued row is 0).
     ///
-    /// Monotonic per row by construction: the byte total only increases
-    /// within the downloading phase, and the phase steps are strictly
-    /// increasing (Queued 0 < Downloading < Extracting < Staged 1.0), so
-    /// a row's own bar never regresses.
+    /// Monotonic per row by construction: the running byte total is
+    /// non-decreasing within download (0 → … → size), and the phase steps
+    /// are strictly increasing (Queued 0 < Downloading < Extracting <
+    /// Staged/Skipped 1.0), so a row's own bar never regresses.
     #[must_use]
     pub fn bar_fraction(&self) -> f32 {
         if self.status == ModDownloadStatus::Downloading {
-            if let Some((bytes, Some(total))) = self.per_byte {
-                if total > 0 {
-                    // Real byte fraction, clamped to just below the
-                    // Extracting step so the lifecycle (not the bar) owns
-                    // the hand-off to the next phase.
-                    let raw = (bytes as f32 / total as f32).clamp(0.0, 1.0);
-                    let ceiling = ModDownloadStatus::Extracting.phase_fraction() - 0.01;
-                    return raw.min(ceiling).max(0.0);
-                }
+            // The determinate size: a live Content-Length, else the
+            // share-code-baked expected size.
+            let size = self
+                .per_byte
+                .and_then(|(_, t)| t)
+                .filter(|&t| t > 0)
+                .or(self.expected_size.filter(|&s| s > 0));
+            if let Some(size) = size {
+                // True byte fraction over the WHOLE bar, INCLUDING 0
+                // before the first byte (strictly monotonic from empty —
+                // no nub to jerk back from).
+                let got = self.per_byte.map_or(0, |(b, _)| b);
+                return (got as f32 / size as f32).clamp(0.0, 1.0);
             }
-            // No Content-Length (indeterminate) or zero total ⇒ the
-            // honest active-but-unmeasured nub.
+            // No determinate size anywhere ⇒ indeterminate (the caller
+            // paints a moving marquee via `is_indeterminate`).
             return ModDownloadStatus::Downloading.phase_fraction();
         }
         self.status.phase_fraction()
     }
+
+    /// **DL-Run 2 — `true` when this row's download fill is an honest
+    /// *indeterminate*** — an in-flight `Downloading` row with **no
+    /// determinate size at all**: no live `Content-Length` (`per_byte`
+    /// total `None`/0) AND no share-code-baked `expected_size`. The caller
+    /// paints a moving marquee instead of a static fill so the user sees
+    /// it is genuinely active-but-unmeasured (never a fake %, never a
+    /// frozen bar). If EITHER a Content-Length OR a baked size is known
+    /// the row is determinate (a real `bytes / size` bar) and this is
+    /// `false`.
+    #[must_use]
+    pub fn is_indeterminate(&self) -> bool {
+        if self.status != ModDownloadStatus::Downloading {
+            return false;
+        }
+        let has_content_length = matches!(self.per_byte, Some((_, Some(t))) if t > 0);
+        let has_baked_size = matches!(self.expected_size, Some(s) if s > 0);
+        !has_content_length && !has_baked_size
+    }
+
+    /// **DL-Run 2 — this row's contribution to the Download byte
+    /// aggregate** as `(downloaded_bytes, denominator_bytes)`, or `None`
+    /// when the row has no determinate size at all (excluded from the
+    /// determinate aggregate; the screen then falls back to the count for
+    /// just that row — see [`DownloadProgress::download_overall_fraction`]).
+    ///
+    ///   - `Skipped` (DL-Run 1 already-present) ⇒ `(size, size)` — counts
+    ///     instantly-complete (so a mostly-cached install is honest, not
+    ///     lurched / sat at a false low).
+    ///   - `Extracting` / `Staged` ⇒ `(size, size)` — its archive is fully
+    ///     fetched; it is complete for the *download* phase.
+    ///   - `Downloading` / `Queued` with a known size ⇒
+    ///     `(bytes_so_far, size)` where `size` prefers the baked
+    ///     `expected_size`, else this row's live `Content-Length`.
+    ///   - no known size (no baked size, no Content-Length yet) ⇒ `None`.
+    #[must_use]
+    pub fn download_bytes_pair(&self) -> Option<(u64, u64)> {
+        // The denominator: the share-code-baked size if present, else the
+        // live Content-Length the streamer reported for this row.
+        let known_size = self
+            .expected_size
+            .or_else(|| self.per_byte.and_then(|(_, t)| t).filter(|&t| t > 0));
+        match self.status {
+            ModDownloadStatus::Skipped
+            | ModDownloadStatus::Extracting
+            | ModDownloadStatus::Staged => {
+                // Download-complete for this mod: full size on both sides.
+                known_size.map(|s| (s, s))
+            }
+            ModDownloadStatus::Downloading | ModDownloadStatus::Queued => {
+                let size = known_size?;
+                let got = self.per_byte.map_or(0, |(b, _)| b).min(size);
+                Some((got, size))
+            }
+        }
+    }
+}
+
+/// **DL-Run 2 — the two explicit ordered phases.** Each is its own
+/// independent 0→100; the screen NEVER shares one bar between them. The
+/// install screen takes over after Extract (the #1 0/0-flash hold logic).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InstallPhase {
+    /// Fetching mod archives — the Download byte aggregate is live.
+    #[default]
+    Downloading,
+    /// All archives fetched; unpacking — the Extract count bar is live
+    /// (a SEPARATE 0→100 that starts at 0 here, never inheriting Download).
+    Extracting,
+}
+
+impl InstallPhase {
+    /// The phase-indicator verb the chrome shows ("Downloading …" /
+    /// "Extracting …").
+    pub fn verb(self) -> &'static str {
+        match self {
+            InstallPhase::Downloading => "Downloading",
+            InstallPhase::Extracting => "Extracting",
+        }
+    }
+}
+
+/// **DL-Run 2 — one already-present-by-hash (DL-Run-1-skipped) mod.**
+/// Captured the frame `archive_skip::skip_present_archives` drops it from
+/// `update_selected_update_assets` (it then vanishes from BIO's resolved
+/// set). It is re-injected into the §4.3 grid as an instantly-satisfied
+/// row and its `size` counts complete in the Download byte aggregate so a
+/// mostly-cached install is honest ("48 of 51 already present").
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SkippedMod {
+    /// Mod display name (the asset `label`).
+    pub name: String,
+    /// Source label (the asset `source_id`).
+    pub source: String,
+    /// The archive's known byte size (the share-code-baked
+    /// `ArchiveMeta.size`, matched by `archive_file_name`). `None` if the
+    /// code carried no size for it (still rendered satisfied; just not a
+    /// determinate aggregate contributor).
+    pub size: Option<u64>,
 }
 
 /// The Stage-3 download/extract progress model. Lives on
@@ -323,17 +478,24 @@ impl ModDownloadRow {
 /// fork-download path).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DownloadProgress {
-    /// Per-mod rows, modlist order.
+    /// Per-mod rows for the *to-fetch* set, modlist order (one per resolved
+    /// asset). DL-Run-1-skipped mods are NOT here (BIO dropped them) — they
+    /// are in [`Self::skipped`] and rendered as instant ✓ rows ABOVE these.
     pub rows: Vec<ModDownloadRow>,
-    /// BIO's **aggregate** download progress (0..=100) parsed from
-    /// `step2.scan_status` `"Downloading updates: N/M"`. With #1 the
-    /// orchestrator's parallel downloader also keeps the live "N/M"
-    /// status line (BIO-verbatim), so this still drives the overall bar
-    /// as a monotonic non-decreasing aggregate. `0` when the status is
-    /// not in that shape (idle / scanning / extracting / the empty
-    /// fork-download chassis) — `overall_pct` then rests on the
-    /// extract/stage completion component.
-    pub dl_aggregate_pct: u8,
+    /// **DL-Run 2 — already-present-by-hash mods** (DL-Run 1 dropped them
+    /// from BIO's resolved set; captured into `InstallScreenState
+    /// ::skipped_mods` and carried here). Rendered as instantly-satisfied
+    /// "✓ already downloaded" rows and counted complete in the Download
+    /// byte aggregate.
+    pub skipped: Vec<SkippedMod>,
+    /// **DL-Run 2 — the per-mod expected archive size map**, keyed by
+    /// asset index into `step2.update_selected_update_assets` (== `rows`
+    /// index). Decoded once from the share code's `{name,size,hash}` and
+    /// carried through the per-frame `rows` rebuild (merged onto
+    /// `ModDownloadRow::expected_size`). Empty for a fieldless /
+    /// pre-redesign / third-party code (the aggregate then uses each row's
+    /// live `Content-Length`).
+    pub expected_sizes: std::collections::BTreeMap<usize, u64>,
     /// **#1 (P7.T17 / SPEC §4.3) — the persistent per-mod byte map**,
     /// keyed by asset index into `step2.update_selected_update_assets`
     /// (== row index, since `from_wizard_state` builds one row per asset
@@ -341,11 +503,11 @@ pub struct DownloadProgress {
     /// here every frame from the parallel `stream_downloader`'s byte
     /// deltas. `from_wizard_state` rebuilds `rows` from BIO state each
     /// frame but **carries this map through unchanged + merges it onto the
-    /// rebuilt rows** (`merge_byte_map`), so a `Downloading` row shows its
-    /// real `bytes / total` fraction even though the row vector itself is
-    /// reconstructed per frame. `(bytes, Some(content_length))` ⇒ a real
-    /// fraction; `(bytes, None)` ⇒ indeterminate (no `Content-Length`).
-    /// Empty for the chassis path (phase-fraction fallback).
+    /// rebuilt rows**, so a `Downloading` row shows its real `bytes /
+    /// total` fraction even though the row vector itself is reconstructed
+    /// per frame. `(bytes, Some(content_length))` ⇒ a real fraction;
+    /// `(bytes, None)` ⇒ indeterminate (no `Content-Length`). Empty for
+    /// the chassis path (phase-fraction fallback).
     pub asset_bytes: std::collections::BTreeMap<usize, (u64, Option<u64>)>,
 }
 
@@ -362,14 +524,10 @@ impl DownloadProgress {
     ///     `update_selected_extracted_sources` ⇒ `Staged` (✓).
     ///   - in `update_selected_downloaded_sources` only ⇒ `Extracting`
     ///     (downloaded, extract pending/running).
-    ///   - `update_selected_download_running` ⇒ `Downloading` (**status
-    ///     only — D4**). BIO does **not** expose a per-asset download %
-    ///     (only an aggregate `"Downloading updates: N/M"` in
-    ///     `scan_status`), so the old code mirrored that single aggregate
-    ///     onto *every* in-flight row → 51 identical "downloading 6%" (the
-    ///     user's "confusing" complaint). The redesign shows status only;
-    ///     the aggregate drives the **single overall bar** instead (see
-    ///     `overall_pct`), the one honest progress signal.
+    ///   - `update_selected_download_running` ⇒ `Downloading`. The per-mod
+    ///     bar is THIS mod's live `bytes / Content-Length`
+    ///     ([`ModDownloadRow::bar_fraction`]) from the byte map merged
+    ///     below — the whole 0→1 fill, frame-by-frame, NOT a phase nub.
     ///   - otherwise ⇒ `Queued`.
     ///
     /// The `downloaded` / `extracted` source vectors are
@@ -386,10 +544,17 @@ impl DownloadProgress {
     /// `bytes / total` fraction even though the row vector is reconstructed
     /// per frame. Pass an empty map for the chassis / first-frame path
     /// (phase-fraction fallback).
+    ///
+    /// **DL-Run 2 — `prior_skipped` / `prior_expected` are carried
+    /// through** so the DL-Run-1 already-present rows + the share-code
+    /// byte denominators survive the per-frame rebuild. Pass empties for
+    /// the chassis / first-frame path.
     #[must_use]
-    pub fn from_wizard_state_with_bytes(
+    pub fn from_wizard_state_full(
         state: &WizardState,
         prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
+        prior_skipped: &[SkippedMod],
+        prior_expected: &std::collections::BTreeMap<usize, u64>,
     ) -> Self {
         let s2 = &state.step2;
 
@@ -415,9 +580,9 @@ impl DownloadProgress {
                     // Downloaded; extract pending or running.
                     ModDownloadStatus::Extracting
                 } else if s2.update_selected_download_running {
-                    // #1 — status as before; the per-mod bar now uses the
-                    // REAL byte fraction from `per_byte` (set just below
-                    // from the persistent map) instead of a fabricated %.
+                    // #1 / DL-Run 2 — the per-mod bar uses the REAL byte
+                    // fraction from `per_byte` (merged below from the
+                    // persistent map) over the whole 0→1 bar.
                     ModDownloadStatus::Downloading
                 } else {
                     ModDownloadStatus::Queued
@@ -426,32 +591,45 @@ impl DownloadProgress {
                     name: a.label.clone(),
                     source: a.source_id.clone(),
                     status,
-                    // Carry the live byte readout for this asset index
-                    // through the per-frame rebuild (#1).
+                    // Carry the live byte readout + the share-code expected
+                    // size for this asset index through the per-frame
+                    // rebuild (#1 / DL-Run 2).
                     per_byte: prior_bytes.get(&i).copied(),
+                    expected_size: prior_expected.get(&i).copied(),
                 }
             })
             .collect();
 
-        // BIO-verbatim "N/M" aggregate (the orchestrator's parallel
-        // downloader keeps this status line, so it still drives the
-        // overall bar). 0 when absent — `overall_pct` then rests on the
-        // extract/stage completion component (still monotonic).
-        let dl_aggregate_pct = parse_download_aggregate_pct(&s2.scan_status).unwrap_or(0);
-
         Self {
             rows,
-            dl_aggregate_pct,
+            skipped: prior_skipped.to_vec(),
+            expected_sizes: prior_expected.clone(),
             asset_bytes: prior_bytes.clone(),
         }
     }
 
-    /// Back-compat / chassis convenience: the status-only projection with
-    /// no live byte map (phase-fraction fallback). Used by the render gate
-    /// + the not-yet-wired fork-download path.
+    /// Back-compat: rows + the byte map only (no skipped / expected map).
+    /// Kept for the existing live call site path; prefer
+    /// [`Self::from_wizard_state_full`].
+    #[must_use]
+    pub fn from_wizard_state_with_bytes(
+        state: &WizardState,
+        prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
+    ) -> Self {
+        Self::from_wizard_state_full(state, prior_bytes, &[], &std::collections::BTreeMap::new())
+    }
+
+    /// Back-compat / chassis convenience: the projection with no live byte
+    /// map / skipped / expected map (phase-fraction fallback). Used by the
+    /// render gate + the not-yet-wired fork-download path.
     #[must_use]
     pub fn from_wizard_state(state: &WizardState) -> Self {
-        Self::from_wizard_state_with_bytes(state, &std::collections::BTreeMap::new())
+        Self::from_wizard_state_full(
+            state,
+            &std::collections::BTreeMap::new(),
+            &[],
+            &std::collections::BTreeMap::new(),
+        )
     }
 
     /// **#1 — record a live per-mod byte delta** (called by
@@ -470,66 +648,181 @@ impl DownloadProgress {
 }
 
 impl DownloadProgress {
-    /// **D3 — the advancing "N" in "N / T mods".** Counts rows whose
-    /// archive has finished downloading (`Extracting` or `Staged`), so the
-    /// count climbs *through* the phases (download → extract → stage)
-    /// instead of being stuck `0 / 51` until the very last archive stages
-    /// (the reported "stuck 0/51" complaint). Honest — the archive really
-    /// is fetched once a row reaches Extracting. (`all_staged()`, the
-    /// production auto-advance, still requires *every* row truly `Staged`,
-    /// so "fully complete" correctness is unchanged.)
-    pub fn completed(&self) -> usize {
+    /// **DL-Run 2 — which of the two ordered phases is live.** `Extracting`
+    /// once every to-fetch archive is downloaded (or skipped) — i.e. no row
+    /// is still `Downloading`/`Queued` AND there is at least one row/skip
+    /// (an extract really is the next phase). Otherwise `Downloading`. The
+    /// chassis / empty model is `Downloading` (the default, no-op).
+    pub fn phase(&self) -> InstallPhase {
+        let any_work = !self.rows.is_empty() || !self.skipped.is_empty();
+        let still_fetching = self.rows.iter().any(|r| {
+            matches!(
+                r.status,
+                ModDownloadStatus::Downloading | ModDownloadStatus::Queued
+            )
+        });
+        if any_work && !still_fetching {
+            InstallPhase::Extracting
+        } else {
+            InstallPhase::Downloading
+        }
+    }
+
+    /// **Total mod count = to-fetch rows + DL-Run-1-skipped.** The "T" in
+    /// "N / T mods" (skipped mods ARE part of the modlist; they are just
+    /// instantly satisfied).
+    pub fn total(&self) -> usize {
+        self.rows.len() + self.skipped.len()
+    }
+
+    /// **The Download-phase "N"** — mods whose archive is no longer being
+    /// fetched (download-complete rows + every skipped mod). Climbs as
+    /// archives land; a fully-cached install starts at `skipped == N`.
+    pub fn downloaded_count(&self) -> usize {
         self.rows
             .iter()
             .filter(|r| r.status.download_complete())
             .count()
+            + self.skipped.len()
     }
 
-    /// Total row count — the "T" in the wireframe's "N / T mods".
-    pub fn total(&self) -> usize {
+    /// **The Extract-phase "N" — truly-extracted to-fetch rows ONLY.**
+    /// DL-Run-1-skipped mods are deliberately **not** counted here: their
+    /// archive is a *download-phase* concern (already placed/satisfied),
+    /// and they are dropped from BIO's `update_selected_update_assets`, so
+    /// BIO's reused-unchanged extract loop never processes them — they are
+    /// not part of the extract *work*. Counting them would make the Extract
+    /// bar start above 0 at extract-start (it must start at exactly 0 — the
+    /// user-directed "a new extracting phase from 0 to 100"). So Extract is
+    /// strictly the fraction of *fetched* archives BIO has unpacked.
+    pub fn extracted_count(&self) -> usize {
+        self.rows.iter().filter(|r| r.status.is_done()).count()
+    }
+
+    /// The number of archives the **extract phase** processes — the
+    /// to-fetch rows (what BIO actually unpacks). Skipped mods are NOT
+    /// extract work (see [`Self::extracted_count`]).
+    fn extract_total(&self) -> usize {
         self.rows.len()
     }
 
-    /// **The single overall bar — driven by BIO's real aggregate, monotonic
-    /// non-decreasing.** 0..=100. The earlier version averaged a flat
-    /// per-phase constant (every downloading row = .45) so while all N mods
-    /// were downloading the bar sat frozen at 45% (the reported "stuck at
-    /// 45%"). It now blends BIO's **real** aggregate download progress
-    /// (`dl_aggregate_pct`, the live "N/M archives downloaded") with the
-    /// extract/stage completion, so the bar actually climbs through the
-    /// (longest) download phase. Monotonic: every input (`dl_aggregate_pct`,
-    /// the past-download count, the staged count) is non-decreasing within a
-    /// run and `max`/weighted-sum of non-decreasing values is
-    /// non-decreasing — the bar never regresses. Reaches 100 only when every
-    /// row is `Staged`. Empty ⇒ 0.
-    pub fn overall_pct(&self) -> u32 {
-        let total = self.total();
-        if total == 0 {
-            return 0;
+    /// Generic "N / T done" for the chrome's phase line — the (N, T) for
+    /// the **currently live phase**: Download = (download-complete +
+    /// skipped) / (all mods); Extract = (extracted rows) / (to-fetch rows).
+    /// Always non-decreasing within a run.
+    pub fn completed(&self) -> usize {
+        match self.phase() {
+            InstallPhase::Downloading => self.downloaded_count(),
+            InstallPhase::Extracting => self.extracted_count(),
         }
-        let total_f = total as f32;
-        let staged = self.rows.iter().filter(|r| r.status.is_done()).count() as f32;
-        let past_dl = self
-            .rows
-            .iter()
-            .filter(|r| r.status.download_complete())
-            .count() as f32;
-        // Download component: BIO's live aggregate while archives are still
-        // landing, OR the count already past download — whichever is
-        // greater (keeps it monotonic once scan_status stops showing the
-        // "Downloading updates" line after the batch finishes).
-        let dl_component = (f32::from(self.dl_aggregate_pct) / 100.0).max(past_dl / total_f);
-        // Download is the bulk of the work; extraction/staging the tail.
-        let frac = 0.70 * dl_component + 0.30 * (staged / total_f);
-        (frac.clamp(0.0, 1.0) * 100.0).round() as u32
     }
 
-    /// `true` when there is at least one row and every row is `Staged` — the
-    /// production auto-advance condition (SPEC §4.3: "the next stage
-    /// transitions automatically when downloads complete"). Empty ⇒ `false`
-    /// (an empty list is "not started", never "complete").
+    /// **DL-Run 2 — the Download overall fraction: a TRUE byte aggregate
+    /// `Σ downloaded_bytes ÷ Σ expected_bytes`** across every to-fetch mod,
+    /// with DL-Run-1-skipped mods counted instantly-complete (their full
+    /// size on both sides). 0.0..=1.0. NOT N/M, NOT a heuristic blend.
+    ///
+    /// Each row contributes via [`ModDownloadRow::download_bytes_pair`]
+    /// (baked share-code size preferred, else the live `Content-Length`).
+    /// A row with NO determinate size at all (no baked size, no
+    /// `Content-Length` yet — an indeterminate download) is **excluded
+    /// from the byte sums** and instead contributes a *count* share
+    /// (0 while fetching, 1 once download-complete) so the bar still
+    /// advances honestly and reaches 1.0 (it would otherwise stall < 1).
+    /// Monotonic: byte totals are non-decreasing and a row only ever moves
+    /// `fetching → complete`.
+    ///
+    /// Returns `0.0` for the empty / chassis model.
+    pub fn download_overall_fraction(&self) -> f32 {
+        if self.rows.is_empty() && self.skipped.is_empty() {
+            return 0.0;
+        }
+        let mut num: f64 = 0.0;
+        let mut den: f64 = 0.0;
+        // Determinate rows: real byte numerator + size denominator.
+        // Indeterminate rows: a unit count-share (0 / 1).
+        for r in &self.rows {
+            if let Some((got, size)) = r.download_bytes_pair() {
+                num += got as f64;
+                den += size as f64;
+            } else {
+                // No size anywhere — fall back to a per-row count share so
+                // the aggregate is still bounded + reaches 1.0.
+                den += 1.0;
+                if r.status.download_complete() {
+                    num += 1.0;
+                }
+            }
+        }
+        // Skipped mods are instantly complete. A known size adds to both
+        // byte sums; an unknown-size skip adds a unit count-share (1 / 1).
+        for s in &self.skipped {
+            match s.size {
+                Some(sz) => {
+                    num += sz as f64;
+                    den += sz as f64;
+                }
+                None => {
+                    den += 1.0;
+                    num += 1.0;
+                }
+            }
+        }
+        if den <= 0.0 {
+            return 0.0;
+        }
+        (num / den).clamp(0.0, 1.0) as f32
+    }
+
+    /// **DL-Run 2 — the Download overall percent** (0..=100), the byte
+    /// aggregate rounded. The Download bar reads this; it NEVER carries
+    /// extract progress.
+    pub fn download_overall_pct(&self) -> u32 {
+        (self.download_overall_fraction() * 100.0).round() as u32
+    }
+
+    /// **DL-Run 2 — the Extract overall fraction: a SEPARATE 0→100 that
+    /// starts at EXACTLY 0 when the extract phase begins and climbs
+    /// independently** (`extracted_rows ÷ to-fetch_rows`). It NEVER
+    /// inherits the Download value: while the phase is still `Downloading`
+    /// this is `0.0` by definition (the extract has not begun); the instant
+    /// the phase flips to `Extracting` it is 0 (no row unpacked yet) and
+    /// climbs as BIO unpacks each fetched archive. Count-granular (BIO's
+    /// extract exposes per-archive completion, not bytes) but a clean
+    /// monotonic own-phase 0→1. A fully-cached install (zero to-fetch rows
+    /// — nothing for BIO to extract) is `1.0` once in the extract phase
+    /// (no extract work = complete, so it auto-advances honestly).
+    /// 0.0..=1.0; empty / pre-extract ⇒ 0.0.
+    pub fn extract_overall_fraction(&self) -> f32 {
+        if self.phase() != InstallPhase::Extracting {
+            return 0.0;
+        }
+        let to_extract = self.extract_total();
+        if to_extract == 0 {
+            // Fully-cached: no archive for BIO to extract ⇒ the extract
+            // phase is trivially complete (not a false 0 that never moves).
+            return 1.0;
+        }
+        (self.extracted_count() as f32 / to_extract as f32).clamp(0.0, 1.0)
+    }
+
+    /// **DL-Run 2 — the Extract overall percent** (0..=100). The Extract
+    /// bar reads this; 0 until the extract phase begins.
+    pub fn extract_overall_pct(&self) -> u32 {
+        (self.extract_overall_fraction() * 100.0).round() as u32
+    }
+
+    /// `true` when there is at least one mod and every to-fetch row is a
+    /// fully-extracted terminal (`Staged`) — the production auto-advance
+    /// condition (SPEC §4.3: the next stage transitions automatically when
+    /// downloads + extracts complete). Skipped mods do not block it (their
+    /// content was presented to extract; once BIO unpacks them the rows it
+    /// tracks are `Staged`). Empty ⇒ `false` (not started, never complete).
     pub fn all_staged(&self) -> bool {
-        !self.rows.is_empty() && self.rows.iter().all(|r| r.status.is_done())
+        if self.rows.is_empty() && self.skipped.is_empty() {
+            return false;
+        }
+        self.rows.iter().all(|r| r.status.is_done())
     }
 }
 
@@ -874,17 +1167,77 @@ pub fn render_live(
             &mut orchestrator.wizard_state,
             &expected,
         );
+
+        // ── DL-Run 2 — capture the skipped-mods + the per-asset expected
+        //    sizes so the §4.3 grid renders skipped mods as instantly
+        //    satisfied AND the Download byte aggregate counts their bytes
+        //    complete (a mostly-cached install must feel smooth/fast/honest,
+        //    not lurch / sit at a false low). `skip_present_archives`
+        //    DROPPED the already-present assets from
+        //    `update_selected_update_assets`; diff the captured pre-skip set
+        //    against the post-skip set to recover exactly which mods were
+        //    skipped (by `archive_file_name`, the content identity the skip
+        //    matched on). The expected-size map is keyed by the POST-skip
+        //    row index (== the §4.3 row index `from_wizard_state_full`
+        //    builds), value = the share-code-baked `ArchiveMeta.size`. Both
+        //    are cached on `install_screen_state` and carried through the
+        //    per-frame rebuild. ──
+        let by_name: std::collections::HashMap<&str, &crate::registry::share_export::ArchiveMeta> =
+            expected.iter().map(|m| (m.name.as_str(), m)).collect();
+        let post_skip_names: std::collections::HashSet<String> = orchestrator
+            .wizard_state
+            .step2
+            .update_selected_update_assets
+            .iter()
+            .map(crate::app::app_step2_update_download::archive_file_name)
+            .collect();
+        let mut skipped_mods: Vec<SkippedMod> = Vec::new();
+        // A multiset guard: if the same archive_file_name resolves more
+        // than once, only the surplus (pre-count minus post-count) is
+        // skipped — handled by consuming from a working post-set copy.
+        let mut remaining_post = post_skip_names.clone();
+        for a in &orchestrator.install_screen_state.pre_skip_assets {
+            let name = crate::app::app_step2_update_download::archive_file_name(a);
+            if remaining_post.remove(&name) {
+                continue; // still in the fetch set — not skipped
+            }
+            skipped_mods.push(SkippedMod {
+                name: a.label.clone(),
+                source: a.source_id.clone(),
+                size: by_name.get(name.as_str()).map(|m| m.size),
+            });
+        }
+        let expected_sizes: std::collections::BTreeMap<usize, u64> = orchestrator
+            .wizard_state
+            .step2
+            .update_selected_update_assets
+            .iter()
+            .enumerate()
+            .filter_map(|(i, a)| {
+                let name = crate::app::app_step2_update_download::archive_file_name(a);
+                by_name.get(name.as_str()).map(|m| (i, m.size))
+            })
+            .collect();
+        orchestrator.install_screen_state.skipped_mods = skipped_mods;
+        orchestrator.install_screen_state.expected_archive_sizes = expected_sizes;
+
         orchestrator.install_screen_state.expected_archive_meta = expected;
         tracing::info!(
             target = "orchestrator",
             "checksum-then-skip: {} already-present (not downloaded), {} \
              missing (will fetch), {} no-expected-hash, {} candidates hashed \
-             ({} persistent-cache hits)",
+             ({} persistent-cache hits); DL-Run-2 captured {} skipped-mod \
+             rows + {} expected-size denominators",
             skip.skipped_present,
             skip.missing_on_disk,
             skip.no_expected_hash,
             skip.hashed_candidates,
-            skip.cache_hits
+            skip.cache_hits,
+            orchestrator.install_screen_state.skipped_mods.len(),
+            orchestrator
+                .install_screen_state
+                .expected_archive_sizes
+                .len()
         );
     }
 
@@ -1064,22 +1417,33 @@ pub fn render_live(
 
     // ── (3) Build the live feed from BIO's auto-build state + render the
     //    §4.3 chassis. ──
-    // **#1 — carry the persistent per-mod byte map through the per-frame
-    // rebuild.** `from_wizard_state_with_bytes` reconstructs `rows` from
-    // BIO state (status) but merges the byte map
-    // `OrchestratorApp::drain_stream_download` has been accumulating onto
-    // `install_screen_state.download_progress`, so a `Downloading` row
-    // shows its real `bytes / Content-Length` fraction. The freshly-built
-    // model is then stored BACK onto `install_screen_state.download_
-    // progress` so the map persists across frames AND survives a
-    // `set_asset_bytes` write from the next drain.
+    // **#1 / DL-Run 2 — carry the persistent per-mod byte map + the
+    // DL-Run-1 skipped-mods + the share-code expected-size denominators
+    // through the per-frame rebuild.** `from_wizard_state_full`
+    // reconstructs `rows` from BIO state (status) but merges (a) the byte
+    // map `OrchestratorApp::drain_stream_download` accumulates so a
+    // `Downloading` row shows its real `bytes / Content-Length` fraction
+    // over the WHOLE bar, (b) the skipped-mod rows so a cached install is
+    // honest, (c) the expected-size map so the Download byte aggregate has
+    // a stable denominator. The freshly-built model is stored BACK onto
+    // `install_screen_state.download_progress` so all three persist across
+    // frames AND survive a `set_asset_bytes` write from the next drain.
     let prior_bytes = orchestrator
         .install_screen_state
         .download_progress
         .asset_bytes
         .clone();
-    let mut progress =
-        DownloadProgress::from_wizard_state_with_bytes(&orchestrator.wizard_state, &prior_bytes);
+    let prior_skipped = orchestrator.install_screen_state.skipped_mods.clone();
+    let prior_expected = orchestrator
+        .install_screen_state
+        .expected_archive_sizes
+        .clone();
+    let mut progress = DownloadProgress::from_wizard_state_full(
+        &orchestrator.wizard_state,
+        &prior_bytes,
+        &prior_skipped,
+        &prior_expected,
+    );
 
     // ── **#1 — eliminate the post-extract 0/0 grid flash.** When BIO's
     //    extract empties `update_selected_update_assets` (its
@@ -1211,8 +1575,24 @@ fn render_chrome(
     footer.back_clicked
 }
 
-/// `Box label="overall progress"` — the big "N / T mods · P%" label + the
-/// accent progress bar + the optional faint hint (wireframe lines 3723-3733).
+/// `Box label="overall progress"` — **DL-Run 2: the TWO distinct ordered
+/// phase bars** (Download then Extract) + a phase indicator + the optional
+/// faint hint. Each phase is its own independent 0→100 (the wireframe's
+/// single bar is replaced by two clearly-labelled rows — the user-directed
+/// "smooth fill 0→100, then a new extracting phase 0→100" requirement;
+/// recorded as intentional so a review does not collapse them back to one):
+///
+///   • **Download** — `N / T mods · P%` where P% = the TRUE byte aggregate
+///     `Σ bytes ÷ Σ expected` ([`DownloadProgress::download_overall_pct`]);
+///     filled accent; this is the active phase's bar while downloading.
+///   • **Extract** — a SEPARATE bar that is **0 until the extract phase
+///     begins** then climbs `extracted ÷ total` independently
+///     ([`DownloadProgress::extract_overall_pct`]). It NEVER inherits the
+///     Download value.
+///
+/// The currently-live phase is named ("Downloading … " / "Extracting … ")
+/// and its bar is accent-filled; the not-yet / done phase bar is shown
+/// muted so the user always sees both phases and where they are.
 fn render_overall_progress(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -1227,32 +1607,60 @@ fn render_overall_progress(
                 .family(egui::FontFamily::Name("poppins_medium".into()))
                 .color(redesign_text_muted(palette)),
         );
+        ui.add_space(6.0);
+
+        let phase = progress.phase();
+        // Download denominator = ALL mods (skipped count as satisfied);
+        // Extract denominator = the to-fetch rows BIO actually unpacks
+        // (skipped mods are a download-phase concern, not extract work) —
+        // so the Extract bar is a clean 0→100 that starts at exactly 0.
+        let dl_total = progress.total();
+        let ex_total = progress.rows.len();
+        let dl_n = progress.downloaded_count();
+        let ex_n = progress.extracted_count();
+        let dl_pct = progress.download_overall_pct();
+        let ex_pct = progress.extract_overall_pct();
+
+        // The phase indicator: which phase is live + its N/T · P%.
+        let (verb, n, t, p) = match phase {
+            InstallPhase::Downloading => (InstallPhase::Downloading.verb(), dl_n, dl_total, dl_pct),
+            InstallPhase::Extracting => (InstallPhase::Extracting.verb(), ex_n, ex_total, ex_pct),
+        };
+        ui.label(
+            egui::RichText::new(format!("{verb} \u{2026} {n} / {t} mods \u{00B7} {p}%"))
+                .size(15.0)
+                .family(egui::FontFamily::Name("poppins_medium".into()))
+                .color(redesign_text_primary(palette)),
+        );
         ui.add_space(8.0);
 
-        let pct = progress.overall_pct();
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 12.0;
-            // Fixed 180px label column (wireframe `width:180`).
-            let (label_rect, _) =
-                ui.allocate_exact_size(egui::vec2(180.0, 20.0), egui::Sense::hover());
-            ui.painter().text(
-                egui::pos2(label_rect.left(), label_rect.center().y),
-                egui::Align2::LEFT_CENTER,
-                format!(
-                    "{} / {} mods \u{00B7} {pct}%",
-                    progress.completed(),
-                    progress.total()
-                ),
-                egui::FontId::new(16.0, egui::FontFamily::Name("poppins_medium".into())),
-                redesign_text_primary(palette),
-            );
-
-            // The flex:1 bar (wireframe height:14, sketchy border, input-bg
-            // track, accent fill at `pct`%).
-            let bar_w = ui.available_width();
-            let (track, _) = ui.allocate_exact_size(egui::vec2(bar_w, 14.0), egui::Sense::hover());
-            paint_bar(ui, palette, track, f64::from(pct) / 100.0, true);
-        });
+        // ── Phase bar 1 — Download (the byte aggregate over ALL mods).
+        //    Accent-filled while it is the live phase, muted once handed
+        //    off (it stays full so the user sees download completed). ──
+        phase_bar_row(
+            ui,
+            palette,
+            "download",
+            dl_n,
+            dl_total,
+            dl_pct,
+            f64::from(dl_pct) / 100.0,
+            phase == InstallPhase::Downloading,
+        );
+        ui.add_space(8.0);
+        // ── Phase bar 2 — Extract (a SEPARATE 0→100 over the to-fetch
+        //    rows; 0 until the extract phase begins, never inheriting
+        //    Download's value). ──
+        phase_bar_row(
+            ui,
+            palette,
+            "extract",
+            ex_n,
+            ex_total,
+            ex_pct,
+            f64::from(ex_pct) / 100.0,
+            phase == InstallPhase::Extracting,
+        );
 
         if let Some(h) = hint {
             ui.add_space(6.0);
@@ -1266,6 +1674,87 @@ fn render_overall_progress(
     });
 }
 
+/// **DL-Run 2 — one phase row inside the overall-progress Box**: a fixed
+/// `<verb> N/T · P%` caption column + the flex track. `active` ⇒ the bar
+/// is accent-filled (this is the live phase); inactive ⇒ a muted fill so
+/// the user still sees the not-yet / completed phase and its position
+/// (it never shows the *other* phase's value — the value passed is already
+/// that phase's own independent 0→100).
+#[allow(clippy::too_many_arguments)]
+fn phase_bar_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    verb: &str,
+    n: usize,
+    total: usize,
+    pct: u32,
+    frac: f64,
+    active: bool,
+) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 12.0;
+        // Fixed 180px caption column (mirrors the wireframe `width:180`).
+        let (label_rect, _) = ui.allocate_exact_size(egui::vec2(180.0, 18.0), egui::Sense::hover());
+        let cap_color = if active {
+            redesign_text_primary(palette)
+        } else {
+            redesign_text_faint(palette)
+        };
+        ui.painter().text(
+            egui::pos2(label_rect.left(), label_rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            format!("{verb}  {n} / {total} \u{00B7} {pct}%"),
+            egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into())),
+            cap_color,
+        );
+
+        // The flex:1 bar (wireframe height:14, sketchy border, input-bg
+        // track). Accent fill when this is the live phase; a muted fill
+        // otherwise (Download stays full-but-muted after it hands off so
+        // the user sees it completed; Extract is empty-muted until it
+        // begins).
+        let bar_w = ui.available_width();
+        let (track, _) = ui.allocate_exact_size(egui::vec2(bar_w, 14.0), egui::Sense::hover());
+        paint_phase_bar(ui, palette, track, frac, active);
+    });
+}
+
+/// Paint a phase bar: input-bg track + 1.5px border (always), accent fill
+/// when `active`, a muted (`text-faint`) fill when inactive — so a
+/// completed-but-not-live phase still reads as filled-but-handed-off and a
+/// not-yet phase reads as an empty waiting track.
+fn paint_phase_bar(
+    ui: &egui::Ui,
+    palette: ThemePalette,
+    track: egui::Rect,
+    frac: f64,
+    active: bool,
+) {
+    if !ui.is_rect_visible(track) {
+        return;
+    }
+    let painter = ui.painter();
+    let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8);
+    painter.rect_filled(track, radius, redesign_input_bg(palette));
+    let frac = frac.clamp(0.0, 1.0) as f32;
+    if frac > 0.0 {
+        let fill = if active {
+            redesign_accent(palette)
+        } else {
+            redesign_text_faint(palette)
+        };
+        let fill_rect =
+            egui::Rect::from_min_size(track.min, egui::vec2(track.width() * frac, track.height()));
+        painter.rect_filled(fill_rect, radius, fill);
+    }
+    painter.rect_stroke(
+        track,
+        radius,
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
+        egui::StrokeKind::Inside,
+    );
+}
+
 /// `Box label="mod progress"` — the per-mod grid.
 ///
 /// **Vertically scrollable + footer-safe.** With 50+ mods the list overflows
@@ -1276,11 +1765,13 @@ fn render_overall_progress(
 /// 50-row content height.
 ///
 /// **4 columns** (mod / source / status / progress). The per-mod progress
-/// bar is restored (a core requirement — it must function individually per
-/// mod, separate from the overall bar): its fill is the row's own
-/// `phase_fraction`, so each mod advances on its own schedule. `progress`
-/// fixed 150px, `status` fixed 120px; the two flexible columns split the
-/// remainder 1.8 : 1 (wireframe `1.8fr 1fr`), 12px gap.
+/// bar carries THIS mod's live byte fraction (the whole 0→1 fill) during
+/// download — `ModDownloadRow::bar_fraction()` — so each mod advances
+/// frame-by-frame on its own schedule, separate from the overall bars.
+/// DL-Run-1-skipped mods render FIRST as instantly-satisfied "✓ already
+/// downloaded" rows. `progress` fixed 150px, `status` fixed 120px; the two
+/// flexible columns split the remainder 1.8 : 1 (wireframe `1.8fr 1fr`),
+/// 12px gap.
 fn render_mod_progress(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -1298,8 +1789,16 @@ fn render_mod_progress(
         ui.add_space(8.0);
 
         let col_gap = 12.0;
-        let status_w = 120.0;
-        let prog_w = 150.0;
+        // **DL-Run 2 — status column widened 120→170** to fit the longest
+        // caption "✓ already downloaded" (the DL-Run-1 skipped-mod cell)
+        // without clipping into the progress column (the render-gate
+        // caught the overrun). The progress column is trimmed 150→130 to
+        // keep the net fixed width near the prior 270 (+30 from flex —
+        // negligible even at the 960px floor; this is NOT the
+        // Phase-8-deferred mod/source *flex* collision, which is
+        // unrelated to the status width).
+        let status_w = 170.0;
+        let prog_w = 130.0;
         // The remainder (after the two fixed columns + 3 inter-column gaps)
         // splits 1.8 : 1.
         let flex_total = (ui.available_width() - status_w - prog_w - col_gap * 3.0).max(120.0);
@@ -1320,7 +1819,7 @@ fn render_mod_progress(
                 ui.end_row();
             });
 
-        if progress.rows.is_empty() {
+        if progress.rows.is_empty() && progress.skipped.is_empty() {
             // No rows yet (e.g. the not-yet-wired fork-download chassis, or
             // before the pipeline resolves assets). Honest faint placeholder
             // rather than a blank box (the redesign's honest-empty-state
@@ -1352,6 +1851,15 @@ fn render_mod_progress(
                     .spacing(egui::vec2(col_gap, 6.0))
                     .min_col_width(0.0)
                     .show(ui, |ui| {
+                        // DL-Run 2 — DL-Run-1-skipped (already-present-by-
+                        // hash) mods render FIRST as instantly-satisfied
+                        // rows ("✓ already downloaded", full bar) so a
+                        // mostly-cached install reads honestly + the user
+                        // can see exactly what was reused.
+                        for s in &progress.skipped {
+                            render_skipped_row(ui, palette, s, mod_w, src_w, status_w, prog_w);
+                            ui.end_row();
+                        }
                         for row in &progress.rows {
                             render_grid_row(ui, palette, row, mod_w, src_w, status_w, prog_w);
                             ui.end_row();
@@ -1361,9 +1869,52 @@ fn render_mod_progress(
     });
 }
 
+/// **DL-Run 2 — one DL-Run-1-skipped (already-present-by-hash) mod row.**
+/// Rendered instantly-satisfied: name + source normal, status the
+/// success-green `✓ already downloaded` cell, the per-mod bar full accent.
+/// (The user's "48 of 51 already present, downloading 3" honesty —
+/// skipped mods are visible, not silently dropped.)
+fn render_skipped_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    s: &SkippedMod,
+    mod_w: f32,
+    src_w: f32,
+    status_w: f32,
+    prog_w: f32,
+) {
+    sized_label(
+        ui,
+        mod_w,
+        &s.name,
+        14.0,
+        "poppins_medium",
+        redesign_text_primary(palette),
+    );
+    sized_label(
+        ui,
+        src_w,
+        &s.source,
+        13.0,
+        "poppins_light",
+        redesign_text_faint(palette),
+    );
+    check_prose_cell(
+        ui,
+        status_w,
+        "already downloaded",
+        redesign_success(palette),
+    );
+    let (bar_rect, _) = ui.allocate_exact_size(egui::vec2(prog_w, 14.0), egui::Sense::hover());
+    paint_bar(ui, palette, bar_rect, 1.0, true);
+}
+
 /// One data row of the 4-column grid (mod / source / status / per-mod
-/// progress bar). The bar fill is the row's own `phase_fraction`, so it
-/// advances individually per mod, separate from the overall bar.
+/// progress bar). **DL-Run 2:** the bar fill is the row's own live byte
+/// fraction (`bar_fraction()` — the WHOLE 0→1 fill while downloading), so
+/// it advances frame-by-frame individually per mod, separate from the two
+/// overall phase bars. A no-`Content-Length` row paints a moving marquee
+/// (honest indeterminate, never a fake % or a frozen bar).
 fn render_grid_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -1392,10 +1943,10 @@ fn render_grid_row(
         redesign_text_faint(palette),
     );
 
-    // Column 3 — status (D4 — the row's only state signal: queued →
-    // downloading → extracting... → ✓ staged). Color: done → success-green,
-    // queued → text-faint, else normal text. The `Staged` case lays the
-    // `✓` glyph (firacode_nerd) before the prose (poppins_medium),
+    // Column 3 — status: queued → downloading → extracting... → ✓ staged
+    // (or ✓ already downloaded for a DL-Run-1 skip). Color: done →
+    // success-green, queued → text-faint, else normal text. The done case
+    // lays the `✓` glyph (firacode_nerd) before the prose (poppins_medium),
     // mirroring `sub_flow_footer`'s glyph/prose split.
     let status_color = if row.status.is_done() {
         redesign_success(palette)
@@ -1405,7 +1956,12 @@ fn render_grid_row(
         redesign_text_primary(palette)
     };
     if row.status.is_done() {
-        staged_cell(ui, palette, status_w, status_color);
+        let prose = if row.status.is_skipped() {
+            "already downloaded"
+        } else {
+            "staged"
+        };
+        check_prose_cell(ui, status_w, prose, status_color);
     } else {
         sized_label(
             ui,
@@ -1417,27 +1973,32 @@ fn render_grid_row(
         );
     }
 
-    // Column 4 — the per-mod progress bar (restored core requirement).
-    // **#1:** fill = THIS mod's `bar_fraction()` — the REAL per-mod byte
-    // fraction (`bytes / Content-Length`) from the parallel
-    // `stream_downloader` while it streams, falling back to the
-    // determinate phase step when there is no byte signal (chassis /
-    // fork-download, or pre-first-byte). Advances individually per mod,
-    // separate from the overall bar above. Queued rows show an empty
-    // track (filled = false).
+    // Column 4 — the per-mod progress bar (DL-Run 2 core requirement).
+    // fill = THIS mod's `bar_fraction()` — its REAL byte fraction
+    // (`bytes / Content-Length`) over the WHOLE 0→1 bar while it streams
+    // (read fresh every frame), the phase-fraction fallback otherwise.
+    // Advances frame-by-frame individually per mod, separate from the
+    // overall phase bars. A no-`Content-Length` in-flight row gets a
+    // moving marquee (honest indeterminate). Queued rows: empty track.
     let (bar_rect, _) = ui.allocate_exact_size(egui::vec2(prog_w, 14.0), egui::Sense::hover());
-    paint_bar(
-        ui,
-        palette,
-        bar_rect,
-        f64::from(row.bar_fraction()),
-        !row.status.is_queued(),
-    );
+    if row.is_indeterminate() {
+        paint_indeterminate_bar(ui, palette, bar_rect);
+    } else {
+        paint_bar(
+            ui,
+            palette,
+            bar_rect,
+            f64::from(row.bar_fraction()),
+            !row.status.is_queued(),
+        );
+    }
 }
 
-/// The `✓ staged` cell — glyph in `firacode_nerd` (U+2713 is present,
-/// cmap-verified), prose in `poppins_medium`, both success-green.
-fn staged_cell(ui: &mut egui::Ui, _palette: ThemePalette, w: f32, color: egui::Color32) {
+/// A `✓ <prose>` status cell — the `✓` glyph in `firacode_nerd` (U+2713
+/// is present, cmap-verified), the prose in `poppins_medium`, both in
+/// `color`. Used for both `✓ staged` and the DL-Run-1 `✓ already
+/// downloaded` skip cell.
+fn check_prose_cell(ui: &mut egui::Ui, w: f32, prose: &str, color: egui::Color32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 18.0), egui::Sense::hover());
     if !ui.is_rect_visible(rect) {
         return;
@@ -1458,7 +2019,7 @@ fn staged_cell(ui: &mut egui::Ui, _palette: ThemePalette, w: f32, color: egui::C
     painter.text(
         egui::pos2(rect.left() + glyph_galley.size().x + gap, cy),
         egui::Align2::LEFT_CENTER,
-        "staged",
+        prose,
         prose_font,
         color,
     );
@@ -1529,36 +2090,54 @@ fn paint_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Rect, frac: f64,
     );
 }
 
-// (D4) `parse_download_aggregate_pct` was removed: BIO's aggregate
-// `"Downloading updates: N/M"` was only ever used to fabricate a per-row
-// "downloading N%" mirrored onto every in-flight row. D4 drops that fake
-// per-row %; the single honest overall bar is now the monotonic
-// `phase_fraction` average (`DownloadProgress::overall_pct`), so the
-// status-string parser is dead and has been deleted (no per-frame string
-// parse either).
+// **DL-Run 2.** `parse_download_aggregate_pct` (BIO's `"Downloading
+// updates: N/M"` string parser) is GONE: the Download overall bar is no
+// longer an N/M aggregate at all — it is the TRUE byte aggregate
+// `Σ bytes ÷ Σ expected` (`DownloadProgress::download_overall_fraction`),
+// which never reads `scan_status`. The N/M string only ever jumped 0→~70%
+// in one step (the streamer writes it once at start + once at finish — the
+// user's reported "0 to 70 in jerky fat steps"); the byte aggregate climbs
+// smoothly with every 64 KiB chunk. No per-frame string parse remains.
 
-/// Parse the aggregate download % out of BIO's `scan_status` line — the
-/// **only** download-progress signal BIO emits. `app_step2_update_
-/// download::poll_step2_update_download` sets it to exactly
-/// `"Downloading updates: N/M"` (from the worker's `Progress { completed,
-/// total }`). Returns `Some(0..=100)` only for that exact shape with
-/// `M > 0`; any other status (idle / scanning / extracting / a finished
-/// line) ⇒ `None` (the caller treats it as 0 — the overall bar then rests
-/// on the extract/stage component, never a fabricated value). Format-coupled
-/// to BIO's literal (read-only — if BIO ever changes the string this
-/// degrades to 0, never to a wrong %).
-fn parse_download_aggregate_pct(status: &str) -> Option<u8> {
-    let rest = status.trim().strip_prefix("Downloading updates: ")?;
-    let (done, total) = rest.split_once('/')?;
-    let done: usize = done.trim().parse().ok()?;
-    let total: usize = total.trim().parse().ok()?;
-    if total == 0 {
-        return None;
+/// **DL-Run 2 — paint an honest *indeterminate* per-mod bar** (a
+/// no-`Content-Length` row, mid-download): the sketchy track + a moving
+/// accent marquee block (driven by `ctx` frame time), so the user sees the
+/// row is genuinely active-but-unmeasured — never a fake %, never a frozen
+/// bar. The caller requests continuous repaints while a phase is live, so
+/// the marquee animates frame-by-frame.
+fn paint_indeterminate_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Rect) {
+    if !ui.is_rect_visible(track) {
+        return;
     }
-    let pct = ((done.min(total) as f32 / total as f32) * 100.0)
-        .round()
-        .clamp(0.0, 100.0) as u8;
-    Some(pct)
+    let painter = ui.painter();
+    let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8);
+    painter.rect_filled(track, radius, redesign_input_bg(palette));
+
+    // A block ~28% of the track sliding left↔right, ~1.6s period. `i.time`
+    // is wall-clock seconds; a triangle wave keeps it bouncing inside the
+    // track (never clipped past either edge).
+    let t = ui.input(|i| i.time) as f32;
+    let block = (track.width() * 0.28).max(8.0);
+    let travel = (track.width() - block).max(0.0);
+    let phase = (t / 1.6).fract(); // 0..1
+    let tri = if phase < 0.5 {
+        phase * 2.0
+    } else {
+        2.0 - phase * 2.0
+    }; // 0→1→0
+    let x = track.left() + travel * tri;
+    let block_rect = egui::Rect::from_min_size(
+        egui::pos2(x, track.top()),
+        egui::vec2(block, track.height()),
+    );
+    painter.rect_filled(block_rect, radius, redesign_accent(palette));
+
+    painter.rect_stroke(
+        track,
+        radius,
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
+        egui::StrokeKind::Inside,
+    );
 }
 
 /// **The non-masking arm-failure banner.** A full-width danger-bordered
@@ -1623,141 +2202,21 @@ fn box_frame(palette: ThemePalette) -> egui::Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
-    #[test]
-    fn status_text_is_status_only_no_fabricated_pct() {
-        // D4: status only — a downloading row reads just "downloading"
-        // (NOT "downloading N%"; BIO has no per-asset %).
-        assert_eq!(ModDownloadStatus::Queued.status_text(), "queued");
-        assert_eq!(ModDownloadStatus::Downloading.status_text(), "downloading");
-        assert_eq!(ModDownloadStatus::Extracting.status_text(), "extracting...");
-        assert_eq!(ModDownloadStatus::Staged.status_text(), "staged");
-        // No status caption carries a '%' anywhere (the D4 guarantee).
-        for s in [
-            ModDownloadStatus::Queued,
-            ModDownloadStatus::Downloading,
-            ModDownloadStatus::Extracting,
-            ModDownloadStatus::Staged,
-        ] {
-            assert!(
-                !s.status_text().contains('%'),
-                "D4: no fabricated per-row % in any status caption ({:?})",
-                s
-            );
+    // ───────────────────────── row helpers ─────────────────────────
+
+    fn row(name: &str, status: ModDownloadStatus) -> ModDownloadRow {
+        ModDownloadRow {
+            name: name.to_string(),
+            source: "src".to_string(),
+            status,
+            // No live byte signal in these status/phase tests ⇒
+            // phase-fraction fallback.
+            per_byte: None,
+            expected_size: None,
         }
     }
-
-    #[test]
-    fn phase_fraction_is_strictly_monotonic_non_decreasing() {
-        // D3: Queued ≤ Downloading ≤ Extracting ≤ Staged — the property
-        // that makes the overall bar never regress (a row advancing can
-        // only raise the average). Pin the exact ordering + the boundary
-        // values.
-        let q = ModDownloadStatus::Queued.phase_fraction();
-        let d = ModDownloadStatus::Downloading.phase_fraction();
-        let e = ModDownloadStatus::Extracting.phase_fraction();
-        let s = ModDownloadStatus::Staged.phase_fraction();
-        assert!(q <= d, "Queued ≤ Downloading ({q} ≤ {d})");
-        assert!(d <= e, "Downloading ≤ Extracting ({d} ≤ {e})");
-        assert!(e <= s, "Extracting ≤ Staged ({e} ≤ {s})");
-        assert!((q - 0.0).abs() < f32::EPSILON);
-        assert!((s - 1.0).abs() < f32::EPSILON);
-        // Strictly increasing across the four phases (no two phases share a
-        // fraction — so progress is always visible as a row advances).
-        assert!(q < d && d < e && e < s, "strictly increasing per phase");
-    }
-
-    #[test]
-    fn parse_download_aggregate_pct_only_matches_bios_literal() {
-        // BIO's exact `app_step2_update_download::poll_step2_update_download`
-        // status (`"Downloading updates: N/M"`) — the only real download
-        // signal; it drives the overall bar (the "stuck at 45%" fix).
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 0/7"),
-            Some(0)
-        );
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 7/7"),
-            Some(100)
-        );
-        // 3/7 → 42.857 → round → 43.
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 3/7"),
-            Some(43)
-        );
-        // Any other status ⇒ None (the overall bar then rests on the
-        // extract/stage component, never a fabricated %).
-        assert_eq!(parse_download_aggregate_pct("Idle"), None);
-        assert_eq!(parse_download_aggregate_pct("Scanning..."), None);
-        assert_eq!(
-            parse_download_aggregate_pct("Download updates finished: 7 downloaded, 0 failed"),
-            None
-        );
-        // Degenerate / malformed ⇒ None, never a panic or a wrong %.
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: 1/0"),
-            None
-        );
-        assert_eq!(
-            parse_download_aggregate_pct("Downloading updates: x/y"),
-            None
-        );
-    }
-
-    #[test]
-    fn overall_pct_tracks_bio_aggregate_and_is_monotonic_not_stuck() {
-        // The "stuck at 45%" fix: with every row Downloading, the bar must
-        // follow BIO's real aggregate (dl_aggregate_pct), NOT a flat phase
-        // constant. And it must never regress as rows advance.
-        let dl = |status, agg| DownloadProgress {
-            rows: vec![row("a", status), row("b", status), row("c", status)],
-            dl_aggregate_pct: agg,
-            asset_bytes: std::collections::BTreeMap::new(),
-        };
-        // All downloading, BIO says 0/ N ⇒ ~0 (not a frozen 45).
-        assert!(dl(ModDownloadStatus::Downloading, 0).overall_pct() < 5);
-        // BIO aggregate climbs ⇒ the bar climbs (the core complaint).
-        let p20 = dl(ModDownloadStatus::Downloading, 20).overall_pct();
-        let p60 = dl(ModDownloadStatus::Downloading, 60).overall_pct();
-        assert!(
-            p20 > 0 && p60 > p20,
-            "bar moves with BIO's aggregate ({p20} < {p60})"
-        );
-        // Monotonic across the lifecycle, ending at 100 only when all staged.
-        let q = dl(ModDownloadStatus::Queued, 0).overall_pct();
-        let d = dl(ModDownloadStatus::Downloading, 50).overall_pct();
-        let e = dl(ModDownloadStatus::Extracting, 0).overall_pct();
-        let s = dl(ModDownloadStatus::Staged, 0).overall_pct();
-        assert!(
-            q <= d && d <= e && e <= s,
-            "never regresses ({q}≤{d}≤{e}≤{s})"
-        );
-        assert_eq!(q, 0);
-        assert_eq!(s, 100, "100 only when every row is Staged");
-    }
-
-    #[test]
-    fn is_done_and_is_queued_and_download_complete_are_correct() {
-        assert!(ModDownloadStatus::Queued.is_queued());
-        assert!(!ModDownloadStatus::Queued.is_done());
-        assert!(!ModDownloadStatus::Queued.download_complete());
-        assert!(ModDownloadStatus::Staged.is_done());
-        assert!(!ModDownloadStatus::Staged.is_queued());
-        assert!(ModDownloadStatus::Staged.download_complete());
-        assert!(!ModDownloadStatus::Extracting.is_queued());
-        assert!(!ModDownloadStatus::Extracting.is_done());
-        assert!(
-            ModDownloadStatus::Extracting.download_complete(),
-            "D3: a row past download (Extracting) counts toward the advancing N"
-        );
-        assert!(
-            !ModDownloadStatus::Downloading.download_complete(),
-            "D3: a still-downloading row is NOT yet download-complete"
-        );
-        assert!(!ModDownloadStatus::Downloading.is_queued());
-    }
-
-    // ───────────── #1 — per-mod REAL byte fraction (SPEC §4.3) ─────────────
 
     fn row_b(status: ModDownloadStatus, per_byte: Option<(u64, Option<u64>)>) -> ModDownloadRow {
         ModDownloadRow {
@@ -1765,74 +2224,201 @@ mod tests {
             source: "src".to_string(),
             status,
             per_byte,
+            expected_size: None,
         }
     }
 
-    #[test]
-    fn bar_fraction_uses_real_byte_fraction_while_downloading() {
-        // A Downloading row with a Content-Length total ⇒ bytes/total
-        // (the real per-mod fraction — the #1 core requirement), clamped
-        // just below the Extracting step (the lifecycle, not the bar,
-        // owns the phase hand-off).
-        let half = row_b(ModDownloadStatus::Downloading, Some((50, Some(100))));
-        let f = half.bar_fraction();
-        assert!(
-            (f - 0.5).abs() < 0.001,
-            "50/100 bytes ⇒ ~0.5 real fraction (got {f})"
-        );
-
-        // Near-complete bytes do NOT paint a full bar — capped below
-        // Extracting (0.65) so the row only "completes" when its status
-        // flips via `from_wizard_state`.
-        let almost = row_b(ModDownloadStatus::Downloading, Some((999, Some(1000))));
-        assert!(
-            almost.bar_fraction() < ModDownloadStatus::Extracting.phase_fraction(),
-            "byte-complete-but-not-yet-extracting must not show a full bar"
-        );
-
-        // Monotonic: more bytes ⇒ a non-decreasing fill.
-        let a = row_b(ModDownloadStatus::Downloading, Some((10, Some(100)))).bar_fraction();
-        let b = row_b(ModDownloadStatus::Downloading, Some((60, Some(100)))).bar_fraction();
-        assert!(b >= a, "more bytes ⇒ non-decreasing fill ({a} ≤ {b})");
+    fn row_sz(
+        status: ModDownloadStatus,
+        per_byte: Option<(u64, Option<u64>)>,
+        expected_size: Option<u64>,
+    ) -> ModDownloadRow {
+        ModDownloadRow {
+            name: "m".to_string(),
+            source: "src".to_string(),
+            status,
+            per_byte,
+            expected_size,
+        }
     }
 
-    #[test]
-    fn bar_fraction_indeterminate_no_content_length_is_graceful_nub() {
-        // No Content-Length (None total) ⇒ the honest active-but-
-        // unmeasured nub (the Downloading phase step), never 0 and never
-        // a fabricated %.
-        let nub = row_b(ModDownloadStatus::Downloading, Some((123_456, None)));
-        assert_eq!(
-            nub.bar_fraction(),
-            ModDownloadStatus::Downloading.phase_fraction(),
-            "no Content-Length ⇒ the determinate Downloading nub (graceful)"
-        );
-        // Zero total is treated the same (no division-by-zero, no full bar).
-        let zero = row_b(ModDownloadStatus::Downloading, Some((10, Some(0))));
-        assert_eq!(
-            zero.bar_fraction(),
-            ModDownloadStatus::Downloading.phase_fraction()
-        );
+    fn skipped(name: &str, size: Option<u64>) -> SkippedMod {
+        SkippedMod {
+            name: name.to_string(),
+            source: "github".to_string(),
+            size,
+        }
     }
 
+    // ───────────────────── status captions / tones ─────────────────────
+
     #[test]
-    fn bar_fraction_falls_back_to_phase_when_no_byte_signal() {
-        // Chassis / fork-download / pre-first-byte ⇒ phase-fraction
-        // fallback (the prior behavior is preserved exactly).
+    fn status_text_has_no_fabricated_pct_and_skipped_reads_already_downloaded() {
+        assert_eq!(ModDownloadStatus::Queued.status_text(), "queued");
+        assert_eq!(ModDownloadStatus::Downloading.status_text(), "downloading");
+        assert_eq!(ModDownloadStatus::Extracting.status_text(), "extracting...");
+        assert_eq!(ModDownloadStatus::Staged.status_text(), "staged");
+        assert_eq!(
+            ModDownloadStatus::Skipped.status_text(),
+            "already downloaded"
+        );
         for s in [
             ModDownloadStatus::Queued,
             ModDownloadStatus::Downloading,
             ModDownloadStatus::Extracting,
             ModDownloadStatus::Staged,
+            ModDownloadStatus::Skipped,
         ] {
-            assert_eq!(
-                row_b(s, None).bar_fraction(),
-                s.phase_fraction(),
-                "no byte signal ⇒ phase fraction for {s:?}"
+            assert!(
+                !s.status_text().contains('%'),
+                "no fabricated per-row % in any status caption ({s:?})"
             );
         }
-        // Post-download phases ignore the byte map (a byte fraction would
-        // be ~1.0 there anyway — phase is the right signal).
+    }
+
+    #[test]
+    fn is_done_is_queued_is_skipped_download_complete_are_correct() {
+        assert!(ModDownloadStatus::Queued.is_queued());
+        assert!(!ModDownloadStatus::Queued.is_done());
+        assert!(!ModDownloadStatus::Queued.download_complete());
+
+        assert!(ModDownloadStatus::Staged.is_done());
+        assert!(ModDownloadStatus::Staged.download_complete());
+        assert!(!ModDownloadStatus::Staged.is_skipped());
+
+        // DL-Run-1 Skipped is a fully-satisfied terminal: done +
+        // download-complete + is_skipped.
+        assert!(ModDownloadStatus::Skipped.is_done());
+        assert!(ModDownloadStatus::Skipped.download_complete());
+        assert!(ModDownloadStatus::Skipped.is_skipped());
+        assert!(!ModDownloadStatus::Skipped.is_queued());
+
+        assert!(ModDownloadStatus::Extracting.download_complete());
+        assert!(!ModDownloadStatus::Extracting.is_done());
+        assert!(!ModDownloadStatus::Downloading.download_complete());
+    }
+
+    #[test]
+    fn phase_fraction_is_strictly_monotonic_with_satisfied_terminals_full() {
+        let q = ModDownloadStatus::Queued.phase_fraction();
+        let d = ModDownloadStatus::Downloading.phase_fraction();
+        let e = ModDownloadStatus::Extracting.phase_fraction();
+        let s = ModDownloadStatus::Staged.phase_fraction();
+        let k = ModDownloadStatus::Skipped.phase_fraction();
+        assert!(q < d && d < e && e < s, "strictly increasing q<d<e<s");
+        assert!((q - 0.0).abs() < f32::EPSILON);
+        assert!((s - 1.0).abs() < f32::EPSILON);
+        assert!(
+            (k - 1.0).abs() < f32::EPSILON,
+            "Skipped is a fully-satisfied terminal (1.0)"
+        );
+    }
+
+    // ──────────── DL-Run 2 — per-mod bar = WHOLE byte fraction ────────────
+
+    #[test]
+    fn bar_fraction_is_the_whole_byte_fraction_no_band_clamp() {
+        // The jank fix: a Downloading row's bar is bytes/total over the
+        // ENTIRE 0→1 bar — NOT clamped to a 0.64 band (the old clamp made
+        // a byte-complete row paint ~64% then jerk to full).
+        let half = row_b(ModDownloadStatus::Downloading, Some((50, Some(100))));
+        assert!((half.bar_fraction() - 0.5).abs() < 0.001, "50/100 ⇒ 0.5");
+
+        // Near-complete bytes ⇒ a near-FULL bar (no artificial ceiling).
+        let almost = row_b(ModDownloadStatus::Downloading, Some((999, Some(1000))));
+        assert!(
+            almost.bar_fraction() > 0.98,
+            "byte-near-complete ⇒ a near-full bar (no 0.64 band-clamp), got {}",
+            almost.bar_fraction()
+        );
+
+        // Byte-complete ⇒ exactly full (clamped to 1.0, never > 1).
+        let full = row_b(ModDownloadStatus::Downloading, Some((1000, Some(1000))));
+        assert!((full.bar_fraction() - 1.0).abs() < f32::EPSILON);
+        let over = row_b(ModDownloadStatus::Downloading, Some((1200, Some(1000))));
+        assert!((over.bar_fraction() - 1.0).abs() < f32::EPSILON);
+
+        // Monotonic: more bytes ⇒ non-decreasing.
+        let a = row_b(ModDownloadStatus::Downloading, Some((10, Some(100)))).bar_fraction();
+        let b = row_b(ModDownloadStatus::Downloading, Some((60, Some(100)))).bar_fraction();
+        assert!(b >= a);
+    }
+
+    #[test]
+    fn bar_fraction_no_content_length_is_indeterminate_not_a_fake_pct() {
+        let nub = row_b(ModDownloadStatus::Downloading, Some((123_456, None)));
+        // Falls back to the nub value (the caller paints a moving marquee).
+        assert_eq!(
+            nub.bar_fraction(),
+            ModDownloadStatus::Downloading.phase_fraction()
+        );
+        assert!(nub.is_indeterminate(), "no Content-Length ⇒ indeterminate");
+        // Zero total is treated the same (no divide-by-zero, no full bar).
+        let zero = row_b(ModDownloadStatus::Downloading, Some((10, Some(0))));
+        assert_eq!(
+            zero.bar_fraction(),
+            ModDownloadStatus::Downloading.phase_fraction()
+        );
+        assert!(zero.is_indeterminate());
+        // A determinate row is NOT indeterminate.
+        assert!(!row_b(ModDownloadStatus::Downloading, Some((5, Some(10)))).is_indeterminate());
+        // Only Downloading rows can be indeterminate.
+        assert!(!row_b(ModDownloadStatus::Queued, Some((0, None))).is_indeterminate());
+    }
+
+    #[test]
+    fn bar_fraction_is_strictly_monotonic_from_zero_no_reverse_nub_jerk() {
+        // The runtime-trace finding: a Downloading row with a DETERMINATE
+        // size (baked expected_size, here) but NO bytes yet must read
+        // EXACTLY 0 (an empty track) — NOT a 0.15 nub the real first
+        // chunk could fall *below* (64 KiB of a 600 KB archive = 0.107 <
+        // 0.15 ⇒ a backward jerk). The bar must climb 0 → … → 1
+        // strictly monotonically.
+        let sz = Some(600_000u64);
+        // No bytes yet, size known ⇒ exactly 0 (empty), determinate.
+        let none_yet = row_sz(ModDownloadStatus::Downloading, None, sz);
+        assert_eq!(
+            none_yet.bar_fraction(),
+            0.0,
+            "no bytes yet ⇒ empty bar, NOT a 0.15 nub"
+        );
+        assert!(
+            !none_yet.is_indeterminate(),
+            "a baked size ⇒ determinate (a real bytes/size bar), never the marquee"
+        );
+        // The realistic chunk sequence is strictly increasing from 0 —
+        // the first 64 KiB chunk (0.107) does NOT jerk backward from any
+        // nub (there is no nub).
+        let seq: Vec<f32> = [0u64, 65_536, 131_072, 300_000, 599_999, 600_000]
+            .iter()
+            .map(|&b| {
+                row_sz(ModDownloadStatus::Downloading, Some((b, Some(600_000))), sz).bar_fraction()
+            })
+            .collect();
+        for w in seq.windows(2) {
+            assert!(w[1] >= w[0], "strictly monotonic from 0: {seq:?}");
+        }
+        assert_eq!(seq[0], 0.0);
+        assert!((seq[seq.len() - 1] - 1.0).abs() < 1e-6);
+        // A live Content-Length ALSO makes it determinate-from-0 even with
+        // no baked size.
+        let cl_only = row_sz(ModDownloadStatus::Downloading, Some((0, Some(1000))), None);
+        assert_eq!(cl_only.bar_fraction(), 0.0);
+        assert!(!cl_only.is_indeterminate());
+    }
+
+    #[test]
+    fn bar_fraction_falls_back_to_phase_when_no_byte_signal() {
+        for s in [
+            ModDownloadStatus::Queued,
+            ModDownloadStatus::Downloading,
+            ModDownloadStatus::Extracting,
+            ModDownloadStatus::Staged,
+            ModDownloadStatus::Skipped,
+        ] {
+            assert_eq!(row_b(s, None).bar_fraction(), s.phase_fraction());
+        }
+        // Post-download phases ignore the byte map (phase is the signal).
         assert_eq!(
             row_b(ModDownloadStatus::Extracting, Some((100, Some(100)))).bar_fraction(),
             ModDownloadStatus::Extracting.phase_fraction()
@@ -1843,160 +2429,367 @@ mod tests {
         );
     }
 
+    // ──────── DL-Run 2 — per-row Download byte-aggregate contribution ────────
+
     #[test]
-    fn set_asset_bytes_persists_in_map_and_survives_from_wizard_state() {
-        // The persistent byte map must carry through the per-frame
-        // `from_wizard_state` rebuild (#1 — the row vector is rebuilt from
-        // BIO state every frame; the byte map is not).
-        use crate::app::state::Step2UpdateAsset;
-        let mut st = WizardState::default();
-        st.step2.update_selected_update_assets = vec![
-            Step2UpdateAsset {
-                game_tab: "BGEE".into(),
-                tp_file: "A/A.TP2".into(),
-                label: "A".into(),
-                source_id: "github".into(),
-                tag: "v1".into(),
-                asset_name: "A.zip".into(),
-                asset_url: "http://x/A".into(),
-                installed_source_ref: None,
-            },
-            Step2UpdateAsset {
-                game_tab: "BGEE".into(),
-                tp_file: "B/B.TP2".into(),
-                label: "B".into(),
-                source_id: "weasel".into(),
-                tag: "v2".into(),
-                asset_name: "B.zip".into(),
-                asset_url: "http://x/B".into(),
-                installed_source_ref: None,
-            },
-        ];
-        st.step2.update_selected_download_running = true;
-
-        // Frame 1: a byte delta arrives for asset index 0.
-        let mut p = DownloadProgress::from_wizard_state(&st);
-        p.set_asset_bytes(0, 512, Some(2048));
-        assert_eq!(p.asset_bytes.get(&0), Some(&(512, Some(2048))));
-        assert_eq!(p.rows[0].per_byte, Some((512, Some(2048))));
-
-        // Frame 2: rebuild from BIO state, carrying the prior map — the
-        // byte readout must survive the rebuild.
-        let p2 = DownloadProgress::from_wizard_state_with_bytes(&st, &p.asset_bytes);
-        assert_eq!(
-            p2.rows[0].per_byte,
-            Some((512, Some(2048))),
-            "#1 — the byte map survives the per-frame row rebuild"
+    fn download_bytes_pair_uses_baked_size_then_content_length() {
+        // Baked expected_size is the preferred denominator.
+        let r = row_sz(
+            ModDownloadStatus::Downloading,
+            Some((30, Some(999))),
+            Some(100),
         );
-        assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte delta yet");
-        // The Downloading row now renders a real fraction (512/2048 = .25).
-        assert!((p2.rows[0].bar_fraction() - 0.25).abs() < 0.001);
-    }
-
-    fn row(name: &str, status: ModDownloadStatus) -> ModDownloadRow {
-        ModDownloadRow {
-            name: name.to_string(),
-            source: "src".to_string(),
-            status,
-            // No live byte signal in these status/overall-bar tests ⇒
-            // phase-fraction fallback (preserves the prior semantics for
-            // every existing assertion).
-            per_byte: None,
-        }
-    }
-
-    #[test]
-    fn empty_progress_is_zero_and_not_complete() {
-        let p = DownloadProgress::default();
-        assert_eq!(p.completed(), 0);
-        assert_eq!(p.total(), 0);
-        assert_eq!(p.overall_pct(), 0);
-        assert!(
-            !p.all_staged(),
-            "an empty list is 'not started', not 'complete'"
+        assert_eq!(r.download_bytes_pair(), Some((30, 100)));
+        // No baked size ⇒ the live Content-Length.
+        let r2 = row_sz(ModDownloadStatus::Downloading, Some((30, Some(120))), None);
+        assert_eq!(r2.download_bytes_pair(), Some((30, 120)));
+        // No size anywhere ⇒ None (excluded from the determinate sums).
+        let r3 = row_sz(ModDownloadStatus::Downloading, Some((30, None)), None);
+        assert_eq!(r3.download_bytes_pair(), None);
+        // Download-complete rows count full size on both sides.
+        let ex = row_sz(ModDownloadStatus::Extracting, None, Some(500));
+        assert_eq!(ex.download_bytes_pair(), Some((500, 500)));
+        let st = row_sz(ModDownloadStatus::Staged, None, Some(500));
+        assert_eq!(st.download_bytes_pair(), Some((500, 500)));
+        let sk = row_sz(ModDownloadStatus::Skipped, None, Some(500));
+        assert_eq!(sk.download_bytes_pair(), Some((500, 500)));
+        // Got is clamped to size (never > 1.0 contribution).
+        let over = row_sz(
+            ModDownloadStatus::Downloading,
+            Some((700, Some(999))),
+            Some(500),
         );
+        assert_eq!(over.download_bytes_pair(), Some((500, 500)));
     }
 
+    // ───────────────── DL-Run 2 — the two ordered phases ─────────────────
+
     #[test]
-    fn completed_counts_download_complete_rows_so_it_advances_through_phases() {
-        // D3: "N" counts Extracting + Staged (download finished) so it
-        // climbs through the phases instead of being stuck 0/T until the
-        // last archive stages.
+    fn phase_is_downloading_until_all_fetched_then_extracting() {
+        // Any Queued/Downloading row ⇒ Downloading phase.
         let p = DownloadProgress {
             rows: vec![
                 row("a", ModDownloadStatus::Staged),
-                row("b", ModDownloadStatus::Extracting), // counts (downloaded)
-                row("c", ModDownloadStatus::Downloading), // not yet
-                row("d", ModDownloadStatus::Queued),
+                row("b", ModDownloadStatus::Downloading),
             ],
             ..Default::default()
         };
-        assert_eq!(
-            p.completed(),
-            2,
-            "Staged + Extracting both count toward N (download complete)"
-        );
-        assert_eq!(p.total(), 4);
-    }
-
-    #[test]
-    fn overall_pct_blends_bio_aggregate_with_extract_stage_completion() {
-        // The overall bar is NO LONGER a flat phase-fraction average (that
-        // was the "stuck at 45%" bug). 4 rows [Staged, Extracting,
-        // Downloading, Queued], BIO aggregate 0: past-download = 2/4 = .5,
-        // staged = 1/4 = .25 ⇒ 0.70*.5 + 0.30*.25 = .425 ≈ 42–43%.
-        let p = DownloadProgress {
+        assert_eq!(p.phase(), InstallPhase::Downloading);
+        // All rows download-complete (Extracting/Staged) ⇒ Extracting.
+        let p2 = DownloadProgress {
             rows: vec![
                 row("a", ModDownloadStatus::Staged),
                 row("b", ModDownloadStatus::Extracting),
-                row("c", ModDownloadStatus::Downloading),
-                row("d", ModDownloadStatus::Queued),
             ],
             ..Default::default()
         };
-        let pct = p.overall_pct();
-        assert!((42..=43).contains(&pct), "blend ≈ 42–43, got {pct}");
-        // Same rows but BIO reports 80% downloaded ⇒ the bar is strictly
-        // higher (it tracks BIO's real aggregate, not a frozen constant).
-        let p2 = DownloadProgress {
-            dl_aggregate_pct: 80,
-            ..p.clone()
-        };
-        assert!(
-            p2.overall_pct() > pct,
-            "the overall bar tracks BIO's aggregate ({} > {pct})",
-            p2.overall_pct()
-        );
-    }
-
-    #[test]
-    fn overall_bar_never_regresses_as_a_row_advances_phases() {
-        // THE D3 regression-fix proof (the reported 100→80 stall): a single
-        // row walking Queued → Downloading → Extracting → Staged must yield
-        // a non-decreasing overall %.
-        let mut p = DownloadProgress {
-            rows: vec![row("a", ModDownloadStatus::Queued)],
+        assert_eq!(p2.phase(), InstallPhase::Extracting);
+        // Only skipped mods, none fetching ⇒ already past download.
+        let p3 = DownloadProgress {
+            skipped: vec![skipped("x", Some(10))],
             ..Default::default()
         };
-        let q = p.overall_pct();
-        p.rows[0].status = ModDownloadStatus::Downloading;
-        let d = p.overall_pct();
-        p.rows[0].status = ModDownloadStatus::Extracting;
-        let e = p.overall_pct();
-        p.rows[0].status = ModDownloadStatus::Staged;
-        let s = p.overall_pct();
-        assert!(
-            q <= d && d <= e && e <= s,
-            "overall % must be monotonic non-decreasing across phases \
-             (got {q} → {d} → {e} → {s}) — the 100→80 stall must not recur"
+        assert_eq!(p3.phase(), InstallPhase::Extracting);
+        // Empty / chassis ⇒ Downloading (the default, no-op).
+        assert_eq!(
+            DownloadProgress::default().phase(),
+            InstallPhase::Downloading
         );
-        assert_eq!(s, 100, "all-staged ⇒ 100%");
     }
 
     #[test]
-    fn all_staged_only_when_every_row_truly_staged() {
-        // Correctness of the production auto-advance is UNCHANGED by D3 —
-        // it still requires every row Staged (Extracting is not enough).
+    fn download_overall_is_a_true_byte_aggregate_not_n_over_m() {
+        // 3 rows, sizes 100/100/100. Bytes 100 (done) + 50 + 0.
+        // Σbytes=150, Σexpected=300 ⇒ 0.5 (NOT count 1/3≈0.33).
+        let p = DownloadProgress {
+            rows: vec![
+                row_sz(ModDownloadStatus::Extracting, None, Some(100)),
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((50, Some(100))),
+                    Some(100),
+                ),
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((0, Some(100))),
+                    Some(100),
+                ),
+            ],
+            ..Default::default()
+        };
+        let f = p.download_overall_fraction();
+        assert!(
+            (f - 0.5).abs() < 0.001,
+            "Σbytes÷Σexpected = 150/300 = 0.5, got {f}"
+        );
+        assert_eq!(p.download_overall_pct(), 50);
+    }
+
+    #[test]
+    fn download_overall_climbs_smoothly_with_bytes_and_is_monotonic() {
+        // Two 1000-byte archives streaming; the aggregate climbs every
+        // delta (the "0 to 70 in jerky steps" fix — it never jumps).
+        let mk = |b0: u64, b1: u64| DownloadProgress {
+            rows: vec![
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((b0, Some(1000))),
+                    Some(1000),
+                ),
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((b1, Some(1000))),
+                    Some(1000),
+                ),
+            ],
+            ..Default::default()
+        };
+        let f0 = mk(0, 0).download_overall_fraction();
+        let f1 = mk(100, 50).download_overall_fraction();
+        let f2 = mk(400, 300).download_overall_fraction();
+        let f3 = mk(1000, 1000).download_overall_fraction();
+        assert!((f0 - 0.0).abs() < 1e-6);
+        assert!(f1 > f0 && f2 > f1 && f3 > f2, "strictly climbing");
+        assert!((f3 - 1.0).abs() < 1e-6, "byte-complete ⇒ 1.0");
+        // Every micro-step is small (smooth) — never a 0→0.7 leap.
+        assert!(f1 < 0.10 && f2 < 0.40);
+    }
+
+    #[test]
+    fn download_overall_counts_skipped_mods_complete_so_cached_install_is_honest() {
+        // 48 skipped (each 1000) + 3 to-fetch (each 1000), all 3 still
+        // at 0 bytes. A mostly-cached install must read ~94%, NOT a false
+        // low / a lurch. Σbytes = 48*1000 ; Σexpected = 51*1000.
+        let skipped48: Vec<SkippedMod> = (0..48)
+            .map(|i| skipped(&format!("c{i}"), Some(1000)))
+            .collect();
+        let p = DownloadProgress {
+            rows: vec![
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((0, Some(1000))),
+                    Some(1000),
+                ),
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((0, Some(1000))),
+                    Some(1000),
+                ),
+                row_sz(ModDownloadStatus::Queued, None, Some(1000)),
+            ],
+            skipped: skipped48,
+            ..Default::default()
+        };
+        let f = p.download_overall_fraction();
+        assert!(
+            (f - (48.0 / 51.0) as f32).abs() < 0.001,
+            "48 of 51 cached ⇒ ~0.941 (honest, not lurched), got {f}"
+        );
+        assert_eq!(p.total(), 51);
+        assert_eq!(p.downloaded_count(), 48, "the 48 skipped are past download");
+    }
+
+    #[test]
+    fn download_overall_indeterminate_rows_get_a_count_share_so_it_reaches_one() {
+        // A no-Content-Length (no baked size) row is excluded from the
+        // byte sums but contributes a 0/1 then 1/1 count share so the
+        // aggregate is bounded and reaches 1.0 (never stalls < 1).
+        let mk = |complete: bool| DownloadProgress {
+            rows: vec![
+                row_sz(ModDownloadStatus::Staged, None, Some(100)), // 100/100
+                row_sz(
+                    if complete {
+                        ModDownloadStatus::Staged
+                    } else {
+                        ModDownloadStatus::Downloading
+                    },
+                    Some((9999, None)),
+                    None,
+                ), // indeterminate ⇒ count share
+            ],
+            ..Default::default()
+        };
+        // Determinate done (100/100) + indeterminate fetching (0/1) ⇒
+        // 100/101 ≈ 0.99 — bounded, not > 1.
+        let mid = mk(false).download_overall_fraction();
+        assert!(
+            mid > 0.98 && mid < 1.0,
+            "bounded < 1 while fetching, got {mid}"
+        );
+        // Both complete ⇒ exactly 1.0 (it DOES reach 100%).
+        assert!((mk(true).download_overall_fraction() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn extract_overall_is_separate_zero_until_extract_begins_never_inherits_download() {
+        // While downloading (a row still Downloading) Extract = 0 even
+        // though Download is mid-way — the two NEVER share a value.
+        let downloading = DownloadProgress {
+            rows: vec![
+                row_sz(ModDownloadStatus::Extracting, None, Some(100)),
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((50, Some(100))),
+                    Some(100),
+                ),
+            ],
+            ..Default::default()
+        };
+        assert!(
+            downloading.download_overall_fraction() > 0.0,
+            "download is in progress"
+        );
+        assert_eq!(
+            downloading.extract_overall_fraction(),
+            0.0,
+            "Extract is 0 until the extract phase begins (never inherits Download)"
+        );
+        assert_eq!(downloading.extract_overall_pct(), 0);
+
+        // Extract phase begun (all fetched), 1 of 2 extracted ⇒ 0.5.
+        let extracting = DownloadProgress {
+            rows: vec![
+                row("a", ModDownloadStatus::Staged),     // extracted
+                row("b", ModDownloadStatus::Extracting), // not yet
+            ],
+            ..Default::default()
+        };
+        assert_eq!(extracting.phase(), InstallPhase::Extracting);
+        assert!(
+            (extracting.extract_overall_fraction() - 0.5).abs() < 0.001,
+            "1 of 2 extracted ⇒ 0.5 (its OWN 0→100, count-granular)"
+        );
+        // And it climbs to 1.0 when all staged.
+        let done = DownloadProgress {
+            rows: vec![
+                row("a", ModDownloadStatus::Staged),
+                row("b", ModDownloadStatus::Staged),
+            ],
+            ..Default::default()
+        };
+        assert!((done.extract_overall_fraction() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn extract_starts_at_exactly_zero_even_with_skipped_mods() {
+        // The runtime-trace finding: with DL-Run-1-skipped mods present,
+        // at extract-START (all fetched rows downloaded, none extracted
+        // yet) the Extract bar MUST read EXACTLY 0 — skipped mods are a
+        // download-phase concern (BIO never extracts them; they're dropped
+        // from update_selected_update_assets), so they do NOT pre-fill the
+        // extract bar (the user-directed "a NEW extracting phase from 0").
+        let p = DownloadProgress {
+            rows: vec![
+                row("a", ModDownloadStatus::Extracting), // fetched, not yet extracted
+                row("b", ModDownloadStatus::Extracting),
+            ],
+            skipped: vec![skipped("c1", Some(1000)), skipped("c2", Some(2000))],
+            ..Default::default()
+        };
+        assert_eq!(p.phase(), InstallPhase::Extracting);
+        assert_eq!(
+            p.extract_overall_pct(),
+            0,
+            "extract MUST start at exactly 0% (skipped mods don't pre-fill it)"
+        );
+        // Download is fully done (2 fetched + 2 skipped, all complete).
+        assert_eq!(p.download_overall_pct(), 100);
+        // It then climbs over the to-fetch rows ONLY (1 of 2 extracted).
+        let mut p2 = p.clone();
+        p2.rows[0].status = ModDownloadStatus::Staged;
+        assert!(
+            (p2.extract_overall_fraction() - 0.5).abs() < 0.001,
+            "1 of 2 to-fetch extracted ⇒ 0.5 (skipped NOT in the extract denominator)"
+        );
+        p2.rows[1].status = ModDownloadStatus::Staged;
+        assert!((p2.extract_overall_fraction() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn fully_cached_install_extract_phase_is_complete_not_a_stuck_zero() {
+        // Everything cached (all skipped, zero to-fetch rows): nothing for
+        // BIO to extract ⇒ the extract phase is trivially complete (1.0),
+        // NOT a false 0 that never moves — it auto-advances honestly.
+        let p = DownloadProgress {
+            skipped: vec![skipped("a", Some(10)), skipped("b", Some(20))],
+            ..Default::default()
+        };
+        assert_eq!(p.phase(), InstallPhase::Extracting, "nothing to fetch");
+        assert_eq!(p.download_overall_pct(), 100, "all cached ⇒ download done");
+        assert_eq!(
+            p.extract_overall_pct(),
+            100,
+            "no extract work ⇒ extract complete (not a stuck 0)"
+        );
+        assert!(p.all_staged(), "fully-cached ⇒ auto-advance");
+    }
+
+    #[test]
+    fn extract_never_shows_70_at_51_of_51_downloaded() {
+        // The user's exact complaint: 51/51 downloaded, in extracting
+        // phase, must NOT read a stale 70% — Extract is its own 0→100.
+        let p = DownloadProgress {
+            rows: (0..51)
+                .map(|_| row("m", ModDownloadStatus::Extracting))
+                .collect(),
+            ..Default::default()
+        };
+        assert_eq!(p.phase(), InstallPhase::Extracting);
+        // Download is fully done (every archive fetched) ⇒ Download = 100%
+        // (its own bar), Extract = 0% (nothing unpacked yet) — NOT a
+        // conflated 70%.
+        assert_eq!(
+            p.extract_overall_pct(),
+            0,
+            "0 extracted ⇒ Extract is 0%, never a conflated 70%"
+        );
+        // The download phase is honestly complete (count-fallback: every
+        // row download-complete with no size ⇒ 51/51).
+        assert_eq!(p.downloaded_count(), 51);
+    }
+
+    #[test]
+    fn completed_tracks_the_live_phase_count() {
+        // Downloading phase ⇒ completed == downloaded_count.
+        let dl = DownloadProgress {
+            rows: vec![
+                row("a", ModDownloadStatus::Extracting),
+                row("b", ModDownloadStatus::Downloading),
+            ],
+            skipped: vec![skipped("s", Some(1))],
+            ..Default::default()
+        };
+        assert_eq!(dl.phase(), InstallPhase::Downloading);
+        assert_eq!(
+            dl.completed(),
+            dl.downloaded_count(),
+            "while downloading the N is the download count"
+        );
+        assert_eq!(dl.downloaded_count(), 2, "1 Extracting + 1 skipped");
+        // Extracting phase ⇒ completed == extracted_count.
+        let ex = DownloadProgress {
+            rows: vec![
+                row("a", ModDownloadStatus::Staged),
+                row("b", ModDownloadStatus::Extracting),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(ex.phase(), InstallPhase::Extracting);
+        assert_eq!(ex.completed(), ex.extracted_count());
+    }
+
+    #[test]
+    fn total_counts_rows_plus_skipped() {
+        let p = DownloadProgress {
+            rows: vec![row("a", ModDownloadStatus::Queued)],
+            skipped: vec![skipped("s1", Some(1)), skipped("s2", None)],
+            ..Default::default()
+        };
+        assert_eq!(p.total(), 3, "1 to-fetch + 2 skipped");
+    }
+
+    #[test]
+    fn all_staged_only_when_every_fetch_row_truly_staged() {
         let mut p = DownloadProgress {
             rows: vec![
                 row("a", ModDownloadStatus::Staged),
@@ -2005,34 +2798,87 @@ mod tests {
             ..Default::default()
         };
         assert!(p.all_staged());
-        assert_eq!(p.overall_pct(), 100);
         p.rows[1].status = ModDownloadStatus::Extracting;
         assert!(
             !p.all_staged(),
-            "an Extracting row (download-complete but not staged) must NOT auto-advance"
+            "an Extracting row must NOT auto-advance the stage"
         );
+        // Skipped-only (everything cached) is all-staged once the rows
+        // (none) are all done — a fully-cached install can auto-advance.
+        let cached = DownloadProgress {
+            skipped: vec![skipped("s", Some(1))],
+            ..Default::default()
+        };
+        assert!(
+            cached.all_staged(),
+            "fully-cached (no fetch rows) ⇒ all_staged (auto-advance)"
+        );
+        // Empty/chassis ⇒ not started, never complete.
+        assert!(!DownloadProgress::default().all_staged());
     }
 
     #[test]
-    fn install_copy_is_spec_4_3_verbatim() {
-        // SPEC §4.3 + the Install-path wireframe call (screens.jsx:610-617).
-        let c = DownloadScreenCopy::INSTALL;
-        assert_eq!(c.title, "Downloading & extracting");
-        assert_eq!(
-            c.sub,
-            "fetching mod archives \u{2014} install starts automatically when ready"
+    fn empty_progress_is_zero_and_not_complete() {
+        let p = DownloadProgress::default();
+        assert_eq!(p.completed(), 0);
+        assert_eq!(p.total(), 0);
+        assert_eq!(p.download_overall_pct(), 0);
+        assert_eq!(p.extract_overall_pct(), 0);
+        assert!(!p.all_staged());
+    }
+
+    // ───────── #1 / DL-Run 2 — the persistent byte map survives rebuild ─────────
+
+    #[test]
+    fn set_asset_bytes_persists_and_survives_per_frame_rebuild() {
+        use crate::app::state::Step2UpdateAsset;
+        let mut st = WizardState::default();
+        let mk = |label: &str, src: &str| Step2UpdateAsset {
+            game_tab: "BGEE".into(),
+            tp_file: format!("{label}/{label}.TP2"),
+            label: label.into(),
+            source_id: src.into(),
+            tag: "v1".into(),
+            asset_name: format!("{label}.zip"),
+            asset_url: format!("http://x/{label}"),
+            installed_source_ref: None,
+        };
+        st.step2.update_selected_update_assets = vec![mk("A", "github"), mk("B", "weasel")];
+        st.step2.update_selected_download_running = true;
+
+        let mut p = DownloadProgress::from_wizard_state(&st);
+        p.set_asset_bytes(0, 512, Some(2048));
+        assert_eq!(p.asset_bytes.get(&0), Some(&(512, Some(2048))));
+        assert_eq!(p.rows[0].per_byte, Some((512, Some(2048))));
+
+        // Frame 2: rebuild from BIO state carrying the prior map +
+        // expected sizes (DL-Run 2 — from_wizard_state_full).
+        let mut expected = BTreeMap::new();
+        expected.insert(0usize, 2048u64);
+        let p2 = DownloadProgress::from_wizard_state_full(
+            &st,
+            &p.asset_bytes,
+            &[skipped("CACHED", Some(4096))],
+            &expected,
         );
         assert_eq!(
-            c.hint,
-            Some("after download: install runs without further prompts (no review step)")
+            p2.rows[0].per_byte,
+            Some((512, Some(2048))),
+            "the byte map survives the per-frame row rebuild"
         );
+        assert_eq!(
+            p2.rows[0].expected_size,
+            Some(2048),
+            "the share-code expected size is merged onto the row"
+        );
+        assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte delta yet");
+        assert_eq!(p2.skipped.len(), 1, "skipped mods carried through");
+        // The Downloading row renders a real 512/2048 = .25 fraction.
+        assert!((p2.rows[0].bar_fraction() - 0.25).abs() < 0.001);
     }
 
     #[test]
-    fn from_wizard_state_classifies_every_lifecycle_row_status_only() {
-        // SPEC §4.3 live feed: one row per resolved asset; status from the
-        // authoritative downloaded/extracted membership. D4: in-flight rows
-        // are `Downloading` (status only — NOT a mirrored aggregate %).
+    fn from_wizard_state_full_classifies_lifecycle_and_carries_skipped() {
         let mut st = WizardState::default();
         let asset = |label: &str, src: &str| crate::app::state::Step2UpdateAsset {
             game_tab: "BGEE".to_string(),
@@ -2050,48 +2896,65 @@ mod tests {
             asset("stratagems", "github:scs"),
             asset("spell_rev", "weasel:sr"),
         ];
-        // EET fully done (downloaded + extracted) ⇒ Staged.
         st.step2.update_selected_downloaded_sources = vec![
             "EET -> C:/a/EET.zip".to_string(),
             "cdtweaks -> C:/a/cdt.zip".to_string(),
         ];
         st.step2.update_selected_extracted_sources = vec!["EET -> C:/m/EET".to_string()];
-        // cdtweaks downloaded but not extracted ⇒ Extracting.
-        // stratagems / spell_rev not downloaded; a download is running ⇒
-        // both `Downloading` (status only — NO per-row %, NO 51-identical-%
-        // confusion).
         st.step2.update_selected_download_running = true;
-        st.step2.scan_status = "Downloading updates: 2/4".to_string();
 
-        let p = DownloadProgress::from_wizard_state(&st);
-        assert_eq!(p.rows.len(), 4);
-        assert_eq!(p.rows[0].status, ModDownloadStatus::Staged, "EET staged");
-        assert_eq!(p.rows[0].source, "github:eet");
-        assert_eq!(
-            p.rows[1].status,
-            ModDownloadStatus::Extracting,
-            "cdtweaks downloaded, extract pending ⇒ Extracting"
-        );
-        assert_eq!(
-            p.rows[2].status,
-            ModDownloadStatus::Downloading,
-            "D4: in-flight row is status-only Downloading (no fabricated %)"
-        );
+        let sk = vec![skipped("ALREADY_HERE", Some(7777))];
+        let p =
+            DownloadProgress::from_wizard_state_full(&st, &BTreeMap::new(), &sk, &BTreeMap::new());
+        assert_eq!(p.rows[0].status, ModDownloadStatus::Staged); // downloaded+extracted
+        assert_eq!(p.rows[1].status, ModDownloadStatus::Extracting); // downloaded only
+        assert_eq!(p.rows[2].status, ModDownloadStatus::Downloading); // running
         assert_eq!(p.rows[3].status, ModDownloadStatus::Downloading);
-        // The two in-flight rows are byte-identical in status (no
-        // per-row-% divergence) — exactly the "51 identical 6%" confusion
-        // the redesign removes (now they are an honest plain "downloading").
-        assert_eq!(p.rows[2].status, p.rows[3].status);
+        assert_eq!(p.skipped.len(), 1);
+        assert_eq!(p.total(), 5, "4 rows + 1 skipped");
+    }
 
-        // Not running, nothing downloaded ⇒ all Queued.
-        let mut idle = WizardState::default();
-        idle.step2.update_selected_update_assets = vec![asset("m", "s")];
-        let q = DownloadProgress::from_wizard_state(&idle);
-        assert_eq!(q.rows[0].status, ModDownloadStatus::Queued);
+    // ─────────────────────── copy / outcome ───────────────────────
 
-        // No resolved assets ⇒ empty grid (honest empty state).
-        let empty = DownloadProgress::from_wizard_state(&WizardState::default());
-        assert!(empty.rows.is_empty());
-        assert!(!empty.all_staged());
+    #[test]
+    fn install_copy_is_spec_4_3_verbatim() {
+        let c = DownloadScreenCopy::INSTALL;
+        assert_eq!(c.title, "Downloading & extracting");
+        assert_eq!(
+            c.sub,
+            "fetching mod archives \u{2014} install starts automatically when ready"
+        );
+        assert_eq!(
+            c.hint,
+            Some("after download: install runs without further prompts (no review step)")
+        );
+    }
+
+    #[test]
+    fn render_outcome_chassis_stay_until_all_staged() {
+        // Chassis `render` (no pipeline): Stay while any row not staged,
+        // Advance only when all_staged.
+        let mut st = WizardState::default();
+        let asset = crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".into(),
+            tp_file: "A/A.TP2".into(),
+            label: "A".into(),
+            source_id: "gh".into(),
+            tag: "v1".into(),
+            asset_name: "A.zip".into(),
+            asset_url: "http://x/A".into(),
+            installed_source_ref: None,
+        };
+        st.step2.update_selected_update_assets = vec![asset];
+        // Not downloaded ⇒ Queued ⇒ not all_staged.
+        let p = DownloadProgress::from_wizard_state(&st);
+        assert!(!p.all_staged());
+    }
+
+    #[test]
+    fn install_phase_verbs() {
+        assert_eq!(InstallPhase::Downloading.verb(), "Downloading");
+        assert_eq!(InstallPhase::Extracting.verb(), "Extracting");
+        assert_eq!(InstallPhase::default(), InstallPhase::Downloading);
     }
 }

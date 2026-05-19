@@ -95,41 +95,67 @@ struct Cell {
 /// `Queued`) so the snapshot exercises all four row tones + the moving
 /// overall bar.
 fn representative_live_progress() -> DownloadProgress {
-    let row = |name: &str, source: &str, status: ModDownloadStatus| ModDownloadRow {
+    // DL-Run 2 — a row with a live byte fraction (the whole 0→1 bar) is
+    // `Downloading` + `per_byte = Some((bytes, Some(total)))`; the §4.3
+    // grid renders THIS mod's `bytes / Content-Length`. Distinct fractions
+    // per row (37% vs 81%) prove the per-mod bars advance individually.
+    let row = |name: &str,
+               source: &str,
+               status: ModDownloadStatus,
+               per_byte: Option<(u64, Option<u64>)>| ModDownloadRow {
         name: name.to_string(),
         source: source.to_string(),
         status,
+        per_byte,
+        expected_size: per_byte.and_then(|(_, t)| t),
     };
     DownloadProgress {
         rows: vec![
-            row("EET", "github:K4thos/EET", ModDownloadStatus::Staged),
+            row("EET", "github:K4thos/EET", ModDownloadStatus::Staged, None),
             row(
                 "EET_end",
                 "github:K4thos/EET_end",
                 ModDownloadStatus::Staged,
+                None,
             ),
             row(
                 "cdtweaks",
                 "github:Gibberlings3/cdtweaks",
                 ModDownloadStatus::Extracting,
+                None,
             ),
             row(
                 "stratagems",
                 "github:Gibberlings3/stratagems",
-                ModDownloadStatus::Downloading { progress: 63 },
+                ModDownloadStatus::Downloading,
+                Some((81, Some(100))),
             ),
             row(
                 "item_rev",
                 "github:Gibberlings3/ItemRevisions",
-                ModDownloadStatus::Downloading { progress: 12 },
+                ModDownloadStatus::Downloading,
+                Some((37, Some(100))),
             ),
-            row("spell_rev", "weasel:spell_rev", ModDownloadStatus::Queued),
+            row(
+                "spell_rev",
+                "weasel:spell_rev",
+                ModDownloadStatus::Queued,
+                None,
+            ),
             row(
                 "tweaks_anthology",
                 "github:.../tweaks",
                 ModDownloadStatus::Queued,
+                None,
             ),
         ],
+        // DL-Run 1 already-present-by-hash mods render as instant ✓ rows.
+        skipped: vec![bio::ui::install::stage_downloading::SkippedMod {
+            name: "ascension".to_string(),
+            source: "github:Gibberlings3/Ascension".to_string(),
+            size: Some(4096),
+        }],
+        ..Default::default()
     }
 }
 

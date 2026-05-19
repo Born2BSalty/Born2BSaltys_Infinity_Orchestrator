@@ -55,7 +55,7 @@
 )]
 
 use crate::app::modlist_share::ModlistSharePreview;
-use crate::ui::install::stage_downloading::DownloadProgress;
+use crate::ui::install::stage_downloading::{DownloadProgress, SkippedMod};
 
 /// The four Install Modlist stages (SPEC §4: paste → preview → downloading →
 /// installing). The machine is whole so the dispatcher + back-navigation are
@@ -323,6 +323,26 @@ pub struct InstallScreenState {
     /// run exactly once (not per frame across the extraction window). Set
     /// `true` the frame it runs. Reset by `clear_preview()`. Not persisted.
     pub archives_verified: bool,
+    /// **DL-Run 2 — the DL-Run-1-skipped (already-present-by-hash) mods**,
+    /// captured the one-shot frame `archive_skip::skip_present_archives`
+    /// drops them from `update_selected_update_assets` (diffed against
+    /// `pre_skip_assets`). Re-injected into the §4.3 grid as
+    /// instantly-satisfied "✓ already downloaded" rows and counted complete
+    /// in the Download byte aggregate so a mostly-cached install is
+    /// honest/smooth/fast ("48 of 51 already present"). Carried through the
+    /// per-frame `DownloadProgress` rebuild. Reset by `clear_preview()`.
+    /// Not persisted.
+    pub skipped_mods: Vec<SkippedMod>,
+    /// **DL-Run 2 — the per-asset expected archive size denominator map**,
+    /// keyed by the POST-skip asset index (== the §4.3 row index), value =
+    /// the share-code-baked `ArchiveMeta.size`. Gives the Download byte
+    /// aggregate (`Σ bytes ÷ Σ expected`) a stable denominator independent
+    /// of whether the server sent a `Content-Length`. Decoded at the same
+    /// one-shot skip-pass boundary and carried through the per-frame
+    /// rebuild. Empty for a fieldless / pre-redesign / third-party code
+    /// (the aggregate then uses each row's live `Content-Length`). Reset by
+    /// `clear_preview()`. Not persisted.
+    pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
 }
 
 impl InstallScreenState {
@@ -359,6 +379,11 @@ impl InstallScreenState {
         self.expected_archive_meta = Vec::new();
         self.pre_skip_assets = Vec::new();
         self.archives_verified = false;
+        // DL-Run 2: the skipped-mod rows + the expected-size denominators
+        // are re-derived at the next arm's skip pass — a re-parsed code
+        // must not inherit the prior code's cached/skip view.
+        self.skipped_mods = Vec::new();
+        self.expected_archive_sizes = std::collections::BTreeMap::new();
     }
 }
 

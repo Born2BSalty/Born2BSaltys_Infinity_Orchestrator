@@ -1033,6 +1033,22 @@ impl OrchestratorApp {
             // live, egui would paint lazily and the per-mod bars would
             // appear frozen until the next user input.
             || self.stream_download_rx.is_some()
+            // **DL-Run 2 — keep repainting CONTINUOUSLY for the WHOLE
+            // active-phase window** (the Install-Modlist Downloading screen
+            // / Workspace auto-build). The Phase-7 channel-only coverage
+            // above left gaps the user saw as "minute-apart jumps": between
+            // a parallel-pool burst (rx briefly drained but still
+            // downloading), at the download→extract seam (download rx
+            // gone, extract rx not yet armed), and during the byte
+            // aggregate / no-Content-Length marquee animation (which must
+            // advance every frame, not only on event arrival).
+            // `modlist_auto_build_active` is true for the ENTIRE import →
+            // download → extract → install-handoff pipeline and clears the
+            // instant it goes idle, so the per-mod byte bars + the two
+            // phase bars + the indeterminate marquee animate
+            // frame-by-frame while a phase is live and the CPU is NOT spun
+            // when nothing is downloading/extracting.
+            || self.wizard_state.modlist_auto_build_active
             || !self.step2_progress_queue.is_empty()
     }
 
