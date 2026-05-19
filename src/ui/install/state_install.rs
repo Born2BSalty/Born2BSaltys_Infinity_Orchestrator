@@ -278,23 +278,6 @@ pub struct InstallScreenState {
     /// by `clear_preview()` alongside `pipeline_armed` so a re-entry from
     /// Preview re-arms cleanly. Not persisted.
     pub pipeline_arm_error: Option<String>,
-    /// **Fix A — the modlist id minted once for a fresh Install-Modlist
-    /// paste, threaded so the `-u` `weidu_component_logs` dir and the
-    /// registered `ModlistEntry` share ONE id (the PLAN-GAP resolution; see
-    /// the run report).** On the fresh-paste path the entry's id was
-    /// previously minted *inside* `register_install_modlist_paste`, which
-    /// runs *after* the per-install-dir derivation — so the relocated `-u`
-    /// dir (`%APPDATA%\bio\modlists\<id>\weidu_component_logs`) had no id to
-    /// key on. `stage_downloading::render_live` now mints the id here once
-    /// (in the same `pipeline_armed` latch, before
-    /// `prepare_install_dirs_and_maybe_import`) and
-    /// `register_and_write_install_start_artifacts` reuses it instead of
-    /// re-minting (behavior-neutral: the entry is byte-identical; only the
-    /// id's birthplace moved one call earlier). `None` for the Reinstall
-    /// path (its id is `pending_reinstall_id`) and until the first arm.
-    /// Cleared by `clear_preview()` so a re-entry from Preview mints a
-    /// fresh id. Not persisted.
-    pub install_modlist_id: Option<String>,
     /// **D1 (freeze fix) — content-addressed staging is one-shot per
     /// state transition, NOT per render frame.** The pre-download
     /// `archive_store::stage_known_archives` interposition (loads the
@@ -340,9 +323,6 @@ impl InstallScreenState {
         self.download_progress = DownloadProgress::default();
         self.pipeline_armed = false;
         self.pipeline_arm_error = None;
-        // A re-entry from Preview re-arms from scratch ⇒ a fresh paste mints
-        // a fresh id (the prior arm's id, if any, belonged to that attempt).
-        self.install_modlist_id = None;
         // D1: a re-entry re-stages/re-ingests from scratch (a fresh
         // pipeline) — drop the one-shot latches.
         self.archives_staged = false;
@@ -438,7 +418,6 @@ mod tests {
         st.preview_parse_error = Some("boom".to_string());
         st.pipeline_armed = true;
         st.pipeline_arm_error = Some("arm boom".to_string());
-        st.install_modlist_id = Some("ABCDEFGHIJKL".to_string());
         st.archives_staged = true;
         st.archives_ingested = true;
         st.clear_preview();
@@ -448,10 +427,6 @@ mod tests {
         assert!(!st.preview_cached);
         assert!(!st.pipeline_armed);
         assert!(st.pipeline_arm_error.is_none());
-        assert!(
-            st.install_modlist_id.is_none(),
-            "Fix A: a re-entry from Preview must mint a fresh id"
-        );
         assert!(
             !st.archives_staged && !st.archives_ingested,
             "D1: a re-entry must re-stage/re-ingest from scratch"

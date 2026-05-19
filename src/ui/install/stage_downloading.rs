@@ -551,43 +551,8 @@ pub fn render_live(
     if !orchestrator.install_screen_state.pipeline_armed {
         orchestrator.install_screen_state.pipeline_armed = true;
 
-        // ── Fix A (the PLAN-GAP resolution — modlist id at derive time).
-        //    The `-u` `weidu_component_logs` dir now lives at
-        //    `%APPDATA%\bio\modlists\<id>\weidu_component_logs` (no-space,
-        //    program-controlled — WeiDU's `-u` preflight rejects a
-        //    space-containing destination). That needs the modlist id
-        //    *before* `derive_per_install_dirs` runs:
-        //      • Reinstall ⇒ the id is `pending_reinstall_id` (set by
-        //        `reinstall_route::start_reinstall` before this screen).
-        //      • Fresh Install-Modlist paste ⇒ the entry (and its id) was
-        //        previously minted *inside* `register_install_modlist_
-        //        paste`, which runs AFTER the derivation. Mint it ONCE here
-        //        (same one-shot `pipeline_armed` latch) and thread the SAME
-        //        id into BOTH the derivation and
-        //        `register_and_write_install_start_artifacts` (which reuses
-        //        it instead of re-minting) — behavior-neutral: the entry is
-        //        byte-identical; only the id's birthplace moves one call
-        //        earlier. Stored on `install_screen_state` so the
-        //        registration step reads the SAME id. ──
-        let modlist_id: String = orchestrator
-            .pending_reinstall_id
-            .clone()
-            .unwrap_or_else(|| {
-                orchestrator
-                    .install_screen_state
-                    .install_modlist_id
-                    .clone()
-                    .unwrap_or_else(crate::registry::ids::new_modlist_id)
-            });
-        // Persist the resolved id so the post-import registration reuses it
-        // (only meaningful for the fresh-paste path; harmless for Reinstall,
-        // whose registration step ignores it in favor of
-        // `pending_reinstall_id`).
-        orchestrator.install_screen_state.install_modlist_id = Some(modlist_id.clone());
-
         match auto_build_driver::prepare_install_dirs_and_maybe_import(
             &mut orchestrator.wizard_state,
-            &modlist_id,
             &destination,
             game,
             workflow,

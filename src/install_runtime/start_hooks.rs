@@ -453,7 +453,6 @@ pub fn on_install_start(
         .ok_or_else(|| format!("modlist {modlist_id} vanished from registry before dir derive"))?;
     crate::install_runtime::per_install_dirs::derive_per_install_dirs(
         &mut wizard_state.step1,
-        modlist_id,
         &destination,
         game,
     )

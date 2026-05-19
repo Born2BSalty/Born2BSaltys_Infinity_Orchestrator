@@ -115,14 +115,7 @@ const FALLBACK_NAME: &str = "Shared modlist";
 /// Built from the **parsed share-code preview** + the chosen destination,
 /// using the **exact `operations_create::create_modlist` convention**
 /// (premise-checked — reused verbatim, not reinvented):
-///   - id ← the **caller-supplied `modlist_id`** (Fix A — the fresh-paste
-///     id is minted once in `stage_downloading::render_live` *before* the
-///     per-install-dir derivation so the relocated `-u`
-///     `weidu_component_logs` dir
-///     [`%APPDATA%\bio\modlists\<id>\weidu_component_logs`] and this entry
-///     share ONE id; behavior-neutral vs. the prior inline
-///     `new_modlist_id()` — same 12-char ULID-style token, same entry,
-///     only minted one call earlier and threaded).
+///   - id ← `new_modlist_id()` (the same 12-char ULID-style generator).
 ///   - `name` ← the code's packed `preview.name`, honest fallback
 ///     `Shared modlist` when absent (SPEC §4.2 — never fabricate).
 ///   - `game` ← `Game::from_legacy_string(&preview.game_install)` (SPEC §4 /
@@ -158,7 +151,6 @@ const FALLBACK_NAME: &str = "Shared modlist";
 pub(crate) fn register_install_modlist_paste(
     preview: &ModlistSharePreview,
     destination: &str,
-    modlist_id: &str,
     registry: &mut ModlistRegistry,
 ) -> Result<ModlistEntry, RegistryError> {
     // SPEC §4.2 honest fallback — never fabricate a name. (The fallback is
@@ -193,17 +185,7 @@ pub(crate) fn register_install_modlist_paste(
         .filter(|s| !s.is_empty())
         .map(str::to_string);
 
-    // Fix A: reuse the caller-supplied id (minted once in `render_live`
-    // BEFORE the per-install-dir derivation so the relocated `-u` dir keys
-    // on it). Defensive fallback to `new_modlist_id()` only if the caller
-    // somehow passed an empty id (shouldn't happen — `render_live` always
-    // resolves a non-empty id before calling this) so the entry never gets
-    // a blank id.
-    let id = if modlist_id.trim().is_empty() {
-        new_modlist_id()
-    } else {
-        modlist_id.trim().to_string()
-    };
+    let id = new_modlist_id();
     let now = Utc::now();
 
     let entry = ModlistEntry {
@@ -315,21 +297,9 @@ pub fn register_and_write_install_start_artifacts(orchestrator: &mut Orchestrato
             return false;
         };
 
-        // Fix A: reuse the id `render_live` minted ONCE before the
-        // per-install-dir derivation (so the relocated `-u`
-        // `weidu_component_logs` dir at `%APPDATA%\bio\modlists\<id>\` and
-        // this registry entry share one id). `render_live` always sets this
-        // on the fresh-paste arm before calling here; the empty fallback in
-        // `register_install_modlist_paste` is the defensive backstop.
-        let pre_minted_id = orchestrator
-            .install_screen_state
-            .install_modlist_id
-            .clone()
-            .unwrap_or_default();
         let entry = match register_install_modlist_paste(
             &preview,
             &destination,
-            &pre_minted_id,
             &mut orchestrator.registry,
         ) {
             Ok(e) => e,
@@ -504,8 +474,7 @@ mod tests {
     fn registers_in_progress_entry_from_preview_packed_name_and_game() {
         let mut reg = ModlistRegistry::default();
         let p = preview(Some("Tactical EET 2026"), "EET", Some("@b2bs"), vec![]);
-        let e = register_install_modlist_paste(&p, "  D:\\eet  ", "ABCDEFGHIJKL", &mut reg)
-            .expect("register ok");
+        let e = register_install_modlist_paste(&p, "  D:\\eet  ", &mut reg).expect("register ok");
 
         assert_eq!(e.name, "Tactical EET 2026");
         assert_eq!(e.game, Game::EET, "game = the payload's game (SPEC §4)");
@@ -516,8 +485,9 @@ mod tests {
             "a pasted-code install is in-progress until it succeeds (SPEC §13.1)"
         );
         assert_eq!(
-            e.id, "ABCDEFGHIJKL",
-            "Fix A: reuses the caller-supplied (pre-minted) id verbatim"
+            e.id.len(),
+            12,
+            "the create_modlist ULID-style id convention"
         );
         assert_eq!(e.author.as_deref(), Some("@b2bs"), "the code's own author");
         assert!(
@@ -539,7 +509,7 @@ mod tests {
         // string `stage_preview` / `stage_installing` use.
         let mut reg = ModlistRegistry::default();
         let p = preview(None, "BGEE", None, vec![]);
-        let e = register_install_modlist_paste(&p, "/x", "IDIDIDIDIDID", &mut reg).expect("ok");
+        let e = register_install_modlist_paste(&p, "/x", &mut reg).expect("ok");
         assert_eq!(e.name, "Shared modlist");
         assert_eq!(e.game, Game::BGEE);
         assert_eq!(e.author, None, "no packed author ⇒ None");
@@ -551,7 +521,7 @@ mod tests {
         // fallback (not stored as "" and not an error).
         let mut reg = ModlistRegistry::default();
         let p = preview(Some("   "), "EET", Some("  "), vec![]);
-        let e = register_install_modlist_paste(&p, "/x", "IDIDIDIDIDID", &mut reg).expect("ok");
+        let e = register_install_modlist_paste(&p, "/x", &mut reg).expect("ok");
         assert_eq!(e.name, "Shared modlist");
         assert_eq!(e.author, None, "whitespace author ⇒ None");
     }
@@ -574,7 +544,7 @@ mod tests {
         ];
         let mut reg = ModlistRegistry::default();
         let p = preview(Some("Shared deep build"), "BG2EE", Some("@sharer"), lineage);
-        let e = register_install_modlist_paste(&p, "/d", "IDIDIDIDIDID", &mut reg).expect("ok");
+        let e = register_install_modlist_paste(&p, "/d", &mut reg).expect("ok");
 
         assert_eq!(e.forked_from.len(), 2, "the code's chain carried verbatim");
         assert_eq!(e.forked_from[0].name, "Original");
@@ -599,49 +569,28 @@ mod tests {
         // an unrecognized payload game string defaults to BGEE (BIO parity).
         let mut reg = ModlistRegistry::default();
         let p = preview(Some("X"), "???", None, vec![]);
-        let e = register_install_modlist_paste(&p, "/x", "IDIDIDIDIDID", &mut reg).expect("ok");
+        let e = register_install_modlist_paste(&p, "/x", &mut reg).expect("ok");
         assert_eq!(e.game, Game::BGEE);
     }
 
     #[test]
-    fn each_registration_uses_its_caller_supplied_id() {
-        // Fix A: the id is now caller-supplied (minted once in `render_live`
-        // before the per-install-dir derivation). Distinct caller ids ⇒
-        // distinct entries (the caller's `new_modlist_id()` guarantees
-        // uniqueness — pinned by the `ids` module's own tests).
+    fn each_registration_gets_a_distinct_id() {
         let mut reg = ModlistRegistry::default();
         let p = preview(Some("A"), "EET", None, vec![]);
-        let a = register_install_modlist_paste(&p, "/a", "AAAAAAAAAAAA", &mut reg).expect("a");
-        let b = register_install_modlist_paste(&p, "/b", "BBBBBBBBBBBB", &mut reg).expect("b");
-        assert_eq!(a.id, "AAAAAAAAAAAA");
-        assert_eq!(b.id, "BBBBBBBBBBBB");
-        assert_ne!(a.id, b.id);
-        assert_eq!(reg.entries.len(), 2);
-    }
-
-    #[test]
-    fn empty_caller_id_falls_back_to_a_fresh_minted_id() {
-        // Defensive backstop: if the caller somehow passes an empty id the
-        // entry must still get a valid (12-char ULID-style) id, never a
-        // blank one (`render_live` always resolves a non-empty id before
-        // calling this — this just hardens the contract).
-        let mut reg = ModlistRegistry::default();
-        let p = preview(Some("A"), "EET", None, vec![]);
-        let e = register_install_modlist_paste(&p, "/a", "   ", &mut reg).expect("ok");
-        assert_eq!(
-            e.id.len(),
-            12,
-            "empty caller id ⇒ a freshly-minted ULID-style id (never blank)"
+        let a = register_install_modlist_paste(&p, "/a", &mut reg).expect("a");
+        let b = register_install_modlist_paste(&p, "/b", &mut reg).expect("b");
+        assert_ne!(
+            a.id, b.id,
+            "ids must be unique (the create_modlist ids convention)"
         );
-        assert!(!e.id.trim().is_empty());
+        assert_eq!(reg.entries.len(), 2);
     }
 
     #[test]
     fn existing_entry_id_for_destination_matches_trimmed_nonempty_only() {
         let mut reg = ModlistRegistry::default();
         let p = preview(Some("A"), "EET", None, vec![]);
-        let a = register_install_modlist_paste(&p, "D:\\dest one", "IDIDIDIDIDID", &mut reg)
-            .expect("a");
+        let a = register_install_modlist_paste(&p, "D:\\dest one", &mut reg).expect("a");
 
         // Same destination (trimmed) ⇒ found (idempotency backstop — never
         // register a duplicate for the same destination).

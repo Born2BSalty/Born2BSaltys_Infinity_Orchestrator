@@ -44,21 +44,12 @@ const WORKSPACE_FILE_NAME: &str = "workspace.json";
 /// is unavailable (identical fallback to [`WorkspaceStore::new_for_id`],
 /// which is now built on this so the two cannot diverge).
 ///
-/// This is the **single source of truth** for the per-modlist data root.
-/// It already holds `workspace.json` ([`WorkspaceStore::new_for_id`] joins
-/// `workspace.json` onto exactly this); the redesign also anchors here:
-///   - the per-install `-u` `weidu_component_logs/` dir (SPEC §13.12 #2 /
-///     §13.12a — relocated out of the user's free-form destination because
-///     WeiDU's `-u` backend forbids spaces and a destination may contain
-///     them; this dir needs a no-space anchor and the appdata path is
-///     program-controlled — see `install_runtime::per_install_dirs`);
-///   - the Home Kebab "Open data folder" action (SPEC §3 — opens this
-///     directory for both in-progress and installed modlists; see
-///     `registry::operations::open_modlist_data_folder`).
-///
-/// Both reuse THIS resolver (never hand-join `%APPDATA%`) so the path the
-/// install writes the `-u` logs to is byte-identical to the path the Home
-/// action opens and to the `workspace.json` parent.
+/// This is the **single source of truth** for the per-modlist data root
+/// (the parent directory of `workspace.json` — [`WorkspaceStore::new_for_id`]
+/// joins `workspace.json` onto exactly this, and is built on this resolver so
+/// the two cannot diverge). Any future per-modlist appdata artifact resolves
+/// through this same function (never a hand-joined `%APPDATA%`) so it is
+/// guaranteed to sit beside the modlist's `workspace.json`.
 #[must_use]
 pub fn modlist_data_dir(modlist_id: &str) -> PathBuf {
     app_config_dir()
