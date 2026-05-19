@@ -239,9 +239,19 @@ impl ModDownloadStatus {
     }
 }
 
-/// One row of the SPEC §4.3 grid. **D4: 3 columns now** (mod / source /
-/// status) — the fabricated per-row progress-bar column is removed (BIO has
-/// no per-asset %; the only honest bar is the single overall one).
+/// One row of the SPEC §4.3 grid (mod / source / status / per-mod bar).
+///
+/// **#1 (P7.T17) — the per-mod bar now carries a REAL byte fraction.**
+/// BIO's serial loop exposed no per-asset byte signal (only the aggregate
+/// `"N/M"`), so the prior bar was a determinate phase step. The net-new
+/// `install_runtime::stream_downloader` reads each response's
+/// `Content-Length` and accumulates bytes, so a `Downloading` row's bar is
+/// `bytes / total` while it streams. `per_byte` is `Some((bytes, total))`
+/// once the streaming downloader has reported progress for this row;
+/// `total` is `None` for a no-`Content-Length` response (indeterminate —
+/// the bar then shows an active-but-unmeasured nub). Cleared / absent for
+/// the chassis path (Phase-6 fork-download) → that path falls back to the
+/// phase-fraction bar exactly as before.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModDownloadRow {
     /// Mod display name (wireframe `m.name`).
@@ -250,6 +260,60 @@ pub struct ModDownloadRow {
     pub source: String,
     /// Lifecycle status driving the status text (D4 — status only).
     pub status: ModDownloadStatus,
+    /// **#1 — live per-mod byte progress** from
+    /// `install_runtime::stream_downloader`. `Some((downloaded_bytes,
+    /// Some(content_length)))` ⇒ a real fraction; `Some((bytes, None))` ⇒
+    /// byte-count with an indeterminate total (no `Content-Length`);
+    /// `None` ⇒ no byte signal yet / the chassis path (phase-fraction
+    /// fallback). Drained into here by `OrchestratorApp::
+    /// drain_stream_download` each frame.
+    pub per_byte: Option<(u64, Option<u64>)>,
+}
+
+impl ModDownloadRow {
+    /// **#1 — the per-mod progress-bar fill (0.0..=1.0).** Prefers the
+    /// REAL byte fraction the parallel `stream_downloader` reports; falls
+    /// back to the determinate phase step when there is no byte signal
+    /// (the chassis / fork-download path, or before the first byte delta):
+    ///
+    ///   - `Downloading` + `per_byte = Some((b, Some(t)))`, `t > 0` ⇒
+    ///     `b / t` — the real per-mod byte fraction (SPEC §4.3 core
+    ///     requirement). Clamped into the downloading band so a row that
+    ///     is byte-complete but not yet flipped to `Extracting` does not
+    ///     paint a full bar (the lifecycle advances it on the next
+    ///     `from_wizard_state` reclassification).
+    ///   - `Downloading` + `per_byte = Some((_, None))` ⇒ the
+    ///     `Downloading` phase nub (no `Content-Length` — an honest
+    ///     active-but-unmeasured fill, SPEC §4.3 "graceful").
+    ///   - any other case (Queued / Extracting / Staged, or no byte
+    ///     signal) ⇒ `status.phase_fraction()` (the prior monotonic
+    ///     phase step — Extracting/Staged are post-download so a byte
+    ///     fraction would be ≈1.0 anyway; phase is the right signal
+    ///     there).
+    ///
+    /// Monotonic per row by construction: the byte total only increases
+    /// within the downloading phase, and the phase steps are strictly
+    /// increasing (Queued 0 < Downloading < Extracting < Staged 1.0), so
+    /// a row's own bar never regresses.
+    #[must_use]
+    pub fn bar_fraction(&self) -> f32 {
+        if self.status == ModDownloadStatus::Downloading {
+            if let Some((bytes, Some(total))) = self.per_byte {
+                if total > 0 {
+                    // Real byte fraction, clamped to just below the
+                    // Extracting step so the lifecycle (not the bar) owns
+                    // the hand-off to the next phase.
+                    let raw = (bytes as f32 / total as f32).clamp(0.0, 1.0);
+                    let ceiling = ModDownloadStatus::Extracting.phase_fraction() - 0.01;
+                    return raw.min(ceiling).max(0.0);
+                }
+            }
+            // No Content-Length (indeterminate) or zero total ⇒ the
+            // honest active-but-unmeasured nub.
+            return ModDownloadStatus::Downloading.phase_fraction();
+        }
+        self.status.phase_fraction()
+    }
 }
 
 /// The Stage-3 download/extract progress model. Lives on
@@ -262,13 +326,27 @@ pub struct DownloadProgress {
     /// Per-mod rows, modlist order.
     pub rows: Vec<ModDownloadRow>,
     /// BIO's **aggregate** download progress (0..=100) parsed from
-    /// `step2.scan_status` `"Downloading updates: N/M"` — the only real,
-    /// moving download signal BIO emits (a per-mod byte-% does not exist).
-    /// Drives the single overall bar so it tracks real download progress
-    /// instead of a flat per-phase constant (the "stuck at 45%" fix). `0`
-    /// when the status is not in that shape (idle / scanning / extracting /
-    /// the empty fork-download chassis).
+    /// `step2.scan_status` `"Downloading updates: N/M"`. With #1 the
+    /// orchestrator's parallel downloader also keeps the live "N/M"
+    /// status line (BIO-verbatim), so this still drives the overall bar
+    /// as a monotonic non-decreasing aggregate. `0` when the status is
+    /// not in that shape (idle / scanning / extracting / the empty
+    /// fork-download chassis) — `overall_pct` then rests on the
+    /// extract/stage completion component.
     pub dl_aggregate_pct: u8,
+    /// **#1 (P7.T17 / SPEC §4.3) — the persistent per-mod byte map**,
+    /// keyed by asset index into `step2.update_selected_update_assets`
+    /// (== row index, since `from_wizard_state` builds one row per asset
+    /// in that order). `OrchestratorApp::drain_stream_download` writes
+    /// here every frame from the parallel `stream_downloader`'s byte
+    /// deltas. `from_wizard_state` rebuilds `rows` from BIO state each
+    /// frame but **carries this map through unchanged + merges it onto the
+    /// rebuilt rows** (`merge_byte_map`), so a `Downloading` row shows its
+    /// real `bytes / total` fraction even though the row vector itself is
+    /// reconstructed per frame. `(bytes, Some(content_length))` ⇒ a real
+    /// fraction; `(bytes, None)` ⇒ indeterminate (no `Content-Length`).
+    /// Empty for the chassis path (phase-fraction fallback).
+    pub asset_bytes: std::collections::BTreeMap<usize, (u64, Option<u64>)>,
 }
 
 impl DownloadProgress {
@@ -299,8 +377,20 @@ impl DownloadProgress {
     /// (`app_step2_update_download.rs:140` / `_extract` `remove_extracted_
     /// update_entries`), so membership is matched by the asset `label`
     /// prefix — the same join BIO itself uses to reconcile them.
+    ///
+    /// **#1 — `prior_bytes` is the persistent per-mod byte map** (from the
+    /// previous frame's `DownloadProgress::asset_bytes`, populated by
+    /// `OrchestratorApp::drain_stream_download` from the parallel
+    /// `stream_downloader`). It is carried through unchanged and merged
+    /// onto the freshly-rebuilt rows so a `Downloading` row shows its real
+    /// `bytes / total` fraction even though the row vector is reconstructed
+    /// per frame. Pass an empty map for the chassis / first-frame path
+    /// (phase-fraction fallback).
     #[must_use]
-    pub fn from_wizard_state(state: &WizardState) -> Self {
+    pub fn from_wizard_state_with_bytes(
+        state: &WizardState,
+        prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
+    ) -> Self {
         let s2 = &state.step2;
 
         let label_done = |list: &[String], label: &str| {
@@ -315,7 +405,8 @@ impl DownloadProgress {
         let rows = s2
             .update_selected_update_assets
             .iter()
-            .map(|a| {
+            .enumerate()
+            .map(|(i, a)| {
                 let downloaded = label_done(&s2.update_selected_downloaded_sources, &a.label);
                 let extracted = label_done(&s2.update_selected_extracted_sources, &a.label);
                 let status = if extracted {
@@ -324,7 +415,9 @@ impl DownloadProgress {
                     // Downloaded; extract pending or running.
                     ModDownloadStatus::Extracting
                 } else if s2.update_selected_download_running {
-                    // D4 — status only; NO fabricated per-row %.
+                    // #1 — status as before; the per-mod bar now uses the
+                    // REAL byte fraction from `per_byte` (set just below
+                    // from the persistent map) instead of a fabricated %.
                     ModDownloadStatus::Downloading
                 } else {
                     ModDownloadStatus::Queued
@@ -333,18 +426,45 @@ impl DownloadProgress {
                     name: a.label.clone(),
                     source: a.source_id.clone(),
                     status,
+                    // Carry the live byte readout for this asset index
+                    // through the per-frame rebuild (#1).
+                    per_byte: prior_bytes.get(&i).copied(),
                 }
             })
             .collect();
 
-        // BIO's only real download-progress signal (the aggregate "N/M" it
-        // writes into scan_status). 0 when absent — `overall_pct` then
-        // rests on the extract/stage completion component (still monotonic).
+        // BIO-verbatim "N/M" aggregate (the orchestrator's parallel
+        // downloader keeps this status line, so it still drives the
+        // overall bar). 0 when absent — `overall_pct` then rests on the
+        // extract/stage completion component (still monotonic).
         let dl_aggregate_pct = parse_download_aggregate_pct(&s2.scan_status).unwrap_or(0);
 
         Self {
             rows,
             dl_aggregate_pct,
+            asset_bytes: prior_bytes.clone(),
+        }
+    }
+
+    /// Back-compat / chassis convenience: the status-only projection with
+    /// no live byte map (phase-fraction fallback). Used by the render gate
+    /// + the not-yet-wired fork-download path.
+    #[must_use]
+    pub fn from_wizard_state(state: &WizardState) -> Self {
+        Self::from_wizard_state_with_bytes(state, &std::collections::BTreeMap::new())
+    }
+
+    /// **#1 — record a live per-mod byte delta** (called by
+    /// `OrchestratorApp::drain_stream_download` from the parallel
+    /// `stream_downloader`'s `AssetProgress`/`AssetDone`). `index` is the
+    /// asset index into `step2.update_selected_update_assets` (== row
+    /// index). Monotonic by construction (the downloader only ever sends a
+    /// non-decreasing running total per asset). Also reflected onto the
+    /// matching row if present so the same-frame render sees it.
+    pub fn set_asset_bytes(&mut self, index: usize, bytes: u64, total: Option<u64>) {
+        self.asset_bytes.insert(index, (bytes, total));
+        if let Some(row) = self.rows.get_mut(index) {
+            row.per_byte = Some((bytes, total));
         }
     }
 }
@@ -714,6 +834,103 @@ pub fn render_live(
         orchestrator.install_screen_state.archives_staged = true;
         archive_store::stage_known_archives(&mut orchestrator.wizard_state, &destination);
     }
+
+    // ── (2b) **#1 — kick the net-new PARALLEL streaming downloader**
+    //    (SPEC §4.3 / §13.12a), interposed **between** `stage_known_
+    //    archives` (above — already dropped any store-satisfied assets so
+    //    they are NOT re-downloaded) and `ingest_downloaded_archives`
+    //    (below — content-addresses what the pool just fetched). This
+    //    REPLACES BIO's serial download sub-phase:
+    //
+    //      - `arm_auto_build` no longer arms `pending_saved_log_download`,
+    //        so BIO's serial `start_step2_update_download` never fires
+    //        (no double-download — `app_step2_saved_log_flow.rs:86-110`
+    //        is skipped).
+    //      - When BIO's apply + update-preview have resolved the asset set
+    //        and nothing is in flight (`download_gate_open` — the SAME
+    //        guard terms BIO's serial block uses, minus the disarmed
+    //        flag), we set `modlist_auto_build_waiting_for_install = true`
+    //        — the EXACT pub field BIO's own block sets at that point
+    //        (`:103`) — so BIO's UNCHANGED extract → rescan →
+    //        `start_auto_build_install` block (`:112-129`, gated on that
+    //        flag) carries the pipeline to the install hand-off after
+    //        extract, identical to the serial path's continuation.
+    //      - With resolved assets ⇒ spawn the bounded parallel pool
+    //        (`stream_downloader::start_stream_download`) and store its
+    //        receiver on `OrchestratorApp::stream_download_rx`;
+    //        `poll_step2_channels::drain_stream_download` pumps per-mod
+    //        byte deltas into the §4.3 grid and, on `Finished`, writes the
+    //        BIO-shaped result vectors + triggers BIO's unchanged
+    //        `start_step2_update_extract` (exactly BIO's serial
+    //        `poll_step2_update_download` tail).
+    //      - With NO resolved assets (everything store-satisfied / nothing
+    //        to fetch) ⇒ do not spawn a pool; setting
+    //        `modlist_auto_build_waiting_for_install = true` is enough —
+    //        BIO's `:112-129` block then fires `start_auto_build_install`
+    //        directly (the same effect as BIO's serial "no assets ⇒
+    //        straight to install" early-out, routed through the existing
+    //        handoff block instead of the now-disarmed download block).
+    //
+    //    One-shot per arm via `update_selected_download_running` (the
+    //    streaming downloader sets it true at start; `download_gate_open`
+    //    requires it false) — the gate cannot re-kick a pool mid-flight.
+    //    Reset on Cancel→Preview (`clear_preview` clears the latches; the
+    //    stream rx is dropped when the pipeline is re-armed).
+    if orchestrator.install_screen_state.pipeline_armed
+        && orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_none()
+        && auto_build_driver::download_gate_open(&orchestrator.wizard_state)
+        && orchestrator.stream_download_rx.is_none()
+        && orchestrator
+            .wizard_state
+            .step2
+            .update_selected_downloaded_sources
+            .is_empty()
+    {
+        // The gate is open and this batch's download has not been done
+        // yet (no `downloaded_sources` recorded — that vector is the
+        // post-download artifact). Set the pub field BIO's own serial
+        // block sets at this exact point so BIO's unchanged install
+        // hand-off fires after extract. (`modlist_auto_build_waiting_for_
+        // install` is on `WizardState` itself, not `step2` — same field
+        // `arm_auto_build` / `app_step2_saved_log_flow.rs:103` set.)
+        orchestrator
+            .wizard_state
+            .modlist_auto_build_waiting_for_install = true;
+
+        if orchestrator
+            .wizard_state
+            .step2
+            .update_selected_update_assets
+            .is_empty()
+        {
+            // No assets to fetch (all store-satisfied / nothing resolved):
+            // BIO's `:112-129` block now owns the hand-off
+            // (`modlist_auto_build_waiting_for_install` is set). Nothing to
+            // download — do NOT spawn an empty pool.
+            tracing::info!(
+                target = "orchestrator",
+                "#1 download gate open with 0 resolved assets — \
+                 nothing to stream; BIO's install hand-off block carries it"
+            );
+        } else if let Some(rx) = crate::install_runtime::stream_downloader::start_stream_download(
+            &mut orchestrator.wizard_state,
+        ) {
+            orchestrator.stream_download_rx = Some(rx);
+            tracing::info!(
+                target = "orchestrator",
+                "#1 parallel streaming downloader spawned for {} asset(s)",
+                orchestrator
+                    .wizard_state
+                    .step2
+                    .update_selected_update_assets
+                    .len()
+            );
+        }
+    }
+
     if !orchestrator.install_screen_state.archives_ingested
         && !destination.is_empty()
         && !orchestrator
@@ -746,10 +963,62 @@ pub fn render_live(
 
     // ── (3) Build the live feed from BIO's auto-build state + render the
     //    §4.3 chassis. ──
-    // `from_wizard_state` returns an owned `DownloadProgress` (the
-    // `&wizard_state` borrow ends here), so reading the arm-error off
-    // `install_screen_state` next is borrow-sound.
-    let progress = DownloadProgress::from_wizard_state(&orchestrator.wizard_state);
+    // **#1 — carry the persistent per-mod byte map through the per-frame
+    // rebuild.** `from_wizard_state_with_bytes` reconstructs `rows` from
+    // BIO state (status) but merges the byte map
+    // `OrchestratorApp::drain_stream_download` has been accumulating onto
+    // `install_screen_state.download_progress`, so a `Downloading` row
+    // shows its real `bytes / Content-Length` fraction. The freshly-built
+    // model is then stored BACK onto `install_screen_state.download_
+    // progress` so the map persists across frames AND survives a
+    // `set_asset_bytes` write from the next drain.
+    let prior_bytes = orchestrator
+        .install_screen_state
+        .download_progress
+        .asset_bytes
+        .clone();
+    let mut progress =
+        DownloadProgress::from_wizard_state_with_bytes(&orchestrator.wizard_state, &prior_bytes);
+
+    // ── **#1 — eliminate the post-extract 0/0 grid flash.** When BIO's
+    //    extract empties `update_selected_update_assets` (its
+    //    `remove_extracted_update_entries`) the freshly-built `progress`
+    //    has zero rows for a few frames before `pipeline_reached_install`
+    //    flips us to stage 4 — that transient rendered as a jarring
+    //    "0 / 0 mods · 0%". We own the download→extract→install hand-off,
+    //    so once the pipeline has reached extract/install we HOLD the last
+    //    non-empty grid (the all-staged/extracting view the user just saw)
+    //    instead of painting an empty one. The held grid is the prior
+    //    frame's `download_progress` (it had rows); we keep showing it
+    //    until `pipeline_reached_install` returns and the caller advances
+    //    to the install screen. Never affects the chassis path (it has no
+    //    pipeline) nor the active download (rows are non-empty then). ──
+    if progress.rows.is_empty()
+        && !orchestrator
+            .install_screen_state
+            .download_progress
+            .rows
+            .is_empty()
+        && orchestrator.install_screen_state.pipeline_armed
+        && orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_none()
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_downloaded_sources
+            .is_empty()
+    {
+        // Hold the last good (rows-populated) grid through the
+        // extract→install seam — no 0/0 flash.
+        progress = orchestrator.install_screen_state.download_progress.clone();
+    } else {
+        // Persist the live model so the byte map survives the next frame's
+        // rebuild + the next drain's `set_asset_bytes`.
+        orchestrator.install_screen_state.download_progress = progress.clone();
+    }
+
     let arm_error = orchestrator.install_screen_state.pipeline_arm_error.clone();
     let back_clicked = render_chrome(ui, palette, copy, &progress, arm_error.as_deref());
 
@@ -1047,16 +1316,20 @@ fn render_grid_row(
         );
     }
 
-    // Column 4 — the per-mod progress bar (restored core requirement). Fill
-    // = THIS mod's `phase_fraction`, so it advances individually (queued
-    // empty → downloading nub → extracting → ✓ full) independent of the
-    // overall bar above. Queued rows show an empty track (filled = false).
+    // Column 4 — the per-mod progress bar (restored core requirement).
+    // **#1:** fill = THIS mod's `bar_fraction()` — the REAL per-mod byte
+    // fraction (`bytes / Content-Length`) from the parallel
+    // `stream_downloader` while it streams, falling back to the
+    // determinate phase step when there is no byte signal (chassis /
+    // fork-download, or pre-first-byte). Advances individually per mod,
+    // separate from the overall bar above. Queued rows show an empty
+    // track (filled = false).
     let (bar_rect, _) = ui.allocate_exact_size(egui::vec2(prog_w, 14.0), egui::Sense::hover());
     paint_bar(
         ui,
         palette,
         bar_rect,
-        f64::from(row.status.phase_fraction()),
+        f64::from(row.bar_fraction()),
         !row.status.is_queued(),
     );
 }
@@ -1338,6 +1611,7 @@ mod tests {
         let dl = |status, agg| DownloadProgress {
             rows: vec![row("a", status), row("b", status), row("c", status)],
             dl_aggregate_pct: agg,
+            asset_bytes: std::collections::BTreeMap::new(),
         };
         // All downloading, BIO says 0/ N ⇒ ~0 (not a frozen 45).
         assert!(dl(ModDownloadStatus::Downloading, 0).overall_pct() < 5);
@@ -1382,11 +1656,151 @@ mod tests {
         assert!(!ModDownloadStatus::Downloading.is_queued());
     }
 
+    // ───────────── #1 — per-mod REAL byte fraction (SPEC §4.3) ─────────────
+
+    fn row_b(status: ModDownloadStatus, per_byte: Option<(u64, Option<u64>)>) -> ModDownloadRow {
+        ModDownloadRow {
+            name: "m".to_string(),
+            source: "src".to_string(),
+            status,
+            per_byte,
+        }
+    }
+
+    #[test]
+    fn bar_fraction_uses_real_byte_fraction_while_downloading() {
+        // A Downloading row with a Content-Length total ⇒ bytes/total
+        // (the real per-mod fraction — the #1 core requirement), clamped
+        // just below the Extracting step (the lifecycle, not the bar,
+        // owns the phase hand-off).
+        let half = row_b(ModDownloadStatus::Downloading, Some((50, Some(100))));
+        let f = half.bar_fraction();
+        assert!(
+            (f - 0.5).abs() < 0.001,
+            "50/100 bytes ⇒ ~0.5 real fraction (got {f})"
+        );
+
+        // Near-complete bytes do NOT paint a full bar — capped below
+        // Extracting (0.65) so the row only "completes" when its status
+        // flips via `from_wizard_state`.
+        let almost = row_b(ModDownloadStatus::Downloading, Some((999, Some(1000))));
+        assert!(
+            almost.bar_fraction() < ModDownloadStatus::Extracting.phase_fraction(),
+            "byte-complete-but-not-yet-extracting must not show a full bar"
+        );
+
+        // Monotonic: more bytes ⇒ a non-decreasing fill.
+        let a = row_b(ModDownloadStatus::Downloading, Some((10, Some(100)))).bar_fraction();
+        let b = row_b(ModDownloadStatus::Downloading, Some((60, Some(100)))).bar_fraction();
+        assert!(b >= a, "more bytes ⇒ non-decreasing fill ({a} ≤ {b})");
+    }
+
+    #[test]
+    fn bar_fraction_indeterminate_no_content_length_is_graceful_nub() {
+        // No Content-Length (None total) ⇒ the honest active-but-
+        // unmeasured nub (the Downloading phase step), never 0 and never
+        // a fabricated %.
+        let nub = row_b(ModDownloadStatus::Downloading, Some((123_456, None)));
+        assert_eq!(
+            nub.bar_fraction(),
+            ModDownloadStatus::Downloading.phase_fraction(),
+            "no Content-Length ⇒ the determinate Downloading nub (graceful)"
+        );
+        // Zero total is treated the same (no division-by-zero, no full bar).
+        let zero = row_b(ModDownloadStatus::Downloading, Some((10, Some(0))));
+        assert_eq!(
+            zero.bar_fraction(),
+            ModDownloadStatus::Downloading.phase_fraction()
+        );
+    }
+
+    #[test]
+    fn bar_fraction_falls_back_to_phase_when_no_byte_signal() {
+        // Chassis / fork-download / pre-first-byte ⇒ phase-fraction
+        // fallback (the prior behavior is preserved exactly).
+        for s in [
+            ModDownloadStatus::Queued,
+            ModDownloadStatus::Downloading,
+            ModDownloadStatus::Extracting,
+            ModDownloadStatus::Staged,
+        ] {
+            assert_eq!(
+                row_b(s, None).bar_fraction(),
+                s.phase_fraction(),
+                "no byte signal ⇒ phase fraction for {s:?}"
+            );
+        }
+        // Post-download phases ignore the byte map (a byte fraction would
+        // be ~1.0 there anyway — phase is the right signal).
+        assert_eq!(
+            row_b(ModDownloadStatus::Extracting, Some((100, Some(100)))).bar_fraction(),
+            ModDownloadStatus::Extracting.phase_fraction()
+        );
+        assert_eq!(
+            row_b(ModDownloadStatus::Staged, Some((100, Some(100)))).bar_fraction(),
+            1.0
+        );
+    }
+
+    #[test]
+    fn set_asset_bytes_persists_in_map_and_survives_from_wizard_state() {
+        // The persistent byte map must carry through the per-frame
+        // `from_wizard_state` rebuild (#1 — the row vector is rebuilt from
+        // BIO state every frame; the byte map is not).
+        use crate::app::state::Step2UpdateAsset;
+        let mut st = WizardState::default();
+        st.step2.update_selected_update_assets = vec![
+            Step2UpdateAsset {
+                game_tab: "BGEE".into(),
+                tp_file: "A/A.TP2".into(),
+                label: "A".into(),
+                source_id: "github".into(),
+                tag: "v1".into(),
+                asset_name: "A.zip".into(),
+                asset_url: "http://x/A".into(),
+                installed_source_ref: None,
+            },
+            Step2UpdateAsset {
+                game_tab: "BGEE".into(),
+                tp_file: "B/B.TP2".into(),
+                label: "B".into(),
+                source_id: "weasel".into(),
+                tag: "v2".into(),
+                asset_name: "B.zip".into(),
+                asset_url: "http://x/B".into(),
+                installed_source_ref: None,
+            },
+        ];
+        st.step2.update_selected_download_running = true;
+
+        // Frame 1: a byte delta arrives for asset index 0.
+        let mut p = DownloadProgress::from_wizard_state(&st);
+        p.set_asset_bytes(0, 512, Some(2048));
+        assert_eq!(p.asset_bytes.get(&0), Some(&(512, Some(2048))));
+        assert_eq!(p.rows[0].per_byte, Some((512, Some(2048))));
+
+        // Frame 2: rebuild from BIO state, carrying the prior map — the
+        // byte readout must survive the rebuild.
+        let p2 = DownloadProgress::from_wizard_state_with_bytes(&st, &p.asset_bytes);
+        assert_eq!(
+            p2.rows[0].per_byte,
+            Some((512, Some(2048))),
+            "#1 — the byte map survives the per-frame row rebuild"
+        );
+        assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte delta yet");
+        // The Downloading row now renders a real fraction (512/2048 = .25).
+        assert!((p2.rows[0].bar_fraction() - 0.25).abs() < 0.001);
+    }
+
     fn row(name: &str, status: ModDownloadStatus) -> ModDownloadRow {
         ModDownloadRow {
             name: name.to_string(),
             source: "src".to_string(),
             status,
+            // No live byte signal in these status/overall-bar tests ⇒
+            // phase-fraction fallback (preserves the prior semantics for
+            // every existing assertion).
+            per_byte: None,
         }
     }
 

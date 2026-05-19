@@ -72,6 +72,17 @@
 //                               orchestrator-owned receivers — SPEC
 //                               §13.12a pipeline-reuse contract). Zero
 //                               BIO edit.
+//      - `stream_downloader`  → P7.T17 / #1 (user-authorized): the
+//                               net-new **parallel streaming downloader**
+//                               that REPLACES BIO's serial download
+//                               sub-phase (real per-mod byte progress;
+//                               bounded pool). Writes the byte-identical
+//                               deterministic archive path, sets the EXACT
+//                               `state.step2` shapes, triggers BIO's
+//                               unchanged extract. Reuses `ureq` +
+//                               `archive_file_name` / `start_step2_
+//                               update_extract` (`pub(crate)`) read-only.
+//                               Zero BIO edit. SPEC §4.3 / §13.12a.
 // ── Run 4b (P7.T10) submodule — the Reinstall route (SPEC §3.1). Per the
 //    per-run module-registration discipline, declared in the run that
 //    implements it:
@@ -117,3 +128,4 @@ pub mod rail_lock_reason;
 pub mod registry_transition;
 pub mod reinstall_route;
 pub mod start_hooks;
+pub mod stream_downloader;

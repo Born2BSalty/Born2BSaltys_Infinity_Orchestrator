@@ -27,26 +27,48 @@
 // does. No new channel infrastructure, no re-architecture.
 //
 // **Arming = BIO's own `start_modlist_auto_build` recipe, minus the
-// install flip.** BIO's `src/ui/step1/page_step1.rs::start_modlist_auto_
-// build` (the canonical reference) sets: `modlist_auto_build_active =
-// true`, `current_step = 1`, the BGEE/BG2EE active tab from the imported
-// game, `pending_saved_log_apply` + `pending_saved_log_update_preview` +
-// `pending_saved_log_download` = `true`, and the status text. It does
-// **not** set `start_install_requested` — the pipeline's own
-// `start_auto_build_install` does that only after download/extract/scan.
-// Mirroring it exactly (not pre-flipping `start_install_requested`) is
-// what makes the install start *after* the archives are staged, not
-// before (verified: `app_step5_flow::start_if_requested` gates only on
-// `start_install_requested && !prep_running` — a premature flip would
-// install an empty per-install Mods folder).
+// install flip AND minus the download flag (#1 — the user-authorized
+// parallel streaming downloader owns the download sub-phase).** BIO's
+// `src/ui/step1/page_step1.rs::start_modlist_auto_build` (the canonical
+// reference) sets: `modlist_auto_build_active = true`, `current_step =
+// 1`, the BGEE/BG2EE active tab from the imported game,
+// `pending_saved_log_apply` + `pending_saved_log_update_preview` +
+// `pending_saved_log_download` = `true`, and the status text. The
+// orchestrator mirrors it **with two deliberate omissions**:
+//
+//   1. it does **not** set `start_install_requested` — the pipeline's own
+//      `start_auto_build_install` does that only after
+//      download/extract/scan (a premature flip would make
+//      `app_step5_flow::start_if_requested` install an empty per-install
+//      Mods folder); and
+//   2. **it does NOT set `pending_saved_log_download`** (#1, user-approved
+//      — NOT a BIO edit, NOT a SPEC CONFLICT). That flag is the SOLE
+//      trigger for BIO's *serial* `app_step2_update_download` worker
+//      (`app_step2_saved_log_flow.rs:86-110`). Leaving it `false` means
+//      BIO's serial download never fires — no double-download. The
+//      orchestrator's net-new parallel streaming downloader
+//      (`install_runtime::stream_downloader`) owns the download sub-phase
+//      instead: `stage_downloading::render_live` watches the SAME gate
+//      BIO's block uses ([`download_gate_open`]), sets the EXACT pub
+//      field BIO's block sets at that point
+//      (`modlist_auto_build_waiting_for_install = true` —
+//      `app_step2_saved_log_flow.rs:103`), spawns the parallel pool, and
+//      on completion writes the BIO-shaped result vectors + triggers
+//      BIO's **unchanged** `start_step2_update_extract`. BIO's unchanged
+//      extract → rescan → `start_auto_build_install` block
+//      (`app_step2_saved_log_flow.rs:112-129`, gated on
+//      `modlist_auto_build_waiting_for_install`) then carries the
+//      pipeline to the install hand-off exactly as it does for the serial
+//      path — only the download *mechanism* changed.
 //
 // **The content-addressed staging layer** (`archive_store`) interposes at
-// the download/extract boundary purely on the orchestrator side — see
-// `live_progress::tick_pipeline`, which calls `archive_store::
-// stage_known_archives` before BIO's download fires and `ingest_
-// downloaded_archives` after it lands. This module's job is the import +
-// arm; `live_progress` owns the per-frame boundary interposition + the
-// §4.3 screen feed.
+// the download/extract boundary purely on the orchestrator side —
+// `stage_downloading::render_live` calls `archive_store::
+// stage_known_archives` before the parallel pool is kicked (already-stored
+// assets are dropped from `update_selected_update_assets` so they are not
+// re-downloaded) and `ingest_downloaded_archives` after it lands.
+// `render_live` owns the per-frame boundary interposition + the §4.3
+// screen feed; this module's job is the import + arm + the gate predicate.
 //
 // **Per-install dirs are derived here too** (the trigger point per plan
 // P7.T3 step 2b / the `start_hooks` P7.T17 placeholder): a fresh
@@ -237,7 +259,16 @@ pub fn arm_download_archive_policy(state: &mut WizardState, mods_archive_folder:
 /// (`page_step1.rs:250-265`) **minus** `start_install_requested` (the
 /// pipeline's `app_step2_saved_log_flow::start_auto_build_install` flips
 /// that itself after download/extract/scan — pre-flipping it would make
-/// `app_step5_flow::start_if_requested` install an empty Mods folder).
+/// `app_step5_flow::start_if_requested` install an empty Mods folder)
+/// **and minus `pending_saved_log_download`** (#1, user-approved): that
+/// flag is the SOLE trigger for BIO's *serial* `app_step2_update_download`
+/// worker (`app_step2_saved_log_flow.rs:86-110`); leaving it `false`
+/// prevents BIO's serial download from firing so the orchestrator's
+/// net-new **parallel streaming downloader**
+/// (`install_runtime::stream_downloader`) can own the download sub-phase
+/// (no double-download). NOT a BIO edit — every field touched here is a
+/// pre-existing `pub` `WizardState`/`Step2State` field; this only changes
+/// *which* of them the orchestrator sets at arm time.
 ///
 /// The active game tab is derived from the (post-import) `step1.
 /// game_install` exactly as BIO does (BGEE ⇒ "BGEE"; everything else ⇒
@@ -245,9 +276,18 @@ pub fn arm_download_archive_policy(state: &mut WizardState, mods_archive_folder:
 /// model, matching `page_step1.rs:254-258`). After this, the
 /// orchestrator's existing per-frame `poll_step2_channels`
 /// (`advance_pending_saved_log_flow`) runs scan → apply-log →
-/// update-preview → download → extract → rescan → `start_auto_build_
-/// install`, and `start_step5_after_render` then kicks the install —
-/// identical to BIO's Step-1 import path.
+/// update-preview (resolving `update_selected_update_assets`); the BIO
+/// serial-download block (`:86-110`) is **skipped** because
+/// `pending_saved_log_download` is `false`. `render_live` then detects the
+/// open gate ([`download_gate_open`]), sets
+/// `modlist_auto_build_waiting_for_install = true` (the SAME pub field
+/// BIO's own block sets at `:103`), and runs the parallel pool; on
+/// completion the BIO-shaped vectors + `start_step2_update_extract` are
+/// applied, and BIO's unchanged extract → rescan → `start_auto_build_
+/// install` block (`:112-129`, gated on
+/// `modlist_auto_build_waiting_for_install`) reaches the install
+/// hand-off — identical to BIO's Step-1 import path, only the download
+/// *mechanism* changed.
 fn arm_auto_build(state: &mut WizardState) {
     state.modlist_auto_build_active = true;
     state.modlist_auto_build_waiting_for_install = false;
@@ -259,7 +299,15 @@ fn arm_auto_build(state: &mut WizardState) {
     };
     state.step2.pending_saved_log_apply = true;
     state.step2.pending_saved_log_update_preview = true;
-    state.step2.pending_saved_log_download = true;
+    // #1 (user-approved) — DO NOT set `pending_saved_log_download`. It is
+    // the SOLE trigger for BIO's serial `start_step2_update_download`
+    // (`app_step2_saved_log_flow.rs:86-110`); leaving it `false` means
+    // BIO's serial worker never fires (no double-download). The
+    // orchestrator's parallel `stream_downloader` owns the download
+    // sub-phase: `render_live` kicks it once the gate
+    // ([`download_gate_open`]) opens, after apply + update-preview have
+    // resolved the asset set.
+    //
     // BIO opens the update-selected popup here so its progress is visible
     // in the legacy wizard. The redesign renders the §4.3 Downloading
     // screen instead, so DO NOT open BIO's popup (it would float over the
@@ -271,6 +319,38 @@ fn arm_auto_build(state: &mut WizardState) {
     // pipeline's own post-state anyway.
     state.step2.scan_status = "Auto Build: preparing imported modlist".to_string();
     state.step5.last_status_text = "Auto Build: preparing imported modlist".to_string();
+}
+
+/// **The orchestrator-side download gate (#1).** `true` when BIO's
+/// apply + update-preview steps have completed and nothing in the
+/// download/extract/check pipeline is in flight — i.e. exactly the moment
+/// BIO's own serial-download block would have fired
+/// (`app_step2_saved_log_flow.rs:86-92`), **minus** the
+/// `pending_saved_log_download` term (the orchestrator no longer arms
+/// it). When this opens during an armed auto-build, `render_live` sets
+/// `modlist_auto_build_waiting_for_install = true` (the SAME pub field
+/// BIO's block sets at `:103`) and:
+///   - if `update_selected_update_assets` is non-empty → kicks the
+///     parallel `stream_downloader` pool;
+///   - if it is empty → does nothing else (BIO's unchanged
+///     `:112-129` install-handoff block then fires `start_auto_build_
+///     install` directly, since `modlist_auto_build_waiting_for_install`
+///     is now set — the same effect as BIO's serial "no assets ⇒ straight
+///     to install" early-out, just routed through the existing handoff
+///     block instead of the now-disarmed download block).
+///
+/// Mirrors BIO's guard terms verbatim so the orchestrator kicks the
+/// parallel pool at precisely the instant BIO would have started its
+/// serial one — no behavior shift beyond the download mechanism.
+#[must_use]
+pub fn download_gate_open(state: &WizardState) -> bool {
+    state.modlist_auto_build_active
+        && !state.step2.pending_saved_log_apply
+        && !state.step2.pending_saved_log_update_preview
+        && !state.step2.update_selected_check_running
+        && !state.step2.update_selected_download_running
+        && !state.step2.update_selected_extract_running
+        && !state.step2.is_scanning
 }
 
 /// `true` once BIO's auto-build pipeline has finished and handed off to
@@ -377,9 +457,14 @@ mod tests {
     }
 
     #[test]
-    fn arm_auto_build_matches_bio_recipe_minus_install_flip() {
-        // The exact BIO `start_modlist_auto_build` field set
-        // (`page_step1.rs:250-265`) MINUS `start_install_requested`.
+    fn arm_auto_build_matches_bio_recipe_minus_install_flip_and_download_flag() {
+        // The BIO `start_modlist_auto_build` field set
+        // (`page_step1.rs:250-265`) MINUS `start_install_requested` AND
+        // MINUS `pending_saved_log_download` (#1, user-approved): the
+        // latter is the SOLE trigger for BIO's serial download
+        // (`app_step2_saved_log_flow.rs:86-110`); leaving it false means
+        // the orchestrator's parallel `stream_downloader` owns the
+        // download sub-phase (no double-download).
         let mut st = WizardState::default();
         st.step1.game_install = "EET".to_string();
         arm_auto_build(&mut st);
@@ -392,7 +477,12 @@ mod tests {
         ); // EET ⇒ BG2EE
         assert!(st.step2.pending_saved_log_apply);
         assert!(st.step2.pending_saved_log_update_preview);
-        assert!(st.step2.pending_saved_log_download);
+        assert!(
+            !st.step2.pending_saved_log_download,
+            "#1 — pending_saved_log_download is NOT armed so BIO's serial \
+             download never fires (the orchestrator's parallel \
+             stream_downloader owns it — no double-download)"
+        );
         assert!(
             !st.step5.start_install_requested,
             "arm must NOT pre-flip start_install_requested — the pipeline's \
@@ -405,6 +495,45 @@ mod tests {
         b.step1.game_install = "BGEE".to_string();
         arm_auto_build(&mut b);
         assert_eq!(b.step2.active_game_tab, "BGEE");
+    }
+
+    #[test]
+    fn download_gate_opens_only_after_apply_and_preview_done() {
+        // #1 — the orchestrator-side gate must mirror BIO's serial-block
+        // guard terms (`app_step2_saved_log_flow.rs:86-92`) MINUS the
+        // disarmed `pending_saved_log_download` term, so the parallel pool
+        // is kicked at precisely the instant BIO would have started its
+        // serial one.
+        let mut st = WizardState::default();
+        // Not armed at all ⇒ closed.
+        assert!(!download_gate_open(&st));
+
+        arm_auto_build(&mut st);
+        // Armed but apply + preview still pending ⇒ closed (BIO's serial
+        // block also waits for these to clear).
+        assert!(
+            !download_gate_open(&st),
+            "gate must stay closed while apply/update-preview are pending"
+        );
+
+        // Apply + preview completed (the flow clears these), nothing in
+        // flight ⇒ the gate opens (exactly BIO's serial-block fire point).
+        st.step2.pending_saved_log_apply = false;
+        st.step2.pending_saved_log_update_preview = false;
+        assert!(
+            download_gate_open(&st),
+            "gate opens once apply+preview are done and nothing is running"
+        );
+
+        // Anything in flight re-closes it (no double-kick / no race).
+        st.step2.update_selected_download_running = true;
+        assert!(!download_gate_open(&st));
+        st.step2.update_selected_download_running = false;
+        st.step2.is_scanning = true;
+        assert!(!download_gate_open(&st));
+        st.step2.is_scanning = false;
+        st.step2.update_selected_check_running = true;
+        assert!(!download_gate_open(&st));
     }
 
     #[test]

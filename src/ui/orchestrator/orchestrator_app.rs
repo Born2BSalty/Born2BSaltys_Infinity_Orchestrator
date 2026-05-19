@@ -362,6 +362,21 @@ pub struct OrchestratorApp {
     /// `#[allow(dead_code)]`; Run 1b wires the poll so it is now read.)
     pub(crate) step2_update_extract_rx:
         Option<Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>>,
+    /// ⑦ **#1 (P7.T17 / SPEC §4.3) — the orchestrator's net-new parallel
+    /// streaming-download channel.** Mirrors `step2_update_download_rx`
+    /// (⑤), but for the orchestrator-owned `install_runtime::
+    /// stream_downloader` that REPLACES BIO's serial download sub-phase.
+    /// `arm_auto_build` no longer arms BIO's `pending_saved_log_download`,
+    /// so BIO's serial worker never fires and ⑤ stays `None` on the
+    /// Install pipeline; this channel carries the parallel pool's per-mod
+    /// byte progress + the final BIO-shaped result vectors. Drained every
+    /// frame by `poll_step2_channels` (after the BIO Step-2 callees): on
+    /// `Finished` the orchestrator writes the vectors onto `state.step2`
+    /// and calls BIO's unchanged `start_step2_update_extract`
+    /// (`stream_downloader::apply_finished`). Net-new orchestrator
+    /// infrastructure — no BIO edit.
+    pub(crate) stream_download_rx:
+        Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
 }
 
 impl OrchestratorApp {
@@ -520,6 +535,10 @@ impl OrchestratorApp {
             step2_update_check_rx: None,
             step2_update_download_rx: None,
             step2_update_extract_rx: None,
+            // #1 — the parallel streaming-download channel is armed by
+            // `stage_downloading::render_live` when the download gate
+            // opens; `None` until then.
+            stream_download_rx: None,
         };
 
         // NOTE: do NOT call `oauth_glue::load_persisted_login` here.
@@ -823,6 +842,25 @@ impl OrchestratorApp {
             &mut self.step2_cancel,
             &mut self.step2_progress_queue,
         );
+        // #1 — drain the orchestrator's net-new parallel streaming
+        // downloader (replaces BIO's serial download sub-phase). Mirrors
+        // BIO's own `poll_step2_update_download` (⑤) discipline: per-mod
+        // byte deltas update the live grid's `Option<(bytes, total)>`;
+        // on `Finished`, write the BIO-shaped vectors onto `state.step2`
+        // + call BIO's UNCHANGED `start_step2_update_extract` (exactly
+        // what BIO's serial poller does at `app_step2_update_download.rs:
+        // 102`). Drained AFTER the BIO Step-2 callees so the extract this
+        // triggers is picked up by the next frame's
+        // `poll_step2_update_extract` — identical timing to BIO's serial
+        // path (BIO's poller likewise calls `start_step2_update_extract`
+        // and the extract poller catches it the following frame).
+        Self::drain_stream_download(
+            &mut self.wizard_state,
+            &mut self.stream_download_rx,
+            &mut self.step2_update_extract_rx,
+            &mut self.install_screen_state.download_progress,
+        );
+
         app_step2_saved_log_flow::advance_pending_saved_log_flow(
             &mut self.wizard_state,
             &mut self.step2_scan_rx,
@@ -831,6 +869,85 @@ impl OrchestratorApp {
             &mut self.step2_update_check_rx,
             &mut self.step2_update_download_rx,
         );
+    }
+
+    /// **#1 — drain the parallel streaming-download channel
+    /// (`stream_download_rx`).** The orchestrator-owned mirror of BIO's
+    /// `bio::app::app_step2_update_download::poll_step2_update_download`
+    /// (⑤): pump per-mod byte deltas into the §4.3 grid's
+    /// `per_byte` map and, on `Finished`, apply the BIO-shaped result
+    /// vectors + trigger BIO's UNCHANGED extract
+    /// (`stream_downloader::apply_finished` — which itself calls
+    /// `app_step2_update_extract::start_step2_update_extract`, the SAME
+    /// `pub(crate)` entry BIO's serial poller calls). Disconnected /
+    /// drained channels reset cleanly. Associated fn (not `&mut self`) so
+    /// the borrow checker permits the simultaneous `&mut wizard_state` +
+    /// `&mut install_screen_state.download_progress` split-borrow at the
+    /// call site.
+    fn drain_stream_download(
+        wizard_state: &mut WizardState,
+        stream_download_rx: &mut Option<
+            Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>,
+        >,
+        step2_update_extract_rx: &mut Option<
+            Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>,
+        >,
+        progress: &mut crate::ui::install::stage_downloading::DownloadProgress,
+    ) {
+        use crate::install_runtime::stream_downloader::{StreamDownloadEvent, apply_finished};
+        use std::sync::mpsc::TryRecvError;
+
+        let Some(rx) = stream_download_rx.as_ref() else {
+            return;
+        };
+        // Drain everything available this frame (the parallel pool emits a
+        // burst of byte deltas — process them all so the bar tracks live,
+        // not one event/frame). Stop on `Finished` (terminal) / empty /
+        // disconnect.
+        loop {
+            match rx.try_recv() {
+                Ok(StreamDownloadEvent::AssetProgress {
+                    index,
+                    bytes,
+                    total,
+                }) => {
+                    progress.set_asset_bytes(index, bytes, total);
+                }
+                Ok(StreamDownloadEvent::AssetDone {
+                    index,
+                    final_bytes,
+                    total,
+                    ..
+                }) => {
+                    // Pin the row's byte readout to its terminal value so
+                    // a successful row reads its full size (the
+                    // status-vector reclassification to Extracting/Staged
+                    // is what visually advances it; this just keeps the
+                    // byte figure honest).
+                    progress.set_asset_bytes(index, final_bytes, total);
+                }
+                Ok(StreamDownloadEvent::Finished(result)) => {
+                    *stream_download_rx = None;
+                    // EXACTLY BIO's `poll_step2_update_download` tail:
+                    // vectors onto state.step2 + BIO's unchanged
+                    // `start_step2_update_extract`.
+                    apply_finished(wizard_state, result, step2_update_extract_rx);
+                    return;
+                }
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => {
+                    // The coordinator dropped the sender without a
+                    // `Finished` (panic / abort). Clear the running flag so
+                    // the pipeline is not wedged; the auto-build blocker
+                    // (unchanged BIO) then stops it on the next tick.
+                    *stream_download_rx = None;
+                    wizard_state.step2.update_selected_download_running = false;
+                    wizard_state.step2.scan_status =
+                        "Download updates failed: worker disconnected".to_string();
+                    return;
+                }
+            }
+        }
     }
 
     /// **P7.T1 — drive the Step-5 install runtime, pre-render portion.**
@@ -911,6 +1028,11 @@ impl OrchestratorApp {
             || self.step2_update_check_rx.is_some()
             || self.step2_update_download_rx.is_some()
             || self.step2_update_extract_rx.is_some()
+            // #1 — the parallel streaming downloader reports byte deltas
+            // off-thread; without an explicit repaint while its channel is
+            // live, egui would paint lazily and the per-mod bars would
+            // appear frozen until the next user input.
+            || self.stream_download_rx.is_some()
             || !self.step2_progress_queue.is_empty()
     }
 
