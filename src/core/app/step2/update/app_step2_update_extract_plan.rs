@@ -9,22 +9,22 @@ use crate::app::mod_downloads;
 use crate::app::state::{Step2UpdateAsset, WizardState};
 
 #[derive(Debug, Clone)]
-pub(super) struct Step2UpdateExtractJob {
-    pub(super) label: String,
-    pub(super) tp_file: String,
-    pub(super) aliases: Vec<String>,
-    pub(super) tp2_rename: Option<mod_downloads::ModDownloadTp2Rename>,
-    pub(super) subdir_require: Option<String>,
-    pub(super) archive_path: PathBuf,
-    pub(super) mods_root: PathBuf,
-    pub(super) backup_root: PathBuf,
-    pub(super) target_root: Option<PathBuf>,
-    pub(super) backup_version_tag: String,
-    pub(super) installed_source_ref: Option<String>,
-    pub(super) installed_source_id: Option<String>,
+pub(crate) struct Step2UpdateExtractJob {
+    pub(crate) label: String,
+    pub(crate) tp_file: String,
+    pub(crate) aliases: Vec<String>,
+    pub(crate) tp2_rename: Option<mod_downloads::ModDownloadTp2Rename>,
+    pub(crate) subdir_require: Option<String>,
+    pub(crate) archive_path: PathBuf,
+    pub(crate) mods_root: PathBuf,
+    pub(crate) backup_root: PathBuf,
+    pub(crate) target_root: Option<PathBuf>,
+    pub(crate) backup_version_tag: String,
+    pub(crate) installed_source_ref: Option<String>,
+    pub(crate) installed_source_id: Option<String>,
 }
 
-pub(super) fn build_extract_jobs(
+pub(crate) fn build_extract_jobs(
     state: &mut WizardState,
     archive_dir: &Path,
 ) -> Vec<Step2UpdateExtractJob> {

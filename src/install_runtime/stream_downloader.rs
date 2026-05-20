@@ -14,7 +14,7 @@ use std::time::Duration;
 use crate::app::app_step2_update_download::archive_file_name;
 use crate::app::state::{Step2UpdateAsset, WizardState};
 
-pub const POOL_SIZE: usize = 4;
+pub const POOL_SIZE: usize = 10;
 
 const READ_CHUNK: usize = 64 * 1024;
 const READ_TIMEOUT_SECS: u64 = 120;

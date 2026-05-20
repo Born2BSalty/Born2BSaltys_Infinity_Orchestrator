@@ -2,10 +2,10 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod archive_skip;
+pub mod archive_skip_async;
 pub mod archive_store;
 pub mod auto_build_driver;
-
-pub mod extract_intercept;
+pub mod extract_parallel;
 pub mod flag_policies;
 pub mod import_code_writer;
 pub mod install_concurrency;

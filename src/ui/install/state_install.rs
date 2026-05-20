@@ -199,6 +199,8 @@ pub struct InstallScreenState {
     pub skipped_mods: Vec<SkippedMod>,
     pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
     pub skip_indices: std::collections::HashSet<usize>,
+    pub download_phase_started: bool,
+    pub archive_skip_completed: bool,
 }
 
 impl InstallScreenState {
@@ -220,6 +222,8 @@ impl InstallScreenState {
         self.skipped_mods = Vec::new();
         self.expected_archive_sizes = std::collections::BTreeMap::new();
         self.skip_indices = std::collections::HashSet::new();
+        self.download_phase_started = false;
+        self.archive_skip_completed = false;
     }
 }
 
@@ -298,20 +302,16 @@ mod tests {
 
     #[test]
     fn clear_preview_resets_preview_state() {
-        let mut st = InstallScreenState {
-            preview_cached: true,
-            fork_info_open: true,
-            preview_parse_error: Some("boom".to_string()),
-            pipeline_arm_error: Some("arm boom".to_string()),
-            pipeline_flags: {
-                let mut flags = InstallPipelineFlags::default();
-                flags.set_armed(true);
-                flags.set_archives_staged(true);
-                flags.set_archives_ingested(true);
-                flags
-            },
-            ..InstallScreenState::default()
-        };
+        let mut st = InstallScreenState::default();
+        st.preview_cached = true;
+        st.fork_info_open = true;
+        st.preview_parse_error = Some("boom".to_string());
+        st.pipeline_armed = true;
+        st.pipeline_arm_error = Some("arm boom".to_string());
+        st.archives_staged = true;
+        st.archives_ingested = true;
+        st.download_phase_started = true;
+        st.archive_skip_completed = true;
         st.clear_preview();
         assert!(st.parsed_preview.is_none());
         assert!(st.preview_parse_error.is_none());
@@ -322,6 +322,14 @@ mod tests {
         assert!(
             !st.pipeline_flags.archives_staged() && !st.pipeline_flags.archives_ingested(),
             "D1: a re-entry must re-stage/re-ingest from scratch"
+        );
+        assert!(
+            !st.download_phase_started,
+            "Fix 1e: a re-entry must re-kick the streamer"
+        );
+        assert!(
+            !st.archive_skip_completed,
+            "v3 Change B: a re-entry must re-run the async skip pass"
         );
     }
 }

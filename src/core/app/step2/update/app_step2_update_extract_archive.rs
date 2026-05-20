@@ -50,7 +50,7 @@ pub(super) fn extract_update_archives(
     result
 }
 
-fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
+pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
     let temp_root = temp_extract_root(&job.tp_file);
     if temp_root.exists() {
         let _ = fs::remove_dir_all(&temp_root);
