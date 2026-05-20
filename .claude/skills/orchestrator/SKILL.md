@@ -14,7 +14,7 @@ description: >-
 
 You are the **orchestrator** for the Infinity Orchestrator redesign: you slice phases into runs, dispatch the `plan-implementer` agent per run, **independently verify** its work, and commit/push. You do not take on substantial work yourself — substantial work is dispatched to a scoped `plan-implementer` run (the substantial-vs-quick test is below); only quick, already-in-context fixes are done inline.
 
-> Two docs are NOT this skill. `.claude/orchestrator-handoff.md` = the **perishable live thread** (where the work currently is — read it right after this skill). `infinity_orchestrator/HANDOFF.md` = project/impl state. This skill = the timeless **how**; the handoff = the current **where**.
+> Two docs are NOT this skill. `.claude/orchestrator-handoff.md` = a **session-edge orchestrator-to-orchestrator handoff** (NOT user-facing). **Read it ONCE at session start** (right after this skill); **write to it ONCE at session end** and ONLY when the user explicitly signals end-of-session ("we're done", "save state", "handoff time", or equivalent). Between read-at-start and write-at-end, do NOT touch it — per-run / per-event state lives in conversation context + commit messages, never in this file. `infinity_orchestrator/HANDOFF.md` = project/impl state. This skill = the timeless **how**; the handoff = the next-session **read-once checkpoint**.
 
 ## The four framing principles (role doctrine)
 
@@ -33,8 +33,8 @@ You are the **orchestrator** for the Infinity Orchestrator redesign: you slice p
 1. `.claude/spec-authority.md` — doctrine + Current-project block. The CRITICAL DIRECTIVE (`infinity_orchestrator/SPEC.md` §1, six carve-outs) governs everything: only those six edits to existing BIO source are allowed; everything else is net-new.
 2. `.claude/agents/plan-implementer.md` — the implementation agent's contract.
 3. Auto-memories (loaded via `MEMORY.md`, but internalize): **no `Co-Authored-By: Claude`** ever (attribute solely `Xgatt <xgatt86@gmail.com>`); **auto-rebuild** after edits; **keep SPEC/plan/HANDOFF in sync** when behavior changes; **affordance-forward empty states** (instructional copy over terse "(not set)"); **scoped `cargo fmt` before every commit** — rustfmt only the staged redesign `.rs` files, NEVER blanket `cargo fmt`/`cargo clippy --fix` (those rewrite protected BIO source = directive violation); **full spec/plan knowledge — never assume** (verify the actual docs before stating/escalating/cascading; sweep the *whole* plan on spec changes; premise-check agent escalations against prior-phase deliverables); **communicate plainly** — the **Option-B format** is a skill principle above (doctrine, no longer a memory); **discuss-then-own** the cadence. All auto-memory files (`feedback_*`) are the operative agent/orchestrator directive set — internalize them.
-4. The active phase work order — the current pointer is in `.claude/orchestrator-handoff.md` (live thread), then `infinity_orchestrator/plan/phase-0N-*.md`.
-5. `.claude/orchestrator-handoff.md` — the live thread: where the work is right now, current state, run status, the current test seed.
+4. The active phase work order — the current pointer is in `.claude/orchestrator-handoff.md` (session-edge handoff — see item 5), then `infinity_orchestrator/plan/phase-0N-*.md`.
+5. `.claude/orchestrator-handoff.md` — the **session-edge handoff** (orchestrator-to-orchestrator only; NOT user-facing): where the previous session left off — branch/HEAD/push state, active arc / fix-set state, next pending or in-flight action, decision points held for the user, current DATA-LOSS sentinel reference, the current test seed, session-specific user directives that landed last session. **Read ONCE here at session start; do NOT update it during the session** — per-run state lives in conversation context + commit messages. **Write to it ONCE at session end, and ONLY when the user explicitly signals end-of-session** — one consolidated checkpoint that the next orchestrator reads at start. The user does not read this file.
 
 ## How to run a run (the loop that works)
 
@@ -68,7 +68,7 @@ Non-empty ⇒ ABORT (CRITICAL DIRECTIVE). `infinity_orchestrator/` is excluded o
 
 - **Re-prep mechanism (the `-d` "Seed test modlist" button is GONE — stale doc trap):** `dev_seed::seed_demo_entry` is wired *only* in `orchestrator/stubs/home_stub.rs`, which **Phase 5 P5.T15 replaced** with the real `page_home.rs` — so `infinity_orchestrator -d` no longer surfaces a Seed button. Re-prep by driving `bio::registry::dev_seed::seed_demo_entry` through a throwaway `src/bin/*.rs` (`RegistryStore::new_default()` + `WorkspaceStore::new_for_id`; load-then-append preserves existing entries; delete the bin after) — this uses the app's own serializer so the schema is exact. Hand-editing `modlists.json` is drift-prone: verified reprs are `state:"in_progress"|"installed"` (snake/lower), `game:"BGEE"|"BG2EE"|"IWDEE"|"EET"`, RFC3339 dates, `format_version:1`. App MUST be closed first (exit-flush clobbers writes).
 - Runtime config dir: `%APPDATA%\bio\`. App must be closed before linking and before swapping `modlists.json` (it loads on launch, flushes on exit).
-- The **current** seed contents (which entries, which IDs) are live state — see `.claude/orchestrator-handoff.md`.
+- The **current** seed contents (which entries, which IDs) are session-edge state — captured in `.claude/orchestrator-handoff.md` at session end; re-read it at session start, do not modify mid-session.
 
 ## User working style (observed)
 
