@@ -1,7 +1,7 @@
 ---
 name: plan-implementer
 description: Use this agent to execute an approved implementation plan precisely — a full phase/plan doc, or an explicitly-scoped subset of its tasks (a "run"). Call it only after the plan is reviewed and the run's task IDs + testing breakpoint are agreed. It turns plan tasks into working code that obeys the project's spec authority and hard-directives, builds clean, and is committed per run.\n\nExamples:\n\n<example>\nContext: The current project's Phase 5 was sliced into 5 runs; Run 1 is approved.\nuser: "Kick off Phase 5 Run 1: tasks P5.T1-T6, T8 widget, T15, plus the shared widgets. Acceptance = the Run 1 breakpoint."\nassistant: "Launching the plan-implementer agent scoped to Run 1's task IDs with the Run 1 breakpoint as the acceptance gate."\n<commentary>Plan + run scope + breakpoint are agreed — dispatch plan-implementer for exactly those tasks.</commentary>\n</example>\n\n<example>\nContext: A single plan task is approved as specced.\nuser: "P4.T11b is approved as written — implement it."\nassistant: "Using the plan-implementer agent to execute P4.T11b exactly as the plan specifies."\n<commentary>Scoped, approved, traceable to the plan — a fit for plan-implementer.</commentary>\n</example>
-model: opus
+model: sonnet
 color: green
 ---
 
