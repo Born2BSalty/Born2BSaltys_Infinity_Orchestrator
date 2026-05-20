@@ -1,30 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `WorkspaceStore` — load/save for per-modlist
-// `<config_dir>/modlists/<id>/workspace.json` files.
-//
-// Per Phase 3 P3.T3:
-//   - `new_for_id(id)`           → resolves the per-modlist path inside the
-//                                  platform config dir.
-//   - `load()`                   → returns `Err(Corrupt)` for unparseable
-//                                  files **and** for missing files. The
-//                                  registry is the source of truth for
-//                                  "this modlist exists"; if the registry
-//                                  has an entry but `workspace.json` is gone,
-//                                  the workspace is unusable per SPEC §13.14
-//                                  (terminal-error policy). Returns `Err(Io)`
-//                                  for permission / disk failures.
-//   - `save(&state)`             → atomic via temp file + rename; creates the
-//                                  `modlists/<id>/` parent dir on first write.
-//                                  `dev_seed` and any other "first write"
-//                                  caller goes directly through `save`,
-//                                  never `load`.
-//
-// SPEC: §13.1, §13.14.
-
-// rationale: `#[must_use]` on trivial path/ctor accessors is churn (Cat 3).
-#![allow(clippy::must_use_candidate)]
 
 use std::path::{Path, PathBuf};
 
@@ -32,24 +7,10 @@ use crate::platform_defaults::app_config_dir;
 use crate::registry::errors::RegistryError;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 
-/// Per-modlist directory name inside the platform config dir.
 const MODLISTS_DIR: &str = "modlists";
-/// Per-modlist file name.
+
 const WORKSPACE_FILE_NAME: &str = "workspace.json";
 
-/// The canonical **per-modlist appdata directory** —
-/// `<app_config_dir>/modlists/<id>/` (on Windows
-/// `%APPDATA%\bio\modlists\<id>\`; `%APPDATA%` already includes `Roaming`).
-/// Falls back to the current working directory if the platform config dir
-/// is unavailable (identical fallback to [`WorkspaceStore::new_for_id`],
-/// which is now built on this so the two cannot diverge).
-///
-/// This is the **single source of truth** for the per-modlist data root
-/// (the parent directory of `workspace.json` — [`WorkspaceStore::new_for_id`]
-/// joins `workspace.json` onto exactly this, and is built on this resolver so
-/// the two cannot diverge). Any future per-modlist appdata artifact resolves
-/// through this same function (never a hand-joined `%APPDATA%`) so it is
-/// guaranteed to sit beside the modlist's `workspace.json`.
 #[must_use]
 pub fn modlist_data_dir(modlist_id: &str) -> PathBuf {
     app_config_dir()
@@ -64,30 +25,21 @@ pub struct WorkspaceStore {
 }
 
 impl WorkspaceStore {
-    /// Resolve the workspace file path for a given modlist id.
-    ///
-    /// Layout: `<app_config_dir>/modlists/<id>/workspace.json`. Falls back to
-    /// the current working directory if the platform config dir is unavailable.
+    #[must_use]
     pub fn new_for_id(modlist_id: &str) -> Self {
         let path = modlist_data_dir(modlist_id).join(WORKSPACE_FILE_NAME);
         Self { path }
     }
 
-    /// Override path (used by `dev_seed` tests + custom-rooted callers).
     pub fn new_with_path(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
 
-    /// On-disk file path for diagnostics + the terminal error UI.
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Load the workspace state.
-    ///
-    /// - Missing file → `Err(Corrupt)` (per SPEC §13.14 terminal-error policy).
-    /// - Present-but-unreadable → `Err(Corrupt)`.
-    /// - IO failure → `Err(Io)`.
     pub fn load(&self) -> Result<ModlistWorkspaceState, RegistryError> {
         let raw = match std::fs::read_to_string(&self.path) {
             Ok(s) => s,
@@ -108,12 +60,13 @@ impl WorkspaceStore {
         }
     }
 
-    /// Persist the workspace state atomically via temp file + rename.
     pub fn save(&self, state: &ModlistWorkspaceState) -> Result<(), RegistryError> {
         let raw = serde_json::to_string_pretty(state)?;
 
-        if let Some(parent) = self.path.parent()
-            && !parent.as_os_str().is_empty()
+        if let Some(parent) = self
+            .path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
         {
             std::fs::create_dir_all(parent).map_err(RegistryError::Io)?;
         }

@@ -10,7 +10,6 @@ fn short_sha(value: &str) -> &str {
     let end = trimmed
         .char_indices()
         .nth(12)
-        .map(|(idx, _)| idx)
-        .unwrap_or(trimmed.len());
+        .map_or(trimmed.len(), |(idx, _)| idx);
     &trimmed[..end]
 }

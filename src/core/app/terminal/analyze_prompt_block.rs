@@ -5,8 +5,30 @@ use super::model::{PromptInfo, PromptKind};
 use super::prompt_detect::is_prompt_line;
 use super::utils::{fnv1a64, normalize_prompt_key, recent_lines, strip_log_prefix};
 
-pub(crate) fn current_prompt_info(output: &str) -> Option<PromptInfo> {
+pub(in crate::app::terminal) fn current_prompt_info(output: &str) -> Option<PromptInfo> {
     let lines = recent_lines(output, 1200);
+    let (anchor_idx, legacy_key) = find_prompt_anchor(&lines);
+    let Some(anchor_idx) = anchor_idx else {
+        return legacy_prompt_info(legacy_key);
+    };
+    let start = prompt_block_start(&lines, anchor_idx);
+    let end = prompt_block_end(&lines, anchor_idx);
+    let Some(summary) = summarize_prompt_block(&lines[start..=end]) else {
+        return legacy_prompt_info(legacy_key);
+    };
+    let block = summary.normalized_lines.join("\n");
+    Some(PromptInfo {
+        key: format!("BLOCK:{:016X}", fnv1a64(&block)),
+        legacy_key,
+        preview_line: summary.preview_line,
+        kind: classify_prompt_kind(&summary.raw_lines, summary.option_count),
+        option_count: summary.option_count,
+        line_count: summary.raw_lines.len(),
+        char_count: summary.raw_lines.iter().map(|l| l.chars().count()).sum(),
+    })
+}
+
+fn find_prompt_anchor(lines: &[&str]) -> (Option<usize>, Option<String>) {
     let mut anchor_idx: Option<usize> = None;
     let mut legacy_key: Option<String> = None;
     for (idx, line) in lines.iter().enumerate().rev() {
@@ -25,19 +47,23 @@ pub(crate) fn current_prompt_info(output: &str) -> Option<PromptInfo> {
             break;
         }
     }
+    (anchor_idx, legacy_key)
+}
 
-    let Some(anchor_idx) = anchor_idx else {
-        return legacy_key.map(|key| PromptInfo {
-            key,
-            legacy_key: None,
-            preview_line: String::new(),
-            kind: PromptKind::FreeText,
-            option_count: 0,
-            line_count: 0,
-            char_count: 0,
-        });
-    };
+fn legacy_prompt_info(key: Option<String>) -> Option<PromptInfo> {
+    let key = key?;
+    Some(PromptInfo {
+        key,
+        legacy_key: None,
+        preview_line: String::new(),
+        kind: PromptKind::FreeText,
+        option_count: 0,
+        line_count: 0,
+        char_count: 0,
+    })
+}
 
+fn prompt_block_start(lines: &[&str], anchor_idx: usize) -> usize {
     let mut start = anchor_idx;
     let mut blank_budget = 2usize;
     while start > 0 {
@@ -57,9 +83,12 @@ pub(crate) fn current_prompt_info(output: &str) -> Option<PromptInfo> {
         }
         break;
     }
+    start
+}
 
+fn prompt_block_end(lines: &[&str], anchor_idx: usize) -> usize {
     let mut end = anchor_idx;
-    blank_budget = 2;
+    let mut blank_budget = 2usize;
     while end + 1 < lines.len() {
         let next = strip_log_prefix(lines[end + 1]).trim();
         if next.is_empty() {
@@ -77,12 +106,22 @@ pub(crate) fn current_prompt_info(output: &str) -> Option<PromptInfo> {
         }
         break;
     }
+    end
+}
 
+struct PromptBlockSummary {
+    normalized_lines: Vec<String>,
+    raw_lines: Vec<String>,
+    preview_line: String,
+    option_count: usize,
+}
+
+fn summarize_prompt_block(lines: &[&str]) -> Option<PromptBlockSummary> {
     let mut normalized_lines = Vec::new();
     let mut option_count = 0usize;
     let mut preview_line = String::new();
     let mut raw_lines = Vec::new();
-    for line in &lines[start..=end] {
+    for line in lines {
         let stripped = strip_log_prefix(line).trim();
         if stripped.is_empty() {
             continue;
@@ -99,32 +138,16 @@ pub(crate) fn current_prompt_info(output: &str) -> Option<PromptInfo> {
             normalized_lines.push(norm);
         }
     }
-
     if normalized_lines.is_empty() {
-        return legacy_key.map(|key| PromptInfo {
-            key,
-            legacy_key: None,
-            preview_line: String::new(),
-            kind: PromptKind::FreeText,
-            option_count: 0,
-            line_count: 0,
-            char_count: 0,
-        });
+        None
+    } else {
+        Some(PromptBlockSummary {
+            normalized_lines,
+            raw_lines,
+            preview_line,
+            option_count,
+        })
     }
-
-    let block = normalized_lines.join("\n");
-    let kind = classify_prompt_kind(&raw_lines, option_count);
-    let line_count = raw_lines.len();
-    let char_count = raw_lines.iter().map(|l| l.chars().count()).sum();
-    Some(PromptInfo {
-        key: format!("BLOCK:{:016X}", fnv1a64(&block)),
-        legacy_key,
-        preview_line,
-        kind,
-        option_count,
-        line_count,
-        char_count,
-    })
 }
 
 fn classify_prompt_kind(raw_lines: &[String], option_count: usize) -> PromptKind {
@@ -207,5 +230,5 @@ fn is_numbered_option_line(line: &str) -> bool {
     if !saw_digit {
         return false;
     }
-    matches!(chars.next(), Some('.') | Some(')'))
+    matches!(chars.next(), Some('.' | ')'))
 }

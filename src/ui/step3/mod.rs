@@ -16,5 +16,5 @@ pub mod state_blocks_step3;
 pub mod state_drag_step3;
 pub mod state_step3;
 pub mod toolbar_support_step3;
-pub(crate) use state_step3::blocks;
-pub(crate) use state_step3::drag;
+pub(crate) use state_blocks_step3 as blocks;
+pub(crate) use state_drag_step3 as drag;

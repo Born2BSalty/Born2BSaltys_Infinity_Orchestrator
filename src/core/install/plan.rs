@@ -10,6 +10,7 @@ pub struct InstallPlan {
 }
 
 impl InstallPlan {
+    #[must_use]
     pub fn from_log_file(log_file: &LogFile) -> Self {
         Self {
             components: log_file.components().to_vec(),

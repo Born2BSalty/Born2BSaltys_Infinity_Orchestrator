@@ -167,11 +167,12 @@ fn render_checked_row(
         [label_w, row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("Checked")),
     );
-    let checked_pill = match checked {
-        true => crate::ui::shared::typography_global::strong("Checked")
-            .color(crate::ui::shared::theme_global::success()),
-        false => crate::ui::shared::typography_global::strong("Unchecked")
-            .color(crate::ui::shared::theme_global::text_muted()),
+    let checked_pill = if checked {
+        crate::ui::shared::typography_global::strong("Checked")
+            .color(crate::ui::shared::theme_global::success())
+    } else {
+        crate::ui::shared::typography_global::strong("Unchecked")
+            .color(crate::ui::shared::theme_global::text_muted())
     };
     ui.add_sized([value_w, row_h], egui::Label::new(checked_pill));
     ui.label("");

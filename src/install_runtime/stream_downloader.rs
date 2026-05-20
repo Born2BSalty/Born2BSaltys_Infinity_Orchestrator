@@ -1,98 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `install_runtime::stream_downloader` — Phase 7 P7.T17 / #1 (the
-// user-authorized net-new **parallel streaming downloader**, SPEC §4.3 /
-// §13.12a).
-//
-// **Why this exists (the root cause it fixes).** BIO's archive download
-// (`app_step2_update_download::download_update_assets`) is a **serial**
-// `ureq` + `io::copy` loop that emits ONLY an aggregate
-// `Step2UpdateDownloadEvent::Progress { completed, total }` (a
-// `"Downloading updates: N/M"` count). It has **no per-asset byte
-// signal** — that absence is the real reason every prior per-mod-progress
-// attempt was coarse (the §4.3 grid could only show a determinate phase
-// step, not a real fill). The user authorized our own implementation: a
-// **bounded parallel pool** that reads each response's `Content-Length`
-// and accumulates bytes in a manual read-loop, so the §4.3 grid carries a
-// **real per-mod byte fraction**.
-//
-// **Zero BIO source (the run's hard constraint — SPEC §1 / the six
-// carve-outs).** This module:
-//
-//   - reuses `ureq` (already a `Cargo.toml` dep — the same crate BIO's
-//     serial loop uses; no new dependency);
-//   - calls BIO's `pub(crate)` `app_step2_update_download::archive_file_
-//     name` **read-only** to compute the write path (the SAME fn
-//     `archive_store` already calls — established in-crate read-only
-//     reuse, not a BIO edit);
-//   - writes each archive to **exactly**
-//     `PathBuf::from(state.step1.mods_archive_folder.trim())
-//       .join(archive_file_name(asset))` — **byte-identical** to the path
-//     BIO's reused-unchanged extract re-derives + gates on `.exists()`
-//     (`app_step2_update_extract_plan.rs:48-49`). That `.exists()`
-//     decoupling seam is *why* a net-new downloader composes without
-//     forking extract;
-//   - sets the EXACT `state.step2` shapes BIO's extract/ingest expect,
-//     copied **verbatim** from the serial loop (see [`run_download`]'s
-//     push formats);
-//   - on completion calls BIO's `pub(crate)`
-//     `app_step2_update_extract::start_step2_update_extract` — the SAME
-//     entry BIO's own `poll_step2_update_download` calls — so extract /
-//     rescan / install proceed **unchanged**.
-//
-// **The arming change (user-approved, orchestrator-side only — NOT a BIO
-// edit, NOT a SPEC CONFLICT).** BIO's serial worker fires from
-// `app_step2_saved_log_flow::advance_pending_saved_log_flow` ONLY when
-// `state.step2.pending_saved_log_download == true`. The orchestrator-owned
-// `auto_build_driver::arm_auto_build` no longer sets that flag, so BIO's
-// serial download never starts (no double-download). This module owns the
-// download sub-phase instead: it watches the SAME gate BIO's block uses
-// (apply + update-preview done, nothing else running) and, the moment
-// resolved assets are available, sets `modlist_auto_build_waiting_for_
-// install = true` (the EXACT pub field BIO's own block sets at that point
-// — `app_step2_saved_log_flow.rs:103`) and spawns the bounded parallel
-// pool. On completion it pushes the result vectors + triggers BIO's
-// extract; BIO's unchanged extract → rescan → `start_auto_build_install`
-// path (gated on `modlist_auto_build_waiting_for_install`) then carries
-// the pipeline to the install hand-off exactly as it does for the serial
-// path. The `archive_store` content-addressed staging/dedupe is
-// unaffected (extract + `ingest_downloaded_archives` re-derive paths /
-// read fs — `stage_known_archives` still drops already-stored assets from
-// `update_selected_update_assets` *before* this pool is kicked).
-//
-// **Concurrency model.** A spawned coordinator thread owns a bounded
-// worker pool (`POOL_SIZE` ≈ 4) via a shared work index + a results
-// `Mutex`; each worker streams one asset at a time, sending
-// `StreamDownloadEvent::AssetProgress` byte deltas + a terminal
-// `AssetDone`. The coordinator sends a final `Finished` carrying the
-// BIO-shaped `downloaded` / `failed` vectors. The orchestrator owns the
-// `Receiver` on `OrchestratorApp` (mirroring `step2_update_download_rx`)
-// and drains it every frame in `poll_step2_channels`; on `Finished` it
-// writes the `state.step2` vectors + calls `start_step2_update_extract`.
-//
-// **No-Content-Length → graceful.** The per-row progress is
-// `Option<(bytes, Option<total>)>`: `total` is `None` when the server
-// sent no `Content-Length` (byte-count progress with an indeterminate
-// total — the §4.3 grid renders it as an active-but-unmeasured row).
-//
-// SPEC: §4.3 (Downloading screen — real per-mod byte fraction), §13.12a
-//       (per-install dirs + content-addressed staging + the
-//       pipeline-reuse contract), §1 (CRITICAL DIRECTIVE — net-new,
-//       zero BIO source).
-
-// rationale: a bounded download pool with a shared work index + results
-// mutex is intrinsic to the parallel design (not a smell); `Self`/
-// `const fn`/`#[must_use]` churn + the doc-paragraph-length lint add
-// noise without behavior value (Cat 3).
-#![allow(
-    clippy::missing_const_for_fn,
-    clippy::must_use_candidate,
-    clippy::use_self,
-    clippy::too_long_first_doc_paragraph
-)]
 
 use std::fs;
+use std::hash::BuildHasher;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -104,53 +14,21 @@ use std::time::Duration;
 use crate::app::app_step2_update_download::archive_file_name;
 use crate::app::state::{Step2UpdateAsset, WizardState};
 
-/// The bounded parallel pool size. **DL Fix-Set v3 (Change C / Imp-4)**
-/// — widened 4 → 10 to match the user-directed Wabbajack-grade
-/// throughput target. Connection pressure to the mod hosts (GitHub /
-/// Weasel / Morpheus) and the user's link is still modest at 10 (the
-/// per-host TCP slot ceiling on a modern home/office link is far above
-/// 10), while throughput on a 51-archive EET install scales nearly
-/// linearly with pool size up to the disk-write ceiling. The disk-
-/// pressure floor matches `extract_parallel::EXTRACT_POOL_SIZE` /
-/// `archive_skip_async::HASH_POOL_SIZE` so the v3 pools are uniform
-/// (the user-reported productivity cliffs all came from sub-10
-/// parallelism).
 pub const POOL_SIZE: usize = 10;
 
-/// The per-asset read-loop chunk. 64 KiB matches `archive_store::hash_file`
-/// — a multi-hundred-MB mod archive streams to disk without buffering
-/// wholly in RAM, and byte-delta events arrive often enough for a smooth
-/// per-mod bar without flooding the channel.
 const READ_CHUNK: usize = 64 * 1024;
+const READ_TIMEOUT_SECS: u64 = 120;
 
-/// One asset's live byte progress. `(downloaded_bytes, total)` where
-/// `total` is `Some(content_length)` when the server advertised one and
-/// `None` for a chunked / no-`Content-Length` response (byte-count with an
-/// indeterminate total — SPEC §4.3 "graceful"). Mirrors the `Option<(bytes,
-/// Option<total>)>` shape `DownloadProgress` carries per row.
 pub type AssetBytes = (u64, Option<u64>);
+type AssetStreamError = (u64, Option<u64>, String);
 
-/// Events the coordinator thread sends to the orchestrator's per-frame
-/// drain. Mirrors `bio::app::app_step2_update_download::
-/// Step2UpdateDownloadEvent`'s channel discipline, with the per-asset byte
-/// granularity BIO's serial loop lacks.
 pub enum StreamDownloadEvent {
-    /// A byte delta for one asset (`index` into the original asset list).
-    /// `bytes` is the running total downloaded so far for that asset;
-    /// `total` is its `Content-Length` (`None` ⇒ indeterminate).
     AssetProgress {
         index: usize,
         bytes: u64,
         total: Option<u64>,
     },
-    /// One asset reached a terminal state (success or failure). `ok`
-    /// distinguishes; `final_bytes` is the byte count at termination.
-    /// **Fix 1b** — `error` carries the failure string on `ok == false`
-    /// (`None` on success) so the orchestrator's per-asset drain can push
-    /// the BIO-shaped `"{label}: {err}"` to
-    /// `update_selected_download_failed_sources` per-asset as failures
-    /// arrive — not bulk-assigned at `Finished` (which left the §4.3 grid's
-    /// `downloaded_count()` flat at 0 until terminal).
+
     AssetDone {
         index: usize,
         ok: bool,
@@ -158,86 +36,30 @@ pub enum StreamDownloadEvent {
         total: Option<u64>,
         error: Option<String>,
     },
-    /// Every asset finished. Carries the BIO-shaped result vectors the
-    /// orchestrator writes verbatim into `state.step2`
-    /// (`update_selected_downloaded_sources` /
-    /// `update_selected_download_failed_sources`).
+
     Finished(StreamDownloadResult),
 }
 
-/// The terminal result — the EXACT two vectors BIO's serial
-/// `Step2UpdateDownloadResult` produces (same element formats, see
-/// [`run_download`]). The orchestrator assigns these straight onto
-/// `state.step2` then calls `start_step2_update_extract`, identical to
-/// BIO's `poll_step2_update_download`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StreamDownloadResult {
-    /// `"{label} -> {dest}"` per success — byte-identical to
-    /// `app_step2_update_download.rs:140`.
     pub downloaded: Vec<String>,
-    /// `"{label}: {err}"` per failure — byte-identical to
-    /// `app_step2_update_download.rs:142`.
+
     pub failed: Vec<String>,
 }
 
-/// Internal per-asset terminal record the workers push into the shared
-/// results vec (coordinator orders + formats them at the end).
 struct AssetResult {
     index: usize,
-    /// `Ok(dest_display)` → success (the destination path's `Display`,
-    /// matching BIO's `destination.display()`); `Err(msg)` → the BIO-shaped
-    /// error string.
+
     outcome: Result<String, String>,
 }
 
-/// **Spawn the bounded parallel streaming download (the net-new
-/// replacement for BIO's serial loop).** Reads
-/// `state.step1.mods_archive_folder` (the global Settings → Paths
-/// Mods-archive folder — fed via the established settings-sync) +
-/// `state.step2.update_selected_update_assets` (the resolved asset set —
-/// read-only input, left intact), sets
-/// `state.step2.update_selected_download_running = true` and clears the
-/// extract result vectors + the *non-pre-populated* download-failed
-/// vector (the downloaded vector is NOT cleared here — Fix 1e pre-
-/// populates it with skipped-archive entries via `archive_skip` BEFORE
-/// the streamer kicks; the streamer never touches skipped indices and so
-/// MUST NOT clobber those entries), then spawns a coordinator thread that
-/// drives a `POOL_SIZE` worker pool.
-///
-/// **Fix 1e — `skipped` is the orchestrator-side index set the streamer
-/// silently bypasses.** Indices into the unchanged asset list. The worker
-/// loop checks `skipped.contains(&i)` before dispatch and continues to
-/// the next index without emitting any event or pushing a result —
-/// archive_skip already placed the bytes at the deterministic path AND
-/// pre-populated the downloaded-sources entry, so the §4.3 grid treats
-/// those rows as download-complete from frame one and BIO's
-/// `build_extract_jobs` finds them (the asset stays in the list).
-///
-/// The caller must:
-///   1. set `state.step2.modlist_auto_build_waiting_for_install = true`
-///      *before* calling this (the pub field BIO's own block sets at this
-///      point — `app_step2_saved_log_flow.rs:103` — so BIO's unchanged
-///      extract→rescan→install hand-off fires after extract); and
-///   2. on the resulting `Receiver`'s events:
-///      - per `AssetDone`, push the BIO-shaped `"{label} -> {dest}"` /
-///        `"{label}: {err}"` to `state.step2.update_selected_downloaded_
-///        sources` / `update_selected_download_failed_sources` (Fix 1b —
-///        per-asset so the §4.3 grid's `downloaded_count()` climbs
-///        smoothly as archives land);
-///      - on `Finished`, call [`apply_result_state`] (flag flip + status
-///        line) then kick BIO's `app_step2_update_extract::start_step2_
-///        update_extract` via `extract_intercept::start_extract_with_
-///        intercept` (Fix 1c — wraps the BIO receiver-end stream with a
-///        forwarder that snapshots `Progress` events for the §4.3 Extract
-///        bar).
-///
-/// Idempotent re-entry guard: if `update_selected_download_running` is
-/// already set, returns `None` (the pool is already in flight) — matching
-/// BIO's serial `start_step2_update_download` early-return.
-pub fn start_stream_download(
+pub fn start_stream_download<S>(
     state: &mut WizardState,
-    skipped: &std::collections::HashSet<usize>,
-) -> Option<Receiver<StreamDownloadEvent>> {
+    skipped: &std::collections::HashSet<usize, S>,
+) -> Option<Receiver<StreamDownloadEvent>>
+where
+    S: BuildHasher,
+{
     if state.step2.update_selected_download_running {
         return None;
     }
@@ -245,20 +67,9 @@ pub fn start_stream_download(
     let archive_dir = state.step1.mods_archive_folder.trim().to_string();
     let assets = state.step2.update_selected_update_assets.clone();
 
-    // Mirror the serial loop's start mutations
-    // (`app_step2_update_download.rs:50-56`): running flag on,
-    // extract-running off, the FAILED + extract vectors cleared.
-    //
-    // **Fix 1e** — the downloaded-sources vector is NOT cleared here:
-    // `archive_skip::skip_present_archives` pre-populated it with one
-    // BIO-shaped entry per skipped archive BEFORE the streamer kicked
-    // (so the §4.3 grid sees the skipped rows as download-complete from
-    // frame one). Clearing here would clobber those entries. The
-    // streamer's per-asset `AssetDone` branch appends to this vector for
-    // *fetched* assets only (skipped indices are silently bypassed).
     state.step2.update_selected_download_running = true;
     state.step2.update_selected_extract_running = false;
-    // Intentionally NOT cleared (Fix 1e): update_selected_downloaded_sources.
+
     state.step2.update_selected_download_failed_sources.clear();
     state.step2.update_selected_extracted_sources.clear();
     state.step2.update_selected_extract_failed_sources.clear();
@@ -266,26 +77,14 @@ pub fn start_stream_download(
 
     let (tx, rx) = mpsc::channel::<StreamDownloadEvent>();
     let archive_dir = PathBuf::from(archive_dir);
-    let skipped_owned: Arc<std::collections::HashSet<usize>> = Arc::new(skipped.clone());
+    let skipped_owned: Arc<std::collections::HashSet<usize>> =
+        Arc::new(skipped.iter().copied().collect());
     thread::spawn(move || {
         run_download(&archive_dir, assets, &tx, &skipped_owned);
     });
     Some(rx)
 }
 
-/// The coordinator + bounded worker pool. Runs on a spawned thread (never
-/// the egui frame thread). Spawns `min(POOL_SIZE, assets.len())` workers
-/// that pull from a shared atomic index; each streams one asset at a time
-/// via [`stream_one_asset`], emitting byte deltas + a terminal
-/// `AssetDone`. When the index is exhausted and all workers join, the
-/// coordinator formats the BIO-shaped result vectors (ordered by original
-/// asset index) and sends `Finished`.
-///
-/// **One deliberate failure does not abort the pool** — a failed asset
-/// records an `Err` and the workers keep pulling the rest (matching BIO's
-/// serial loop, which `match`es each result and continues). The
-/// `auto_build_blocker_before_install` BIO check (unchanged) then stops
-/// the auto-build for the failed source after extract, exactly as today.
 fn run_download(
     archive_dir: &Path,
     assets: Vec<Step2UpdateAsset>,
@@ -295,9 +94,6 @@ fn run_download(
     let total = assets.len();
     let mut result = StreamDownloadResult::default();
 
-    // Create the Mods-archive dir up front (same as the serial loop's
-    // `fs::create_dir_all(archive_dir)` precondition). A failure here is
-    // the serial loop's `"Mods Archive: {err}"` global failure.
     if let Err(err) = fs::create_dir_all(archive_dir) {
         result.failed.push(format!("Mods Archive: {err}"));
         let _ = tx.send(StreamDownloadEvent::Finished(result));
@@ -309,15 +105,6 @@ fn run_download(
         return;
     }
 
-    // Shared work index + ordered results. `assets` is shared read-only
-    // (each worker reads `assets[i]`); `next` hands out indices; `results`
-    // collects terminal records. **Fix 1e** — the worker loop checks
-    // `skipped.contains(&i)` and silently bypasses those indices (no
-    // event, no result push); `archive_skip` already placed the bytes +
-    // pre-populated the downloaded-sources entry. The all-skipped case
-    // exhausts the index range without emitting anything ⇒ the
-    // coordinator falls through to the final `Finished` send (empty
-    // `result.downloaded` / `result.failed`).
     let assets = Arc::new(assets);
     let archive_dir = Arc::new(archive_dir.to_path_buf());
     let next = Arc::new(AtomicUsize::new(0));
@@ -339,34 +126,21 @@ fn run_download(
                     break;
                 }
                 if skipped.contains(&index) {
-                    // **Fix 1e** — silently bypass. `archive_skip`
-                    // already placed the bytes + pre-populated the
-                    // downloaded-sources entry. No event, no result push.
                     continue;
                 }
                 let asset = &assets[index];
                 let dest = archive_dir.join(archive_file_name(asset));
                 let outcome = stream_one_asset(asset, &dest, index, &tx);
-                // **Fix 1b** — carry the error string into `AssetDone`
-                // (`None` on success) so the orchestrator's per-asset
-                // drain can push to `update_selected_download_failed_
-                // sources` as failures arrive, not bulk at `Finished`.
+
                 let (ok, final_bytes, total_len, error_msg, rec) = match outcome {
                     Ok((bytes, total_len)) => (
                         true,
                         bytes,
                         total_len,
                         None,
-                        // BIO's exact success format
-                        // (`app_step2_update_download.rs:140`):
-                        // `"{} -> {}"` with `asset.label` +
-                        // `destination.display()`.
                         AssetResult {
                             index,
-                            // `destination.display()` rendered to a String
-                            // — the coordinator prefixes `"{label} -> "`
-                            // (BIO's exact `app_step2_update_download.rs:
-                            // 140` format) when ordering the vectors.
+
                             outcome: Ok(dest.display().to_string()),
                         },
                     ),
@@ -375,9 +149,6 @@ fn run_download(
                         bytes,
                         total_len,
                         Some(err.clone()),
-                        // BIO's exact failure format
-                        // (`app_step2_update_download.rs:142`):
-                        // `"{}: {err}"` with `asset.label`.
                         AssetResult {
                             index,
                             outcome: Err(err),
@@ -400,10 +171,6 @@ fn run_download(
         let _ = h.join();
     }
 
-    // Order the terminal records by original asset index and format the
-    // two BIO-shaped vectors. `label` is taken from the original asset
-    // list (the worker only carried the index) so the strings are
-    // byte-identical to BIO's serial loop.
     let mut recs = results.lock().expect("download results mutex");
     recs.sort_by_key(|r| r.index);
     for rec in recs.iter() {
@@ -418,34 +185,15 @@ fn run_download(
     let _ = tx.send(StreamDownloadEvent::Finished(result));
 }
 
-/// Stream a single asset to `dest` with `ureq` + a manual byte-accumulating
-/// read-loop (the per-asset byte signal BIO's `io::copy` serial loop does
-/// not expose). Reads `Content-Length` into `total` (`None` ⇒ chunked /
-/// indeterminate — graceful per SPEC §4.3). Emits an `AssetProgress` byte
-/// delta as bytes accumulate.
-///
-/// Errors map via `err.to_string()` exactly as BIO's serial
-/// `download_one_asset` does (so the failed-source string is byte-identical
-/// to BIO's). A non-2xx status is mapped to a readable error (ureq 2.x
-/// `.call()` already `Err`s on 4xx/5xx — the explicit status guard is
-/// defense in depth + a clear message).
-///
-/// Returns `Ok((bytes, total))` on success / `Err((bytes, total, msg))` on
-/// failure (the byte count at the point of failure feeds the terminal
-/// `AssetDone`).
 fn stream_one_asset(
     asset: &Step2UpdateAsset,
     dest: &Path,
     index: usize,
     tx: &Sender<StreamDownloadEvent>,
-) -> Result<(u64, Option<u64>), (u64, Option<u64>, String)> {
-    // Same agent construction as BIO's serial loop
-    // (`app_step2_update_download.rs:119-122`): a 20s connect / 120s read
-    // timeout. (Built per-asset so a slow asset's read timeout cannot
-    // wedge a shared agent across the pool.)
+) -> Result<AssetBytes, AssetStreamError> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
-        .timeout_read(Duration::from_secs(120))
+        .timeout_read(Duration::from_secs(READ_TIMEOUT_SECS))
         .build();
 
     let response = match agent
@@ -462,9 +210,6 @@ fn stream_one_asset(
         return Err((0, None, format!("HTTP {status}")));
     }
 
-    // `Content-Length` → the determinate total (SPEC §4.3 real per-mod
-    // fraction). Absent / unparseable ⇒ `None` (byte-count with an
-    // indeterminate total — the graceful path).
     let total: Option<u64> = response
         .header("Content-Length")
         .and_then(|v| v.trim().parse::<u64>().ok());
@@ -487,91 +232,45 @@ fn stream_one_asset(
             return Err((downloaded, total, err.to_string()));
         }
         downloaded += n as u64;
-        // A byte delta per chunk — the real per-mod fraction the §4.3 grid
-        // renders (monotonic by construction; reaches `total` on success).
+
         let _ = tx.send(StreamDownloadEvent::AssetProgress {
             index,
             bytes: downloaded,
             total,
         });
     }
-    // Ensure the bytes are on disk before extract re-derives the path +
-    // gates on `.exists()` (BIO's serial loop relies on the same
-    // file-closed-after-`io::copy` ordering; an explicit flush removes any
-    // doubt under the parallel pool).
+
     if let Err(err) = std::io::Write::flush(&mut file) {
         return Err((downloaded, total, err.to_string()));
     }
     Ok((downloaded, total))
 }
 
-/// The deterministic on-disk destination for `asset` in `archive_dir` —
-/// **exactly** `archive_dir.join(archive_file_name(asset))**, the
-/// byte-identical path BIO's reused-unchanged extract re-derives + gates
-/// on `.exists()` (`app_step2_update_extract_plan.rs:48-49`). Public
-/// because it is this module's documented write-path *contract* (the
-/// runtime trace + any future caller verifies against it); it composes
-/// BIO's `archive_file_name` read-only — zero BIO edit.
 #[must_use]
 pub fn deterministic_dest(asset: &Step2UpdateAsset, archive_dir: &Path) -> PathBuf {
     archive_dir.join(archive_file_name(asset))
 }
 
-/// **Apply the running flag + status — the state-mutation half of BIO's
-/// `poll_step2_update_download` tail** (`app_step2_update_download.rs:94-
-/// 101`), MINUS the bulk vector assignment.
-///
-/// **Fix 1b** — the downloaded/failed vectors are now appended per-asset
-/// by the orchestrator's `drain_stream_download` as each `AssetDone`
-/// arrives (so the §4.3 grid's `downloaded_count()` climbs smoothly as
-/// archives land, instead of staying flat at 0 until terminal). The
-/// `result` arg is accepted but its `downloaded` / `failed` are no longer
-/// assigned here — that is the per-asset job. This function only clears
-/// the running flag and writes the BIO-verbatim finished status line
-/// (which reads the *already-populated* vectors via the orchestrator's
-/// per-asset pushes).
-///
-/// Pure `state` mutation (no BIO `pub(crate)` type in the signature) so
-/// it is `pub` + observable by the runtime trace. The caller
-/// (`drain_stream_download`, in-crate) then makes the single
-/// `start_step2_update_extract` call via `extract_intercept`.
-#[allow(unused_variables)] // `result` retained for compat / observability
 pub fn apply_result_state(state: &mut WizardState, result: StreamDownloadResult) {
+    let StreamDownloadResult { downloaded, failed } = result;
+    drop((downloaded, failed));
     state.step2.update_selected_download_running = false;
-    // Read the vectors AS POPULATED BY THE PER-ASSET PUSHES (Fix 1b).
+
     let downloaded = state.step2.update_selected_downloaded_sources.len();
     let failed = state.step2.update_selected_download_failed_sources.len();
-    // BIO-verbatim finished status (`app_step2_update_download.rs:100-101`).
+
     state.step2.scan_status =
         format!("Download updates finished: {downloaded} downloaded, {failed} failed");
 }
 
-// **DL Fix-Set v2 — `apply_finished` removed.** Previously this wrapped
-// `apply_result_state` + BIO's `pub(crate)` `start_step2_update_extract`
-// in one call. The orchestrator's `drain_stream_download` now does both
-// directly:
-//   • `apply_result_state` (downloaded/failed vectors are now per-asset-
-//     pushed by Fix 1b, not bulk-assigned here — see `apply_result_state`'s
-//     updated contract);
-//   • Fix 1c's `install_runtime::extract_intercept::start_extract_with_
-//     intercept`, which kicks BIO's `start_step2_update_extract` through
-//     a forwarder thread that snapshots `Progress` events into a shared
-//     handle the §4.3 Extract bar reads every frame.
-// The wrapper added no value with one caller and one new branch (extract
-// intercept), so it is removed for clarity. The brief authorizes the
-// removal.
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read as _, Write as _};
+    use std::io::Write as _;
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     fn td() -> PathBuf {
-        // DATA-LOSS-safe: a unique temp dir; this module never binds the
-        // real `%APPDATA%\bio\` (it operates only on an arbitrary
-        // Mods-archive dir + temp HTTP fixtures).
         static C: AtomicU64 = AtomicU64::new(0);
         let p = std::env::temp_dir().join(format!(
             "bio_stream_dl_test_{}_{}",
@@ -595,20 +294,6 @@ mod tests {
         }
     }
 
-    /// A throwaway in-process HTTP server (`127.0.0.1:0`) for the
-    /// temp-path tests. Routes by path: `/cl/<name>` serves a fixed body
-    /// WITH `Content-Length`; `/nocl/<name>` serves a body with NO
-    /// `Content-Length` (closes the connection to delimit it); `/404`
-    /// returns 404. NEVER a real network host (DATA-LOSS / directive).
-    ///
-    /// `expected_requests` is the EXACT number of HTTP requests the test
-    /// will make (== asset count, including any 404 asset) — NOT
-    /// `bodies.len()`. The 404 asset has no `bodies` entry but still
-    /// consumes a request, so counting by `bodies.len()` would stop the
-    /// server early and leave a worker's connection refused (a flaky
-    /// race). Each connection is served on **its own thread** so the
-    /// bounded pool's workers genuinely overlap (a single-threaded
-    /// `accept`-then-serve loop would serialize them).
     fn spawn_fixture(
         bodies: Vec<(String, Vec<u8>)>,
         with_cl: bool,
@@ -622,10 +307,7 @@ mod tests {
             let mut conns = Vec::new();
             let mut accepted = 0usize;
             for stream in listener.incoming() {
-                let mut stream = match stream {
-                    Ok(s) => s,
-                    Err(_) => break,
-                };
+                let Ok(mut stream) = stream else { break };
                 let bodies = std::sync::Arc::clone(&bodies);
                 conns.push(thread::spawn(move || {
                     let mut buf = [0u8; 2048];
@@ -653,13 +335,10 @@ mod tests {
                                 body.len()
                             );
                             let _ = stream.write_all(header.as_bytes());
-                            let _ = stream.write_all(&body);
                         } else {
-                            // No Content-Length: body then close the
-                            // connection to delimit it (ureq reads to EOF).
                             let _ = stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n");
-                            let _ = stream.write_all(&body);
                         }
+                        let _ = stream.write_all(&body);
                     }
                     let _ = stream.flush();
                 }));
@@ -682,8 +361,8 @@ mod tests {
             ("A".to_string(), b"AAA-bytes-payload".to_vec()),
             ("B".to_string(), vec![7u8; 4096]),
         ];
-        // 2 assets ⇒ 2 requests.
-        let (base, h) = spawn_fixture(payloads.clone(), true, 2);
+
+        let (base, h) = spawn_fixture(payloads, true, 2);
 
         let mut state = WizardState::default();
         state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
@@ -720,7 +399,6 @@ mod tests {
         let r = finished.expect("Finished arrives");
         h.join().unwrap();
 
-        // (a) EXACT write path = mods_archive_folder / archive_file_name.
         let dest_a = archive_dir.join(archive_file_name(&a));
         let dest_b = archive_dir.join(archive_file_name(&b));
         assert!(
@@ -730,7 +408,6 @@ mod tests {
         assert_eq!(std::fs::read(&dest_a).unwrap(), b"AAA-bytes-payload");
         assert_eq!(std::fs::read(&dest_b).unwrap(), vec![7u8; 4096]);
 
-        // (b) BIO-verbatim success vector: "{label} -> {dest.display()}".
         assert_eq!(r.failed, Vec::<String>::new());
         assert!(
             r.downloaded
@@ -740,7 +417,7 @@ mod tests {
             r.downloaded
                 .contains(&format!("{} -> {}", b.label, dest_b.display()))
         );
-        // update_selected_update_assets left INTACT (read-only input).
+
         assert_eq!(state.step2.update_selected_update_assets.len(), 2);
 
         let _ = std::fs::remove_dir_all(&archive_dir);
@@ -750,7 +427,7 @@ mod tests {
     fn no_content_length_is_graceful_indeterminate_total() {
         let archive_dir = td();
         let payloads = vec![("N".to_string(), b"no-content-length-body".to_vec())];
-        // 1 asset ⇒ 1 request.
+
         let (base, h) = spawn_fixture(payloads, false, 1);
 
         let mut state = WizardState::default();
@@ -800,10 +477,7 @@ mod tests {
     #[test]
     fn failure_records_bio_shaped_failed_and_does_not_abort_pool() {
         let archive_dir = td();
-        // C succeeds; the 404 asset fails — the pool must keep C.
-        // 2 assets (good + 404) ⇒ 2 requests (the 404 has no `payloads`
-        // entry but still consumes a request — counting by payloads.len()
-        // was the flaky-race bug).
+
         let payloads = vec![("C".to_string(), b"C-good-bytes".to_vec())];
         let (base, h) = spawn_fixture(payloads, true, 2);
 
@@ -837,7 +511,6 @@ mod tests {
         h.join().unwrap();
         let r = finished.unwrap();
 
-        // Good asset survived (pool not aborted by the failure).
         let dest_good = archive_dir.join(archive_file_name(&good));
         assert!(dest_good.exists());
         assert!(
@@ -845,7 +518,7 @@ mod tests {
                 .iter()
                 .any(|e| e == &format!("{} -> {}", good.label, dest_good.display()))
         );
-        // Failure recorded in the BIO-verbatim "{label}: {err}" shape.
+
         assert_eq!(r.failed.len(), 1);
         assert!(
             r.failed[0].starts_with(&format!("{}: ", bad.label)),
@@ -878,7 +551,7 @@ mod tests {
     fn re_entry_guard_returns_none_when_already_running() {
         let mut state = WizardState::default();
         state.step1.mods_archive_folder = td().to_string_lossy().into_owned();
-        state.step2.update_selected_download_running = true; // already in flight
+        state.step2.update_selected_download_running = true;
         assert!(
             start_stream_download(&mut state, &std::collections::HashSet::new()).is_none(),
             "a second start while running is a no-op (BIO serial-loop parity)"
@@ -887,10 +560,6 @@ mod tests {
 
     #[test]
     fn deterministic_dest_is_byte_identical_to_bio_extract_path() {
-        // The write-path contract: EXACTLY the path BIO's reused-unchanged
-        // extract re-derives + gates on `.exists()`
-        // (`app_step2_update_extract_plan.rs:48-49` =
-        // `archive_dir.join(archive_file_name(asset))`).
         let archive_dir = td();
         let a = asset(
             "MOD/MOD.TP2",
@@ -909,38 +578,18 @@ mod tests {
 
     #[test]
     fn apply_result_state_flips_flag_and_sets_status_without_bulk_assigning_vectors() {
-        // **DL Fix-Set v2 (Fix 1b).** `apply_result_state` no longer
-        // bulk-assigns `update_selected_downloaded_sources` /
-        // `update_selected_download_failed_sources`. Those are appended
-        // per-asset by the orchestrator's `drain_stream_download` as
-        // each `AssetDone` arrives. `apply_result_state` only:
-        //   • clears `update_selected_download_running`;
-        //   • writes BIO's verbatim "Download updates finished: N
-        //     downloaded, M failed" status reading the
-        //     ALREADY-POPULATED vectors.
-        // Simulate the post-per-asset state by pre-populating the
-        // vectors before calling `apply_result_state`, then assert the
-        // flag flip + status text — and assert the vectors are NOT
-        // overwritten (which would clobber whatever the per-asset path
-        // pushed).
         let mut st = WizardState::default();
-        // Pre-populate as the AssetDone branch would: 1 downloaded
-        // entry, 1 failed entry (BIO-shaped strings).
+
         st.step2.update_selected_downloaded_sources =
             vec!["MyMod -> C:\\arch\\MyMod.zip".to_string()];
         st.step2.update_selected_download_failed_sources = vec!["BadMod: HTTP 404".to_string()];
         st.step2.update_selected_download_running = true;
 
-        // `result` is no longer the source of truth for the vectors —
-        // `apply_result_state` only reads `state.step2`'s vectors for
-        // the status count. Pass an EMPTY result on purpose to prove it
-        // is not used as the vector source anymore.
         let result = StreamDownloadResult::default();
         apply_result_state(&mut st, result);
 
-        // Flag flipped.
         assert!(!st.step2.update_selected_download_running);
-        // Vectors NOT clobbered — the per-asset pushes survive.
+
         assert_eq!(
             st.step2.update_selected_downloaded_sources,
             vec!["MyMod -> C:\\arch\\MyMod.zip".to_string()],
@@ -951,7 +600,7 @@ mod tests {
             vec!["BadMod: HTTP 404".to_string()],
             "failed vector NOT bulk-overwritten (per-asset pushes survive)"
         );
-        // Status reads the populated vectors: 1 downloaded, 1 failed.
+
         assert_eq!(
             st.step2.scan_status, "Download updates finished: 1 downloaded, 1 failed",
             "apply_result_state sets BIO's verbatim download-finished status \
@@ -961,13 +610,6 @@ mod tests {
 
     #[test]
     fn fix_1b_asset_done_carries_error_string_for_per_asset_failed_push() {
-        // **DL Fix-Set v2 (Fix 1b).** `StreamDownloadEvent::AssetDone`
-        // gained an `error: Option<String>` field so the orchestrator's
-        // per-asset drain can build the BIO-shaped "{label}: {err}"
-        // failed-source string as failures arrive (not bulk-assigned at
-        // `Finished`). Drive a real fixture run with one good + one 404
-        // asset; collect every AssetDone; assert (ok, error) are
-        // matched (success ⇒ error None; failure ⇒ error Some(_)).
         let archive_dir = td();
         let payloads = vec![("D".to_string(), b"D-good".to_vec())];
         let (base, h) = spawn_fixture(payloads, true, 2);
@@ -988,7 +630,7 @@ mod tests {
             "E.zip",
             format!("{base}/404"),
         );
-        state.step2.update_selected_update_assets = vec![good.clone(), bad.clone()];
+        state.step2.update_selected_update_assets = vec![good, bad];
 
         let rx = start_stream_download(&mut state, &std::collections::HashSet::new())
             .expect("pool spawns");
@@ -1001,17 +643,16 @@ mod tests {
                     dones.push((index, ok, error));
                 }
                 StreamDownloadEvent::Finished(_) => break,
-                _ => {}
+                StreamDownloadEvent::AssetProgress { .. } => {}
             }
         }
         h.join().unwrap();
 
-        // Exactly 2 AssetDones (one per asset).
         assert_eq!(dones.len(), 2, "one AssetDone per asset");
-        // Good asset (whichever index) ⇒ ok==true + error==None.
+
         let good_done = dones.iter().find(|d| d.1).expect("one ok asset");
         assert_eq!(good_done.2, None, "ok ⇒ error None");
-        // Bad asset (whichever index) ⇒ ok==false + error==Some(_).
+
         let bad_done = dones.iter().find(|d| !d.1).expect("one failed asset");
         assert!(
             bad_done.2.is_some(),

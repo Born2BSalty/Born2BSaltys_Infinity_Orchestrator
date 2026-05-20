@@ -1,11 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// Create stub destination.
-//
-// Per Phase 2 P2.T5: title "Create / edit modlist", sub "Coming in Phase 6".
-//
-// SPEC: §5.
 
 use eframe::egui;
 

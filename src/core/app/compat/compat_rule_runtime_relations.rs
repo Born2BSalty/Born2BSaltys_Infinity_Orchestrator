@@ -10,15 +10,15 @@ use super::{
     CompatActiveItem, matches::string_or_many_items, non_empty, normalize_kind, normalize_mod_key,
 };
 
-pub(crate) fn rule_uses_related_target(rule: &CompatRule) -> bool {
+fn rule_uses_related_target(rule: &CompatRule) -> bool {
     !string_or_many_items(rule.related_mod.as_ref()).is_empty()
 }
 
-pub(crate) fn rule_uses_path_requirement(rule: &CompatRule) -> bool {
+fn rule_uses_path_requirement(rule: &CompatRule) -> bool {
     non_empty(rule.path_field.as_deref()).is_some()
 }
 
-pub(crate) fn single_related_target(rule: &CompatRule) -> Option<(String, Option<String>)> {
+pub(in crate::app) fn single_related_target(rule: &CompatRule) -> Option<(String, Option<String>)> {
     let mut targets = related_targets(rule).into_iter();
     let first = targets.next()?;
     if targets.next().is_none() {
@@ -28,7 +28,7 @@ pub(crate) fn single_related_target(rule: &CompatRule) -> Option<(String, Option
     }
 }
 
-pub(crate) fn matched_related_target(
+pub(in crate::app) fn matched_related_target(
     rule: &CompatRule,
     current_tp_file: &str,
     current_component_id: &str,
@@ -49,7 +49,11 @@ pub(crate) fn matched_related_target(
     })
 }
 
-pub(crate) fn direct_rule_applies(rule: &CompatRule, step1: &Step1State, tab: &str) -> bool {
+pub(in crate::app) fn direct_rule_applies(
+    rule: &CompatRule,
+    step1: &Step1State,
+    tab: &str,
+) -> bool {
     if rule_uses_related_target(rule) {
         return false;
     }
@@ -68,7 +72,7 @@ pub(crate) fn direct_rule_applies(rule: &CompatRule, step1: &Step1State, tab: &s
     true
 }
 
-pub(crate) fn relation_rule_applies(
+pub(in crate::app) fn relation_rule_applies(
     rule: &CompatRule,
     current_tp_file: &str,
     current_component_id: &str,
@@ -109,7 +113,7 @@ pub(crate) fn relation_rule_applies(
     }
 }
 
-pub(crate) fn game_dir_for_tab<'a>(step1: &'a Step1State, tab: &str) -> Option<&'a str> {
+pub(in crate::app) fn game_dir_for_tab<'a>(step1: &'a Step1State, tab: &str) -> Option<&'a str> {
     let value = if tab.eq_ignore_ascii_case("BGEE") {
         if step1.game_install.eq_ignore_ascii_case("EET") {
             if step1.new_pre_eet_dir_enabled && !step1.eet_pre_dir.trim().is_empty() {
@@ -204,13 +208,11 @@ fn target_matches_one(
         return false;
     }
 
-    if let Some(component_id) = non_empty(related_component) {
+    non_empty(related_component).is_none_or(|component_id| {
         item.component_id
             .trim()
             .eq_ignore_ascii_case(component_id.trim())
-    } else {
-        true
-    }
+    })
 }
 
 fn related_targets(rule: &CompatRule) -> Vec<(String, Option<String>)> {

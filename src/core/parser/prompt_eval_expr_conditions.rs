@@ -13,7 +13,7 @@ pub(crate) fn evaluate_condition_clause(
     evaluate_condition_clause_state(condition_text, prompt_eval, prompt_vars).is_not_false()
 }
 
-pub(crate) fn evaluate_condition_clause_state(
+pub(super) fn evaluate_condition_clause_state(
     condition_text: &str,
     prompt_eval: &PromptEvalContext,
     prompt_vars: Option<&PromptVarContext>,
@@ -173,8 +173,7 @@ mod tests {
         let mut ctx = test_context();
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_millis());
         let root = std::env::temp_dir().join(format!("bio_prompt_eval_{stamp}"));
         let child = root.join("override").join("test.itm");
         fs::create_dir_all(child.parent().expect("parent")).expect("mkdir");

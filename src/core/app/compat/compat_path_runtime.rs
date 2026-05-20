@@ -89,7 +89,7 @@ fn first_predicate_target(eval_text: &str, predicate: &str) -> Option<String> {
             value_index += 1;
         }
         match tokens.get(value_index) {
-            Some(Token::Atom(value)) | Some(Token::Ident(value)) if !value.trim().is_empty() => {
+            Some(Token::Atom(value) | Token::Ident(value)) if !value.trim().is_empty() => {
                 return Some(value.trim().to_string());
             }
             _ => return None,
@@ -157,16 +157,16 @@ fn path_guard_file_cache() -> &'static Mutex<HashMap<String, CachedPathGuards>> 
 }
 
 fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
-    match fs::metadata(tp2_path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(tp2_path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 fn collect_path_guards(block: &[&str]) -> Vec<PathGuard> {
@@ -246,17 +246,23 @@ fn strip_subcomponent_condition(line: &str) -> Option<String> {
     if tail.is_empty() {
         return None;
     }
-    let tail = if let Some(rest) = tail.strip_prefix('~') {
-        let end = rest.find('~')?;
-        &rest[end + 1..]
-    } else if let Some(rest) = tail.strip_prefix('"') {
-        let end = rest.find('"')?;
-        &rest[end + 1..]
-    } else {
-        let split = tail
-            .find(|ch: char| ch.is_whitespace() || ch == '/')
-            .unwrap_or(tail.len());
-        &tail[split..]
+    let tail = match tail.chars().next() {
+        Some('~') => {
+            let rest = &tail[1..];
+            let end = rest.find('~')?;
+            &rest[end + 1..]
+        }
+        Some('"') => {
+            let rest = &tail[1..];
+            let end = rest.find('"')?;
+            &rest[end + 1..]
+        }
+        _ => {
+            let split = tail
+                .find(|ch: char| ch.is_whitespace() || ch == '/')
+                .unwrap_or(tail.len());
+            &tail[split..]
+        }
     };
     let tail = tail.trim_start();
     if tail.is_empty() {

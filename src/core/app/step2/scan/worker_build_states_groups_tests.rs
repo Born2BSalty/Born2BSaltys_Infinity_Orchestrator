@@ -6,7 +6,7 @@ use crate::app::scan::ScannedComponent;
 
 #[test]
 fn deprecated_placeholder_without_group_inherits_surrounding_group() {
-    let tp2_text = r#"
+    let tp2_text = r"
 BEGIN ~Choice A~ DESIGNATED 2350
 GROUP ~Gameplay~
 SUBCOMPONENT ~Multiclass~
@@ -23,7 +23,7 @@ SUBCOMPONENT ~Multiclass~
 
 BEGIN ~Other Choice~ DESIGNATED 2400
 GROUP ~Other~
-"#;
+";
     let components = vec![
         component("2350", "Multiclass -> Choice A"),
         component("2351", "Multiclass -> Choice B"),
@@ -56,7 +56,7 @@ fn component(component_id: &str, display: &str) -> ScannedComponent {
 
 #[test]
 fn deprecated_placeholder_choice_stays_in_same_collapsible_family() {
-    let tp2_text = r#"
+    let tp2_text = r"
 BEGIN ~Allow humans to multi-class~ DESIGNATED 2350
 SUBCOMPONENT ~Alter Multi-Class Restrictions~
 
@@ -73,7 +73,7 @@ SUBCOMPONENT ~Alter Multi-Class Restrictions~
 
 BEGIN ~Install options one and three (everyone can multi-class anything they can single-class)~ DESIGNATED 2358
 SUBCOMPONENT ~Alter Multi-Class Restrictions~
-"#;
+";
     let components = vec![
         component(
             "2350",
@@ -114,13 +114,13 @@ SUBCOMPONENT ~Alter Multi-Class Restrictions~
 
 #[test]
 fn subcomponent_parent_component_stays_in_same_collapsible_family() {
-    let tp2_text = r#"
+    let tp2_text = r"
 BEGIN @151 DESIGNATED 151 SUBCOMPONENT @150 GROUP @1 LABEL Morpheus562sKitpackBattlerager1
 
 BEGIN @152 DESIGNATED 152 SUBCOMPONENT @150 GROUP @1 LABEL Morpheus562sKitpackBattlerager2
 
 BEGIN @150 DESIGNATED 150 GROUP @1 LABEL Morpheus562sKitpackBattlerager3
-"#;
+";
     let components = vec![
         component("151", "Install Battlerager Kit -> Assign kit to Korgan"),
         component(

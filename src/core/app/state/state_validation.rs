@@ -5,6 +5,7 @@ use super::state::Step1State;
 #[path = "state_validation_paths.rs"]
 mod paths;
 
+#[must_use]
 pub fn is_step1_valid(s: &Step1State) -> bool {
     if !has_value(&s.mods_folder) || !has_value(&s.weidu_binary) {
         return false;
@@ -72,6 +73,7 @@ pub fn is_step1_valid(s: &Step1State) -> bool {
     }
 }
 
+#[must_use]
 pub fn run_path_check(s: &Step1State) -> (bool, String) {
     paths::run_path_check(s)
 }
@@ -86,6 +88,7 @@ pub fn split_path_check_lines(msg: &str) -> Vec<String> {
         .collect()
 }
 
+#[must_use]
 pub fn step1_mods_folder_has_tp2(s: &Step1State) -> bool {
     paths::step1_mods_folder_has_tp2(s)
 }

@@ -53,7 +53,11 @@ pub(crate) fn render_paths_grid(
                 "TP2 Path",
                 details.tp2_path.as_deref(),
                 true,
-                details.tp2_path.clone().map(Step2Action::OpenSelectedTp2),
+                details
+                    .tp2_path
+                    .clone()
+                    .map(Step2Action::OpenSelectedTp2)
+                    .as_ref(),
             );
             render_path_row(
                 ui,
@@ -62,7 +66,11 @@ pub(crate) fn render_paths_grid(
                 "INI Path",
                 details.ini_path.as_deref(),
                 true,
-                details.ini_path.clone().map(Step2Action::OpenSelectedIni),
+                details
+                    .ini_path
+                    .clone()
+                    .map(Step2Action::OpenSelectedIni)
+                    .as_ref(),
             );
             render_path_row(
                 ui,
@@ -74,7 +82,8 @@ pub(crate) fn render_paths_grid(
                 details
                     .readme_path
                     .clone()
-                    .map(Step2Action::OpenSelectedReadme),
+                    .map(Step2Action::OpenSelectedReadme)
+                    .as_ref(),
             );
             if details.web_url.is_some() {
                 render_path_row(
@@ -84,7 +93,11 @@ pub(crate) fn render_paths_grid(
                     "Web",
                     details.web_url.as_deref(),
                     false,
-                    details.web_url.clone().map(Step2Action::OpenSelectedWeb),
+                    details
+                        .web_url
+                        .clone()
+                        .map(Step2Action::OpenSelectedWeb)
+                        .as_ref(),
                 );
             }
         });
@@ -109,96 +122,130 @@ fn render_package_grid(
         .num_columns(3)
         .spacing([8.0, 4.0])
         .show(ui, |ui| {
-            render_text_row(
-                ui,
-                layout,
-                "Installed Source",
-                details
-                    .package_installed_source_name
-                    .as_deref()
-                    .unwrap_or("Unknown"),
-                false,
-            );
-            if let Some(name) = details.package_source_name.as_deref() {
-                let update_source = if source_status == "Selected" {
-                    format!("{name} (selected)")
-                } else {
-                    format!("{name} (default)")
-                };
-                render_text_row(ui, layout, "Update Source", &update_source, false);
-            }
-            if let Some(version) = details.package_latest_version.as_deref() {
-                render_text_row(ui, layout, "Latest Version", version, false);
-            }
-            if let Some(url) = details.package_source_url.as_deref() {
-                render_path_row(
-                    ui,
-                    action,
-                    layout,
-                    "URL",
-                    Some(url),
-                    false,
-                    Some(Step2Action::OpenSelectedWeb(url.to_string())),
-                );
-            }
-            if let Some(github) = details.package_source_github.as_deref() {
-                render_path_row(
-                    ui,
-                    action,
-                    layout,
-                    "GitHub",
-                    Some(github),
-                    false,
-                    Some(Step2Action::OpenSelectedWeb(github_repo_url(github))),
-                );
-            }
+            render_package_grid_rows(ui, details, action, layout, source_status);
         });
     if can_add_source {
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            if ui
-                .button("Add Source")
-                .on_hover_text("Open mod_downloads_user.toml")
-                .clicked()
-            {
-                *action = Some(Step2Action::OpenModDownloadsUserSource);
-            }
-            if ui
-                .button("Reload Sources")
-                .on_hover_text("Reload mod_downloads_default.toml and mod_downloads_user.toml")
-                .clicked()
-            {
-                *action = Some(Step2Action::ReloadModDownloadSources);
-            }
-        });
+        render_package_source_buttons(ui, action);
     }
     if let Some(locked) = details.package_update_locked {
-        ui.add_space(4.0);
-        let label = if locked {
-            "Unlock Updates"
-        } else {
-            "Lock Updates"
-        };
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(
-                    details.package_can_check_updates,
-                    egui::Button::new("Check This Mod"),
-                )
-                .on_hover_text("Check updates only for the selected mod.")
-                .clicked()
-            {
-                *action = Some(Step2Action::PreviewUpdateSelectedMod);
-            }
-            if ui
-                .button(label)
-                .on_hover_text("Skip or allow this mod when checking updates in this session.")
-                .clicked()
-            {
-                *action = Some(Step2Action::SetSelectedModUpdateLocked(!locked));
-            }
-        });
+        render_package_update_buttons(ui, details, action, locked);
     }
+}
+
+fn render_package_grid_rows(
+    ui: &mut egui::Ui,
+    details: &Step2Details,
+    action: &mut Option<Step2Action>,
+    layout: &PathsGridLayout,
+    source_status: &str,
+) {
+    render_text_row(
+        ui,
+        layout,
+        "Installed Source",
+        details
+            .package_installed_source_name
+            .as_deref()
+            .unwrap_or("Unknown"),
+        false,
+    );
+    if let Some(name) = details.package_source_name.as_deref() {
+        let update_source = if source_status == "Selected" {
+            format!("{name} (selected)")
+        } else {
+            format!("{name} (default)")
+        };
+        render_text_row(ui, layout, "Update Source", &update_source, false);
+    }
+    if let Some(version) = details.package_latest_version.as_deref() {
+        render_text_row(ui, layout, "Latest Version", version, false);
+    }
+    render_package_link_rows(ui, details, action, layout);
+}
+
+fn render_package_link_rows(
+    ui: &mut egui::Ui,
+    details: &Step2Details,
+    action: &mut Option<Step2Action>,
+    layout: &PathsGridLayout,
+) {
+    if let Some(url) = details.package_source_url.as_deref() {
+        let open_action = Step2Action::OpenSelectedWeb(url.to_string());
+        render_path_row(
+            ui,
+            action,
+            layout,
+            "URL",
+            Some(url),
+            false,
+            Some(&open_action),
+        );
+    }
+    if let Some(github) = details.package_source_github.as_deref() {
+        let open_action = Step2Action::OpenSelectedWeb(github_repo_url(github));
+        render_path_row(
+            ui,
+            action,
+            layout,
+            "GitHub",
+            Some(github),
+            false,
+            Some(&open_action),
+        );
+    }
+}
+
+fn render_package_source_buttons(ui: &mut egui::Ui, action: &mut Option<Step2Action>) {
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        if ui
+            .button("Add Source")
+            .on_hover_text("Open mod_downloads_user.toml")
+            .clicked()
+        {
+            *action = Some(Step2Action::OpenModDownloadsUserSource);
+        }
+        if ui
+            .button("Reload Sources")
+            .on_hover_text("Reload mod_downloads_default.toml and mod_downloads_user.toml")
+            .clicked()
+        {
+            *action = Some(Step2Action::ReloadModDownloadSources);
+        }
+    });
+}
+
+fn render_package_update_buttons(
+    ui: &mut egui::Ui,
+    details: &Step2Details,
+    action: &mut Option<Step2Action>,
+    locked: bool,
+) {
+    ui.add_space(4.0);
+    let label = if locked {
+        "Unlock Updates"
+    } else {
+        "Lock Updates"
+    };
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(
+                details.package_can_check_updates,
+                egui::Button::new("Check This Mod"),
+            )
+            .on_hover_text("Check updates only for the selected mod.")
+            .clicked()
+        {
+            *action = Some(Step2Action::PreviewUpdateSelectedMod);
+        }
+        if ui
+            .button(label)
+            .on_hover_text("Skip or allow this mod when checking updates in this session.")
+            .clicked()
+        {
+            *action = Some(Step2Action::SetSelectedModUpdateLocked(!locked));
+        }
+    });
 }
 
 fn render_text_row(
@@ -263,7 +310,7 @@ fn render_path_row(
     label: &str,
     value: Option<&str>,
     missing_amber: bool,
-    open_action: Option<Step2Action>,
+    open_action: Option<&Step2Action>,
 ) {
     ui.add_sized(
         [layout.label_w, layout.row_h],
@@ -290,9 +337,9 @@ fn render_path_row(
                 .small_button("O")
                 .on_hover_text(crate::ui::shared::tooltip_global::OPEN)
                 .clicked()
-                && let Some(a) = open_action.clone()
+                && let Some(a) = open_action
             {
-                *action = Some(a);
+                *action = Some(a.clone());
             }
         });
     } else {

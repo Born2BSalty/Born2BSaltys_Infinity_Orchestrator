@@ -16,77 +16,18 @@ pub(crate) fn preview_update_selected(
     sources: &ModDownloadsLoad,
 ) {
     let exact_log_mode = state.step1.installs_exactly_from_weidu_logs();
-    let include_all_tabs = state.step1.game_install == "EET";
     let selected_source_ids = state.step2.selected_source_ids.clone();
     state.step2.update_selected_target_game_tab = None;
     state.step2.update_selected_target_tp_file = None;
 
-    let mut known = Vec::new();
-    let mut manual = Vec::new();
-    let mut unknown = Vec::new();
-    let mut locked = Vec::new();
-    let mut update_requests = Vec::new();
-    let mut queued_tp2 = HashSet::new();
-    for game_tab in if include_all_tabs {
-        ["BGEE", "BG2EE"]
-    } else {
-        [state.step2.active_game_tab.as_str(), ""]
-    } {
-        if game_tab.is_empty() {
-            continue;
-        }
-        let mods = if game_tab == "BGEE" {
-            &mut state.step2.bgee_mods
-        } else {
-            &mut state.step2.bg2ee_mods
-        };
-        for mod_state in mods.iter_mut() {
-            mod_state.package_marker = None;
-            if !exact_log_mode {
-                if !mod_state.checked
-                    && !mod_state
-                        .components
-                        .iter()
-                        .any(|component| component.checked)
-                {
-                    continue;
-                }
-                let label = if mod_state.name.trim().is_empty() {
-                    mod_state.tp_file.clone()
-                } else {
-                    mod_state.name.clone()
-                };
-                if mod_state.update_locked {
-                    locked.push(label);
-                    continue;
-                }
-                let source =
-                    resolve_selected_source(sources, &selected_source_ids, &mod_state.tp_file);
-                if let Some(source) = source {
-                    if mod_downloads::source_is_auto_resolvable(&source) {
-                        let tp2_key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
-                        if queued_tp2.insert(tp2_key) {
-                            queue_source_request(
-                                game_tab,
-                                &mod_state.tp_file,
-                                &label,
-                                None,
-                                &source,
-                                &mut update_requests,
-                            );
-                        }
-                        known.push(label);
-                    } else {
-                        mod_state.package_marker = Some('!');
-                        manual.push(label);
-                    }
-                } else {
-                    mod_state.package_marker = Some('!');
-                    unknown.push(label);
-                }
-            }
-        }
-    }
+    let FullUpdatePreviewCollection {
+        mut known,
+        mut manual,
+        mut unknown,
+        locked,
+        mut update_requests,
+        mut queued_tp2,
+    } = collect_full_update_preview(state, sources, &selected_source_ids, exact_log_mode);
     let mut pending_preview = PendingLogUpdatePreview {
         known: &mut known,
         manual: &mut manual,
@@ -101,14 +42,226 @@ pub(crate) fn preview_update_selected(
         &mut pending_preview,
     );
 
-    let known_count = known.len();
-    let manual_count = manual.len();
-    let unknown_count = unknown.len();
-    let locked_count = locked.len();
-    let missing_count = known_count + manual_count + unknown_count;
-    state.step2.update_selected_known_sources = known;
-    state.step2.update_selected_manual_sources = manual;
-    state.step2.update_selected_unknown_sources = unknown;
+    let preview = FullUpdatePreviewResult {
+        known,
+        manual,
+        unknown,
+        locked,
+        update_requests,
+    };
+    let update_requests = apply_full_update_preview_state(state, preview, exact_log_mode);
+    start_full_update_preview_check(
+        state,
+        step2_update_check_rx,
+        update_requests,
+        exact_log_mode,
+    );
+}
+
+pub(crate) fn preview_update_selected_mod(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+    sources: &ModDownloadsLoad,
+) {
+    let Some((game_tab, tp_file)) = target_update_mod(state) else {
+        return;
+    };
+    state.step2.update_selected_target_game_tab = Some(game_tab.clone());
+    state.step2.update_selected_target_tp_file = Some(tp_file.clone());
+    let selected_source_ids = state.step2.selected_source_ids.clone();
+    let mut preview =
+        collect_target_update_preview(state, sources, &selected_source_ids, &game_tab, &tp_file);
+    if preview.target_label.is_none() {
+        collect_pending_target_update_preview(
+            state,
+            sources,
+            &selected_source_ids,
+            &game_tab,
+            &tp_file,
+            &mut preview,
+        );
+    }
+    apply_target_update_preview(state, &game_tab, &tp_file, preview, step2_update_check_rx);
+}
+
+struct FullUpdatePreviewCollection {
+    known: Vec<String>,
+    manual: Vec<String>,
+    unknown: Vec<String>,
+    locked: Vec<String>,
+    update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
+    queued_tp2: HashSet<String>,
+}
+
+struct FullUpdatePreviewResult {
+    known: Vec<String>,
+    manual: Vec<String>,
+    unknown: Vec<String>,
+    locked: Vec<String>,
+    update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
+}
+
+struct TargetUpdatePreview {
+    target_label: Option<String>,
+    known: Vec<String>,
+    manual: Vec<String>,
+    unknown: Vec<String>,
+    update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
+}
+
+fn collect_full_update_preview(
+    state: &mut WizardState,
+    sources: &ModDownloadsLoad,
+    selected_source_ids: &BTreeMap<String, String>,
+    exact_log_mode: bool,
+) -> FullUpdatePreviewCollection {
+    let mut preview = FullUpdatePreviewCollection {
+        known: Vec::new(),
+        manual: Vec::new(),
+        unknown: Vec::new(),
+        locked: Vec::new(),
+        update_requests: Vec::new(),
+        queued_tp2: HashSet::new(),
+    };
+    let active_tabs = [state.step2.active_game_tab.clone()];
+    let all_tabs = ["BGEE".to_string(), "BG2EE".to_string()];
+    let game_tabs = if state.step1.game_install == "EET" {
+        all_tabs.as_slice()
+    } else {
+        active_tabs.as_slice()
+    };
+    for game_tab in game_tabs {
+        collect_game_tab_update_preview(
+            state,
+            sources,
+            selected_source_ids,
+            exact_log_mode,
+            game_tab,
+            &mut preview,
+        );
+    }
+    preview
+}
+
+fn collect_game_tab_update_preview(
+    state: &mut WizardState,
+    sources: &ModDownloadsLoad,
+    selected_source_ids: &BTreeMap<String, String>,
+    exact_log_mode: bool,
+    game_tab: &str,
+    preview: &mut FullUpdatePreviewCollection,
+) {
+    let mods = if game_tab == "BGEE" {
+        &mut state.step2.bgee_mods
+    } else {
+        &mut state.step2.bg2ee_mods
+    };
+    for mod_state in mods.iter_mut() {
+        mod_state.package_marker = None;
+        if exact_log_mode || !mod_selected_for_update(mod_state) {
+            continue;
+        }
+        let label = mod_update_label(mod_state);
+        if mod_state.update_locked {
+            preview.locked.push(label);
+            continue;
+        }
+        queue_mod_update_preview(
+            game_tab,
+            mod_state,
+            &label,
+            sources,
+            selected_source_ids,
+            preview,
+        );
+    }
+}
+
+fn mod_selected_for_update(mod_state: &crate::app::state::Step2ModState) -> bool {
+    mod_state.checked
+        || mod_state
+            .components
+            .iter()
+            .any(|component| component.checked)
+}
+
+fn mod_update_label(mod_state: &crate::app::state::Step2ModState) -> String {
+    if mod_state.name.trim().is_empty() {
+        mod_state.tp_file.clone()
+    } else {
+        mod_state.name.clone()
+    }
+}
+
+fn queue_mod_update_preview(
+    game_tab: &str,
+    mod_state: &mut crate::app::state::Step2ModState,
+    label: &str,
+    sources: &ModDownloadsLoad,
+    selected_source_ids: &BTreeMap<String, String>,
+    preview: &mut FullUpdatePreviewCollection,
+) {
+    let source = resolve_selected_source(sources, selected_source_ids, &mod_state.tp_file);
+    if let Some(source) = source {
+        if mod_downloads::source_is_auto_resolvable(&source) {
+            let tp2_key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
+            if preview.queued_tp2.insert(tp2_key) {
+                queue_source_request(
+                    game_tab,
+                    &mod_state.tp_file,
+                    label,
+                    None,
+                    &source,
+                    &mut preview.update_requests,
+                );
+            }
+            preview.known.push(label.to_string());
+        } else {
+            mod_state.package_marker = Some('!');
+            preview.manual.push(label.to_string());
+        }
+    } else {
+        mod_state.package_marker = Some('!');
+        preview.unknown.push(label.to_string());
+    }
+}
+
+fn apply_full_update_preview_state(
+    state: &mut WizardState,
+    preview: FullUpdatePreviewResult,
+    exact_log_mode: bool,
+) -> Vec<super::app_step2_update_check::Step2UpdateCheckRequest> {
+    let known_count = preview.known.len();
+    let manual_count = preview.manual.len();
+    let unknown_count = preview.unknown.len();
+    let locked_count = preview.locked.len();
+    let request_count = preview.update_requests.len();
+    state.step2.update_selected_known_sources = preview.known;
+    state.step2.update_selected_manual_sources = preview.manual;
+    state.step2.update_selected_unknown_sources = preview.unknown;
+    clear_full_update_preview_results(state);
+    state.step2.update_selected_check_total_count = request_count;
+    state.step2.update_selected_popup_open = true;
+    state.step2.update_selected_has_run = true;
+    state.step2.update_selected_last_selection_signature =
+        Some(update_selection_signature(&state.step2));
+    state.step2.update_selected_last_was_full_selection = true;
+    if exact_log_mode {
+        state.step2.exact_log_mod_list_checked = true;
+    }
+    state.step2.scan_status = full_update_preview_status(
+        exact_log_mode,
+        known_count,
+        manual_count,
+        unknown_count,
+        locked_count,
+    );
+    preview.update_requests
+}
+
+fn clear_full_update_preview_results(state: &mut WizardState) {
     state.step2.update_selected_update_assets.clear();
     state.step2.update_selected_update_sources.clear();
     state.step2.update_selected_locked_update_assets.clear();
@@ -129,16 +282,17 @@ pub(crate) fn preview_update_selected(
     state.step2.update_selected_confirm_latest_fallback_open = false;
     state.step2.update_selected_merge_latest_fallback = false;
     state.step2.update_selected_check_done_count = 0;
-    state.step2.update_selected_check_total_count = update_requests.len();
-    state.step2.update_selected_popup_open = true;
-    state.step2.update_selected_has_run = true;
-    state.step2.update_selected_last_selection_signature =
-        Some(update_selection_signature(&state.step2));
-    state.step2.update_selected_last_was_full_selection = true;
+}
+
+fn full_update_preview_status(
+    exact_log_mode: bool,
+    known_count: usize,
+    manual_count: usize,
+    unknown_count: usize,
+    locked_count: usize,
+) -> String {
     if exact_log_mode {
-        state.step2.exact_log_mod_list_checked = true;
-    }
-    state.step2.scan_status = if exact_log_mode {
+        let missing_count = known_count + manual_count + unknown_count;
         format!(
             "Check mod list: {missing_count} missing, {known_count} auto, {manual_count} manual, {unknown_count} no source"
         )
@@ -146,8 +300,21 @@ pub(crate) fn preview_update_selected(
         format!(
             "Check updates: {known_count} auto, {manual_count} manual, {unknown_count} missing, {locked_count} locked"
         )
-    };
-    if !update_requests.is_empty() {
+    }
+}
+
+fn start_full_update_preview_check(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+    update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
+    exact_log_mode: bool,
+) {
+    if update_requests.is_empty() {
+        state.step2.update_selected_check_running = false;
+        *step2_update_check_rx = None;
+    } else {
         state.step2.scan_status = if exact_log_mode {
             format!("Checking missing mod sources: {}", update_requests.len())
         } else {
@@ -158,131 +325,172 @@ pub(crate) fn preview_update_selected(
             step2_update_check_rx,
             update_requests,
         );
-    } else {
-        state.step2.update_selected_check_running = false;
-        *step2_update_check_rx = None;
     }
 }
 
-pub(crate) fn preview_update_selected_mod(
-    state: &mut WizardState,
-    step2_update_check_rx: &mut Option<
-        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
-    >,
-    sources: &ModDownloadsLoad,
-) {
-    let (game_tab, tp_file) = if let (Some(game_tab), Some(tp_file)) = (
+fn target_update_mod(state: &WizardState) -> Option<(String, String)> {
+    if let (Some(game_tab), Some(tp_file)) = (
         state.step2.update_selected_target_game_tab.clone(),
         state.step2.update_selected_target_tp_file.clone(),
     ) {
-        (game_tab, tp_file)
+        Some((game_tab, tp_file))
+    } else if let Some(Step2Selection::Mod { game_tab, tp_file }) = state.step2.selected.clone() {
+        Some((game_tab, tp_file))
     } else {
-        let Some(Step2Selection::Mod { game_tab, tp_file }) = state.step2.selected.clone() else {
-            return;
-        };
-        (game_tab, tp_file)
+        None
+    }
+}
+
+fn collect_target_update_preview(
+    state: &mut WizardState,
+    sources: &ModDownloadsLoad,
+    selected_source_ids: &BTreeMap<String, String>,
+    game_tab: &str,
+    tp_file: &str,
+) -> TargetUpdatePreview {
+    let mut preview = TargetUpdatePreview {
+        target_label: None,
+        known: Vec::new(),
+        manual: Vec::new(),
+        unknown: Vec::new(),
+        update_requests: Vec::new(),
     };
-    state.step2.update_selected_target_game_tab = Some(game_tab.clone());
-    state.step2.update_selected_target_tp_file = Some(tp_file.clone());
-    let selected_source_ids = state.step2.selected_source_ids.clone();
     let mods = if game_tab == "BGEE" {
         &mut state.step2.bgee_mods
     } else {
         &mut state.step2.bg2ee_mods
     };
-
-    let mut known = Vec::new();
-    let mut manual = Vec::new();
-    let mut unknown = Vec::new();
-    let mut update_requests = Vec::new();
-    let mut target_label = None::<String>;
-
-    for mod_state in mods.iter_mut() {
-        if mod_state.tp_file != tp_file {
-            continue;
-        }
+    if let Some(mod_state) = mods
+        .iter_mut()
+        .find(|mod_state| mod_state.tp_file == tp_file)
+    {
         mod_state.package_marker = None;
-        let label = if mod_state.name.trim().is_empty() {
-            mod_state.tp_file.clone()
-        } else {
-            mod_state.name.clone()
-        };
-        target_label = Some(label.clone());
-        if mod_state.update_locked {
-            break;
+        let label = mod_update_label(mod_state);
+        preview.target_label = Some(label.clone());
+        if !mod_state.update_locked {
+            queue_target_mod_update_preview(
+                game_tab,
+                mod_state,
+                &label,
+                sources,
+                selected_source_ids,
+                &mut preview,
+            );
         }
-        let source = resolve_selected_source(sources, &selected_source_ids, &mod_state.tp_file);
-        if let Some(source) = source {
-            if mod_downloads::source_is_auto_resolvable(&source) {
-                queue_source_request(
-                    &game_tab,
-                    &mod_state.tp_file,
-                    &label,
-                    None,
-                    &source,
-                    &mut update_requests,
-                );
-                known.push(label);
-            } else {
-                mod_state.package_marker = Some('!');
-                manual.push(label);
-            }
+    }
+    preview
+}
+
+fn queue_target_mod_update_preview(
+    game_tab: &str,
+    mod_state: &mut crate::app::state::Step2ModState,
+    label: &str,
+    sources: &ModDownloadsLoad,
+    selected_source_ids: &BTreeMap<String, String>,
+    preview: &mut TargetUpdatePreview,
+) {
+    let source = resolve_selected_source(sources, selected_source_ids, &mod_state.tp_file);
+    if let Some(source) = source {
+        if mod_downloads::source_is_auto_resolvable(&source) {
+            queue_source_request(
+                game_tab,
+                &mod_state.tp_file,
+                label,
+                None,
+                &source,
+                &mut preview.update_requests,
+            );
+            preview.known.push(label.to_string());
         } else {
             mod_state.package_marker = Some('!');
-            unknown.push(label);
+            preview.manual.push(label.to_string());
         }
+    } else {
+        mod_state.package_marker = Some('!');
+        preview.unknown.push(label.to_string());
+    }
+}
+
+fn collect_pending_target_update_preview(
+    state: &WizardState,
+    sources: &ModDownloadsLoad,
+    selected_source_ids: &BTreeMap<String, String>,
+    game_tab: &str,
+    tp_file: &str,
+    preview: &mut TargetUpdatePreview,
+) {
+    let target_tp2 = mod_downloads::normalize_mod_download_tp2(tp_file);
+    for pending in &state.step2.log_pending_downloads {
+        if pending.game_tab != game_tab
+            || mod_downloads::normalize_mod_download_tp2(&pending.tp_file) != target_tp2
+        {
+            continue;
+        }
+        queue_pending_target_update_preview(state, sources, selected_source_ids, pending, preview);
         break;
     }
+}
 
-    if target_label.is_none() {
-        for pending in &state.step2.log_pending_downloads {
-            if pending.game_tab != game_tab
-                || mod_downloads::normalize_mod_download_tp2(&pending.tp_file)
-                    != mod_downloads::normalize_mod_download_tp2(&tp_file)
-            {
-                continue;
-            }
-            let source = resolve_selected_source(sources, &selected_source_ids, &pending.tp_file);
-            if let Some(source) = source {
-                if mod_downloads::source_is_auto_resolvable(&source) {
-                    queue_source_request(
-                        &pending.game_tab,
-                        &pending.tp_file,
-                        &pending.label,
-                        if state.step1.installs_exactly_from_weidu_logs() {
-                            pending.requested_version.as_deref()
-                        } else {
-                            None
-                        },
-                        &source,
-                        &mut update_requests,
-                    );
-                    known.push(pending.label.clone());
-                } else {
-                    manual.push(pending.label.clone());
-                }
-            } else {
-                unknown.push(pending.label.clone());
-            }
-            target_label = Some(pending.label.clone());
-            break;
+fn queue_pending_target_update_preview(
+    state: &WizardState,
+    sources: &ModDownloadsLoad,
+    selected_source_ids: &BTreeMap<String, String>,
+    pending: &crate::app::state::Step2LogPendingDownload,
+    preview: &mut TargetUpdatePreview,
+) {
+    let source = resolve_selected_source(sources, selected_source_ids, &pending.tp_file);
+    if let Some(source) = source {
+        if mod_downloads::source_is_auto_resolvable(&source) {
+            queue_source_request(
+                &pending.game_tab,
+                &pending.tp_file,
+                &pending.label,
+                state
+                    .step1
+                    .installs_exactly_from_weidu_logs()
+                    .then_some(pending.requested_version.as_deref())
+                    .flatten(),
+                &source,
+                &mut preview.update_requests,
+            );
+            preview.known.push(pending.label.clone());
+        } else {
+            preview.manual.push(pending.label.clone());
         }
+    } else {
+        preview.unknown.push(pending.label.clone());
     }
+    preview.target_label = Some(pending.label.clone());
+}
 
-    if let Some(label) = target_label.as_deref() {
-        replace_label_entries(&mut state.step2.update_selected_known_sources, label, known);
+fn apply_target_update_preview(
+    state: &mut WizardState,
+    game_tab: &str,
+    tp_file: &str,
+    preview: TargetUpdatePreview,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+) {
+    let update_requests = preview.update_requests;
+    if let Some(label) = preview.target_label.as_deref() {
+        replace_label_entries(
+            &mut state.step2.update_selected_known_sources,
+            label,
+            preview.known,
+        );
         replace_label_entries(
             &mut state.step2.update_selected_manual_sources,
             label,
-            manual,
+            preview.manual,
         );
         replace_label_entries(
             &mut state.step2.update_selected_unknown_sources,
             label,
-            unknown,
+            preview.unknown,
         );
         super::app_step2_update_check::clear_update_check_result_for_mod(
-            state, &game_tab, &tp_file, label,
+            state, game_tab, tp_file, label,
         );
     }
     state.step2.update_selected_confirm_latest_fallback_open = false;
@@ -293,16 +501,26 @@ pub(crate) fn preview_update_selected_mod(
     state.step2.update_selected_has_run = true;
     state.step2.update_selected_last_selection_signature = None;
     state.step2.update_selected_last_was_full_selection = false;
-    if !update_requests.is_empty() {
+    start_target_update_preview_check(state, step2_update_check_rx, update_requests);
+}
+
+fn start_target_update_preview_check(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+    update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
+) {
+    if update_requests.is_empty() {
+        state.step2.update_selected_check_running = false;
+        *step2_update_check_rx = None;
+    } else {
         state.step2.scan_status = "Checking update source: 1".to_string();
         super::app_step2_update_check::start_step2_update_check(
             state,
             step2_update_check_rx,
             update_requests,
         );
-    } else {
-        state.step2.update_selected_check_running = false;
-        *step2_update_check_rx = None;
     }
 }
 

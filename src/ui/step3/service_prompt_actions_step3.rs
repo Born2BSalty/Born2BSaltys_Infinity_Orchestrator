@@ -10,7 +10,7 @@ pub(crate) fn apply_prompt_actions(state: &mut WizardState, requests: &[PromptAc
     step3_prompt_edit::apply_prompt_actions(state, requests);
 }
 
-pub(crate) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
+pub(crate) fn render(ui: &egui::Ui, state: &mut WizardState) {
     if !state.step3.prompt_edit_open {
         return;
     }
@@ -21,7 +21,7 @@ pub(crate) fn render(ui: &mut egui::Ui, state: &mut WizardState) {
     }
 }
 
-fn render_wlb_editor(ui: &mut egui::Ui, state: &mut WizardState) {
+fn render_wlb_editor(ui: &egui::Ui, state: &mut WizardState) {
     let mut open = state.step3.prompt_edit_open;
     egui::Window::new("Set @wlb-inputs")
         .open(&mut open)
@@ -68,7 +68,7 @@ fn render_wlb_editor(ui: &mut egui::Ui, state: &mut WizardState) {
     state.step3.prompt_edit_open = open && state.step3.prompt_edit_open;
 }
 
-fn render_json_editor(ui: &mut egui::Ui, state: &mut WizardState) {
+fn render_json_editor(ui: &egui::Ui, state: &mut WizardState) {
     let mut open = state.step3.prompt_edit_open;
     egui::Window::new("Prompt Entry JSON")
         .open(&mut open)

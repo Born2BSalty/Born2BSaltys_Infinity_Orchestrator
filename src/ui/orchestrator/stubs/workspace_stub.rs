@@ -1,15 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// Workspace stub destination.
-//
-// Per Phase 2 P2.T5: title "Workspace", sub "Coming in Phase 6", plus a short
-// note about which modlist id is loaded. **It does NOT host `WizardApp`** —
-// per C1/C4 revisions, the Workspace destination is wired in Phase 6 to call
-// BIO's per-step page renderers directly (plus an orchestrator-side Step 4
-// wrapper per C4).
-//
-// SPEC: §2.2.
 
 use eframe::egui;
 

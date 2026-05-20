@@ -10,11 +10,15 @@ use tar::Archive as TarArchive;
 pub(super) fn is_tar_gz_archive(path: &Path) -> bool {
     path.file_name()
         .and_then(|value| value.to_str())
-        .map(|value| {
-            let lower = value.to_ascii_lowercase();
-            lower.ends_with(".tar.gz") || lower.ends_with(".tgz")
+        .is_some_and(|value| {
+            value
+                .get(value.len().saturating_sub(".tar.gz".len())..)
+                .is_some_and(|suffix| suffix.eq_ignore_ascii_case(".tar.gz"))
+                || path
+                    .extension()
+                    .and_then(|suffix| suffix.to_str())
+                    .is_some_and(|suffix| suffix.eq_ignore_ascii_case("tgz"))
         })
-        .unwrap_or(false)
 }
 
 pub(super) fn extract_tar_gz_archive(archive_path: &Path, out_dir: &Path) -> Result<(), String> {

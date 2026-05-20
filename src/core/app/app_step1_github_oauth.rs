@@ -66,7 +66,7 @@ pub(crate) fn start_github_oauth_device_flow()
     let interval_secs = response.interval.max(1);
     let expires_in_secs = response.expires_in.max(interval_secs);
     thread::spawn(move || {
-        poll_for_access_token(tx, device_code, interval_secs, expires_in_secs);
+        poll_for_access_token(&tx, &device_code, interval_secs, expires_in_secs);
     });
 
     Ok((
@@ -129,7 +129,7 @@ pub(crate) fn poll_github_oauth_flow(
         Ok(validated) => {
             match super::app_step2_update_github_auth::store_github_oauth_token(&validated.token) {
                 Ok(()) => {
-                    state.github_auth_login = validated.login.clone();
+                    state.github_auth_login.clone_from(&validated.login);
                     state.github_auth_status_text.clear();
                     state.step2.scan_status = format!("Connected as {}.", validated.login);
                 }
@@ -162,8 +162,8 @@ fn request_device_code() -> Result<GitHubDeviceCodeResponse, String> {
 }
 
 fn poll_for_access_token(
-    tx: mpsc::Sender<GitHubOAuthFlowResult>,
-    device_code: String,
+    tx: &mpsc::Sender<GitHubOAuthFlowResult>,
+    device_code: &str,
     interval_secs: u64,
     expires_in_secs: u64,
 ) {
@@ -181,7 +181,7 @@ fn poll_for_access_token(
             return;
         }
         thread::sleep(Duration::from_secs(interval));
-        match poll_access_token_once(&agent, &device_code) {
+        match poll_access_token_once(&agent, device_code) {
             Ok(GitHubAccessTokenPollOutcome::Success(token)) => {
                 let _ = tx.send(
                     fetch_github_login_for_token(&agent, &token)
@@ -193,11 +193,7 @@ fn poll_for_access_token(
             Ok(GitHubAccessTokenPollOutcome::SlowDown) => {
                 interval = interval.saturating_add(5);
             }
-            Ok(GitHubAccessTokenPollOutcome::Failed(err)) => {
-                let _ = tx.send(Err(err));
-                return;
-            }
-            Err(err) => {
+            Ok(GitHubAccessTokenPollOutcome::Failed(err)) | Err(err) => {
                 let _ = tx.send(Err(err));
                 return;
             }

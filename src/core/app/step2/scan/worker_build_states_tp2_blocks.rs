@@ -125,7 +125,7 @@ fn parse_begin_at_component_id(line: &str) -> Option<String> {
     }
     let tail = trimmed["BEGIN".len()..].trim_start();
     let rest = tail.strip_prefix('@')?;
-    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         None
     } else {
@@ -155,7 +155,7 @@ pub(super) fn parse_designated_id(upper_line: &str) -> Option<String> {
     }
     let index = upper_line.find("DESIGNATED")?;
     let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-    let digits: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         None
     } else {
@@ -207,12 +207,12 @@ fn parse_group_key(line: &str) -> Option<String> {
     if let Some(rest) = tail.strip_prefix('~') {
         let end = rest.find('~')?;
         let value = rest[..end].trim();
-        return (!value.is_empty()).then(|| format!("~{}~", value));
+        return (!value.is_empty()).then(|| format!("~{value}~"));
     }
     if let Some(rest) = tail.strip_prefix('"') {
         let end = rest.find('"')?;
         let value = rest[..end].trim();
-        return (!value.is_empty()).then(|| format!("\"{}\"", value));
+        return (!value.is_empty()).then(|| format!("\"{value}\""));
     }
     let value: String = tail
         .chars()

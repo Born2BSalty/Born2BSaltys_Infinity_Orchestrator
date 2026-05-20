@@ -1,432 +1,235 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `InstallScreenState` — per-screen UI state for the Install Modlist
-// destination (SPEC §4). Lives on `OrchestratorApp::install_screen_state`.
-// Persists across screen visits within a session; not written to disk (the
-// pasted code / chosen destination are transient until an install starts —
-// Phase 7).
-//
-// **Run 4 scope.** The four-stage machine is declared *whole*
-// (`Paste | Preview | Downloading | InstallingStub`) so the dispatcher and
-// the back-navigation are total. Run 3 implemented `Paste` +
-// `InstallingStub`; Run 4 implements `Preview` (the parsed share-code
-// preview — Overview Box + 6 tabs + the `allow_auto_install` gate +
-// provenance display + `ForkInfoPopup`). `Downloading` still renders the
-// Run-5 placeholder; the download/extract engines are NOT in Run 4.
-//
-// Run 4 grows this struct with the real preview state:
-//   - `parsed_preview: Option<ModlistSharePreview>` — the result of
-//     `preview_modlist_share_code`, cached so the parse runs once on
-//     `Paste → Preview` (not per-frame). `None` while on Paste; `Some`
-//     after a successful parse. Carries (via carve-out #5) the
-//     `allow_auto_install` bit + the provenance trio
-//     `name` / `author` / `forked_from`.
-//   - `preview_parse_error: Option<String>` — set when the parse fails so
-//     the preview can show the error instead of a blank box (the wireframe
-//     assumes a valid code; a paste-stage parse failure is real and must be
-//     surfaced, not silently swallowed).
-//   - `active_preview_tab: PreviewTab` — the selected Content-Box tab.
-//   - `fork_info_open: bool` — whether the `ForkInfoPopup` is open.
-// `preview_cached` stays (the stage-4 stub's `← Back to preview` target,
-// SPEC §4.4) and is now set `true` when the parse succeeds.
-//
-// **DestChoice → WeiDU flag mapping (SPEC §13.12 #1 + #6).** The radio
-// labels are wireframe-verbatim (`screens.jsx:123-154`); the flag mapping is
-// `DestChoice::to_flags` below — a pure function with unit tests. Run 3 only
-// *records* the choice + exposes the mapping; the mapping is applied to the
-// orchestrator-owned `WizardState.step1` at install start (Phase 7), so no
-// BIO state is mutated this run.
-//
-// SPEC: §4.1 (paste stage), §4.2 (preview stage + `allow_auto_install`
-//       gate + provenance), §4.4 (stage 4 stub), §13.3 (provenance fields),
-//       §13.12 #1/#6 (flag policy), §1 (carve-out #5).
-
-// rationale: per-screen UI state + the pure `DestChoice::to_flags` mapping —
-// `DestFlags`'s 4 flags model 4 independent WeiDU policy bits (intentional,
-// not a state-machine smell); `Self`/`const fn`/`#[must_use]` and the
-// doc-paragraph-length lint are churn without behavior value (Cat 3).
-#![allow(
-    clippy::struct_excessive_bools,
-    clippy::use_self,
-    clippy::missing_const_for_fn,
-    clippy::must_use_candidate,
-    clippy::too_long_first_doc_paragraph
-)]
 
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::ui::install::stage_downloading::{DownloadProgress, SkippedMod};
 
-/// The four Install Modlist stages (SPEC §4: paste → preview → downloading →
-/// installing). The machine is whole so the dispatcher + back-navigation are
-/// total; Run 3 implements `Paste` + `InstallingStub`, with `Preview` /
-/// `Downloading` rendering Run-4 / Run-5 placeholders.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InstallStage {
-    /// Stage 1 — destination + `DestinationNotEmptyWarning` + import-code
-    /// textarea + footer (SPEC §4.1). Fully implemented this run.
     #[default]
     Paste,
-    /// Stage 2 — parsed share-code preview (SPEC §4.2). Run 4. This run it
-    /// renders a placeholder.
     Preview,
-    /// Stage 3 — per-mod download/extract grid (SPEC §4.3). Run 5. This run
-    /// it renders a placeholder.
     Downloading,
-    /// Stage 4 — the install runtime (SPEC §4.4). Full runtime is Phase 7;
-    /// this run renders the §4.4 stub.
     InstallingStub,
 }
 
-/// The `DestinationNotEmptyWarning` radio choice (SPEC §4.1 / §13.12 #6).
-/// Labels in the UI are wireframe-verbatim (`screens.jsx:123-154`):
-///   - `Clear`    → "Clear contents"
-///   - `Backup`   → "Backup contents then proceed"
-///   - `Continue` → "Continue partial installation" (only when partial is
-///     allowed)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DestChoice {
-    /// Wipe the target then reinstall.
     Clear,
-    /// Move existing files to a backup folder, then install.
     Backup,
-    /// Continue a partial install — skip the share-code requirement, pick up
-    /// where a previous install left off.
     Continue,
 }
 
-/// The `WeiDU` / install-runner flags a `DestChoice` resolves to, per
-/// SPEC §13.12. These mirror `bio::app::state::Step1State` fields
-/// (`prepare_target_dirs_before_install`, `backup_targets_before_eet_copy`,
-/// `skip_installed`, `check_last_installed`). Run 3 only computes this; the
-/// values are written into the orchestrator-owned `WizardState.step1` at
-/// install start (Phase 7) — no BIO state is touched this run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DestFlags {
-    /// `prepare_target_dirs_before_install` — wipe/prepare the target dirs
-    /// before `WeiDU` runs (SPEC §13.12 #6).
     pub prepare_target_dirs_before_install: bool,
-    /// `backup_targets_before_eet_copy` — move existing files aside first
-    /// (SPEC §13.12 #6).
     pub backup_targets_before_eet_copy: bool,
-    /// `-s` (skip installed) — ON only in Continue Partial Install
-    /// (SPEC §13.12 #1).
     pub skip_installed: bool,
-    /// `-c` (check last installed) — ON only in Continue Partial Install
-    /// (SPEC §13.12 #1).
-    pub check_last_installed: bool,
+    pub check_last_installed: DestCheckFlag,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DestCheckFlag(bool);
+
+impl DestCheckFlag {
+    const fn new(value: bool) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> bool {
+        self.0
+    }
+}
+
+impl std::ops::Not for DestCheckFlag {
+    type Output = bool;
+
+    fn not(self) -> Self::Output {
+        !self.0
+    }
 }
 
 impl DestChoice {
-    /// SPEC §13.12 #1 + #6 — the canonical `DestChoice` → flag mapping.
-    ///
-    /// | choice     | prepare | backup | -s / -c |
-    /// |------------|---------|--------|---------|
-    /// | `Clear`    | true    | false  | off     |
-    /// | `Backup`   | true    | true   | off     |
-    /// | `Continue` | false   | false  | on      |
-    ///
-    /// - `Clear` / `Backup` are fresh installs: prepare the target dirs
-    ///   (`prepare_target_dirs_before_install = true`); `Backup` additionally
-    ///   moves existing files aside first (`backup_targets_before_eet_copy =
-    ///   true`); skip/check-last stay OFF (§13.12 #6 + #1 "OFF for fresh
-    ///   installs").
-    /// - `Continue` is the Continue Partial Install workflow: do NOT prepare
-    ///   the target dirs (`prepare_target_dirs_before_install = false`), no
-    ///   backup, and turn `-s` (skip installed) + `-c` (check last installed)
-    ///   ON (§13.12 #1 "automatically ON when the user enters the Continue
-    ///   Partial Install workflow").
-    pub fn to_flags(self) -> DestFlags {
+    #[must_use]
+    pub const fn to_flags(self) -> DestFlags {
         match self {
-            DestChoice::Clear => DestFlags {
+            Self::Clear => DestFlags {
                 prepare_target_dirs_before_install: true,
                 backup_targets_before_eet_copy: false,
                 skip_installed: false,
-                check_last_installed: false,
+                check_last_installed: DestCheckFlag::new(false),
             },
-            DestChoice::Backup => DestFlags {
+            Self::Backup => DestFlags {
                 prepare_target_dirs_before_install: true,
                 backup_targets_before_eet_copy: true,
                 skip_installed: false,
-                check_last_installed: false,
+                check_last_installed: DestCheckFlag::new(false),
             },
-            DestChoice::Continue => DestFlags {
+            Self::Continue => DestFlags {
                 prepare_target_dirs_before_install: false,
                 backup_targets_before_eet_copy: false,
                 skip_installed: true,
-                check_last_installed: true,
+                check_last_installed: DestCheckFlag::new(true),
             },
         }
     }
 }
 
-/// The six Content-Box tabs of the preview stage, in the file-folder strip
-/// (SPEC §4.2; wireframe `screens.jsx::ImportPreviewTabs` line 470 — exact
-/// order + labels). `display_label` is the wireframe-verbatim tab caption.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PreviewTab {
-    /// BIO version / game / install mode / log counts / included flags /
-    /// "what import will do" recap (default tab — wireframe `useState`
-    /// initial is `"Summary"`).
     #[default]
     Summary,
-    /// Verbatim BGEE `weidu.log` from the share code.
     BgeeWeidu,
-    /// Verbatim BG2EE `weidu.log` from the share code.
     Bg2eeWeidu,
-    /// `mod_downloads_user.toml` excerpt packaged in the share.
     UserDownloads,
-    /// Pinned `[refs]` / `[sources]` TOML.
     InstalledRefs,
-    /// `<mod> | <source> | <file>` list of restored mod-config files.
     ModConfigs,
 }
 
 impl PreviewTab {
-    /// All six tabs in wireframe order (for the tab-strip render loop).
-    pub const ALL: [PreviewTab; 6] = [
-        PreviewTab::Summary,
-        PreviewTab::BgeeWeidu,
-        PreviewTab::Bg2eeWeidu,
-        PreviewTab::UserDownloads,
-        PreviewTab::InstalledRefs,
-        PreviewTab::ModConfigs,
+    pub const ALL: [Self; 6] = [
+        Self::Summary,
+        Self::BgeeWeidu,
+        Self::Bg2eeWeidu,
+        Self::UserDownloads,
+        Self::InstalledRefs,
+        Self::ModConfigs,
     ];
 
-    /// Wireframe-verbatim tab caption (`screens.jsx:470`).
-    pub fn display_label(self) -> &'static str {
+    #[must_use]
+    pub const fn display_label(self) -> &'static str {
         match self {
-            PreviewTab::Summary => "Summary",
-            PreviewTab::BgeeWeidu => "BGEE WeiDU",
-            PreviewTab::Bg2eeWeidu => "BG2EE WeiDU",
-            PreviewTab::UserDownloads => "User Downloads",
-            PreviewTab::InstalledRefs => "Installed Refs",
-            PreviewTab::ModConfigs => "Mod Configs",
+            Self::Summary => "Summary",
+            Self::BgeeWeidu => "BGEE WeiDU",
+            Self::Bg2eeWeidu => "BG2EE WeiDU",
+            Self::UserDownloads => "User Downloads",
+            Self::InstalledRefs => "Installed Refs",
+            Self::ModConfigs => "Mod Configs",
         }
     }
 }
 
-/// Per-screen Install Modlist UI state. Run 4 grows the preview state (see
-/// the module header); `destination` / `import_code` / the `DestChoice`
-/// machinery stay from Run 3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct InstallPipelineFlags {
+    bits: u8,
+}
+
+impl InstallPipelineFlags {
+    const ARMED: u8 = 0b00_0001;
+    const ARCHIVES_STAGED: u8 = 0b00_0010;
+    const ARCHIVES_INGESTED: u8 = 0b00_0100;
+    const ARCHIVES_VERIFIED: u8 = 0b00_1000;
+    const DOWNLOAD_PHASE_STARTED: u8 = 0b01_0000;
+    const ARCHIVE_SKIP_COMPLETED: u8 = 0b10_0000;
+
+    #[must_use]
+    pub const fn armed(self) -> bool {
+        self.bits & Self::ARMED != 0
+    }
+
+    pub const fn set_armed(&mut self, value: bool) {
+        self.set_bit(Self::ARMED, value);
+    }
+
+    #[must_use]
+    pub const fn archives_staged(self) -> bool {
+        self.bits & Self::ARCHIVES_STAGED != 0
+    }
+
+    pub const fn set_archives_staged(&mut self, value: bool) {
+        self.set_bit(Self::ARCHIVES_STAGED, value);
+    }
+
+    #[must_use]
+    pub const fn archives_ingested(self) -> bool {
+        self.bits & Self::ARCHIVES_INGESTED != 0
+    }
+
+    pub const fn set_archives_ingested(&mut self, value: bool) {
+        self.set_bit(Self::ARCHIVES_INGESTED, value);
+    }
+
+    #[must_use]
+    pub const fn archives_verified(self) -> bool {
+        self.bits & Self::ARCHIVES_VERIFIED != 0
+    }
+
+    pub const fn set_archives_verified(&mut self, value: bool) {
+        self.set_bit(Self::ARCHIVES_VERIFIED, value);
+    }
+
+    #[must_use]
+    pub const fn download_phase_started(self) -> bool {
+        self.bits & Self::DOWNLOAD_PHASE_STARTED != 0
+    }
+
+    pub const fn set_download_phase_started(&mut self, value: bool) {
+        self.set_bit(Self::DOWNLOAD_PHASE_STARTED, value);
+    }
+
+    #[must_use]
+    pub const fn archive_skip_completed(self) -> bool {
+        self.bits & Self::ARCHIVE_SKIP_COMPLETED != 0
+    }
+
+    pub const fn set_archive_skip_completed(&mut self, value: bool) {
+        self.set_bit(Self::ARCHIVE_SKIP_COMPLETED, value);
+    }
+
+    pub const fn reset(&mut self) {
+        self.bits = 0;
+    }
+
+    const fn set_bit(&mut self, bit: u8, value: bool) {
+        if value {
+            self.bits |= bit;
+        } else {
+            self.bits &= !bit;
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct InstallScreenState {
-    /// Active stage. Defaults to `Paste` so a fresh entry from the rail / the
-    /// Home `paste import code` CTA lands on stage 1.
     pub stage: InstallStage,
-    /// Destination folder string (`FolderInput` value). The
-    /// `DestinationNotEmptyWarning` shows only when this is set AND non-empty
-    /// on disk.
     pub destination: String,
-    /// The chosen `DestinationNotEmptyWarning` option, if any. `None` until
-    /// the user picks one (no warning shown, or shown-but-unanswered).
     pub destination_choice: Option<DestChoice>,
-    /// The pasted BIO-MODLIST-V1 share code. Empty disables the footer
-    /// primary in non-partial mode (SPEC §4.1).
     pub import_code: String,
-    /// The parsed share-code preview (carve-out #5: carries
-    /// `allow_auto_install` + the provenance trio). `None` until the parse
-    /// runs on `Paste → Preview`; cached so the parse is one-shot, not
-    /// per-frame. Cleared when the user goes back to Paste.
-    ///
-    /// `pub(crate)` (the rest of the struct is `pub`): `ModlistSharePreview`
-    /// is BIO's `pub(crate)` type (carve-out #5 keeps it at its existing
-    /// field visibility — not a redesign decision), so this field can't be
-    /// more public than the type it holds. Every reader is in-crate.
     pub(crate) parsed_preview: Option<ModlistSharePreview>,
-    /// Set when `preview_modlist_share_code` returned `Err` so the preview
-    /// stage shows the failure instead of a blank box (mutually exclusive
-    /// with `parsed_preview` — a parse either yields a preview or an error).
     pub preview_parse_error: Option<String>,
-    /// The selected Content-Box tab (SPEC §4.2).
     pub active_preview_tab: PreviewTab,
-    /// Whether the `ForkInfoPopup` (SPEC §10.9) is open. Toggled by the
-    /// `⑂ fork info` button; the popup is Close-only + non-blocking.
     pub fork_info_open: bool,
-    /// Whether a parsed preview has been cached (drives the stage-4 stub's
-    /// `← Back to preview` target — SPEC §4.4: preview if cached, else
-    /// paste). Set `true` when the parse succeeds.
     pub preview_cached: bool,
-    /// Stage-3 per-mod download/extract progress model (SPEC §4.3).
-    /// **Phase 7 P7.T17 feeds it live** each frame from BIO's auto-build
-    /// state (`DownloadProgress::from_wizard_state`) while on the
-    /// Downloading stage; the Phase-5 empty-grid chassis is the
-    /// pre-arm / fork-download fallback. Cleared whenever the user leaves
-    /// Downloading back to Preview (a re-parsed code must not inherit a
-    /// stale grid).
     pub download_progress: DownloadProgress,
-    /// **P7.T17 — pipeline-armed-once latch.** `false` until the
-    /// Downloading stage has run the import + per-install-dir derivation +
-    /// auto-build arm exactly once for this code; flipped `true` by
-    /// `stage_downloading::render_live` on first entry so the import /
-    /// `arm_auto_build` (which set the `pending_saved_log_*` flags) is not
-    /// re-run every frame (that would reset the pipeline mid-flight).
-    /// Reset to `false` whenever the user leaves Downloading back to
-    /// Preview (alongside `download_progress`) so a re-entry re-arms with
-    /// a possibly-changed code/destination. Not persisted (transient until
-    /// an install starts — Phase 7).
-    pub pipeline_armed: bool,
-    /// **Non-masking arm-failure surface (the "it just sits there, no
-    /// feedback" fix).** Set to the error string when
-    /// `auto_build_driver::prepare_install_dirs_and_maybe_import` returns
-    /// `Err` on the one-shot arm: the latch stays `true` (no per-frame
-    /// re-import / I/O churn of a bad code — the original design intent),
-    /// but the Downloading chrome renders this prominently instead of the
-    /// failure being buried in the empty-grid-hidden `step2.scan_status`
-    /// sub-text (the reported permanent inert "0 / 0 mods" mystery). Mirror
-    /// of `preview_parse_error` (same `Option<String>` lifecycle). Cleared
-    /// by `clear_preview()` alongside `pipeline_armed` so a re-entry from
-    /// Preview re-arms cleanly. Not persisted.
+    pub pipeline_flags: InstallPipelineFlags,
     pub pipeline_arm_error: Option<String>,
-    /// **D1 (freeze fix) — content-addressed staging is one-shot per
-    /// state transition, NOT per render frame.** The pre-download
-    /// `archive_store::stage_known_archives` interposition (loads the
-    /// lock/index + copies stored archives onto BIO's deterministic path)
-    /// ran every frame until download started — repeated disk I/O on the
-    /// egui render thread. Set `true` the first frame it runs so it fires
-    /// exactly once (idempotent by construction — running once is correct;
-    /// only the per-frame repetition was the bug). Reset by
-    /// `clear_preview()`. Not persisted.
-    pub archives_staged: bool,
-    /// **D1 (freeze fix — the priority hang) — post-download archive
-    /// ingest is one-shot, NOT per frame.** `archive_store::ingest_
-    /// downloaded_archives` **FNV-hashes every downloaded archive**; it was
-    /// gated only by `!download_running && downloaded_sources non-empty`,
-    /// so it re-hashed *all* archives **every frame** for the entire
-    /// post-download window (which spans extraction — the reported worst-
-    /// case freeze). Set `true` the first frame the ingest runs so the
-    /// (idempotent) content-addressing pass executes exactly once. Reset by
-    /// `clear_preview()`. Not persisted.
-    pub archives_ingested: bool,
-    /// **Download-Overhaul Run 1 — the per-archive `{name,size,hash}`
-    /// expected hashes decoded from the pasted share code** (the Wabbajack
-    /// "expected" input — `share_export::decode_archive_meta`). Decoded
-    /// once at the same one-shot boundary as the skip pass and cached so
-    /// the post-download verify uses the SAME expected set. Empty for a
-    /// fieldless / pre-redesign / third-party code (⇒ today's
-    /// always-download fallback). Reset by `clear_preview()`. Not
-    /// persisted.
     pub expected_archive_meta: Vec<crate::registry::share_export::ArchiveMeta>,
-    /// **Download-Overhaul Run 1 — the pre-skip resolved asset set**,
-    /// captured the frame the checksum-then-skip pass runs (before it
-    /// drops already-present archives from
-    /// `update_selected_update_assets`). The post-download verify hashes
-    /// exactly what the streamer *could* have fetched against
-    /// `expected_archive_meta`, so it must see the full pre-skip list (a
-    /// skipped archive was already content-verified to be present; a
-    /// fetched one must be verified). Reset by `clear_preview()`. Not
-    /// persisted.
     pub pre_skip_assets: Vec<crate::app::state::Step2UpdateAsset>,
-    /// **Download-Overhaul Run 1 — post-download verify is one-shot.** The
-    /// Wabbajack mismatch pass (`archive_skip::verify_downloaded_archives`)
-    /// hashes every just-downloaded archive once; like the ingest it must
-    /// run exactly once (not per frame across the extraction window). Set
-    /// `true` the frame it runs. Reset by `clear_preview()`. Not persisted.
-    pub archives_verified: bool,
-    /// **DL-Run 2 — the DL-Run-1-skipped (already-present-by-hash) mods**,
-    /// captured the one-shot frame `archive_skip::skip_present_archives`
-    /// drops them from `update_selected_update_assets` (diffed against
-    /// `pre_skip_assets`). Re-injected into the §4.3 grid as
-    /// instantly-satisfied "✓ already downloaded" rows and counted complete
-    /// in the Download byte aggregate so a mostly-cached install is
-    /// honest/smooth/fast ("48 of 51 already present"). Carried through the
-    /// per-frame `DownloadProgress` rebuild. Reset by `clear_preview()`.
-    /// Not persisted.
     pub skipped_mods: Vec<SkippedMod>,
-    /// **DL-Run 2 — the per-asset expected archive size denominator map**,
-    /// keyed by the asset index into `update_selected_update_assets` (==
-    /// the §4.3 row index — Fix 1e: the list is never mutated, indices
-    /// remain stable), value = the share-code-baked `ArchiveMeta.size`.
-    /// Gives the Download byte aggregate (`Σ bytes ÷ Σ expected`) a stable
-    /// denominator independent of whether the server sent a
-    /// `Content-Length`. Decoded at the same one-shot skip-pass boundary
-    /// and carried through the per-frame rebuild. Empty for a fieldless
-    /// / pre-redesign / third-party code (the aggregate then uses each
-    /// row's live `Content-Length`). Reset by `clear_preview()`. Not
-    /// persisted.
     pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
-    /// **DL Fix-Set v2 (Fix 1e) — the orchestrator-side skip-index set.**
-    /// The set of indices into the unchanged `update_selected_update_
-    /// assets` whose archives are already present on disk (DL-Run-1 hash
-    /// match) and which the parallel streamer must silently bypass. The
-    /// indices are stable because Fix 1e KEEPS skipped assets in the
-    /// list (so BIO's `build_extract_jobs` finds them). Computed at the
-    /// one-shot skip-pass boundary from `summary.skipped_assets` and
-    /// passed to `stream_downloader::start_stream_download` when the
-    /// download gate opens. Reset by `clear_preview()`. Not persisted.
     pub skip_indices: std::collections::HashSet<usize>,
-    /// **DL Fix-Set v2 (Fix 1e) — download-phase one-shot kick latch.**
-    /// `false` until `stage_downloading::render_live` has called
-    /// `start_stream_download` once for this arm; `true` once the call
-    /// has been made. Replaces the prior heuristic that checked
-    /// `stream_download_rx.is_none() && downloaded_sources.is_empty()`
-    /// — that heuristic was already-true under Fix 1e (downloaded-sources
-    /// is now pre-populated by `archive_skip`) and would have re-kicked
-    /// the streamer every frame. Reset by `clear_preview()`. Not
-    /// persisted.
-    pub download_phase_started: bool,
-    /// **DL Fix-Set v3 (Change B) — async archive-skip completion
-    /// latch.** `false` while the async hash pass is still in flight
-    /// (`OrchestratorApp::archive_skip_rx.is_some()`); `true` the
-    /// moment its `Finished` event is drained (and the
-    /// `skip_indices` are stored on this state). The download kick
-    /// gate (`download_phase_started` predicate) ALSO requires this
-    /// to be true — the streamer must not fire until the skip set is
-    /// known, otherwise it would download archives the async pass
-    /// would have skipped. Reset by `clear_preview()` so a re-entry
-    /// re-runs the skip pass from scratch. Not persisted.
-    pub archive_skip_completed: bool,
 }
 
 impl InstallScreenState {
-    /// `true` when the user picked the Continue-Partial option. In partial
-    /// mode the import-code section disappears and the footer primary becomes
-    /// `Continue Install →` (SPEC §4.1).
+    #[must_use]
     pub fn is_partial(&self) -> bool {
         self.destination_choice == Some(DestChoice::Continue)
     }
 
-    /// Drop the cached preview + any parse error and close the fork popup.
-    /// Called when the user goes back to Paste (the pasted code may change,
-    /// so a stale preview must not survive) and when a fresh parse is about
-    /// to run. Also drops the live Downloading grid + the P7.T17
-    /// pipeline-armed latch so a re-parsed code re-arms the import →
-    /// auto-build pipeline from scratch (never inherits the prior code's
-    /// in-flight pipeline state).
     pub fn clear_preview(&mut self) {
         self.parsed_preview = None;
         self.preview_parse_error = None;
         self.fork_info_open = false;
         self.preview_cached = false;
         self.download_progress = DownloadProgress::default();
-        self.pipeline_armed = false;
+        self.pipeline_flags.reset();
         self.pipeline_arm_error = None;
-        // D1: a re-entry re-stages/re-ingests from scratch (a fresh
-        // pipeline) — drop the one-shot latches.
-        self.archives_staged = false;
-        self.archives_ingested = false;
-        // Download-Overhaul Run 1: a re-parsed code must re-decode its
-        // expected hashes + re-run the checksum-then-skip / verify from
-        // scratch (never inherit the prior code's expected set / skip
-        // decisions).
         self.expected_archive_meta = Vec::new();
         self.pre_skip_assets = Vec::new();
-        self.archives_verified = false;
-        // DL-Run 2: the skipped-mod rows + the expected-size denominators
-        // are re-derived at the next arm's skip pass — a re-parsed code
-        // must not inherit the prior code's cached/skip view.
         self.skipped_mods = Vec::new();
         self.expected_archive_sizes = std::collections::BTreeMap::new();
-        // DL Fix-Set v2 (Fix 1e): the orchestrator-side skip-index set
-        // + the one-shot download-kick latch must reset on re-entry too
-        // (a re-parsed code re-runs the skip pass + re-kicks the streamer
-        // from scratch).
         self.skip_indices = std::collections::HashSet::new();
-        self.download_phase_started = false;
-        // DL Fix-Set v3 (Change B): the async-skip completion latch
-        // resets too — a re-entry re-runs the async hash pass from
-        // scratch.
-        self.archive_skip_completed = false;
     }
 }
 
@@ -436,34 +239,29 @@ mod tests {
 
     #[test]
     fn clear_maps_to_prepare_on_backup_off_no_skip() {
-        // SPEC §13.12 #6: `clear` = prepare ON, backup OFF.
-        // SPEC §13.12 #1: -s/-c OFF for fresh installs.
         let f = DestChoice::Clear.to_flags();
         assert!(f.prepare_target_dirs_before_install);
         assert!(!f.backup_targets_before_eet_copy);
         assert!(!f.skip_installed);
-        assert!(!f.check_last_installed);
+        assert!(!f.check_last_installed.get());
     }
 
     #[test]
     fn backup_maps_to_prepare_on_backup_on_no_skip() {
-        // SPEC §13.12 #6: `backup` = prepare ON, backup ON.
         let f = DestChoice::Backup.to_flags();
         assert!(f.prepare_target_dirs_before_install);
         assert!(f.backup_targets_before_eet_copy);
         assert!(!f.skip_installed);
-        assert!(!f.check_last_installed);
+        assert!(!f.check_last_installed.get());
     }
 
     #[test]
     fn continue_maps_to_prepare_off_backup_off_skip_on() {
-        // SPEC §13.12 #6: `continue` = prepare OFF, backup OFF.
-        // SPEC §13.12 #1: -s/-c ON in Continue Partial Install.
         let f = DestChoice::Continue.to_flags();
         assert!(!f.prepare_target_dirs_before_install);
         assert!(!f.backup_targets_before_eet_copy);
         assert!(f.skip_installed);
-        assert!(f.check_last_installed);
+        assert!(f.check_last_installed.get());
     }
 
     #[test]
@@ -485,7 +283,6 @@ mod tests {
 
     #[test]
     fn preview_tab_labels_are_wireframe_verbatim() {
-        // screens.jsx:470 — exact caption strings, exact order.
         let labels: Vec<&str> = PreviewTab::ALL.iter().map(|t| t.display_label()).collect();
         assert_eq!(
             labels,
@@ -502,7 +299,6 @@ mod tests {
 
     #[test]
     fn default_preview_tab_is_summary() {
-        // Wireframe `useState("Summary")` initial.
         assert_eq!(PreviewTab::default(), PreviewTab::Summary);
         assert_eq!(
             InstallScreenState::default().active_preview_tab,
@@ -512,34 +308,36 @@ mod tests {
 
     #[test]
     fn clear_preview_resets_preview_state() {
-        let mut st = InstallScreenState::default();
-        st.preview_cached = true;
-        st.fork_info_open = true;
-        st.preview_parse_error = Some("boom".to_string());
-        st.pipeline_armed = true;
-        st.pipeline_arm_error = Some("arm boom".to_string());
-        st.archives_staged = true;
-        st.archives_ingested = true;
-        st.download_phase_started = true;
-        st.archive_skip_completed = true;
+        let mut st = InstallScreenState {
+            preview_cached: true,
+            fork_info_open: true,
+            preview_parse_error: Some("boom".to_string()),
+            pipeline_arm_error: Some("arm boom".to_string()),
+            ..Default::default()
+        };
+        st.pipeline_flags.set_armed(true);
+        st.pipeline_flags.set_archives_staged(true);
+        st.pipeline_flags.set_archives_ingested(true);
+        st.pipeline_flags.set_download_phase_started(true);
+        st.pipeline_flags.set_archive_skip_completed(true);
         st.clear_preview();
         assert!(st.parsed_preview.is_none());
         assert!(st.preview_parse_error.is_none());
         assert!(!st.fork_info_open);
         assert!(!st.preview_cached);
-        assert!(!st.pipeline_armed);
+        assert!(!st.pipeline_flags.armed());
         assert!(st.pipeline_arm_error.is_none());
         assert!(
-            !st.archives_staged && !st.archives_ingested,
+            !st.pipeline_flags.archives_staged() && !st.pipeline_flags.archives_ingested(),
             "D1: a re-entry must re-stage/re-ingest from scratch"
         );
         assert!(
-            !st.download_phase_started,
-            "Fix 1e: a re-entry must re-kick the streamer"
+            !st.pipeline_flags.download_phase_started(),
+            "a re-entry must re-kick the streamer"
         );
         assert!(
-            !st.archive_skip_completed,
-            "v3 Change B: a re-entry must re-run the async skip pass"
+            !st.pipeline_flags.archive_skip_completed(),
+            "a re-entry must re-run the async skip pass"
         );
     }
 }

@@ -1,56 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `modlist_card` — one card in the Home filtered list. Two card types
-// (in-progress vs installed) share the same chassis, differing only in the
-// meta line and the right-cluster action set.
-//
-// Mirrors `wireframe-preview/screens.jsx::HomeScreen` cards (line 318-346):
-//   Box { display:flex; justify-content:space-between; align-items:center;
-//         padding:"10px 12px" }
-//     left:  <Label>{name}</Label>
-//            <Label hand style={fontSize:14, color:var(--text-faint)}>{meta}</Label>
-//     right (in-progress): <Btn small primary>resume</Btn> + <Kebab .../>
-//            Kebab: Copy import code / Rename / Delete
-//     right (installed):   <Btn small>play</Btn> + <Kebab .../>
-//            Kebab: Copy import code / Open install folder / Rename /
-//                   Reinstall / Delete
-//
-// Per SPEC §3.2 + HANDOFF M6 the installed action button is **`open`** (not
-// the wireframe's `play`) for v1 alpha — there is no game launcher yet, so
-// the label honestly reflects the behavior (opens the install folder).
-//
-// Meta lines (SPEC §3.2):
-//   in-progress: `<N> mods · <C> components · last touched <rel>
-//                  [· paused at Step <K>]`
-//                — the `· paused at Step <K>` segment is OMITTED (not a
-//                  placeholder) when `entry.paused_at_step` is `None`.
-//   installed:   `<N> mods · <size> · installed <rel>`
-//                — `<size>` renders `—` when `entry.total_size_bytes` is
-//                  `None` (post-install size computation lands in Phase 7;
-//                  Phase 5 / Run 1 has no size yet).
-//
-// **Run 2 ("Home — actions live"):** the Kebab items now bubble real intents
-// up to `page_home` via `ModlistCardActions` (interior-mutability `Cell`
-// inside `render_action_cluster`, since `KebabItem::on_click` is `FnMut`).
-// Wired this run: Copy import code (P5.T2 callback site), Open install folder
-// (P5.T17), Reinstall (P5.T18), Delete (P5.T7). **`Rename` stays an inert
-// `|| {}` placeholder** — it is a later run, explicitly out of Run 2 scope.
-// The primary action button (`resume` / `open`) also routes via the returned
-// `ModlistCardActions`.
-//
-// SPEC: §3.2 (cards shared shape), §3.1 (in-list cards + Kebab item sets).
-
-// rationale: the casts are pixel-radius roundings and a byte-count→f64
-// widening for human-readable size formatting — correct by construction at
-// the magnitudes involved (Cat 2); `#[must_use]` on a trivial helper is
-// churn (Cat 3).
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::must_use_candidate
-)]
 
 use std::fmt::Write as _;
 
@@ -60,37 +9,22 @@ use crate::registry::model::{ModlistEntry, ModlistState};
 use crate::ui::orchestrator::widgets::{BtnOpts, KebabItem, redesign_btn, render_kebab};
 use crate::ui::shared::format_relative::relative_time;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
-/// What the user did on a card this frame. The primary button + the wired
-/// Kebab items (Run 2) each map to a variant; `page_home` applies them after
-/// the immutable render borrows end.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModlistCardActions {
-    /// Nothing was clicked.
     #[default]
     None,
-    /// In-progress card's `resume` button — open the workspace at Step 2.
     Resume,
-    /// Installed card's `open` button — open the install folder (P5.T17).
     Open,
-    /// Kebab → `Copy import code`. The page resolves the entry's
-    /// `latest_share_code` via `operations::share_code_for` and copies it
-    /// with `ctx.copy_text(...)` (egui built-in — no clipboard crate).
     CopyImportCode,
-    /// Kebab → `Open install folder` (P5.T17). Same effect as the installed
-    /// card's `open` button; distinct variant for traceability.
     OpenInstallFolder,
-    /// Kebab → `Reinstall` (P5.T18) — opens the danger Reinstall confirm.
     Reinstall,
-    /// Kebab → `Delete` (P5.T7) — opens the danger Delete confirm.
     Delete,
 }
 
-/// Render one modlist card. `id_salt` (the entry id) keeps each card's Kebab
-/// popup state independent.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -98,15 +32,13 @@ pub fn render(
 ) -> ModlistCardActions {
     let mut action = ModlistCardActions::None;
 
-    // Card chassis: sketchy Box, 10×12 padding, name/meta on the left, the
-    // action cluster flush-right.
     let chassis = egui::Frame::default()
         .fill(redesign_shell_bg(palette))
         .stroke(egui::Stroke::new(
             REDESIGN_BORDER_WIDTH_PX,
             redesign_border_strong(palette),
         ))
-        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
         .inner_margin(egui::Margin {
             left: 12,
             right: 12,
@@ -116,7 +48,6 @@ pub fn render(
 
     chassis.show(ui, |ui| {
         ui.horizontal(|ui| {
-            // ── Left: name + meta stack (grows to fill). ──
             let full_w = ui.available_width();
             ui.allocate_ui_with_layout(
                 egui::vec2(full_w, 40.0),
@@ -124,10 +55,6 @@ pub fn render(
                 |ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     ui.label(
-                        // Wireframe card name is a plain `<Label>` (weight
-                        // 400) — not bold. poppins_medium is our nearest
-                        // non-bold UI weight; full primary color carries the
-                        // title hierarchy (meta below is faint).
                         egui::RichText::new(&entry.name)
                             .size(13.0)
                             .family(egui::FontFamily::Name("poppins_medium".into()))
@@ -142,7 +69,6 @@ pub fn render(
                 },
             );
 
-            // ── Right: action cluster (button + Kebab), flush-right. ──
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 action = render_action_cluster(ui, palette, entry);
             });
@@ -152,7 +78,6 @@ pub fn render(
     action
 }
 
-/// Build the meta line for an entry per SPEC §3.2.
 pub fn meta_line(entry: &ModlistEntry) -> String {
     match entry.state {
         ModlistState::InProgress => {
@@ -162,19 +87,15 @@ pub fn meta_line(entry: &ModlistEntry) -> String {
                 entry.component_count,
                 relative_time(entry.last_touched_date),
             );
-            // Omit the segment entirely (not a placeholder) when unknown.
             if let Some(step) = entry.paused_at_step {
                 let _ = write!(s, " \u{00B7} paused at Step {step}");
             }
             s
         }
         ModlistState::Installed => {
-            // `—` (em dash) when size unknown.
             let size = entry
                 .total_size_bytes
                 .map_or_else(|| "\u{2014}".to_string(), human_size);
-            // "installed <rel>" tracks the install date; fall back to
-            // last-touched if (defensively) the install date is missing.
             let when = entry.install_date.unwrap_or(entry.last_touched_date);
             format!(
                 "{} mods \u{00B7} {} \u{00B7} installed {}",
@@ -186,11 +107,6 @@ pub fn meta_line(entry: &ModlistEntry) -> String {
     }
 }
 
-/// The right-cluster button + Kebab. Two action sets keyed on state. The
-/// Kebab item closures are `FnMut`, so they record the chosen intent into a
-/// shared `Cell<ModlistCardActions>` that this function returns once the
-/// closures + `render_kebab` borrow end. `Rename` is intentionally an inert
-/// `|| {}` (out of Run 2 scope — a later run wires it).
 fn render_action_cluster(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -203,15 +119,10 @@ fn render_action_cluster(
 
     match entry.state {
         ModlistState::InProgress => {
-            // `right_to_left` lays widgets out trailing-edge first, so add the
-            // Kebab first to keep on-screen order [resume] [···].
-            // In-progress Kebab (SPEC §3.1 / §3.2): Copy import code / Rename
-            // / Delete.
             let mut items = vec![
                 KebabItem::new("Copy import code", || {
                     picked.set(ModlistCardActions::CopyImportCode);
                 }),
-                // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
@@ -234,8 +145,6 @@ fn render_action_cluster(
             }
         }
         ModlistState::Installed => {
-            // Installed Kebab (SPEC §3.2): Copy import code / Open install
-            // folder / Rename / Reinstall / Delete.
             let mut items = vec![
                 KebabItem::new("Copy import code", || {
                     picked.set(ModlistCardActions::CopyImportCode);
@@ -243,7 +152,6 @@ fn render_action_cluster(
                 KebabItem::new("Open install folder", || {
                     picked.set(ModlistCardActions::OpenInstallFolder);
                 }),
-                // Rename: out of Run 2 scope — inert placeholder (later run).
                 KebabItem::new("Rename", || {}),
                 KebabItem::new("Reinstall", || picked.set(ModlistCardActions::Reinstall)),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
@@ -251,8 +159,6 @@ fn render_action_cluster(
             render_kebab(ui, palette, &entry.id, &mut items);
             drop(items);
 
-            // Renamed from the wireframe's `play` → `open` for v1 alpha
-            // (SPEC §3.2 / HANDOFF M6): neutral (non-primary) small button.
             if redesign_btn(
                 ui,
                 palette,
@@ -273,26 +179,29 @@ fn render_action_cluster(
     picked.into_inner()
 }
 
-/// Human-readable byte size (e.g. "2.3 GB"). Only used for installed cards
-/// once Phase 7 populates `total_size_bytes`; included now so the meta-line
-/// shape is final.
 fn human_size(bytes: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    const GB: f64 = MB * 1024.0;
-    const TB: f64 = GB * 1024.0;
-    let b = bytes as f64;
-    if b >= TB {
-        format!("{:.1} TB", b / TB)
-    } else if b >= GB {
-        format!("{:.1} GB", b / GB)
-    } else if b >= MB {
-        format!("{:.1} MB", b / MB)
-    } else if b >= KB {
-        format!("{:.1} KB", b / KB)
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    const TB: u64 = GB * 1024;
+    if bytes >= TB {
+        scaled_size(bytes, TB, "TB")
+    } else if bytes >= GB {
+        scaled_size(bytes, GB, "GB")
+    } else if bytes >= MB {
+        scaled_size(bytes, MB, "MB")
+    } else if bytes >= KB {
+        scaled_size(bytes, KB, "KB")
     } else {
         format!("{bytes} B")
     }
+}
+
+fn scaled_size(bytes: u64, unit: u64, suffix: &str) -> String {
+    let tenths = (u128::from(bytes) * 10 + u128::from(unit) / 2) / u128::from(unit);
+    let whole = tenths / 10;
+    let decimal = tenths % 10;
+    format!("{whole}.{decimal} {suffix}")
 }
 
 #[cfg(test)]
@@ -353,7 +262,7 @@ mod tests {
         let mut e = base_entry();
         e.state = ModlistState::Installed;
         e.mod_count = 47;
-        e.total_size_bytes = Some((2.3 * 1024.0 * 1024.0 * 1024.0) as u64);
+        e.total_size_bytes = Some(2_469_396_070);
         e.install_date = Some(Utc::now());
         let m = meta_line(&e);
         assert!(m.contains("2.3 GB"), "got: {m}");

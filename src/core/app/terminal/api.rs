@@ -6,24 +6,25 @@ use std::collections::HashMap;
 use super::{EmbeddedTerminal, input, scripted_inputs};
 
 impl EmbeddedTerminal {
-    pub fn has_new_data(&self) -> bool {
-        self.has_new_data
+    #[must_use]
+    pub const fn has_new_data(&self) -> bool {
+        self.events.has_new_data
     }
 
-    pub fn take_exit_event(&mut self) -> bool {
-        let had_exit = self.saw_exit_event;
-        self.saw_exit_event = false;
+    pub const fn take_exit_event(&mut self) -> bool {
+        let had_exit = self.events.saw_exit_event;
+        self.events.saw_exit_event = false;
         had_exit
     }
 
-    pub fn take_exit_code(&mut self) -> Option<i32> {
+    pub const fn take_exit_code(&mut self) -> Option<i32> {
         let code = self.last_exit_code;
         self.last_exit_code = None;
         code
     }
 
     pub fn send_line(&mut self, line: &str) {
-        self.log_bio_debug(&format!("send_line=\"{}\"", line));
+        self.log_bio_debug(&format!("send_line=\"{line}\""));
         input::send_line(self, line);
     }
 
@@ -33,12 +34,12 @@ impl EmbeddedTerminal {
         self.append_output(&sent_line);
         self.important_buffer
             .push_str(sent_line.trim_start_matches('\n'));
-        self.prompt_capture_active = false;
-        self.prompt_capture_lines = 0;
-        self.prompt_capture_after_send = true;
-        self.warning_capture_active = false;
-        self.warning_capture_lines = 0;
-        self.has_new_data = true;
+        self.prompt_capture.active = false;
+        self.prompt_capture.lines = 0;
+        self.prompt_capture.after_send = true;
+        self.warning_capture.active = false;
+        self.warning_capture.lines = 0;
+        self.events.has_new_data = true;
     }
 
     pub fn shutdown(&mut self) {
@@ -53,6 +54,7 @@ impl EmbeddedTerminal {
         scripted_inputs::take_next_scripted_input_for_current(self)
     }
 
+    #[must_use]
     pub fn peek_next_scripted_input_for_current(&self) -> Option<&str> {
         scripted_inputs::peek_next_scripted_input_for_current(self)
     }

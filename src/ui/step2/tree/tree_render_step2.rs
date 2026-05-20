@@ -49,7 +49,7 @@ pub fn render_mod_tree(
         ctx.collapse_default_open,
     );
     if *ctx.jump_to_selected_requested
-        && selection_targets_mod(ctx.selected, ctx.active_tab, &mod_state.tp_file)
+        && selection_targets_mod(ctx.selected.as_ref(), ctx.active_tab, &mod_state.tp_file)
     {
         state.set_open(true);
     }
@@ -67,7 +67,7 @@ pub fn render_mod_tree(
                 ui,
                 mod_state,
                 ctx.active_tab,
-                ctx.selected,
+                ctx.selected.as_ref(),
                 ctx.next_selection_order,
                 ctx.prompt_eval,
                 ctx.jump_to_selected_requested,
@@ -138,20 +138,22 @@ fn finalize_mod_checked_state(mod_state: &mut Step2ModState) {
 }
 
 fn selection_targets_mod(
-    selected: &Option<Step2Selection>,
+    selected: Option<&Step2Selection>,
     active_tab: &str,
     tp_file: &str,
 ) -> bool {
     match selected {
-        Some(Step2Selection::Mod {
-            game_tab,
-            tp_file: selected_tp,
-        }) => game_tab == active_tab && selected_tp == tp_file,
-        Some(Step2Selection::Component {
-            game_tab,
-            tp_file: selected_tp,
-            ..
-        }) => game_tab == active_tab && selected_tp == tp_file,
+        Some(
+            Step2Selection::Mod {
+                game_tab,
+                tp_file: selected_tp,
+            }
+            | Step2Selection::Component {
+                game_tab,
+                tp_file: selected_tp,
+                ..
+            },
+        ) => game_tab == active_tab && selected_tp == tp_file,
         None => false,
     }
 }

@@ -223,7 +223,7 @@ fn is_negated_call_context(tokens: &[Token], index: usize) -> bool {
     while cursor > 0 {
         cursor -= 1;
         match tokens.get(cursor) {
-            Some(Token::LParen) => continue,
+            Some(Token::LParen) => {}
             Some(Token::Bang | Token::Not) => return true,
             _ => return false,
         }
@@ -239,7 +239,7 @@ pub(crate) fn parse_negated_mod_is_installed_targets(
     let mut out = Vec::<ParsedDependencyTarget>::new();
 
     while index < tokens.len() {
-        if !matches!(tokens.get(index), Some(Token::Bang) | Some(Token::Not)) {
+        if !matches!(tokens.get(index), Some(Token::Bang | Token::Not)) {
             index += 1;
             continue;
         }
@@ -332,10 +332,7 @@ pub(crate) fn normalize_component_id(value: &str) -> Option<String> {
     let trimmed = value
         .trim()
         .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
-    let digits: String = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
+    let digits: String = trimmed.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         return None;
     }
@@ -349,11 +346,9 @@ pub(crate) fn normalize_component_id(value: &str) -> Option<String> {
 
 fn normalize_mod_key(value: &str) -> String {
     let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
+    let file = lower
+        .rfind(['/', '\\'])
+        .map_or(lower.as_str(), |idx| &lower[idx + 1..]);
     let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
     without_ext
         .strip_prefix("setup-")

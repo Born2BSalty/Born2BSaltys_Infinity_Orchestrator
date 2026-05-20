@@ -1,11 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// Install stub destination.
-//
-// Per Phase 2 P2.T5: title "Install shared modlist", sub "Coming in Phase 5".
-//
-// SPEC: §4.
 
 use eframe::egui;
 

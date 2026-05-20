@@ -49,12 +49,12 @@ pub(crate) fn collect_step3_compat_markers(
     items: &[Step3ItemState],
 ) -> HashMap<String, Step3CompatMarker> {
     let cache_key = step3_compat_cache_key(step1, tab, mods, items);
-    if let Some(cached) = step3_compat_cache()
+    let cached = step3_compat_cache()
         .lock()
         .expect("step3 compat cache lock poisoned")
         .get(&cache_key)
-        .cloned()
-    {
+        .cloned();
+    if let Some(cached) = cached {
         return cached;
     }
 
@@ -315,7 +315,7 @@ fn scan_predicate_marker_for_item(
         message: Some(hit.message),
         related_mod: hit.related_mod,
         related_component: hit.related_component,
-        source: Some(tp2_path.to_string()),
+        source: Some(tp2_path.clone()),
         raw_evidence: Some(hit.raw_evidence),
     })
 }

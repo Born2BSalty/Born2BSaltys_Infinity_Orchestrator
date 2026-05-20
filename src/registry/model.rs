@@ -1,47 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `ModlistRegistry` — serde model for `modlists.json`.
-//
-// Per Phase 3 P3.T1 (SPEC §13.1):
-//   - `ModlistRegistry { format_version, entries }` — top-level container.
-//   - `ModlistEntry { id, name, game, destination_folder, state, … }` — one row.
-//   - `ModlistState { InProgress, Installed }` — lifecycle stage.
-//   - `Game { BGEE, BG2EE, IWDEE, EET }` — chosen game family per entry.
-//
-// All fields are `#[serde(default)]` at the struct level so the schema can
-// gain new fields additively without breaking older `modlists.json` files
-// already on disk. `#[serde(rename_all = "snake_case")]` keeps the JSON
-// human-readable.
-//
-// Timestamps use `chrono::DateTime<Utc>` (already a `Cargo.toml` dep).
-//
-// SPEC: §13.1, §15 (additive schema evolution).
-
-// rationale: serde model — `Self`/`const fn`/`#[must_use]` churn adds noise on
-// trivial accessors (Cat 3); deriving `Eq` on these structs is a trait-bound
-// surface change, not provably behavior-neutral, so suppress (Cat 3).
-#![allow(
-    clippy::use_self,
-    clippy::must_use_candidate,
-    clippy::missing_const_for_fn,
-    clippy::derive_partial_eq_without_eq
-)]
 
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// The top-level `modlists.json` document.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModlistRegistry {
-    /// Schema version. Incremented when a non-backward-compatible change is
-    /// introduced (we expect to stay at 1 for the v1 alpha lifecycle).
     pub format_version: u32,
-    /// All known modlists. Ordering is the on-disk write order; the Home
-    /// screen sorts at render time.
+
     pub entries: Vec<ModlistEntry>,
 }
 
@@ -55,106 +24,61 @@ impl Default for ModlistRegistry {
 }
 
 impl ModlistRegistry {
-    /// True if no entries are stored. Used by Home's first-launch empty state
-    /// and the statusbar's `0 modlists` segment.
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
-    /// Look up an entry by id.
+    #[must_use]
     pub fn find(&self, id: &str) -> Option<&ModlistEntry> {
         self.entries.iter().find(|e| e.id == id)
     }
 
-    /// Mutably look up an entry by id.
     pub fn find_mut(&mut self, id: &str) -> Option<&mut ModlistEntry> {
         self.entries.iter_mut().find(|e| e.id == id)
     }
 }
 
-/// One modlist row in the registry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModlistEntry {
-    /// Stable opaque id (12-char base32 ULID via `ids::new_modlist_id`).
     pub id: String,
-    /// Display name shown in Home cards / Workspace title.
+
     pub name: String,
-    /// Chosen game family for this modlist.
+
     pub game: Game,
-    /// Final install folder (per-modlist, not per-app).
+
     pub destination_folder: String,
-    /// Lifecycle stage — in progress vs installed.
+
     pub state: ModlistState,
-    /// When the entry was first created (UTC).
+
     pub creation_date: DateTime<Utc>,
-    /// Last time the user touched the workspace (UTC). Bumped on every
-    /// successful workspace state write.
+
     pub last_touched_date: DateTime<Utc>,
-    /// When the install completed (None for in-progress entries).
+
     pub install_date: Option<DateTime<Utc>>,
-    /// When the most recent install **attempt started** (UTC). Set by the
-    /// P7.T3 install-start hook on every attempt regardless of variant
-    /// (Install / Restart / Resume / Reinstall) — every attempt is
-    /// timestamped (plan P7.T3 acceptance). Distinct from `install_date`
-    /// (which is set only on a *clean* completion by `flip_to_installed`,
-    /// P7.T6); `install_started_at` persists even if the install crashes /
-    /// is cancelled / errors, so the elapsed-since-start is recoverable.
-    /// `#[serde(default)]` so older `modlists.json` (which lacks the key)
-    /// parses to `None` — bit-for-bit backward-compatible, the same
-    /// additive-schema pattern as `author` / `forked_from`. Net-new
-    /// orchestrator-owned field (this struct is Phase-3 redesign source —
-    /// NOT a BIO-source edit, NOT a carve-out). The plan's "the registry
-    /// `ModlistEntry` already carries `install_started_at`" prose was a
-    /// PLAN GAP (the field did not exist); pre-provisioned here the same
-    /// way the model's other Run-2/4 additive fields were.
+
     #[serde(default)]
     pub install_started_at: Option<DateTime<Utc>>,
-    /// When the user last clicked "Play" / opened the install folder.
+
     pub last_played_date: Option<DateTime<Utc>>,
-    /// Cached mod count for the Home card meta line.
+
     pub mod_count: u32,
-    /// Cached component count for the Home card meta line.
+
     pub component_count: u32,
-    /// Cached workspace step (2–5) the in-progress build is paused at, for
-    /// the Home card meta line (`… · paused at Step <K>`). Denormalized onto
-    /// the registry the same way `mod_count` / `component_count` are, so Home
-    /// renders without loading `workspace.json`. `None` for installed entries
-    /// (their meta line shows `installed <when>` instead). Kept in sync by
-    /// the Phase 6 workspace-persistence cycle on every workspace write.
+
     pub paused_at_step: Option<u8>,
-    /// Cached total install footprint (computed post-install in Phase 7).
+
     pub total_size_bytes: Option<u64>,
-    /// Last share/import code captured for this modlist.
+
     pub latest_share_code: Option<String>,
-    /// Handle of whoever authored *this* modlist (SPEC §13.3 Provenance).
-    /// Source at create/fork: `RedesignSettings.user_name` (empty ⇒ `None`).
-    /// `#[serde(default)]` so older `modlists.json` (which lacks the key)
-    /// parses to `None` — bit-for-bit backward-compatible. *Used* by Runs
-    /// 2/4 (the Create/fork path + `pack_meta`); added now so the model is
-    /// stable.
+
     #[serde(default)]
     pub author: Option<String>,
-    /// Append-only fork lineage, ordered oldest → newest (SPEC §13.3
-    /// Provenance / §5.3 append rule): `forked_from[0]` is the original
-    /// root, the last entry is the immediate parent. Empty for a
-    /// from-scratch (non-forked) modlist. The element type is BIO's
-    /// `pub(crate)` `ForkAncestor` (carve-out #5, Phase 5) — **reused**, no
-    /// parallel registry-side type, no drift; its pinned Phase-5 derive set
-    /// (`Debug, Clone, PartialEq, Serialize, Deserialize`) already satisfies
-    /// `ModlistEntry`'s derives + the `modlists.json` round-trip, so this
-    /// adds **zero** BIO-source edit. `#[serde(default)]` (a `Vec` defaults
-    /// empty) keeps older files backward-compatible. *Used* by Runs 2/4.
-    /// `pub(crate)` (not `pub`): `ForkAncestor` is BIO's `pub(crate)`
-    /// carve-out-#5 struct — same-crate visibility avoids a
-    /// `private_interfaces` warning and is sufficient (the `bio` crate has
-    /// no external library consumer; serde (de)serialization is unaffected
-    /// by Rust field visibility, so the `modlists.json` round-trip is
-    /// identical).
+
     #[serde(default)]
     pub(crate) forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
-    /// Workspace state file path **relative** to the orchestrator's config
-    /// dir. Always `modlists/<id>/workspace.json` in practice.
+
     pub workspace_file_relpath: PathBuf,
 }
 
@@ -184,19 +108,15 @@ impl Default for ModlistEntry {
     }
 }
 
-/// The lifecycle stage of a modlist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ModlistState {
-    /// Workspace edits ongoing; install not yet completed.
     #[default]
     InProgress,
-    /// Install completed; entry is read-only from Home (Reinstall = clone).
+
     Installed,
 }
 
-/// Game family for an entry. Mirrors BIO's `game_install` string set but is
-/// strongly typed for the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Game {
@@ -208,24 +128,23 @@ pub enum Game {
 }
 
 impl Game {
-    /// Map to the BIO `game_install` legacy string used by `Step1State`.
-    pub fn to_legacy_string(self) -> &'static str {
+    #[must_use]
+    pub const fn to_legacy_string(self) -> &'static str {
         match self {
-            Game::BGEE => "BGEE",
-            Game::BG2EE => "BG2EE",
-            Game::IWDEE => "IWDEE",
-            Game::EET => "EET",
+            Self::BGEE => "BGEE",
+            Self::BG2EE => "BG2EE",
+            Self::IWDEE => "IWDEE",
+            Self::EET => "EET",
         }
     }
 
-    /// Parse the legacy `Step1State::game_install` string back into a `Game`.
-    /// Defaults to `BGEE` for unrecognized inputs (matches BIO's behavior).
+    #[must_use]
     pub fn from_legacy_string(s: &str) -> Self {
         match s.trim() {
-            "BG2EE" => Game::BG2EE,
-            "IWDEE" => Game::IWDEE,
-            "EET" => Game::EET,
-            _ => Game::BGEE,
+            "BG2EE" => Self::BG2EE,
+            "IWDEE" => Self::IWDEE,
+            "EET" => Self::EET,
+            _ => Self::BGEE,
         }
     }
 }
@@ -267,7 +186,6 @@ mod tests {
 
     #[test]
     fn missing_fields_use_defaults() {
-        // Older `modlists.json` that lacks `total_size_bytes` parses fine.
         let raw = r#"{"format_version":1,"entries":[]}"#;
         let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat");
         assert_eq!(r.format_version, 1);
@@ -294,9 +212,6 @@ mod tests {
     fn provenance_fields_serde_default_round_trip() {
         use crate::app::modlist_share::ForkAncestor;
 
-        // Older `modlists.json` that predates the provenance fields must
-        // parse with `author == None` + `forked_from == []` (bit-for-bit
-        // backward-compatible — carve-out-#5 default semantics).
         let raw = r#"{
             "format_version": 1,
             "entries": [{
@@ -310,13 +225,9 @@ mod tests {
         let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat parse");
         assert_eq!(r.entries[0].author, None);
         assert!(r.entries[0].forked_from.is_empty());
-        // P7.T3 additive field: older files lacking `install_started_at`
-        // parse to `None` (bit-for-bit backward-compatible, same pattern as
-        // the provenance trio).
+
         assert_eq!(r.entries[0].install_started_at, None);
 
-        // A populated lineage round-trips losslessly (the reused BIO
-        // `ForkAncestor` derives Serialize+Deserialize per carve-out #5).
         let mut reg = ModlistRegistry::default();
         reg.entries.push(ModlistEntry {
             id: "ZYXWVUTSRQPO".to_string(),

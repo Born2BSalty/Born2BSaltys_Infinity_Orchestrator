@@ -16,7 +16,7 @@ pub(super) fn start_step2_scan(
     step2_cancel: &mut Option<Arc<AtomicBool>>,
     step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
 ) {
-    cancel_step2_scan(state, step2_cancel);
+    cancel_step2_scan(state, step2_cancel.as_ref());
     let (tx, rx) = mpsc::channel::<Step2ScanEvent>();
     let cancel = Arc::new(AtomicBool::new(false));
     let step1 = state.step1.clone();
@@ -35,7 +35,7 @@ pub(super) fn start_step2_scan(
     thread::spawn(move || run_scan(step1, tx, cancel_for_thread));
 }
 
-pub(super) fn cancel_step2_scan(state: &mut WizardState, step2_cancel: &Option<Arc<AtomicBool>>) {
+pub(super) fn cancel_step2_scan(state: &mut WizardState, step2_cancel: Option<&Arc<AtomicBool>>) {
     if let Some(cancel) = step2_cancel {
         cancel.store(true, Ordering::Relaxed);
         state.step2.scan_status = "Canceling...".to_string();

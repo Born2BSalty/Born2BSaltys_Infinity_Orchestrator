@@ -56,6 +56,7 @@ pub enum AppCommandConfig {
     Scan(ScanConfig),
 }
 
+#[must_use]
 pub fn from_cli(cli: &Cli) -> Option<AppCommandConfig> {
     let command = cli.command.as_ref()?;
     match command {

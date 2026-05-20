@@ -5,8 +5,9 @@ use crate::platform_defaults::compose_weidu_log_path;
 
 use super::step5_command_config::InstallCommandConfig;
 
+#[must_use]
 pub(crate) fn resolve_bgee_log_file(config: &InstallCommandConfig) -> String {
-    if config.have_weidu_logs && !config.bgee_log_file.trim().is_empty() {
+    if config.logs.exact_weidu_logs && !config.bgee_log_file.trim().is_empty() {
         return config.bgee_log_file.trim().to_string();
     }
     let folder = if config.game_install == "EET" {
@@ -17,8 +18,9 @@ pub(crate) fn resolve_bgee_log_file(config: &InstallCommandConfig) -> String {
     compose_weidu_log_path(folder)
 }
 
+#[must_use]
 pub(crate) fn resolve_bg2_log_file(config: &InstallCommandConfig) -> String {
-    if config.have_weidu_logs && !config.bg2ee_log_file.trim().is_empty() {
+    if config.logs.exact_weidu_logs && !config.bg2ee_log_file.trim().is_empty() {
         return config.bg2ee_log_file.trim().to_string();
     }
     let folder = if config.game_install == "EET" {

@@ -66,14 +66,13 @@ fn spawn_reader<R: Read + Send + 'static>(mut reader: R, tx: Sender<OutputEvent>
         let mut buf = [0_u8; 4096];
         loop {
             match reader.read(&mut buf) {
-                Ok(0) => break,
+                Ok(0) | Err(_) => break,
                 Ok(n) => {
                     let chunk = String::from_utf8_lossy(&buf[..n]).to_string();
                     if tx.send(OutputEvent::Data(chunk)).is_err() {
                         break;
                     }
                 }
-                Err(_) => break,
             }
         }
     });

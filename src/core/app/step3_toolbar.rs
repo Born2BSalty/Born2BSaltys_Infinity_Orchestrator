@@ -31,9 +31,9 @@ pub(crate) struct Step3ToolbarSummary {
 }
 
 pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary {
-    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let bgee_markers = if show_bgee {
+    let has_first_game_tab = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let has_second_game_tab = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let first_game_markers = if has_first_game_tab {
         crate::app::compat_step3_rules::collect_step3_compat_markers(
             &state.step1,
             "BGEE",
@@ -43,7 +43,7 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
     } else {
         std::collections::HashMap::new()
     };
-    let bg2ee_markers = if show_bg2ee {
+    let second_game_markers = if has_second_game_tab {
         crate::app::compat_step3_rules::collect_step3_compat_markers(
             &state.step1,
             "BG2EE",
@@ -54,7 +54,7 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
         std::collections::HashMap::new()
     };
     let prompt_eval = build_prompt_eval_context(state);
-    let bgee_prompt_count = if show_bgee {
+    let first_game_prompt_count = if has_first_game_tab {
         collect_step3_prompt_toolbar_entries(&state.step3.bgee_items, &prompt_eval)
             .into_iter()
             .map(|entry| entry.component_ids.len())
@@ -62,7 +62,7 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
     } else {
         0
     };
-    let bg2ee_prompt_count = if show_bg2ee {
+    let second_game_prompt_count = if has_second_game_tab {
         collect_step3_prompt_toolbar_entries(&state.step3.bg2ee_items, &prompt_eval)
             .into_iter()
             .map(|entry| entry.component_ids.len())
@@ -71,16 +71,20 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
         0
     };
     Step3ToolbarSummary {
-        show_bgee,
-        show_bg2ee,
-        bgee_summary: tab_compat_summary(&bgee_markers),
-        bg2ee_summary: tab_compat_summary(&bg2ee_markers),
-        bgee_prompt_count,
-        bg2ee_prompt_count,
-        bgee_target: first_tab_issue_target("BGEE", &state.step3.bgee_items, &bgee_markers),
-        bg2ee_target: first_tab_issue_target("BG2EE", &state.step3.bg2ee_items, &bg2ee_markers),
-        bgee_markers,
-        bg2ee_markers,
+        show_bgee: has_first_game_tab,
+        show_bg2ee: has_second_game_tab,
+        bgee_summary: tab_compat_summary(&first_game_markers),
+        bg2ee_summary: tab_compat_summary(&second_game_markers),
+        bgee_prompt_count: first_game_prompt_count,
+        bg2ee_prompt_count: second_game_prompt_count,
+        bgee_target: first_tab_issue_target("BGEE", &state.step3.bgee_items, &first_game_markers),
+        bg2ee_target: first_tab_issue_target(
+            "BG2EE",
+            &state.step3.bg2ee_items,
+            &second_game_markers,
+        ),
+        bgee_markers: first_game_markers,
+        bg2ee_markers: second_game_markers,
         compat_rules_error: crate::app::compat_rules::load_rules().error,
     }
 }
@@ -94,7 +98,7 @@ pub(crate) fn tab_has_conflict(
 }
 
 pub(crate) fn open_toolbar_issue_popup(state: &mut WizardState, target: &Step3ToolbarIssueTarget) {
-    state.step3.active_game_tab = target.tab_id.clone();
+    state.step3.active_game_tab.clone_from(&target.tab_id);
     state.step2.selected = Some(Step2Selection::Component {
         game_tab: target.tab_id.clone(),
         tp_file: target.tp_file.clone(),

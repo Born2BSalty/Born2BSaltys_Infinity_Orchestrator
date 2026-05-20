@@ -19,8 +19,7 @@ pub(crate) fn collect_prompt_jump_component_ids(
             let has_prompt = component
                 .prompt_summary
                 .as_ref()
-                .map(|summary| !summary.trim().is_empty())
-                .unwrap_or(false)
+                .is_some_and(|summary| !summary.trim().is_empty())
                 || !component.prompt_events.is_empty();
             if !has_prompt {
                 continue;
@@ -64,11 +63,9 @@ fn parse_prompt_jump_component_ids(text: &str) -> Vec<u32> {
 
 fn normalize_mod_key(value: &str) -> String {
     let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
+    let file = lower
+        .rfind(['/', '\\'])
+        .map_or(lower.as_str(), |idx| &lower[idx + 1..]);
     let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
     without_ext
         .strip_prefix("setup-")

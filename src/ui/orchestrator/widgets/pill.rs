@@ -1,40 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `Pill` primitive — generic tone-aware status pill (small rounded label with
-// a tinted fill + dark text).
-//
-// Mirrors `wireframe-preview/screens.jsx::Pill` semantics: a compact rounded
-// chip used for short status words. Tones come from SPEC §12.2's
-// theme-invariant pill palette (`pill_danger` / `pill_warn` / `pill_info` /
-// `pill_neutral`) with the fixed dark `pill_text` foreground.
-//
-// NOTE (Phase 5 / Run 1): the Home modlist cards intentionally do **not**
-// render a status pill — per SPEC §3.1 ("without needing an extra status
-// pill") + the wireframe `HomeScreen` cards, the meta line and the
-// action-button label (`resume` vs `open`) disambiguate state. This generic
-// widget is provided per the Phase 5 file inventory for the surfaces that do
-// use pills (Workspace fork badge, preview overview, etc.).
-//
-// SPEC: §12.2 (pill tones).
-
-// rationale: `f32 as u8` casts are pixel-radius roundings of small positive
-// constants — correct by construction (Cat 2); `Self` vs the explicit enum
-// name is a stylistic preference (Cat 3).
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::use_self
-)]
 
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, ThemePalette, redesign_pill_danger, redesign_pill_info,
+    REDESIGN_BORDER_RADIUS_U8, ThemePalette, redesign_pill_danger, redesign_pill_info,
     redesign_pill_neutral, redesign_pill_text, redesign_pill_warn,
 };
 
-/// Pill tone → fill color (SPEC §12.2, theme-invariant).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PillTone {
     Danger,
@@ -44,17 +17,16 @@ pub enum PillTone {
 }
 
 impl PillTone {
-    fn fill(self, palette: ThemePalette) -> egui::Color32 {
+    const fn fill(self, palette: ThemePalette) -> egui::Color32 {
         match self {
-            PillTone::Danger => redesign_pill_danger(palette),
-            PillTone::Warn => redesign_pill_warn(palette),
-            PillTone::Info => redesign_pill_info(palette),
-            PillTone::Neutral => redesign_pill_neutral(palette),
+            Self::Danger => redesign_pill_danger(palette),
+            Self::Warn => redesign_pill_warn(palette),
+            Self::Info => redesign_pill_info(palette),
+            Self::Neutral => redesign_pill_neutral(palette),
         }
     }
 }
 
-/// Render a pill at the current cursor and return its `Response`.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -75,7 +47,7 @@ pub fn render(
         let painter = ui.painter();
         painter.rect_filled(
             rect,
-            egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8),
+            egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
             tone.fill(palette),
         );
         painter.text(

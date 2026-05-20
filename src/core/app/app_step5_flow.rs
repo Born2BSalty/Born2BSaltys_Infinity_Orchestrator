@@ -96,11 +96,10 @@ pub(crate) fn start_if_requested(
         term.append_marker("Target prep started");
         *step5_pending_start = Some(pending);
         *step5_prep_rx = Some(spawn_target_prep_worker(state.step1.clone()));
-        true
     } else {
         start_install_process(state, term, pending);
-        true
     }
+    true
 }
 
 pub(crate) fn poll_step5_terminal(

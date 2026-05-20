@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::step5::state_step5::Step5ConsoleViewState;
+use crate::ui::step5::state_step5::{ConsoleOutputFilter, Step5ConsoleViewState};
 
 fn is_component_id_token(token: &str) -> bool {
     let t = token.trim_matches(|c: char| c == ',' || c == '.' || c == ':' || c == ';');
@@ -30,11 +30,9 @@ fn split_chunks_preserve_quotes(line: &str) -> Vec<String> {
             cur.push(ch);
             continue;
         }
+        cur.push(ch);
         if ch.is_whitespace() && !in_quote {
-            cur.push(ch);
             out.push(std::mem::take(&mut cur));
-        } else {
-            cur.push(ch);
         }
     }
     if !cur.is_empty() {
@@ -170,15 +168,13 @@ pub(crate) fn render_console_panel(
     });
 }
 
-fn selected_console_text<'a>(
+const fn selected_console_text<'a>(
     terminal: &'a EmbeddedTerminal,
     console_view: &Step5ConsoleViewState,
 ) -> &'a str {
-    if console_view.installed_only {
-        terminal.installed_text()
-    } else if console_view.important_only {
-        terminal.important_text()
-    } else {
-        terminal.output_text()
+    match console_view.filter {
+        ConsoleOutputFilter::General => terminal.output_text(),
+        ConsoleOutputFilter::Important => terminal.important_text(),
+        ConsoleOutputFilter::Installed => terminal.installed_text(),
     }
 }

@@ -22,7 +22,7 @@ pub(crate) struct DragFinalizeContext<'a> {
 
 pub(crate) struct DragPointerContext<'a> {
     pub items: &'a [Step3ItemState],
-    pub drag_from: &'a Option<usize>,
+    pub drag_from: Option<&'a usize>,
     pub drag_over: &'a mut Option<usize>,
     pub drag_indices: &'a [usize],
     pub drag_grab_offset: &'a f32,
@@ -93,11 +93,11 @@ pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'
 pub(crate) fn draw_insert_marker(
     ui: &egui::Ui,
     items: &[Step3ItemState],
-    drag_from: &Option<usize>,
+    drag_active: bool,
     drag_over: Option<usize>,
     visible_rows: &[(usize, egui::Rect)],
 ) {
-    if drag_from.is_none() {
+    if !drag_active {
         return;
     }
     if let Some(insert_at) = drag_over {
@@ -142,20 +142,14 @@ pub(crate) fn update_drag_target_from_pointer(ui: &egui::Ui, ctx: &mut DragPoint
             .count()
             .max(1);
         if n > 0 && k > 0 {
-            let list_top_y = visible_rows
-                .first()
-                .map(|(_, r)| r.top())
-                .unwrap_or(pointer.y);
+            let list_top_y = visible_rows.first().map_or(pointer.y, |(_, r)| r.top());
             let row_h = if *drag_row_h > 0.0 {
                 *drag_row_h
             } else {
-                (visible_rows
-                    .first()
-                    .map(|(_, r)| r.height())
-                    .unwrap_or(20.0)
-                    + ui.spacing().item_spacing.y.max(0.0))
-                .max(1.0)
-            };
+                visible_rows.first().map_or(20.0, |(_, r)| r.height())
+                    + ui.spacing().item_spacing.y.max(0.0)
+            }
+            .max(1.0);
             let desired_block_start = drag::compute_desired_block_start(
                 pointer.y,
                 list_top_y,

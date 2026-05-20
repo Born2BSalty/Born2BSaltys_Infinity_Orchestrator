@@ -31,6 +31,7 @@ pub fn dedup_components(comps: Vec<ScannedComponent>) -> Vec<ScannedComponent> {
     out
 }
 
+#[must_use]
 pub fn parse_component_line(line: &str) -> Option<ScannedComponent> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -51,8 +52,7 @@ pub fn parse_component_line(line: &str) -> Option<ScannedComponent> {
         }
         let display = trimmed
             .split_once("//")
-            .map(|(_, rhs)| rhs.trim().to_string())
-            .unwrap_or_else(|| trimmed.to_string());
+            .map_or_else(|| trimmed.to_string(), |(_, rhs)| rhs.trim().to_string());
         return Some(ScannedComponent {
             tp_file: Path::new(install_path)
                 .file_name()
@@ -102,6 +102,7 @@ pub fn parse_component_line(line: &str) -> Option<ScannedComponent> {
     }
 }
 
+#[must_use]
 pub fn normalize_tp_file(value: &str) -> String {
     let file = Path::new(value)
         .file_name()

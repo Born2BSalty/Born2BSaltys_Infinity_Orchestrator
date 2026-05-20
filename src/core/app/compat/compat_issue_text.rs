@@ -17,10 +17,7 @@ pub(crate) fn human_kind(kind: &str) -> &'static str {
 }
 
 pub(crate) fn format_issue_target(mod_name: &str, component: Option<u32>) -> String {
-    match component {
-        Some(id) => format!("{mod_name} #{id}"),
-        None => mod_name.to_string(),
-    }
+    component.map_or_else(|| mod_name.to_string(), |id| format!("{mod_name} #{id}"))
 }
 
 pub(crate) fn parse_games(value: &str) -> String {
@@ -45,18 +42,14 @@ pub(crate) fn parse_or_targets_from_reason(reason: &str) -> Option<Vec<String>> 
 }
 
 pub(crate) fn is_require_order_evidence(raw_evidence: Option<&str>) -> bool {
-    raw_evidence
-        .map(|raw| raw.trim_start().to_ascii_uppercase().starts_with("REQUIRE"))
-        .unwrap_or(false)
+    raw_evidence.is_some_and(|raw| raw.trim_start().to_ascii_uppercase().starts_with("REQUIRE"))
 }
 
 pub(crate) fn display_source(source: &str) -> String {
     let trimmed = source.trim();
-    if let Some(idx) = trimmed.find("TP2:") {
-        trimmed[idx..].to_string()
-    } else {
-        trimmed.to_string()
-    }
+    trimmed
+        .find("TP2:")
+        .map_or_else(|| trimmed.to_string(), |idx| trimmed[idx..].to_string())
 }
 
 pub(crate) fn is_duplicate_selection_issue(
@@ -111,14 +104,11 @@ pub(crate) fn issue_summary(
         return format!("Needs `{related}`");
     }
     if code.eq_ignore_ascii_case("FORBID_HIT") || code.eq_ignore_ascii_case("RULE_HIT") {
-        if raw_evidence
-            .map(|raw| {
-                raw.trim_start()
-                    .to_ascii_uppercase()
-                    .starts_with("FORBID_COMPONENT")
-            })
-            .unwrap_or(false)
-        {
+        if raw_evidence.is_some_and(|raw| {
+            raw.trim_start()
+                .to_ascii_uppercase()
+                .starts_with("FORBID_COMPONENT")
+        }) {
             let trimmed = reason.trim();
             if !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("unknown") {
                 return trimmed.to_string();

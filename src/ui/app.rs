@@ -23,7 +23,7 @@ mod lifecycle;
 #[path = "app_methods.rs"]
 mod methods;
 #[path = "app_nav_ui.rs"]
-pub(crate) mod nav_ui;
+pub mod nav_ui;
 #[path = "app_step2_log.rs"]
 mod step2_log;
 #[path = "app_step2_router.rs"]
@@ -64,10 +64,11 @@ impl Default for WizardApp {
 }
 
 impl WizardApp {
+    #[must_use]
     pub fn new(dev_mode: bool) -> Self {
         let init = bootstrap::initialize(dev_mode);
         let mut state = WizardState::with_step1(init.step1.clone());
-        state.github_auth_login = init.github_auth_login.clone();
+        state.github_auth_login.clone_from(&init.github_auth_login);
         if let Some(startup_status) = init.startup_status.clone() {
             state.step2.scan_status = startup_status;
         }

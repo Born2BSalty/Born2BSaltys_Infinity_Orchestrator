@@ -1,18 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `value_row` — labeled numeric/string input for the Advanced sub-tab.
-//
-// Per Phase 4 P4.T6 (absorb-the-gate pattern):
-//   - Empty input  → "use BIO default", flip the corresponding `<field>_enabled = false`.
-//   - Filled input → "override", flip `<field>_enabled = true`.
-//
-// The widget itself stays simple — it just renders label + input + hint. The
-// caller's `on_change` callback owns the gate flip.
-
-// rationale: `f32 as u8` casts are colour-channel / pixel roundings of small
-// positive values — correct by construction (Cat 2).
-#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use eframe::egui;
 
@@ -61,8 +48,6 @@ pub fn render(
                     .color(redesign_text_faint(palette)),
             );
         }
-        // Shared input primitive — border on the OUTER (allocated) box, not
-        // egui's margin-inset inner rect (the app-wide indented-input fix).
         let response = redesign_text_input(
             ui,
             palette,

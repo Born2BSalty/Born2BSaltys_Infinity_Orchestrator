@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -21,29 +22,31 @@ pub(super) fn write_quick_triage_txt(
     let mut text = String::new();
     text.push_str("BIO quick triage\n");
     text.push_str("================\n\n");
-    text.push_str(&format!("generated_at_unix={timestamp_unix_secs}\n"));
-    text.push_str(&format!("first_failure={first_failure}\n"));
-    text.push_str(&format!(
-        "step1_path_check={}\n",
+    writeln!(text, "generated_at_unix={timestamp_unix_secs}")
+        .expect("writing to String should not fail");
+    writeln!(text, "first_failure={first_failure}").expect("writing to String should not fail");
+    writeln!(
+        text,
+        "step1_path_check={}",
         match &state.step1_path_check {
             Some((ok, _)) => {
                 if *ok { "ok" } else { "failed" }
             }
             None => "not_run",
         }
-    ));
-    text.push_str(&format!(
-        "step2_status={}\n",
-        state.step2.scan_status.trim()
-    ));
-    text.push_str(&format!(
-        "install_exit_code={:?}\n",
-        state.step5.last_exit_code
-    ));
-    text.push_str(&format!(
-        "install_status={}\n\n",
+    )
+    .expect("writing to String should not fail");
+    writeln!(text, "step2_status={}", state.step2.scan_status.trim())
+        .expect("writing to String should not fail");
+    writeln!(text, "install_exit_code={:?}", state.step5.last_exit_code)
+        .expect("writing to String should not fail");
+    writeln!(
+        text,
+        "install_status={}",
         state.step5.last_status_text.trim()
-    ));
+    )
+    .expect("writing to String should not fail");
+    text.push('\n');
     text.push_str("open_these_files_first:\n");
     text.push_str("- bio_diag.txt\n");
     text.push_str("- scan_context.json\n");

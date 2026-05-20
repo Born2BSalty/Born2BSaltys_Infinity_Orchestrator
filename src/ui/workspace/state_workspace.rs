@@ -1,33 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `WorkspaceViewState` — per-modlist workspace UI state held by the
-// orchestrator while a modlist workspace is open.
-//
-// Per Phase 6 P6.T1 + the phase-06 file inventory. The struct shape is fixed
-// in Run 1 (the workspace spine) so later runs only fill behavior:
-//   - `current_step` / `completed_steps`  → driven by the nav bar (P6.T4).
-//   - `loaded_workspace_id`               → tracks which modlist's data is
-//     currently sitting in the orchestrator's shared `WizardState` so the
-//     loader (P6.T1) knows when a swap is needed.
-//   - `renaming` / `rename_temp`          → inline rename (P6.T5 — Run 2;
-//     declared now, inert this run, mirroring the Phase-5 staged-field
-//     pattern).
-//   - `save_draft_flash_until`            → the `✓ saved!` flash (P6.T6 —
-//     Run 2; declared now, inert this run).
-//   - `share_paste_open`                  → the Share import code dialog
-//     (Phase 7; declared now, inert this run).
-//   - `install_complete`                  → flipped post-install (Phase 7).
-//   - `fork_meta`                         → fork badge + sub-line + ForkInfo
-//     popup feed (P6.T5/T8 — Run 2/3; the holder type is fixed now so the
-//     model is stable, populated later).
-//
-// SPEC: §2.2 (workspace shell), §13.1 (per-modlist workspace state).
-
-// rationale: a small UI-state struct with independent flags — the multi-bool
-// shape is intentional (each flag drives a distinct workspace affordance),
-// and `#[must_use]` on the trivial constructor / queries is churn (Cat 3).
-#![allow(clippy::struct_excessive_bools, clippy::must_use_candidate)]
 
 use std::collections::HashSet;
 use std::time::Instant;
@@ -35,78 +7,17 @@ use std::time::Instant;
 use crate::app::state::Step2Selection;
 use crate::registry::model::Game;
 
-/// Orchestrator-owned Step-2 chrome state (P6.T2c). The Step-2 C4 wrapper
-/// owns the **Details-pane visibility** because the wireframe's Step 2 hides
-/// the Details panel by default (SPEC §6: "the Details panel is hidden by
-/// default") whereas BIO's `frame_step2` always renders it in the split.
-/// This is net-new chrome state — BIO's `state_step2` is untouched.
 #[derive(Debug, Clone, Default)]
 pub struct WorkspaceStep2State {
-    /// Details pane visible. **Default `false`** (SPEC §6 — hidden by
-    /// default; opened via the Kebab "Show Details panel" toggle or by
-    /// selecting a tree row, mirroring the wireframe `ComponentTree`
-    /// `onSelect → setDetailsOpen(true)`).
     pub details_open: bool,
-    /// Snapshot of `wizard_state.step2.selected` from the previous frame.
-    /// When the live selection transitions to a *new* value (a row / `[?]`
-    /// click in BIO's reused tree), the wrapper auto-opens the Details
-    /// panel — the egui equivalent of the wireframe `ComponentTree`'s
-    /// `onSelect`/`onOpenDetails` callbacks (BIO's tree has no separate
-    /// detail-open signal; a row click sets `state.step2.selected`).
     pub last_selection: Option<Step2Selection>,
-    /// **Rescan-reconcile snapshot** (SPEC §6.3, the #2 fix). Captured at
-    /// scan-trigger time — the current selection as
-    /// `(tp2.to_ascii_uppercase(), component_id, selected_order)` over every
-    /// checked component on both tabs — and re-applied onto the freshly
-    /// scanned mod set when the (async) scan **completes** (the fresh set
-    /// has landed via `OrchestratorApp::poll_step2_channels`). `None` when
-    /// no rescan is pending. Orchestrator-owned: BIO's `state_step2` is
-    /// untouched and BIO's scan is non-preserving by design.
     pub rescan_snapshot: Option<RescanSnapshot>,
-    /// Previous-frame `wizard_state.step2.is_scanning`, so the reconcile can
-    /// fire exactly on the scan-completion edge (`true → false`) — the
-    /// moment BIO's `Step2ScanEvent::Finished` handler has replaced the mod
-    /// vectors. Drained-before-render in `OrchestratorApp::update`.
     pub was_scanning: bool,
-    /// Post-reconcile drop warning for the scan-status footer (SPEC §6.3:
-    /// _"N component(s) dropped — M mod(s) no longer present"_). `Some` only
-    /// when a completed rescan dropped at least one selected component;
-    /// cleared on the next scan trigger.
     pub rescan_drop_warning: Option<String>,
-    /// **Cold-resume scan pending** (Phase 6 / Run 2b — the #1 fix). Set by
-    /// `step2_resume_scan::maybe_trigger_resume_scan` when a workspace opens
-    /// with a recorded dev-scan folder + a persisted order but an empty
-    /// scanned mod set: it re-points `step1.mods_folder`, stashes a
-    /// `rescan_snapshot` built from the **persisted order**, dispatches
-    /// `StartScan`, and sets this. On scan completion
-    /// `reconcile_on_scan_complete` re-applies the snapshot (the existing
-    /// rescan path) **and**, because this is a resume (no prior Step-3 order
-    /// to protect — `populate` rebuilt it empty), rebuilds Step 3 from the
-    /// re-marked Step-2 mods via BIO's `step3_sync::build_step3_items` (the
-    /// loader's own recipe), then clears this. Distinct from a dev *rescan*
-    /// (`rescan_snapshot` set, this `false`), which deliberately does **not**
-    /// rebuild Step 3 (it preserves the user's reorder — SPEC §6.3 / BIO's
-    /// clobber-protection).
     pub resume_pending: bool,
-    /// **Pending Select-via-WeiDU-Log destructive confirm** (SPEC §6.10 +
-    /// wireframe `askWeiduImport`, `screens.jsx:2778-2784`). Select-via-Log
-    /// replaces *every* component selection on the tab, so the tab-row
-    /// button does **not** dispatch the picker directly — it arms this with
-    /// the target tab (`Some(true)` = BGEE, `Some(false)` = BG2EE) and
-    /// `workspace_step2::render` shows the danger `ConfirmDialog`. Only on
-    /// **Confirm** does it dispatch `Step2Action::Select{Bgee,Bg2ee}ViaLog`
-    /// (the unchanged `step2_log_glue` picker+apply path); **Cancel/dismiss**
-    /// just clears this — nothing changes. `None` = no confirm in flight.
-    /// Orchestrator-owned (BIO's `state_step2` is untouched).
     pub pending_weidu_log_confirm: Option<bool>,
 }
 
-/// One captured selection entry for the rescan-reconcile (SPEC §6.3, the #2
-/// fix): the component's `tp2` (upper-cased — BIO matches `tp_file`
-/// case-insensitively, the precedent being
-/// `workspace_state_loader::apply_order_to_mods`), its `component_id`, and
-/// its `selected_order` so the install order is preserved across the
-/// rescan.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RescanSelection {
     pub tp2_upper: String,
@@ -114,169 +25,114 @@ pub struct RescanSelection {
     pub selected_order: Option<usize>,
 }
 
-/// The full pre-scan selection snapshot — both game tabs (BIO buckets
-/// single-game modlists, incl. IWDEE, into `bgee_mods`; EET uses both).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RescanSnapshot {
     pub bgee: Vec<RescanSelection>,
     pub bg2ee: Vec<RescanSelection>,
 }
 
-/// The four workspace steps (SPEC §2.2). Step 1 no longer exists inside the
-/// workspace — setup migrated to Settings + Create.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WorkspaceStep {
-    /// Step 2 — Scan and Select.
     Step2,
-    /// Step 3 — Reorder and Resolve.
     Step3,
-    /// Step 4 — Review.
     Step4,
-    /// Step 5 — Install.
     Step5,
 }
 
 impl WorkspaceStep {
-    /// All four steps in workspace order.
-    pub const ALL: [WorkspaceStep; 4] = [
-        WorkspaceStep::Step2,
-        WorkspaceStep::Step3,
-        WorkspaceStep::Step4,
-        WorkspaceStep::Step5,
-    ];
+    pub const ALL: [Self; 4] = [Self::Step2, Self::Step3, Self::Step4, Self::Step5];
 
-    /// 0-based index into [`WorkspaceStep::ALL`].
-    pub fn index(self) -> usize {
+    #[must_use]
+    pub const fn index(self) -> usize {
         match self {
-            WorkspaceStep::Step2 => 0,
-            WorkspaceStep::Step3 => 1,
-            WorkspaceStep::Step4 => 2,
-            WorkspaceStep::Step5 => 3,
+            Self::Step2 => 0,
+            Self::Step3 => 1,
+            Self::Step4 => 2,
+            Self::Step5 => 3,
         }
     }
 
-    /// The `Step N` kicker (SPEC §2.2 / wireframe `WORKSPACE_STEPS`).
-    pub fn step_kicker(self) -> &'static str {
+    #[must_use]
+    pub const fn step_kicker(self) -> &'static str {
         match self {
-            WorkspaceStep::Step2 => "Step 2",
-            WorkspaceStep::Step3 => "Step 3",
-            WorkspaceStep::Step4 => "Step 4",
-            WorkspaceStep::Step5 => "Step 5",
+            Self::Step2 => "Step 2",
+            Self::Step3 => "Step 3",
+            Self::Step4 => "Step 4",
+            Self::Step5 => "Step 5",
         }
     }
 
-    /// The step label (SPEC §2.2 / wireframe `WORKSPACE_STEPS`).
-    pub fn label(self) -> &'static str {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
-            WorkspaceStep::Step2 => "Scan and Select",
-            WorkspaceStep::Step3 => "Reorder and Resolve",
-            WorkspaceStep::Step4 => "Review",
-            WorkspaceStep::Step5 => "Install",
+            Self::Step2 => "Scan and Select",
+            Self::Step3 => "Reorder and Resolve",
+            Self::Step4 => "Review",
+            Self::Step5 => "Install",
         }
     }
 
-    /// The one-line hint shown under the progress bar (wireframe
-    /// `WORKSPACE_STEPS[*].hint`).
-    pub fn hint(self) -> &'static str {
+    #[must_use]
+    pub const fn hint(self) -> &'static str {
         match self {
-            WorkspaceStep::Step2 => "Choose components to install.",
-            WorkspaceStep::Step3 => {
+            Self::Step2 => "Choose components to install.",
+            Self::Step3 => {
                 "Review and adjust install order. Drag to reorder; right-click for more actions."
             }
-            WorkspaceStep::Step4 => {
+            Self::Step4 => {
                 "Verify setup and install order before running. Next saves weidu.log file(s) and advances to install."
             }
-            WorkspaceStep::Step5 => "Run the install with live console, prompts, and diagnostics.",
+            Self::Step5 => "Run the install with live console, prompts, and diagnostics.",
         }
     }
 
-    /// The next step, or `None` if this is the last.
-    pub fn next(self) -> Option<WorkspaceStep> {
+    #[must_use]
+    pub const fn next(self) -> Option<Self> {
         match self {
-            WorkspaceStep::Step2 => Some(WorkspaceStep::Step3),
-            WorkspaceStep::Step3 => Some(WorkspaceStep::Step4),
-            WorkspaceStep::Step4 => Some(WorkspaceStep::Step5),
-            WorkspaceStep::Step5 => None,
+            Self::Step2 => Some(Self::Step3),
+            Self::Step3 => Some(Self::Step4),
+            Self::Step4 => Some(Self::Step5),
+            Self::Step5 => None,
         }
     }
 
-    /// The previous step, or `None` if this is the first.
-    pub fn prev(self) -> Option<WorkspaceStep> {
+    #[must_use]
+    pub const fn prev(self) -> Option<Self> {
         match self {
-            WorkspaceStep::Step2 => None,
-            WorkspaceStep::Step3 => Some(WorkspaceStep::Step2),
-            WorkspaceStep::Step4 => Some(WorkspaceStep::Step3),
-            WorkspaceStep::Step5 => Some(WorkspaceStep::Step4),
+            Self::Step2 => None,
+            Self::Step3 => Some(Self::Step2),
+            Self::Step4 => Some(Self::Step3),
+            Self::Step5 => Some(Self::Step4),
         }
     }
 }
 
-/// Fork provenance shown in the workspace header (badge + sub-line) and fed
-/// to the `ForkInfoPopup`. The holder type is fixed in Run 1 so the model is
-/// stable; population (from the parsed parent share code at fork time) lands
-/// in Run 2/3 (P6.T5 / P6.T8). `forked_from` reuses BIO's `pub(crate)`
-/// `ForkAncestor` (carve-out #5) — no parallel type.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ForkMeta {
-    /// Immediate parent's display name.
     pub parent_name: String,
-    /// Immediate parent's author handle.
     pub parent_author: String,
-    /// Mods preselected from the parent (for the header sub-line).
     pub mods: u32,
-    /// Components preselected from the parent (for the header sub-line).
     pub components: u32,
-    /// Full lineage chain oldest → newest (the parent's chain ++ parent).
-    /// `pub(crate)` (not `pub`): the element type `ForkAncestor` is BIO's
-    /// `pub(crate)` carve-out-#5 struct; same-crate visibility avoids a
-    /// `private_interfaces` warning and is sufficient (no external library
-    /// consumer — the orchestrator binary is same-crate).
     pub(crate) forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
 }
 
-/// Per-modlist workspace view state.
+pub type WorkspaceFlag = bool;
+
 #[derive(Debug, Clone)]
 pub struct WorkspaceViewState {
-    /// Registry id of the modlist currently being edited.
     pub modlist_id: String,
-    /// Display name (registry `ModlistEntry.name`); the header shows
-    /// `Editing <name>`.
     pub modlist_name: String,
-    /// Fork provenance, if this modlist was forked (Run 2/3 populates).
     pub fork_meta: Option<ForkMeta>,
-    /// The modlist's chosen game family (immutable once the workspace opens —
-    /// SPEC §5.1). Drives single- vs dual-game tabs in Steps 2-4.
     pub game: Game,
-    /// The active workspace step.
     pub current_step: WorkspaceStep,
-    /// Steps the user has advanced past (drives the progress-bar checkmarks).
     pub completed_steps: HashSet<WorkspaceStep>,
-    /// Inline-rename active (P6.T5 — Run 2; inert this run).
-    pub renaming: bool,
-    /// Inline-rename scratch buffer (P6.T5 — Run 2; inert this run).
+    pub renaming: WorkspaceFlag,
     pub rename_temp: String,
-    /// `✓ saved!` flash deadline (P6.T6 — Run 2; inert this run).
     pub save_draft_flash_until: Option<Instant>,
-    /// Share import code dialog open (Phase 7; inert this run).
-    pub share_paste_open: bool,
-    /// `ForkInfoPopup` open (P6.T5 — Run 2). The exact analogue of
-    /// `share_paste_open` / `install/state_install.rs::fork_info_open`: a
-    /// persistent non-blocking-popup-open bool the header re-renders the
-    /// reused Phase-5 `ForkInfoPopup` from each frame, clearing it on the
-    /// popup's `Closed` outcome. Declared in Run 2 (the Run-1 spine fixed
-    /// the rest of the shape; this is the minimal additive field the
-    /// `⑂ view fork details` trigger needs, mirroring `share_paste_open`).
-    pub fork_info_open: bool,
-    /// Flipped to `true` post-successful-install (Phase 7).
-    pub install_complete: bool,
-    /// Which modlist's data is currently loaded into the orchestrator's
-    /// shared `WizardState`. The loader compares this to the routed id to
-    /// decide when a populate/swap is needed (P6.T1 / P6.T12).
+    pub share_paste_open: WorkspaceFlag,
+    pub fork_info_open: WorkspaceFlag,
+    pub install_complete: WorkspaceFlag,
     pub loaded_workspace_id: Option<String>,
-    /// Net-new Step-2 chrome state (Details-pane visibility — hidden by
-    /// default per SPEC §6 — + the selection snapshot driving auto-open).
-    /// Reset with the rest of the view state on a modlist swap so a fresh
-    /// workspace starts with the Details panel hidden (P6.T2c).
     pub step2: WorkspaceStep2State,
 }
 
@@ -287,8 +143,6 @@ impl Default for WorkspaceViewState {
             modlist_name: String::new(),
             fork_meta: None,
             game: Game::default(),
-            // SPEC §3.2 / P6.T14: the workspace always opens at Step 2 for
-            // v1 alpha.
             current_step: WorkspaceStep::Step2,
             completed_steps: HashSet::new(),
             renaming: false,
@@ -304,8 +158,7 @@ impl Default for WorkspaceViewState {
 }
 
 impl WorkspaceViewState {
-    /// True if `step` is marked completed (has a checkmark in the progress
-    /// bar).
+    #[must_use]
     pub fn is_completed(&self, step: WorkspaceStep) -> bool {
         self.completed_steps.contains(&step)
     }

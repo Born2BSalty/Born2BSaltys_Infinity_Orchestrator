@@ -96,6 +96,6 @@ impl StringOrMany {
     }
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }

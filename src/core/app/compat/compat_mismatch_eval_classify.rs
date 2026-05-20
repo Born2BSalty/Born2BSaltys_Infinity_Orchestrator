@@ -7,12 +7,12 @@ use super::context::{MismatchContext, TriState};
 use super::parser::{ComparisonValue, compare_tristate, parse_comparison_value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RequirementFailureClass {
+pub(in crate::app) enum RequirementFailureClass {
     Mismatch,
     Conditional,
 }
 
-pub(crate) fn classify_failed_requirement(
+pub(in crate::app) fn classify_failed_requirement(
     input: &str,
     context: &MismatchContext,
 ) -> RequirementFailureClass {
@@ -22,7 +22,7 @@ pub(crate) fn classify_failed_requirement(
     if !parser.is_at_end() {
         return RequirementFailureClass::Conditional;
     }
-    if result.value == TriState::False && result.false_game {
+    if result.value == TriState::False && result.false_sources.has_game() {
         RequirementFailureClass::Mismatch
     } else {
         RequirementFailureClass::Conditional
@@ -43,7 +43,7 @@ enum GamePredicate {
 }
 
 impl GamePredicate {
-    fn is_mismatch(self) -> bool {
+    const fn is_mismatch(self) -> bool {
         matches!(self, Self::Game | Self::Engine)
     }
 }
@@ -51,49 +51,78 @@ impl GamePredicate {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ClassifiedTri {
     value: TriState,
-    true_game: bool,
-    true_other: bool,
-    false_game: bool,
-    false_other: bool,
+    true_sources: PredicateSources,
+    false_sources: PredicateSources,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PredicateSources(u8);
+
+impl PredicateSources {
+    const NONE: u8 = 0;
+    const GAME: u8 = 1;
+    const OTHER: u8 = 2;
+
+    const fn empty() -> Self {
+        Self(Self::NONE)
+    }
+
+    const fn game() -> Self {
+        Self(Self::GAME)
+    }
+
+    const fn other() -> Self {
+        Self(Self::OTHER)
+    }
+
+    const fn has_game(self) -> bool {
+        self.0 & Self::GAME != 0
+    }
+
+    const fn has_other(self) -> bool {
+        self.0 & Self::OTHER != 0
+    }
+
+    const fn union(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
 }
 
 impl ClassifiedTri {
-    fn neutral(value: TriState) -> Self {
+    const fn neutral(value: TriState) -> Self {
         Self {
             value,
-            true_game: false,
-            true_other: false,
-            false_game: false,
-            false_other: false,
+            true_sources: PredicateSources::empty(),
+            false_sources: PredicateSources::empty(),
         }
     }
 
-    fn game(value: TriState) -> Self {
+    const fn game(value: TriState) -> Self {
         match value {
             TriState::True => Self {
                 value,
-                true_game: true,
+                true_sources: PredicateSources::game(),
                 ..Self::neutral(value)
             },
             TriState::False => Self {
                 value,
-                false_game: true,
+                false_sources: PredicateSources::game(),
                 ..Self::neutral(value)
             },
             _ => Self::neutral(value),
         }
     }
 
-    fn other(value: TriState) -> Self {
+    const fn other(value: TriState) -> Self {
         match value {
             TriState::True => Self {
                 value,
-                true_other: true,
+                true_sources: PredicateSources::other(),
                 ..Self::neutral(value)
             },
             TriState::False => Self {
                 value,
-                false_other: true,
+                false_sources: PredicateSources::other(),
                 ..Self::neutral(value)
             },
             _ => Self::neutral(value),
@@ -106,22 +135,18 @@ impl ClassifiedTri {
         match value {
             TriState::True => {
                 if self.value == TriState::True {
-                    out.true_game |= self.true_game;
-                    out.true_other |= self.true_other;
+                    out.true_sources = out.true_sources.union(self.true_sources);
                 }
                 if rhs.value == TriState::True {
-                    out.true_game |= rhs.true_game;
-                    out.true_other |= rhs.true_other;
+                    out.true_sources = out.true_sources.union(rhs.true_sources);
                 }
             }
             TriState::False => {
                 if self.value == TriState::False {
-                    out.false_game |= self.false_game;
-                    out.false_other |= self.false_other;
+                    out.false_sources = out.false_sources.union(self.false_sources);
                 }
                 if rhs.value == TriState::False {
-                    out.false_game |= rhs.false_game;
-                    out.false_other |= rhs.false_other;
+                    out.false_sources = out.false_sources.union(rhs.false_sources);
                 }
             }
             _ => {}
@@ -135,22 +160,18 @@ impl ClassifiedTri {
         match value {
             TriState::True => {
                 if self.value == TriState::True {
-                    out.true_game |= self.true_game;
-                    out.true_other |= self.true_other;
+                    out.true_sources = out.true_sources.union(self.true_sources);
                 }
                 if rhs.value == TriState::True {
-                    out.true_game |= rhs.true_game;
-                    out.true_other |= rhs.true_other;
+                    out.true_sources = out.true_sources.union(rhs.true_sources);
                 }
             }
             TriState::False => {
                 if self.value == TriState::False {
-                    out.false_game |= self.false_game;
-                    out.false_other |= self.false_other;
+                    out.false_sources = out.false_sources.union(self.false_sources);
                 }
                 if rhs.value == TriState::False {
-                    out.false_game |= rhs.false_game;
-                    out.false_other |= rhs.false_other;
+                    out.false_sources = out.false_sources.union(rhs.false_sources);
                 }
             }
             _ => {}
@@ -158,19 +179,17 @@ impl ClassifiedTri {
         out
     }
 
-    fn not(self) -> Self {
+    const fn not(self) -> Self {
         Self {
             value: self.value.not(),
-            true_game: self.false_game,
-            true_other: self.false_other,
-            false_game: self.true_game,
-            false_other: self.true_other,
+            true_sources: self.false_sources,
+            false_sources: self.true_sources,
         }
     }
 }
 
 impl<'a> ClassifyingParser<'a> {
-    fn new(tokens: Vec<Token>, context: &'a MismatchContext) -> Self {
+    const fn new(tokens: Vec<Token>, context: &'a MismatchContext) -> Self {
         Self {
             tokens,
             pos: 0,
@@ -213,7 +232,7 @@ impl<'a> ClassifyingParser<'a> {
         let Some(rhs) = self.consume_comparison_value() else {
             return ClassifiedTri::neutral(TriState::Unknown);
         };
-        classify_compared(lhs, op, rhs)
+        classify_compared(lhs, &op, rhs)
     }
 
     fn parse_primary(&mut self) -> ClassifiedTri {
@@ -236,8 +255,7 @@ impl<'a> ClassifyingParser<'a> {
             "ENGINE_IS" => self.parse_game_call(GamePredicate::Engine),
             "GAME_INCLUDES" => self.parse_game_call(GamePredicate::Includes),
             "MOD_IS_INSTALLED" => self.parse_mod_is_installed(),
-            "FILE_EXISTS_IN_GAME" => self.parse_ignored_file_call(),
-            "FILE_EXISTS" => self.parse_ignored_file_call(),
+            "FILE_EXISTS_IN_GAME" | "FILE_EXISTS" => self.parse_ignored_file_call(),
             "TRUE" => ClassifiedTri::neutral(TriState::True),
             "FALSE" => ClassifiedTri::neutral(TriState::False),
             _ => ClassifiedTri::neutral(TriState::Unknown),
@@ -322,7 +340,7 @@ impl<'a> ClassifyingParser<'a> {
 
     fn consume_value(&mut self) -> Option<String> {
         match self.peek().cloned() {
-            Some(Token::Atom(value)) | Some(Token::Ident(value)) => {
+            Some(Token::Atom(value) | Token::Ident(value)) => {
                 self.pos += 1;
                 Some(value)
             }
@@ -355,7 +373,7 @@ impl<'a> ClassifyingParser<'a> {
         parse_comparison_value(&value)
     }
 
-    fn is_at_end(&self) -> bool {
+    const fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len()
     }
 
@@ -364,19 +382,27 @@ impl<'a> ClassifyingParser<'a> {
     }
 }
 
-fn classify_compared(lhs: ClassifiedTri, op: Token, rhs: ComparisonValue) -> ClassifiedTri {
+const fn classify_compared(lhs: ClassifiedTri, op: &Token, rhs: ComparisonValue) -> ClassifiedTri {
     let value = compare_tristate(lhs.value, op, rhs);
     let mut out = ClassifiedTri::neutral(value);
-    let lhs_has_game = lhs.true_game || lhs.false_game;
-    let lhs_has_other = lhs.true_other || lhs.false_other;
+    let lhs_has_game = lhs.true_sources.has_game() || lhs.false_sources.has_game();
+    let lhs_has_other = lhs.true_sources.has_other() || lhs.false_sources.has_other();
     match value {
         TriState::True => {
-            out.true_game = lhs_has_game;
-            out.true_other = lhs_has_other;
+            if lhs_has_game {
+                out.true_sources = out.true_sources.union(PredicateSources::game());
+            }
+            if lhs_has_other {
+                out.true_sources = out.true_sources.union(PredicateSources::other());
+            }
         }
         TriState::False => {
-            out.false_game = lhs_has_game;
-            out.false_other = lhs_has_other;
+            if lhs_has_game {
+                out.false_sources = out.false_sources.union(PredicateSources::game());
+            }
+            if lhs_has_other {
+                out.false_sources = out.false_sources.union(PredicateSources::other());
+            }
         }
         TriState::Ignored | TriState::Unknown => {}
     }

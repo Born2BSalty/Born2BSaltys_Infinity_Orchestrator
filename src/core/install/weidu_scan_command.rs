@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn hidden_command(program: &Path) -> Command {
     #[cfg(target_os = "windows")]

@@ -171,7 +171,7 @@ fn parse_designated_id(upper_line: &str) -> Option<String> {
     }
     let index = upper_line.find("DESIGNATED")?;
     let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-    let digits: String = tail.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+    let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         None
     } else {

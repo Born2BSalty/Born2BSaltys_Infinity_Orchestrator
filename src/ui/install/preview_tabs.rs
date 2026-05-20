@@ -1,61 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// Install Modlist — the preview Content Box's 6-tab file-folder strip +
-// per-tab content (SPEC §4.2, P5.T11).
-//
-// Mirrors `wireframe-preview/screens.jsx::ImportPreviewTabs` (line 469-510)
-// for the strip and `::PreviewText` (line 512-529) for the per-tab body.
-//
-// **Tab strip** (`ImportPreviewTabs`, `merge` variant — the preview always
-// uses `merge` so the active tab dissolves into the box below):
-//   each tab: padding 6px 14px; 1.5px solid border-strong;
-//     borderRadius 4px 4px 0 0; marginBottom -1.5px (overlap the box edge);
-//     active  → background shell-bg, color text,        fontWeight 700,
-//               borderBottom 1.5px solid shell-bg  (merge into the box)
-//     inactive→ background chrome-bg, color text-muted, fontWeight 400,
-//               borderBottom 1.5px solid border-strong
-//   Poppins 14px; the strip itself has `borderBottom: 1.5px solid
-//   border-strong` so the inactive tabs sit on a continuous baseline and
-//   the active tab punches a shell-bg gap in it (the file-folder look).
-//
-// Because egui has no z-index/negative-margin model, the "active tab merges
-// into the box" effect is reproduced by painting the strip's baseline rule
-// and then over-painting a shell-bg segment exactly under the active tab
-// (the same technique BIO's other file-folder strips will use; Settings'
-// tab strip is the sibling precedent for this pattern in the redesign).
-//
-// **Tab content** (`PreviewText`): a single monospace pre-wrapped block,
-// `FiraCode Nerd` 13px, lineHeight 1.35, color text. Each tab's text is
-// built from the parsed `ModlistSharePreview` (NOT mock data):
-//   - Summary        — composed recap (wireframe `PreviewText` "Summary"
-//                       structure, populated from the real preview).
-//   - BGEE WeiDU      — `preview.bgee_log_text` verbatim.
-//   - BG2EE WeiDU     — `preview.bg2ee_log_text` verbatim.
-//   - User Downloads  — `preview.source_overrides_text` verbatim.
-//   - Installed Refs  — `preview.installed_refs_text` verbatim.
-//   - Mod Configs     — `preview.mod_configs_text` verbatim.
-// When a section is empty the body shows a faint "(none in this share
-// code)" placeholder rather than an empty pane (the wireframe's mock always
-// has content; a real share code legitimately may not — surface it
-// honestly, like the rest of the redesign's empty states).
-//
-// `firacode_nerd` is the only registered monospace family (HANDOFF caveat);
-// all glyphs used here are ASCII so coverage is not a concern.
-//
-// SPEC: §4.2 (preview tab contents), §6.4 (file-folder tab pattern).
-// Wireframe: screens.jsx:469-529 (verbatim).
-
-// rationale: `f32 as u8` casts are pixel-radius roundings of small positive
-// constants — correct by construction (Cat 2); the doc-paragraph-length and
-// line-count lints are subjective style on a faithfully-mirrored widget
-// (Cat 3).
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::too_long_first_doc_paragraph,
-    clippy::too_many_lines
-)]
 
 use eframe::egui;
 
@@ -66,14 +10,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_shell_bg, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
-/// Render the 6-tab strip. Mutates `active` in place when a tab is clicked.
-/// Caller renders the Content Box immediately below so the active tab merges
-/// into it. `pub(crate)` to stay consistent with `render_tab_body` (which
-/// must be `pub(crate)` — it takes the BIO `pub(crate)` `ModlistSharePreview`).
 pub(crate) fn render_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active: &mut PreviewTab) {
-    // Wireframe: the strip is `display:flex; gap:4; flexWrap:wrap;
-    // borderBottom: 1.5px solid border-strong`. Capture the strip origin so
-    // we can punch a shell-bg gap under the active tab afterwards.
     let strip_left = ui.cursor().left();
     let strip_width = ui.available_width();
 
@@ -94,7 +31,6 @@ pub(crate) fn render_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active:
         }
     });
 
-    // The strip's continuous 1.5px baseline rule (wireframe `borderBottom`).
     let baseline_y = ui.cursor().top() - 1.0;
     let painter = ui.painter();
     painter.line_segment(
@@ -105,10 +41,6 @@ pub(crate) fn render_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active:
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
     );
 
-    // "Active tab merges into the box": over-paint a shell-bg segment of the
-    // baseline exactly under the active tab so the border visually opens
-    // into the Content Box below (the file-folder effect — wireframe
-    // `borderBottom: 1.5px solid shell-bg` on the active tab).
     if let Some(r) = active_tab_rect {
         painter.line_segment(
             [
@@ -120,8 +52,6 @@ pub(crate) fn render_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active:
     }
 }
 
-/// Paint a single tab and return its rect (so the caller can punch the
-/// baseline under the active one + hit-test the click).
 fn render_one_tab(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -164,15 +94,10 @@ fn render_one_tab(
             redesign_chrome_bg(palette)
         };
         painter.rect_filled(rect, radius, fill);
-        // Wireframe: 1.5px border on top/left/right; the bottom edge is the
-        // shell-bg merge for the active tab (handled by the baseline
-        // over-paint in `render_tab_strip`) and border-strong for inactive
-        // (the strip baseline rule already draws that). So stroke only the
-        // three non-bottom sides here.
         let stroke = egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-        painter.line_segment([rect.left_top(), rect.right_top()], stroke); // top
-        painter.line_segment([rect.left_top(), rect.left_bottom()], stroke); // left
-        painter.line_segment([rect.right_top(), rect.right_bottom()], stroke); // right
+        painter.line_segment([rect.left_top(), rect.right_top()], stroke);
+        painter.line_segment([rect.left_top(), rect.left_bottom()], stroke);
+        painter.line_segment([rect.right_top(), rect.right_bottom()], stroke);
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -185,16 +110,12 @@ fn render_one_tab(
     rect
 }
 
-/// Hit-test a tab rect for a primary click this frame.
 fn tab_clicked(ui: &egui::Ui, rect: egui::Rect) -> bool {
     ui.input(|i| {
         i.pointer.primary_clicked() && i.pointer.interact_pos().is_some_and(|p| rect.contains(p))
     })
 }
 
-/// Render the active tab's monospace body inside the Content Box
-/// (`PreviewText`). Wireframe: `FiraCode Nerd` 13px, lineHeight 1.35,
-/// whiteSpace pre-wrap, color text.
 pub(crate) fn render_tab_body(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -226,9 +147,6 @@ pub(crate) fn render_tab_body(
         });
 }
 
-/// Build the per-tab text from the parsed preview. Summary is a composed
-/// recap (wireframe `PreviewText` "Summary" structure); every other tab is
-/// the verbatim packaged section.
 fn tab_text(tab: PreviewTab, p: &ModlistSharePreview) -> String {
     match tab {
         PreviewTab::Summary => summary_text(p),
@@ -240,12 +158,6 @@ fn tab_text(tab: PreviewTab, p: &ModlistSharePreview) -> String {
     }
 }
 
-/// The Summary recap, structured exactly like the wireframe's `PreviewText`
-/// "Summary" string (screens.jsx:521) but filled from the real
-/// `ModlistSharePreview`. The redesign has no "Step 1", so the
-/// "What Import Will Do" bullets use the wireframe's Step-1-free wording
-/// (the wireframe is canonical over BIO's `format_modlist_import_preview`,
-/// which still references Step 1 — that copy belongs to the legacy wizard).
 fn summary_text(p: &ModlistSharePreview) -> String {
     let yn = |b: bool| if b { "Yes" } else { "No" };
     format!(
@@ -314,7 +226,6 @@ mod tests {
         assert!(s.contains("BG2EE: 115 entries"));
         assert!(s.contains("Source overrides: Yes"));
         assert!(s.contains("Mod config files: 4"));
-        // Redesign copy — no Step 1 references (wireframe is canonical).
         assert!(!s.contains("Step 1"));
     }
 
@@ -331,8 +242,6 @@ mod tests {
             p.installed_refs_text
         );
         assert_eq!(tab_text(PreviewTab::ModConfigs, &p), p.mod_configs_text);
-        // An empty section yields an empty string (the renderer shows the
-        // faint "(none …)" placeholder for that case).
         assert!(tab_text(PreviewTab::Bg2eeWeidu, &p).is_empty());
     }
 }

@@ -39,7 +39,7 @@ pub(crate) fn render_table(ui: &mut egui::Ui) {
 
                                 for (key, entry) in group.items {
                                     crate::ui::step5::prompt_answers_rows_step5::render_entry_row(
-                                        ui, &key, entry,
+                                        ui, &key, &entry,
                                     );
                                 }
                             });

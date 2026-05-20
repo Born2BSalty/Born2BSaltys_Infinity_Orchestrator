@@ -98,14 +98,11 @@ pub(super) fn candidate_language_ids(
     }
 
     let mut ordered = Vec::<String>::new();
-    if wants_english {
-        ordered.extend(english);
-        ordered.extend(others);
-    } else {
+    if !wants_english {
         ordered.extend(preferred);
-        ordered.extend(english);
-        ordered.extend(others);
     }
+    ordered.extend(english);
+    ordered.extend(others);
 
     let mut deduped = Vec::<String>::new();
     for id in ordered {
@@ -146,7 +143,7 @@ fn tokenize_language_label(label: &str) -> Vec<String> {
     label
         .split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|part| !part.is_empty())
-        .map(|part| part.to_ascii_lowercase())
+        .map(str::to_ascii_lowercase)
         .collect()
 }
 

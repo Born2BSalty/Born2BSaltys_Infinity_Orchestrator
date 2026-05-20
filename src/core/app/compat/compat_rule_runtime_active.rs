@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::app::state::{Step2ModState, Step3ItemState};
 
 #[derive(Debug, Clone)]
-pub(crate) struct CompatActiveItem {
+pub(in crate::app) struct CompatActiveItem {
     pub(crate) tp_file: String,
     pub(crate) mod_name: String,
     pub(crate) tp2_path: String,
@@ -14,7 +14,7 @@ pub(crate) struct CompatActiveItem {
     pub(crate) order: Option<usize>,
 }
 
-pub(crate) fn collect_step2_active_items(mods: &[Step2ModState]) -> Vec<CompatActiveItem> {
+pub(in crate::app) fn collect_step2_active_items(mods: &[Step2ModState]) -> Vec<CompatActiveItem> {
     let mut out = Vec::<(usize, CompatActiveItem)>::new();
     let mut discovery_index = 0usize;
     for mod_state in mods {
@@ -46,7 +46,7 @@ pub(crate) fn collect_step2_active_items(mods: &[Step2ModState]) -> Vec<CompatAc
         .collect()
 }
 
-pub(crate) fn collect_step3_active_items(
+pub(in crate::app) fn collect_step3_active_items(
     items: &[Step3ItemState],
     tp2_paths: &HashMap<String, String>,
 ) -> Vec<CompatActiveItem> {
@@ -71,7 +71,7 @@ pub(crate) fn collect_step3_active_items(
     out
 }
 
-pub(crate) fn active_item_order(
+pub(in crate::app) fn active_item_order(
     active_items: &[CompatActiveItem],
     tp_file: &str,
     component_id: &str,

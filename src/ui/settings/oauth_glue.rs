@@ -1,33 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `oauth_glue` — glue functions that drive the GitHub OAuth device flow
-// from the orchestrator side.
-//
-// Per Phase 4 P4.T12 + the C2 audit:
-//   - `start_github_flow(orchestrator)` — kicks off the device flow by
-//     calling `bio::app::app_step1_github_oauth::start_github_oauth_device_flow`
-//     directly (`pub(crate)`, reachable same-crate per carve-out #3).
-//   - `render_github_popup_if_open(orchestrator, ctx)` — invokes BIO's
-//     existing popup renderer at `bio::ui::step1::github_auth_popup_step1::render`
-//     (`pub fn` per line 10 of that file). Any `Step1Action` returned is
-//     dispatched in-place via the same `bio::app::*` public helpers that
-//     BIO's `WizardApp::handle_step1_action` uses — **without** the
-//     WizardApp wrapper (per the C2 audit: `handle_step1_action` mutates
-//     `WizardApp.step1_github_auth_rx`, so the orchestrator owns its own
-//     receiver field on `OrchestratorApp`).
-//   - `poll_github_oauth_flow(orchestrator)` — per-frame poll of the
-//     in-flight receiver, calling `bio::app::app_step1_github_oauth::poll_github_oauth_flow`
-//     directly.
-//
-// **No BIO source modifications.** Everything is reached via `bio::app::*`
-// and `bio::ui::step1::*` public surface (visibility verified at top of file).
-//
-// SPEC: §11.4, §13.2.
-
-// rationale: doc-paragraph-length is a subjective style lint; the wording is
-// intentional (Cat 3).
-#![allow(clippy::too_long_first_doc_paragraph)]
 
 use eframe::egui;
 
@@ -36,9 +8,6 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::step1::action_step1::Step1Action;
 use crate::ui::step1::github_auth_popup_step1;
 
-/// Kick off the GitHub OAuth device flow. Called from the Accounts tab's
-/// `connect` button. Mirrors the body of `WizardApp::handle_step1_action`'s
-/// `ConnectGitHub` / `ReconnectGitHub` arms.
 pub fn start_github_flow(orchestrator: &mut OrchestratorApp, force_start: bool) {
     let state = &mut orchestrator.wizard_state;
     if orchestrator.github_auth_rx.is_some() || state.github_auth_running {
@@ -68,8 +37,6 @@ pub fn start_github_flow(orchestrator: &mut OrchestratorApp, force_start: bool) 
     }
 }
 
-/// Disconnect helper — mirrors the body of `WizardApp::handle_step1_action`'s
-/// `DisconnectGitHub` arm.
 pub fn disconnect_github(orchestrator: &mut OrchestratorApp) {
     let state = &mut orchestrator.wizard_state;
     orchestrator.github_auth_rx = None;
@@ -90,9 +57,6 @@ pub fn disconnect_github(orchestrator: &mut OrchestratorApp) {
     }
 }
 
-/// Per-frame poll of the in-flight receiver. Called from
-/// `OrchestratorApp::update`. Delegates to BIO's `poll_github_oauth_flow`
-/// which mutates `WizardState` directly (it's a `pub(crate) fn`).
 pub fn poll_github_oauth_flow(orchestrator: &mut OrchestratorApp) {
     oauth::poll_github_oauth_flow(
         &mut orchestrator.wizard_state,
@@ -100,10 +64,6 @@ pub fn poll_github_oauth_flow(orchestrator: &mut OrchestratorApp) {
     );
 }
 
-/// Render the popup if `wizard_state.github_auth_popup_open` is set. Called
-/// from `OrchestratorApp::update` once per frame so the popup overlays
-/// whichever destination is active. Any returned `Step1Action` is dispatched
-/// inline.
 pub fn render_github_popup_if_open(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
     if !orchestrator.wizard_state.github_auth_popup_open {
         return;
@@ -119,19 +79,7 @@ pub fn render_github_popup_if_open(orchestrator: &mut OrchestratorApp, ctx: &egu
             Step1Action::DisconnectGitHub => {
                 disconnect_github(orchestrator);
             }
-            Step1Action::PathsChanged => {
-                // No-op for the orchestrator — paths-changed is handled by
-                // the per-edit debounce in `validate_debounce::tick`.
-            }
+            Step1Action::PathsChanged => {}
         }
     }
 }
-
-// Intentionally no public `load_persisted_login` helper here. BIO's
-// `app_bootstrap_init::initialize` already calls
-// `oauth::load_github_login_from_stored_token` once on startup and the
-// resolved login lands on `wizard_state.github_auth_login`. Adding a second
-// orchestrator-side load would touch the OS keychain again, which on macOS
-// triggers a fresh authorization prompt for unsigned binaries (re-builds
-// invalidate the keychain ACL's signature trust). One load per launch is
-// enough — see the comment in `OrchestratorApp::new`.

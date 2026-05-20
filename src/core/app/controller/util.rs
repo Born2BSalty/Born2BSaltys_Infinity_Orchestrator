@@ -3,6 +3,7 @@
 
 use crate::app::state::Step2ModState;
 
+#[must_use]
 pub fn current_exe_fingerprint() -> String {
     let Ok(path) = std::env::current_exe() else {
         return "unknown".to_string();

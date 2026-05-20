@@ -8,7 +8,7 @@ use crate::ui::step5::prompt_memory;
 pub(crate) fn render_entry_row(
     ui: &mut egui::Ui,
     key: &str,
-    entry: prompt_memory::PromptAnswerEntry,
+    entry: &prompt_memory::PromptAnswerEntry,
 ) {
     let mut enabled = entry.enabled;
     if ui.checkbox(&mut enabled, "").changed() {

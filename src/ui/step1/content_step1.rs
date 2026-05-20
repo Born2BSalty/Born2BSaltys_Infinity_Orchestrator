@@ -39,7 +39,7 @@ pub fn render_game_selection_content(ui: &mut egui::Ui, s: &mut Step1State) {
     });
 }
 
-fn step1_language_options() -> &'static [(&'static str, &'static str)] {
+const fn step1_language_options() -> &'static [(&'static str, &'static str)] {
     &[
         ("en_US", "English"),
         ("de_DE", "German"),
@@ -126,7 +126,14 @@ pub fn render_options_content(
 ) {
     section_title(ui, "Options");
     sync_install_mode(s);
-    let prompt_help = "Copies: // @wlb-inputs:\n\
+    render_prompt_tag_button(ui);
+    render_github_button(ui, github_button_label, action);
+    render_install_mode_combo(ui, s);
+    render_option_toggles(ui, s);
+    render_backup_options(ui, s);
+}
+
+const PROMPT_HELP: &str = "Copies: // @wlb-inputs:\n\
 \n\
 What it does\n\
 Pre-fills answers for installer prompts from the same weidu.log line.\n\
@@ -156,15 +163,24 @@ Multiple yes/no/accept/cancel prompts\n\
 \n\
 Prompt sequence with blank input\n\
 ~ANOTHERMOD\\SETUP-ANOTHERMOD.TP2~ #0 #0 // Optional prompt: v2.0 // @wlb-inputs: 1,,y";
+
+fn render_prompt_tag_button(ui: &mut egui::Ui) {
     let copy_resp = ui.small_button("Click Me To Copy Prompt Input Tag");
     copy_resp.clone().on_hover_ui(|ui| {
         ui.set_max_width(tt::DEFAULT_TOOLTIP_MAX_WIDTH);
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-        ui.label(prompt_help);
+        ui.label(PROMPT_HELP);
     });
     if copy_resp.clicked() {
         ui.ctx().copy_text("// @wlb-inputs:".to_string());
     }
+}
+
+fn render_github_button(
+    ui: &mut egui::Ui,
+    github_button_label: &str,
+    action: &mut Option<Step1Action>,
+) {
     if ui
         .button(github_button_label)
         .on_hover_text("Connect BIO to GitHub using browser-based authorization.")
@@ -172,6 +188,9 @@ Prompt sequence with blank input\n\
     {
         *action = Some(Step1Action::ConnectGitHub);
     }
+}
+
+fn render_install_mode_combo(ui: &mut egui::Ui, s: &mut Step1State) {
     ui.horizontal(|ui| {
         ui.add_space(100.0);
         ui.label(typo::strong("Install Mode"));
@@ -201,6 +220,9 @@ Prompt sequence with blank input\n\
             );
         });
     sync_install_mode(s);
+}
+
+fn render_option_toggles(ui: &mut egui::Ui, s: &mut Step1State) {
     ui.checkbox(
         &mut s.weidu_log_mode_enabled,
         "Enable WeiDU Logging Options (-u)",
@@ -225,6 +247,9 @@ Prompt sequence with blank input\n\
             egui::DragValue::new(&mut s.lookback).range(1..=5000),
         );
     });
+}
+
+fn render_backup_options(ui: &mut egui::Ui, s: &mut Step1State) {
     let show_backup_checkbox = if s.game_install == "EET" {
         s.new_pre_eet_dir_enabled || s.new_eet_dir_enabled
     } else {
@@ -281,20 +306,15 @@ pub fn render_flags_content(ui: &mut egui::Ui, s: &mut Step1State) {
         .on_hover_text(tt::STEP1_DOWNLOAD_MISSING);
     ui.checkbox(&mut s.overwrite, "-o Overwrite mod folder")
         .on_hover_text(tt::STEP1_OVERWRITE_MOD_FOLDER);
-    if s.game_install != "EET" {
+    if s.game_install == "EET" {
+        s.generate_directory_enabled = false;
+    } else {
         ui.checkbox(
             &mut s.generate_directory_enabled,
             "-g Clone source game -> target directory",
         )
         .on_hover_text(tt::STEP1_CLONE_SOURCE_TARGET);
-    } else {
-        s.generate_directory_enabled = false;
     }
-}
-
-pub fn render_mods_folder_content(ui: &mut egui::Ui, s: &mut Step1State) {
-    section_title(ui, "Mods Folder");
-    path_row_dir(ui, "Your Mods Folder", &mut s.mods_folder);
 }
 
 pub fn render_tools_content(ui: &mut egui::Ui, s: &mut Step1State) {

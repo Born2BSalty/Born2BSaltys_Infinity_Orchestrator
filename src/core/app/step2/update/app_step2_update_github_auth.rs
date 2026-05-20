@@ -27,8 +27,7 @@ pub(crate) fn store_github_oauth_token(token: &str) -> Result<(), String> {
 
 pub(crate) fn clear_github_oauth_token() -> Result<(), String> {
     match secure_store_entry()?.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(err) => Err(err.to_string()),
     }
 }

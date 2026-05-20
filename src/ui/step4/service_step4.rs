@@ -6,5 +6,5 @@ use std::{fs, io};
 
 pub fn read_source_log_lines(path: &Path) -> io::Result<Vec<String>> {
     let content = fs::read_to_string(path)?;
-    Ok(content.lines().map(|line| line.to_string()).collect())
+    Ok(content.lines().map(str::to_string).collect())
 }

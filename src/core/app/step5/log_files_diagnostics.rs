@@ -20,15 +20,15 @@ pub fn current_or_new_run_id(step5: &Step5State) -> String {
     step5.diagnostics_run_id.clone().unwrap_or_else(make_run_id)
 }
 
+#[must_use]
 pub fn run_dir_from_id(run_id: &str) -> PathBuf {
     PathBuf::from("diagnostics").join(format!("run_{run_id}"))
 }
 
 pub fn prune_old_diagnostics(keep_run_id: Option<&str>) {
     let diagnostics_dir = Path::new("diagnostics");
-    let entries = match fs::read_dir(diagnostics_dir) {
-        Ok(entries) => entries,
-        Err(_) => return,
+    let Ok(entries) = fs::read_dir(diagnostics_dir) else {
+        return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
@@ -65,6 +65,7 @@ pub struct DiagnosticLogGroup {
     pub copied_paths: Vec<PathBuf>,
 }
 
+#[must_use]
 pub fn copy_diagnostic_origin_logs(step1: &Step1State, logs_dir: &Path) -> Vec<DiagnosticLogGroup> {
     let _ = fs::create_dir_all(logs_dir);
     let mut groups = vec![

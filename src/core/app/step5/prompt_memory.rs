@@ -19,6 +19,7 @@ use std::path::Path;
 pub use mutate::PromptAnswerContext;
 pub use types::PromptAnswerEntry;
 
+#[must_use]
 pub fn get_answer(prompt_key: &str) -> Option<String> {
     query::get_answer(prompt_key)
 }
@@ -32,6 +33,7 @@ pub fn remember_answer_with_context(
     mutate::remember_answer_with_context(prompt_key, answer, preview, ctx);
 }
 
+#[must_use]
 pub fn alias_from_preview(preview: &str) -> String {
     mutate::alias_from_preview(preview)
 }
@@ -40,6 +42,7 @@ pub fn ensure_prompt_entry(prompt_key: &str, preview: &str) {
     mutate::ensure_prompt_entry(prompt_key, preview);
 }
 
+#[must_use]
 pub fn list_entries() -> Vec<(String, PromptAnswerEntry)> {
     query::list_entries()
 }
@@ -56,14 +59,17 @@ pub fn set_alias(prompt_key: &str, alias_value: &str) {
     mutate::set_alias(prompt_key, alias_value);
 }
 
+#[must_use]
 pub fn display_name(prompt_key: &str) -> String {
     query::display_name(prompt_key)
 }
 
+#[must_use]
 pub fn get_answer_by_alias(alias_value: &str) -> Option<String> {
     query::get_answer_by_alias(alias_value)
 }
 
+#[must_use]
 pub fn list_component_sequences() -> std::collections::HashMap<String, Vec<String>> {
     query::list_component_sequences()
 }
@@ -80,10 +86,12 @@ pub fn clear_all() {
     mutate::clear_all();
 }
 
+#[must_use]
 pub fn take_last_persist_error() -> Option<String> {
     mutate::take_last_persist_error()
 }
 
+#[must_use]
 pub fn take_last_load_error() -> Option<String> {
     storage::take_last_load_error()
 }

@@ -10,7 +10,7 @@ use super::super::compat_rule_runtime::{
     game_dir_for_tab as shared_game_dir_for_tab, normalize_mod_key,
 };
 
-pub(crate) fn build_mismatch_context(
+pub(in crate::app) fn build_mismatch_context(
     step1: &Step1State,
     tab: &str,
     checked_components: HashSet<(String, String)>,
@@ -95,7 +95,7 @@ fn is_eet_core_selected(checked_components: &HashSet<(String, String)>) -> bool 
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct MismatchContext {
+pub(in crate::app) struct MismatchContext {
     active_games: HashSet<String>,
     active_engines: HashSet<String>,
     active_includes: HashSet<String>,
@@ -104,7 +104,7 @@ pub(crate) struct MismatchContext {
 }
 
 impl MismatchContext {
-    pub(crate) fn has_checked_component(&self, mod_name: &str, component_id: &str) -> bool {
+    pub(in crate::app) fn has_checked_component(&self, mod_name: &str, component_id: &str) -> bool {
         let component_id = component_id.trim();
         if component_id.is_empty() {
             return false;
@@ -168,7 +168,7 @@ impl MismatchContext {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TriState {
+pub(in crate::app) enum TriState {
     True,
     False,
     Ignored,
@@ -176,11 +176,11 @@ pub(crate) enum TriState {
 }
 
 impl TriState {
-    pub(super) fn from_bool(value: bool) -> Self {
+    pub(super) const fn from_bool(value: bool) -> Self {
         if value { Self::True } else { Self::False }
     }
 
-    pub(super) fn and(self, rhs: Self) -> Self {
+    pub(super) const fn and(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::False, _) | (_, Self::False) => Self::False,
             (Self::Ignored, value) | (value, Self::Ignored) => value,
@@ -189,7 +189,7 @@ impl TriState {
         }
     }
 
-    pub(super) fn or(self, rhs: Self) -> Self {
+    pub(super) const fn or(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::True, _) | (_, Self::True) => Self::True,
             (Self::Ignored, value) | (value, Self::Ignored) => value,
@@ -198,7 +198,7 @@ impl TriState {
         }
     }
 
-    pub(super) fn not(self) -> Self {
+    pub(super) const fn not(self) -> Self {
         match self {
             Self::True => Self::False,
             Self::False => Self::True,

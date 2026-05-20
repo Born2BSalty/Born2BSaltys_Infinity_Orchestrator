@@ -1,30 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `RedesignSettings` — sibling settings file for the redesign-only fields.
-//
-// Per Phase 4 P4.T10:
-//   - Stored in `bio_redesign_settings.json`, **not** as a new field on
-//     `bio::settings::model::AppSettings`. Per the CRITICAL DIRECTIVE,
-//     existing BIO serde structs are not extended.
-//   - Fields: `user_name`, `theme_palette`, `language`, `diagnostic_mode`.
-//   - All `#[serde(default)]` so adding new fields stays backward-compat.
-//
-// SPEC: §11.1.
-
-// rationale: serde model + trivial label/list accessors — `Self`/`const fn`/
-// `#[must_use]` churn and the doc-paragraph-length lint add noise without
-// behavior value (Cat 3).
-#![allow(
-    clippy::use_self,
-    clippy::missing_const_for_fn,
-    clippy::must_use_candidate,
-    clippy::too_long_first_doc_paragraph
-)]
 
 use serde::{Deserialize, Serialize};
 
-/// Theme choice persisted alongside the redesign's other UI prefs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeChoice {
@@ -33,9 +11,6 @@ pub enum ThemeChoice {
     Dark,
 }
 
-/// UI language choice. Per SPEC §11.1, only English drives real text rendering
-/// in v1 alpha — the other entries are a visual stub. The persisted value
-/// stays stable across phases so the future i18n layer can read it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum UiLanguage {
@@ -53,24 +28,24 @@ pub enum UiLanguage {
 }
 
 impl UiLanguage {
-    /// Stable display label for the General sub-tab `ComboBox`.
-    pub fn label(self) -> &'static str {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
-            UiLanguage::English => "English",
-            UiLanguage::German => "Deutsch",
-            UiLanguage::French => "Français",
-            UiLanguage::Spanish => "Español",
-            UiLanguage::Italian => "Italiano",
-            UiLanguage::Polish => "Polski",
-            UiLanguage::Portuguese => "Português",
-            UiLanguage::Czech => "Čeština",
-            UiLanguage::Turkish => "Türkçe",
-            UiLanguage::Ukrainian => "Українська",
+            Self::English => "English",
+            Self::German => "Deutsch",
+            Self::French => "Français",
+            Self::Spanish => "Español",
+            Self::Italian => "Italiano",
+            Self::Polish => "Polski",
+            Self::Portuguese => "Português",
+            Self::Czech => "Čeština",
+            Self::Turkish => "Türkçe",
+            Self::Ukrainian => "Українська",
         }
     }
 
-    /// The full ordered list shown in the `ComboBox` (SPEC §11.1).
-    pub fn all() -> &'static [UiLanguage] {
+    #[must_use]
+    pub const fn all() -> &'static [Self] {
         const ALL: [UiLanguage; 10] = [
             UiLanguage::English,
             UiLanguage::German,
@@ -87,34 +62,22 @@ impl UiLanguage {
     }
 }
 
-/// All redesign-only persistent fields. Sibling to BIO's `AppSettings`;
-/// **never** merged into `AppSettings`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RedesignSettings {
-    /// User display name — feeds the share-code author field (SPEC §11.1) and
-    /// the General sub-tab `NameRow`.
     pub user_name: String,
-    /// Active theme palette persisted across launches.
+
     pub theme_palette: ThemeChoice,
-    /// UI language choice (visual-stub for v1 alpha — see SPEC §11.1).
+
     pub language: UiLanguage,
-    /// Persistent Diagnostic-mode toggle. OR'd with the CLI `-d` flag at app
-    /// launch per M12.
+
     pub diagnostic_mode: bool,
-    /// Whether path validation runs automatically at app launch.
-    ///
-    /// `true` (default): `OrchestratorApp::new` seeds
-    /// `settings_screen_state.path_validation_results` with a synchronous
-    /// `validate_now::run_now` pass so prefilled paths show their inline
-    /// status the moment the user opens Settings → Paths.
-    /// `false`: the seeding pass is skipped; validation runs only in response
-    /// to user edits via the debounce cycle.
+
     #[serde(default = "default_true")]
     pub validate_paths_on_startup: bool,
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 

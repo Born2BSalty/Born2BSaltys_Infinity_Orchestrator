@@ -190,7 +190,7 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
     }
     let mut out = Vec::with_capacity(values.len() / 4 * 3);
     for chunk in values.chunks(4) {
-        let pad = chunk.iter().filter(|value| **value == 64).count();
+        let pad = usize::from(chunk[3] == 64) + usize::from(chunk[2] == 64);
         if pad > 2 || chunk[..4 - pad].contains(&64) {
             return Err("pending mod config base64 padding is invalid.".to_string());
         }

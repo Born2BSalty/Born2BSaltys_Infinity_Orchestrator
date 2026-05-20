@@ -10,14 +10,16 @@ pub(super) fn get_answer(prompt_key: &str) -> Option<String> {
     if prompt_key.trim().is_empty() {
         return None;
     }
-    let guard = storage::memory().lock().ok()?;
-    guard.get(prompt_key).and_then(|entry| {
-        if entry.enabled {
-            Some(entry.answer.clone())
-        } else {
-            None
-        }
-    })
+    {
+        let guard = storage::memory().lock().ok()?;
+        guard.get(prompt_key).and_then(|entry| {
+            if entry.enabled {
+                Some(entry.answer.clone())
+            } else {
+                None
+            }
+        })
+    }
 }
 
 pub(super) fn list_entries() -> Vec<(String, PromptAnswerEntry)> {
@@ -32,18 +34,22 @@ pub(super) fn list_entries() -> Vec<(String, PromptAnswerEntry)> {
 }
 
 pub(super) fn display_name(prompt_key: &str) -> String {
-    let Ok(guard) = storage::memory().lock() else {
-        return prompt_key.to_string();
+    let display = {
+        let Ok(guard) = storage::memory().lock() else {
+            return prompt_key.to_string();
+        };
+        guard.get(prompt_key).and_then(|entry| {
+            let alias = entry.alias.trim();
+            if alias.is_empty() {
+                None
+            } else if prompt_key.starts_with("ENTRY:") {
+                Some(alias.to_string())
+            } else {
+                Some(format!("{alias} ({prompt_key})"))
+            }
+        })
     };
-    if let Some(entry) = guard.get(prompt_key)
-        && !entry.alias.trim().is_empty()
-    {
-        if prompt_key.starts_with("ENTRY:") {
-            return entry.alias.trim().to_string();
-        }
-        return format!("{} ({prompt_key})", entry.alias.trim());
-    }
-    prompt_key.to_string()
+    display.unwrap_or_else(|| prompt_key.to_string())
 }
 
 pub(super) fn get_answer_by_alias(alias_value: &str) -> Option<String> {
@@ -51,20 +57,23 @@ pub(super) fn get_answer_by_alias(alias_value: &str) -> Option<String> {
     if alias_value.is_empty() {
         return None;
     }
-    let guard = storage::memory().lock().ok()?;
-    let mut found: Option<String> = None;
-    for entry in guard.values() {
-        if !entry.enabled {
-            continue;
-        }
-        if entry.alias.eq_ignore_ascii_case(alias_value) {
-            if found.is_some() {
-                return None;
+    {
+        let guard = storage::memory().lock().ok()?;
+        let mut found: Option<String> = None;
+        for entry in guard.values() {
+            if !entry.enabled {
+                continue;
             }
-            found = Some(entry.answer.clone());
+            if entry.alias.eq_ignore_ascii_case(alias_value) {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(entry.answer.clone());
+            }
         }
+        drop(guard);
+        found
     }
-    found
 }
 
 pub(super) fn list_component_sequences() -> HashMap<String, Vec<String>> {

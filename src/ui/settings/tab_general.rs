@@ -1,23 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `tab_general` — General sub-tab renderer.
-//
-// Per Phase 4 P4.T7: NameRow at the top, then 2-col grid of:
-//   - Theme (segmented light/dark) — writes `RedesignSettings::theme_palette`
-//     + `OrchestratorApp::theme_palette` so the change is live on the very
-//     next frame.
-//   - Language (ComboBox).
-//   - Validate-all-paths-on-startup (Toggle, default on).
-//   - Diagnostic mode (Toggle, default off). OR'd with the CLI `-d` flag at
-//     app launch per M12; toggling at runtime updates `dev_mode` next frame.
-//
-// SPEC: §11.1.
-
-// rationale: the dashed-rule `while x < right` is an intentional
-// pixel-stepping loop and the tab render length mirrors its field set —
-// suppressed without behavior change (Cat 3).
-#![allow(clippy::while_float, clippy::too_many_lines)]
 
 use eframe::egui;
 
@@ -31,10 +13,13 @@ use crate::ui::shared::redesign_tokens::{
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
 
-    // NameRow — the wireframe wraps this in the same `SettingsRow` chassis as
-    // every other General setting (label + hint stack on the left, control
-    // flush-right, dashed bottom rule). No separate section divider: each
-    // settings_row already carries its own dashed rule.
+    render_name_row(ui, palette, orchestrator);
+    ui.add_space(12.0);
+    render_theme_language_rows(ui, palette, orchestrator);
+    render_mode_rows(ui, palette, orchestrator);
+}
+
+fn render_name_row(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut OrchestratorApp) {
     let mut name_changed = false;
     settings_row(
         ui,
@@ -55,139 +40,145 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     if name_changed {
         orchestrator.redesign_settings_dirty = true;
     }
+}
 
-    ui.add_space(12.0);
-
-    // 2-column grid: row 1 = Theme | Language, row 2 = Validate | Diagnostic.
-    // Each cell is a horizontal SettingsRow (label/hint stack on left, control
-    // on right) — matches the wireframe `gridTemplateColumns: "1fr 1fr"`.
+fn render_theme_language_rows(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+) {
     ui.columns(2, |cols| {
-        // ── Theme ──
-        settings_row(
-            &mut cols[0],
-            palette,
-            "Theme",
-            "light parchment or warm dark",
-            |ui| {
-                let current = orchestrator.redesign_settings.theme_palette;
-                let clicked = segmented_toggle::render(
-                    ui,
-                    palette,
-                    [
-                        ("light", current == ThemeChoice::Light),
-                        ("dark", current == ThemeChoice::Dark),
-                    ],
-                );
-                if let Some(i) = clicked {
-                    let chosen = if i == 0 {
-                        ThemeChoice::Light
-                    } else {
-                        ThemeChoice::Dark
-                    };
-                    if chosen != current {
-                        orchestrator.redesign_settings.theme_palette = chosen;
-                        orchestrator.theme_palette = match chosen {
-                            ThemeChoice::Light => ThemePalette::Light,
-                            ThemeChoice::Dark => ThemePalette::Dark,
-                        };
-                        orchestrator.redesign_settings_dirty = true;
-                    }
-                }
-            },
-        );
-        // ── Language ──
-        settings_row(
-            &mut cols[1],
-            palette,
-            "Language",
-            "language used across the BIO app",
-            |ui| {
-                // ComboBox pinned to right edge (right_to_left layout in the
-                // settings_row control slot).
-                let current_lang = orchestrator.redesign_settings.language;
-                let mut new_lang = current_lang;
-                egui::ComboBox::from_id_salt("settings_general_language")
-                    .selected_text(
-                        egui::RichText::new(current_lang.label())
-                            .size(12.0)
-                            .family(egui::FontFamily::Name("poppins_medium".into()))
-                            .color(redesign_text_primary(palette)),
-                    )
-                    .show_ui(ui, |ui| {
-                        for option in UiLanguage::all() {
-                            ui.selectable_value(&mut new_lang, *option, option.label());
-                        }
-                    });
-                if new_lang != current_lang {
-                    orchestrator.redesign_settings.language = new_lang;
-                    orchestrator.redesign_settings_dirty = true;
-                }
-                // Status indicator: the picker persists but BIO ships
-                // Latin-only Poppins + has no i18n layer yet, so non-English
-                // selections currently have no visible effect (SPEC §11.1
-                // notes this is a v1-alpha visual stub).
-                ui.add_space(8.0);
-                ui.label(
-                    egui::RichText::new("(coming soon)")
-                        .size(11.0)
-                        .family(egui::FontFamily::Proportional)
-                        .color(redesign_text_faint(palette)),
-                );
-            },
-        );
-    });
-
-    ui.columns(2, |cols| {
-        // ── Validate on startup ──
-        settings_row(
-            &mut cols[0],
-            palette,
-            "Validate all paths on startup",
-            "warns if game folders moved",
-            |ui| {
-                let mut on = orchestrator.redesign_settings.validate_paths_on_startup;
-                let mut changed = false;
-                toggle_row::render(ui, palette, "", &mut on, None, || changed = true);
-                if changed {
-                    orchestrator.redesign_settings.validate_paths_on_startup = on;
-                    orchestrator.redesign_settings_dirty = true;
-                    // Reflect the toggle's new state immediately rather than
-                    // waiting for the next app launch: on → seed the inline
-                    // status with a fresh pass; off → clear it so rows go
-                    // neutral until the user edits.
-                    orchestrator.settings_screen_state.path_validation_results = if on {
-                        crate::ui::settings::validate_now::run_now(&orchestrator.wizard_state.step1)
-                    } else {
-                        crate::ui::settings::state_settings::ValidationReport::default()
-                    };
-                }
-            },
-        );
-        // ── Diagnostic mode ──
-        settings_row(
-            &mut cols[1],
-            palette,
-            "Diagnostic mode",
-            "extra logging for bug reports",
-            |ui| {
-                let mut on = orchestrator.redesign_settings.diagnostic_mode;
-                let mut changed = false;
-                toggle_row::render(ui, palette, "", &mut on, None, || changed = true);
-                if changed {
-                    orchestrator.redesign_settings.diagnostic_mode = on;
-                    // M12: dev_mode = cli_flag || persisted_toggle.
-                    orchestrator.dev_mode = orchestrator.dev_mode_cli_flag || on;
-                    orchestrator.redesign_settings_dirty = true;
-                }
-            },
-        );
+        render_theme_row(&mut cols[0], palette, orchestrator);
+        render_language_row(&mut cols[1], palette, orchestrator);
     });
 }
 
-/// A single cell in the General-tab grid. Horizontal layout per wireframe
-/// `SettingsRow` (`screens.jsx:3823`): label/hint stack on the left grows to
-/// fill remaining width; control sits flush-right with a stable width.
-/// Dashed bottom rule mirrors `borderBottom: "1px dashed #ccc"`.
+fn render_mode_rows(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut OrchestratorApp) {
+    ui.columns(2, |cols| {
+        render_validate_on_startup_row(&mut cols[0], palette, orchestrator);
+        render_diagnostic_mode_row(&mut cols[1], palette, orchestrator);
+    });
+}
+
+fn render_theme_row(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut OrchestratorApp) {
+    settings_row(ui, palette, "Theme", "light parchment or warm dark", |ui| {
+        let current = orchestrator.redesign_settings.theme_palette;
+        let clicked = segmented_toggle::render(
+            ui,
+            palette,
+            [
+                ("light", current == ThemeChoice::Light),
+                ("dark", current == ThemeChoice::Dark),
+            ],
+        );
+        if let Some(i) = clicked {
+            let chosen = if i == 0 {
+                ThemeChoice::Light
+            } else {
+                ThemeChoice::Dark
+            };
+            if chosen != current {
+                orchestrator.redesign_settings.theme_palette = chosen;
+                orchestrator.theme_palette = match chosen {
+                    ThemeChoice::Light => ThemePalette::Light,
+                    ThemeChoice::Dark => ThemePalette::Dark,
+                };
+                orchestrator.redesign_settings_dirty = true;
+            }
+        }
+    });
+}
+
+fn render_language_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+) {
+    settings_row(
+        ui,
+        palette,
+        "Language",
+        "language used across the BIO app",
+        |ui| {
+            let current_lang = orchestrator.redesign_settings.language;
+            let mut new_lang = current_lang;
+            egui::ComboBox::from_id_salt("settings_general_language")
+                .selected_text(
+                    egui::RichText::new(current_lang.label())
+                        .size(12.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(redesign_text_primary(palette)),
+                )
+                .show_ui(ui, |ui| {
+                    for option in UiLanguage::all() {
+                        ui.selectable_value(&mut new_lang, *option, option.label());
+                    }
+                });
+            if new_lang != current_lang {
+                orchestrator.redesign_settings.language = new_lang;
+                orchestrator.redesign_settings_dirty = true;
+            }
+            ui.add_space(8.0);
+            ui.label(
+                egui::RichText::new("(coming soon)")
+                    .size(11.0)
+                    .family(egui::FontFamily::Proportional)
+                    .color(redesign_text_faint(palette)),
+            );
+        },
+    );
+}
+
+fn render_validate_on_startup_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+) {
+    settings_row(
+        ui,
+        palette,
+        "Validate all paths on startup",
+        "warns if game folders moved",
+        |ui| {
+            let mut on = orchestrator.redesign_settings.validate_paths_on_startup;
+            let mut changed = false;
+            toggle_row::render(ui, palette, "", &mut on, None, || changed = true);
+            if changed {
+                orchestrator.redesign_settings.validate_paths_on_startup = on;
+                orchestrator.redesign_settings_dirty = true;
+                orchestrator.settings_screen_state.path_validation_results = if on {
+                    crate::ui::settings::validate_now::run_now(&orchestrator.wizard_state.step1)
+                } else {
+                    crate::ui::settings::state_settings::ValidationReport::default()
+                };
+            }
+        },
+    );
+}
+
+fn render_diagnostic_mode_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+) {
+    settings_row(
+        ui,
+        palette,
+        "Diagnostic mode",
+        "extra logging for bug reports",
+        |ui| {
+            let mut on = orchestrator.redesign_settings.diagnostic_mode;
+            let mut changed = false;
+            toggle_row::render(ui, palette, "", &mut on, None, || changed = true);
+            if changed {
+                orchestrator.redesign_settings.diagnostic_mode = on;
+                orchestrator.dev_mode = orchestrator.dev_mode_cli_flag || on;
+                orchestrator.redesign_settings_dirty = true;
+            }
+        },
+    );
+}
+
 fn settings_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -198,7 +189,6 @@ fn settings_row(
     ui.add_space(8.0);
     let row_top = ui.cursor().top();
     ui.horizontal(|ui| {
-        // Left: label + hint stack, grows.
         let cell_width = ui.available_width();
         ui.allocate_ui_with_layout(
             egui::vec2(cell_width, 36.0),
@@ -218,14 +208,12 @@ fn settings_row(
                 );
             },
         );
-        // Right: control, flush-right, fixed-fit width.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             control(ui);
         });
     });
     ui.add_space(8.0);
 
-    // Dashed bottom rule across the cell width.
     let row_bottom = ui.cursor().top();
     let rect = ui.max_rect();
     draw_dashed_horizontal(
@@ -248,7 +236,10 @@ fn draw_dashed_horizontal(
     let dash_w = 4.0;
     let gap_w = 4.0;
     let mut x = left;
-    while x < right {
+    loop {
+        if x >= right {
+            break;
+        }
         let x_end = (x + dash_w).min(right);
         painter.line_segment(
             [egui::pos2(x, y), egui::pos2(x_end, y)],
