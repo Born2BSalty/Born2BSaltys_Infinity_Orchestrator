@@ -1,57 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `confirm_delete` — the Home Delete confirm (P5.T7) and the sibling
-// Reinstall confirm (P5.T18). Both delegate to the shared, non-blocking
-// `ConfirmDialog` (`widgets/dialogs/confirm_dialog.rs`); this module owns
-// only the title + body strings.
-//
-// ── Delete body — VERBATIM from the wireframe ──
-// `wireframe-preview/screens.jsx:388-399` renders (as plain text):
-//   This will permanently remove:
-//     • the modlist's registry entry (it disappears from Home)
-//     • the install folder on disk: <destination path>
-//   This action cannot be undone.
-// SPEC §3.1's Delete-semantics paragraph paraphrases this; the wireframe is
-// canonical for copy (HANDOFF source-of-truth ordering), so the strings here
-// track screens.jsx, not the SPEC prose.
-//
-// ── Reinstall body — SPEC §3.1 Reinstall semantics / wireframe :409-419 ──
-//   This will erase the current install folder and re-run the entire install
-//   from scratch. Your component selection and order are preserved; the
-//   modlist moves back to in-progress while the install runs, then returns to
-//   installed when complete.
-//     • existing files at: <destination path> will be deleted
-//   This action cannot be undone.
-//
-// The destination path shown in both bodies is the entry's real
-// `destination_folder`. The wireframe fakes it via `sampleDestFor` (a slug)
-// because it has no registry; we have the real value.
-//
-// SPEC: §3.1 (Delete semantics, Reinstall semantics), §10.1, §10.7.
-
-// rationale: trivial dialog-text/ctor helpers — `const fn`/`#[must_use]` and
-// the doc-paragraph-length lint are churn without behavior value (Cat 3).
-#![allow(
-    clippy::missing_const_for_fn,
-    clippy::must_use_candidate,
-    clippy::too_long_first_doc_paragraph
-)]
 
 use crate::registry::model::ModlistEntry;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::ConfirmDialog;
 
-/// Build the Delete confirm's title + body for `entry`. Title:
-/// `Delete "<name>"?`. Body: wireframe-verbatim (screens.jsx:388-399), with
-/// the entry's real destination folder substituted for the wireframe's
-/// faked slug path.
+#[must_use]
 pub fn delete_dialog_text(entry: &ModlistEntry) -> (String, String) {
     let title = format!("Delete \"{}\"?", entry.name);
     let dest = destination_display(entry);
-    // `\u{2022}` = • bullet. Rendered in Poppins (Latin-Extended range —
-    // safe, unlike symbol glyphs that need firacode_nerd per the HANDOFF
-    // caveat; • is U+2022 General Punctuation, present in the Poppins subset
-    // the same way the `·` U+00B7 already used across Home cards is).
     let body = format!(
         "This will permanently remove:\n\
          \u{2022} the modlist's registry entry (it disappears from Home)\n\
@@ -61,9 +17,7 @@ pub fn delete_dialog_text(entry: &ModlistEntry) -> (String, String) {
     (title, body)
 }
 
-/// Build the Reinstall confirm's title + body for `entry`. Title:
-/// `Reinstall "<name>"?`. Body per SPEC §3.1 Reinstall semantics /
-/// wireframe screens.jsx:409-419.
+#[must_use]
 pub fn reinstall_dialog_text(entry: &ModlistEntry) -> (String, String) {
     let title = format!("Reinstall \"{}\"?", entry.name);
     let dest = destination_display(entry);
@@ -78,10 +32,6 @@ pub fn reinstall_dialog_text(entry: &ModlistEntry) -> (String, String) {
     (title, body)
 }
 
-/// The destination string to show in a confirm body. When the entry has no
-/// destination yet (in-progress builds / dev-seed entries carry `""`), show
-/// an explicit placeholder rather than an empty gap — keeps the bullet line
-/// honest and matches the affordance-forward empty-state convention.
 fn destination_display(entry: &ModlistEntry) -> String {
     let d = entry.destination_folder.trim();
     if d.is_empty() {
@@ -91,10 +41,12 @@ fn destination_display(entry: &ModlistEntry) -> String {
     }
 }
 
-/// Convenience: build a `ConfirmDialog` descriptor for the Delete confirm.
-/// `title`/`body` must outlive the returned borrow (caller owns the
-/// `(String, String)` from [`delete_dialog_text`]).
-pub fn delete_confirm<'a>(id_salt: &'a str, title: &'a str, body: &'a str) -> ConfirmDialog<'a> {
+#[must_use]
+pub const fn delete_confirm<'a>(
+    id_salt: &'a str,
+    title: &'a str,
+    body: &'a str,
+) -> ConfirmDialog<'a> {
     ConfirmDialog {
         id_salt,
         title,
@@ -104,8 +56,12 @@ pub fn delete_confirm<'a>(id_salt: &'a str, title: &'a str, body: &'a str) -> Co
     }
 }
 
-/// Convenience: build a `ConfirmDialog` descriptor for the Reinstall confirm.
-pub fn reinstall_confirm<'a>(id_salt: &'a str, title: &'a str, body: &'a str) -> ConfirmDialog<'a> {
+#[must_use]
+pub const fn reinstall_confirm<'a>(
+    id_salt: &'a str,
+    title: &'a str,
+    body: &'a str,
+) -> ConfirmDialog<'a> {
     ConfirmDialog {
         id_salt,
         title,

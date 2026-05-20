@@ -70,6 +70,6 @@ pub struct PromptAnswerEntry {
     pub hit_count: u64,
 }
 
-pub(super) fn default_enabled() -> bool {
+pub(super) const fn default_enabled() -> bool {
     false
 }

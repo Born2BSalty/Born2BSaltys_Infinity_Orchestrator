@@ -37,14 +37,14 @@ pub(crate) fn weidu_colored_widget_text(ui: &egui::Ui, text: &str) -> egui::Widg
 }
 
 pub(crate) fn format_step3_item(item: &Step3ItemState) -> String {
-    if !item.raw_line.trim().is_empty() {
-        normalize_weidu_like_line(&item.raw_line)
-    } else {
+    if item.raw_line.trim().is_empty() {
         let folder = item.mod_name.replace('/', "\\");
         format!(
             "~{}\\{}~ #0 #{} // {}",
             folder, item.tp_file, item.component_id, item.component_label
         )
+    } else {
+        normalize_weidu_like_line(&item.raw_line)
     }
 }
 

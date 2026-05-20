@@ -7,18 +7,19 @@ use super::step5_command_common_args::{append_common_args, installer_program};
 use super::step5_command_config::InstallCommandConfig;
 use super::step5_command_log_paths::{resolve_bg2_log_file, resolve_bgee_log_file};
 
+#[must_use]
 pub(crate) fn capture_resume_targets(config: &InstallCommandConfig) -> ResumeTargets {
     if config.game_install == "EET" {
         ResumeTargets {
             bg1_game_dir: Some(
-                if config.new_pre_eet_dir_enabled && !config.eet_pre_dir.trim().is_empty() {
+                if config.directories.pre_eet_override && !config.eet_pre_dir.trim().is_empty() {
                     config.eet_pre_dir.trim().to_string()
                 } else {
                     config.eet_bgee_game_folder.trim().to_string()
                 },
             ),
             bg2_game_dir: Some(
-                if config.new_eet_dir_enabled && !config.eet_new_dir.trim().is_empty() {
+                if config.directories.eet_override && !config.eet_new_dir.trim().is_empty() {
                     config.eet_new_dir.trim().to_string()
                 } else {
                     config.eet_bg2ee_game_folder.trim().to_string()
@@ -31,7 +32,8 @@ pub(crate) fn capture_resume_targets(config: &InstallCommandConfig) -> ResumeTar
             bg1_game_dir: None,
             bg2_game_dir: None,
             game_dir: Some(
-                if config.generate_directory_enabled && !config.generate_directory.trim().is_empty()
+                if config.directories.generate_output
+                    && !config.generate_directory.trim().is_empty()
                 {
                     config.generate_directory.trim().to_string()
                 } else if config.game_install == "BG2EE" {
@@ -44,6 +46,7 @@ pub(crate) fn capture_resume_targets(config: &InstallCommandConfig) -> ResumeTar
     }
 }
 
+#[must_use]
 pub(crate) fn build_resume_invocation(
     config: &InstallCommandConfig,
     resume_targets: &ResumeTargets,
@@ -54,11 +57,11 @@ pub(crate) fn build_resume_invocation(
         let bg1_dir = resume_targets
             .bg1_game_dir
             .as_deref()
-            .unwrap_or(config.eet_bgee_game_folder.trim());
+            .unwrap_or_else(|| config.eet_bgee_game_folder.trim());
         let bg2_dir = resume_targets
             .bg2_game_dir
             .as_deref()
-            .unwrap_or(config.eet_bg2ee_game_folder.trim());
+            .unwrap_or_else(|| config.eet_bg2ee_game_folder.trim());
         args.push("eet".to_string());
         args.push("--bg1-game-directory".to_string());
         args.push(bg1_dir.to_string());

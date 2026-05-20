@@ -1,46 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `workspace_view` — the top-level workspace renderer. Owns the layout of
-// the workspace shell (SPEC §2.2 / wireframe `WorkspaceView`):
-//
-//   1. Header row — `Editing <modlist name>` (small caps).
-//   2. `WorkspaceProgressBar` (4 steps, completed-state).
-//   3. Per-step hint line.
-//   4. Active step's content area (`workspace_step_router::render`).
-//   5. `WorkspaceNavBar` (← Previous / step indicator / Next →).
-//
-// **Run-2 scope.** The header is now the full `workspace_header`
-// (`Editing <name>` + ✎ inline rename + Fork badge + `⑂ view fork details`
-// + `save draft`), replacing Run-1's minimal title. `ctx` is now used (the
-// reused Phase-5 `ForkInfoPopup` is a non-blocking overlay rendered over
-// the shell). `SharePasteCodeDialog` (Step-5 `Share import code`) is
-// Phase 7 — `workspace_header` renders that button disabled until then.
-//
-// **Phase-7 Run-1 scope.** Step 5 now renders the real install-runtime
-// chrome (`step5::page_workspace_step5::render`, replacing the Phase-6
-// stub) and the nav bar's `← Previous` is locked once Install is clicked
-// (P7.T8 — `disable_prev` computed below from `install_complete ||
-// step5.install_running || workspace_step5.install_clicked`). The
-// `SharePasteCodeDialog` body is still Run 3; `workspace_header` keeps its
-// `Share import code` button disabled until then.
-//
-// The nav bar's outcome drives step advancement + the progress-bar
-// checkmarks: crossing forward into a new step marks the step being left as
-// completed (wireframe `goNext`: `if (!completed.includes(tab))
-// setCompleted([...completed, tab])`). On the **first** workspace step
-// (Step 2) `← Previous` routes back to **Home** (SPEC §2.2 / P6.T4 —
-// affordance-forward: the user entered via a Home `resume`/`open`, so
-// first-step Previous closes that loop rather than being a dead control;
-// recorded SPEC §2.2 + overview 2026-05-16). This mirrors Run-1's
-// Home→Workspace resume route in reverse (set `orchestrator.nav`).
-//
-// Per the plan's file inventory the signature is
-// `render(ui, orchestrator, modlist_id, ctx)`. The caller
-// (`page_router`) has already ensured the modlist is loaded into the
-// orchestrator's `WizardState` (populate / sync) before calling this.
-//
-// SPEC: §2.2, §6.1 (Step 2 layout = this exact stack).
 
 use eframe::egui;
 
@@ -52,10 +11,6 @@ use crate::ui::workspace::{
     workspace_step_router,
 };
 
-/// Render the workspace shell for the modlist currently loaded into the
-/// orchestrator's `WizardState`. `modlist_id` is the routed id (already
-/// resolved + loaded by `page_router`); `_ctx` is reserved for the Run-2/3
-/// popup overlays.
 pub fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
@@ -64,25 +19,15 @@ pub fn render(
 ) {
     let palette = orchestrator.theme_palette;
 
-    // ── 1. Header row — the full workspace header (P6.T5/T6): `Editing
-    //    <name>` + ✎ inline rename + Fork badge + `⑂ view fork details`
-    //    (reused Phase-5 ForkInfoPopup) + `save draft`. ──
     workspace_header::render(ui, orchestrator, ctx);
     ui.add_space(10.0);
 
-    // ── 2. Progress bar. ──
     workspace_progress_bar::render(ui, palette, &orchestrator.workspace_view);
 
-    // ── 3. Per-step hint line. ──
     let current = orchestrator.workspace_view.current_step;
     workspace_hint_line::render(ui, palette, current);
 
-    // ── 4. Active step content. Wrapped so the step body takes the
-    //    remaining vertical space and the nav bar stays pinned at the
-    //    bottom (wireframe `flex:1 minHeight:0` content + `flexShrink:0`
-    //    nav bar). ──
-    let nav_reserve = 84.0; // ~ WorkspaceNavBar footprint (20 margin + 14
-    // pad + ~30 control row + breathing room) — keeps the nav bar visible.
+    let nav_reserve = 84.0;
     let avail_h = ui.available_height();
     let body_h = (avail_h - nav_reserve).max(0.0);
     ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
@@ -93,41 +38,16 @@ pub fn render(
             });
     });
 
-    // ── 5. Nav bar. **P7.T8 — `← Previous` lock.** Per SPEC §9.2 the
-    //    workspace `← Previous` is disabled "once Install has been clicked
-    //    — even before the install completes, and after it completes". The
-    //    lock condition OR-combines the three "Install was clicked"
-    //    signals:
-    //      - `WorkspaceViewState::install_complete` (Phase-6-provisioned;
-    //        flipped post-successful-install in Run 3 / P7.T6),
-    //      - `state.step5.install_running` (BIO's live install flag; set
-    //        once Run 2 wires the real install-start hook), and
-    //      - `workspace_step5.install_clicked` (the Run-1 marker — in Run 1
-    //        there is no real install, so this is the operative signal:
-    //        `page_workspace_step5::render`, run by the step router just
-    //        above, sets it the frame Install is clicked, so the nav bar —
-    //        rendered after the router — disables `← Previous` that same
-    //        frame).
-    //    The nav bar applies the VERBATIM SPEC §9.2 tooltip when disabled.
     let disable_prev = orchestrator.workspace_view.install_complete
         || orchestrator.wizard_state.step5.install_running
         || orchestrator.workspace_step5.install_clicked;
     let outcome = workspace_nav_bar::render(ui, palette, current, disable_prev);
 
-    // Apply nav outcome after the render borrows end.
     if outcome.next_clicked {
         if let Some(next) = current.next() {
-            // #5 fix — mirror BIO's Step2→Step3 sync on the forward nav
-            // edge. BIO's `WizardApp` rebuilds Step 3 from Step 2 in
-            // `app_nav_actions::advance_after_next` when leaving Step 2
-            // (`current_step == 1`); the orchestrator's own nav never did,
-            // so Step 3 stayed empty/stale. We mirror BIO's EXACT trigger
-            // + semantics here (no reimplementation, no BIO edit).
             if current == WorkspaceStep::Step2 {
                 sync_step3_from_step2_on_nav_edge(orchestrator);
             }
-            // Crossing forward marks the step being left as completed
-            // (wireframe `goNext`).
             orchestrator.workspace_view.completed_steps.insert(current);
             orchestrator.workspace_view.current_step = next;
         }
@@ -135,84 +55,28 @@ pub fn render(
         if let Some(prev) = current.prev() {
             orchestrator.workspace_view.current_step = prev;
         } else {
-            // #3 fix — first-step `← Previous` routes back to **Home**
-            // (SPEC §2.2 / P6.T4): the user reached the workspace via a
-            // Home `resume`/`open`, so first-step Previous closes that loop
-            // rather than being a dead control. `current.prev()` is `None`
-            // only on the first workspace step (Step 2), so this arm IS the
-            // first-step case. This mirrors Run-1's Home→Workspace resume
-            // route in reverse — set the top-level destination router
-            // (`page_router` reads `orchestrator.nav` next frame; the
-            // loaded workspace state stays intact so a later resume
-            // re-opens it). `disable_prev` is `false` until Phase 7 and the
-            // nav bar only emits `prev_clicked` when `← Previous` is
-            // enabled, so reaching here already implies not force-disabled.
             orchestrator.nav = NavDestination::Home;
         }
     }
 }
 
-/// Mirror BIO's Step2→Step3 sync at the orchestrator's Step2→Step3 forward
-/// nav edge (the #5 fix).
-///
-/// **What BIO does (the mirrored call site + semantics).** BIO's
-/// `WizardApp` Next handler (`bio::app::app_nav_actions::advance_after_next`,
-/// `app_nav_actions.rs:131-156`) asks `bio::app::app_nav::decide_next_action`
-/// (`app_nav.rs:85-114`) for the action. When leaving Step 2
-/// (`current_step == 1`) and the Step-2 selection changed since the last
-/// sync (or Step 3 has no real items), that returns
-/// `NextAction::SyncStep3AndAdvance { signature }`, on which
-/// `advance_after_next` runs **exactly**:
-///
-/// ```ignore
-/// super::app_step3_sync_flow::sync_step3_from_step2(state);
-/// state.set_last_step2_sync_signature(signature.clone());
-/// ```
-///
-/// We replicate **that** arm verbatim — calling BIO's own `pub(crate)`
-/// `decide_next_action` (so the change-detection signature is BIO's own,
-/// carried in the enum payload — zero logic copied) and BIO's own
-/// `pub(crate)` `sync_step3_from_step2`. The orchestrator owns its own
-/// step machine, so we do NOT run BIO's `apply_next_action`/`go_next` or
-/// its settings-save; `wizard_state.current_step` is temporarily set to
-/// BIO's Step-2 index `1` only so `decide_next_action` evaluates the right
-/// branch, then restored (it is a pure `&WizardState` read with no
-/// mutation, so save/restore is sound and leaves no residue).
-///
-/// **Clobber protection (the Step-3 reorder concern).** This is BIO's own
-/// design, inherited by mirroring it exactly:
-///   - If the user only reordered in Step 3 and the Step-2 selection is
-///     unchanged, `decide_next_action` finds the signature unchanged AND
-///     Step 3 has real items, so it returns a NON-sync variant →
-///     `sync_step3_from_step2` is **not called** → the Step-3 order is
-///     left untouched.
-///   - If the Step-2 selection did change, `sync_step3_from_step2` →
-///     `reconcile_step3_items` (`app_step3_sync_flow.rs:32-77`) preserves
-///     the relative order of still-selected Step-3 items and appends only
-///     the newly-selected ones — exactly BIO's behavior.
 fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {
     use crate::app::app_nav::{NextAction, decide_next_action};
     use crate::app::app_step3_sync_flow::sync_step3_from_step2;
 
     let state = &mut orchestrator.wizard_state;
 
-    // Temporarily present "we are on Step 2" to BIO's decision fn (BIO's
-    // Step-2 index is 1). `decide_next_action` is a pure read; restore after.
     let saved_step = state.current_step;
     state.current_step = 1;
     let action = decide_next_action(state);
     state.current_step = saved_step;
 
-    // Replicate ONLY `advance_after_next`'s `SyncStep3AndAdvance` arm
-    // (`app_nav_actions.rs:137-140`) — BIO's own sync + signature write.
     if let NextAction::SyncStep3AndAdvance { signature } = action {
         sync_step3_from_step2(state);
         state.set_last_step2_sync_signature(signature);
     }
 }
 
-/// The vertical footprint the nav bar reserves at the bottom (exported so a
-/// future header run can keep the layout math in one place).
 pub const NAV_BAR_RESERVE_PX: f32 = 84.0;
 
 #[cfg(test)]
@@ -221,19 +85,16 @@ mod tests {
 
     #[test]
     fn nav_reserve_constant_is_reasonable() {
-        // Sanity: the reserve must cover the nav bar's ~64px footprint
-        // (sub_flow_footer's FOOTER_HEIGHT_PX) plus the 20px top margin.
-        assert!(NAV_BAR_RESERVE_PX >= 64.0);
-        assert!(NAV_BAR_RESERVE_PX <= 120.0);
+        const {
+            assert!(NAV_BAR_RESERVE_PX >= 64.0);
+            assert!(NAV_BAR_RESERVE_PX <= 120.0);
+        }
     }
 
     #[test]
     fn step_advance_logic_matches_wireframe_gonext() {
-        // Pure logic mirror of the in-render nav-outcome handling: forward
-        // from Step 2 marks Step 2 completed and lands on Step 3.
         let mut completed = std::collections::HashSet::new();
         let current = WorkspaceStep::Step2;
-        // simulate next_clicked:
         if let Some(next) = current.next() {
             completed.insert(current);
             assert_eq!(next, WorkspaceStep::Step3);

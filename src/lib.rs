@@ -1,22 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `bio` library crate root.
-//
-// Per SPEC §1 CRITICAL DIRECTIVE carve-out #3, the project is restructured
-// from its original single-binary layout (everything declared in `main.rs`)
-// into a `lib + 2 bins` layout. The module tree below is identical to
-// today's `src/main.rs` `mod` block, but with `pub` visibility — so both
-// binaries (`BIO` and `infinity_orchestrator`) link against this library and
-// reach BIO's public surface as `bio::*`.
-//
-// `pub(crate)` items inside the library stay reachable to other code that
-// lives inside the same crate (notably the orchestrator's modules under
-// `src/ui/orchestrator/` introduced in Phase 2). The orchestrator binary's
-// `main.rs` is a thin shim into this library.
-//
-// **Behavior is preserved bit-for-bit** vs. today's BIO — no logic changes
-// in any file the carve-out touches.
 
 #[path = "core/app/mod.rs"]
 pub mod app;
@@ -37,27 +20,6 @@ pub mod platform_defaults;
 pub mod settings;
 pub mod ui;
 
-// Phase 3 — Modlist registry. New top-level module under the orchestrator's
-// data layer. Registered here under the CRITICAL DIRECTIVE carve-out #3's
-// companion provision (additive `pub mod` lines for orchestrator-owned data).
 pub mod registry;
 
-// Phase 7 P7.T1 — install runtime. Net-new top-level orchestrator module
-// (the install-start hooks, import-code writer, registry transition,
-// concurrency gate, rail-lock reason, flag policies, reinstall route).
-// Registered here alongside `registry` under the same carve-out #3
-// companion provision — the plan's "alongside `mod registry;`" intent
-// (its "in `src/bin/infinity_orchestrator.rs`" prose is a PLAN GAP: that
-// binary is a thin shim with no `mod` block; `mod registry;` actually
-// lives here). Run 1 declares no submodules — later runs add theirs
-// (P7.T3 = `start_hooks` / `import_code_writer` / `registry_transition`;
-// P7.T9/T9b = `install_concurrency` / `rail_lock_reason`; etc.).
 pub mod install_runtime;
-
-// Redesign modules (Infinity Orchestrator) are registered in their natural
-// places in the BIO module tree per CRITICAL DIRECTIVE carve-out #3's
-// companion provision (additive `pub mod` lines in existing `mod.rs` files):
-//   - `bio::ui::shared::redesign_fonts` (registered in `src/ui/shared/mod.rs`)
-//   - `bio::ui::shared::redesign_tokens` (registered in `src/ui/shared/mod.rs`)
-//   - `bio::ui::shell` (registered in `src/ui/mod.rs`)
-// No lib-root re-exports are needed.

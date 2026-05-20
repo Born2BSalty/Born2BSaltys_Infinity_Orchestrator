@@ -3,6 +3,7 @@
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use crate::app::platform_asset_target;
+use std::path::Path;
 
 pub(super) fn pick_release_asset_for_current_os(
     assets: &[(&str, &str)],
@@ -13,8 +14,7 @@ pub(super) fn pick_release_asset_for_current_os(
             let score = asset_score(asset_name);
             if best
                 .as_ref()
-                .map(|(best_score, ..)| score > *best_score)
-                .unwrap_or(true)
+                .is_none_or(|(best_score, ..)| score > *best_score)
             {
                 best = Some((
                     score,
@@ -43,10 +43,9 @@ pub(super) fn pick_release_asset_for_pkg_list(
                 let score = asset_score(asset_name);
                 let replace = best
                     .as_ref()
-                    .map(|(best_score, best_pkg_index, ..)| {
+                    .is_none_or(|(best_score, best_pkg_index, ..)| {
                         score > *best_score || (score == *best_score && pkg_index < *best_pkg_index)
-                    })
-                    .unwrap_or(true);
+                    });
                 if replace {
                     best = Some((
                         score,
@@ -83,12 +82,15 @@ pub(super) fn pick_release_asset_by_name(
 }
 
 fn is_archive_asset(name: &str) -> bool {
-    let lower = name.trim().to_ascii_lowercase();
-    [
-        ".zip", ".7z", ".rar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz",
-    ]
-    .iter()
-    .any(|suffix| lower.ends_with(suffix))
+    has_extension(name, "zip")
+        || has_extension(name, "7z")
+        || has_extension(name, "rar")
+        || has_extension(name, "tgz")
+        || has_extension(name, "tbz2")
+        || has_extension(name, "txz")
+        || has_suffix_ignore_ascii_case(name, ".tar.gz")
+        || has_suffix_ignore_ascii_case(name, ".tar.bz2")
+        || has_suffix_ignore_ascii_case(name, ".tar.xz")
 }
 
 fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
@@ -96,17 +98,17 @@ fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
     match pkg {
         "lin" => lower.starts_with("lin-"),
         "osx" | "mac" => lower.starts_with("osx-") || lower.starts_with("mac-"),
-        "win" => lower.ends_with(".exe"),
-        "wzp" => lower.starts_with("win-") && lower.ends_with(".zip"),
+        "win" => has_extension(name, "exe"),
+        "wzp" => lower.starts_with("win-") && has_extension(name, "zip"),
         "w32zip" => {
-            lower.ends_with(".zip")
+            has_extension(name, "zip")
                 && (lower.contains("win32")
                     || lower.contains("32-bit")
                     || lower.contains("32bit")
                     || (lower.contains("x86") && !lower.contains("x86_64")))
         }
         "w64zip" => {
-            lower.ends_with(".zip")
+            has_extension(name, "zip")
                 && (lower.contains("win64")
                     || lower.contains("x64")
                     || lower.contains("x86_64")
@@ -115,16 +117,17 @@ fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
                     || lower.contains("64bit"))
         }
         "macarmzip" => {
-            lower.ends_with(".zip") && contains_any(&lower, &["arm64", "aarch64", "apple-silicon"])
+            has_extension(name, "zip")
+                && contains_any(&lower, &["arm64", "aarch64", "apple-silicon"])
         }
         "macx64zip" => {
-            lower.ends_with(".zip")
+            has_extension(name, "zip")
                 && (contains_any(&lower, &["x64", "x86_64", "intel"])
                     || ((lower.starts_with("mac-") || lower.starts_with("osx-"))
                         && !contains_any(&lower, &["arm64", "aarch64", "apple-silicon"])))
         }
         "zip" => {
-            lower.ends_with(".zip")
+            has_extension(name, "zip")
                 && !lower.starts_with("win-")
                 && !lower.starts_with("osx-")
                 && !lower.starts_with("mac-")
@@ -132,8 +135,8 @@ fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
                 && !lower.starts_with("wzp-")
                 && !lower.contains("source code")
         }
-        "rar" => lower.ends_with(".rar"),
-        "iemod" => lower.ends_with(".iemod"),
+        "rar" => has_extension(name, "rar"),
+        "iemod" => has_extension(name, "iemod"),
         _ => false,
     }
 }
@@ -141,7 +144,7 @@ fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
 fn asset_score(name: &str) -> i32 {
     let lower = name.trim().to_ascii_lowercase();
     let mut score = 0;
-    if lower.ends_with(".zip") || lower.ends_with(".7z") || lower.ends_with(".rar") {
+    if has_extension(name, "zip") || has_extension(name, "7z") || has_extension(name, "rar") {
         score += 5;
     }
     if lower.contains("source code") {
@@ -244,4 +247,20 @@ fn arch_score(name: &str, preferred: &[&str], avoided: &[&str]) -> i32 {
 
 fn contains_any(name: &str, tokens: &[&str]) -> bool {
     tokens.iter().any(|token| name.contains(token))
+}
+
+fn has_extension(name: &str, extension: &str) -> bool {
+    Path::new(name.trim())
+        .extension()
+        .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+}
+
+fn has_suffix_ignore_ascii_case(name: &str, suffix: &str) -> bool {
+    let trimmed = name.trim();
+    let Some(start) = trimmed.len().checked_sub(suffix.len()) else {
+        return false;
+    };
+    trimmed
+        .get(start..)
+        .is_some_and(|tail| tail.eq_ignore_ascii_case(suffix))
 }

@@ -1,19 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `toggle_row` — label + on/off switch + optional hint.
-//
-// Per Phase 4 P4.T8 file inventory: simple binary toggle used in the
-// General + Advanced sub-tabs.
-
-// rationale: `f32 as u8` casts are colour-channel / pixel roundings of small
-// positive values — correct by construction (Cat 2).
-#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_PANEL_RADIUS_U8, ThemePalette, redesign_accent,
     redesign_border_strong, redesign_chrome_bg, redesign_text_faint, redesign_text_primary,
 };
 
@@ -39,7 +30,7 @@ pub fn render(
 
         let (rect, response) = ui.allocate_exact_size(egui::vec2(42.0, 22.0), egui::Sense::click());
         let painter = ui.painter();
-        let radius = egui::CornerRadius::same((REDESIGN_BORDER_RADIUS_PX + 8.0) as u8);
+        let radius = egui::CornerRadius::same(REDESIGN_PANEL_RADIUS_U8);
         let track_fill = if *on {
             redesign_accent(palette)
         } else {
@@ -52,7 +43,6 @@ pub fn render(
             egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
             egui::StrokeKind::Inside,
         );
-        // Knob.
         let knob_size = 16.0;
         let knob_center = if *on {
             egui::pos2(rect.right() - knob_size * 0.5 - 4.0, rect.center().y)

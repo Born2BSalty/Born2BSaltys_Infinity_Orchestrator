@@ -1,40 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `step4_save_row` — the Step-4 top action row (P6.T2b, SPEC §8.1). Net-new
-// redesign chrome; the Save **action** reuses BIO's `pub(crate)` save flow.
-//
-// Mirrors the wireframe `OrderPanel` action sub-row (`screens.jsx:3182-3187`):
-//
-//   <div flex gap:8 marginBottom:10 alignItems:center>
-//     <Btn>Save weidu.log's</Btn>
-//     <Label hand marginLeft:auto color:var(--text-faint)>
-//       {selected.length} components ready to install on {upperTab}
-//       · across {new Set(selected.map(c => c.tp2)).size} mods
-//     </Label>
-//   </div>
-//
-// - Button label: `Save weidu.log's` for a dual-game (EET) modlist,
-//   `Save weidu.log` for single-game — the exact label switch BIO's
-//   `content_step4::render` uses (`"EET" => "Save weidu.log's"`).
-// - Click → returns `Some(Step4Action::SaveWeiduLog)` to the wrapper, which
-//   returns it to the router; the router dispatches it via
-//   `step_action_dispatch::dispatch_step4`. **All dispatch happens at the
-//   router layer for consistency** (M11) — the Save row does NOT call the
-//   BIO save fn itself, so the save-error popup is surfaced by the wrapper
-//   (`workspace_step4`) from `wizard_state.step5.last_status_text`, not here.
-// - Count: `<N> components ready to install on <TAB> · across <M> mods` —
-//   `N` = non-parent Step-3 items on the active tab; `M` = unique `tp_file`
-//   over them (the wireframe's `new Set(selected.map(c => c.tp2)).size`).
-//   Rendered in the wireframe `<Label hand>` style (accent-deep, 14px) but
-//   colour-overridden to `text-faint` per the wireframe's inline
-//   `color: var(--text-faint)`.
-//
-// SPEC: §8.1 (Step-4 action row + count), §1 (decision order — net-new
-//       render, reuse BIO's save action via the router).
-
-// rationale: f32→u8 roundings are not present here; the module is layout-only.
-#![allow(clippy::module_name_repetitions)]
 
 use eframe::egui;
 
@@ -45,9 +10,6 @@ use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_faint};
 use crate::ui::workspace::step4::workspace_step4;
 
-/// Render the Step-4 action row into the current `ui`. Returns
-/// `Some(Step4Action::SaveWeiduLog)` if the Save button was clicked (the
-/// router dispatches it; per M11 all dispatch is at the router layer).
 pub fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
@@ -56,9 +18,6 @@ pub fn render(
     let mut action: Option<Step4Action> = None;
 
     let is_dual = workspace_step4::is_dual_game(&orchestrator.wizard_state);
-    // The exact label switch BIO's `content_step4::render` performs
-    // (`"EET" => "Save weidu.log's"`, `_ => "Save weidu.log"`); the
-    // orchestrator's modlist is dual-game iff EET.
     let save_label = if is_dual {
         "Save weidu.log's"
     } else {
@@ -82,18 +41,10 @@ pub fn render(
         .on_hover_text(crate::ui::shared::tooltip_global::STEP4_SAVE_WEIDU_LOG)
         .clicked()
         {
-            // M11 — return the action; the router dispatches via
-            // `dispatch_step4` → `bio::app::app_step4_flow::
-            // handle_step4_action` (which routes to
-            // `auto_save_step4_weidu_logs`). The save-error popup is a
-            // render-side concern surfaced by the wrapper afterwards.
             action = Some(Step4Action::SaveWeiduLog);
         }
 
-        // `marginLeft: auto` → push the count Label flush-right.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            // Wireframe `<Label hand>` is 14px Poppins, but its inline style
-            // overrides the colour to `var(--text-faint)`.
             ui.label(
                 egui::RichText::new(format!(
                     "{comp_count} components ready to install on {active_tab} \u{00B7} across {mod_count} mods"
@@ -108,11 +59,6 @@ pub fn render(
     action
 }
 
-/// `(active_tab_label, component_count, unique_mod_count)` for the count
-/// text. The component count is the number of **non-parent** Step-3 items on
-/// the active tab (the installable leaves — the wireframe's `selected`); the
-/// mod count is the number of distinct `tp_file`s over them (the wireframe's
-/// `new Set(selected.map(c => c.tp2)).size`).
 fn active_tab_counts(state: &WizardState) -> (&'static str, usize, usize) {
     let (tab_label, items) = workspace_step4::active_tab_items(state);
     let leaves: Vec<&crate::app::state::Step3ItemState> =
@@ -153,9 +99,6 @@ mod tests {
         p
     }
 
-    /// The count text counts installable leaves (not synthetic parent rows)
-    /// and unique TP2 files — matching the wireframe `selected` /
-    /// `new Set(...tp2).size`.
     #[test]
     fn counts_leaves_and_unique_mods_skipping_parents() {
         let mut s = WizardState::default();
@@ -174,8 +117,6 @@ mod tests {
         assert_eq!(mods, 2, "2 distinct tp_files");
     }
 
-    /// EET → dual-game → `Save weidu.log's`; everything else → single →
-    /// `Save weidu.log` (BIO's exact label switch).
     #[test]
     fn save_label_switches_on_eet() {
         let mut s = WizardState::default();

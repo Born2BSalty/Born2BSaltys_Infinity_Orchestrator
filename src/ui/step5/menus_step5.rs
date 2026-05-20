@@ -140,6 +140,6 @@ fn set_rust_log_level(state: &mut WizardState, level: Option<&str>) {
     }
 }
 
-pub(crate) fn diagnostics_ready_for_dev(state: &WizardState) -> bool {
+pub(crate) const fn diagnostics_ready_for_dev(state: &WizardState) -> bool {
     state.step1.rust_log_debug || state.step1.rust_log_trace
 }

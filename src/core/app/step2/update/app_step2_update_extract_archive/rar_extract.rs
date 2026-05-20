@@ -8,8 +8,7 @@ use unrar::Archive;
 pub(super) fn is_rar_archive(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
-        .map(|value| value.eq_ignore_ascii_case("rar"))
-        .unwrap_or(false)
+        .is_some_and(|value| value.eq_ignore_ascii_case("rar"))
 }
 
 pub(super) fn extract_rar_archive(archive_path: &Path, out_dir: &Path) -> Result<(), String> {

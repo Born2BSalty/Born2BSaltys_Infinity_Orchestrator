@@ -27,7 +27,7 @@ pub(crate) struct DependencyCompatHit {
     pub(crate) raw_evidence: String,
 }
 
-pub(crate) fn scan_dependency_hit(
+pub(in crate::app) fn scan_dependency_hit(
     tp2_path: &str,
     component_id: &str,
     component_order: Option<usize>,

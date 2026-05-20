@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::log_files::{
@@ -68,7 +68,7 @@ pub use write_checks::{
     AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary,
 };
 
-pub(crate) fn build_weidu_export_lines(items: &[Step3ItemState]) -> Vec<String> {
+pub fn build_weidu_export_lines(items: &[Step3ItemState]) -> Vec<String> {
     items
         .iter()
         .filter(|i| !i.is_parent)
@@ -76,15 +76,16 @@ pub(crate) fn build_weidu_export_lines(items: &[Step3ItemState]) -> Vec<String> 
         .collect()
 }
 
-pub(crate) fn format_step4_item(item: &Step3ItemState) -> String {
-    if !item.raw_line.trim().is_empty() {
-        normalize_weidu_like_line(&item.raw_line)
-    } else {
+#[must_use]
+pub fn format_step4_item(item: &Step3ItemState) -> String {
+    if item.raw_line.trim().is_empty() {
         let folder = item.mod_name.replace('/', "\\");
         format!(
             "~{}\\{}~ #0 #{} // {}",
             folder, item.tp_file, item.component_id, item.component_label
         )
+    } else {
+        normalize_weidu_like_line(&item.raw_line)
     }
 }
 
@@ -95,8 +96,7 @@ pub fn export_diagnostics(
 ) -> Result<PathBuf> {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let run_id = current_or_new_run_id(&state.step5);
     prune_old_diagnostics(Some(&run_id));
     let root_dir = PathBuf::from("diagnostics");
@@ -123,9 +123,10 @@ pub fn export_diagnostics(
     } else {
         build_weidu_export_lines(&state.step3.bgee_items)
     };
-    let console_excerpt = terminal
-        .map(|t| t.console_excerpt(40_000))
-        .unwrap_or_else(|| fallback_console_excerpt(state, 40_000));
+    let console_excerpt = terminal.map_or_else(
+        || fallback_console_excerpt(state, 40_000),
+        |t| t.console_excerpt(40_000),
+    );
     let install_config = build_install_command_config(&state.step1);
     let (installer_program, installer_args) = build_install_invocation(&install_config);
 
@@ -154,107 +155,20 @@ pub fn export_diagnostics(
     }
     written_paths.extend(appdata_summary.copied.iter().cloned());
 
-    match runtime_assumptions_json::write_runtime_assumptions_json(&summary_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("runtime_assumptions_json_write=FAILED: {err}"),
-        ),
-    }
-    match quick_triage::write_quick_triage_txt(&run_dir, state, &write_check_summary, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("quick_triage_write=FAILED: {err}")),
-    }
-    match scan_context_json::write_scan_context_json(&scan_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("scan_context_json_write=FAILED: {err}")),
-    }
-    match step2_render_order_json::write_step2_render_order_json(&scan_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("step2_render_order_json_write=FAILED: {err}"),
-        ),
-    }
-    match step2_component_audit_json::write_step2_component_audit_json(&scan_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("step2_component_audit_json_write=FAILED: {err}"),
-        ),
-    }
-    match step2_component_audit_txt::write_step2_component_audit_txt(&scan_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("step2_component_audit_txt_write=FAILED: {err}"),
-        ),
-    }
-    match prompt_calls_json::write_prompt_calls_json(&summary_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("prompt_calls_json_write=FAILED: {err}")),
-    }
-    match parser_events_json::write_parser_events_json(&scan_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("parser_events_json_write=FAILED: {err}"),
-        ),
-    }
-    match parser_raw_json::write_parser_raw_json(&scan_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(&out_path, &format!("parser_raw_json_write=FAILED: {err}")),
-    }
-    match undefined_summary_json::write_undefined_summary_json(&scan_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("undefined_summary_json_write=FAILED: {err}"),
-        ),
-    }
-    match compat_decisions_json::write_compat_decisions_json(&compat_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("compat_decisions_json_write=FAILED: {err}"),
-        ),
-    }
-    match compat_rule_inventory_json::write_compat_rule_inventory_json(&compat_dir, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("compat_rule_inventory_json_write=FAILED: {err}"),
-        ),
-    }
-    match compat_rule_trace_json::write_compat_rule_trace_json(&compat_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("compat_rule_trace_json_write=FAILED: {err}"),
-        ),
-    }
-    match compat_rule_matches_summary_json::write_compat_rule_matches_summary_json(&compat_dir, ts)
-    {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("compat_rule_matches_summary_json_write=FAILED: {err}"),
-        ),
-    }
-    match step3_issue_snapshot_json::write_step3_issue_snapshot_json(&compat_dir, state, ts) {
-        Ok(path) => written_paths.push(path),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("step3_issue_snapshot_json_write=FAILED: {err}"),
-        ),
-    }
-    match mod_downloads_diagnostics::write_mod_download_diagnostics(&run_dir, state, ts) {
-        Ok(paths) => written_paths.extend(paths),
-        Err(err) => append_diag_note(
-            &out_path,
-            &format!("mod_download_diagnostics_write=FAILED: {err}"),
-        ),
-    }
+    let artifact_paths = DiagnosticArtifactPaths {
+        run_dir: &run_dir,
+        summary_dir: &summary_dir,
+        scan_dir: &scan_dir,
+        compat_dir: &compat_dir,
+        out_path: &out_path,
+    };
+    write_diagnostic_artifacts(
+        state,
+        artifact_paths,
+        &write_check_summary,
+        ts,
+        &mut written_paths,
+    );
 
     if let Err(err) = export_marker_json::write_export_marker_json(&run_dir, ts, &written_paths) {
         append_diag_note(
@@ -265,9 +179,168 @@ pub fn export_diagnostics(
     Ok(out_path)
 }
 
+#[derive(Clone, Copy)]
+struct DiagnosticArtifactPaths<'a> {
+    run_dir: &'a Path,
+    summary_dir: &'a Path,
+    scan_dir: &'a Path,
+    compat_dir: &'a Path,
+    out_path: &'a Path,
+}
+
+fn write_diagnostic_artifacts(
+    state: &WizardState,
+    paths: DiagnosticArtifactPaths<'_>,
+    write_check_summary: &WriteCheckSummary,
+    ts: u64,
+    written_paths: &mut Vec<PathBuf>,
+) {
+    push_result_path(
+        runtime_assumptions_json::write_runtime_assumptions_json(paths.summary_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "runtime_assumptions_json_write",
+    );
+    push_result_path(
+        quick_triage::write_quick_triage_txt(paths.run_dir, state, write_check_summary, ts),
+        written_paths,
+        paths.out_path,
+        "quick_triage_write",
+    );
+    push_result_path(
+        scan_context_json::write_scan_context_json(paths.scan_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "scan_context_json_write",
+    );
+    push_result_path(
+        step2_render_order_json::write_step2_render_order_json(paths.scan_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "step2_render_order_json_write",
+    );
+    push_result_path(
+        step2_component_audit_json::write_step2_component_audit_json(paths.scan_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "step2_component_audit_json_write",
+    );
+    push_result_path(
+        step2_component_audit_txt::write_step2_component_audit_txt(paths.scan_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "step2_component_audit_txt_write",
+    );
+    push_result_path(
+        prompt_calls_json::write_prompt_calls_json(paths.summary_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "prompt_calls_json_write",
+    );
+    push_scan_artifacts(state, paths, ts, written_paths);
+    push_compat_artifacts(state, paths, ts, written_paths);
+    push_result_paths(
+        mod_downloads_diagnostics::write_mod_download_diagnostics(paths.run_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "mod_download_diagnostics_write",
+    );
+}
+
+fn push_scan_artifacts(
+    state: &WizardState,
+    paths: DiagnosticArtifactPaths<'_>,
+    ts: u64,
+    written_paths: &mut Vec<PathBuf>,
+) {
+    push_result_path(
+        parser_events_json::write_parser_events_json(paths.scan_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "parser_events_json_write",
+    );
+    push_result_path(
+        parser_raw_json::write_parser_raw_json(paths.scan_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "parser_raw_json_write",
+    );
+    push_result_path(
+        undefined_summary_json::write_undefined_summary_json(paths.scan_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "undefined_summary_json_write",
+    );
+}
+
+fn push_compat_artifacts(
+    state: &WizardState,
+    paths: DiagnosticArtifactPaths<'_>,
+    ts: u64,
+    written_paths: &mut Vec<PathBuf>,
+) {
+    push_result_path(
+        compat_decisions_json::write_compat_decisions_json(paths.compat_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "compat_decisions_json_write",
+    );
+    push_result_path(
+        compat_rule_inventory_json::write_compat_rule_inventory_json(paths.compat_dir, ts),
+        written_paths,
+        paths.out_path,
+        "compat_rule_inventory_json_write",
+    );
+    push_result_path(
+        compat_rule_trace_json::write_compat_rule_trace_json(paths.compat_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "compat_rule_trace_json_write",
+    );
+    push_result_path(
+        compat_rule_matches_summary_json::write_compat_rule_matches_summary_json(
+            paths.compat_dir,
+            ts,
+        ),
+        written_paths,
+        paths.out_path,
+        "compat_rule_matches_summary_json_write",
+    );
+    push_result_path(
+        step3_issue_snapshot_json::write_step3_issue_snapshot_json(paths.compat_dir, state, ts),
+        written_paths,
+        paths.out_path,
+        "step3_issue_snapshot_json_write",
+    );
+}
+
+fn push_result_path(
+    result: Result<PathBuf>,
+    written_paths: &mut Vec<PathBuf>,
+    out_path: &Path,
+    label: &str,
+) {
+    match result {
+        Ok(path) => written_paths.push(path),
+        Err(err) => append_diag_note(out_path, &format!("{label}=FAILED: {err}")),
+    }
+}
+
+fn push_result_paths(
+    result: Result<Vec<PathBuf>>,
+    written_paths: &mut Vec<PathBuf>,
+    out_path: &Path,
+    label: &str,
+) {
+    match result {
+        Ok(paths) => written_paths.extend(paths),
+        Err(err) => append_diag_note(out_path, &format!("{label}=FAILED: {err}")),
+    }
+}
+
 fn write_step4_weidu_log_snapshots(
     state: &WizardState,
-    logs_dir: &std::path::Path,
+    logs_dir: &Path,
 ) -> Result<Vec<DiagnosticLogGroup>> {
     let header = [
         "// Log of Currently Installed WeiDU Mods",
@@ -280,7 +353,10 @@ fn write_step4_weidu_log_snapshots(
             let dest_dir = logs_dir.join("Save WeiDU logs").join(label);
             fs::create_dir_all(&dest_dir)?;
             let dest = dest_dir.join(file_name);
-            let mut out: Vec<String> = header.iter().map(|s| s.to_string()).collect();
+            let mut out: Vec<String> = header
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect();
             out.extend(lines);
             fs::write(&dest, out.join("\n"))?;
             Ok(DiagnosticLogGroup {
@@ -317,7 +393,7 @@ fn write_step4_weidu_log_snapshots(
     Ok(groups)
 }
 
-fn append_diag_note(out_path: &PathBuf, line: &str) {
+fn append_diag_note(out_path: &Path, line: &str) {
     let note = format!("\n[Diagnostics Notes]\n{line}\n");
     if let Ok(mut f) = fs::OpenOptions::new().append(true).open(out_path) {
         let _ = f.write_all(note.as_bytes());

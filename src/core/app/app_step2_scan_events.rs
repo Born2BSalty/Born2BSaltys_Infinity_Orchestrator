@@ -2,13 +2,14 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::{BTreeSet, VecDeque};
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::TryRecvError;
 
 use crate::app::controller::util::sort_mods_alphabetically;
-use crate::app::state::WizardState;
+use crate::app::state::{Step2ModState, Step2ScanReport, WizardState};
 use crate::app::step2_worker::Step2ScanEvent;
 
 pub(super) fn poll_step2_scan_events(
@@ -28,121 +29,66 @@ pub(super) fn poll_step2_scan_events(
                 total,
                 name,
             }) => {
-                step2_progress_queue.push_back((current, total, name));
-                if step2_progress_queue.len() > 512 {
-                    let _ = step2_progress_queue.pop_front();
-                }
+                queue_progress(step2_progress_queue, current, total, name);
             }
             Ok(Step2ScanEvent::Preview {
-                mut bgee_mods,
-                mut bg2ee_mods,
+                bgee_mods,
+                bg2ee_mods,
                 total,
             }) => {
-                let compat_error = crate::app::compat_logic::apply_step2_compat_rules(
-                    &state.step1,
-                    &mut bgee_mods,
-                    &mut bg2ee_mods,
-                );
-                crate::app::mod_update_locks::apply_mod_update_locks(&mut bgee_mods);
-                crate::app::mod_update_locks::apply_mod_update_locks(&mut bg2ee_mods);
-                let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
-                state.step2.bgee_mods = bgee_mods;
-                state.step2.bg2ee_mods = bg2ee_mods;
-                state.step2.selected = None;
-                state.step2.next_selection_order = 1;
-                state.step2.scan_progress_percent = 0;
-                state.step2.scan_status = match (lock_load_error, compat_error) {
-                    (Some(lock_err), Some(compat_err)) => {
-                        format!(
-                            "0/{total}: discovering mods... (update lock load failed: {lock_err}; compat rules load failed: {compat_err})"
-                        )
-                    }
-                    (Some(lock_err), None) => {
-                        format!(
-                            "0/{total}: discovering mods... (update lock load failed: {lock_err})"
-                        )
-                    }
-                    (None, Some(compat_err)) => {
-                        format!(
-                            "0/{total}: discovering mods... (compat rules load failed: {compat_err})"
-                        )
-                    }
-                    (None, None) => format!("0/{total}: discovering mods..."),
-                };
+                handle_preview(state, bgee_mods, bg2ee_mods, total);
             }
             Ok(Step2ScanEvent::Finished {
-                mut bgee_mods,
-                mut bg2ee_mods,
+                bgee_mods,
+                bg2ee_mods,
                 report,
             }) => {
-                sort_mods_alphabetically(&mut bgee_mods);
-                sort_mods_alphabetically(&mut bg2ee_mods);
-                let compat_error = crate::app::compat_logic::apply_step2_compat_rules(
-                    &state.step1,
-                    &mut bgee_mods,
-                    &mut bg2ee_mods,
+                handle_finished(
+                    state,
+                    step2_scan_rx,
+                    step2_cancel,
+                    step2_progress_queue,
+                    bgee_mods,
+                    bg2ee_mods,
+                    *report,
                 );
-                crate::app::mod_update_locks::apply_mod_update_locks(&mut bgee_mods);
-                crate::app::mod_update_locks::apply_mod_update_locks(&mut bg2ee_mods);
-                let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
-                state.step2.bgee_mods = bgee_mods;
-                state.step2.bg2ee_mods = bg2ee_mods;
-                let installed_refs_cleanup_error = prune_stale_installed_refs(state);
-                state.step2.selected = None;
-                state.step2.next_selection_order = 1;
-                state.step2.scan_progress_percent = 100;
-                let mut scan_status = match (lock_load_error, compat_error) {
-                    (Some(lock_err), Some(compat_err)) => {
-                        format!(
-                            "Done (update lock load failed: {lock_err}; compat rules load failed: {compat_err})"
-                        )
-                    }
-                    (Some(lock_err), None) => format!("Done (update lock load failed: {lock_err})"),
-                    (None, Some(compat_err)) => {
-                        format!("Done (compat rules load failed: {compat_err})")
-                    }
-                    (None, None) => "Done".to_string(),
-                };
-                if let Some(err) = installed_refs_cleanup_error {
-                    scan_status.push_str(&format!(" (installed refs cleanup failed: {err})"));
-                }
-                state.step2.scan_status = scan_status;
-                state.step2.last_scan_report = Some(*report);
-                state.step2.is_scanning = false;
-                *step2_scan_rx = None;
-                *step2_cancel = None;
-                step2_progress_queue.clear();
                 reached_terminal = true;
                 break;
             }
             Ok(Step2ScanEvent::Failed(message)) => {
-                state.step2.scan_status = format!("Scan failed: {message}");
-                state.step2.last_scan_report = None;
-                state.step2.is_scanning = false;
-                *step2_scan_rx = None;
-                *step2_cancel = None;
-                step2_progress_queue.clear();
+                finish_step2_scan(
+                    state,
+                    step2_scan_rx,
+                    step2_cancel,
+                    step2_progress_queue,
+                    format!("Scan failed: {message}"),
+                    None,
+                );
                 reached_terminal = true;
                 break;
             }
             Ok(Step2ScanEvent::Canceled) => {
-                state.step2.scan_status = "Scan canceled".to_string();
-                state.step2.last_scan_report = None;
-                state.step2.is_scanning = false;
-                *step2_scan_rx = None;
-                *step2_cancel = None;
-                step2_progress_queue.clear();
+                finish_step2_scan(
+                    state,
+                    step2_scan_rx,
+                    step2_cancel,
+                    step2_progress_queue,
+                    "Scan canceled".to_string(),
+                    None,
+                );
                 reached_terminal = true;
                 break;
             }
             Err(TryRecvError::Empty) => break,
             Err(TryRecvError::Disconnected) => {
-                state.step2.scan_status = "Scan worker disconnected".to_string();
-                state.step2.last_scan_report = None;
-                state.step2.is_scanning = false;
-                *step2_scan_rx = None;
-                *step2_cancel = None;
-                step2_progress_queue.clear();
+                finish_step2_scan(
+                    state,
+                    step2_scan_rx,
+                    step2_cancel,
+                    step2_progress_queue,
+                    "Scan worker disconnected".to_string(),
+                    None,
+                );
                 reached_terminal = true;
                 break;
             }
@@ -150,12 +96,137 @@ pub(super) fn poll_step2_scan_events(
     }
     if !reached_terminal && let Some((current, total, name)) = step2_progress_queue.pop_front() {
         state.step2.scan_status = format!("{current}/{total}: {name}");
-        state.step2.scan_progress_percent = current
-            .checked_mul(100)
-            .and_then(|value| value.checked_div(total))
-            .map(|value| value.min(100) as u8)
-            .unwrap_or(0);
+        state.step2.scan_progress_percent = scan_progress_percent(current, total);
     }
+}
+
+fn queue_progress(
+    step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
+    current: usize,
+    total: usize,
+    name: String,
+) {
+    step2_progress_queue.push_back((current, total, name));
+    if step2_progress_queue.len() > 512 {
+        let _ = step2_progress_queue.pop_front();
+    }
+}
+
+fn handle_preview(
+    state: &mut WizardState,
+    mut bgee_scan_mods: Vec<Step2ModState>,
+    mut bg2_scan_mods: Vec<Step2ModState>,
+    total: usize,
+) {
+    let compat_error = crate::app::compat_logic::apply_step2_compat_rules(
+        &state.step1,
+        &mut bgee_scan_mods,
+        &mut bg2_scan_mods,
+    );
+    crate::app::mod_update_locks::apply_mod_update_locks(&mut bgee_scan_mods);
+    crate::app::mod_update_locks::apply_mod_update_locks(&mut bg2_scan_mods);
+    let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
+    state.step2.bgee_mods = bgee_scan_mods;
+    state.step2.bg2ee_mods = bg2_scan_mods;
+    reset_scan_selection(state);
+    state.step2.scan_progress_percent = 0;
+    state.step2.scan_status = scan_preview_status(total, lock_load_error, compat_error);
+}
+
+fn handle_finished(
+    state: &mut WizardState,
+    step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
+    step2_cancel: &mut Option<Arc<AtomicBool>>,
+    step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
+    mut bgee_scan_mods: Vec<Step2ModState>,
+    mut bg2_scan_mods: Vec<Step2ModState>,
+    report: Step2ScanReport,
+) {
+    sort_mods_alphabetically(&mut bgee_scan_mods);
+    sort_mods_alphabetically(&mut bg2_scan_mods);
+    let compat_error = crate::app::compat_logic::apply_step2_compat_rules(
+        &state.step1,
+        &mut bgee_scan_mods,
+        &mut bg2_scan_mods,
+    );
+    crate::app::mod_update_locks::apply_mod_update_locks(&mut bgee_scan_mods);
+    crate::app::mod_update_locks::apply_mod_update_locks(&mut bg2_scan_mods);
+    let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
+    state.step2.bgee_mods = bgee_scan_mods;
+    state.step2.bg2ee_mods = bg2_scan_mods;
+    let installed_refs_cleanup_error = prune_stale_installed_refs(state);
+    reset_scan_selection(state);
+    state.step2.scan_progress_percent = 100;
+    let mut finished_status = scan_finished_status(lock_load_error, compat_error);
+    if let Some(err) = installed_refs_cleanup_error {
+        let _ = write!(finished_status, " (installed refs cleanup failed: {err})");
+    }
+    finish_step2_scan(
+        state,
+        step2_scan_rx,
+        step2_cancel,
+        step2_progress_queue,
+        finished_status,
+        Some(report),
+    );
+}
+
+fn finish_step2_scan(
+    state: &mut WizardState,
+    step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
+    step2_cancel: &mut Option<Arc<AtomicBool>>,
+    step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
+    status_text: String,
+    report: Option<Step2ScanReport>,
+) {
+    state.step2.scan_status = status_text;
+    state.step2.last_scan_report = report;
+    state.step2.is_scanning = false;
+    *step2_scan_rx = None;
+    *step2_cancel = None;
+    step2_progress_queue.clear();
+}
+
+fn reset_scan_selection(state: &mut WizardState) {
+    state.step2.selected = None;
+    state.step2.next_selection_order = 1;
+}
+
+fn scan_preview_status(
+    total: usize,
+    lock_load_error: Option<String>,
+    compat_error: Option<String>,
+) -> String {
+    match (lock_load_error, compat_error) {
+        (Some(lock_err), Some(compat_err)) => format!(
+            "0/{total}: discovering mods... (update lock load failed: {lock_err}; compat rules load failed: {compat_err})"
+        ),
+        (Some(lock_err), None) => {
+            format!("0/{total}: discovering mods... (update lock load failed: {lock_err})")
+        }
+        (None, Some(compat_err)) => {
+            format!("0/{total}: discovering mods... (compat rules load failed: {compat_err})")
+        }
+        (None, None) => format!("0/{total}: discovering mods..."),
+    }
+}
+
+fn scan_finished_status(lock_load_error: Option<String>, compat_error: Option<String>) -> String {
+    match (lock_load_error, compat_error) {
+        (Some(lock_err), Some(compat_err)) => format!(
+            "Done (update lock load failed: {lock_err}; compat rules load failed: {compat_err})"
+        ),
+        (Some(lock_err), None) => format!("Done (update lock load failed: {lock_err})"),
+        (None, Some(compat_err)) => format!("Done (compat rules load failed: {compat_err})"),
+        (None, None) => "Done".to_string(),
+    }
+}
+
+fn scan_progress_percent(current: usize, total: usize) -> u8 {
+    current
+        .checked_mul(100)
+        .and_then(|value| value.checked_div(total))
+        .map_or(0, |value| u8::try_from(value.min(100)).unwrap_or(100))
 }
 
 fn prune_stale_installed_refs(state: &WizardState) -> Option<String> {

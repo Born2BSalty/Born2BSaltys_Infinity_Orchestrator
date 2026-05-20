@@ -240,18 +240,16 @@ fn requested_github_channel(value: Option<&str>) -> GitHubChannel {
     {
         Some("pre-release") => GitHubChannel::Pre,
         Some("preonly") => GitHubChannel::PreOnly,
-        Some("releases") => GitHubChannel::Stable,
         Some("master") => GitHubChannel::Master,
         Some("ifeellucky") => GitHubChannel::IFeelLucky,
         _ => GitHubChannel::Stable,
     }
 }
 
-fn release_matches_channel(release: &GitHubRelease, channel: GitHubChannel) -> bool {
+const fn release_matches_channel(release: &GitHubRelease, channel: GitHubChannel) -> bool {
     match channel {
         GitHubChannel::Stable => !release.prerelease,
-        GitHubChannel::Pre => release.prerelease,
-        GitHubChannel::PreOnly => release.prerelease,
+        GitHubChannel::Pre | GitHubChannel::PreOnly => release.prerelease,
         GitHubChannel::Master | GitHubChannel::IFeelLucky => true,
     }
 }

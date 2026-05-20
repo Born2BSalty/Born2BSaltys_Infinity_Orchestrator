@@ -62,7 +62,11 @@ mod dispatch {
                     app.dev_mode,
                     app.exe_fingerprint.as_str(),
                 ) {
-                    handle_step5_action(app, action);
+                    match action {
+                        step5::action_step5::Step5Action::StartInstall => {
+                            app.state.step5.start_install_requested = true;
+                        }
+                    }
                 }
             }
             _ => {}
@@ -81,14 +85,6 @@ mod dispatch {
             app.handle_step2_action(action);
         }
     }
-
-    fn handle_step5_action(app: &mut WizardApp, action: step5::action_step5::Step5Action) {
-        match action {
-            step5::action_step5::Step5Action::StartInstall => {
-                app.state.step5.start_install_requested = true;
-            }
-        }
-    }
 }
 mod repaint {
     use eframe::egui;
@@ -98,15 +94,17 @@ mod repaint {
 
     pub(super) fn request_if_needed(app: &WizardApp, ctx: &egui::Context) {
         if crate::app::app_update_cycle::needs_repaint(
-            &app.step1_github_auth_rx,
-            &app.step2_scan_rx,
-            &app.step2_progress_queue,
-            &app.step2_update_check_rx,
-            &app.step2_update_download_rx,
-            &app.step2_update_extract_rx,
-            &app.step5_terminal,
-            &app.step5_prep_rx,
-            &app.state,
+            crate::app::app_update_cycle::RepaintContext {
+                step1_github_auth_rx: app.step1_github_auth_rx.as_ref(),
+                step2_scan_rx: app.step2_scan_rx.as_ref(),
+                step2_progress_queue: &app.step2_progress_queue,
+                step2_update_check_rx: app.step2_update_check_rx.as_ref(),
+                step2_update_download_rx: app.step2_update_download_rx.as_ref(),
+                step2_update_extract_rx: app.step2_update_extract_rx.as_ref(),
+                step5_terminal: app.step5_terminal.as_ref(),
+                step5_prep_rx: app.step5_prep_rx.as_ref(),
+                state: &app.state,
+            },
         ) {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
@@ -123,19 +121,21 @@ pub(super) fn run(app: &mut WizardApp, ctx: &egui::Context, _frame: &mut eframe:
         &mut app.state,
         &mut app.step1_github_auth_rx,
     );
-    let mut step5_requested_repaint = crate::app::app_update_cycle::poll_before_render(
-        &mut app.state,
-        &mut app.step2_scan_rx,
-        &mut app.step2_cancel,
-        &mut app.step2_progress_queue,
-        &mut app.step2_update_check_rx,
-        &mut app.step2_update_download_rx,
-        &mut app.step2_update_extract_rx,
-        &mut app.step5_terminal,
-        &mut app.step5_terminal_error,
-        &mut app.step5_prep_rx,
-        &mut app.step5_pending_start,
-    );
+    let mut poll_ctx = crate::app::app_update_cycle::PollBeforeRenderContext {
+        state: &mut app.state,
+        step2_scan_rx: &mut app.step2_scan_rx,
+        step2_cancel: &mut app.step2_cancel,
+        step2_progress_queue: &mut app.step2_progress_queue,
+        step2_update_check_rx: &mut app.step2_update_check_rx,
+        step2_update_download_rx: &mut app.step2_update_download_rx,
+        step2_update_extract_rx: &mut app.step2_update_extract_rx,
+        step5_terminal: &mut app.step5_terminal,
+        step5_terminal_error: &mut app.step5_terminal_error,
+        step5_prep_rx: &mut app.step5_prep_rx,
+        step5_pending_start: &mut app.step5_pending_start,
+    };
+    let mut step5_requested_repaint =
+        crate::app::app_update_cycle::poll_before_render(&mut poll_ctx);
     if !install_was_running && app.state.step5.install_running {
         app.step5_console_view.request_input_focus = true;
     }

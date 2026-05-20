@@ -78,7 +78,10 @@ fn collect_setup_tra_files(base: &Path, out: &mut Vec<PathBuf>) {
             .file_name()
             .and_then(|value| value.to_str())
             .is_some_and(|name| {
-                name.ends_with(".tra") && name.to_ascii_lowercase().contains("setup")
+                path.extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("tra"))
+                    && name.to_ascii_lowercase().contains("setup")
             })
             && !out.iter().any(|existing| existing == &path)
         {
@@ -99,21 +102,12 @@ fn parse_tra_string_map(text: &str) -> HashMap<String, String> {
         };
         let key = key.trim().to_string();
         let rhs = rhs.trim();
-        let value = if let Some(rest) = rhs.strip_prefix('~') {
-            rest.split('~')
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_string()
-        } else if let Some(rest) = rhs.strip_prefix('"') {
-            rest.split('"')
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_string()
-        } else {
-            continue;
+        let value = match rhs.chars().next() {
+            Some('~') => rhs[1..].split('~').next().unwrap_or_default().trim(),
+            Some('"') => rhs[1..].split('"').next().unwrap_or_default().trim(),
+            _ => continue,
         };
+        let value = value.to_string();
         if !value.is_empty() {
             out.insert(key, value);
         }

@@ -1,32 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `RegistryStore` — load/save for `modlists.json`.
-//
-// Per Phase 3 P3.T2 + P3.T4 + P3.T10:
-//   - `new_default()`            → resolves the on-disk path via
-//                                  `bio::platform_defaults::app_config_file`.
-//   - `load()`                   → returns `Ok(empty)` when file is absent;
-//                                  `Err(Corrupt)` when present but unparseable;
-//                                  `Err(Io)` for other IO errors.
-//                                  **Pure read-only.** Never renames/mutates
-//                                  the file on disk.
-//   - `save(&registry)`          → pretty JSON. Atomic via temp file +
-//                                  rename (POSIX `rename` / Windows
-//                                  `MoveFileEx MOVEFILE_REPLACE_EXISTING`).
-//   - `backup_corrupt_file()`    → renames the on-disk file to
-//                                  `modlists.json.corrupt-<unix-ts>` and
-//                                  returns the new path. Called explicitly
-//                                  by `OrchestratorApp::new()` on the error
-//                                  path; `load()` itself stays pure (P3.T10).
-//
-// Mirrors the shape of `bio::settings::store::SettingsStore` — read it as a
-// reference; not modified.
-//
-// SPEC: §13.1, §13.14.
-
-// rationale: `#[must_use]` on trivial path/ctor accessors is churn (Cat 3).
-#![allow(clippy::must_use_candidate)]
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -35,7 +8,6 @@ use crate::platform_defaults::app_config_file;
 use crate::registry::errors::RegistryError;
 use crate::registry::model::ModlistRegistry;
 
-/// Filename used inside the platform config dir.
 const REGISTRY_FILE_NAME: &str = "modlists.json";
 
 #[derive(Debug, Clone)]
@@ -44,32 +16,21 @@ pub struct RegistryStore {
 }
 
 impl RegistryStore {
-    /// Construct the store pointing at the platform-default config dir.
+    #[must_use]
     pub fn new_default() -> Self {
         let path = app_config_file(REGISTRY_FILE_NAME, ".");
         Self { path }
     }
 
-    /// Override path (useful for tests).
     pub fn new_with_path(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
 
-    /// The on-disk file path. Surfaced for the terminal error UI.
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Read the registry from disk.
-    ///
-    /// - Missing file → `Ok(ModlistRegistry::default())` (first-launch case).
-    /// - Present-but-unreadable file → `Err(Corrupt {...})` with the path
-    ///   and the upstream parse error.
-    /// - IO failure (permission denied, file-locked, etc.) → `Err(Io(...))`.
-    ///
-    /// **Pure read-only.** Even when the file is corrupt, `load` never
-    /// renames or otherwise mutates it — that's the caller's job via
-    /// `backup_corrupt_file`.
     pub fn load(&self) -> Result<ModlistRegistry, RegistryError> {
         let raw = match std::fs::read_to_string(&self.path) {
             Ok(s) => s,
@@ -87,19 +48,13 @@ impl RegistryStore {
         }
     }
 
-    /// Persist the registry to disk **atomically** via temp file + rename.
-    ///
-    /// The temp file is written next to the target (same filesystem) so the
-    /// rename is atomic on POSIX (`rename(2)` requires same-FS) and on Windows
-    /// (`MoveFileEx MOVEFILE_REPLACE_EXISTING` semantics — `std::fs::rename`
-    /// uses these on Windows by default).
-    ///
-    /// Creates the parent directory if missing.
     pub fn save(&self, registry: &ModlistRegistry) -> Result<(), RegistryError> {
         let raw = serde_json::to_string_pretty(registry)?;
 
-        if let Some(parent) = self.path.parent()
-            && !parent.as_os_str().is_empty()
+        if let Some(parent) = self
+            .path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
         {
             std::fs::create_dir_all(parent).map_err(RegistryError::Io)?;
         }
@@ -110,12 +65,6 @@ impl RegistryStore {
         Ok(())
     }
 
-    /// Side-effect: rename the on-disk file (if present) to
-    /// `modlists.json.corrupt-<unix-ts>` and return the new path. Used by
-    /// `OrchestratorApp::new` on the error path after `load()` returns
-    /// `Err(Corrupt | Io)`.
-    ///
-    /// **Not called by `load`** — `load` stays pure (P3.T10).
     pub fn backup_corrupt_file(&self) -> std::io::Result<PathBuf> {
         let ts = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -186,7 +135,7 @@ mod tests {
             }
             other => panic!("expected Corrupt, got {other:?}"),
         }
-        // Corrupt file remains intact — load is pure.
+
         let still_there = std::fs::read_to_string(&path).expect("file still there");
         assert_eq!(still_there, "{ not json");
         let _ = std::fs::remove_file(&path);
@@ -228,7 +177,6 @@ mod tests {
 
     #[test]
     fn save_uses_tmp_file_then_rename() {
-        // Indirect check: ensure no `.tmp` lingers after a successful save.
         let path = temp_path("atomic");
         let store = RegistryStore::new_with_path(&path);
         store.save(&ModlistRegistry::default()).expect("save");

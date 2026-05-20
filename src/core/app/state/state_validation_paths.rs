@@ -29,8 +29,7 @@ pub(super) fn run_path_check(s: &Step1State) -> (bool, String) {
                 || s.imports_modlist())
             {
                 errors.push(format!(
-                    "Mods Folder has no .tp2 files within scan depth {}",
-                    depth
+                    "Mods Folder has no .tp2 files within scan depth {depth}"
                 ));
             }
         }

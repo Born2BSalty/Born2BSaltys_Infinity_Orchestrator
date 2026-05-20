@@ -21,7 +21,7 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     let jump_ids = prompt_popup_nav::collect_text_prompt_jump_ids(state, &title, &text);
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
-    egui::Window::new(format!("Parsed prompts - {}", title))
+    egui::Window::new(format!("Parsed prompts - {title}"))
         .open(&mut open)
         .resizable(true)
         .collapsible(false)
@@ -112,7 +112,7 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
     )
 }
 
-fn render_prompt_toolbar_popup(ui: &mut egui::Ui, state: &mut WizardState) {
+fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
     let title = state.step2.prompt_popup_title.clone();
     let entries = prompt_popup_nav::collect_active_prompt_toolbar_entries(state);
     let mut open = state.step2.prompt_popup_open;

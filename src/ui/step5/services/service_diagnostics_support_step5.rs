@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::app::state::{Step1State, WizardState};
 use crate::app::terminal::EmbeddedTerminal;
 
-pub(crate) fn apply_dev_defaults(state: &mut WizardState, dev_mode: bool) {
+pub(crate) const fn apply_dev_defaults(state: &mut WizardState, dev_mode: bool) {
     if dev_mode {
         state.step1.bio_full_debug = true;
         state.step1.log_raw_output_dev = true;

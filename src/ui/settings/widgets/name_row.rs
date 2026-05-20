@@ -1,25 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `name_row` — edit-in-place name *control* used by the General sub-tab.
-//
-// The label + hint + dashed-rule chassis is owned by the caller's
-// `settings_row` wrapper (the wireframe wraps `NameRow` in the same
-// `SettingsRow` chassis as every other General setting — see
-// `wireframe-preview/screens.jsx::NameRow`). This widget renders only the
-// right-anchored control:
-//   - Display mode: the name (or the `click to set your name` placeholder)
-//     + an `edit` button.
-//   - Edit mode: a single-line TextEdit (placeholder `@yourhandle`) + a
-//     primary `save` button + a `cancel` button.
-//
-// Caller passes an `&mut String` for the persisted value, an `&mut bool` for
-// the editing toggle, and an `&mut String` scratch buffer for the in-progress
-// edit text.
-
-// rationale: `f32 as u8` casts are colour-channel / pixel roundings of small
-// positive values — correct by construction (Cat 2).
-#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use eframe::egui;
 
@@ -39,8 +19,6 @@ pub fn render(
     ui.horizontal(|ui| {
         if *editing {
             let margin = egui::Margin::symmetric(8, 4);
-            // Shared input primitive — border on the OUTER (allocated) box,
-            // not egui's margin-inset inner rect (app-wide indent fix).
             let _response = redesign_text_input(
                 ui,
                 palette,

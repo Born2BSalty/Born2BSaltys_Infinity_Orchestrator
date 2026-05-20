@@ -1,25 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `tab_accounts` — Accounts sub-tab renderer.
-//
-// Per SPEC §11.4: three service cards.
-//   - GitHub     — `connect` opens BIO's OAuth flow via `oauth_glue::start_github_flow`;
-//                  `disconnect` clears the token via `oauth_glue::disconnect_github`.
-//   - Nexus Mods — `disabled` (not yet wired). Hover tooltip explains.
-//   - Mega       — same as Nexus Mods.
 
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::oauth_glue;
-use crate::ui::settings::widgets::account_card::{self, CardState};
+use crate::ui::settings::widgets::account_card::{self, AccountCard, CardState};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
     let login = orchestrator.wizard_state.github_auth_login.clone();
 
-    // GitHub — fully wired.
     let gh_state = if login.trim().is_empty() {
         CardState::NotConnected
     } else {
@@ -30,12 +21,14 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let gh_clicked = account_card::render(
         ui,
         palette,
-        "GH",
-        "GitHub",
-        gh_state,
-        "connect",
-        "disconnect",
-        false, // not disabled
+        AccountCard {
+            initials: "GH",
+            service_name: "GitHub",
+            state: gh_state,
+            connect_label: "connect",
+            disconnect_label: "disconnect",
+            disabled: false,
+        },
     );
     if gh_clicked {
         if login.trim().is_empty() {
@@ -45,27 +38,29 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         }
     }
 
-    // Nexus Mods — coming later; button is non-clickable.
     let _ = account_card::render(
         ui,
         palette,
-        "NX",
-        "Nexus Mods",
-        CardState::NotConnected,
-        "connect",
-        "disconnect",
-        true, // disabled
+        AccountCard {
+            initials: "NX",
+            service_name: "Nexus Mods",
+            state: CardState::NotConnected,
+            connect_label: "connect",
+            disconnect_label: "disconnect",
+            disabled: true,
+        },
     );
 
-    // Mega — coming later; button is non-clickable.
     let _ = account_card::render(
         ui,
         palette,
-        "M",
-        "Mega",
-        CardState::NotConnected,
-        "connect",
-        "disconnect",
-        true, // disabled
+        AccountCard {
+            initials: "M",
+            service_name: "Mega",
+            state: CardState::NotConnected,
+            connect_label: "connect",
+            disconnect_label: "disconnect",
+            disabled: true,
+        },
     );
 }

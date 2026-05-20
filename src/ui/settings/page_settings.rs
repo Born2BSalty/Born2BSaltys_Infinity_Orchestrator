@@ -1,13 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `page_settings` — the Settings destination's screen entry.
-//
-// Per Phase 4 P4.T1: renders the screen title + the file-folder tab strip +
-// the active tab's body. Tab selection persists in
-// `SettingsScreenState::active_tab`.
-//
-// SPEC: §11.
 
 use eframe::egui;
 

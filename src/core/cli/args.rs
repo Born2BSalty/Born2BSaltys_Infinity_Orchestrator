@@ -26,16 +26,15 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Launch 5-step GUI shell
     #[command(name = "gui")]
     Gui,
-    /// Normal install for (BG1EE,BG2EE,IWDEE)
+
     #[command(name = "normal")]
     Normal(NormalArgs),
-    /// EET install for (eet)
+
     #[command(name = "eet")]
     Eet(EetArgs),
-    /// Scan utilities
+
     #[command(name = "scan")]
     Scan(ScanArgs),
 }
@@ -97,15 +96,6 @@ pub struct CommonOptions {
         default_missing_value = "true"
     )]
     pub skip_installed: bool,
-    #[arg(
-        long,
-        env = "ABORT_ON_WARNINGS",
-        default_value_t = false,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        default_missing_value = "true"
-    )]
-    pub abort_on_warnings: bool,
     #[arg(long, env = "TIMEOUT", default_value_t = 3600)]
     pub timeout: usize,
     #[arg(
@@ -125,6 +115,36 @@ pub struct CommonOptions {
     pub strict_matching: bool,
     #[arg(
         long,
+        env = "OVERWRITE",
+        default_value_t = false,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true"
+    )]
+    pub overwrite: bool,
+    #[arg(long, env = "TICK", default_value_t = 500)]
+    pub tick: u64,
+    #[arg(long, env = "LOOKBACK", default_value_t = 10)]
+    pub lookback: usize,
+    #[command(flatten)]
+    pub install_switches: InstallSwitches,
+    #[command(flatten)]
+    pub scan_switches: ScanSwitches,
+}
+
+#[derive(Args, Debug)]
+pub struct InstallSwitches {
+    #[arg(
+        long,
+        env = "ABORT_ON_WARNINGS",
+        default_value_t = false,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true"
+    )]
+    pub abort_on_warnings: bool,
+    #[arg(
+        long,
         env = "DOWNLOAD",
         default_value_t = true,
         action = ArgAction::Set,
@@ -134,15 +154,6 @@ pub struct CommonOptions {
     pub download: bool,
     #[arg(
         long,
-        env = "OVERWRITE",
-        default_value_t = false,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        default_missing_value = "true"
-    )]
-    pub overwrite: bool,
-    #[arg(
-        long,
         env = "CHECK_LAST_INSTALLED",
         default_value_t = true,
         action = ArgAction::Set,
@@ -150,10 +161,10 @@ pub struct CommonOptions {
         default_missing_value = "true"
     )]
     pub check_last_installed: bool,
-    #[arg(long, env = "TICK", default_value_t = 500)]
-    pub tick: u64,
-    #[arg(long, env = "LOOKBACK", default_value_t = 10)]
-    pub lookback: usize,
+}
+
+#[derive(Args, Debug)]
+pub struct ScanSwitches {
     #[arg(
         long,
         env = "CASEFOLD",
@@ -177,10 +188,9 @@ pub struct ScanArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum ScanCommand {
-    /// Scan and print components
     #[command(name = "components")]
     Components(ScanComponentsArgs),
-    /// Scan and print available languages
+
     #[command(name = "languages")]
     Languages(ScanLanguagesArgs),
 }

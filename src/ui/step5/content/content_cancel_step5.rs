@@ -7,7 +7,7 @@ use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
 
 pub(crate) fn render_cancel_confirm(
-    ui: &mut egui::Ui,
+    ui: &egui::Ui,
     state: &mut WizardState,
     terminal: Option<&mut EmbeddedTerminal>,
 ) {

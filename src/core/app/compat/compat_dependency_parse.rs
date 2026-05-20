@@ -90,16 +90,16 @@ fn requirement_cache() -> &'static Mutex<HashMap<String, CachedRequirements>> {
 }
 
 fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
-    match fs::metadata(tp2_path) {
-        Ok(meta) => FileCacheStamp {
-            modified: meta.modified().ok(),
-            len: meta.len(),
-        },
-        Err(_) => FileCacheStamp {
+    fs::metadata(tp2_path).map_or(
+        FileCacheStamp {
             modified: None,
             len: 0,
         },
-    }
+        |meta| FileCacheStamp {
+            modified: meta.modified().ok(),
+            len: meta.len(),
+        },
+    )
 }
 
 fn parsed_requirement_to_core(parsed: ParsedComponentRequirement) -> ComponentRequirement {

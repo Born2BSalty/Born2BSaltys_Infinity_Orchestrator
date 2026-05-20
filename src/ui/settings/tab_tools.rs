@@ -1,15 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `tab_tools` — Tools sub-tab renderer.
-//
-// Per SPEC §11.3, two writable binary rows backed by `Step1Settings`:
-//   - `weidu`         → `Step1Settings::weidu_binary`
-//   - `mod_installer` → `Step1Settings::mod_installer_binary`
-//
-// Validation runs in `validate_now::check_binary`: absolute paths are checked
-// with `is_file`; bare names are resolved against `$PATH` so the row tells
-// the truth about which binary will actually run.
 
 use eframe::egui;
 
@@ -17,7 +7,7 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::state_settings::{PathStatus, PathStatusTone};
 use crate::ui::settings::validate_debounce;
 use crate::ui::settings::validate_now;
-use crate::ui::settings::widgets::path_row::{self, PathRowMode};
+use crate::ui::settings::widgets::path_row::{self, PathRow, PathRowMode};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
@@ -84,11 +74,13 @@ fn bin_row_for_field(
             path_row::render(
                 ui,
                 palette,
-                label,
-                v,
-                hint.as_deref(),
-                tone,
-                PathRowMode::File,
+                PathRow {
+                    label,
+                    mono_value: v,
+                    hint: hint.as_deref(),
+                    tone,
+                    mode: PathRowMode::File,
+                },
                 || changed_field = Some(field),
             );
         }

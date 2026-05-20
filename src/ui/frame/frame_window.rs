@@ -10,6 +10,7 @@ pub const APP_TITLE: &str = concat!(
     env!("CARGO_PKG_VERSION")
 );
 
+#[must_use]
 pub fn native_options() -> NativeOptions {
     NativeOptions {
         viewport: egui::ViewportBuilder::default()

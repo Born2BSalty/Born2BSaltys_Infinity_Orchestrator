@@ -12,8 +12,6 @@ use crate::ui::layout::{
 use crate::ui::shared::typography_global as typo;
 
 pub fn render_archive_backup_content(ui: &mut egui::Ui, s: &mut Step1State) {
-    let _legacy_archive_renderer: fn(&mut egui::Ui, &mut Step1State) =
-        super::content_step1::render_mods_archive_content;
     ui.label(typo::section_title("Mods Archive / Backup"));
     path_row_dir(ui, "Mods Archive", &mut s.mods_archive_folder);
     path_row_dir(ui, "Backup", &mut s.mods_backup_folder);

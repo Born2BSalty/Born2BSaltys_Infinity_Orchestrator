@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use walkdir::WalkDir;
 
+#[must_use]
 pub fn find_best_readme(mods_root: &Path, tp2_path: &str, mod_name: &str) -> Option<String> {
     let tp2 = Path::new(tp2_path);
     let rel = tp2.strip_prefix(mods_root).ok()?;
@@ -75,7 +76,7 @@ pub fn find_best_readme(mods_root: &Path, tp2_path: &str, mod_name: &str) -> Opt
             _ => 0,
         };
         if let Ok(rel) = path.strip_prefix(&mod_dir) {
-            let depth = rel.components().count() as i32;
+            let depth = i32::try_from(rel.components().count()).unwrap_or(i32::MAX);
             score -= depth * 2;
             let rel_l = rel.to_string_lossy().to_ascii_lowercase();
             if rel_l.contains("backup") || rel_l.contains("old") || rel_l.contains("temp") {

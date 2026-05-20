@@ -63,6 +63,7 @@ impl Component {
         })
     }
 
+    #[must_use]
     pub fn key_eq(&self, other: &Self) -> bool {
         self.tp_file.eq_ignore_ascii_case(&other.tp_file)
             && self.name.eq_ignore_ascii_case(&other.name)
@@ -70,6 +71,7 @@ impl Component {
             && self.component.eq_ignore_ascii_case(&other.component)
     }
 
+    #[must_use]
     pub fn strict_eq(&self, other: &Self) -> bool {
         self.key_eq(other)
             && self.component_name == other.component_name
@@ -127,7 +129,7 @@ mod tests {
             lang: "0".into(),
             component: "1".into(),
             component_name: "X".into(),
-            sub_component: "".into(),
+            sub_component: String::new(),
             version: "v1".into(),
             wlb_inputs: None,
         };

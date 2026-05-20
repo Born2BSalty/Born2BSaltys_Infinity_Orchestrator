@@ -8,6 +8,7 @@ pub const SPACE_LG: f32 = 12.0;
 
 pub const BORDER_THIN: f32 = 1.0;
 pub const RADIUS_SM: f32 = 4.0;
+pub const RADIUS_SM_U8: u8 = 4;
 
 pub const STEP1_ADVANCED_MIN_H: f32 = 142.0;
 pub const STEP1_SIDE_PANEL_MIN_H: f32 = 204.0;

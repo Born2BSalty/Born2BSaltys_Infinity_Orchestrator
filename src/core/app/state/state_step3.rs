@@ -17,12 +17,12 @@ pub struct Step3ItemState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Step3State {
+pub struct Step3State<Flag = bool> {
     pub active_game_tab: String,
     pub bgee_items: Vec<Step3ItemState>,
     pub bg2ee_items: Vec<Step3ItemState>,
-    pub bgee_has_conflict: bool,
-    pub bg2ee_has_conflict: bool,
+    pub bgee_has_conflict: Flag,
+    pub bg2ee_has_conflict: Flag,
     pub bgee_selected: Vec<usize>,
     pub bg2ee_selected: Vec<usize>,
     pub bgee_drag_from: Option<usize>,
@@ -51,8 +51,8 @@ pub struct Step3State {
     pub bg2ee_undo_stack: Vec<Vec<Step3ItemState>>,
     pub bgee_redo_stack: Vec<Vec<Step3ItemState>>,
     pub bg2ee_redo_stack: Vec<Vec<Step3ItemState>>,
-    pub jump_to_selected_requested: bool,
-    pub prompt_edit_open: bool,
+    pub jump_to_selected_requested: Flag,
+    pub prompt_edit_open: Flag,
     pub prompt_edit_mode: String,
     pub prompt_edit_key: String,
     pub prompt_edit_component_key: String,

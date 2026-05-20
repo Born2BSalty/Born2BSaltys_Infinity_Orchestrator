@@ -107,7 +107,7 @@ fn copy_appdata_tree_filtered(
         let ext = src_path
             .extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.to_ascii_lowercase())
+            .map(str::to_ascii_lowercase)
             .unwrap_or_default();
         if !matches!(
             ext.as_str(),

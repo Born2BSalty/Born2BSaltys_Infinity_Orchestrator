@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-mod constraints {
+pub mod constraints {
     use crate::app::state::Step3ItemState;
 
-    pub(crate) fn snap_to_parent_boundary(remaining: &[Step3ItemState], target: usize) -> usize {
+    #[must_use]
+    pub fn snap_to_parent_boundary(remaining: &[Step3ItemState], target: usize) -> usize {
         let mut candidates: Vec<usize> = remaining
             .iter()
             .enumerate()
@@ -26,7 +27,8 @@ mod constraints {
         best
     }
 
-    pub(crate) fn enforce_child_parent_constraint(
+    #[must_use]
+    pub fn enforce_child_parent_constraint(
         remaining: &[Step3ItemState],
         insert_at: usize,
         moving: &[Step3ItemState],
@@ -65,7 +67,8 @@ mod constraints {
         if d_start <= d_end { start } else { end }
     }
 
-    pub(crate) fn hard_clamp_insert_at(
+    #[must_use]
+    pub fn hard_clamp_insert_at(
         remaining: &[Step3ItemState],
         insert_at: usize,
         moving: &[Step3ItemState],
@@ -106,6 +109,7 @@ mod constraints {
         clamped
     }
 
+    #[must_use]
     fn mod_key(item: &Step3ItemState) -> String {
         format!(
             "{}::{}",
@@ -115,8 +119,9 @@ mod constraints {
     }
 }
 
-mod math {
-    pub(crate) fn compute_desired_block_start(
+pub mod math {
+    #[must_use]
+    pub fn compute_desired_block_start(
         pointer_y: f32,
         list_top_y: f32,
         row_pitch: f32,
@@ -125,20 +130,34 @@ mod math {
         n: usize,
         k: usize,
     ) -> usize {
-        let row_pitch = row_pitch.max(1.0);
+        let row_pitch = f64::from(row_pitch.max(1.0));
         let desired_grabbed_row =
-            ((pointer_y - list_top_y - grab_offset) / row_pitch).floor() as isize;
-        let max_start = (n.saturating_sub(k)) as isize;
-        (desired_grabbed_row - grab_pos_in_block as isize).clamp(0, max_start) as usize
+            ((f64::from(pointer_y) - f64::from(list_top_y) - f64::from(grab_offset)) / row_pitch)
+                .floor();
+        let desired_start =
+            desired_grabbed_row - f64::from(u32::try_from(grab_pos_in_block).unwrap_or(u32::MAX));
+        let max_start = n.saturating_sub(k);
+
+        let mut start = 0usize;
+        while start < max_start {
+            let next = start + 1;
+            let next_as_float = f64::from(u32::try_from(next).unwrap_or(u32::MAX));
+            if next_as_float > desired_start {
+                break;
+            }
+            start = next;
+        }
+        start
     }
 }
 
-mod slots {
+pub mod slots {
     use eframe::egui;
 
     use crate::app::state::Step3ItemState;
 
-    pub(crate) fn visible_slot_to_insert_at(
+    #[must_use]
+    pub fn visible_slot_to_insert_at(
         items: &[Step3ItemState],
         block: &[usize],
         visible_rows: &[(usize, egui::Rect)],
@@ -177,11 +196,11 @@ mod slots {
     }
 }
 
-pub(crate) use constraints::enforce_child_parent_constraint;
-pub(crate) use constraints::hard_clamp_insert_at;
-pub(crate) use constraints::snap_to_parent_boundary;
-pub(crate) use math::compute_desired_block_start;
-pub(crate) use slots::visible_slot_to_insert_at;
+pub use constraints::enforce_child_parent_constraint;
+pub use constraints::hard_clamp_insert_at;
+pub use constraints::snap_to_parent_boundary;
+pub use math::compute_desired_block_start;
+pub use slots::visible_slot_to_insert_at;
 
 #[cfg(test)]
 mod tests {

@@ -1,36 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `NavDestination` — top-level orchestrator destinations.
-//
-// Per Phase 2 P2.T1: the four rail items (Home / Install / Create / Settings)
-// in SPEC §2.1 order, plus an off-rail `Workspace` destination (Phase 6 wires
-// the real modlist_id; Phase 2 leaves it `None`).
-//
-// `rail_items()` returns an **owned** `[NavDestination; 4]` (per L6) — a
-// `&'static [NavDestination]` cannot be const-constructed because
-// `Workspace { modlist_id: Option<String> }` carries a heap-allocated
-// `String` and the enum is not `'static`-constructible at const-eval time.
-// The four rail variants are all unit variants, so construction at call time
-// is cheap (4 enum discriminants).
-//
-// SPEC §2.1: Explore is intentionally omitted from v1 alpha (Appendix C
-// lists it as a future v2 track).
 
-// rationale: small router enum with trivial label/icon/predicate accessors —
-// `Self`/`const fn`/`#[must_use]` churn and the doc-paragraph-length lint add
-// noise without behavior value (Cat 3).
-#![allow(
-    clippy::use_self,
-    clippy::missing_const_for_fn,
-    clippy::must_use_candidate,
-    clippy::too_long_first_doc_paragraph
-)]
-
-/// The top-level orchestrator destination router. Variants 1-4 are the rail
-/// items in SPEC §2.1 order; `Workspace` is off-rail and reached from the
-/// Home stub's dev-mode button in Phase 2 (real entry from Home cards in
-/// Phase 5).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum NavDestination {
     #[default]
@@ -44,49 +14,38 @@ pub enum NavDestination {
 }
 
 impl NavDestination {
-    /// The wireframe-verbatim rail label (SPEC §2.1).
-    pub fn label(&self) -> &'static str {
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
         match self {
-            NavDestination::Home => "Home",
-            NavDestination::Install => "Install",
-            NavDestination::Create => "Create",
-            NavDestination::Settings => "Settings",
-            NavDestination::Workspace { .. } => "Workspace",
+            Self::Home => "Home",
+            Self::Install => "Install",
+            Self::Create => "Create",
+            Self::Settings => "Settings",
+            Self::Workspace { .. } => "Workspace",
         }
     }
 
-    /// The glyph shown in the rail next to the label (SPEC §2.1).
-    pub fn icon(&self) -> &'static str {
+    #[must_use]
+    pub const fn icon(&self) -> &'static str {
         match self {
-            NavDestination::Home => "\u{2302}",             // ⌂
-            NavDestination::Install => "\u{2193}",          // ↓
-            NavDestination::Create => "\u{270E}",           // ✎
-            NavDestination::Settings => "\u{2699}",         // ⚙
-            NavDestination::Workspace { .. } => "\u{2630}", // ☰ (workspace — not shown in rail)
+            Self::Home => "\u{2302}",
+            Self::Install => "\u{2193}",
+            Self::Create => "\u{270E}",
+            Self::Settings => "\u{2699}",
+            Self::Workspace { .. } => "\u{2630}",
         }
     }
 
-    /// The four rail items in SPEC §2.1 order. Owned array (L6); the four
-    /// rail variants are unit variants so construction is trivial.
-    pub fn rail_items() -> [NavDestination; 4] {
-        [
-            NavDestination::Home,
-            NavDestination::Install,
-            NavDestination::Create,
-            NavDestination::Settings,
-        ]
+    #[must_use]
+    pub const fn rail_items() -> [Self; 4] {
+        [Self::Home, Self::Install, Self::Create, Self::Settings]
     }
 
-    /// True for the four rail destinations; false for `Workspace`. Used by the
-    /// rail-active-state highlight (Home stays "active" while in Workspace per
-    /// SPEC §2.1, since Workspace is reached from a Home card).
-    pub fn is_rail_item(&self) -> bool {
+    #[must_use]
+    pub const fn is_rail_item(&self) -> bool {
         matches!(
             self,
-            NavDestination::Home
-                | NavDestination::Install
-                | NavDestination::Create
-                | NavDestination::Settings,
+            Self::Home | Self::Install | Self::Create | Self::Settings,
         )
     }
 }

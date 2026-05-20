@@ -47,13 +47,12 @@ pub(crate) fn mod_has_current_version(state: &WizardState, game_tab: &str, tp_fi
     };
     mods.iter()
         .find(|mod_state| mod_state.tp_file == tp_file)
-        .map(|mod_state| {
+        .is_some_and(|mod_state| {
             mod_state
                 .components
                 .iter()
                 .any(|component| parse_version(&component.raw_line).is_some())
         })
-        .unwrap_or(false)
 }
 
 pub(crate) fn version_is_update(

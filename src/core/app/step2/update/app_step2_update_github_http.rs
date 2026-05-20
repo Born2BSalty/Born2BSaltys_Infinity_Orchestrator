@@ -45,7 +45,7 @@ fn github_api_request(agent: &ureq::Agent, url: &str) -> Result<ureq::Response, 
 fn format_github_request_error(url: &str, err: ureq::Error) -> String {
     match err {
         ureq::Error::Status(code, response) => format_github_status_error(url, code, &response),
-        other => other.to_string(),
+        other @ ureq::Error::Transport(_) => other.to_string(),
     }
 }
 

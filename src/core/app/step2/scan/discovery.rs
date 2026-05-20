@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 
 use crate::app::state::{Step1State, Step2ModState};
 
+#[must_use]
 pub fn resolve_scan_game_dir(step1: &Step1State) -> Option<PathBuf> {
     let mut candidates: Vec<&str> = Vec::new();
     match step1.game_install.as_str() {
@@ -56,8 +57,12 @@ pub fn group_tp2s(mod_root: &Path, depth: usize) -> Result<Vec<(String, Vec<Path
         if !entry.file_type().is_file() {
             continue;
         }
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if name.ends_with(".tp2") {
+        if entry
+            .path()
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("tp2"))
+        {
             tp2_paths.push(entry.path().to_path_buf());
         }
     }
@@ -75,6 +80,7 @@ pub fn group_tp2s(mod_root: &Path, depth: usize) -> Result<Vec<(String, Vec<Path
     Ok(grouped.into_iter().collect())
 }
 
+#[must_use]
 pub fn build_preview_mods(grouped: &[(String, Vec<PathBuf>)]) -> Vec<Step2ModState> {
     grouped
         .iter()
@@ -86,8 +92,7 @@ pub fn build_preview_mods(grouped: &[(String, Vec<PathBuf>)]) -> Vec<Step2ModSta
                 .unwrap_or_default();
             let tp_file = Path::new(&tp2_path)
                 .file_name()
-                .map(|v| v.to_string_lossy().to_string())
-                .unwrap_or_else(|| display_name.clone());
+                .map_or_else(|| display_name.clone(), |v| v.to_string_lossy().to_string());
             Step2ModState {
                 name: display_name,
                 tp_file,
@@ -108,11 +113,12 @@ pub fn build_preview_mods(grouped: &[(String, Vec<PathBuf>)]) -> Vec<Step2ModSta
         .collect()
 }
 
+#[must_use]
 pub fn display_name_from_group_key(group_key: &str) -> String {
-    Path::new(group_key)
-        .file_name()
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| group_key.to_string())
+    Path::new(group_key).file_name().map_or_else(
+        || group_key.to_string(),
+        |v| v.to_string_lossy().to_string(),
+    )
 }
 
 fn mod_group_key(mod_root: &Path, tp2_path: &Path, tp2_dirs: &BTreeSet<PathBuf>) -> String {
@@ -141,11 +147,10 @@ fn mod_group_key(mod_root: &Path, tp2_path: &Path, tp2_dirs: &BTreeSet<PathBuf>)
             return best_group;
         }
     }
-    tp2_path
-        .parent()
-        .and_then(|p| p.file_name())
-        .map(|v| v.to_string_lossy().to_string())
-        .unwrap_or_else(|| tp2_path.display().to_string())
+    tp2_path.parent().and_then(|p| p.file_name()).map_or_else(
+        || tp2_path.display().to_string(),
+        |v| v.to_string_lossy().to_string(),
+    )
 }
 
 fn named_package_group_key(

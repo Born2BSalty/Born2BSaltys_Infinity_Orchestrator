@@ -7,14 +7,17 @@ use super::state_validation;
 impl WizardState {
     pub const STEP_COUNT: usize = 5;
 
-    pub fn can_go_back(&self) -> bool {
+    #[must_use]
+    pub const fn can_go_back(&self) -> bool {
         self.current_step > 0
     }
 
-    pub fn can_go_next(&self) -> bool {
+    #[must_use]
+    pub const fn can_go_next(&self) -> bool {
         self.current_step + 1 < Self::STEP_COUNT
     }
 
+    #[must_use]
     pub fn is_step1_valid(&self) -> bool {
         state_validation::is_step1_valid(&self.step1)
     }
@@ -25,21 +28,21 @@ impl WizardState {
             Some(state_validation::step1_mods_folder_has_tp2(&self.step1));
     }
 
-    pub fn open_step1_clean_confirm(&mut self) {
+    pub const fn open_step1_clean_confirm(&mut self) {
         self.step1_clean_confirm_open = true;
     }
 
-    pub fn clear_step1_clean_confirm(&mut self) {
+    pub const fn clear_step1_clean_confirm(&mut self) {
         self.step1_clean_confirm_open = false;
     }
 
     pub fn record_step4_save_error(&mut self, msg: String) {
-        self.step5.last_status_text = msg.clone();
+        self.step5.last_status_text.clone_from(&msg);
         self.step4_save_error_text = msg;
         self.step4_save_error_open = true;
     }
 
-    pub fn dismiss_step4_save_error(&mut self) {
+    pub const fn dismiss_step4_save_error(&mut self) {
         self.step4_save_error_open = false;
     }
 
@@ -51,18 +54,19 @@ impl WizardState {
         self.last_step2_sync_signature = None;
     }
 
-    pub fn go_back(&mut self) {
+    pub const fn go_back(&mut self) {
         if self.can_go_back() {
             self.current_step -= 1;
         }
     }
 
-    pub fn go_next(&mut self) {
+    pub const fn go_next(&mut self) {
         if self.can_go_next() {
             self.current_step += 1;
         }
     }
 
+    #[must_use]
     pub fn with_step1(step1: Step1State) -> Self {
         Self {
             current_step: 0,

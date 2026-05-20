@@ -83,16 +83,14 @@ fn backup_target_dir_if_nonempty(target: &str) -> std::io::Result<Option<PathBuf
 
     let parent = target_path
         .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let name = target_path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("target");
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let backup = parent.join(format!("_bio_backup_{name}_{ts}"));
 
     fs::rename(&target_path, &backup)?;

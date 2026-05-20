@@ -35,7 +35,7 @@ pub(crate) struct ComponentRenderState<'a> {
     pub enforce_meta_for: &'a mut Vec<usize>,
 }
 
-pub(crate) fn reborrow_render_state<'a>(
+pub(crate) const fn reborrow_render_state<'a>(
     state: &'a mut ComponentRenderState<'_>,
 ) -> ComponentRenderState<'a> {
     ComponentRenderState {

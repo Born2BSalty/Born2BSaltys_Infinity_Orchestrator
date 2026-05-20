@@ -1,178 +1,167 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `tab_advanced` — Advanced sub-tab renderer.
-//
-// Per Phase 4 P4.T6 (SPEC §11.5):
-//   - Two equal-width columns (`ui.columns(2, ...)`) matching the wireframe's
-//     `gridTemplateColumns: "1fr 1fr"`.
-//   - Left column "Timing & limits": ValueRows with absorb-the-gate pattern.
-//     An empty input means "use BIO default" — internally maps to
-//     `<field>_enabled = false` + `<field> = default`. A filled input maps to
-//     `enabled = true` + parsed value. We do **not** remove the boolean
-//     `_enabled` fields from `Step1Settings` (CRITICAL DIRECTIVE).
-//   - Right column "Install behavior" + "WeiDU command-line flags":
-//     ToggleRows.
-//
-// Each row uses an end-capped layout (label left-aligned, optional hint mid,
-// control flush-right) so longer hint copy never pushes the column wider —
-// the right column's control always stops at the column's right edge.
-//
-// SPEC: §11.5.
-
-// rationale: `f32 as u8` casts are pixel roundings of small positive
-// constants — correct by construction (Cat 2); the tab render fn's argument
-// count / length mirror the sub-tab's field set and a split would not aid
-// readability (Cat 3).
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::too_many_arguments,
-    clippy::too_many_lines
-)]
 
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_PX, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_chrome_bg, redesign_input_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_PANEL_RADIUS_U8, ThemePalette,
+    redesign_accent, redesign_border_strong, redesign_chrome_bg, redesign_input_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
 
     ui.columns(2, |cols| {
-        // ---------------- Left column: Timing & limits ----------------
-        {
-            let ui = &mut cols[0];
-            col_header(ui, palette, "Timing & limits");
-            value_row_gated_usize(
-                ui,
-                palette,
-                "Custom scan depth",
-                None,
-                &mut orchestrator.wizard_state.step1.depth,
-                &mut orchestrator.wizard_state.step1.custom_scan_depth,
-                5,
-                "default 5",
-            );
-            value_row_gated_usize(
-                ui,
-                palette,
-                "Mod install timeout",
-                Some("sec"),
-                &mut orchestrator.wizard_state.step1.timeout,
-                &mut orchestrator.wizard_state.step1.timeout_per_mod_enabled,
-                3600,
-                "default 3600",
-            );
-            value_row_gated_usize(
-                ui,
-                palette,
-                "Auto-answer initial delay",
-                Some("ms"),
-                &mut orchestrator.wizard_state.step1.auto_answer_initial_delay_ms,
-                &mut orchestrator
-                    .wizard_state
-                    .step1
-                    .auto_answer_initial_delay_enabled,
-                2000,
-                "default 2000",
-            );
-            value_row_gated_usize(
-                ui,
-                palette,
-                "Auto-answer post-send delay",
-                Some("ms"),
-                &mut orchestrator
-                    .wizard_state
-                    .step1
-                    .auto_answer_post_send_delay_ms,
-                &mut orchestrator
-                    .wizard_state
-                    .step1
-                    .auto_answer_post_send_delay_enabled,
-                5000,
-                "default 5000",
-            );
-            value_row_gated_u64(
-                ui,
-                palette,
-                "Tick (dev)",
-                Some("ms"),
-                &mut orchestrator.wizard_state.step1.tick,
-                &mut orchestrator.wizard_state.step1.tick_dev_enabled,
-                500,
-                "default 500",
-            );
-            value_row_gated_usize(
-                ui,
-                palette,
-                "Prompt context lookback",
-                None,
-                &mut orchestrator.wizard_state.step1.lookback,
-                &mut orchestrator.wizard_state.step1.lookback_enabled,
-                10,
-                "default 10",
-            );
-        }
-
-        // ---------------- Right column: Install behavior + WeiDU flags ----
-        {
-            let ui = &mut cols[1];
-            col_header(ui, palette, "Install behavior");
-            toggle_row(
-                ui,
-                palette,
-                "Prompt sound cue",
-                Some("beep when a prompt needs you"),
-                &mut orchestrator
-                    .wizard_state
-                    .step1
-                    .prompt_required_sound_enabled,
-            );
-            toggle_row(
-                ui,
-                palette,
-                "Download missing mods",
-                Some("fetch GitHub/Weasel/Morpheus during install"),
-                &mut orchestrator.wizard_state.step1.download,
-            );
-            toggle_row(
-                ui,
-                palette,
-                "Casefold filename matching",
-                Some("ASCII case-insensitive lookups"),
-                &mut orchestrator.wizard_state.step1.casefold,
-            );
-
-            ui.add_space(10.0);
-            col_header(ui, palette, "WeiDU command-line flags");
-            toggle_row(
-                ui,
-                palette,
-                "-a  abort on warnings",
-                None,
-                &mut orchestrator.wizard_state.step1.abort_on_warnings,
-            );
-            toggle_row(
-                ui,
-                palette,
-                "-x  strict matching",
-                None,
-                &mut orchestrator.wizard_state.step1.strict_matching,
-            );
-            toggle_row(
-                ui,
-                palette,
-                "-o  overwrite",
-                None,
-                &mut orchestrator.wizard_state.step1.overwrite,
-            );
-        }
+        render_timing_limits(&mut cols[0], palette, orchestrator);
+        render_install_behavior(&mut cols[1], palette, orchestrator);
     });
+}
+
+fn render_timing_limits(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+) {
+    col_header(ui, palette, "Timing & limits");
+    value_row_gated_usize(
+        ui,
+        palette,
+        GatedUsizeRow {
+            label: "Custom scan depth",
+            hint: None,
+            value: &mut orchestrator.wizard_state.step1.depth,
+            enabled: &mut orchestrator.wizard_state.step1.custom_scan_depth,
+            default_value: 5,
+            placeholder: "default 5",
+        },
+    );
+    value_row_gated_usize(
+        ui,
+        palette,
+        GatedUsizeRow {
+            label: "Mod install timeout",
+            hint: Some("sec"),
+            value: &mut orchestrator.wizard_state.step1.timeout,
+            enabled: &mut orchestrator.wizard_state.step1.timeout_per_mod_enabled,
+            default_value: 3600,
+            placeholder: "default 3600",
+        },
+    );
+    value_row_gated_usize(
+        ui,
+        palette,
+        GatedUsizeRow {
+            label: "Auto-answer initial delay",
+            hint: Some("ms"),
+            value: &mut orchestrator.wizard_state.step1.auto_answer_initial_delay_ms,
+            enabled: &mut orchestrator
+                .wizard_state
+                .step1
+                .auto_answer_initial_delay_enabled,
+            default_value: 2000,
+            placeholder: "default 2000",
+        },
+    );
+    value_row_gated_usize(
+        ui,
+        palette,
+        GatedUsizeRow {
+            label: "Auto-answer post-send delay",
+            hint: Some("ms"),
+            value: &mut orchestrator
+                .wizard_state
+                .step1
+                .auto_answer_post_send_delay_ms,
+            enabled: &mut orchestrator
+                .wizard_state
+                .step1
+                .auto_answer_post_send_delay_enabled,
+            default_value: 5000,
+            placeholder: "default 5000",
+        },
+    );
+    value_row_gated_u64(
+        ui,
+        palette,
+        GatedU64Row {
+            label: "Tick (dev)",
+            hint: Some("ms"),
+            value: &mut orchestrator.wizard_state.step1.tick,
+            enabled: &mut orchestrator.wizard_state.step1.tick_dev_enabled,
+            default_value: 500,
+            placeholder: "default 500",
+        },
+    );
+    value_row_gated_usize(
+        ui,
+        palette,
+        GatedUsizeRow {
+            label: "Prompt context lookback",
+            hint: None,
+            value: &mut orchestrator.wizard_state.step1.lookback,
+            enabled: &mut orchestrator.wizard_state.step1.lookback_enabled,
+            default_value: 10,
+            placeholder: "default 10",
+        },
+    );
+}
+
+fn render_install_behavior(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+) {
+    col_header(ui, palette, "Install behavior");
+    toggle_row(
+        ui,
+        palette,
+        "Prompt sound cue",
+        Some("beep when a prompt needs you"),
+        &mut orchestrator
+            .wizard_state
+            .step1
+            .prompt_required_sound_enabled,
+    );
+    toggle_row(
+        ui,
+        palette,
+        "Download missing mods",
+        Some("fetch GitHub/Weasel/Morpheus during install"),
+        &mut orchestrator.wizard_state.step1.download,
+    );
+    toggle_row(
+        ui,
+        palette,
+        "Casefold filename matching",
+        Some("ASCII case-insensitive lookups"),
+        &mut orchestrator.wizard_state.step1.casefold,
+    );
+
+    ui.add_space(10.0);
+    col_header(ui, palette, "WeiDU command-line flags");
+    toggle_row(
+        ui,
+        palette,
+        "-a  abort on warnings",
+        None,
+        &mut orchestrator.wizard_state.step1.abort_on_warnings,
+    );
+    toggle_row(
+        ui,
+        palette,
+        "-x  strict matching",
+        None,
+        &mut orchestrator.wizard_state.step1.strict_matching,
+    );
+    toggle_row(
+        ui,
+        palette,
+        "-o  overwrite",
+        None,
+        &mut orchestrator.wizard_state.step1.overwrite,
+    );
 }
 
 fn col_header(ui: &mut egui::Ui, palette: ThemePalette, label: &str) {
@@ -185,9 +174,6 @@ fn col_header(ui: &mut egui::Ui, palette: ThemePalette, label: &str) {
     ui.add_space(4.0);
 }
 
-/// End-capped row: label left-aligned, optional hint mid, control flush-right.
-/// The control is painted by `add_control` inside a `right_to_left` ui so it
-/// stops at the column's right edge regardless of label / hint length.
 fn end_capped_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -246,7 +232,7 @@ fn paint_input(
     let response = ui.add_sized(egui::vec2(110.0, 22.0), edit);
     ui.painter().rect_stroke(
         response.rect,
-        egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_PX as u8),
+        egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
         egui::StrokeKind::Outside,
     );
@@ -256,7 +242,7 @@ fn paint_input(
 fn paint_toggle(ui: &mut egui::Ui, palette: ThemePalette, on: &mut bool) -> bool {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(42.0, 22.0), egui::Sense::click());
     let painter = ui.painter();
-    let radius = egui::CornerRadius::same((REDESIGN_BORDER_RADIUS_PX + 8.0) as u8);
+    let radius = egui::CornerRadius::same(REDESIGN_PANEL_RADIUS_U8);
     let track_fill = if *on {
         redesign_accent(palette)
     } else {
@@ -293,17 +279,33 @@ fn paint_toggle(ui: &mut egui::Ui, palette: ThemePalette, on: &mut bool) -> bool
     }
 }
 
-/// Absorb-the-gate row for a `usize` field with an `enabled: bool` companion.
-fn value_row_gated_usize(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    label: &str,
-    hint: Option<&str>,
-    value: &mut usize,
-    enabled: &mut bool,
+struct GatedUsizeRow<'a> {
+    label: &'a str,
+    hint: Option<&'a str>,
+    value: &'a mut usize,
+    enabled: &'a mut bool,
     default_value: usize,
-    placeholder: &str,
-) {
+    placeholder: &'a str,
+}
+
+struct GatedU64Row<'a> {
+    label: &'a str,
+    hint: Option<&'a str>,
+    value: &'a mut u64,
+    enabled: &'a mut bool,
+    default_value: u64,
+    placeholder: &'a str,
+}
+
+fn value_row_gated_usize(ui: &mut egui::Ui, palette: ThemePalette, row: GatedUsizeRow<'_>) {
+    let GatedUsizeRow {
+        label,
+        hint,
+        value,
+        enabled,
+        default_value,
+        placeholder,
+    } = row;
     let mut buf = if *enabled {
         value.to_string()
     } else {
@@ -322,17 +324,15 @@ fn value_row_gated_usize(
     }
 }
 
-/// Absorb-the-gate row for a `u64` field with an `enabled: bool` companion.
-fn value_row_gated_u64(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    label: &str,
-    hint: Option<&str>,
-    value: &mut u64,
-    enabled: &mut bool,
-    default_value: u64,
-    placeholder: &str,
-) {
+fn value_row_gated_u64(ui: &mut egui::Ui, palette: ThemePalette, row: GatedU64Row<'_>) {
+    let GatedU64Row {
+        label,
+        hint,
+        value,
+        enabled,
+        default_value,
+        placeholder,
+    } = row;
     let mut buf = if *enabled {
         value.to_string()
     } else {

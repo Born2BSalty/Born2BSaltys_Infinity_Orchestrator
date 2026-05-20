@@ -1,11 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// Settings stub destination.
-//
-// Per Phase 2 P2.T5: title "Settings", sub "Coming in Phase 4".
-//
-// SPEC: §11.
 
 use eframe::egui;
 

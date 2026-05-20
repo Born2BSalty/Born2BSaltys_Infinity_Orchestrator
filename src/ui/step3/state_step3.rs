@@ -22,16 +22,16 @@ pub type ActiveListMut<'a> = (
 );
 
 pub fn normalize_active_tab(state: &mut WizardState) {
-    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let active_is_visible = (state.step3.active_game_tab == "BGEE" && show_bgee)
-        || (state.step3.active_game_tab == "BG2EE" && show_bg2ee);
+    let show_first_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let show_second_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let active_is_visible = (state.step3.active_game_tab == "BGEE" && show_first_game)
+        || (state.step3.active_game_tab == "BG2EE" && show_second_game);
     if active_is_visible {
         return;
     }
-    if show_bgee {
+    if show_first_game {
         state.step3.active_game_tab = "BGEE".to_string();
-    } else if show_bg2ee {
+    } else if show_second_game {
         state.step3.active_game_tab = "BG2EE".to_string();
     }
 }
@@ -74,12 +74,4 @@ pub fn active_list_mut(state: &mut WizardState) -> ActiveListMut<'_> {
             &mut state.step3.bg2ee_redo_stack,
         )
     }
-}
-
-pub(crate) mod blocks {
-    pub(crate) use crate::ui::step3::state_blocks_step3::*;
-}
-
-pub(crate) mod drag {
-    pub(crate) use crate::ui::step3::state_drag_step3::*;
 }

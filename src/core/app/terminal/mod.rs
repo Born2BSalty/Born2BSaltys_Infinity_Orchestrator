@@ -16,6 +16,27 @@ mod output;
 mod process;
 mod scripted_inputs;
 
+pub use analyze::PromptInfo;
+
+#[derive(Default)]
+struct PromptCapture {
+    active: bool,
+    lines: usize,
+    after_send: bool,
+}
+
+#[derive(Default)]
+struct WarningCapture {
+    active: bool,
+    lines: usize,
+}
+
+#[derive(Default)]
+struct EventFlags {
+    has_new_data: bool,
+    saw_exit_event: bool,
+}
+
 pub struct EmbeddedTerminal {
     pub(super) child: Option<Child>,
     pub(super) stdin: Option<ChildStdin>,
@@ -24,11 +45,8 @@ pub struct EmbeddedTerminal {
     important_buffer: String,
     installed_buffer: String,
     important_scan_tail: String,
-    prompt_capture_active: bool,
-    prompt_capture_lines: usize,
-    prompt_capture_after_send: bool,
-    warning_capture_active: bool,
-    warning_capture_lines: usize,
+    prompt_capture: PromptCapture,
+    warning_capture: WarningCapture,
     pub(super) max_buffer_chars: usize,
     boundary_event_count: u64,
     boundary_scan_tail: String,
@@ -43,8 +61,7 @@ pub struct EmbeddedTerminal {
     raw_log_file: Option<File>,
     bio_debug_log_path: Option<std::path::PathBuf>,
     bio_debug_log_file: Option<File>,
-    has_new_data: bool,
-    saw_exit_event: bool,
+    events: EventFlags,
     last_exit_code: Option<i32>,
     last_runtime_error: Option<String>,
 }
@@ -59,11 +76,8 @@ impl EmbeddedTerminal {
             important_buffer: String::new(),
             installed_buffer: String::new(),
             important_scan_tail: String::new(),
-            prompt_capture_active: false,
-            prompt_capture_lines: 0,
-            prompt_capture_after_send: false,
-            warning_capture_active: false,
-            warning_capture_lines: 0,
+            prompt_capture: PromptCapture::default(),
+            warning_capture: WarningCapture::default(),
             max_buffer_chars: 250_000,
             boundary_event_count: 0,
             boundary_scan_tail: String::new(),
@@ -78,8 +92,7 @@ impl EmbeddedTerminal {
             raw_log_file: None,
             bio_debug_log_path: None,
             bio_debug_log_file: None,
-            has_new_data: false,
-            saw_exit_event: false,
+            events: EventFlags::default(),
             last_exit_code: None,
             last_runtime_error: None,
         })

@@ -27,7 +27,7 @@ pub fn render_pane(
     });
 }
 
-pub(crate) mod details_pane_content {
+pub mod details_pane_content {
     use eframe::egui;
 
     use crate::app::state::{WizardState, exact_log_ready_to_install};
@@ -113,7 +113,7 @@ pub(crate) mod details_pane_content {
         let action_w = 48.0;
         let value_w = (ui.available_width() - label_w - action_w - 24.0).max(120.0);
         let row_h = 20.0;
-        let value_chars = ((value_w / 7.2).floor() as usize).max(12);
+        let value_chars = floored_columns(value_w, 7.2, 12);
 
         ui.label(crate::ui::shared::typography_global::strong(mod_name));
         ui.horizontal(|ui| {
@@ -130,5 +130,18 @@ pub(crate) mod details_pane_content {
         ui.add_space(6.0);
         render_component_block(ui, details);
         render_raw_line(ui, details);
+    }
+
+    fn floored_columns(width: f32, column_width: f32, minimum: usize) -> usize {
+        let estimate = (width / column_width).floor();
+        if estimate.is_finite() {
+            estimate
+                .to_string()
+                .parse::<usize>()
+                .unwrap_or(minimum)
+                .max(minimum)
+        } else {
+            minimum
+        }
     }
 }

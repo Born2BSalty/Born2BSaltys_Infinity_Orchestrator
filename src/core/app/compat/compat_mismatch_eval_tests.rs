@@ -13,10 +13,7 @@ use crate::app::state::Step1State;
 fn evaluates_mod_is_installed_equals_zero_as_true_when_missing() {
     let context = mismatch_context("BG2EE", "BG2EE", &[]);
     assert_eq!(
-        evaluate_requirement(
-            r#"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0"#,
-            &context
-        ),
+        evaluate_requirement(r"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0", &context),
         TriState::True
     );
 }
@@ -25,17 +22,11 @@ fn evaluates_mod_is_installed_equals_zero_as_true_when_missing() {
 fn evaluates_mod_is_installed_equals_zero_as_false_when_selected() {
     let context = mismatch_context("BG2EE", "BG2EE", &[("item_rev", "0")]);
     assert_eq!(
-        evaluate_requirement(
-            r#"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0"#,
-            &context
-        ),
+        evaluate_requirement(r"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0", &context),
         TriState::False
     );
     assert_eq!(
-        classify_failed_requirement(
-            r#"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0"#,
-            &context
-        ),
+        classify_failed_requirement(r"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0", &context),
         RequirementFailureClass::Conditional
     );
 }
@@ -43,7 +34,7 @@ fn evaluates_mod_is_installed_equals_zero_as_false_when_selected() {
 #[test]
 fn renders_comparison_evidence() {
     assert_eq!(
-        render_requirement_evidence(r#"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0"#).as_deref(),
+        render_requirement_evidence(r"(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ 0)=0").as_deref(),
         Some("(MOD_IS_INSTALLED ~item_rev/item_rev.tp2~ ~0~) = 0")
     );
 }
@@ -52,15 +43,15 @@ fn renders_comparison_evidence() {
 fn keeps_eet_game_identity_separate_from_bg2ee_engine() {
     let context = mismatch_context("EET", "BG2EE", &[("eet", "0")]);
     assert_eq!(
-        evaluate_requirement(r#"GAME_IS ~bgee bg2ee iwdee~"#, &context),
+        evaluate_requirement(r"GAME_IS ~bgee bg2ee iwdee~", &context),
         TriState::False
     );
     assert_eq!(
-        evaluate_requirement(r#"GAME_IS ~eet~"#, &context),
+        evaluate_requirement(r"GAME_IS ~eet~", &context),
         TriState::True
     );
     assert_eq!(
-        evaluate_requirement(r#"ENGINE_IS ~bg2ee~"#, &context),
+        evaluate_requirement(r"ENGINE_IS ~bg2ee~", &context),
         TriState::True
     );
 }

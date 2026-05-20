@@ -75,10 +75,6 @@ pub(crate) struct ModlistSharePreview {
     pub(crate) installed_refs_text: String,
     pub(crate) mod_config_count: usize,
     pub(crate) mod_configs_text: String,
-    // Carve-out #5 paired in-memory counterpart — `share_preview()` is the
-    // payload→view projection (the analogue of the `From` impls named in the
-    // canonical example); without these the orchestrator's preview cannot
-    // read the four sibling keys. Visibility matches the existing fields.
     pub(crate) allow_auto_install: bool,
     pub(crate) name: Option<String>,
     pub(crate) author: Option<String>,
@@ -96,7 +92,7 @@ pub(crate) fn import_modlist_share_code(
     let payload = decode_share_payload(code)?;
     let preview = share_preview(&payload)?;
     let mut step1 = state.step1.clone();
-    step1.game_install = payload.game_install.clone();
+    step1.game_install.clone_from(&payload.game_install);
     step1.install_mode =
         crate::app::state::Step1State::normalize_install_mode(&payload.install_mode).to_string();
     step1.sync_install_mode_flags();
@@ -144,12 +140,6 @@ struct ModlistSharePayload {
     installed_refs: ModlistShareInstalledRefs,
     #[serde(default)]
     mod_configs: ModlistShareModConfigs,
-    // Schema-additive sibling keys the orchestrator injects via its net-new
-    // `pack_meta` envelope (CRITICAL DIRECTIVE carve-out #5 "Modlist-share
-    // provenance application"). All optional; absent ⇒ today's BIO behavior
-    // bit-for-bit (`allow_auto_install` defaults `true`, the provenance trio
-    // defaults `None` / empty). BIO's own code never reads or writes these —
-    // only the orchestrator's Install/fork preview does.
     #[serde(default = "default_true")]
     allow_auto_install: bool,
     #[serde(default)]
@@ -160,25 +150,10 @@ struct ModlistSharePayload {
     forked_from: Vec<ForkAncestor>,
 }
 
-/// Default for `ModlistSharePayload::allow_auto_install` — `true` so every
-/// pre-redesign / third-party code (which omits the key) is treated as
-/// auto-install-eligible, exactly as today's BIO consumes it (SPEC §13.3
-/// "`allow_auto_install` (schema-additive field, default `true`)").
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
-/// One ancestor in a modlist's fork lineage (SPEC §13.3 Provenance —
-/// `forked_from`, ordered oldest → newest). Derives the full
-/// `Debug, Clone, PartialEq, Serialize, Deserialize` set (not just
-/// `Deserialize`): `Deserialize` for the payload parse; `Serialize` +
-/// `PartialEq` + `Clone` + `Debug` because Phase 6 reuses *this same BIO
-/// type* as the element of the registry `ModlistEntry.forked_from`, which
-/// derives the same set and round-trips / `assert_eq!`s. Pinning the full
-/// set in this single carve-out #5 edit means no follow-up BIO-source touch
-/// in Phase 6. Precedent: the sibling `ModlistShareConfigFile` already
-/// derives `Deserialize, Serialize` in this file. No `Default` is needed
-/// (`Vec` defaults empty).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ForkAncestor {
     pub(crate) name: String,
@@ -236,12 +211,12 @@ fn decode_share_payload(code: &str) -> Result<ModlistSharePayload, String> {
 fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, String> {
     let install_mode =
         crate::app::state::Step1State::normalize_install_mode(&payload.install_mode).to_string();
-    let bgee_entries = count_weidu_entries(payload.weidu_logs.bgee.as_deref());
-    let bg2ee_entries = count_weidu_entries(payload.weidu_logs.bg2ee.as_deref());
+    let first_game_entries = count_weidu_entries(payload.weidu_logs.bgee.as_deref());
+    let second_game_entries = count_weidu_entries(payload.weidu_logs.bg2ee.as_deref());
     if match payload.game_install.as_str() {
-        "EET" => bgee_entries == 0 && bg2ee_entries == 0,
-        "BG2EE" => bg2ee_entries == 0,
-        _ => bgee_entries == 0,
+        "EET" => first_game_entries == 0 && second_game_entries == 0,
+        "BG2EE" => second_game_entries == 0,
+        _ => first_game_entries == 0,
     } {
         return Err("No WeiDU entries available to import.".to_string());
     }
@@ -263,8 +238,8 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
         bio_version: payload.bio_version.clone(),
         game_install: payload.game_install.clone(),
         install_mode,
-        bgee_entries,
-        bg2ee_entries,
+        bgee_entries: first_game_entries,
+        bg2ee_entries: second_game_entries,
         has_source_overrides: payload
             .source_overrides
             .mod_downloads_user_toml
@@ -289,7 +264,6 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
             .unwrap_or_default(),
         mod_config_count: payload.mod_configs.files.len(),
         mod_configs_text,
-        // Carve-out #5 propagation — one line per sibling key, payload→preview.
         allow_auto_install: payload.allow_auto_install,
         name: payload.name.clone(),
         author: payload.author.clone(),
@@ -306,25 +280,25 @@ fn write_imported_weidu_logs(
             write_imported_log(
                 "BGEE",
                 payload.weidu_logs.bgee.as_deref(),
-                import_log_target_path(step1, true)?,
+                &import_log_target_path(step1, true)?,
             )?;
             let rewritten_bg2ee =
                 rewrite_imported_eet_bg2ee_wlb_paths(step1, payload.weidu_logs.bg2ee.as_deref())?;
             write_imported_log(
                 "BG2EE",
                 rewritten_bg2ee.as_deref(),
-                import_log_target_path(step1, false)?,
+                &import_log_target_path(step1, false)?,
             )
         }
         "BG2EE" => write_imported_log(
             "BG2EE",
             payload.weidu_logs.bg2ee.as_deref(),
-            import_log_target_path(step1, false)?,
+            &import_log_target_path(step1, false)?,
         ),
         _ => write_imported_log(
             "BGEE",
             payload.weidu_logs.bgee.as_deref(),
-            import_log_target_path(step1, true)?,
+            &import_log_target_path(step1, true)?,
         ),
     }
 }
@@ -435,14 +409,14 @@ fn import_log_target_path(
     Ok(PathBuf::from(value.trim()).join("weidu.log"))
 }
 
-fn write_imported_log(label: &str, text: Option<&str>, path: PathBuf) -> Result<(), String> {
+fn write_imported_log(label: &str, text: Option<&str>, path: &Path) -> Result<(), String> {
     let Some(text) = text.filter(|text| count_weidu_entries(Some(text)) > 0) else {
         return Err(format!("Imported {label} WeiDU log has no entries."));
     };
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    fs::write(&path, text).map_err(|err| format!("Write {label} WeiDU log failed: {err}"))
+    fs::write(path, text).map_err(|err| format!("Write {label} WeiDU log failed: {err}"))
 }
 
 fn write_text_file(path: PathBuf, text: &str) -> Result<(), String> {
@@ -453,7 +427,7 @@ fn write_text_file(path: PathBuf, text: &str) -> Result<(), String> {
 }
 
 fn count_weidu_entries(text: Option<&str>) -> usize {
-    text.map(|text| {
+    text.map_or(0, |text| {
         text.lines()
             .filter(|line| {
                 let line = line.trim();
@@ -461,7 +435,6 @@ fn count_weidu_entries(text: Option<&str>) -> usize {
             })
             .count()
     })
-    .unwrap_or(0)
 }
 
 struct ExportWeiduLogs {
@@ -610,13 +583,16 @@ fn mod_config_root(tp2_path: &str) -> Option<PathBuf> {
 
 fn relevant_weidu_text_is_empty(
     state: &WizardState,
-    bgee_text: Option<&str>,
-    bg2ee_text: Option<&str>,
+    first_game_text: Option<&str>,
+    second_game_text: Option<&str>,
 ) -> bool {
     match state.step1.game_install.as_str() {
-        "EET" => weidu_text_has_no_entries(bgee_text) && weidu_text_has_no_entries(bg2ee_text),
-        "BG2EE" => weidu_text_has_no_entries(bg2ee_text),
-        _ => weidu_text_has_no_entries(bgee_text),
+        "EET" => {
+            weidu_text_has_no_entries(first_game_text)
+                && weidu_text_has_no_entries(second_game_text)
+        }
+        "BG2EE" => weidu_text_has_no_entries(second_game_text),
+        _ => weidu_text_has_no_entries(first_game_text),
     }
 }
 
@@ -734,7 +710,10 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
     }
     let mut out = Vec::with_capacity(values.len() / 4 * 3);
     for chunk in values.chunks(4) {
-        let pad = chunk.iter().filter(|value| **value == 64).count();
+        let pad = usize::from(chunk[0] == 64)
+            + usize::from(chunk[1] == 64)
+            + usize::from(chunk[2] == 64)
+            + usize::from(chunk[3] == 64);
         if pad > 2 || chunk[..4 - pad].contains(&64) {
             return Err("Share code base64 padding is invalid.".to_string());
         }
@@ -755,22 +734,8 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(test)]
 mod tests {
-    //! Carve-out #5 behavior-neutrality proof (Phase 5 Run 4, SPEC §1
-    //! "Modlist-share provenance application", §13.3).
-    //!
-    //! The four schema-additive sibling keys (`allow_auto_install` +
-    //! `name` / `author` / `forked_from`) must parse and behave bit-for-bit
-    //! as today's BIO for any code that omits them — i.e. defaults are
-    //! `true` / `None` / empty, and the `share_preview()` projection carries
-    //! those through. These tests pin that, and also that a code which *does*
-    //! carry the keys surfaces them (forward-compat — generation lands
-    //! Phase 6/7; the consume path is verified here).
     use super::*;
 
-    /// A minimal but valid payload: `game_install = "BGEE"` with a single
-    /// real (non-comment) BGEE WeiDU entry so `share_preview()`'s
-    /// "no entries" guard passes. The four provenance keys are intentionally
-    /// ABSENT — this is the pre-redesign / third-party shape.
     const FIELDLESS_PAYLOAD_JSON: &str = r#"{
         "format_version": 1,
         "bio_version": "0.1.0-test",
@@ -781,11 +746,8 @@ mod tests {
 
     #[test]
     fn absent_provenance_keys_parse_to_today_defaults() {
-        // The exact parse `decode_share_payload` performs after inflation.
         let payload: ModlistSharePayload =
             serde_json::from_str(FIELDLESS_PAYLOAD_JSON).expect("fieldless payload must parse");
-        // Carve-out invariant: absent ⇒ auto-install-eligible (today's
-        // behavior — BIO has always treated pre-redesign codes this way).
         assert!(
             payload.allow_auto_install,
             "absent allow_auto_install must default true"
@@ -800,8 +762,6 @@ mod tests {
 
     #[test]
     fn share_preview_projects_defaults_for_fieldless_code() {
-        // The payload→preview projection (the carve-out's paired in-memory
-        // counterpart) must carry the defaults through unchanged.
         let payload: ModlistSharePayload =
             serde_json::from_str(FIELDLESS_PAYLOAD_JSON).expect("fieldless payload must parse");
         let preview = share_preview(&payload).expect("preview must build");
@@ -809,16 +769,12 @@ mod tests {
         assert_eq!(preview.name, None);
         assert_eq!(preview.author, None);
         assert!(preview.forked_from.is_empty());
-        // The rest of the preview is unaffected (sanity that the additive
-        // fields did not perturb the existing projection).
         assert_eq!(preview.game_install, "BGEE");
         assert_eq!(preview.bgee_entries, 1);
     }
 
     #[test]
     fn present_provenance_keys_are_surfaced_through_preview() {
-        // Forward-compat: a code that *carries* the keys (as orchestrator
-        // `pack_meta` will emit in Phase 6/7) surfaces them on the preview.
         let json = r#"{
             "format_version": 1,
             "bio_version": "0.1.0-test",
@@ -862,9 +818,6 @@ mod tests {
 
     #[test]
     fn fork_ancestor_serde_round_trips() {
-        // `ForkAncestor` derives the full Serialize + Deserialize set so
-        // Phase 6 can reuse it as the registry `ModlistEntry.forked_from`
-        // element with no follow-up BIO edit. Prove the round-trip.
         let original = ForkAncestor {
             name: "EET Basics".to_string(),
             author: "@olim".to_string(),

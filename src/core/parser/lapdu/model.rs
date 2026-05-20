@@ -4,7 +4,7 @@
 use serde::{Deserialize, Deserializer};
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct ParserOutput {
+pub(super) struct ParserOutput {
     pub schema_version: u32,
     #[serde(default, deserialize_with = "string_or_default")]
     pub source_file: String,
@@ -23,7 +23,7 @@ pub struct ParserOutput {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct ParserEvent {
+pub(super) struct ParserEvent {
     #[serde(default, deserialize_with = "string_or_default")]
     pub kind: String,
     #[serde(default)]
@@ -55,7 +55,7 @@ pub struct ParserEvent {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct ParserOption {
+pub(super) struct ParserOption {
     #[serde(default, deserialize_with = "string_or_default")]
     pub label: String,
     #[serde(default, deserialize_with = "string_or_default")]
@@ -65,7 +65,7 @@ pub struct ParserOption {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct ParserFlowNode {
+pub(super) struct ParserFlowNode {
     #[serde(default, deserialize_with = "string_or_default")]
     pub id: String,
     #[serde(default, deserialize_with = "string_or_default")]
@@ -73,11 +73,11 @@ pub struct ParserFlowNode {
     #[serde(default, deserialize_with = "vec_or_default")]
     pub event_ids: Vec<String>,
     #[serde(default, deserialize_with = "vec_or_default")]
-    pub children: Vec<ParserFlowNode>,
+    pub children: Vec<Self>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct ParserDiagnostic {
+pub(super) struct ParserDiagnostic {
     #[serde(default, deserialize_with = "string_or_default")]
     pub code: String,
     #[serde(default, deserialize_with = "string_or_default")]
