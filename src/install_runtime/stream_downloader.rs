@@ -139,11 +139,18 @@ pub enum StreamDownloadEvent {
     },
     /// One asset reached a terminal state (success or failure). `ok`
     /// distinguishes; `final_bytes` is the byte count at termination.
+    /// **Fix 1b** — `error` carries the failure string on `ok == false`
+    /// (`None` on success) so the orchestrator's per-asset drain can push
+    /// the BIO-shaped `"{label}: {err}"` to
+    /// `update_selected_download_failed_sources` per-asset as failures
+    /// arrive — not bulk-assigned at `Finished` (which left the §4.3 grid's
+    /// `downloaded_count()` flat at 0 until terminal).
     AssetDone {
         index: usize,
         ok: bool,
         final_bytes: u64,
         total: Option<u64>,
+        error: Option<String>,
     },
     /// Every asset finished. Carries the BIO-shaped result vectors the
     /// orchestrator writes verbatim into `state.step2`
@@ -184,22 +191,47 @@ struct AssetResult {
 /// `state.step2.update_selected_update_assets` (the resolved asset set —
 /// read-only input, left intact), sets
 /// `state.step2.update_selected_download_running = true` and clears the
-/// downloaded/failed vectors (mirroring the serial loop's start state),
-/// then spawns a coordinator thread that drives a `POOL_SIZE` worker pool.
+/// extract result vectors + the *non-pre-populated* download-failed
+/// vector (the downloaded vector is NOT cleared here — Fix 1e pre-
+/// populates it with skipped-archive entries via `archive_skip` BEFORE
+/// the streamer kicks; the streamer never touches skipped indices and so
+/// MUST NOT clobber those entries), then spawns a coordinator thread that
+/// drives a `POOL_SIZE` worker pool.
+///
+/// **Fix 1e — `skipped` is the orchestrator-side index set the streamer
+/// silently bypasses.** Indices into the unchanged asset list. The worker
+/// loop checks `skipped.contains(&i)` before dispatch and continues to
+/// the next index without emitting any event or pushing a result —
+/// archive_skip already placed the bytes at the deterministic path AND
+/// pre-populated the downloaded-sources entry, so the §4.3 grid treats
+/// those rows as download-complete from frame one and BIO's
+/// `build_extract_jobs` finds them (the asset stays in the list).
 ///
 /// The caller must:
 ///   1. set `state.step2.modlist_auto_build_waiting_for_install = true`
 ///      *before* calling this (the pub field BIO's own block sets at this
 ///      point — `app_step2_saved_log_flow.rs:103` — so BIO's unchanged
 ///      extract→rescan→install hand-off fires after extract); and
-///   2. on the resulting `Receiver`'s `Finished`, write the vectors onto
-///      `state.step2` + call `app_step2_update_extract::
-///      start_step2_update_extract` (see [`apply_finished`]).
+///   2. on the resulting `Receiver`'s events:
+///      - per `AssetDone`, push the BIO-shaped `"{label} -> {dest}"` /
+///        `"{label}: {err}"` to `state.step2.update_selected_downloaded_
+///        sources` / `update_selected_download_failed_sources` (Fix 1b —
+///        per-asset so the §4.3 grid's `downloaded_count()` climbs
+///        smoothly as archives land);
+///      - on `Finished`, call [`apply_result_state`] (flag flip + status
+///        line) then kick BIO's `app_step2_update_extract::start_step2_
+///        update_extract` via `extract_intercept::start_extract_with_
+///        intercept` (Fix 1c — wraps the BIO receiver-end stream with a
+///        forwarder that snapshots `Progress` events for the §4.3 Extract
+///        bar).
 ///
 /// Idempotent re-entry guard: if `update_selected_download_running` is
 /// already set, returns `None` (the pool is already in flight) — matching
 /// BIO's serial `start_step2_update_download` early-return.
-pub fn start_stream_download(state: &mut WizardState) -> Option<Receiver<StreamDownloadEvent>> {
+pub fn start_stream_download(
+    state: &mut WizardState,
+    skipped: &std::collections::HashSet<usize>,
+) -> Option<Receiver<StreamDownloadEvent>> {
     if state.step2.update_selected_download_running {
         return None;
     }
@@ -207,14 +239,20 @@ pub fn start_stream_download(state: &mut WizardState) -> Option<Receiver<StreamD
     let archive_dir = state.step1.mods_archive_folder.trim().to_string();
     let assets = state.step2.update_selected_update_assets.clone();
 
-    // Mirror the serial loop's start mutations EXACTLY
+    // Mirror the serial loop's start mutations
     // (`app_step2_update_download.rs:50-56`): running flag on,
-    // extract-running off, all four download/extract result vectors
-    // cleared. `update_selected_update_assets` is left INTACT (read-only
-    // input — extract re-reads it; the contract).
+    // extract-running off, the FAILED + extract vectors cleared.
+    //
+    // **Fix 1e** — the downloaded-sources vector is NOT cleared here:
+    // `archive_skip::skip_present_archives` pre-populated it with one
+    // BIO-shaped entry per skipped archive BEFORE the streamer kicked
+    // (so the §4.3 grid sees the skipped rows as download-complete from
+    // frame one). Clearing here would clobber those entries. The
+    // streamer's per-asset `AssetDone` branch appends to this vector for
+    // *fetched* assets only (skipped indices are silently bypassed).
     state.step2.update_selected_download_running = true;
     state.step2.update_selected_extract_running = false;
-    state.step2.update_selected_downloaded_sources.clear();
+    // Intentionally NOT cleared (Fix 1e): update_selected_downloaded_sources.
     state.step2.update_selected_download_failed_sources.clear();
     state.step2.update_selected_extracted_sources.clear();
     state.step2.update_selected_extract_failed_sources.clear();
@@ -222,8 +260,9 @@ pub fn start_stream_download(state: &mut WizardState) -> Option<Receiver<StreamD
 
     let (tx, rx) = mpsc::channel::<StreamDownloadEvent>();
     let archive_dir = PathBuf::from(archive_dir);
+    let skipped_owned: Arc<std::collections::HashSet<usize>> = Arc::new(skipped.clone());
     thread::spawn(move || {
-        run_download(&archive_dir, assets, &tx);
+        run_download(&archive_dir, assets, &tx, &skipped_owned);
     });
     Some(rx)
 }
@@ -245,6 +284,7 @@ fn run_download(
     archive_dir: &Path,
     assets: Vec<Step2UpdateAsset>,
     tx: &Sender<StreamDownloadEvent>,
+    skipped: &Arc<std::collections::HashSet<usize>>,
 ) {
     let total = assets.len();
     let mut result = StreamDownloadResult::default();
@@ -265,7 +305,13 @@ fn run_download(
 
     // Shared work index + ordered results. `assets` is shared read-only
     // (each worker reads `assets[i]`); `next` hands out indices; `results`
-    // collects terminal records.
+    // collects terminal records. **Fix 1e** — the worker loop checks
+    // `skipped.contains(&i)` and silently bypasses those indices (no
+    // event, no result push); `archive_skip` already placed the bytes +
+    // pre-populated the downloaded-sources entry. The all-skipped case
+    // exhausts the index range without emitting anything ⇒ the
+    // coordinator falls through to the final `Finished` send (empty
+    // `result.downloaded` / `result.failed`).
     let assets = Arc::new(assets);
     let archive_dir = Arc::new(archive_dir.to_path_buf());
     let next = Arc::new(AtomicUsize::new(0));
@@ -279,20 +325,32 @@ fn run_download(
         let next = Arc::clone(&next);
         let results = Arc::clone(&results);
         let tx = tx.clone();
+        let skipped = Arc::clone(skipped);
         handles.push(thread::spawn(move || {
             loop {
                 let index = next.fetch_add(1, Ordering::SeqCst);
                 if index >= assets.len() {
                     break;
                 }
+                if skipped.contains(&index) {
+                    // **Fix 1e** — silently bypass. `archive_skip`
+                    // already placed the bytes + pre-populated the
+                    // downloaded-sources entry. No event, no result push.
+                    continue;
+                }
                 let asset = &assets[index];
                 let dest = archive_dir.join(archive_file_name(asset));
                 let outcome = stream_one_asset(asset, &dest, index, &tx);
-                let (ok, final_bytes, total_len, rec) = match outcome {
+                // **Fix 1b** — carry the error string into `AssetDone`
+                // (`None` on success) so the orchestrator's per-asset
+                // drain can push to `update_selected_download_failed_
+                // sources` as failures arrive, not bulk at `Finished`.
+                let (ok, final_bytes, total_len, error_msg, rec) = match outcome {
                     Ok((bytes, total_len)) => (
                         true,
                         bytes,
                         total_len,
+                        None,
                         // BIO's exact success format
                         // (`app_step2_update_download.rs:140`):
                         // `"{} -> {}"` with `asset.label` +
@@ -310,6 +368,7 @@ fn run_download(
                         false,
                         bytes,
                         total_len,
+                        Some(err.clone()),
                         // BIO's exact failure format
                         // (`app_step2_update_download.rs:142`):
                         // `"{}: {err}"` with `asset.label`.
@@ -325,6 +384,7 @@ fn run_download(
                     ok,
                     final_bytes,
                     total: total_len,
+                    error: error_msg,
                 });
             }
         }));
@@ -451,20 +511,28 @@ pub fn deterministic_dest(asset: &Step2UpdateAsset, archive_dir: &Path) -> PathB
     archive_dir.join(archive_file_name(asset))
 }
 
-/// **Apply the BIO-shaped result vectors + running flag + status — the
-/// state-mutation half of BIO's `poll_step2_update_download` tail**
-/// (`app_step2_update_download.rs:94-101`): assign the two vectors onto
-/// `state.step2`, clear the running flag, set the BIO-verbatim finished
-/// status line. Pure `state` mutation (no BIO `pub(crate)` type in the
-/// signature) so it is `pub` + observable by the runtime trace. The
-/// caller (`apply_finished`, in-crate) then makes the single
-/// `start_step2_update_extract` call. Split out so the trace can prove
-/// contract (4) end-to-end via the public surface while the
-/// extract-trigger (5) stays an in-crate `pub(crate)` BIO call.
+/// **Apply the running flag + status — the state-mutation half of BIO's
+/// `poll_step2_update_download` tail** (`app_step2_update_download.rs:94-
+/// 101`), MINUS the bulk vector assignment.
+///
+/// **Fix 1b** — the downloaded/failed vectors are now appended per-asset
+/// by the orchestrator's `drain_stream_download` as each `AssetDone`
+/// arrives (so the §4.3 grid's `downloaded_count()` climbs smoothly as
+/// archives land, instead of staying flat at 0 until terminal). The
+/// `result` arg is accepted but its `downloaded` / `failed` are no longer
+/// assigned here — that is the per-asset job. This function only clears
+/// the running flag and writes the BIO-verbatim finished status line
+/// (which reads the *already-populated* vectors via the orchestrator's
+/// per-asset pushes).
+///
+/// Pure `state` mutation (no BIO `pub(crate)` type in the signature) so
+/// it is `pub` + observable by the runtime trace. The caller
+/// (`drain_stream_download`, in-crate) then makes the single
+/// `start_step2_update_extract` call via `extract_intercept`.
+#[allow(unused_variables)] // `result` retained for compat / observability
 pub fn apply_result_state(state: &mut WizardState, result: StreamDownloadResult) {
     state.step2.update_selected_download_running = false;
-    state.step2.update_selected_downloaded_sources = result.downloaded;
-    state.step2.update_selected_download_failed_sources = result.failed;
+    // Read the vectors AS POPULATED BY THE PER-ASSET PUSHES (Fix 1b).
     let downloaded = state.step2.update_selected_downloaded_sources.len();
     let failed = state.step2.update_selected_download_failed_sources.len();
     // BIO-verbatim finished status (`app_step2_update_download.rs:100-101`).
@@ -472,36 +540,20 @@ pub fn apply_result_state(state: &mut WizardState, result: StreamDownloadResult)
         format!("Download updates finished: {downloaded} downloaded, {failed} failed");
 }
 
-/// **Apply the coordinator's `Finished` result the EXACT way BIO's own
-/// `poll_step2_update_download` does** (`app_step2_update_download.rs:
-/// 94-103`): the [`apply_result_state`] vectors/flag/status, then call
-/// `app_step2_update_extract::start_step2_update_extract` (BIO's
-/// `pub(crate)` extract entry — the SAME one BIO's poll invokes; reused
-/// **unchanged**, no fork). After this, BIO's unchanged extract → rescan →
-/// `start_auto_build_install` path (gated on the
-/// `modlist_auto_build_waiting_for_install` the caller set before the
-/// download) carries the pipeline to the install hand-off — identical to
-/// the serial path's continuation. `pub(crate)` because its signature
-/// names BIO's `pub(crate)` `Step2UpdateExtractEvent` (same visibility
-/// rule as the `OrchestratorApp` receiver fields); the in-crate
-/// `drain_stream_download` is the only caller.
-pub(crate) fn apply_finished(
-    state: &mut WizardState,
-    result: StreamDownloadResult,
-    step2_update_extract_rx: &mut Option<
-        Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>,
-    >,
-) {
-    apply_result_state(state, result);
-    // BIO's `pub(crate)` extract entry — the SAME call BIO's
-    // `poll_step2_update_download` makes (`app_step2_update_download.rs:
-    // 102`). Reused unchanged: only the *download* mechanism is replaced;
-    // extract stays BIO's.
-    crate::app::app_step2_update_extract::start_step2_update_extract(
-        state,
-        step2_update_extract_rx,
-    );
-}
+// **DL Fix-Set v2 — `apply_finished` removed.** Previously this wrapped
+// `apply_result_state` + BIO's `pub(crate)` `start_step2_update_extract`
+// in one call. The orchestrator's `drain_stream_download` now does both
+// directly:
+//   • `apply_result_state` (downloaded/failed vectors are now per-asset-
+//     pushed by Fix 1b, not bulk-assigned here — see `apply_result_state`'s
+//     updated contract);
+//   • Fix 1c's `install_runtime::extract_intercept::start_extract_with_
+//     intercept`, which kicks BIO's `start_step2_update_extract` through
+//     a forwarder thread that snapshots `Progress` events into a shared
+//     handle the §4.3 Extract bar reads every frame.
+// The wrapper added no value with one caller and one new branch (extract
+// intercept), so it is removed for clarity. The brief authorizes the
+// removal.
 
 #[cfg(test)]
 mod tests {
@@ -645,7 +697,8 @@ mod tests {
         );
         state.step2.update_selected_update_assets = vec![a.clone(), b.clone()];
 
-        let rx = start_stream_download(&mut state).expect("pool spawns");
+        let rx = start_stream_download(&mut state, &std::collections::HashSet::new())
+            .expect("pool spawns");
         assert!(
             state.step2.update_selected_download_running,
             "running flag set true at start (BIO serial-loop parity)"
@@ -705,7 +758,8 @@ mod tests {
         );
         state.step2.update_selected_update_assets = vec![a.clone()];
 
-        let rx = start_stream_download(&mut state).expect("pool spawns");
+        let rx = start_stream_download(&mut state, &std::collections::HashSet::new())
+            .expect("pool spawns");
         let mut saw_indeterminate = false;
         let mut finished: Option<StreamDownloadResult> = None;
         while let Ok(ev) = rx.recv() {
@@ -765,7 +819,8 @@ mod tests {
         );
         state.step2.update_selected_update_assets = vec![good.clone(), bad.clone()];
 
-        let rx = start_stream_download(&mut state).expect("pool spawns");
+        let rx = start_stream_download(&mut state, &std::collections::HashSet::new())
+            .expect("pool spawns");
         let mut finished: Option<StreamDownloadResult> = None;
         while let Ok(ev) = rx.recv() {
             if let StreamDownloadEvent::Finished(r) = ev {
@@ -799,7 +854,8 @@ mod tests {
         let archive_dir = td();
         let mut state = WizardState::default();
         state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
-        let rx = start_stream_download(&mut state).expect("pool spawns even with 0 assets");
+        let rx = start_stream_download(&mut state, &std::collections::HashSet::new())
+            .expect("pool spawns even with 0 assets");
         let mut got_finished = false;
         while let Ok(ev) = rx.recv() {
             if let StreamDownloadEvent::Finished(r) = ev {
@@ -818,7 +874,7 @@ mod tests {
         state.step1.mods_archive_folder = td().to_string_lossy().into_owned();
         state.step2.update_selected_download_running = true; // already in flight
         assert!(
-            start_stream_download(&mut state).is_none(),
+            start_stream_download(&mut state, &std::collections::HashSet::new()).is_none(),
             "a second start while running is a no-op (BIO serial-loop parity)"
         );
     }
@@ -846,82 +902,120 @@ mod tests {
     }
 
     #[test]
-    fn apply_finished_sets_bio_shaped_state_and_triggers_bio_extract() {
-        // **(5) — the extract trigger.** `apply_finished` is the EXACT
-        // BIO `poll_step2_update_download` tail: BIO-shaped vectors +
-        // running false + verbatim status, THEN BIO's `pub(crate)`
-        // `start_step2_update_extract`. With an empty per-install Mods
-        // folder BIO's extract honestly early-returns (no spawn) — its
-        // observable post-state proves the call site ran exactly once
-        // through `apply_finished`. (In-crate because `apply_finished` /
-        // `start_step2_update_extract` are `pub(crate)` — the runtime
-        // trace proves the out-of-crate-observable contract; this proves
-        // the `pub(crate)` linkage. Same split as the orchestrator's
-        // acceptance-driver hygiene precedent.)
+    fn apply_result_state_flips_flag_and_sets_status_without_bulk_assigning_vectors() {
+        // **DL Fix-Set v2 (Fix 1b).** `apply_result_state` no longer
+        // bulk-assigns `update_selected_downloaded_sources` /
+        // `update_selected_download_failed_sources`. Those are appended
+        // per-asset by the orchestrator's `drain_stream_download` as
+        // each `AssetDone` arrives. `apply_result_state` only:
+        //   • clears `update_selected_download_running`;
+        //   • writes BIO's verbatim "Download updates finished: N
+        //     downloaded, M failed" status reading the
+        //     ALREADY-POPULATED vectors.
+        // Simulate the post-per-asset state by pre-populating the
+        // vectors before calling `apply_result_state`, then assert the
+        // flag flip + status text — and assert the vectors are NOT
+        // overwritten (which would clobber whatever the per-asset path
+        // pushed).
         let mut st = WizardState::default();
-        // mods_archive_folder set so start_step2_update_extract passes its
-        // own empty-archive-dir guard and reaches build_extract_jobs (which
-        // then early-returns on the empty Mods folder — the honest path).
-        st.step1.mods_archive_folder = td().to_string_lossy().into_owned();
-        let result = StreamDownloadResult {
-            downloaded: vec!["MyMod -> C:\\arch\\MyMod.zip".to_string()],
-            failed: vec!["BadMod: HTTP 404".to_string()],
-        };
+        // Pre-populate as the AssetDone branch would: 1 downloaded
+        // entry, 1 failed entry (BIO-shaped strings).
+        st.step2.update_selected_downloaded_sources =
+            vec!["MyMod -> C:\\arch\\MyMod.zip".to_string()];
+        st.step2.update_selected_download_failed_sources = vec!["BadMod: HTTP 404".to_string()];
         st.step2.update_selected_download_running = true;
 
-        // First prove apply_result_state's status in isolation (the
-        // BIO-verbatim download-finished line — the state-mutation half).
-        let mut st_state_only = st.clone();
-        apply_result_state(&mut st_state_only, result.clone());
-        assert_eq!(
-            st_state_only.step2.scan_status, "Download updates finished: 1 downloaded, 1 failed",
-            "apply_result_state sets BIO's verbatim download-finished status"
-        );
+        // `result` is no longer the source of truth for the vectors —
+        // `apply_result_state` only reads `state.step2`'s vectors for
+        // the status count. Pass an EMPTY result on purpose to prove it
+        // is not used as the vector source anymore.
+        let result = StreamDownloadResult::default();
+        apply_result_state(&mut st, result);
 
-        // Now the full apply_finished = apply_result_state + BIO's
-        // start_step2_update_extract.
-        let mut extract_rx: Option<
-            Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>,
-        > = None;
-        apply_finished(&mut st, result.clone(), &mut extract_rx);
-
-        // BIO-shaped vectors assigned verbatim + running cleared (the
-        // apply_result_state half — unaffected by the extract tail).
+        // Flag flipped.
         assert!(!st.step2.update_selected_download_running);
+        // Vectors NOT clobbered — the per-asset pushes survive.
         assert_eq!(
             st.step2.update_selected_downloaded_sources,
-            result.downloaded
+            vec!["MyMod -> C:\\arch\\MyMod.zip".to_string()],
+            "downloaded vector NOT bulk-overwritten (per-asset pushes survive)"
         );
         assert_eq!(
             st.step2.update_selected_download_failed_sources,
-            result.failed
+            vec!["BadMod: HTTP 404".to_string()],
+            "failed vector NOT bulk-overwritten (per-asset pushes survive)"
         );
-        // **The extract-trigger proof:** BIO's start_step2_update_extract
-        // RAN — its `build_extract_jobs` saw the empty per-install Mods
-        // folder, pushed "Mods Folder is empty" to
-        // `update_selected_extract_failed_sources`, and (failed > 0)
-        // OVERWROTE scan_status with its own verbatim
-        // "Extract updates finished: 0 updated, N failed". That overwrite
-        // (vs the download-finished line proven above) is the observable
-        // evidence the `pub(crate)` extract entry was invoked exactly once
-        // via apply_finished — not left as apply_result_state's status.
+        // Status reads the populated vectors: 1 downloaded, 1 failed.
         assert_eq!(
-            st.step2.scan_status, "Extract updates finished: 0 updated, 1 failed",
-            "BIO's start_step2_update_extract ran via apply_finished and \
-             set its own status (the extract-trigger proof)"
+            st.step2.scan_status, "Download updates finished: 1 downloaded, 1 failed",
+            "apply_result_state sets BIO's verbatim download-finished status \
+             (reading the already-populated vectors)"
+        );
+    }
+
+    #[test]
+    fn fix_1b_asset_done_carries_error_string_for_per_asset_failed_push() {
+        // **DL Fix-Set v2 (Fix 1b).** `StreamDownloadEvent::AssetDone`
+        // gained an `error: Option<String>` field so the orchestrator's
+        // per-asset drain can build the BIO-shaped "{label}: {err}"
+        // failed-source string as failures arrive (not bulk-assigned at
+        // `Finished`). Drive a real fixture run with one good + one 404
+        // asset; collect every AssetDone; assert (ok, error) are
+        // matched (success ⇒ error None; failure ⇒ error Some(_)).
+        let archive_dir = td();
+        let payloads = vec![("D".to_string(), b"D-good".to_vec())];
+        let (base, h) = spawn_fixture(payloads, true, 2);
+
+        let mut state = WizardState::default();
+        state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        let good = asset(
+            "DMOD/DMOD.TP2",
+            "github",
+            "v1",
+            "D.zip",
+            format!("{base}/cl/D"),
+        );
+        let bad = asset(
+            "EMOD/EMOD.TP2",
+            "github",
+            "v9",
+            "E.zip",
+            format!("{base}/404"),
+        );
+        state.step2.update_selected_update_assets = vec![good.clone(), bad.clone()];
+
+        let rx = start_stream_download(&mut state, &std::collections::HashSet::new())
+            .expect("pool spawns");
+        let mut dones: Vec<(usize, bool, Option<String>)> = Vec::new();
+        while let Ok(ev) = rx.recv() {
+            match ev {
+                StreamDownloadEvent::AssetDone {
+                    index, ok, error, ..
+                } => {
+                    dones.push((index, ok, error));
+                }
+                StreamDownloadEvent::Finished(_) => break,
+                _ => {}
+            }
+        }
+        h.join().unwrap();
+
+        // Exactly 2 AssetDones (one per asset).
+        assert_eq!(dones.len(), 2, "one AssetDone per asset");
+        // Good asset (whichever index) ⇒ ok==true + error==None.
+        let good_done = dones.iter().find(|d| d.1).expect("one ok asset");
+        assert_eq!(good_done.2, None, "ok ⇒ error None");
+        // Bad asset (whichever index) ⇒ ok==false + error==Some(_).
+        let bad_done = dones.iter().find(|d| !d.1).expect("one failed asset");
+        assert!(
+            bad_done.2.is_some(),
+            "failed ⇒ error carries the BIO-shaped error string"
         );
         assert!(
-            st.step2
-                .update_selected_extract_failed_sources
-                .iter()
-                .any(|e| e == "Mods Folder is empty"),
-            "BIO's build_extract_jobs ran (its empty-Mods-folder honest path)"
+            !bad_done.2.as_deref().unwrap().is_empty(),
+            "error string is non-empty (BIO-shaped \"{{err}}\")"
         );
-        // The extract is NOT left running (it honestly early-returned with
-        // no jobs — no worker spawned for an empty Mods folder).
-        assert!(
-            !st.step2.update_selected_extract_running,
-            "start_step2_update_extract early-returned (no jobs) — not left running"
-        );
+
+        let _ = std::fs::remove_dir_all(&archive_dir);
     }
 }

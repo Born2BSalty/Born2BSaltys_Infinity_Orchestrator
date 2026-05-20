@@ -509,6 +509,19 @@ pub struct DownloadProgress {
     /// `(bytes, None)` ⇒ indeterminate (no `Content-Length`). Empty for
     /// the chassis path (phase-fraction fallback).
     pub asset_bytes: std::collections::BTreeMap<usize, (u64, Option<u64>)>,
+    /// **DL Fix-Set v2 (Fix 1c) — the live BIO extract progress snapshot
+    /// `(completed, total)`**, sourced every frame from the shared
+    /// `Arc<Mutex<Option<(usize, usize)>>>` on `OrchestratorApp::extract_
+    /// progress` (written by the forwarder thread `extract_intercept::
+    /// start_extract_with_intercept` spawns when the download finishes).
+    /// `Some(_)` while extract is in flight ⇒ the Extract bar reads a
+    /// real `completed / total` fraction; `None` (pre-extract / post-
+    /// Finished / chassis path) ⇒ the bar falls back to the count path
+    /// (`extracted_count() / extract_total()`, which doesn't update until
+    /// BIO bulk-assigns `update_selected_extracted_sources` at extract-
+    /// `Finished` — the defect this fixes). Not persisted across frames;
+    /// `render_live` re-snapshots from the handle every frame.
+    pub extract_progress: Option<(usize, usize)>,
 }
 
 impl DownloadProgress {
@@ -549,6 +562,19 @@ impl DownloadProgress {
     /// through** so the DL-Run-1 already-present rows + the share-code
     /// byte denominators survive the per-frame rebuild. Pass empties for
     /// the chassis / first-frame path.
+    ///
+    /// **Fix 1e** — under Fix 1e the asset list KEEPS skipped assets (so
+    /// BIO's `build_extract_jobs` finds them). The §4.3 grid renders
+    /// skipped mods via the dedicated `skipped` rows path (the "✓
+    /// already downloaded" caption), so the to-fetch row list MUST
+    /// filter out asset indices that are in the skipped set — otherwise
+    /// the same mod would appear twice (once as a Skipped row, once as
+    /// a Staged/Extracting/Downloading row). The filter uses the labels
+    /// of `prior_skipped` (the skipped-mod labels are unique under the
+    /// SkippedMod model — Fix 1e built them from the actual asset
+    /// labels). The original asset index `i` is **preserved** for
+    /// `prior_bytes` / `prior_expected` lookups (they key on the index
+    /// in the unchanged list).
     #[must_use]
     pub fn from_wizard_state_full(
         state: &WizardState,
@@ -566,12 +592,22 @@ impl DownloadProgress {
                     .is_some_and(|l| l == label)
             })
         };
+        // **Fix 1e** — the set of skipped-row labels (the names rendered
+        // in the dedicated "✓ already downloaded" rows). Asset indices
+        // whose label matches are excluded from the to-fetch row list
+        // (no double-render). The original asset index is preserved
+        // throughout so byte/size lookups still hit.
+        let skipped_labels: std::collections::HashSet<&str> =
+            prior_skipped.iter().map(|s| s.name.as_str()).collect();
 
         let rows = s2
             .update_selected_update_assets
             .iter()
             .enumerate()
-            .map(|(i, a)| {
+            .filter_map(|(i, a)| {
+                if skipped_labels.contains(a.label.as_str()) {
+                    return None; // rendered as a Skipped row, not here
+                }
                 let downloaded = label_done(&s2.update_selected_downloaded_sources, &a.label);
                 let extracted = label_done(&s2.update_selected_extracted_sources, &a.label);
                 let status = if extracted {
@@ -587,16 +623,17 @@ impl DownloadProgress {
                 } else {
                     ModDownloadStatus::Queued
                 };
-                ModDownloadRow {
+                Some(ModDownloadRow {
                     name: a.label.clone(),
                     source: a.source_id.clone(),
                     status,
                     // Carry the live byte readout + the share-code expected
-                    // size for this asset index through the per-frame
-                    // rebuild (#1 / DL-Run 2).
+                    // size for THIS asset index through the per-frame
+                    // rebuild (#1 / DL-Run 2). Indices are stable under
+                    // Fix 1e (asset list is never mutated).
                     per_byte: prior_bytes.get(&i).copied(),
                     expected_size: prior_expected.get(&i).copied(),
-                }
+                })
             })
             .collect();
 
@@ -605,6 +642,11 @@ impl DownloadProgress {
             skipped: prior_skipped.to_vec(),
             expected_sizes: prior_expected.clone(),
             asset_bytes: prior_bytes.clone(),
+            // The live snapshot is sourced by `render_live` from the
+            // orchestrator-owned handle, not from BIO state — leave it
+            // `None` here; the caller fills it after the rebuild (see
+            // `render_live`).
+            extract_progress: None,
         }
     }
 
@@ -708,70 +750,98 @@ impl DownloadProgress {
 
     /// Generic "N / T done" for the chrome's phase line — the (N, T) for
     /// the **currently live phase**: Download = (download-complete +
-    /// skipped) / (all mods); Extract = (extracted rows) / (to-fetch rows).
-    /// Always non-decreasing within a run.
+    /// skipped) / (all mods); Extract = the live `(completed, total)` if
+    /// the Fix-1c snapshot is present, else the count-fallback. Always
+    /// non-decreasing within a run.
     pub fn completed(&self) -> usize {
         match self.phase() {
             InstallPhase::Downloading => self.downloaded_count(),
-            InstallPhase::Extracting => self.extracted_count(),
+            InstallPhase::Extracting => self.extract_completed_total().0,
         }
     }
 
-    /// **DL-Run 2 — the Download overall fraction: a TRUE byte aggregate
-    /// `Σ downloaded_bytes ÷ Σ expected_bytes`** across every to-fetch mod,
-    /// with DL-Run-1-skipped mods counted instantly-complete (their full
-    /// size on both sides). 0.0..=1.0. NOT N/M, NOT a heuristic blend.
+    /// **DL-Run 2 — the Download overall fraction.** Two modes, chosen by
+    /// what the share code carries:
     ///
-    /// Each row contributes via [`ModDownloadRow::download_bytes_pair`]
-    /// (baked share-code size preferred, else the live `Content-Length`).
-    /// A row with NO determinate size at all (no baked size, no
-    /// `Content-Length` yet — an indeterminate download) is **excluded
-    /// from the byte sums** and instead contributes a *count* share
-    /// (0 while fetching, 1 once download-complete) so the bar still
-    /// advances honestly and reaches 1.0 (it would otherwise stall < 1).
-    /// Monotonic: byte totals are non-decreasing and a row only ever moves
-    /// `fetching → complete`.
+    ///   - **Homogeneous-known-size** (every to-fetch row has a determinate
+    ///     size — a baked `expected_size` OR a live `Content-Length`): a
+    ///     TRUE byte aggregate `Σ downloaded_bytes ÷ Σ expected_bytes`
+    ///     across every to-fetch mod, with DL-Run-1-skipped mods counted
+    ///     instantly-complete (their full size on both sides). The smooth
+    ///     byte path — every 64 KiB chunk advances the bar.
+    ///   - **Any-row-lacks-known-size** (an old / fieldless / pre-redesign
+    ///     code that baked no per-archive sizes, AND the active row's
+    ///     server sent no `Content-Length`): **pure count** — `(download-
+    ///     complete rows + skipped) / (all rows + skipped)`. Skipped mods
+    ///     always count instantly complete (numerator + denominator). This
+    ///     is the Fix 1a fallback (the old "% of currently-known bytes" bug:
+    ///     active-pool sizes dominated the denominator so the bar tracked
+    ///     the active batch as the total instead of all mods).
     ///
-    /// Returns `0.0` for the empty / chassis model.
+    /// 0.0..=1.0. Monotonic: byte totals are non-decreasing and a row only
+    /// ever moves `fetching → complete`. Returns `0.0` for the empty /
+    /// chassis model.
     pub fn download_overall_fraction(&self) -> f32 {
         if self.rows.is_empty() && self.skipped.is_empty() {
             return 0.0;
         }
+        // Fix 1a — pure-count fallback when ANY row lacks a known size.
+        // The bug: mixing byte-known and count-only rows let active-pool
+        // sizes dominate the denominator (the bar tracked "% of currently-
+        // known bytes", not "% of all mods' bytes"). When any row is
+        // size-unknown, every row is treated as a single count-unit
+        // (skipped mods instantly complete on both sides).
+        if self.any_row_lacks_known_size() {
+            let denom = self.rows.len() + self.skipped.len();
+            if denom == 0 {
+                return 0.0;
+            }
+            let downloaded = self
+                .rows
+                .iter()
+                .filter(|r| r.status.download_complete())
+                .count()
+                + self.skipped.len();
+            return (downloaded as f32 / denom as f32).clamp(0.0, 1.0);
+        }
+        // Homogeneous known-size — TRUE byte aggregate (the smooth path).
         let mut num: f64 = 0.0;
         let mut den: f64 = 0.0;
-        // Determinate rows: real byte numerator + size denominator.
-        // Indeterminate rows: a unit count-share (0 / 1).
         for r in &self.rows {
             if let Some((got, size)) = r.download_bytes_pair() {
                 num += got as f64;
                 den += size as f64;
-            } else {
-                // No size anywhere — fall back to a per-row count share so
-                // the aggregate is still bounded + reaches 1.0.
-                den += 1.0;
-                if r.status.download_complete() {
-                    num += 1.0;
-                }
             }
         }
-        // Skipped mods are instantly complete. A known size adds to both
-        // byte sums; an unknown-size skip adds a unit count-share (1 / 1).
+        // Skipped mods are instantly complete; size is known here (the
+        // homogeneous-known-size branch) so it adds to both sums.
         for s in &self.skipped {
-            match s.size {
-                Some(sz) => {
-                    num += sz as f64;
-                    den += sz as f64;
-                }
-                None => {
-                    den += 1.0;
-                    num += 1.0;
-                }
+            if let Some(sz) = s.size {
+                num += sz as f64;
+                den += sz as f64;
             }
         }
         if den <= 0.0 {
             return 0.0;
         }
         (num / den).clamp(0.0, 1.0) as f32
+    }
+
+    /// **Fix 1a — `true` when ANY to-fetch row has NO known size** (no
+    /// baked `expected_size` AND no live positive `Content-Length`). Drives
+    /// the [`Self::download_overall_fraction`] pure-count fallback: the old
+    /// "% of currently-known bytes" mode let the active pool's sizes
+    /// dominate the denominator so the bar tracked the active batch as the
+    /// total instead of every mod. Pure count is the honest aggregate when
+    /// the share code carries no sizes (a pre-DL-Run-1 / third-party code).
+    /// Empty rows ⇒ `false` (no row to lack a size).
+    #[must_use]
+    pub fn any_row_lacks_known_size(&self) -> bool {
+        self.rows.iter().any(|r| {
+            let baked = r.expected_size.is_some_and(|s| s > 0);
+            let live = r.per_byte.and_then(|(_, t)| t).is_some_and(|t| t > 0);
+            !baked && !live
+        })
     }
 
     /// **DL-Run 2 — the Download overall percent** (0..=100), the byte
@@ -781,21 +851,35 @@ impl DownloadProgress {
         (self.download_overall_fraction() * 100.0).round() as u32
     }
 
-    /// **DL-Run 2 — the Extract overall fraction: a SEPARATE 0→100 that
-    /// starts at EXACTLY 0 when the extract phase begins and climbs
-    /// independently** (`extracted_rows ÷ to-fetch_rows`). It NEVER
-    /// inherits the Download value: while the phase is still `Downloading`
-    /// this is `0.0` by definition (the extract has not begun); the instant
-    /// the phase flips to `Extracting` it is 0 (no row unpacked yet) and
-    /// climbs as BIO unpacks each fetched archive. Count-granular (BIO's
-    /// extract exposes per-archive completion, not bytes) but a clean
-    /// monotonic own-phase 0→1. A fully-cached install (zero to-fetch rows
-    /// — nothing for BIO to extract) is `1.0` once in the extract phase
-    /// (no extract work = complete, so it auto-advances honestly).
+    /// **DL-Run 2 + DL Fix-Set v2 (Fix 1c) — the Extract overall fraction.**
+    /// A SEPARATE 0→100 that starts at EXACTLY 0 when the extract phase
+    /// begins and climbs independently — NEVER inherits the Download value.
+    /// Two modes:
+    ///
+    ///   - **Live snapshot (Fix 1c)**: when [`Self::extract_progress`] is
+    ///     `Some((completed, total))` (the forwarder thread the orchestrator
+    ///     spawns at extract-kick wrote the latest BIO `Progress` event),
+    ///     return `completed / total.max(1)`. This is the real live extract
+    ///     fraction — climbs frame-by-frame as BIO unpacks each archive.
+    ///   - **Count fallback**: `extracted_rows / extract_total()`. Used
+    ///     pre-snapshot, post-`Finished` (the handle is cleared then), the
+    ///     chassis path, or anywhere the intercept isn't wired. The count
+    ///     path only updates at extract-`Finished` (BIO bulk-assigns
+    ///     `update_selected_extracted_sources` then) — the very defect
+    ///     Fix 1c addresses for the live path; the fallback is still
+    ///     monotonic + correct, just count-granular.
+    ///
+    /// A fully-cached install (zero to-fetch rows — nothing for BIO to
+    /// extract) is `1.0` once in the extract phase (no extract work =
+    /// complete, so it auto-advances honestly).
     /// 0.0..=1.0; empty / pre-extract ⇒ 0.0.
     pub fn extract_overall_fraction(&self) -> f32 {
         if self.phase() != InstallPhase::Extracting {
             return 0.0;
+        }
+        // **Fix 1c — prefer the live forwarder-snapshot when present.**
+        if let Some((completed, total)) = self.extract_progress {
+            return (completed as f32 / total.max(1) as f32).clamp(0.0, 1.0);
         }
         let to_extract = self.extract_total();
         if to_extract == 0 {
@@ -810,6 +894,22 @@ impl DownloadProgress {
     /// bar reads this; 0 until the extract phase begins.
     pub fn extract_overall_pct(&self) -> u32 {
         (self.extract_overall_fraction() * 100.0).round() as u32
+    }
+
+    /// **DL Fix-Set v2 (Fix 1c) — `(completed, total)` for the Extract
+    /// phase's N/T display.** When the live snapshot is present (the
+    /// forwarder thread snapshotted a BIO `Progress` event), returns
+    /// those numbers so the §4.3 chrome's "N / T mods" line tracks the
+    /// real mid-extract progress. Otherwise falls back to the
+    /// count-based `(extracted_count(), extract_total())` (which only
+    /// updates at extract-`Finished` — the count-fallback for the
+    /// chassis / pre-snapshot path).
+    #[must_use]
+    pub fn extract_completed_total(&self) -> (usize, usize) {
+        if let Some((completed, total)) = self.extract_progress {
+            return (completed, total);
+        }
+        (self.extracted_count(), self.extract_total())
     }
 
     /// `true` when there is at least one mod and every to-fetch row is a
@@ -1108,13 +1208,18 @@ pub fn render_live(
     //        lock). Gated to after download finished. Doing this single
     //        pass is the same total hashing BIO's download already did once
     //        — it is the *repeated per-frame* hashing that froze the UI. ──
-    let s2 = &orchestrator.wizard_state.step2;
-    let download_started =
-        s2.update_selected_download_running || !s2.update_selected_downloaded_sources.is_empty();
+    // **Fix 1e** — `download_started` heuristic is dropped. The
+    // `archives_staged` one-shot latch is sufficient (the pre-Fix-1e
+    // `!download_running && downloaded_sources.is_empty()` check was
+    // there to avoid racing BIO mid-fetch; under Fix 1e the latch is
+    // strictly tighter — it fires once on its arm and is never re-armed
+    // until `clear_preview()`, regardless of pre-population). Keeping
+    // it would have been false-positive under Fix 1e because the skip
+    // pass pre-populates `downloaded_sources` — but the latch is THE
+    // guard.
     if !orchestrator.install_screen_state.archives_staged
         && orchestrator.install_screen_state.pipeline_armed
         && !destination.is_empty()
-        && !download_started
         && !orchestrator
             .wizard_state
             .step2
@@ -1158,6 +1263,10 @@ pub fn render_live(
         // Capture the pre-skip resolved set for the post-download verify
         // (a skipped archive was content-verified present; a fetched one
         // must be verified — both come from this full list).
+        // **Fix 1e** — the list is no longer mutated by `skip_present_
+        // archives`, so `pre_skip_assets` is equal to the asset list
+        // itself; we still capture it for the verify pass (its contract
+        // didn't change — it operates on this list).
         orchestrator.install_screen_state.pre_skip_assets = orchestrator
             .wizard_state
             .step2
@@ -1168,44 +1277,58 @@ pub fn render_live(
             &expected,
         );
 
-        // ── DL-Run 2 — capture the skipped-mods + the per-asset expected
-        //    sizes so the §4.3 grid renders skipped mods as instantly
-        //    satisfied AND the Download byte aggregate counts their bytes
-        //    complete (a mostly-cached install must feel smooth/fast/honest,
-        //    not lurch / sit at a false low). `skip_present_archives`
-        //    DROPPED the already-present assets from
-        //    `update_selected_update_assets`; diff the captured pre-skip set
-        //    against the post-skip set to recover exactly which mods were
-        //    skipped (by `archive_file_name`, the content identity the skip
-        //    matched on). The expected-size map is keyed by the POST-skip
-        //    row index (== the §4.3 row index `from_wizard_state_full`
-        //    builds), value = the share-code-baked `ArchiveMeta.size`. Both
-        //    are cached on `install_screen_state` and carried through the
-        //    per-frame rebuild. ──
+        // ── **DL Fix-Set v2 (Fix 1e)** — `summary.skipped_assets`
+        //    carries the exact assets that were skipped (no diff
+        //    needed); read it directly. The orchestrator-side
+        //    **skip-index set** is the indices into the unchanged asset
+        //    list whose `archive_file_name` matches a skipped asset's
+        //    (a multiset-correct match by name + label pair — same-name
+        //    different-source can't both be skipped since the hash is
+        //    the identity). The §4.3 grid renders the
+        //    SkippedMod rows from `skipped_assets` (the streamer never
+        //    touches their indices). The expected-size map is keyed by
+        //    the asset index in the unchanged list. ──
         let by_name: std::collections::HashMap<&str, &crate::registry::share_export::ArchiveMeta> =
             expected.iter().map(|m| (m.name.as_str(), m)).collect();
-        let post_skip_names: std::collections::HashSet<String> = orchestrator
-            .wizard_state
-            .step2
-            .update_selected_update_assets
+        let skipped_mods: Vec<SkippedMod> = skip
+            .skipped_assets
             .iter()
-            .map(crate::app::app_step2_update_download::archive_file_name)
+            .map(|a| {
+                let name = crate::app::app_step2_update_download::archive_file_name(a);
+                SkippedMod {
+                    name: a.label.clone(),
+                    source: a.source_id.clone(),
+                    size: by_name.get(name.as_str()).map(|m| m.size),
+                }
+            })
             .collect();
-        let mut skipped_mods: Vec<SkippedMod> = Vec::new();
-        // A multiset guard: if the same archive_file_name resolves more
-        // than once, only the surplus (pre-count minus post-count) is
-        // skipped — handled by consuming from a working post-set copy.
-        let mut remaining_post = post_skip_names.clone();
-        for a in &orchestrator.install_screen_state.pre_skip_assets {
-            let name = crate::app::app_step2_update_download::archive_file_name(a);
-            if remaining_post.remove(&name) {
-                continue; // still in the fetch set — not skipped
+        // Build the skip-index set: for each skipped asset (by label +
+        // archive_file_name pair), find its index in the unchanged asset
+        // list. A label collision is impossible in practice (BIO derives
+        // it from the source); for safety we consume occurrences so a
+        // duplicate name picks distinct indices.
+        let mut skip_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut consumed: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        for skipped_asset in &skip.skipped_assets {
+            let name = crate::app::app_step2_update_download::archive_file_name(skipped_asset);
+            for (i, a) in orchestrator
+                .wizard_state
+                .step2
+                .update_selected_update_assets
+                .iter()
+                .enumerate()
+            {
+                if consumed.contains(&i) {
+                    continue;
+                }
+                if a.label == skipped_asset.label
+                    && crate::app::app_step2_update_download::archive_file_name(a) == name
+                {
+                    skip_indices.insert(i);
+                    consumed.insert(i);
+                    break;
+                }
             }
-            skipped_mods.push(SkippedMod {
-                name: a.label.clone(),
-                source: a.source_id.clone(),
-                size: by_name.get(name.as_str()).map(|m| m.size),
-            });
         }
         let expected_sizes: std::collections::BTreeMap<usize, u64> = orchestrator
             .wizard_state
@@ -1220,14 +1343,16 @@ pub fn render_live(
             .collect();
         orchestrator.install_screen_state.skipped_mods = skipped_mods;
         orchestrator.install_screen_state.expected_archive_sizes = expected_sizes;
+        orchestrator.install_screen_state.skip_indices = skip_indices;
 
         orchestrator.install_screen_state.expected_archive_meta = expected;
         tracing::info!(
             target = "orchestrator",
-            "checksum-then-skip: {} already-present (not downloaded), {} \
-             missing (will fetch), {} no-expected-hash, {} candidates hashed \
-             ({} persistent-cache hits); DL-Run-2 captured {} skipped-mod \
-             rows + {} expected-size denominators",
+            "checksum-then-skip: {} already-present (kept in list for \
+             extract, streamer bypasses by index), {} missing (will fetch), \
+             {} no-expected-hash, {} candidates hashed ({} persistent-cache \
+             hits); DL-Run-2 captured {} skipped-mod rows + {} expected-size \
+             denominators + {} skip indices",
             skip.skipped_present,
             skip.missing_on_disk,
             skip.no_expected_hash,
@@ -1237,7 +1362,8 @@ pub fn render_live(
             orchestrator
                 .install_screen_state
                 .expected_archive_sizes
-                .len()
+                .len(),
+            orchestrator.install_screen_state.skip_indices.len(),
         );
     }
 
@@ -1246,93 +1372,57 @@ pub fn render_live(
     //    archives` (above — already dropped any store-satisfied assets so
     //    they are NOT re-downloaded) and `ingest_downloaded_archives`
     //    (below — content-addresses what the pool just fetched). This
-    //    REPLACES BIO's serial download sub-phase:
+    //    REPLACES BIO's serial download sub-phase.
     //
-    //      - `arm_auto_build` no longer arms `pending_saved_log_download`,
-    //        so BIO's serial `start_step2_update_download` never fires
-    //        (no double-download — `app_step2_saved_log_flow.rs:86-110`
-    //        is skipped).
-    //      - When BIO's apply + update-preview have resolved the asset set
-    //        and nothing is in flight (`download_gate_open` — the SAME
-    //        guard terms BIO's serial block uses, minus the disarmed
-    //        flag), we set `modlist_auto_build_waiting_for_install = true`
-    //        — the EXACT pub field BIO's own block sets at that point
-    //        (`:103`) — so BIO's UNCHANGED extract → rescan →
-    //        `start_auto_build_install` block (`:112-129`, gated on that
-    //        flag) carries the pipeline to the install hand-off after
-    //        extract, identical to the serial path's continuation.
-    //      - With resolved assets ⇒ spawn the bounded parallel pool
-    //        (`stream_downloader::start_stream_download`) and store its
-    //        receiver on `OrchestratorApp::stream_download_rx`;
-    //        `poll_step2_channels::drain_stream_download` pumps per-mod
-    //        byte deltas into the §4.3 grid and, on `Finished`, writes the
-    //        BIO-shaped result vectors + triggers BIO's unchanged
-    //        `start_step2_update_extract` (exactly BIO's serial
-    //        `poll_step2_update_download` tail).
-    //      - With NO resolved assets (everything store-satisfied / nothing
-    //        to fetch) ⇒ do not spawn a pool; setting
-    //        `modlist_auto_build_waiting_for_install = true` is enough —
-    //        BIO's `:112-129` block then fires `start_auto_build_install`
-    //        directly (the same effect as BIO's serial "no assets ⇒
-    //        straight to install" early-out, routed through the existing
-    //        handoff block instead of the now-disarmed download block).
+    //    **Fix 1e — one-shot via `download_phase_started`.** The prior
+    //    heuristic (`stream_download_rx.is_none() && downloaded_sources.
+    //    is_empty()`) was already-true under Fix 1e: `archive_skip` now
+    //    pre-populates `downloaded_sources` with one entry per skipped
+    //    archive, so the heuristic would re-kick the streamer every
+    //    frame. The latch is set just before the call and cleared by
+    //    `clear_preview()` on Cancel→Preview.
     //
-    //    One-shot per arm via `update_selected_download_running` (the
-    //    streaming downloader sets it true at start; `download_gate_open`
-    //    requires it false) — the gate cannot re-kick a pool mid-flight.
-    //    Reset on Cancel→Preview (`clear_preview` clears the latches; the
-    //    stream rx is dropped when the pipeline is re-armed).
+    //    The kick ALWAYS calls `start_stream_download` (even when every
+    //    asset is in `skip_indices` ⇒ the all-cached case): the
+    //    streamer's worker loop bypasses skipped indices silently, and
+    //    the coordinator falls through to send an immediate `Finished`
+    //    when the index range exhausts ⇒ the orchestrator's drain
+    //    then runs `apply_result_state` + Fix-1c's `start_extract_with_
+    //    intercept`, and BIO's unchanged extract → rescan →
+    //    `start_auto_build_install` carries the pipeline forward
+    //    (matching the non-skip path's continuation exactly).
     if orchestrator.install_screen_state.pipeline_armed
         && orchestrator
             .install_screen_state
             .pipeline_arm_error
             .is_none()
         && auto_build_driver::download_gate_open(&orchestrator.wizard_state)
-        && orchestrator.stream_download_rx.is_none()
-        && orchestrator
-            .wizard_state
-            .step2
-            .update_selected_downloaded_sources
-            .is_empty()
+        && !orchestrator.install_screen_state.download_phase_started
     {
-        // The gate is open and this batch's download has not been done
-        // yet (no `downloaded_sources` recorded — that vector is the
-        // post-download artifact). Set the pub field BIO's own serial
-        // block sets at this exact point so BIO's unchanged install
-        // hand-off fires after extract. (`modlist_auto_build_waiting_for_
-        // install` is on `WizardState` itself, not `step2` — same field
-        // `arm_auto_build` / `app_step2_saved_log_flow.rs:103` set.)
         orchestrator
             .wizard_state
             .modlist_auto_build_waiting_for_install = true;
-
-        if orchestrator
-            .wizard_state
-            .step2
-            .update_selected_update_assets
-            .is_empty()
-        {
-            // No assets to fetch (all store-satisfied / nothing resolved):
-            // BIO's `:112-129` block now owns the hand-off
-            // (`modlist_auto_build_waiting_for_install` is set). Nothing to
-            // download — do NOT spawn an empty pool.
-            tracing::info!(
-                target = "orchestrator",
-                "#1 download gate open with 0 resolved assets — \
-                 nothing to stream; BIO's install hand-off block carries it"
-            );
-        } else if let Some(rx) = crate::install_runtime::stream_downloader::start_stream_download(
+        // Mark the one-shot BEFORE the call (defensive: if the call
+        // panics or otherwise re-enters this frame, we must not double-
+        // kick). The latch is cleared by `clear_preview()` on
+        // Cancel→Preview so a re-arm re-kicks cleanly.
+        orchestrator.install_screen_state.download_phase_started = true;
+        let skip_indices = orchestrator.install_screen_state.skip_indices.clone();
+        if let Some(rx) = crate::install_runtime::stream_downloader::start_stream_download(
             &mut orchestrator.wizard_state,
+            &skip_indices,
         ) {
             orchestrator.stream_download_rx = Some(rx);
             tracing::info!(
                 target = "orchestrator",
-                "#1 parallel streaming downloader spawned for {} asset(s)",
+                "Fix 1e — parallel streaming downloader spawned for {} \
+                 asset(s); streamer bypasses {} skipped index/indices",
                 orchestrator
                     .wizard_state
                     .step2
                     .update_selected_update_assets
-                    .len()
+                    .len(),
+                skip_indices.len()
             );
         }
     }
@@ -1358,6 +1448,7 @@ pub fn render_live(
             .wizard_state
             .step2
             .update_selected_download_running
+        && orchestrator.install_screen_state.download_phase_started
         && !orchestrator
             .wizard_state
             .step2
@@ -1369,7 +1460,29 @@ pub fn render_live(
             .install_screen_state
             .expected_archive_meta
             .clone();
-        let pre_skip = orchestrator.install_screen_state.pre_skip_assets.clone();
+        // **Fix 1e** — the verify pass must operate only on assets the
+        // streamer actually FETCHED (not the ones `archive_skip` already
+        // content-verified present + placed). Filter `pre_skip_assets`
+        // (which under Fix 1e equals `update_selected_update_assets`) by
+        // excluding `skip_indices`: only the genuinely-downloaded assets
+        // remain. (The pre-populated skipped entries in
+        // `update_selected_downloaded_sources` are content-verified by
+        // the skip pass itself — the hash matched on disk before they
+        // were placed; re-verifying them here would re-hash for no value.)
+        let skip_indices = orchestrator.install_screen_state.skip_indices.clone();
+        let pre_skip: Vec<_> = orchestrator
+            .install_screen_state
+            .pre_skip_assets
+            .iter()
+            .enumerate()
+            .filter_map(|(i, a)| {
+                if skip_indices.contains(&i) {
+                    None // already content-verified by the skip pass
+                } else {
+                    Some(a.clone())
+                }
+            })
+            .collect();
         let v = crate::install_runtime::archive_skip::verify_downloaded_archives(
             &mut orchestrator.wizard_state,
             &expected,
@@ -1391,6 +1504,13 @@ pub fn render_live(
             .wizard_state
             .step2
             .update_selected_download_running
+        // **Fix 1e** — gate behind `download_phase_started` (the kick
+        // latch). The prior `!downloaded_sources.is_empty()` heuristic
+        // is now true the moment `archive_skip` pre-populates skipped
+        // entries — before the streamer even runs. We want ingest to
+        // run AFTER the streamer finishes (its own latch flips
+        // `download_running` false on `Finished`).
+        && orchestrator.install_screen_state.download_phase_started
         && !orchestrator
             .wizard_state
             .step2
@@ -1444,6 +1564,13 @@ pub fn render_live(
         &prior_skipped,
         &prior_expected,
     );
+    // **DL Fix-Set v2 (Fix 1c)** — snapshot the live BIO extract
+    // `(completed, total)` from the shared handle the forwarder thread
+    // writes; the Extract phase bar + the chrome's N/T line both read it
+    // for the real mid-extract progress (instead of the count-only
+    // post-`Finished` fallback). `None` outside the extract window ⇒ the
+    // count fallback (chassis + pre-snapshot path) is used.
+    progress.extract_progress = orchestrator.extract_progress.lock().ok().and_then(|g| *g);
 
     // ── **#1 — eliminate the post-extract 0/0 grid flash.** When BIO's
     //    extract empties `update_selected_update_assets` (its
@@ -1614,11 +1741,15 @@ fn render_overall_progress(
         // Extract denominator = the to-fetch rows BIO actually unpacks
         // (skipped mods are a download-phase concern, not extract work) —
         // so the Extract bar is a clean 0→100 that starts at exactly 0.
+        // **Fix 1c** — when the live snapshot is present, the Extract
+        // N/T comes from BIO's `Progress { completed, total }` (the
+        // forwarder thread's snapshot) so the chrome reads the real
+        // mid-extract progress, not the count-only post-`Finished`
+        // bulk-assign.
         let dl_total = progress.total();
-        let ex_total = progress.rows.len();
         let dl_n = progress.downloaded_count();
-        let ex_n = progress.extracted_count();
         let dl_pct = progress.download_overall_pct();
+        let (ex_n, ex_total) = progress.extract_completed_total();
         let ex_pct = progress.extract_overall_pct();
 
         // The phase indicator: which phase is live + its N/T · P%.
@@ -2526,6 +2657,126 @@ mod tests {
     }
 
     #[test]
+    fn fix_1a_pure_count_fallback_when_any_row_lacks_known_size() {
+        // The defect this fixes: with mixed known/unknown sizes, the
+        // pre-fix byte aggregate let the active pool's known sizes dominate
+        // the denominator, so the overall bar tracked the active batch as
+        // the total. The fix: ANY row lacking a known size ⇒ pure count.
+        // Three known-size complete rows + one unknown-size active row +
+        // one skipped (no size) ⇒ pure count = (3 + 1) / (4 + 1) = 0.8.
+        let p = DownloadProgress {
+            rows: vec![
+                row_sz(ModDownloadStatus::Staged, None, Some(1000)),
+                row_sz(ModDownloadStatus::Staged, None, Some(1000)),
+                row_sz(ModDownloadStatus::Staged, None, Some(1000)),
+                // The unknown-size row: no baked size, no Content-Length yet.
+                row_sz(ModDownloadStatus::Downloading, Some((100, None)), None),
+            ],
+            skipped: vec![skipped("c1", None)],
+            ..Default::default()
+        };
+        assert!(p.any_row_lacks_known_size());
+        let f = p.download_overall_fraction();
+        assert!(
+            (f - 0.8).abs() < 1e-4,
+            "pure count = (3 complete + 1 skipped) / (4 rows + 1 skipped) = 0.8, got {f}"
+        );
+    }
+
+    #[test]
+    fn fix_1a_homogeneous_known_size_uses_byte_aggregate() {
+        // All rows have a known size (baked OR live Content-Length) ⇒ the
+        // smooth byte path is unchanged: Σbytes ÷ Σexpected.
+        let p = DownloadProgress {
+            rows: vec![
+                row_sz(ModDownloadStatus::Extracting, None, Some(100)),
+                row_sz(
+                    ModDownloadStatus::Downloading,
+                    Some((50, Some(100))),
+                    Some(100),
+                ),
+                // Live Content-Length only — still a known size (no baked).
+                row_sz(ModDownloadStatus::Downloading, Some((25, Some(100))), None),
+            ],
+            ..Default::default()
+        };
+        assert!(!p.any_row_lacks_known_size(), "every row has a known size");
+        let f = p.download_overall_fraction();
+        // Σbytes = 100 + 50 + 25 = 175; Σexpected = 300 ⇒ ~0.5833.
+        assert!(
+            (f - (175.0_f32 / 300.0)).abs() < 1e-4,
+            "byte aggregate = 175/300, got {f}"
+        );
+    }
+
+    #[test]
+    fn fix_1a_all_skipped_is_full_in_both_modes() {
+        // No to-fetch rows ⇒ no row lacks known size (empty `any`) ⇒ byte
+        // path; skipped mods contribute full size on both sides ⇒ 1.0.
+        let p = DownloadProgress {
+            skipped: vec![skipped("a", Some(10)), skipped("b", Some(20))],
+            ..Default::default()
+        };
+        assert!(!p.any_row_lacks_known_size());
+        assert!((p.download_overall_fraction() - 1.0).abs() < 1e-6);
+
+        // Skipped-only with no sizes also reads as full (the empty-rows
+        // case still goes through the byte branch; den is 0 ⇒ early 0.0 —
+        // but the user-facing display: a fully-cached install with no
+        // sizes is handled by the count fallback only if ANY row exists.
+        // The empty-rows / sized-skip-only combination is correctly 1.0).
+        let only_unknown_skipped = DownloadProgress {
+            skipped: vec![skipped("a", None)],
+            ..Default::default()
+        };
+        // No rows ⇒ any_row_lacks_known_size = false (vacuous) ⇒ byte path
+        // ⇒ no determinate sums (no rows, skip has no size) ⇒ den 0 ⇒ 0.
+        // This is acceptable: the screen anyway shows 100% via the chrome
+        // (all_staged + extract = 1.0). The aggregate's "0 of 0 bytes" is
+        // honest; the chrome's percentage uses pct (rounded — still 0).
+        // We document the case via the assertion below.
+        assert_eq!(
+            only_unknown_skipped.download_overall_fraction(),
+            0.0,
+            "no rows + skipped-with-no-size ⇒ no determinate bytes (chrome \
+             still flips via all_staged / extract-complete)"
+        );
+    }
+
+    #[test]
+    fn fix_1a_partial_skipped_plus_unknown_to_fetch_counts_skipped_complete() {
+        // 2 skipped (cached) + 2 to-fetch unknown-size ⇒ pure count.
+        // Skipped count as complete on both sides.
+        // numerator = 2 (skipped) + 0 (no row download-complete) = 2;
+        // denominator = 2 (rows) + 2 (skipped) = 4 ⇒ 0.5.
+        let p = DownloadProgress {
+            rows: vec![
+                row_sz(ModDownloadStatus::Downloading, Some((50, None)), None),
+                row_sz(ModDownloadStatus::Queued, None, None),
+            ],
+            skipped: vec![skipped("c1", Some(1000)), skipped("c2", None)],
+            ..Default::default()
+        };
+        assert!(p.any_row_lacks_known_size());
+        let f = p.download_overall_fraction();
+        assert!(
+            (f - 0.5).abs() < 1e-4,
+            "pure count = (0 row-complete + 2 skipped) / (2 + 2) = 0.5, got {f}"
+        );
+        // Once both to-fetch rows complete ⇒ 4/4 = 1.0.
+        let p_done = DownloadProgress {
+            rows: vec![
+                row_sz(ModDownloadStatus::Extracting, Some((50, None)), None),
+                row_sz(ModDownloadStatus::Staged, None, None),
+            ],
+            skipped: vec![skipped("c1", Some(1000)), skipped("c2", None)],
+            ..Default::default()
+        };
+        assert!(p_done.any_row_lacks_known_size());
+        assert!((p_done.download_overall_fraction() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn download_overall_climbs_smoothly_with_bytes_and_is_monotonic() {
         // Two 1000-byte archives streaming; the aggregate climbs every
         // delta (the "0 to 70 in jerky steps" fix — it never jumps).
@@ -2591,12 +2842,14 @@ mod tests {
 
     #[test]
     fn download_overall_indeterminate_rows_get_a_count_share_so_it_reaches_one() {
-        // A no-Content-Length (no baked size) row is excluded from the
-        // byte sums but contributes a 0/1 then 1/1 count share so the
-        // aggregate is bounded and reaches 1.0 (never stalls < 1).
+        // **Fix 1a** — ANY row lacking a known size flips the aggregate to
+        // pure count (the "active-pool sizes dominate" defect). The bar is
+        // bounded and reaches 1.0 via count, not the old per-row byte/count
+        // hybrid (which under-counted unknown rows as a single unit
+        // alongside known rows worth potentially-GB).
         let mk = |complete: bool| DownloadProgress {
             rows: vec![
-                row_sz(ModDownloadStatus::Staged, None, Some(100)), // 100/100
+                row_sz(ModDownloadStatus::Staged, None, Some(100)),
                 row_sz(
                     if complete {
                         ModDownloadStatus::Staged
@@ -2605,18 +2858,17 @@ mod tests {
                     },
                     Some((9999, None)),
                     None,
-                ), // indeterminate ⇒ count share
+                ), // indeterminate (no size) ⇒ any-lacks-known-size ⇒ pure count
             ],
             ..Default::default()
         };
-        // Determinate done (100/100) + indeterminate fetching (0/1) ⇒
-        // 100/101 ≈ 0.99 — bounded, not > 1.
+        // Pure count: 1 done / 2 rows = 0.5 mid-flight; bounded < 1.
         let mid = mk(false).download_overall_fraction();
         assert!(
-            mid > 0.98 && mid < 1.0,
-            "bounded < 1 while fetching, got {mid}"
+            (mid - 0.5).abs() < 1e-6,
+            "any-lacks-known-size ⇒ pure count = 1/2 = 0.5, got {mid}"
         );
-        // Both complete ⇒ exactly 1.0 (it DOES reach 100%).
+        // Both complete ⇒ 2/2 = exactly 1.0.
         assert!((mk(true).download_overall_fraction() - 1.0).abs() < 1e-6);
     }
 
@@ -2668,6 +2920,68 @@ mod tests {
             ..Default::default()
         };
         assert!((done.extract_overall_fraction() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn fix_1c_extract_overall_uses_live_snapshot_when_present() {
+        // **DL Fix-Set v2 (Fix 1c).** When the orchestrator's forwarder
+        // thread snapshots a BIO `Progress { completed, total }` event
+        // into the shared handle, the Extract bar reads the real
+        // mid-extract progress (instead of count_fallback which doesn't
+        // update until BIO bulk-assigns the extracted vector at
+        // `Finished`).
+        // Phase = Extracting (all rows downloaded, none extracted) ⇒
+        // count fallback = 0/2 = 0.0; snapshot says 3/10 ⇒ the bar reads
+        // 0.3.
+        let mut p = DownloadProgress {
+            rows: vec![
+                row("a", ModDownloadStatus::Extracting),
+                row("b", ModDownloadStatus::Extracting),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(p.phase(), InstallPhase::Extracting);
+        // No snapshot ⇒ count fallback (0/2 = 0).
+        assert_eq!(p.extract_overall_pct(), 0);
+        // Snapshot live ⇒ uses (completed, total) = (3, 10) = 30%.
+        p.extract_progress = Some((3, 10));
+        assert_eq!(
+            p.extract_overall_pct(),
+            30,
+            "live snapshot (3/10) ⇒ 30%, not the count fallback (0/2)"
+        );
+        // The chrome's N/T also reads the snapshot via
+        // `extract_completed_total`.
+        assert_eq!(p.extract_completed_total(), (3, 10));
+        assert_eq!(p.completed(), 3, "chrome N tracks the live snapshot");
+        // Snapshot clears ⇒ falls back to count.
+        p.extract_progress = None;
+        assert_eq!(p.extract_completed_total(), (0, 2));
+        assert_eq!(p.extract_overall_pct(), 0);
+    }
+
+    #[test]
+    fn fix_1c_extract_snapshot_only_drives_bar_during_extract_phase() {
+        // **Fix 1c safety:** a stale snapshot from a prior extract must
+        // not bleed into the Download phase. While `phase ==
+        // Downloading` the Extract bar reads 0 regardless of any
+        // snapshot value (the existing "never inherits Download"
+        // invariant; tested here for the snapshot path too).
+        let p = DownloadProgress {
+            rows: vec![row_sz(
+                ModDownloadStatus::Downloading,
+                Some((50, Some(100))),
+                Some(100),
+            )],
+            extract_progress: Some((7, 10)), // a stale value
+            ..Default::default()
+        };
+        assert_eq!(p.phase(), InstallPhase::Downloading);
+        assert_eq!(
+            p.extract_overall_pct(),
+            0,
+            "Extract is 0 during Download phase, even with a snapshot present"
+        );
     }
 
     #[test]

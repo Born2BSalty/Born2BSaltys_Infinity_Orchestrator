@@ -1250,6 +1250,164 @@ mod tests {
         let _ = std::fs::remove_file(&store_path);
     }
 
+    #[test]
+    fn fix_1d_paste_path_re_derives_step3_so_counts_are_non_zero() {
+        // **DL Fix-Set v2 (Fix 1d).** On the Install-Modlist-paste path,
+        // `state.step3` is EMPTY at clean-exit (the auto-build saved-log
+        // flow runs apply_log ONCE, then BIO's post-extract scan WIPES
+        // step2 checked state, then `start_auto_build_install` fires).
+        // `count_mods_and_components` (called by `flip_to_installed`)
+        // reads `state.step3.{bgee,bg2ee}_items` ⇒ returns (0, 0). The
+        // orchestrator's `maybe_flip_to_installed_on_clean_exit` now
+        // re-runs `apply_saved_weidu_log_selection` (re-reads the post-
+        // install weidu.log via the log-folder step1 fields) +
+        // `sync_step3_from_step2` (builds step3 from the freshly-checked
+        // step2) BEFORE the flip — so step3 is populated and counts are
+        // non-zero. This test exercises the EFFECT of the new pre-flip
+        // re-derivation: simulate the post-install state with on-disk
+        // synthetic weidu.log files, run the same two BIO callees the
+        // orchestrator runs, then call `flip_to_installed` and assert
+        // the registry entry has non-zero mod/component counts.
+        let (store, store_path) = temp_registry_store("fix_1d_paste");
+        let dest = temp_destination("fix_1d_paste");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        // Build a per-install BGEE log folder with a synthetic weidu.log
+        // listing 2 distinct mods, 3 components total (the count_mods_
+        // and_components contract: distinct tp_files + leaf rows).
+        let bgee_log_dir = dest.join("BGEE-logs");
+        std::fs::create_dir_all(&bgee_log_dir).unwrap();
+        std::fs::write(
+            bgee_log_dir.join("weidu.log"),
+            "~EEFIXPACK/EEFIXPACK.TP2~ #0 #0 // Fix Pack: v1\n\
+             ~EEFIXPACK/EEFIXPACK.TP2~ #0 #2 // Fix Pack extra: v1\n\
+             ~BG1UB/SETUP-BG1UB.TP2~ #0 #0 // BG1 UB: v15\n",
+        )
+        .unwrap();
+
+        // Build a WizardState that mimics the orchestrator's at clean
+        // exit on the paste path: step1 has the log-folder set (the
+        // per-install dirs derivation set it); step2 has the scanned
+        // mods (BIO's post-extract scan populated them); step3 is
+        // EMPTY (the bug — the count call returns (0,0) without the
+        // re-derivation). We populate step2 with the BIO Step2ModState
+        // shapes apply_saved_weidu_log_selection needs to match.
+        use crate::app::state::{Step2ComponentState, Step2ModState};
+        let mut s = WizardState::default();
+        s.step1.game_install = "BGEE".to_string();
+        s.step1.bgee_log_folder = bgee_log_dir.to_string_lossy().into_owned();
+        // Helper for empty Step2ComponentState (covers the many fields
+        // we don't care about for this test).
+        let comp = |id: &str, label: &str, raw: &str| Step2ComponentState {
+            component_id: id.to_string(),
+            label: label.to_string(),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            raw_line: raw.to_string(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false, // log-apply / sync will flip it
+            selected_order: None,
+        };
+        let mod_state =
+            |name: &str, tp: &str, components: Vec<Step2ComponentState>| Step2ModState {
+                name: name.to_string(),
+                tp_file: tp.to_string(),
+                tp2_path: String::new(),
+                readme_path: None,
+                ini_path: None,
+                web_url: None,
+                package_marker: None,
+                latest_checked_version: None,
+                update_locked: false,
+                mod_prompt_summary: None,
+                mod_prompt_events: Vec::new(),
+                checked: false,
+                hidden_components: Vec::new(),
+                components,
+            };
+        // Step 2 scanned mods (post-extract scan result), with no
+        // components checked yet (BIO's scan wipes checked state).
+        s.step2.bgee_mods = vec![
+            mod_state(
+                "EEFIXPACK",
+                "EEFIXPACK/EEFIXPACK.TP2",
+                vec![
+                    comp("0", "Fix Pack", "0 // Fix Pack: v1"),
+                    comp("2", "Fix Pack extra", "2 // Fix Pack extra: v1"),
+                ],
+            ),
+            mod_state(
+                "BG1UB",
+                "BG1UB/SETUP-BG1UB.TP2",
+                vec![comp("0", "BG1 UB", "0 // BG1 UB: v15")],
+            ),
+        ];
+
+        // Pre-flip baseline: counts read (0, 0) because step3 is empty.
+        let (mods_before, comps_before) = count_mods_and_components(&s);
+        assert_eq!(
+            (mods_before, comps_before),
+            (0, 0),
+            "BASELINE — without the re-derivation, the paste path leaves \
+             step3 empty and `count_mods_and_components` reads (0, 0)"
+        );
+
+        // **Fix 1d** — the orchestrator runs these two BIO callees
+        // BEFORE calling `flip_to_installed` on the paste path.
+        crate::app::app_step2_log::apply_saved_weidu_log_selection(&mut s);
+        crate::app::app_step3_sync_flow::sync_step3_from_step2(&mut s);
+
+        // Post-re-derivation: step3 is populated; counts are non-zero.
+        let (mods_after, comps_after) = count_mods_and_components(&s);
+        assert!(
+            mods_after > 0 && comps_after > 0,
+            "Fix 1d — after the pre-flip re-derivation, step3 is populated \
+             and counts are NON-ZERO: got ({mods_after}, {comps_after})"
+        );
+        // 2 distinct mods (EEFIXPACK + BG1UB) + 3 leaves.
+        assert_eq!(mods_after, 2, "2 distinct tp_files");
+        assert_eq!(comps_after, 3, "3 component leaves in the synthetic log");
+
+        // Now call `flip_to_installed` and confirm the registry entry
+        // records the non-zero counts.
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "FIX1DPASTE01".to_string(),
+            name: "Polished BGEE".to_string(),
+            game: Game::BGEE,
+            destination_folder: dest.to_string_lossy().into_owned(),
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+        let rx = flip_to_installed("FIX1DPASTE01", &mut registry, &store, &s, None);
+        let entry = registry.find("FIX1DPASTE01").unwrap();
+        assert_eq!(entry.state, ModlistState::Installed);
+        assert_eq!(
+            entry.mod_count, 2,
+            "registry entry's mod_count reflects the re-derived step3"
+        );
+        assert_eq!(
+            entry.component_count, 3,
+            "registry entry's component_count reflects the re-derived step3"
+        );
+        if let Some(rx) = rx {
+            let _ = rx.recv_timeout(std::time::Duration::from_secs(5));
+        }
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_file(&store_path);
+    }
+
     /// Test-only inverse of `pack_meta`'s envelope: strip prefix,
     /// base64url-decode, zlib-inflate, read `allow_auto_install`. Uses
     /// `flate2` (already a dep) + the same URL-safe alphabet

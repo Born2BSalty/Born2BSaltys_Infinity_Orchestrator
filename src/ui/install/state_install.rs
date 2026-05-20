@@ -334,15 +334,37 @@ pub struct InstallScreenState {
     /// Not persisted.
     pub skipped_mods: Vec<SkippedMod>,
     /// **DL-Run 2 — the per-asset expected archive size denominator map**,
-    /// keyed by the POST-skip asset index (== the §4.3 row index), value =
-    /// the share-code-baked `ArchiveMeta.size`. Gives the Download byte
-    /// aggregate (`Σ bytes ÷ Σ expected`) a stable denominator independent
-    /// of whether the server sent a `Content-Length`. Decoded at the same
-    /// one-shot skip-pass boundary and carried through the per-frame
-    /// rebuild. Empty for a fieldless / pre-redesign / third-party code
-    /// (the aggregate then uses each row's live `Content-Length`). Reset by
-    /// `clear_preview()`. Not persisted.
+    /// keyed by the asset index into `update_selected_update_assets` (==
+    /// the §4.3 row index — Fix 1e: the list is never mutated, indices
+    /// remain stable), value = the share-code-baked `ArchiveMeta.size`.
+    /// Gives the Download byte aggregate (`Σ bytes ÷ Σ expected`) a stable
+    /// denominator independent of whether the server sent a
+    /// `Content-Length`. Decoded at the same one-shot skip-pass boundary
+    /// and carried through the per-frame rebuild. Empty for a fieldless
+    /// / pre-redesign / third-party code (the aggregate then uses each
+    /// row's live `Content-Length`). Reset by `clear_preview()`. Not
+    /// persisted.
     pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
+    /// **DL Fix-Set v2 (Fix 1e) — the orchestrator-side skip-index set.**
+    /// The set of indices into the unchanged `update_selected_update_
+    /// assets` whose archives are already present on disk (DL-Run-1 hash
+    /// match) and which the parallel streamer must silently bypass. The
+    /// indices are stable because Fix 1e KEEPS skipped assets in the
+    /// list (so BIO's `build_extract_jobs` finds them). Computed at the
+    /// one-shot skip-pass boundary from `summary.skipped_assets` and
+    /// passed to `stream_downloader::start_stream_download` when the
+    /// download gate opens. Reset by `clear_preview()`. Not persisted.
+    pub skip_indices: std::collections::HashSet<usize>,
+    /// **DL Fix-Set v2 (Fix 1e) — download-phase one-shot kick latch.**
+    /// `false` until `stage_downloading::render_live` has called
+    /// `start_stream_download` once for this arm; `true` once the call
+    /// has been made. Replaces the prior heuristic that checked
+    /// `stream_download_rx.is_none() && downloaded_sources.is_empty()`
+    /// — that heuristic was already-true under Fix 1e (downloaded-sources
+    /// is now pre-populated by `archive_skip`) and would have re-kicked
+    /// the streamer every frame. Reset by `clear_preview()`. Not
+    /// persisted.
+    pub download_phase_started: bool,
 }
 
 impl InstallScreenState {
@@ -384,6 +406,12 @@ impl InstallScreenState {
         // must not inherit the prior code's cached/skip view.
         self.skipped_mods = Vec::new();
         self.expected_archive_sizes = std::collections::BTreeMap::new();
+        // DL Fix-Set v2 (Fix 1e): the orchestrator-side skip-index set
+        // + the one-shot download-kick latch must reset on re-entry too
+        // (a re-parsed code re-runs the skip pass + re-kicks the streamer
+        // from scratch).
+        self.skip_indices = std::collections::HashSet::new();
+        self.download_phase_started = false;
     }
 }
 

@@ -120,6 +120,14 @@
 pub mod archive_skip;
 pub mod archive_store;
 pub mod auto_build_driver;
+// ── DL Fix-Set v2 (Fix 1c) — extract-progress intercept. Wraps BIO's
+//    `pub(crate)` `app_step2_update_extract` receiver-end stream with a
+//    forwarder that snapshots `Progress` events into a shared handle the
+//    orchestrator reads every frame (so the §4.3 Extract bar climbs
+//    mid-extract, instead of staying at 0 until `Finished`). Zero BIO
+//    source — only the receiver-end is intercepted; BIO's enum +
+//    `poll_step2_update_extract` are untouched. SPEC §4.3 / §13.12a / §1.
+pub mod extract_intercept;
 pub mod flag_policies;
 pub mod import_code_writer;
 pub mod install_concurrency;

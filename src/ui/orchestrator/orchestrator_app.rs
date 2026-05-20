@@ -377,6 +377,20 @@ pub struct OrchestratorApp {
     /// infrastructure — no BIO edit.
     pub(crate) stream_download_rx:
         Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
+
+    /// **DL Fix-Set v2 (Fix 1c) — the BIO extract progress snapshot.** A
+    /// shared `Arc<Mutex<Option<(completed, total)>>>` written by the
+    /// forwarder thread `install_runtime::extract_intercept::start_
+    /// extract_with_intercept` spawns when it kicks BIO's extract; read
+    /// every frame by `stage_downloading::render_live` so the §4.3 Extract
+    /// bar shows the REAL `completed / total` mid-extract (instead of the
+    /// count-based fallback that doesn't update until BIO's `Finished`
+    /// bulk-assigns the `update_selected_extracted_sources` vector). Reset
+    /// to `None` by the intercept on entry (a fresh run starts clean) and
+    /// on `Finished` (extract phase is over; the install screen takes
+    /// over). `None` when no extract is in flight ⇒ the screen falls back
+    /// to the count path.
+    pub(crate) extract_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
 }
 
 impl OrchestratorApp {
@@ -539,6 +553,11 @@ impl OrchestratorApp {
             // `stage_downloading::render_live` when the download gate
             // opens; `None` until then.
             stream_download_rx: None,
+            // DL Fix-Set v2 (Fix 1c) — the BIO extract progress snapshot
+            // handle. Shared with the forwarder thread the intercept
+            // spawns at extract-kick; the §4.3 Extract bar reads it every
+            // frame.
+            extract_progress: Arc::new(std::sync::Mutex::new(None)),
         };
 
         // NOTE: do NOT call `oauth_glue::load_persisted_login` here.
@@ -675,6 +694,36 @@ impl OrchestratorApp {
                 .and_then(|e| e.latest_share_code.clone())
                 .filter(|c| !c.trim().is_empty())
         };
+
+        // ── **DL Fix-Set v2 (Fix 1d) — paste-path step3 re-derive
+        //    BEFORE the flip.** `count_mods_and_components` (in
+        //    `registry_transition::flip_to_installed`) reads
+        //    `state.step3.{bgee,bg2ee}_items`. On the Install-Modlist-paste
+        //    path the saved-log auto-build flow runs `apply_saved_weidu_log_
+        //    selection` ONCE (initial), then BIO's post-extract `start_step2_
+        //    scan` WIPES `state.step2.{bgee,bg2ee}_mods` checked state, then
+        //    `start_auto_build_install` fires. At clean exit step2 has no
+        //    checked components and step3 was never built ⇒ `(0, 0)` lands
+        //    in the registry entry. The Workspace path is fine (step3 is
+        //    populated by the Step-2→Step-3 nav).
+        //
+        //    Fix: only on the paste path (`!from_workspace`), re-read the
+        //    POST-install weidu.log via BIO's `pub(crate)`
+        //    `apply_saved_weidu_log_selection` (which reads from
+        //    `state.step1.{bgee_log_folder,bg2ee_log_folder,eet_bgee_log_
+        //    folder,eet_bg2ee_log_folder}` — set by `derive_per_install_
+        //    dirs`), then call BIO's `pub(crate)` `sync_step3_from_step2`
+        //    to build `step3.{bgee,bg2ee}_items` from the freshly-checked
+        //    step2 components via `build_step3_items`. Zero BIO edit —
+        //    same-crate reuse of two `pub(crate)` functions the rest of
+        //    the orchestrator already uses. The side effects (clear_step2_
+        //    compat_state, scan_status text, etc.) are post-install
+        //    harmless — the install has completed; nothing reads them
+        //    again. ──
+        if !from_workspace {
+            crate::app::app_step2_log::apply_saved_weidu_log_selection(&mut self.wizard_state);
+            crate::app::app_step3_sync_flow::sync_step3_from_step2(&mut self.wizard_state);
+        }
 
         // Split the &mut borrow into the disjoint fields `flip_to_installed`
         // needs (`registry` / `registry_store` / `wizard_state` are distinct
@@ -859,6 +908,7 @@ impl OrchestratorApp {
             &mut self.stream_download_rx,
             &mut self.step2_update_extract_rx,
             &mut self.install_screen_state.download_progress,
+            &self.extract_progress,
         );
 
         app_step2_saved_log_flow::advance_pending_saved_log_flow(
@@ -893,8 +943,13 @@ impl OrchestratorApp {
             Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>,
         >,
         progress: &mut crate::ui::install::stage_downloading::DownloadProgress,
+        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
     ) {
-        use crate::install_runtime::stream_downloader::{StreamDownloadEvent, apply_finished};
+        use crate::install_runtime::extract_intercept::start_extract_with_intercept;
+        use crate::install_runtime::stream_downloader::{
+            StreamDownloadEvent, apply_result_state, deterministic_dest,
+        };
+        use std::path::PathBuf;
         use std::sync::mpsc::TryRecvError;
 
         let Some(rx) = stream_download_rx.as_ref() else {
@@ -915,9 +970,10 @@ impl OrchestratorApp {
                 }
                 Ok(StreamDownloadEvent::AssetDone {
                     index,
+                    ok,
                     final_bytes,
                     total,
-                    ..
+                    error,
                 }) => {
                     // Pin the row's byte readout to its terminal value so
                     // a successful row reads its full size (the
@@ -925,13 +981,55 @@ impl OrchestratorApp {
                     // is what visually advances it; this just keeps the
                     // byte figure honest).
                     progress.set_asset_bytes(index, final_bytes, total);
+                    // **DL Fix-Set v2 (Fix 1b) — per-asset append to the
+                    // BIO-shaped result vectors** so the §4.3 grid's
+                    // `downloaded_count()` (which reads
+                    // `update_selected_downloaded_sources` by `label`
+                    // membership) climbs smoothly as archives land,
+                    // instead of staying flat at 0 until terminal +
+                    // bulk-assign. The string format matches BIO's
+                    // serial loop verbatim (`app_step2_update_download
+                    // .rs:140` / `:142`): `"{label} -> {dest}"` /
+                    // `"{label}: {err}"`. The destination is computed
+                    // EXACTLY as the streamer wrote it via
+                    // `deterministic_dest` (the byte-identical path BIO's
+                    // extract gates on).
+                    let archive_dir = PathBuf::from(wizard_state.step1.mods_archive_folder.trim());
+                    if let Some(asset) = wizard_state.step2.update_selected_update_assets.get(index)
+                    {
+                        if ok {
+                            let dest = deterministic_dest(asset, &archive_dir);
+                            wizard_state
+                                .step2
+                                .update_selected_downloaded_sources
+                                .push(format!("{} -> {}", asset.label, dest.display()));
+                        } else {
+                            let err_str = error.as_deref().unwrap_or("unknown error").to_string();
+                            wizard_state
+                                .step2
+                                .update_selected_download_failed_sources
+                                .push(format!("{}: {}", asset.label, err_str));
+                        }
+                    }
                 }
                 Ok(StreamDownloadEvent::Finished(result)) => {
                     *stream_download_rx = None;
-                    // EXACTLY BIO's `poll_step2_update_download` tail:
-                    // vectors onto state.step2 + BIO's unchanged
-                    // `start_step2_update_extract`.
-                    apply_finished(wizard_state, result, step2_update_extract_rx);
+                    // **DL Fix-Set v2.** The downloaded/failed vectors
+                    // have been populated per-asset by the AssetDone
+                    // branch above (Fix 1b); `apply_result_state` only
+                    // clears the running flag + writes the BIO-verbatim
+                    // finished status line that reads the
+                    // already-populated vectors. Then **Fix 1c** kicks
+                    // BIO's `pub(crate)` `start_step2_update_extract`
+                    // through the forwarder thread that snapshots
+                    // `Progress` events into `extract_progress` so the
+                    // §4.3 Extract bar climbs mid-extract.
+                    apply_result_state(wizard_state, result);
+                    start_extract_with_intercept(
+                        wizard_state,
+                        step2_update_extract_rx,
+                        extract_progress,
+                    );
                     return;
                 }
                 Err(TryRecvError::Empty) => return,

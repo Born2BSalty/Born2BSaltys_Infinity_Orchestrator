@@ -253,14 +253,17 @@ fn file_size_mtime(path: &Path) -> Option<(u64, Option<u128>)> {
     Some((size, mtime))
 }
 
-/// Outcome of [`skip_present_archives`] — counts only, purely
-/// observational (the live Downloading screen / the run report / the
-/// runtime trace want to know how much the checksum-then-skip saved).
+/// Outcome of [`skip_present_archives`] — counts (purely observational)
+/// + the [`Self::skipped_assets`] vec the caller uses to drive the §4.3
+/// grid's "✓ already downloaded" rows + the orchestrator-side skip set
+/// the streamer uses to silently bypass already-present indices.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SkipSummary {
     /// Wanted archives whose expected `{size,hash}` was already present on
-    /// disk ⇒ **dropped from the download list** (NOT fetched) + presented
-    /// at BIO's extract path. The Wabbajack "already have it" count.
+    /// disk ⇒ presented at BIO's extract path + the asset stays in
+    /// `update_selected_update_assets` so BIO's `build_extract_jobs` finds
+    /// it (Fix 1e — the prior "drop from the list" left them un-extracted
+    /// in the all-cached case). The Wabbajack "already have it" count.
     pub skipped_present: usize,
     /// Wanted archives with **no** recorded expected hash (fieldless /
     /// pre-redesign / un-hashable code) ⇒ left for a normal download
@@ -276,6 +279,16 @@ pub struct SkipSummary {
     /// Of `hashed_candidates`, how many were a **persistent-cache hit** (no
     /// re-hash — proves a multi-GB archive hashes once ever).
     pub cache_hits: usize,
+    /// **Fix 1e — the exact assets that were skipped.** Cloned out of
+    /// `update_selected_update_assets` during the loop (the assets stay
+    /// in the list now — Fix 1e — so BIO's extract finds them). The
+    /// §4.3 grid reads `.label` / `.source_id` here for the "✓ already
+    /// downloaded" rows directly (no diff needed); the streamer reads
+    /// the **indices** (re-derived in the caller against the unchanged
+    /// asset list, because the asset's natural identity is its archive
+    /// file name + content) to bypass these the moment the loop body
+    /// would dispatch them.
+    pub skipped_assets: Vec<Step2UpdateAsset>,
 }
 
 /// **Before the streamer downloads: checksum-then-skip (the Wabbajack
@@ -378,58 +391,81 @@ pub fn skip_present_archives(state: &mut WizardState, expected: &[ArchiveMeta]) 
         cache.save(&archive_dir);
     }
 
-    // ── Skip pass: drop every wanted asset whose expected hash is present
-    //    on disk + present those bytes at BIO's deterministic extract
-    //    path. Assets with no expected hash, or whose expected hash is not
-    //    on disk, are KEPT for a normal download. ──
-    let assets = std::mem::take(&mut state.step2.update_selected_update_assets);
-    let mut kept = Vec::with_capacity(assets.len());
-    for asset in assets {
-        let name = archive_file_name(&asset);
+    // ── Skip pass: for every wanted asset whose expected hash is present
+    //    on disk, present those bytes at BIO's deterministic extract path
+    //    + record the asset in `summary.skipped_assets` AND pre-populate
+    //    `state.step2.update_selected_downloaded_sources` with the
+    //    BIO-shaped `"{label} -> {dest}"` string. **Fix 1e — assets are
+    //    NOT dropped from `update_selected_update_assets`**: BIO's
+    //    `build_extract_jobs` iterates that same list, so dropping them
+    //    left the all-cached case un-extracted (the bytes were placed but
+    //    never unpacked). The pre-population means the §4.3 grid's
+    //    `label_done` classifier flips skipped rows to `Extracting`
+    //    immediately (the grid renders them via the separate
+    //    `summary.skipped_assets` path with the "✓ already downloaded"
+    //    caption — the caller filters out the duplicate row index when
+    //    rebuilding). The orchestrator-side "skip set" is the set of
+    //    indices the caller computes against the unchanged asset list +
+    //    passes to the streamer to silently bypass.
+    //
+    //    Assets with no expected hash, or whose expected hash is not on
+    //    disk, are LEFT for a normal download (genuine fetch). ──
+    for asset in &state.step2.update_selected_update_assets {
+        let name = archive_file_name(asset);
         let Some(meta) = by_name.get(name.as_str()) else {
             // The exporter baked no hash for this archive (or it is a
             // newly-resolved one not in the code) ⇒ always-download
             // fallback (never an error).
             summary.no_expected_hash += 1;
-            kept.push(asset);
             continue;
         };
         let Some(present_path) = present_by_hash.get(&meta.hash) else {
             // The expected content is not on disk ⇒ genuine fetch.
             summary.missing_on_disk += 1;
-            kept.push(asset);
             continue;
         };
         // **The expected bytes are already on disk** — present them at
-        // BIO's deterministic extract path and DROP the asset so the
-        // parallel streamer never fetches it (the Wabbajack skip).
+        // BIO's deterministic extract path. The asset STAYS in the list
+        // (Fix 1e) so BIO's `build_extract_jobs` finds it; the streamer
+        // bypasses its index via the orchestrator-side skip set.
         let deterministic = archive_dir.join(&name);
-        if present_path == &deterministic {
-            // Already exactly where extract looks (same file) — nothing to
-            // place; just drop the asset.
+        let placed = if present_path == &deterministic {
+            // Already exactly where extract looks (same file) — nothing
+            // to place; the deterministic path is already populated.
+            true
+        } else {
+            match link_or_copy(present_path, &deterministic) {
+                Ok(()) => true,
+                Err(err) => {
+                    warn!(
+                        target = "orchestrator",
+                        "present skip-source {} → {}: {err} (falling back to a \
+                         normal download for this archive)",
+                        present_path.display(),
+                        deterministic.display()
+                    );
+                    false
+                }
+            }
+        };
+        if placed {
             summary.skipped_present += 1;
-            continue;
-        }
-        match link_or_copy(present_path, &deterministic) {
-            Ok(()) => {
-                summary.skipped_present += 1;
-                // Asset intentionally NOT pushed to `kept` ⇒ dropped from
-                // the download list ⇒ never fetched.
-            }
-            Err(err) => {
-                warn!(
-                    target = "orchestrator",
-                    "present skip-source {} → {}: {err} (falling back to a \
-                     normal download for this archive)",
-                    present_path.display(),
-                    deterministic.display()
-                );
-                summary.missing_on_disk += 1;
-                kept.push(asset);
-            }
+            summary.skipped_assets.push(asset.clone());
+            // **Fix 1e — pre-populate the BIO-shaped downloaded-sources
+            // entry** so the §4.3 grid sees the skipped row as
+            // download-complete from frame one (the streamer never
+            // touches this asset's index; this is the per-asset push the
+            // skip path owes the grid). Matches BIO's verbatim format
+            // (`app_step2_update_download.rs:140`).
+            state.step2.update_selected_downloaded_sources.push(format!(
+                "{} -> {}",
+                asset.label,
+                deterministic.display()
+            ));
+        } else {
+            summary.missing_on_disk += 1;
         }
     }
-    state.step2.update_selected_update_assets = kept;
     summary
 }
 
@@ -641,10 +677,16 @@ mod tests {
 
     #[test]
     fn present_archive_is_skipped_not_downloaded_and_placed_for_extract() {
-        // SPEC §13.12a — the core bug fix: an archive whose expected
-        // {size,hash} is already present on disk is DROPPED from the
-        // download list (the streamer never fetches it) and PLACED at
-        // BIO's deterministic extract path.
+        // SPEC §13.12a + **Fix 1e** — an archive whose expected
+        // {size,hash} is already present on disk is PRESENTED at BIO's
+        // deterministic extract path, recorded in
+        // `summary.skipped_assets`, pre-populated in
+        // `update_selected_downloaded_sources` (BIO-shaped) — AND the
+        // asset STAYS in `update_selected_update_assets` so BIO's
+        // `build_extract_jobs` finds it. The streamer bypasses its
+        // index via the orchestrator-side skip set; the all-cached case
+        // now extracts correctly (Fix 1e — the prior "drop from list"
+        // left them un-extracted).
         let archive_dir = td();
         let mut state = WizardState::default();
         state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
@@ -666,10 +708,18 @@ mod tests {
         let s = skip_present_archives(&mut state, &[expected]);
 
         assert_eq!(s.skipped_present, 1, "the present archive was skipped");
-        assert!(
-            state.step2.update_selected_update_assets.is_empty(),
-            "the asset was DROPPED ⇒ the streamer never downloads it"
+        assert_eq!(
+            state.step2.update_selected_update_assets.len(),
+            1,
+            "**Fix 1e** — the asset STAYS in the list so BIO's \
+             build_extract_jobs finds it (the streamer bypasses by index)"
         );
+        assert_eq!(
+            s.skipped_assets.len(),
+            1,
+            "skipped_assets carries the exact asset (no diff needed by the caller)"
+        );
+        assert_eq!(s.skipped_assets[0].label, a.label);
         let deterministic = archive_dir.join(&name);
         assert!(
             deterministic.exists(),
@@ -679,6 +729,19 @@ mod tests {
             std::fs::read(&deterministic).unwrap(),
             b"SHARED-ARCHIVE-BYTES",
             "extract gets exactly the expected content"
+        );
+        // **Fix 1e — pre-populated downloaded-sources entry** (BIO-shaped
+        // "{label} -> {dest}" so the §4.3 grid sees download-complete
+        // from frame one — the streamer never touches this asset).
+        assert_eq!(
+            state.step2.update_selected_downloaded_sources.len(),
+            1,
+            "Fix 1e — downloaded-sources pre-populated with the BIO-shaped entry"
+        );
+        assert_eq!(
+            state.step2.update_selected_downloaded_sources[0],
+            format!("{} -> {}", a.label, deterministic.display()),
+            "pre-populated entry is BIO-verbatim shape"
         );
         let _ = std::fs::remove_dir_all(&archive_dir);
     }
@@ -937,6 +1000,66 @@ mod tests {
             HashCache::load(&archive_dir).entries.is_empty(),
             "a corrupt cache degrades to empty (worst case: one re-hash)"
         );
+        let _ = std::fs::remove_dir_all(&archive_dir);
+    }
+
+    #[test]
+    fn fix_1e_all_cached_keeps_every_asset_for_extract_and_prepopulates_each() {
+        // **DL Fix-Set v2 (Fix 1e).** The all-cached scenario: every
+        // wanted archive is already on disk by hash. After the skip
+        // pass:
+        //   - update_selected_update_assets is UNCHANGED (every asset
+        //     stays so BIO's `build_extract_jobs` finds them);
+        //   - update_selected_downloaded_sources is pre-populated with
+        //     one BIO-shaped entry per skipped asset (the §4.3 grid
+        //     reads it for download-complete classification);
+        //   - summary.skipped_assets carries every skipped asset
+        //     (caller derives the skip-set indices for the streamer).
+        let archive_dir = td();
+        let mut state = WizardState::default();
+        state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+
+        let a = asset("AMOD/AMOD.TP2", "github", "v1", "A.zip");
+        let b = asset("BMOD/BMOD.TP2", "weasel", "v2", "B.zip");
+        let c = asset("CMOD/CMOD.TP2", "morpheus", "v3", "C.zip");
+        // Each archive's bytes are at the deterministic path already
+        // (the realistic "all-cached" case after a prior install).
+        let bytes_a = b"A-ARCHIVE-BYTES".to_vec();
+        let bytes_b = b"B-DIFFERENT-BYTES".to_vec();
+        let bytes_c = b"C-THIRD-BYTES-LONGER-X".to_vec();
+        std::fs::write(archive_dir.join(archive_file_name(&a)), &bytes_a).unwrap();
+        std::fs::write(archive_dir.join(archive_file_name(&b)), &bytes_b).unwrap();
+        std::fs::write(archive_dir.join(archive_file_name(&c)), &bytes_c).unwrap();
+        let expected = vec![
+            meta_for(&archive_dir, &a),
+            meta_for(&archive_dir, &b),
+            meta_for(&archive_dir, &c),
+        ];
+        state.step2.update_selected_update_assets = vec![a.clone(), b.clone(), c.clone()];
+
+        let s = skip_present_archives(&mut state, &expected);
+
+        assert_eq!(s.skipped_present, 3, "all 3 archives skipped");
+        assert_eq!(
+            state.step2.update_selected_update_assets.len(),
+            3,
+            "Fix 1e — all assets STAY in the list for BIO's extract"
+        );
+        assert_eq!(s.skipped_assets.len(), 3, "all 3 in skipped_assets");
+        // Pre-populated entries — one per skipped asset.
+        assert_eq!(state.step2.update_selected_downloaded_sources.len(), 3);
+        for asset in [&a, &b, &c] {
+            let dest = archive_dir.join(archive_file_name(asset));
+            let expected_entry = format!("{} -> {}", asset.label, dest.display());
+            assert!(
+                state
+                    .step2
+                    .update_selected_downloaded_sources
+                    .contains(&expected_entry),
+                "pre-populated entry missing for {}: {expected_entry}",
+                asset.label
+            );
+        }
         let _ = std::fs::remove_dir_all(&archive_dir);
     }
 
