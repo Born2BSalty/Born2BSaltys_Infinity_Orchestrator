@@ -8,7 +8,7 @@
 
 ## How to use this doc
 
-- **Source of truth for behavior:** the Rust app in `src/core/app/` and `src/ui/step{1,2,3,4,5}/`. Tier-2 navigation lives in `src/CLAUDE.md`, `src/ui/CLAUDE.md`, `src/core/app/CLAUDE.md`.
+- **Source of truth for behavior:** the Rust app in `src/core/app/` and `src/ui/step{1,2,3,4,5}/`. Explore those directories directly for module orientation.
 - **Wireframe to edit:** `wireframe-preview/screens.jsx` (loose JSX). The bundled file at the repo root (`Infinity Orchestrator Wireframe _standalone.html`) was extracted into this directory as loose `app.jsx` / `screens.jsx` / `tweaks-panel.jsx` + an `index.html` that loads them via Babel-in-the-browser.
 - **Preview server:** `cd wireframe-preview && python3 -m http.server 4310` → http://localhost:4310/. Refresh after edits.
 - **Do not change styling.** Keep Patrick Hand / Caveat / JetBrains Mono fonts, dotted parchment bg, dusty amber accent, sketchy borders with `box-shadow: 6px 6px 0`, diagonal-stripe placeholders. Only add functionality.
