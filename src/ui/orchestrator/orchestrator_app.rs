@@ -335,7 +335,7 @@ impl OrchestratorApp {
             warn!(
                 target = "orchestrator",
                 "clean-exit edge with no loaded workspace id and no \
-                 active_install_modlist_id; flip_to_installed skipped"
+ active_install_modlist_id; flip_to_installed skipped"
             );
             return;
         };
@@ -391,15 +391,15 @@ impl OrchestratorApp {
                         warn!(
                             target = "orchestrator",
                             "size-fill atomic write for {modlist_id} failed: \
-                             {err} (in-memory size set; debounced cycle will \
-                             retry the write — plan P7.T6)"
+ {err} (in-memory size set; debounced cycle will \
+ retry the write — plan )"
                         );
                     }
                 } else {
                     tracing::debug!(
                         target = "orchestrator",
                         "size result for {modlist_id} discarded — modlist no \
-                         longer in registry (deleted)"
+ longer in registry (deleted)"
                     );
                 }
                 self.install_size_worker_rx = None;
@@ -409,7 +409,7 @@ impl OrchestratorApp {
                 warn!(
                     target = "orchestrator",
                     "install size worker disconnected without a result \
-                     (thread panicked) — size stays — (plan P7.T6)"
+ (thread panicked) — size stays —"
                 );
                 self.install_size_worker_rx = None;
             }
@@ -547,37 +547,23 @@ impl OrchestratorApp {
         }
     }
 
-    /// **DL Fix-Set v3 (Change A) — drain the parallel extract event
-    /// channel.** Per-asset `AssetDone` events bump the
-    /// `extract_progress` snapshot so the §4.3 Extract bar climbs
-    /// smoothly as workers finish in completion order. On `Finished`
-    /// the orchestrator:
-    ///   1. Writes the BIO-shaped vectors onto `state.step2`
-    ///      (`update_selected_extracted_sources` /
-    ///      `update_selected_extract_failed_sources`) — byte-
-    ///      identical to BIO's serial `poll_step2_update_extract`
-    ///      Finished branch.
-    ///   2. Replicates BIO's `remove_extracted_update_entries`
-    ///      inline (the private cleanup the serial poll runs;
-    ///      retains the post-state contract).
-    ///   3. **Leaves `extract_progress` at `Some((N, N))`** — the
-    ///      v3 bug fix: the v2 forwarder cleared it on Finished,
-    ///      causing a frame of `(0, 0)` flash before the screen
-    ///      took over. The next install's
-    ///      `start_parallel_extract` resets the handle.
-    ///   4. If `extracted > 0`: kicks the post-extract rescan via
-    ///      BIO's unchanged `app_step2_scan::start_step2_scan`
-    ///      (the SAME call BIO's serial poll makes). The
-    ///      `start_auto_build_install` hand-off downstream
-    ///      proceeds unchanged.
-    ///   5. Else: sets the BIO-verbatim "Extract updates finished
-    ///      …" status (matching BIO's serial poll's
-    ///      no-extracted branch).
+    /// Drain the parallel extract event channel.
     ///
-    /// Associated fn (not `&mut self`) so the borrow checker
-    /// permits the simultaneous `&mut wizard_state` + `&mut
-    /// step2_scan_rx` / `&mut step2_cancel` /
-    /// `&mut step2_progress_queue` split-borrow at the call site.
+    /// Per-asset `AssetDone` events bump the `extract_progress` snapshot so
+    /// the Extract bar climbs as workers finish. On `Finished` this:
+    /// 1. Writes the extracted / failed source vectors onto `state.step2`,
+    ///    byte-identical to BIO's serial `poll_step2_update_extract`.
+    /// 2. Replicates BIO's `remove_extracted_update_entries` inline.
+    /// 3. Leaves `extract_progress` at `Some((N, N))` so the screen does
+    ///    not flash `(0, 0)` before it takes over; the next install's
+    ///    `start_parallel_extract` resets the handle.
+    /// 4. If `extracted > 0`: kicks the post-extract rescan via
+    ///    `app_step2_scan::start_step2_scan`.
+    /// 5. Else: sets the "Extract updates finished …" status.
+    ///
+    /// Associated fn (not `&mut self`) so the simultaneous `&mut`
+    /// borrows of the wizard state + receivers / cancel / queue
+    /// resolve at the call site.
     fn drain_extract_parallel(
         wizard_state: &mut WizardState,
         extract_parallel_rx: &mut Option<
@@ -671,7 +657,7 @@ impl OrchestratorApp {
                         .update_selected_extract_failed_sources
                         .len();
 
-                    // **DL Fix-Set v3 (Change A) bug fix.** Do NOT
+                    // **(Change A) bug fix.** Do NOT
                     // clear `extract_progress`. Leave it at
                     // `Some((N, N))` so the §4.3 chrome continues
                     // to show 100% until the install screen takes
@@ -699,7 +685,7 @@ impl OrchestratorApp {
                     } else {
                         wizard_state.step2.scan_status = format!(
                             "Extract updates finished: {extracted} updated, \
-                             {failed} failed"
+ {failed} failed"
                         );
                     }
                     return;
@@ -716,30 +702,29 @@ impl OrchestratorApp {
         }
     }
 
-    /// **DL Fix-Set v3 (Change B) — drain the async archive-skip
+    /// **(Change B) — drain the async archive-skip
     /// event channel.** Per-asset events drive the §4.3 grid's
     /// Hashing-phase row transitions in real time + maintain the
     /// `hash_progress` snapshot the new `InstallPhase::Hashing` bar
     /// reads:
-    ///   - `CandidateEnumerated { total }`: set
-    ///     `hash_progress = Some((0, total))` so the chrome shows
-    ///     "0 / N" immediately.
-    ///   - `AssetHashStarted { index }`: no-op on state (the row's
-    ///     status is derived from the per-frame
-    ///     `from_wizard_state_full` rebuild + the `skip_indices`
-    ///     set already in `InstallScreenState`).
-    ///   - `AssetHashed { index, was_skipped, label, dest_display }`:
-    ///     bump `hash_progress = Some((c+1, t))`; if `was_skipped`,
-    ///     push the BIO-shaped `"{label} -> {dest_display}"` entry
-    ///     into `update_selected_downloaded_sources` (mirroring the
-    ///     sync `archive_skip::skip_present_archives` pre-
-    ///     population — the §4.3 grid uses label membership for
-    ///     download-complete classification).
-    ///   - `Finished { summary, skipped_indices }`: store
-    ///     `skip_indices` on `InstallScreenState`, clear
-    ///     `archive_skip_rx`, set `archive_skip_completed = true`
-    ///     so the streamer kick gate can open.
-    ///
+    /// `CandidateEnumerated { total }`: set
+    /// `hash_progress = Some((0, total))` so the chrome shows
+    /// "0 / N" immediately.
+    /// `AssetHashStarted { index }`: no-op on state (the row's
+    /// status is derived from the per-frame
+    /// `from_wizard_state_full` rebuild + the `skip_indices`
+    /// set already in `InstallScreenState`).
+    /// `AssetHashed { index, was_skipped, label, dest_display }`:
+    /// bump `hash_progress = Some((c+1, t))`; if `was_skipped`,
+    /// push the BIO-shaped `"{label} -> {dest_display}"` entry
+    /// into `update_selected_downloaded_sources` (mirroring the
+    /// sync `archive_skip::skip_present_archives` pre-
+    /// population — the §4.3 grid uses label membership for
+    /// download-complete classification).
+    /// `Finished { summary, skipped_indices }`: store
+    /// `skip_indices` on `InstallScreenState`, clear
+    /// `archive_skip_rx`, set `archive_skip_completed = true`
+    /// so the streamer kick gate can open.
     /// The `summary` is observational (counts) and is logged via
     /// `tracing::info!` (matching the sync pass's log shape) — the
     /// orchestrator's other state (`skipped_mods`,
@@ -790,17 +775,15 @@ impl OrchestratorApp {
                         let (c, t) = g.unwrap_or((0, 0));
                         *g = Some((c + 1, t));
                     }
-                    if was_skipped {
-                        if let Some(dest) = dest_display {
-                            // Mirror the sync pass's BIO-shaped
-                            // pre-population so the §4.3 grid sees
-                            // download-complete from the moment
-                            // the asset's hash resolves.
-                            wizard_state
-                                .step2
-                                .update_selected_downloaded_sources
-                                .push(format!("{label} -> {dest}"));
-                        }
+                    if was_skipped && let Some(dest) = dest_display {
+                        // Mirror the sync pass's BIO-shaped
+                        // pre-population so the §4.3 grid sees
+                        // download-complete from the moment
+                        // the asset's hash resolves.
+                        wizard_state
+                            .step2
+                            .update_selected_downloaded_sources
+                            .push(format!("{label} -> {dest}"));
                     }
                 }
                 Ok(ArchiveSkipEvent::Finished {
@@ -809,12 +792,14 @@ impl OrchestratorApp {
                 }) => {
                     *archive_skip_rx = None;
                     install_screen_state.skip_indices = skipped_indices.into_iter().collect();
-                    install_screen_state.archive_skip_completed = true;
+                    install_screen_state
+                        .pipeline_flags
+                        .set_archive_skip_completed(true);
                     tracing::info!(
                         target = "orchestrator",
                         "async archive-skip finished: {} already-present, \
-                         {} missing (will fetch), {} no-expected-hash, \
-                         {} candidates hashed ({} persistent-cache hits)",
+ {} missing (will fetch), {} no-expected-hash, \
+ {} candidates hashed ({} persistent-cache hits)",
                         summary.skipped_present,
                         summary.missing_on_disk,
                         summary.no_expected_hash,
@@ -831,11 +816,13 @@ impl OrchestratorApp {
                     // an empty skip set so the streamer can still
                     // open (it will just fetch everything — the
                     // honest fallback).
-                    install_screen_state.archive_skip_completed = true;
+                    install_screen_state
+                        .pipeline_flags
+                        .set_archive_skip_completed(true);
                     tracing::warn!(
                         target = "orchestrator",
                         "async archive-skip worker disconnected without \
-                         Finished — falling back to download-all"
+ Finished — falling back to download-all"
                     );
                     return;
                 }
@@ -843,8 +830,7 @@ impl OrchestratorApp {
         }
     }
 
-    /// **P7.T1 — drive the Step-5 install runtime, pre-render portion.**
-    ///
+    /// **drive the Step-5 install runtime, pre-render portion.**
     /// Mirrors the Step-5 lines of `bio::app::app_update_cycle::
     /// poll_before_render` (`app_update_cycle.rs:66-76`) — the exact two
     /// calls `bio::ui::app::update_loop::run` makes before rendering Step 5

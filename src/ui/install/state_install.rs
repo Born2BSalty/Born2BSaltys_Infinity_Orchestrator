@@ -116,11 +116,12 @@ pub struct InstallPipelineFlags {
 }
 
 impl InstallPipelineFlags {
-    const ARMED: u8 = 0b0_0001;
-    const ARCHIVES_STAGED: u8 = 0b0_0010;
-    const ARCHIVES_INGESTED: u8 = 0b0_0100;
-    const ARCHIVES_VERIFIED: u8 = 0b0_1000;
-    const DOWNLOAD_PHASE_STARTED: u8 = 0b1_0000;
+    const ARMED: u8 = 0b00_0001;
+    const ARCHIVES_STAGED: u8 = 0b00_0010;
+    const ARCHIVES_INGESTED: u8 = 0b00_0100;
+    const ARCHIVES_VERIFIED: u8 = 0b00_1000;
+    const DOWNLOAD_PHASE_STARTED: u8 = 0b01_0000;
+    const ARCHIVE_SKIP_COMPLETED: u8 = 0b10_0000;
 
     #[must_use]
     pub const fn armed(self) -> bool {
@@ -167,6 +168,15 @@ impl InstallPipelineFlags {
         self.set_bit(Self::DOWNLOAD_PHASE_STARTED, value);
     }
 
+    #[must_use]
+    pub const fn archive_skip_completed(self) -> bool {
+        self.bits & Self::ARCHIVE_SKIP_COMPLETED != 0
+    }
+
+    pub const fn set_archive_skip_completed(&mut self, value: bool) {
+        self.set_bit(Self::ARCHIVE_SKIP_COMPLETED, value);
+    }
+
     pub const fn reset(&mut self) {
         self.bits = 0;
     }
@@ -199,8 +209,6 @@ pub struct InstallScreenState {
     pub skipped_mods: Vec<SkippedMod>,
     pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
     pub skip_indices: std::collections::HashSet<usize>,
-    pub download_phase_started: bool,
-    pub archive_skip_completed: bool,
 }
 
 impl InstallScreenState {
@@ -222,8 +230,6 @@ impl InstallScreenState {
         self.skipped_mods = Vec::new();
         self.expected_archive_sizes = std::collections::BTreeMap::new();
         self.skip_indices = std::collections::HashSet::new();
-        self.download_phase_started = false;
-        self.archive_skip_completed = false;
     }
 }
 
@@ -302,16 +308,18 @@ mod tests {
 
     #[test]
     fn clear_preview_resets_preview_state() {
-        let mut st = InstallScreenState::default();
-        st.preview_cached = true;
-        st.fork_info_open = true;
-        st.preview_parse_error = Some("boom".to_string());
-        st.pipeline_armed = true;
-        st.pipeline_arm_error = Some("arm boom".to_string());
-        st.archives_staged = true;
-        st.archives_ingested = true;
-        st.download_phase_started = true;
-        st.archive_skip_completed = true;
+        let mut st = InstallScreenState {
+            preview_cached: true,
+            fork_info_open: true,
+            preview_parse_error: Some("boom".to_string()),
+            pipeline_arm_error: Some("arm boom".to_string()),
+            ..Default::default()
+        };
+        st.pipeline_flags.set_armed(true);
+        st.pipeline_flags.set_archives_staged(true);
+        st.pipeline_flags.set_archives_ingested(true);
+        st.pipeline_flags.set_download_phase_started(true);
+        st.pipeline_flags.set_archive_skip_completed(true);
         st.clear_preview();
         assert!(st.parsed_preview.is_none());
         assert!(st.preview_parse_error.is_none());
@@ -324,12 +332,12 @@ mod tests {
             "D1: a re-entry must re-stage/re-ingest from scratch"
         );
         assert!(
-            !st.download_phase_started,
-            "Fix 1e: a re-entry must re-kick the streamer"
+            !st.pipeline_flags.download_phase_started(),
+            "a re-entry must re-kick the streamer"
         );
         assert!(
-            !st.archive_skip_completed,
-            "v3 Change B: a re-entry must re-run the async skip pass"
+            !st.pipeline_flags.archive_skip_completed(),
+            "a re-entry must re-run the async skip pass"
         );
     }
 }

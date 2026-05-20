@@ -1,38 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// **DL Fix-Set v3 render gate** — renders the §4.3 Downloading window
-// in SIX scenes targeted at the v3 design's defining moments. The
-// orchestrator opens these PNGs itself and judges. Output:
-// `target/ui-snapshots/dl_window_v3_*.png`.
-//
-//   • `hashing` — every row Hashing, "Checking cache" verb line (the
-//     new Hashing phase the v3 async skip pass introduces).
-//   • `mid_hashing` — some rows transitioned to Skipped/Queued, some
-//     still Hashing; the rows are sorted by status priority
-//     (Hashing top, Queued mid, Skipped bottom).
-//   • `mid_download` — mix of Downloading / Queued / downloaded
-//     (cached + extracting); rows sorted (active top, pending
-//     middle, downloaded bottom). All downloaded-terminal rows
-//     render as "✓ downloaded".
-//   • `mid_extract` — every row "✓ downloaded"; Extract bar climbing
-//     (live `extract_progress` snapshot says 7/15 — the parallel
-//     extract coordinator's mid-extract state).
-//   • `preparing` — extract done; "Preparing to install" verb line;
-//     both phase bars at 100% (the v3 UX hand-off beat at the tail
-//     of Extract).
-//   • `all_cached` — every row Skipped (DL-Run-1 all-cached);
-//     "✓ downloaded" uniform caption, full Download bar, no extract
-//     work.
-//
-// Test hygiene (directive-grade — DATA-LOSS): synthesised
-// `DownloadProgress` + the public `install_redesign_fonts`. Constructs
-// no `OrchestratorApp` / `RegistryStore` / `WorkspaceStore`, touches
-// no `%APPDATA%` / real config dir.
+
+//! Render gate for the Downloading window. Renders six representative
+//! scenes — `hashing`, `mid_hashing`, `mid_download`, `mid_extract`,
+//! `preparing`, `all_cached` — at two viewport sizes each and writes the
+//! PNGs under `target/ui-snapshots/dl_window_v3_*.png` for visual
+//! inspection.
+//!
+//! Constructs no `OrchestratorApp` / `RegistryStore` / `WorkspaceStore`;
+//! touches no `%APPDATA%` / real config dir.
 
 use bio::ui::install::stage_downloading::{
     self, DownloadProgress, DownloadScreenCopy, ModDownloadRow, ModDownloadStatus,
 };
+use bio::ui::shared::numeric::f32_from_u32;
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{
     REDESIGN_NAV_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette,
@@ -40,6 +21,8 @@ use bio::ui::shared::redesign_tokens::{
 
 use eframe::egui;
 use egui_kittest::Harness;
+
+type SceneFn = fn() -> DownloadProgress;
 
 const CENTRAL_MARGIN: egui::Margin = egui::Margin {
     left: 28,
@@ -382,13 +365,128 @@ fn scene_all_cached() -> DownloadProgress {
     }
 }
 
+/// Paint the title bar / status bar scaffold (matching the live shell's
+/// frame chrome so the scene PNGs read like the real app).
+fn paint_scaffold_chrome(ctx: &egui::Context) {
+    let chrome = egui::Color32::from_rgb(0x15, 0x22, 0x2B);
+    egui::TopBottomPanel::top("scaffold_titlebar")
+        .exact_height(REDESIGN_TITLEBAR_HEIGHT_PX)
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(egui::Frame::NONE)
+        .show(ctx, |ui| {
+            let r = ui.max_rect();
+            ui.painter().rect_filled(r, 0.0, chrome);
+            ui.allocate_space(ui.available_size());
+        });
+    egui::TopBottomPanel::bottom("scaffold_statusbar")
+        .exact_height(REDESIGN_STATUSBAR_HEIGHT_PX)
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(egui::Frame::NONE)
+        .show(ctx, |ui| {
+            let r = ui.max_rect();
+            ui.painter().rect_filled(r, 0.0, chrome);
+            ui.allocate_space(ui.available_size());
+        });
+}
+
+/// Paint the left rail + central content; the central content is the
+/// download screen rendered against `progress`.
+fn paint_shell_with_progress(
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    progress: &DownloadProgress,
+) {
+    let chrome = egui::Color32::from_rgb(0x15, 0x22, 0x2B);
+    egui::CentralPanel::default()
+        .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(0x0B, 0x11, 0x16)))
+        .show(ctx, |ui| {
+            egui::SidePanel::left("scaffold_rail")
+                .exact_width(REDESIGN_NAV_WIDTH_PX)
+                .resizable(false)
+                .show_separator_line(false)
+                .frame(egui::Frame::NONE)
+                .show_inside(ui, |ui| {
+                    let r = ui.max_rect();
+                    ui.painter().rect_filled(r, 0.0, chrome);
+                    ui.set_min_width(REDESIGN_NAV_WIDTH_PX);
+                    ui.allocate_space(ui.available_size());
+                });
+
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE.inner_margin(CENTRAL_MARGIN))
+                .show_inside(ui, |ui| {
+                    let _ = stage_downloading::render(
+                        ui,
+                        palette,
+                        DownloadScreenCopy::INSTALL,
+                        progress,
+                    );
+                });
+        });
+}
+
+/// Render one scene at one viewport size, write the PNG, and return the
+/// output path.
+fn render_scene_to_png(
+    out_dir: &std::path::Path,
+    scene_name: &str,
+    scene_fn: SceneFn,
+    cell: &Cell,
+) -> std::path::PathBuf {
+    let w = f32_from_u32(cell.w);
+    let h = f32_from_u32(cell.h);
+
+    let mut frame: u64 = 0;
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(w, h))
+        .with_pixels_per_point(1.0)
+        .build(move |ctx| {
+            if frame == 0 {
+                install_redesign_fonts(ctx);
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.allocate_space(ui.available_size());
+                });
+                frame += 1;
+                return;
+            }
+            frame += 1;
+
+            let progress = scene_fn();
+            paint_scaffold_chrome(ctx);
+            paint_shell_with_progress(ctx, ThemePalette::Dark, &progress);
+        });
+
+    for _ in 0..8 {
+        harness.run();
+    }
+    let img = harness
+        .render()
+        .expect("egui_kittest wgpu render() must produce an image");
+    let path = out_dir.join(format!(
+        "dl_window_v3_{scene_name}__{}x{}.png",
+        cell.w, cell.h
+    ));
+    img.save(&path)
+        .unwrap_or_else(|e| panic!("write PNG {}: {e}", path.display()));
+    let abs = path.canonicalize().unwrap_or_else(|_| path.clone());
+    println!(
+        "SNAPSHOT  {}x{}  dl-window-v3/{scene_name}  -> {}",
+        cell.w,
+        cell.h,
+        abs.display()
+    );
+    path
+}
+
 #[test]
 fn render_dl_window_v3_scenes() {
     let out_dir = snapshot_out_dir();
     std::fs::create_dir_all(&out_dir).expect("create target/ui-snapshots dir");
 
     let cells = [Cell { w: 1280, h: 820 }, Cell { w: 1045, h: 735 }];
-    let scenes: [(&str, fn() -> DownloadProgress); 6] = [
+    let scenes: [(&str, SceneFn); 6] = [
         ("hashing", scene_hashing),
         ("mid_hashing", scene_mid_hashing),
         ("mid_download", scene_mid_download),
@@ -398,112 +496,9 @@ fn render_dl_window_v3_scenes() {
     ];
 
     let mut written: Vec<std::path::PathBuf> = Vec::new();
-
     for (scene_name, scene_fn) in scenes {
         for cell in &cells {
-            let w = cell.w as f32;
-            let h = cell.h as f32;
-
-            let mut frame: u64 = 0;
-            let mut harness = Harness::builder()
-                .with_size(egui::vec2(w, h))
-                .with_pixels_per_point(1.0)
-                .build(move |ctx| {
-                    if frame == 0 {
-                        install_redesign_fonts(ctx);
-                        egui::CentralPanel::default().show(ctx, |ui| {
-                            ui.allocate_space(ui.available_size());
-                        });
-                        frame += 1;
-                        return;
-                    }
-                    frame += 1;
-
-                    let progress = scene_fn();
-                    let palette = ThemePalette::Dark;
-
-                    egui::TopBottomPanel::top("scaffold_titlebar")
-                        .exact_height(REDESIGN_TITLEBAR_HEIGHT_PX)
-                        .resizable(false)
-                        .show_separator_line(false)
-                        .frame(egui::Frame::NONE)
-                        .show(ctx, |ui| {
-                            let r = ui.max_rect();
-                            ui.painter().rect_filled(
-                                r,
-                                0.0,
-                                egui::Color32::from_rgb(0x15, 0x22, 0x2B),
-                            );
-                            ui.allocate_space(ui.available_size());
-                        });
-
-                    egui::TopBottomPanel::bottom("scaffold_statusbar")
-                        .exact_height(REDESIGN_STATUSBAR_HEIGHT_PX)
-                        .resizable(false)
-                        .show_separator_line(false)
-                        .frame(egui::Frame::NONE)
-                        .show(ctx, |ui| {
-                            let r = ui.max_rect();
-                            ui.painter().rect_filled(
-                                r,
-                                0.0,
-                                egui::Color32::from_rgb(0x15, 0x22, 0x2B),
-                            );
-                            ui.allocate_space(ui.available_size());
-                        });
-
-                    egui::CentralPanel::default()
-                        .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(0x0B, 0x11, 0x16)))
-                        .show(ctx, |ui| {
-                            egui::SidePanel::left("scaffold_rail")
-                                .exact_width(REDESIGN_NAV_WIDTH_PX)
-                                .resizable(false)
-                                .show_separator_line(false)
-                                .frame(egui::Frame::NONE)
-                                .show_inside(ui, |ui| {
-                                    let r = ui.max_rect();
-                                    ui.painter().rect_filled(
-                                        r,
-                                        0.0,
-                                        egui::Color32::from_rgb(0x15, 0x22, 0x2B),
-                                    );
-                                    ui.set_min_width(REDESIGN_NAV_WIDTH_PX);
-                                    ui.allocate_space(ui.available_size());
-                                });
-
-                            egui::CentralPanel::default()
-                                .frame(egui::Frame::NONE.inner_margin(CENTRAL_MARGIN))
-                                .show_inside(ui, |ui| {
-                                    let _ = stage_downloading::render(
-                                        ui,
-                                        palette,
-                                        DownloadScreenCopy::INSTALL,
-                                        &progress,
-                                    );
-                                });
-                        });
-                });
-
-            for _ in 0..8 {
-                harness.run();
-            }
-            let img = harness
-                .render()
-                .expect("egui_kittest wgpu render() must produce an image");
-            let path = out_dir.join(format!(
-                "dl_window_v3_{scene_name}__{}x{}.png",
-                cell.w, cell.h
-            ));
-            img.save(&path)
-                .unwrap_or_else(|e| panic!("write PNG {}: {e}", path.display()));
-            let abs = path.canonicalize().unwrap_or_else(|_| path.clone());
-            println!(
-                "SNAPSHOT  {}x{}  dl-window-v3/{scene_name}  -> {}",
-                cell.w,
-                cell.h,
-                abs.display()
-            );
-            written.push(path);
+            written.push(render_scene_to_png(&out_dir, scene_name, scene_fn, cell));
         }
     }
 

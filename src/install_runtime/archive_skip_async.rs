@@ -1,78 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// `install_runtime::archive_skip_async` — **DL Fix-Set v3 (Change B):
-// async hashing with per-asset progress** (SPEC §13.12a / §4.3).
-//
-// **The bug + improvement this fixes.** The synchronous
-// `archive_skip::skip_present_archives` pass runs on the egui render
-// thread the moment the Downloading screen arms. With a large
-// Mods-archive folder + many same-size on-disk candidates, the hashing
-// blocks the UI for seconds (the user-reported "looks frozen at start of
-// download"). The persistent path+mtime cache only helps on a second
-// install; a first install still pays the full hash cost. This module
-// REPLACES that path with a **bounded parallel hashing pool**
-// (`HASH_POOL_SIZE = 10`) that runs on a spawned coordinator thread, so
-// the UI stays responsive while hashing runs in the background.
-//
-// **Per-asset events arrive as hashing progresses**, not in a single
-// terminal lump:
-//   - `CandidateEnumerated { total }` — the moment the asset list is
-//     known (right at coordinator start), so the §4.3 chrome's Hashing
-//     phase indicator can show "0 / N" immediately.
-//   - `AssetHashStarted { index }` — when a worker picks an asset up
-//     and is about to hash it; the §4.3 grid flips that row's status
-//     to `Hashing` (visual "checking cache…").
-//   - `AssetHashed { index, was_skipped, label, dest_display }` —
-//     when the asset's hash decision is final; bumps the hash count
-//     and (if skipped) lets the drain push the BIO-shaped
-//     `"{label} -> {dest_display}"` entry into
-//     `update_selected_downloaded_sources` (mirroring the sync skip
-//     path's pre-population).
-//   - `Finished { summary, skipped_indices }` — every asset processed;
-//     the drain stores `skip_indices` on `InstallScreenState`,
-//     clears `archive_skip_rx`, and sets `archive_skip_completed =
-//     true` so the streamer's kick gate can now open.
-//
-// **Zero BIO source.** This module only: reads the JSON sidecar at
-// `archive_dir/HASH_CACHE_FILENAME` (the same path the sync
-// `archive_skip` writes; the on-disk format IS the public contract);
-// reuses `app_step2_update_download::archive_file_name` **read-only**
-// (the SAME fn `archive_store` / `stream_downloader` / sync
-// `archive_skip` already reuse); and reuses
-// `archive_store::hash_file` (the ONE stable seedless FNV-1a-128 —
-// one hashing path, zero drift). The existing sync `archive_skip::
-// skip_present_archives` is LEFT in place (tests still use it; any
-// future fallback can fall back to it).
-//
-// **Concurrency model.** A spawned coordinator thread first loads
-// the persistent hash cache + enumerates the global Mods-archive
-// folder with the cheap size pre-filter. Then it spawns
-// `min(HASH_POOL_SIZE, candidates.len())` worker threads via a
-// shared `Arc<AtomicUsize>` work index to hash candidates in
-// parallel. After workers join, the coordinator merges per-thread
-// cache writes into the persistent cache + saves once (no mutex
-// contention during hashing). A second worker pool then handles
-// per-asset skip decisions, emitting `AssetHashStarted` /
-// `AssetHashed` events to the orchestrator's drain. After workers
-// join, the coordinator orders results by asset index, builds the
-// `SkipSummary` + `skipped_indices`, and sends `Finished`.
-//
-// SPEC: §13.12a (content-addressed: hash-on-write, skip-if-present,
-//       coexist + the BIO-name link for extract), §4.3 (Downloading
-//       screen — Hashing phase indicator), §1 (CRITICAL DIRECTIVE —
-//       net-new, zero BIO source).
 
-// rationale: a bounded hash pool with a shared work index + per-thread
-// hash-result merge is intrinsic to the parallel design (not a smell);
-// `Self`/`const fn`/`#[must_use]` churn + the doc-paragraph-length lint
-// add noise without behavior value (Cat 3).
-#![allow(
-    clippy::missing_const_for_fn,
-    clippy::must_use_candidate,
-    clippy::use_self,
-    clippy::too_long_first_doc_paragraph
-)]
+//! Bounded parallel hashing pool for archive-skip decisions.
+//!
+//! Runs on a spawned coordinator thread so the UI stays responsive while
+//! candidate archives in the Mods-archive folder are hashed against the
+//! share-code's expected hashes. Two worker pools (size [`HASH_POOL_SIZE`])
+//! run in sequence: phase 1 hashes the size-matching on-disk candidates
+//! through the persistent cache, phase 2 consults the resulting
+//! present-by-hash map per asset and emits per-asset events to the
+//! orchestrator's drain.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -90,71 +27,54 @@ use crate::install_runtime::archive_skip::{HASH_CACHE_FILENAME, SkipSummary};
 use crate::install_runtime::archive_store;
 use crate::registry::share_export::ArchiveMeta;
 
-/// The bounded parallel hashing pool size. 10 keeps disk pressure
-/// bounded (hashing is read-heavy; >10 thrashes the disk on spinning
-/// media) while being substantially faster than the prior serial
-/// pass on any modern multi-core box. Same number as the extract pool
-/// (`extract_parallel::EXTRACT_POOL_SIZE`) — the disk-pressure
-/// argument is the same shape.
+/// Bounded parallel hashing pool size. Matches
+/// [`crate::install_runtime::extract_parallel::EXTRACT_POOL_SIZE`] so the
+/// disk-pressure shape is the same across phases.
 pub const HASH_POOL_SIZE: usize = 10;
 
 /// Events the coordinator thread sends to the orchestrator's per-frame
-/// drain. Mirrors `stream_downloader::StreamDownloadEvent` / `extract_
-/// parallel::ExtractAssetEvent` discipline.
+/// drain.
 pub enum ArchiveSkipEvent {
-    /// The asset list is known; the §4.3 chrome's Hashing phase
-    /// indicator can show "0 / N" immediately. Sent exactly once at
-    /// coordinator start.
+    /// The asset list is known. Sent exactly once at coordinator start
+    /// so the chrome's Hashing phase indicator can show `0 / N`
+    /// immediately.
     CandidateEnumerated { total: usize },
-    /// A worker picked asset `index` up and is about to hash it; the
-    /// §4.3 grid flips that row's status to `Hashing` ("checking
-    /// cache…"). Sent before each asset's hash work begins.
+    /// A worker is about to hash the asset at `index`; the grid flips
+    /// that row's status to `Hashing`.
     AssetHashStarted { index: usize },
-    /// Asset `index`'s hash decision is final. `was_skipped == true`
-    /// means the expected hash is on disk + the bytes were placed at
-    /// the deterministic path (`dest_display` carries the path's
-    /// `Display`); the drain pre-populates `update_selected_
-    /// downloaded_sources` with the BIO-shaped `"{label} -> {dest}"`
-    /// entry. `was_skipped == false` ⇒ no skip (either no expected
-    /// hash recorded, or expected hash not on disk) ⇒ the asset is
-    /// left in the to-fetch set for the streamer.
+    /// Asset `index`'s hash decision is final. `was_skipped` ⇒ the
+    /// expected hash is on disk and the bytes were placed at
+    /// `dest_display` (the deterministic path); the drain pre-populates
+    /// `update_selected_downloaded_sources` with `"{label} -> {dest}"`.
+    /// `!was_skipped` ⇒ the asset is left in the to-fetch set.
     AssetHashed {
         index: usize,
         was_skipped: bool,
         label: String,
         dest_display: Option<String>,
     },
-    /// Every asset processed. Carries the same observational
-    /// `SkipSummary` the sync pass returns + the orchestrator-side
-    /// skip-index set (the indices into the unchanged asset list the
-    /// streamer must silently bypass). After this the drain stores
-    /// `skip_indices` on `InstallScreenState`, clears `archive_skip_
-    /// rx`, and sets `archive_skip_completed = true`.
+    /// Every asset processed. Carries the observational [`SkipSummary`]
+    /// + the asset indices the streamer must silently bypass.
     Finished {
         summary: SkipSummary,
         skipped_indices: Vec<usize>,
     },
 }
 
-/// The coordinator's input — a snapshot of just the pieces the
-/// async pass needs, so it can be moved into the spawned thread
-/// without holding a `&mut WizardState`.
+/// Snapshot of the pieces the async pass needs, moved into the spawned
+/// coordinator thread so no `&mut WizardState` is held across it.
 pub struct AsyncSkipInput {
-    /// The global Mods-archive folder (`state.step1.mods_archive_
-    /// folder`, trimmed). Empty ⇒ the coordinator early-returns with
-    /// a no-op `Finished`.
+    /// The Mods-archive folder. Empty ⇒ the coordinator early-returns
+    /// with a no-op `Finished`.
     pub archive_dir: PathBuf,
-    /// The resolved asset set (`state.step2.update_selected_update_
-    /// assets`, cloned). Read-only input, left intact.
+    /// The resolved asset set; read-only input, left intact.
     pub assets: Vec<Step2UpdateAsset>,
 }
 
-// ── Local async-side cache structures. We deliberately do NOT touch
-//    the sync `archive_skip::HashCache` struct (which is `pub` but
-//    with a module-private entry type and a module-private hash-
-//    lookup method). Instead we load/save the JSON sidecar through
-//    the on-disk format directly — the format IS the public contract;
-//    no new BIO surface is needed. ──
+// Local cache types. We deliberately do NOT touch the sync
+// `archive_skip::HashCache` (its entry type + hash-lookup are private);
+// the on-disk JSON format IS the public contract so we load/save it
+// directly.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct AsyncCacheEntry {
     size: u64,
@@ -171,17 +91,17 @@ struct AsyncCacheFile {
 impl AsyncCacheFile {
     fn load(archive_dir: &Path) -> Self {
         let p = archive_dir.join(HASH_CACHE_FILENAME);
-        match std::fs::read_to_string(&p) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
-                warn!(
-                    target = "orchestrator",
-                    "archive hash cache unreadable ({err}); continuing empty \
-                     (worst case: a one-time re-hash)"
-                );
-                Self::default()
-            }),
-            Err(_) => Self::default(),
-        }
+        let Ok(text) = std::fs::read_to_string(&p) else {
+            return Self::default();
+        };
+        serde_json::from_str(&text).unwrap_or_else(|err| {
+            warn!(
+                target = "orchestrator",
+                "archive hash cache unreadable ({err}); continuing empty \
+                 (worst case: a one-time re-hash)"
+            );
+            Self::default()
+        })
     }
 
     fn save(&self, archive_dir: &Path) {
@@ -212,10 +132,10 @@ impl AsyncCacheFile {
         if e.size != size {
             return None;
         }
-        if let (Some(a), Some(b)) = (e.mtime_nanos, mtime) {
-            if a != b {
-                return None;
-            }
+        if let (Some(a), Some(b)) = (e.mtime_nanos, mtime)
+            && a != b
+        {
+            return None;
         }
         Some(&e.hash)
     }
@@ -237,10 +157,8 @@ impl AsyncCacheFile {
     }
 }
 
-/// File `(size, mtime_nanos)` — the size pre-filter input + the cache
-/// invalidation key. `None` mtime if unavailable (rare; size-only
-/// then). Mirrors the sync pass's helper (kept local so the sync
-/// module can stay untouched).
+/// `(size, mtime_nanos)` for `path`. `None` if not a file; the inner
+/// `mtime` is `None` when unavailable (size-only invalidation then).
 fn file_size_mtime(path: &Path) -> Option<(u64, Option<u128>)> {
     let meta = std::fs::metadata(path).ok()?;
     if !meta.is_file() {
@@ -255,24 +173,23 @@ fn file_size_mtime(path: &Path) -> Option<(u64, Option<u128>)> {
     Some((size, mtime))
 }
 
-/// `true` if `path` is one of the orchestrator's own JSON sidecars
-/// in the global Mods-archive folder — never a skip candidate.
-/// Mirrors the sync pass's `is_sidecar` (kept local; same list).
+/// `true` if `path` is one of the orchestrator's own JSON sidecars in
+/// the Mods-archive folder — never a skip candidate.
 fn is_sidecar(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|n| n.to_str()),
-        Some(HASH_CACHE_FILENAME)
-            | Some(archive_store::ARCHIVE_INDEX_FILENAME)
-            | Some(archive_store::INSTALL_LOCK_FILENAME)
+        Some(
+            HASH_CACHE_FILENAME
+                | archive_store::ARCHIVE_INDEX_FILENAME
+                | archive_store::INSTALL_LOCK_FILENAME
+        )
     ) || path
         .extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| e.eq_ignore_ascii_case("tmp"))
 }
 
-/// Present `src`'s bytes at `dst` (BIO's deterministic extract
-/// path) — hardlink preferred, copy fallback. Mirrors the sync
-/// pass's `link_or_copy`.
+/// Present `src`'s bytes at `dst` — hardlink preferred, copy fallback.
 fn link_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent)?;
@@ -286,70 +203,70 @@ fn link_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
 }
 
-/// **Spawn the bounded parallel checksum-then-skip pool (the v3
-/// async replacement for the v2 sync `skip_present_archives`).**
-/// Returns the `Receiver<ArchiveSkipEvent>` so the orchestrator's
-/// per-frame drain can pump events into the §4.3 grid live.
+/// `(path, size, mtime_nanos)` for one size-matching on-disk candidate.
+type CandidateMeta = (PathBuf, u64, Option<u128>);
+
+/// A `(path, size, mtime, hash)` tuple a worker wants to record in the
+/// persistent cache after a fresh hash.
+type CacheWrite = (PathBuf, u64, Option<u128>, String);
+
+/// Per-asset result the asset-side workers push into a shared vec; the
+/// coordinator orders them by `index` to build the summary.
+type AssetRecord = (usize, bool, Step2UpdateAsset);
+
+/// Spawn the bounded parallel checksum-then-skip pool.
 ///
-/// Behavior:
-///   1. Spawn a coordinator thread (the egui render thread returns
-///      immediately).
-///   2. Coordinator: load the persistent cache from `archive_dir`.
-///      Enumerate `archive_dir` with the cheap size pre-filter
-///      (built once before workers spawn — shared read-only).
-///      Build `wanted_sizes` / `by_name` / `wanted_hashes` lookups
-///      from `expected`.
-///   3. Emit `CandidateEnumerated { total: assets.len() }`.
-///   4. Empty archive_dir or empty assets ⇒ early-return no-op
-///      `Finished` with summary noting the no-op state.
-///   5. Empty `expected` ⇒ no-op pass: every asset is "no expected
-///      hash" (the always-download fallback); emit
-///      `AssetHashStarted` + `AssetHashed{was_skipped:false}` per
-///      asset, then `Finished` with `no_expected_hash =
-///      assets.len()`.
-///   6. Otherwise hash size-matching on-disk candidates through
-///      the cache in parallel (`HASH_POOL_SIZE` workers, splitting
-///      by file). Per-thread cache writes are merged once at the
-///      end (no mutex contention during hashing).
-///   7. Spawn the asset-side workers to consult `present_by_hash`
-///      for each asset's expected hash. Emit `AssetHashStarted`
-///      then `AssetHashed`.
-///   8. After all workers join, save the merged cache. Build the
-///      `SkipSummary` + `skipped_indices` + send `Finished`.
+/// Returns a receiver the orchestrator's per-frame drain consumes.
+/// The coordinator runs on a spawned thread (the caller returns
+/// immediately) and progresses through:
+/// 1. Emit `CandidateEnumerated { total: assets.len() }`.
+/// 2. Early-return no-op `Finished` if `archive_dir` or `assets` is
+///    empty.
+/// 3. If `expected` is empty: emit one `AssetHashStarted` +
+///    `AssetHashed { was_skipped: false }` per asset and `Finished`
+///    with `no_expected_hash == assets.len()`.
+/// 4. Otherwise hash size-matching on-disk candidates through the
+///    persistent cache in parallel ([`HASH_POOL_SIZE`] workers,
+///    splitting by file). Per-thread cache writes merge once after
+///    workers join.
+/// 5. Run a second parallel pool over assets: each worker consults
+///    `present_by_hash` for the asset's expected hash and emits
+///    `AssetHashStarted` then `AssetHashed`.
+/// 6. Send `Finished` with the ordered [`SkipSummary`] +
+///    `skipped_indices`.
+#[must_use]
 pub fn start_async_archive_skip(
     state_snapshot: AsyncSkipInput,
     expected: Vec<ArchiveMeta>,
 ) -> Receiver<ArchiveSkipEvent> {
     let (tx, rx) = mpsc::channel::<ArchiveSkipEvent>();
     thread::spawn(move || {
-        run_async_archive_skip(state_snapshot, expected, &tx);
+        run_async_archive_skip(state_snapshot, &expected, &tx);
     });
     rx
 }
 
-/// The coordinator + worker pool body. Runs on the spawned thread.
+/// Coordinator body: runs on the spawned thread.
 fn run_async_archive_skip(
     input: AsyncSkipInput,
-    expected: Vec<ArchiveMeta>,
+    expected: &[ArchiveMeta],
     tx: &Sender<ArchiveSkipEvent>,
 ) {
-    let archive_dir = input.archive_dir;
-    let assets = input.assets;
+    let AsyncSkipInput {
+        archive_dir,
+        assets,
+    } = input;
     let total_assets = assets.len();
 
-    // Emit the candidate count immediately so the §4.3 chrome can
-    // show "0 / N" at the start.
     let _ = tx.send(ArchiveSkipEvent::CandidateEnumerated {
         total: total_assets,
     });
 
-    // Early-return on empty archive_dir or empty assets — emit a
-    // no-op Finished.
     if archive_dir.as_os_str().is_empty() || total_assets == 0 {
-        let mut summary = SkipSummary::default();
-        if expected.is_empty() {
-            summary.no_expected_hash = total_assets;
-        }
+        let summary = SkipSummary {
+            no_expected_hash: if expected.is_empty() { total_assets } else { 0 },
+            ..Default::default()
+        };
         let _ = tx.send(ArchiveSkipEvent::Finished {
             summary,
             skipped_indices: Vec::new(),
@@ -357,30 +274,11 @@ fn run_async_archive_skip(
         return;
     }
 
-    // Empty expected — no-op pass: every asset is "no expected
-    // hash" (always-download fallback). Emit one AssetHashStarted
-    // + AssetHashed per asset (so the grid's per-row state
-    // transitions are consistent) then Finished.
     if expected.is_empty() {
-        let mut summary = SkipSummary::default();
-        summary.no_expected_hash = total_assets;
-        for (i, a) in assets.iter().enumerate() {
-            let _ = tx.send(ArchiveSkipEvent::AssetHashStarted { index: i });
-            let _ = tx.send(ArchiveSkipEvent::AssetHashed {
-                index: i,
-                was_skipped: false,
-                label: a.label.clone(),
-                dest_display: None,
-            });
-        }
-        let _ = tx.send(ArchiveSkipEvent::Finished {
-            summary,
-            skipped_indices: Vec::new(),
-        });
+        emit_always_download(&assets, tx);
         return;
     }
 
-    // Build the lookup maps (the same shape the sync pass builds).
     let by_name: HashMap<String, ArchiveMeta> = expected
         .iter()
         .map(|m| (m.name.clone(), m.clone()))
@@ -389,121 +287,202 @@ fn run_async_archive_skip(
     let wanted_hashes: std::collections::HashSet<String> =
         expected.iter().map(|m| m.hash.clone()).collect();
 
-    // ── Phase 1: enumerate + hash size-matching on-disk candidates
-    //    through the persistent cache, in parallel. ──
-    let cache_at_entry = AsyncCacheFile::load(&archive_dir);
-    let mut candidate_paths: Vec<(PathBuf, u64, Option<u128>)> = Vec::new();
-    if let Ok(read_dir) = std::fs::read_dir(&archive_dir) {
-        for entry in read_dir.flatten() {
-            let path = entry.path();
-            let Some((size, mtime)) = file_size_mtime(&path) else {
-                continue;
-            };
-            if is_sidecar(&path) {
-                continue;
-            }
-            if !wanted_sizes.contains(&size) {
-                continue;
-            }
-            candidate_paths.push((path, size, mtime));
-        }
-    }
+    let candidate_paths = enumerate_candidates(&archive_dir, &wanted_sizes);
     let candidate_count = candidate_paths.len();
+    let (present_by_hash, cache_writes, cache_hits) =
+        hash_candidates_parallel(&archive_dir, candidate_paths, &wanted_hashes);
+    let recs = decide_per_asset_parallel(assets, by_name.clone(), present_by_hash, archive_dir, tx);
+    let (summary, skipped_indices) = build_summary(&recs, &by_name, candidate_count, cache_hits);
+
+    drop(cache_writes);
+
+    let _ = tx.send(ArchiveSkipEvent::Finished {
+        summary,
+        skipped_indices,
+    });
+}
+
+/// No-expected-hash fallback: emit `AssetHashStarted` + `AssetHashed`
+/// per asset and a `Finished` with `no_expected_hash == assets.len()`.
+fn emit_always_download(assets: &[Step2UpdateAsset], tx: &Sender<ArchiveSkipEvent>) {
+    let summary = SkipSummary {
+        no_expected_hash: assets.len(),
+        ..Default::default()
+    };
+    for (i, a) in assets.iter().enumerate() {
+        let _ = tx.send(ArchiveSkipEvent::AssetHashStarted { index: i });
+        let _ = tx.send(ArchiveSkipEvent::AssetHashed {
+            index: i,
+            was_skipped: false,
+            label: a.label.clone(),
+            dest_display: None,
+        });
+    }
+    let _ = tx.send(ArchiveSkipEvent::Finished {
+        summary,
+        skipped_indices: Vec::new(),
+    });
+}
+
+/// Cheap size-pre-filter pass: read `archive_dir` once and keep entries
+/// whose size matches one of `wanted_sizes`.
+fn enumerate_candidates(
+    archive_dir: &Path,
+    wanted_sizes: &std::collections::HashSet<u64>,
+) -> Vec<CandidateMeta> {
+    let mut out: Vec<CandidateMeta> = Vec::new();
+    let Ok(read_dir) = std::fs::read_dir(archive_dir) else {
+        return out;
+    };
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        let Some((size, mtime)) = file_size_mtime(&path) else {
+            continue;
+        };
+        if is_sidecar(&path) {
+            continue;
+        }
+        if !wanted_sizes.contains(&size) {
+            continue;
+        }
+        out.push((path, size, mtime));
+    }
+    out
+}
+
+/// Phase 1: hash size-matching candidates through the persistent cache
+/// in parallel. Returns the resulting present-by-hash map, the
+/// per-thread cache-write list (merged + saved as a side effect), and
+/// the cache-hit count.
+fn hash_candidates_parallel(
+    archive_dir: &Path,
+    candidate_paths: Vec<CandidateMeta>,
+    wanted_hashes: &std::collections::HashSet<String>,
+) -> (HashMap<String, PathBuf>, Vec<CacheWrite>, usize) {
+    let cache_at_entry = AsyncCacheFile::load(archive_dir);
     let candidate_paths = Arc::new(candidate_paths);
     let cache_at_entry = Arc::new(cache_at_entry);
-    let wanted_hashes = Arc::new(wanted_hashes);
+    let wanted_hashes_arc = Arc::new(wanted_hashes.clone());
     let next_candidate = Arc::new(AtomicUsize::new(0));
     let present_by_hash: Arc<Mutex<HashMap<String, PathBuf>>> =
         Arc::new(Mutex::new(HashMap::new()));
-    let cache_writes: Arc<Mutex<Vec<(PathBuf, u64, Option<u128>, String)>>> =
-        Arc::new(Mutex::new(Vec::new()));
+    let cache_writes: Arc<Mutex<Vec<CacheWrite>>> = Arc::new(Mutex::new(Vec::new()));
     let cache_hits = Arc::new(AtomicUsize::new(0));
 
-    let worker_count = HASH_POOL_SIZE.min(candidate_count.max(1));
+    let worker_count = HASH_POOL_SIZE.min(candidate_paths.len().max(1));
     let mut handles = Vec::with_capacity(worker_count);
     for _ in 0..worker_count {
         let candidate_paths = Arc::clone(&candidate_paths);
         let cache_at_entry = Arc::clone(&cache_at_entry);
-        let wanted_hashes = Arc::clone(&wanted_hashes);
+        let wanted_hashes = Arc::clone(&wanted_hashes_arc);
         let next_candidate = Arc::clone(&next_candidate);
         let present_by_hash = Arc::clone(&present_by_hash);
         let cache_writes = Arc::clone(&cache_writes);
         let cache_hits = Arc::clone(&cache_hits);
         handles.push(thread::spawn(move || {
-            loop {
-                let i = next_candidate.fetch_add(1, Ordering::SeqCst);
-                if i >= candidate_paths.len() {
-                    break;
-                }
-                let (path, size, mtime) = &candidate_paths[i];
-                let hash = if let Some(h) = cache_at_entry.fresh_hash(path, *size, *mtime) {
-                    cache_hits.fetch_add(1, Ordering::Relaxed);
-                    h.to_string()
-                } else {
-                    match archive_store::hash_file(path) {
-                        Ok(h) => {
-                            cache_writes.lock().expect("cache_writes mutex").push((
-                                path.clone(),
-                                *size,
-                                *mtime,
-                                h.clone(),
-                            ));
-                            h
-                        }
-                        Err(err) => {
-                            warn!(
-                                target = "orchestrator",
-                                "hash candidate {}: {err} (skipping it as a \
-                                 skip source — it will just be re-downloaded \
-                                 if wanted)",
-                                path.display()
-                            );
-                            continue;
-                        }
-                    }
-                };
-                if wanted_hashes.contains(hash.as_str()) {
-                    present_by_hash
-                        .lock()
-                        .expect("present_by_hash mutex")
-                        .entry(hash)
-                        .or_insert(path.clone());
-                }
-            }
+            hash_candidates_worker(
+                &candidate_paths,
+                &cache_at_entry,
+                &wanted_hashes,
+                &next_candidate,
+                &present_by_hash,
+                &cache_writes,
+                &cache_hits,
+            );
         }));
     }
     for h in handles {
         let _ = h.join();
     }
 
-    // Merge per-thread cache writes into the persistent cache + save
-    // once (the coordinator-only serial merge).
-    let mut cache = (*cache_at_entry).clone();
     let writes = cache_writes.lock().expect("cache_writes mutex").clone();
+    let mut cache = (*cache_at_entry).clone();
     let mut cache_dirty = false;
-    for (path, size, mtime, hash) in writes {
-        if cache.record(&path, size, mtime, &hash) {
+    for (path, size, mtime, hash) in &writes {
+        if cache.record(path, *size, *mtime, hash) {
             cache_dirty = true;
         }
     }
     if cache_dirty {
-        cache.save(&archive_dir);
+        cache.save(archive_dir);
     }
 
-    // Snapshot present_by_hash for the per-asset phase.
-    let present_by_hash_final = Arc::new(
-        present_by_hash
-            .lock()
-            .expect("present_by_hash mutex")
-            .clone(),
-    );
+    let present = present_by_hash
+        .lock()
+        .expect("present_by_hash mutex")
+        .clone();
+    let hits = cache_hits.load(Ordering::Relaxed);
+    (present, writes, hits)
+}
 
-    // ── Phase 2: per-asset skip decisions, in parallel. ──
+fn hash_candidates_worker(
+    candidate_paths: &[CandidateMeta],
+    cache_at_entry: &AsyncCacheFile,
+    wanted_hashes: &std::collections::HashSet<String>,
+    next_candidate: &AtomicUsize,
+    present_by_hash: &Mutex<HashMap<String, PathBuf>>,
+    cache_writes: &Mutex<Vec<CacheWrite>>,
+    cache_hits: &AtomicUsize,
+) {
+    loop {
+        let i = next_candidate.fetch_add(1, Ordering::SeqCst);
+        if i >= candidate_paths.len() {
+            break;
+        }
+        let (path, size, mtime) = &candidate_paths[i];
+        let hash = if let Some(h) = cache_at_entry.fresh_hash(path, *size, *mtime) {
+            cache_hits.fetch_add(1, Ordering::Relaxed);
+            h.to_string()
+        } else {
+            match archive_store::hash_file(path) {
+                Ok(h) => {
+                    cache_writes.lock().expect("cache_writes mutex").push((
+                        path.clone(),
+                        *size,
+                        *mtime,
+                        h.clone(),
+                    ));
+                    h
+                }
+                Err(err) => {
+                    warn!(
+                        target = "orchestrator",
+                        "hash candidate {}: {err} (skipping it as a \
+                         skip source — it will just be re-downloaded \
+                         if wanted)",
+                        path.display()
+                    );
+                    continue;
+                }
+            }
+        };
+        if wanted_hashes.contains(hash.as_str()) {
+            present_by_hash
+                .lock()
+                .expect("present_by_hash mutex")
+                .entry(hash)
+                .or_insert_with(|| path.clone());
+        }
+    }
+}
+
+/// Phase 2: per-asset skip decisions in parallel. Each worker hashes is
+/// already done; here we just consult `present_by_hash` and emit the
+/// per-asset events as decisions are made.
+fn decide_per_asset_parallel(
+    assets: Vec<Step2UpdateAsset>,
+    by_name: HashMap<String, ArchiveMeta>,
+    present_by_hash: HashMap<String, PathBuf>,
+    archive_dir: PathBuf,
+    tx: &Sender<ArchiveSkipEvent>,
+) -> Vec<AssetRecord> {
+    let total_assets = assets.len();
     let assets = Arc::new(assets);
     let by_name = Arc::new(by_name);
+    let present_by_hash = Arc::new(present_by_hash);
     let archive_dir = Arc::new(archive_dir);
     let next_asset = Arc::new(AtomicUsize::new(0));
-    let asset_results: Arc<Mutex<Vec<(usize, bool, Step2UpdateAsset)>>> =
+    let asset_results: Arc<Mutex<Vec<AssetRecord>>> =
         Arc::new(Mutex::new(Vec::with_capacity(total_assets)));
 
     let worker_count = HASH_POOL_SIZE.min(total_assets);
@@ -511,53 +490,56 @@ fn run_async_archive_skip(
     for _ in 0..worker_count {
         let assets = Arc::clone(&assets);
         let by_name = Arc::clone(&by_name);
-        let present_by_hash = Arc::clone(&present_by_hash_final);
+        let present_by_hash = Arc::clone(&present_by_hash);
         let archive_dir = Arc::clone(&archive_dir);
         let next_asset = Arc::clone(&next_asset);
         let asset_results = Arc::clone(&asset_results);
         let tx = tx.clone();
         handles.push(thread::spawn(move || {
-            loop {
-                let i = next_asset.fetch_add(1, Ordering::SeqCst);
-                if i >= assets.len() {
-                    break;
-                }
-                let asset = &assets[i];
-                let _ = tx.send(ArchiveSkipEvent::AssetHashStarted { index: i });
-                let name = archive_file_name(asset);
-                let Some(meta) = by_name.get(&name) else {
-                    asset_results.lock().expect("asset_results mutex").push((
-                        i,
-                        false,
-                        asset.clone(),
-                    ));
-                    let _ = tx.send(ArchiveSkipEvent::AssetHashed {
-                        index: i,
-                        was_skipped: false,
-                        label: asset.label.clone(),
-                        dest_display: None,
-                    });
-                    continue;
-                };
-                let Some(present_path) = present_by_hash.get(&meta.hash) else {
-                    asset_results.lock().expect("asset_results mutex").push((
-                        i,
-                        false,
-                        asset.clone(),
-                    ));
-                    let _ = tx.send(ArchiveSkipEvent::AssetHashed {
-                        index: i,
-                        was_skipped: false,
-                        label: asset.label.clone(),
-                        dest_display: None,
-                    });
-                    continue;
-                };
+            decide_per_asset_worker(
+                &assets,
+                &by_name,
+                &present_by_hash,
+                &archive_dir,
+                &next_asset,
+                &asset_results,
+                &tx,
+            );
+        }));
+    }
+    for h in handles {
+        let _ = h.join();
+    }
+
+    let mut recs = asset_results.lock().expect("asset_results mutex").clone();
+    recs.sort_by_key(|(i, _, _)| *i);
+    recs
+}
+
+fn decide_per_asset_worker(
+    assets: &[Step2UpdateAsset],
+    by_name: &HashMap<String, ArchiveMeta>,
+    present_by_hash: &HashMap<String, PathBuf>,
+    archive_dir: &Path,
+    next_asset: &AtomicUsize,
+    asset_results: &Mutex<Vec<AssetRecord>>,
+    tx: &Sender<ArchiveSkipEvent>,
+) {
+    loop {
+        let i = next_asset.fetch_add(1, Ordering::SeqCst);
+        if i >= assets.len() {
+            break;
+        }
+        let asset = &assets[i];
+        let _ = tx.send(ArchiveSkipEvent::AssetHashStarted { index: i });
+        let name = archive_file_name(asset);
+        let (was_skipped, dest_display) = by_name
+            .get(&name)
+            .and_then(|meta| present_by_hash.get(&meta.hash))
+            .map_or((false, None), |present_path| {
                 let deterministic = archive_dir.join(&name);
-                let placed = if present_path == &deterministic {
-                    true
-                } else {
-                    match link_or_copy(present_path, &deterministic) {
+                let placed = present_path == &deterministic
+                    || match link_or_copy(present_path, &deterministic) {
                         Ok(()) => true,
                         Err(err) => {
                             warn!(
@@ -570,68 +552,52 @@ fn run_async_archive_skip(
                             );
                             false
                         }
-                    }
-                };
+                    };
                 if placed {
-                    let dest_display = deterministic.display().to_string();
-                    asset_results.lock().expect("asset_results mutex").push((
-                        i,
-                        true,
-                        asset.clone(),
-                    ));
-                    let _ = tx.send(ArchiveSkipEvent::AssetHashed {
-                        index: i,
-                        was_skipped: true,
-                        label: asset.label.clone(),
-                        dest_display: Some(dest_display),
-                    });
+                    (true, Some(deterministic.display().to_string()))
                 } else {
-                    asset_results.lock().expect("asset_results mutex").push((
-                        i,
-                        false,
-                        asset.clone(),
-                    ));
-                    let _ = tx.send(ArchiveSkipEvent::AssetHashed {
-                        index: i,
-                        was_skipped: false,
-                        label: asset.label.clone(),
-                        dest_display: None,
-                    });
+                    (false, None)
                 }
-            }
-        }));
+            });
+        asset_results
+            .lock()
+            .expect("asset_results mutex")
+            .push((i, was_skipped, asset.clone()));
+        let _ = tx.send(ArchiveSkipEvent::AssetHashed {
+            index: i,
+            was_skipped,
+            label: asset.label.clone(),
+            dest_display,
+        });
     }
-    for h in handles {
-        let _ = h.join();
-    }
+}
 
-    // Build the SkipSummary + skipped_indices (ordered by asset
-    // index for deterministic output).
-    let mut recs = asset_results.lock().expect("asset_results mutex").clone();
-    recs.sort_by_key(|(i, _, _)| *i);
-
+/// Tally the per-asset records into the observational `SkipSummary` and
+/// the streamer's `skipped_indices` (ordered by asset index).
+fn build_summary(
+    recs: &[AssetRecord],
+    by_name: &HashMap<String, ArchiveMeta>,
+    candidate_count: usize,
+    cache_hits: usize,
+) -> (SkipSummary, Vec<usize>) {
     let mut summary = SkipSummary::default();
     let mut skipped_indices: Vec<usize> = Vec::new();
-    for (i, was_skipped, asset) in &recs {
+    for (i, was_skipped, asset) in recs {
         let name = archive_file_name(asset);
         let has_expected = by_name.contains_key(&name);
         if *was_skipped {
             summary.skipped_present += 1;
             summary.skipped_assets.push(asset.clone());
             skipped_indices.push(*i);
-        } else if !has_expected {
-            summary.no_expected_hash += 1;
-        } else {
+        } else if has_expected {
             summary.missing_on_disk += 1;
+        } else {
+            summary.no_expected_hash += 1;
         }
     }
     summary.hashed_candidates = candidate_count;
-    summary.cache_hits = cache_hits.load(Ordering::Relaxed);
-
-    let _ = tx.send(ArchiveSkipEvent::Finished {
-        summary,
-        skipped_indices,
-    });
+    summary.cache_hits = cache_hits;
+    (summary, skipped_indices)
 }
 
 #[cfg(test)]
@@ -674,7 +640,7 @@ mod tests {
     }
 
     fn collect_events(
-        rx: Receiver<ArchiveSkipEvent>,
+        rx: &Receiver<ArchiveSkipEvent>,
     ) -> (Vec<ArchiveSkipEvent>, Option<(SkipSummary, Vec<usize>)>) {
         let mut events = Vec::new();
         let mut finished: Option<(SkipSummary, Vec<usize>)> = None;
@@ -700,7 +666,7 @@ mod tests {
             assets: vec![asset("A/A.TP2", "gh", "v1", "A.zip")],
         };
         let rx = start_async_archive_skip(input, vec![]);
-        let (events, finished) = collect_events(rx);
+        let (events, finished) = collect_events(&rx);
         let has_enum = events
             .iter()
             .any(|e| matches!(e, ArchiveSkipEvent::CandidateEnumerated { total: 1 }));
@@ -720,7 +686,7 @@ mod tests {
             ],
         };
         let rx = start_async_archive_skip(input, vec![]);
-        let (events, finished) = collect_events(rx);
+        let (events, finished) = collect_events(&rx);
 
         let started = events
             .iter()
@@ -749,10 +715,10 @@ mod tests {
 
         let input = AsyncSkipInput {
             archive_dir: archive_dir.clone(),
-            assets: vec![a.clone()],
+            assets: vec![a],
         };
         let rx = start_async_archive_skip(input, vec![expected]);
-        let (events, finished) = collect_events(rx);
+        let (events, finished) = collect_events(&rx);
 
         let has_enum = events
             .iter()
@@ -808,10 +774,10 @@ mod tests {
 
         let input = AsyncSkipInput {
             archive_dir: archive_dir.clone(),
-            assets: vec![a.clone(), b.clone()],
+            assets: vec![a, b],
         };
         let rx = start_async_archive_skip(input, expected);
-        let (_events, finished) = collect_events(rx);
+        let (_events, finished) = collect_events(&rx);
         let (async_summary, _indices) = finished.unwrap();
 
         assert_eq!(
