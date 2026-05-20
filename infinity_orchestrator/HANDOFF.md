@@ -88,16 +88,18 @@ Run the orchestrator (the eframe window will appear; on macOS it may open behind
 infinity_orchestrator/                  # this folder (artifacts: spec, plan, wireframe, handoff)
 ├── SPEC.md                             # canonical product spec (read first)
 ├── HANDOFF.md                          # this file
-├── plan/
-│   ├── overview.md                     # phasing philosophy + revision log
-│   ├── phase-01-theme-and-shell.md
-│   ├── phase-02-nav-routing.md
-│   ├── phase-03-modlist-registry.md
-│   ├── phase-04-settings.md
-│   ├── phase-05-home-install-paste.md
-│   ├── phase-06-create-workspace-shell.md
-│   ├── phase-07-install-runtime.md
-│   └── phase-08-popup-reskins-polish.md
+├── plan/                               # (streamlined 2026-05-19; see plan/revision-log.md)
+│   ├── overview.md                     # phasing philosophy + phase table + architecture
+│   ├── revision-log.md                 # dated history — split out of overview.md
+│   ├── phase-01-theme-and-shell.md     # SHIPPED — ~10-line status stub (full doc in archive/)
+│   ├── phase-02-nav-routing.md         # SHIPPED — stub
+│   ├── phase-03-modlist-registry.md    # SHIPPED — stub
+│   ├── phase-04-settings.md            # SHIPPED — stub
+│   ├── phase-05-home-install-paste.md  # SHIPPED — stub
+│   ├── phase-06-create-workspace-shell.md  # SHIPPED — stub
+│   ├── phase-07-install-runtime.md     # SHIPPED — stub
+│   ├── phase-08-popup-reskins-polish.md  # LIVE
+│   └── archive/                        # full pre-streamline phase-01..07 docs (audit-only)
 └── wireframe-preview/                  # canonical visual reference (HTML+React preview)
     ├── build.html                      # built single-file preview (open in browser)
     ├── index.html                      # CSS tokens + font-face declarations + shell layout

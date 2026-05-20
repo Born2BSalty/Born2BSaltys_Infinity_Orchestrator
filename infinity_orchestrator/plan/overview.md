@@ -124,7 +124,7 @@ The orchestrator's `Workspace` destination calls BIO's **existing per-step rende
 match step {
     WorkspaceStep::Step2 => bio::ui::step2::page_step2::render(ui, &mut self.wizard_state, self.dev_mode, &self.exe_fingerprint),
     WorkspaceStep::Step3 => bio::ui::step3::page_step3::render(ui, &mut self.wizard_state, self.dev_mode, &self.exe_fingerprint),
-    WorkspaceStep::Step4 => workspace_step4::render(ui, self), // Phase 6's new chrome — see C4
+    WorkspaceStep::Step4 => workspace_step4::render(ui, self), // Phase 6's new chrome — C4 is defined in revision-log.md
     WorkspaceStep::Step5 => bio::ui::workspace::step5::render(ui, &mut self.wizard_state, ...), // Phase 7 wraps with new chrome
 }
 ```
@@ -132,13 +132,13 @@ match step {
 Each `page_stepN::render` has a step-specific signature (verified in source):
 
 - **Step 2:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint) -> Option<Step2Action>` (`src/ui/step2/page_step2.rs:10`).
-- **Step 3:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint)` returning `()` — no action enum; the page mutates `WizardState` directly (`src/ui/step3/page_step3.rs:7`; see H2 below).
+- **Step 3:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint)` returning `()` — no action enum; the page mutates `WizardState` directly (`src/ui/step3/page_step3.rs:7`; H2 is defined in [`revision-log.md`](revision-log.md)).
 - **Step 4:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint) -> Option<Step4Action>` (`src/ui/step4/page_step4.rs:8`). **Note:** per Phase 6 P6.T2b (C4), the orchestrator's workspace step router replaces this body with an orchestrator-side renderer; the orchestrator does **not** call `page_step4::render`. The signature is documented here only for the legacy `BIO` binary's path.
 - **Step 5:** `pub fn render(ui, &mut WizardState, &mut Step5ConsoleViewState, Option<&mut EmbeddedTerminal>, Option<&str>, dev_mode, exe_fingerprint) -> Option<Step5Action>` — verified in source at `src/ui/step5/page_step5.rs`.
 
 The returned `StepNAction` (where present) is dispatched to the same `bio::app::app_step*_*` orchestration functions BIO's `WizardApp` dispatches to.
 
-The orchestrator handles each step page's returned action by calling the same dispatch functions BIO already exposes (e.g., `bio::app::app_step2_router::handle_step2_action`, which is `pub(crate)` per `src/core/app/app_step2_router.rs:6` — reachable from same-crate orchestrator code). The orchestrator does not call `WizardApp::handle_stepN_action` directly — those are `pub(super)` methods on `WizardApp` defined in `src/ui/app_methods.rs`. Instead, it calls the underlying `bio::app::app_step*_*` functions that those handlers wrap. The dispatch surface is BIO's `bio::app::*` API plus the `pub(crate)` step-action handlers — identical to what `bio::ui::app::update_loop::run` uses (the BIO update loop's real path; see H3 below).
+The orchestrator handles each step page's returned action by calling the same dispatch functions BIO already exposes (e.g., `bio::app::app_step2_router::handle_step2_action`, which is `pub(crate)` per `src/core/app/app_step2_router.rs:6` — reachable from same-crate orchestrator code). The orchestrator does not call `WizardApp::handle_stepN_action` directly — those are `pub(super)` methods on `WizardApp` defined in `src/ui/app_methods.rs`. Instead, it calls the underlying `bio::app::app_step*_*` functions that those handlers wrap. The dispatch surface is BIO's `bio::app::*` API plus the `pub(crate)` step-action handlers — identical to what `bio::ui::app::update_loop::run` uses (the BIO update loop's real path; H3 is defined in [`revision-log.md`](revision-log.md)).
 
 ### Workspace state loader (replaces the "orchestrator bridge")
 
@@ -263,7 +263,7 @@ Re-read SPEC §1 before each phase. The six authorized carve-outs are:
 1. **Theme-token extraction.** Replace unconditional inline `egui::Color32::from_rgb(...)` literals (or unconditional `theme_global::*()` accessor calls that resolve to such literals) and inline padding `f32` values with reads from the redesign token surface (`src/ui/shared/redesign_tokens.rs::redesign_*(palette)` accessors). Behavior unchanged; conditional structure (if any) unchanged.
 2. **Window-chrome config flips.** One-line changes to `egui::Window` builder calls — specifically `.collapsible(false)` → `.collapsible(true)`. The body, signatures, and behavior of the popup stay identical.
 3. **Library/binary structural split.** The carve-out described in detail in the Architecture section above. Mechanical; no logic changes; behavior preserved bit-for-bit.
-4. **WizardApp → WizardState signature refactor.** BIO functions whose body only mutates `app.state` may be refactored to take `&mut WizardState` instead of `&mut WizardApp`. Body unchanged; existing call sites inside `WizardApp` update to pass `&mut self.state`. Per-function audit required (see Phase 4's C2 audit table).
+4. **WizardApp → WizardState signature refactor.** BIO functions whose body only mutates `app.state` may be refactored to take `&mut WizardState` instead of `&mut WizardApp`. Body unchanged; existing call sites inside `WizardApp` update to pass `&mut self.state`. Per-function audit required (see Phase 4's C2 audit table at [`archive/phase-04-settings.md`](archive/phase-04-settings.md)).
 5. **Schema-additive serde field additions.** New optional `#[serde(default = ...)]` fields on existing BIO serde structs when the default preserves today's behavior. Used for share-code v1 → v1+ additive evolution.
 6. **State-aware theme-token reads.** For BIO source files that render redesign-relevant UI surfaces (Step 2 tree + Details, Step 3 reorder list + toolbar, Step 5 console + status + install row + dev header + cancel-confirm, popup group), inline `Color32` literals or `theme_global::*()` accessor calls may be swapped for `redesign_*(palette)` accessors **even when the literal sits inside conditional logic that decides between colors based on state** (hover, selected, conflict tone, dev-mode banner, install-running, prep-running, locked, disabled, kind, etc.). The conditional structure of the function must be preserved exactly — no new branches, no removed branches, no reordered branches, no logic mutations, no behavior changes. Only the color expressions inside each branch change, and only to swap `theme_global::*()` / inline `Color32::from_rgb(...)` calls for `redesign_*(palette)` calls. The function gains a `palette: ThemePalette` parameter; call sites thread it through. Per-file scope documentation required (see Phase 8 file inventory).
 
