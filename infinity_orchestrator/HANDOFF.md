@@ -23,26 +23,58 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
 
 ---
 
-## Queued fix-sets — post DL Fix-Set v3 user testing (filed 2026-05-20)
+## Recent ships + process / tooling changes (2026-05-20)
 
-**v3 just shipped (`7962b3f`, pushed):** parallel extract coordinator + async hashing + visual collapse + 7th BIO carve-out (narrow visibility-only, 6 edits/3 files, zero behavior). Awaiting the user's live re-test.
+**Code:**
+- **DL Fix-Set v2** (`25184fa`) — 5 user-approved fixes from the live re-test of v1: pure-count download bar fallback, per-asset push to downloaded/failed vectors, `extract_intercept` snapshot infrastructure, `apply_saved_weidu_log_selection` + `sync_step3_from_step2` on the paste-path before flip, `archive_skip` keeps assets in list + pre-populates `downloaded_sources`. ZERO BIO, six carve-outs.
+- **DL Fix-Set v3** (`7962b3f`) — parallel extract coordinator (new `install_runtime::extract_parallel`, pool 10) + async hashing (new `install_runtime::archive_skip_async`, pool 10) + visual collapse to "✓ downloaded" + Hashing phase + row sort + "Preparing to install" overlay + **7th BIO carve-out** (narrow visibility-only, 6 edits across 3 files: `extract_one_archive`, `Step2UpdateExtractJob` + fields, `build_extract_jobs` all `pub(super)` → `pub(crate)` + the parent's `mod archive;` / `mod plan;` → `pub(crate) mod`). The carve-out count is now **7**. The v2 `extract_intercept` module was REPLACED by `extract_parallel`. Both v2 + v3 pushed.
 
-**Two fix-sets queued behind v3 user-testing, in order. DO NOT dispatch either until v3 tests cleanly.**
+**Process:**
+- **Per-run branch + PR workflow** (PR #1, merged at `10a2ac0`) — every commit (code AND doc) goes via a per-run branch off `overhaul/infinity_orchestrator` + PR + user squash-merge. Orchestrator never auto-merges. Branch naming: `fix/<slug>` / `feat/<slug>` / `docs/<slug>`. PR body sections: Scope / Change list / Verification / Manual-test script / Judgment calls. Pure-doc commits SKIP the final rebuild gate (saved 30s wastes + the Windows file-lock collision). Full rules in the orchestrator skill's "Per-run branch + PR workflow" subsection.
+- **`.claude/` + `CLAUDE.md` files untracked** (PR #2, merged at `5976b4f`) — the orchestrator skill / plan-implementer agent / spec-authority / orchestrator-handoff / per-directory `CLAUDE.md` files are kept locally for the harness but no longer tracked. `.gitignore` flipped from "tracked on purpose so AI orientation travels" to blanket `.claude/` + `CLAUDE.md` excludes. References scrubbed from this HANDOFF + plan/revision-log + wireframe-preview/GAP_ANALYSIS (read path now one-way: AI agents start inside `.claude` and branch out; tracked docs never point back). **Gotcha for fresh clones / `git pull` consumers**: the pull deletes the local `.claude/` files from the working tree as the merge propagates. Restore via `git restore --worktree --source=<commit-with-files> -- .claude/ CLAUDE.md src/CLAUDE.md src/core/CLAUDE.md src/core/app/CLAUDE.md src/core/app/compat/CLAUDE.md src/settings/CLAUDE.md src/ui/CLAUDE.md` (use `2e7f72c` for the latest orchestrator skill; `d3b3c79` for the rest).
 
-**Step-5 fix-set (3 bugs, queued first — see `project_step5_fixset_queued` memory):**
+**Tooling:**
+- **Full clippy pedantic + nursery gate clean across the codebase** (PR #3, commit `517e45b`, merged at `118672f`) — whole-codebase canonical gate `cargo clippy --all-targets --all-features -- -D warnings -W unreachable_pub -W clippy::pedantic -W clippy::nursery -A missing_errors_doc -A missing_panics_doc` now exits 0 with zero warnings. Removed file-level + per-item `#[allow(clippy::...)]` suppressions, stripped forensic header comments (spec / fix-set / run / phase / wireframe-line pointers — comments now describe the code, not its paper trail), trimmed first-doc-paragraphs, fixed `as`-cast lints. **Implication: the touched-files-only grandfathering rule is essentially moot — there are no pre-existing `#[allow]`s or forensic comments to grandfather. Future fix-sets land on a clippy-clean codebase; just don't regress.**
+- **New `/code-hygiene` shared skill** (LOCAL, `.claude/skills/code-hygiene/SKILL.md` — not tracked) — both the orchestrator AND the plan-implementer agent read it before touching code. Encodes the clippy pedantic + nursery / no-`#[allow]` / concise-rustdoc / no-`#[doc = "..."]` / no-SPEC-§-or-phase/run/fix-set-pointers-in-code rules. Net behavior: dispatch briefs no longer restate the rules; the agent reads the contract at session start; the first draft is compliant. Gates are a backstop, not a forgive-and-fix loop.
+
+---
+
+## Queued fix-sets — in dispatch order (next first)
+
+**Dispatch policy:** each fix-set as one plan-implementer run per the dispatch-grouped-fixes memory; full gate set (BIO-source guard + scoped clippy + comment hygiene + scoped rustfmt + `cargo test --lib` + both binaries + DATA-LOSS sentinel + runtime trace + render PNGs); per-run branch + PR per the workflow above. Each set must land + user-test cleanly before the next dispatches.
+
+### 1. DL Fix-Set v4 — 5-bug live re-test fix-set (analysis presented 2026-05-20; user owes 2 decisions)
+
+User reported 5 bugs after live re-testing v3. Root causes traced into source; fix shapes drafted. Two decisions are owed before dispatch:
+
+**The 5 bugs:**
+1. **Cancel during downloads doesn't cancel** — `page_install.rs:201-210` Cancel handler only resets two UI latches + routes back; does NOT drop receivers, clear `modlist_auto_build_active` / `pending_saved_log_*` / `download_phase_started` / `archive_skip_completed` / `archives_verified`. Backend keeps trucking → install starts → rail locks. Fix: Cancel handler rewrite to drop all 3 channel rx + clear all 5 flow flags + `clear_preview`.
+2. **Hashing creates a full duplicate of every archive on disk** — `archive_store.rs:460` (`ingest_downloaded_archives`) does `fs::copy(&deterministic, &stored)`. Same at `:374` (`stage_known_archives`). 5+ GB wasted on a 51-mod EET. Fix: shared `link_or_copy` helper (mirror `archive_skip.rs::link_or_copy` at `:584-598`); hardlink first, copy fallback. Single inode + two names.
+3a. **"no mods queued" while hash 51/51 100% on entry** — TWO bugs compound: `from_wizard_state_full` has no code path returning `ModDownloadStatus::Hashing` (enum variant exists, classifier never produces it); AND `hash_progress` / `extract_progress` snapshots are never reset on `clear_preview`, so a fresh install inherits the previous install's `(51, 51)` final value. Fix: `clear_preview` resets both snapshots to `None`; add `hashed_indices: HashSet<usize>` on `InstallScreenState`; `drain_archive_skip_events` populates it per `AssetHashed`; `from_wizard_state_full` returns `Hashing` for unhashed indices.
+3b. **Extract bar shows 51/51 100% "Preparing to install" briefly then resets to 9/51 18%** — same stale-snapshot mechanism as 3a. Fix: same `clear_preview` reset closes both 3a + 3b.
+4. **Last download shows no progress then jumps to done** — likely the final asset's `AssetProgress` and `AssetDone` arrive in the same drain pass; per_byte updates but row status doesn't flip until `from_wizard_state_full` rebuilds. Fix: explicit per_byte pin to `(final_bytes, Some(final_bytes))` on AssetDone BEFORE downloaded_sources push. Runtime trace asserts incremental progress for the final asset.
+5. **Only 5 downloads max parallel** — `POOL_SIZE = 10` in code (verified at `stream_downloader.rs:118`). Likely a host/network limit (GitHub releases rate-limits ~5 concurrent per IP); workers spawn but 5 block on TCP connect.
+
+**Decisions owed by user:**
+1. **Bug 5 direction**: (i) per-host throttling explicit (group assets by host, run pool size per-host) / (ii) accept the host limit (POOL_SIZE=10 covers mixed-source modlists; same-host is host-bound anyway) / (iii) **investigate first** (orchestrator default — trace what the 5 "missing" workers are doing, then decide).
+2. **Anything else in scope** before dispatch? — user said "these 5 should be fixed before we move onto step 5 fixes"; confirms this v4 jumps ahead of Step-5 + Create/Fork.
+
+**Once decisions land:** single dispatch on branch `fix/dl-screen-cancel-dedupe-snapshots`. Full v4 analysis + dispatch plan persisted in `.claude/orchestrator-handoff.md` (orchestrator-internal).
+
+### 2. Step-5 fix-set (3 bugs, queued behind v4 — see `project_step5_fixset_queued` memory)
+
 1. Step-5 console window unbounded horizontally — long lines bleed off the right edge. BIO's embedded terminal rendered inside the orchestrator's Step-5 chrome. Likely orchestrator-side `Ui::set_max_width` bound (no carve-out); investigate first — may need narrow carve-out if BIO ignores the bound.
 2. Install pathway sticks at Step 5 after completion. Nav-away → back-to-Install lands at the previous in-progress Step-5 view instead of fresh paste-stage. Only "← back to import" resets. Missing state-reset on install-completion-edge or nav-away.
 3. Install log persists across runs in the same session (same shared root as #2). Per-install log scope, not session-global. Likely one fix to the install-completion-edge reset closes both #2 and #3.
 
 User screenshot: `C:\Users\spany\OneDrive\Pictures\Screenshots\Screenshot 2026-05-20 090406.png`.
 
-**Create/Fork fix-set (2 bugs, queued second — see `project_create_fork_fixset_queued` memory):**
+### 3. Create/Fork fix-set (2 bugs, queued behind Step-5 — see `project_create_fork_fixset_queued` memory)
+
 1. Import and Modify (fork-download) stuck at 0/0. "Downloading fork" screen renders "no mods queued" forever with "× 2 path issues" indicator at bottom-left. Likely silent path-validation failure — Settings → Paths missing required fields, asset resolution returns empty, no user-visible blocker. Investigation: premise-check the path-validation rules + which paths the fork-download flow requires; verify whether the fork-download path uses the new DL pipeline (streamer + async hashing per v3) or a separate older path. Surface the path issue PROMINENTLY on-screen (the non-masking arm-error pattern v2 introduced).
 2. Destination Clean / Backup scope too narrow — currently only operates on bg1 and bg2 subfolders; must encompass the ENTIRE destination directory (per-install Mods folder, bg1, bg2, weidu_component_logs, weidu input logs, etc.). Lives in `src/ui/install/destination_not_empty.rs` + the underlying clean/backup helper.
 
 User screenshot: `C:\Users\spany\OneDrive\Pictures\Screenshots\Screenshot 2026-05-20 091047.png`.
-
-**Dispatch policy:** each fix-set as one plan-implementer run per the dispatch-grouped-fixes memory; full gate set + runtime trace + render PNGs. The Step-5 set lands first (its bugs are blockers for clean re-testing); Create/Fork set lands after.
 
 ---
 

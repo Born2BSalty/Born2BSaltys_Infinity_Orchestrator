@@ -21,13 +21,5 @@ infinity_orchestrator/wireframe-preview/node_modules/
 /Infinity Orchestrator Wireframe*.html
 /infinity_orchestrator.zip
 
-# AI agent artifacts — kept local, not tracked (user-authorized 2026-05-20).
-# The orchestrator skill / plan-implementer agent definition / orchestrator-
-# handoff / spec-authority and any per-directory CLAUDE.md notes live in the
-# working tree locally for the harness to use, but are intentionally NOT
-# tracked in the public repo. Reverses the prior "tracked so AI orientation
-# travels with the repo" stance. The per-machine harness state
-# (`.claude/settings.local.json`, etc.) is also covered by the blanket
-# `.claude/` rule below.
 .claude/
 CLAUDE.md
