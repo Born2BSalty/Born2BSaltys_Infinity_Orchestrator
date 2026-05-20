@@ -23,6 +23,29 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
 
 ---
 
+## Queued fix-sets — post DL Fix-Set v3 user testing (filed 2026-05-20)
+
+**v3 just shipped (`7962b3f`, pushed):** parallel extract coordinator + async hashing + visual collapse + 7th BIO carve-out (narrow visibility-only, 6 edits/3 files, zero behavior). Awaiting the user's live re-test.
+
+**Two fix-sets queued behind v3 user-testing, in order. DO NOT dispatch either until v3 tests cleanly.**
+
+**Step-5 fix-set (3 bugs, queued first — see `project_step5_fixset_queued` memory):**
+1. Step-5 console window unbounded horizontally — long lines bleed off the right edge. BIO's embedded terminal rendered inside the orchestrator's Step-5 chrome. Likely orchestrator-side `Ui::set_max_width` bound (no carve-out); investigate first — may need narrow carve-out if BIO ignores the bound.
+2. Install pathway sticks at Step 5 after completion. Nav-away → back-to-Install lands at the previous in-progress Step-5 view instead of fresh paste-stage. Only "← back to import" resets. Missing state-reset on install-completion-edge or nav-away.
+3. Install log persists across runs in the same session (same shared root as #2). Per-install log scope, not session-global. Likely one fix to the install-completion-edge reset closes both #2 and #3.
+
+User screenshot: `C:\Users\spany\OneDrive\Pictures\Screenshots\Screenshot 2026-05-20 090406.png`.
+
+**Create/Fork fix-set (2 bugs, queued second — see `project_create_fork_fixset_queued` memory):**
+1. Import and Modify (fork-download) stuck at 0/0. "Downloading fork" screen renders "no mods queued" forever with "× 2 path issues" indicator at bottom-left. Likely silent path-validation failure — Settings → Paths missing required fields, asset resolution returns empty, no user-visible blocker. Investigation: premise-check the path-validation rules + which paths the fork-download flow requires; verify whether the fork-download path uses the new DL pipeline (streamer + async hashing per v3) or a separate older path. Surface the path issue PROMINENTLY on-screen (the non-masking arm-error pattern v2 introduced).
+2. Destination Clean / Backup scope too narrow — currently only operates on bg1 and bg2 subfolders; must encompass the ENTIRE destination directory (per-install Mods folder, bg1, bg2, weidu_component_logs, weidu input logs, etc.). Lives in `src/ui/install/destination_not_empty.rs` + the underlying clean/backup helper.
+
+User screenshot: `C:\Users\spany\OneDrive\Pictures\Screenshots\Screenshot 2026-05-20 091047.png`.
+
+**Dispatch policy:** each fix-set as one plan-implementer run per the dispatch-grouped-fixes memory; full gate set + runtime trace + render PNGs. The Step-5 set lands first (its bugs are blockers for clean re-testing); Create/Fork set lands after.
+
+---
+
 ## What ships today
 
 - Two binaries coexist:
