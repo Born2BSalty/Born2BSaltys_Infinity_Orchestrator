@@ -104,12 +104,18 @@ use std::time::Duration;
 use crate::app::app_step2_update_download::archive_file_name;
 use crate::app::state::{Step2UpdateAsset, WizardState};
 
-/// The bounded parallel pool size. ~4 keeps connection pressure modest
-/// (mod hosts — GitHub / Weasel / Morpheus — and the user's link) while
-/// being meaningfully faster than BIO's serial loop. `> 1` (real
-/// parallelism) and `<= POOL_SIZE` in flight at any instant is the
-/// contract the runtime trace asserts.
-pub const POOL_SIZE: usize = 4;
+/// The bounded parallel pool size. **DL Fix-Set v3 (Change C / Imp-4)**
+/// — widened 4 → 10 to match the user-directed Wabbajack-grade
+/// throughput target. Connection pressure to the mod hosts (GitHub /
+/// Weasel / Morpheus) and the user's link is still modest at 10 (the
+/// per-host TCP slot ceiling on a modern home/office link is far above
+/// 10), while throughput on a 51-archive EET install scales nearly
+/// linearly with pool size up to the disk-write ceiling. The disk-
+/// pressure floor matches `extract_parallel::EXTRACT_POOL_SIZE` /
+/// `archive_skip_async::HASH_POOL_SIZE` so the v3 pools are uniform
+/// (the user-reported productivity cliffs all came from sub-10
+/// parallelism).
+pub const POOL_SIZE: usize = 10;
 
 /// The per-asset read-loop chunk. 64 KiB matches `archive_store::hash_file`
 /// — a multi-hundred-MB mod archive streams to disk without buffering

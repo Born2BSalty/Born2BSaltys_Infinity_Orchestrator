@@ -180,60 +180,95 @@ pub enum ModDownloadStatus {
     /// Not started yet. Faint text.
     #[default]
     Queued,
+    /// **DL Fix-Set v3 (Change B / C) — archive hash decision in
+    /// flight.** The async skip pass is currently hashing this
+    /// archive (`archive_skip_async::AssetHashStarted` arrived; no
+    /// `AssetHashed` yet). The §4.3 grid shows the row as
+    /// active-hashing; the caption is "checking cache…".
+    Hashing,
     /// Archive fetch in progress. The per-mod bar is this mod's live
     /// `bytes / Content-Length` (`ModDownloadRow::bar_fraction`), not a
     /// phase nub.
     Downloading,
-    /// Archive extraction in progress.
+    /// Archive extraction in progress. **DL Fix-Set v3 (Change C /
+    /// Imp-2 — visual collapse):** the caption renders as
+    /// "✓ downloaded" (NOT "extracting…") — the user's request that
+    /// once an archive is fetched the row shows uniformly as
+    /// downloaded regardless of its post-fetch lifecycle stage. The
+    /// internal status distinction stays (still drives completion
+    /// checks, phase classification, count math) but the visual
+    /// presentation is uniform across `Extracting`/`Staged`/`Skipped`.
     Extracting,
-    /// Downloaded + extracted + staged. Success-green text.
+    /// Downloaded + extracted + staged. **Imp-2 collapse**: caption is
+    /// "✓ downloaded" (matching Extracting + Skipped).
     Staged,
     /// **DL-Run 1 — already present on disk by content hash** (the
     /// Wabbajack skip): never downloaded, the bytes were placed at BIO's
-    /// extract path. Renders instantly-satisfied (full bar, success-green
-    /// "✓ already downloaded") and counts complete in the download byte
-    /// aggregate so a mostly-cached install does not lurch / sit at a false
-    /// low.
+    /// extract path. **Imp-2 collapse**: caption is "✓ downloaded" —
+    /// the same uniform terminal as Extracting + Staged.
     Skipped,
 }
 
 impl ModDownloadStatus {
     /// The per-row status caption. `Downloading` reads just `downloading`
-    /// (the live fraction is on the per-mod bar, not the caption);
-    /// `Skipped` reads `already downloaded` (prose only — the `✓` glyph is
-    /// laid by the call site, mirroring `sub_flow_footer`'s glyph/prose
-    /// split, the same as `Staged`).
+    /// (the live fraction is on the per-mod bar, not the caption).
+    /// **DL Fix-Set v3 (Change C / Imp-2 — visual collapse):**
+    /// `Extracting`/`Staged`/`Skipped` all return the SAME caption
+    /// `"downloaded"` (rendered with the `✓` glyph prefix at the call
+    /// site, mirroring `sub_flow_footer`'s glyph/prose split). The user-
+    /// directed simplification: once the bytes are on disk the row reads
+    /// as downloaded regardless of the post-fetch lifecycle stage. The
+    /// internal status distinctions stay (`download_complete()` /
+    /// `is_done()` / `is_skipped()` / `phase_fraction()` still drive
+    /// completion checks, phase classification, count math) — only the
+    /// caption is unified. `Hashing` reads `"checking cache..."` (the
+    /// new async-skip-pass active state).
     pub fn status_text(self) -> String {
         match self {
             ModDownloadStatus::Queued => "queued".to_string(),
+            ModDownloadStatus::Hashing => "checking cache...".to_string(),
             ModDownloadStatus::Downloading => "downloading".to_string(),
-            ModDownloadStatus::Extracting => "extracting...".to_string(),
-            // The check is a separate glyph (firacode_nerd) laid before the
-            // word at the call site — `status_text` returns the prose only so
-            // the glyph/prose split mirrors `sub_flow_footer`.
-            ModDownloadStatus::Staged => "staged".to_string(),
-            ModDownloadStatus::Skipped => "already downloaded".to_string(),
+            // The check is a separate glyph (firacode_nerd) laid before
+            // the word at the call site; `status_text` returns the prose
+            // only so the glyph/prose split mirrors `sub_flow_footer`.
+            // **Imp-2 collapse**: Extracting/Staged/Skipped all render
+            // "downloaded" uniformly (was "extracting..." / "staged" /
+            // "already downloaded").
+            ModDownloadStatus::Extracting
+            | ModDownloadStatus::Staged
+            | ModDownloadStatus::Skipped => "downloaded".to_string(),
         }
     }
 
     /// **The non-byte fallback per-mod fill (0.0..=1.0).** The live path
-    /// uses [`ModDownloadRow::bar_fraction`], which prefers the mod's real
-    /// byte fraction; this is only reached when there is NO byte signal
-    /// (chassis / fork-download / a frame before the first byte delta / a
-    /// no-Content-Length row). Strictly monotonic across the lifecycle
-    /// (Queued 0 < Downloading < Extracting < Staged/Skipped 1.0) so a
-    /// fallback row never visually regresses.
+    /// uses [`ModDownloadRow::bar_fraction`], which prefers the mod's
+    /// real byte fraction; this is only reached when there is NO byte
+    /// signal (chassis / fork-download / a frame before the first byte
+    /// delta / a no-Content-Length row). Strictly monotonic across the
+    /// lifecycle (Queued 0 < Hashing < Downloading < Extracting/Staged/
+    /// Skipped 1.0) so a fallback row never visually regresses.
+    /// **DL Fix-Set v3 (Change C / Imp-2):** `Extracting` is collapsed
+    /// to 1.0 (was 0.65) so its fallback bar matches the new uniform
+    /// "downloaded" caption — Extracting + Staged + Skipped all render
+    /// full.
     pub fn phase_fraction(self) -> f32 {
         match self {
             ModDownloadStatus::Queued => 0.0,
-            // No byte signal yet — a small determinate nub so the row reads
-            // as active (the live byte fraction takes over the moment the
-            // first delta arrives via `ModDownloadRow::per_byte`).
+            // Hashing nub — the row is being checked; a tiny
+            // determinate fill so the row reads as active.
+            ModDownloadStatus::Hashing => 0.1,
+            // No byte signal yet — a small determinate nub so the row
+            // reads as active (the live byte fraction takes over the
+            // moment the first delta arrives via `ModDownloadRow::
+            // per_byte`).
             ModDownloadStatus::Downloading => 0.15,
-            // Archive downloaded; local unpack in progress.
-            ModDownloadStatus::Extracting => 0.65,
-            // Staged and Skipped are both fully-satisfied terminals.
-            ModDownloadStatus::Staged | ModDownloadStatus::Skipped => 1.0,
+            // **Imp-2 collapse**: Extracting + Staged + Skipped are all
+            // fully-satisfied terminals (the user-directed uniform
+            // "downloaded" presentation; the internal distinction stays
+            // for `is_done()` / `download_complete()` / `is_skipped()`).
+            ModDownloadStatus::Extracting
+            | ModDownloadStatus::Staged
+            | ModDownloadStatus::Skipped => 1.0,
         }
     }
 
@@ -244,11 +279,13 @@ impl ModDownloadStatus {
     }
 
     /// **A row whose archive is no longer being fetched** — `Extracting`,
-    /// `Staged`, or DL-Run-1 `Skipped` (its bytes are on disk; nothing left
-    /// to download for it). Drives the Download-phase "N" count and the
-    /// download-byte-aggregate "complete" treatment. (`all_staged()` — the
-    /// production auto-advance — still keys on *every* row being a
-    /// fully-extracted terminal.)
+    /// `Staged`, or DL-Run-1 `Skipped` (its bytes are on disk; nothing
+    /// left to download for it). Drives the Download-phase "N" count
+    /// and the download-byte-aggregate "complete" treatment.
+    /// (`all_staged()` — the production auto-advance — still keys on
+    /// *every* row being a fully-extracted terminal.) `Hashing` is
+    /// NOT download-complete (it's pre-download, deciding whether to
+    /// download or skip).
     pub fn download_complete(self) -> bool {
         matches!(
             self,
@@ -256,14 +293,27 @@ impl ModDownloadStatus {
         )
     }
 
-    /// `true` only for `Queued` — the row's name + status use `text-faint`
-    /// (wireframe `s === "queued"`).
+    /// `true` only for `Queued` — the row's name + status use
+    /// `text-faint` (wireframe `s === "queued"`).
     pub fn is_queued(self) -> bool {
         matches!(self, ModDownloadStatus::Queued)
     }
 
-    /// `true` only for the DL-Run-1 already-present-by-hash terminal — the
-    /// status cell reads "✓ already downloaded" instead of "✓ staged".
+    /// **DL Fix-Set v3 (Change B / C) — `true` only for `Hashing`.**
+    /// The row is being checked against the persistent hash cache /
+    /// the global Mods-archive folder; it has not yet been classified
+    /// into the to-fetch set or the already-present set.
+    pub fn is_hashing(self) -> bool {
+        matches!(self, ModDownloadStatus::Hashing)
+    }
+
+    /// `true` only for the DL-Run-1 already-present-by-hash terminal.
+    /// **DL Fix-Set v3 (Change C / Imp-2):** the visual presentation
+    /// is unified with `Extracting`/`Staged` — all three render
+    /// uniformly as "✓ downloaded". The semantic distinction is
+    /// retained for the internal classification (e.g. for download-
+    /// byte-aggregate math, the skip predicate, the `skipped_mods` /
+    /// `SkippedMod` rendering path).
     pub fn is_skipped(self) -> bool {
         matches!(self, ModDownloadStatus::Skipped)
     }
@@ -419,7 +469,13 @@ impl ModDownloadRow {
                 // Download-complete for this mod: full size on both sides.
                 known_size.map(|s| (s, s))
             }
-            ModDownloadStatus::Downloading | ModDownloadStatus::Queued => {
+            ModDownloadStatus::Downloading
+            | ModDownloadStatus::Queued
+            // DL Fix-Set v3 (Change B / C) — Hashing is pre-download
+            // (deciding whether to download or skip); its byte
+            // contribution to the Download phase aggregate is the
+            // same as Queued (0 bytes / size).
+            | ModDownloadStatus::Hashing => {
                 let size = known_size?;
                 let got = self.per_byte.map_or(0, |(b, _)| b).min(size);
                 Some((got, size))
@@ -428,24 +484,43 @@ impl ModDownloadRow {
     }
 }
 
-/// **DL-Run 2 — the two explicit ordered phases.** Each is its own
-/// independent 0→100; the screen NEVER shares one bar between them. The
-/// install screen takes over after Extract (the #1 0/0-flash hold logic).
+/// **DL Fix-Set v3 (Change C) — three explicit ordered phases.** Each
+/// is its own independent 0→100; the screen NEVER shares one bar
+/// between them. The install screen takes over after Extract (the #1
+/// 0/0-flash hold logic). The new `Hashing` phase fronts the existing
+/// Downloading + Extracting pair: the async archive-skip pass
+/// (`archive_skip_async`) runs first, then the streaming downloader
+/// (`stream_downloader`), then the parallel extract coordinator
+/// (`extract_parallel`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InstallPhase {
+    /// **DL Fix-Set v3 (Change B / C)** — checking the global Mods-
+    /// archive folder against the share-code's per-archive
+    /// `{name,size,hash}` to decide what to fetch vs skip. The
+    /// `hash_progress` snapshot (on `OrchestratorApp`) is the live
+    /// bar. `Hashing` is the phase whenever ANY row's status is
+    /// `Hashing` (workers are actively hashing assets).
+    Hashing,
     /// Fetching mod archives — the Download byte aggregate is live.
     #[default]
     Downloading,
     /// All archives fetched; unpacking — the Extract count bar is live
-    /// (a SEPARATE 0→100 that starts at 0 here, never inheriting Download).
+    /// (a SEPARATE 0→100 that starts at 0 here, never inheriting
+    /// Download).
     Extracting,
 }
 
 impl InstallPhase {
-    /// The phase-indicator verb the chrome shows ("Downloading …" /
-    /// "Extracting …").
+    /// The phase-indicator verb the chrome shows ("Checking cache …" /
+    /// "Downloading …" / "Extracting …"). **DL Fix-Set v3 (Change C
+    /// / Imp-2):** see also `DownloadProgress::is_preparing_install`,
+    /// which the chrome consults to swap the verb line to
+    /// "Preparing to install …" at the very tail of the Extract
+    /// phase (all rows downloaded-terminal + extract complete) —
+    /// the brief's UX request for the install hand-off moment.
     pub fn verb(self) -> &'static str {
         match self {
+            InstallPhase::Hashing => "Checking cache",
             InstallPhase::Downloading => "Downloading",
             InstallPhase::Extracting => "Extracting",
         }
@@ -478,15 +553,27 @@ pub struct SkippedMod {
 /// fork-download path).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DownloadProgress {
-    /// Per-mod rows for the *to-fetch* set, modlist order (one per resolved
-    /// asset). DL-Run-1-skipped mods are NOT here (BIO dropped them) — they
-    /// are in [`Self::skipped`] and rendered as instant ✓ rows ABOVE these.
+    /// Per-mod rows, modlist order (one per resolved asset).
+    /// **DL Fix-Set v3 (Change C / Imp-3)**: rows include EVERY asset,
+    /// including DL-Run-1-skipped (already-present-by-hash) ones as
+    /// `Skipped`-status rows — the rendered grid is one combined
+    /// list, sorted by status priority (active top, pending middle,
+    /// downloaded bottom). The prior separate `skipped: Vec<SkippedMod>`
+    /// rendering path is dropped per the user-directed unification.
     pub rows: Vec<ModDownloadRow>,
-    /// **DL-Run 2 — already-present-by-hash mods** (DL-Run 1 dropped them
-    /// from BIO's resolved set; captured into `InstallScreenState
-    /// ::skipped_mods` and carried here). Rendered as instantly-satisfied
-    /// "✓ already downloaded" rows and counted complete in the Download
-    /// byte aggregate.
+    /// **DL-Run 2 / DL Fix-Set v3 (Change C) — VESTIGIAL FIELD.**
+    /// The brief drops `progress.skipped` (and its separate rendering
+    /// in `render_mod_progress`). The field is RETAINED at length-0
+    /// only for the byte-aggregate math the tests + the render path
+    /// have inherited from v2 (skipped-mod size accounting is now
+    /// handled by Skipped-status rows in `rows`); it is never
+    /// populated by `from_wizard_state_full` in v3 and the
+    /// `render_mod_progress` path never reads it. Internal callers
+    /// that want skipped-mod size accounting should look for
+    /// `Skipped`-status rows in `rows`. Left in place so the existing
+    /// test harness's struct literals continue to compile during the
+    /// v3 migration; the long-term plan is to delete it in a
+    /// follow-up.
     pub skipped: Vec<SkippedMod>,
     /// **DL-Run 2 — the per-mod expected archive size map**, keyed by
     /// asset index into `step2.update_selected_update_assets` (== `rows`
@@ -509,19 +596,30 @@ pub struct DownloadProgress {
     /// `(bytes, None)` ⇒ indeterminate (no `Content-Length`). Empty for
     /// the chassis path (phase-fraction fallback).
     pub asset_bytes: std::collections::BTreeMap<usize, (u64, Option<u64>)>,
-    /// **DL Fix-Set v2 (Fix 1c) — the live BIO extract progress snapshot
-    /// `(completed, total)`**, sourced every frame from the shared
-    /// `Arc<Mutex<Option<(usize, usize)>>>` on `OrchestratorApp::extract_
-    /// progress` (written by the forwarder thread `extract_intercept::
-    /// start_extract_with_intercept` spawns when the download finishes).
-    /// `Some(_)` while extract is in flight ⇒ the Extract bar reads a
-    /// real `completed / total` fraction; `None` (pre-extract / post-
-    /// Finished / chassis path) ⇒ the bar falls back to the count path
-    /// (`extracted_count() / extract_total()`, which doesn't update until
-    /// BIO bulk-assigns `update_selected_extracted_sources` at extract-
-    /// `Finished` — the defect this fixes). Not persisted across frames;
-    /// `render_live` re-snapshots from the handle every frame.
+    /// **DL Fix-Set v2 (Fix 1c) / v3 (Change A) — the live extract
+    /// progress snapshot `(completed, total)`**, sourced every frame
+    /// from the shared `Arc<Mutex<Option<(usize, usize)>>>` on
+    /// `OrchestratorApp::extract_progress`. Under v3 the parallel
+    /// extract coordinator writes here directly (no more forwarder
+    /// thread): set to `Some((0, N))` at extract-start, bumped to
+    /// `Some((c+1, N))` on every `AssetDone`, LEFT at `Some((N, N))`
+    /// on `Finished` (the v3 bug fix: the v2 forwarder cleared it,
+    /// causing a frame of `(0, 0)` flash before the screen took
+    /// over). `Some(_)` ⇒ the Extract bar + the chrome's N/T line
+    /// read real `completed / total`. `None` (no extract run yet
+    /// this session) ⇒ the bar falls back to the count path.
     pub extract_progress: Option<(usize, usize)>,
+    /// **DL Fix-Set v3 (Change B / C) — the live hash progress
+    /// snapshot `(completed, total)`**, sourced every frame from
+    /// the shared `Arc<Mutex<Option<(usize, usize)>>>` on
+    /// `OrchestratorApp::hash_progress`. The async skip pass
+    /// (`archive_skip_async`) writes it via `drain_archive_skip_
+    /// events`: set to `Some((0, N))` on `CandidateEnumerated`,
+    /// bumped to `Some((c+1, N))` on every `AssetHashed`. Reset to
+    /// `None` by `InstallScreenState::clear_preview`. `None`
+    /// outside the hash window ⇒ the chrome's Hashing bar reads
+    /// `(0, 0)` / 0%.
+    pub hash_progress: Option<(usize, usize)>,
 }
 
 impl DownloadProgress {
@@ -592,61 +690,102 @@ impl DownloadProgress {
                     .is_some_and(|l| l == label)
             })
         };
-        // **Fix 1e** — the set of skipped-row labels (the names rendered
-        // in the dedicated "✓ already downloaded" rows). Asset indices
-        // whose label matches are excluded from the to-fetch row list
-        // (no double-render). The original asset index is preserved
-        // throughout so byte/size lookups still hit.
-        let skipped_labels: std::collections::HashSet<&str> =
-            prior_skipped.iter().map(|s| s.name.as_str()).collect();
+        // **DL Fix-Set v3 (Change C / Imp-3)** — the set of skipped-row
+        // labels (the DL-Run-1 already-present-by-hash mods). Under v3
+        // these render as `Skipped`-status rows IN `rows` (the prior
+        // separate-rendering path is dropped). The skipped-label map +
+        // size map are used to build those rows below; non-skipped
+        // assets get their lifecycle classification (Staged / Extracting
+        // / Downloading / Queued) as before.
+        let skipped_by_label: std::collections::HashMap<&str, &SkippedMod> =
+            prior_skipped.iter().map(|s| (s.name.as_str(), s)).collect();
 
-        let rows = s2
+        let mut rows: Vec<ModDownloadRow> = s2
             .update_selected_update_assets
             .iter()
             .enumerate()
-            .filter_map(|(i, a)| {
-                if skipped_labels.contains(a.label.as_str()) {
-                    return None; // rendered as a Skipped row, not here
-                }
-                let downloaded = label_done(&s2.update_selected_downloaded_sources, &a.label);
-                let extracted = label_done(&s2.update_selected_extracted_sources, &a.label);
-                let status = if extracted {
-                    ModDownloadStatus::Staged
-                } else if downloaded {
-                    // Downloaded; extract pending or running.
-                    ModDownloadStatus::Extracting
-                } else if s2.update_selected_download_running {
-                    // #1 / DL-Run 2 — the per-mod bar uses the REAL byte
-                    // fraction from `per_byte` (merged below from the
-                    // persistent map) over the whole 0→1 bar.
-                    ModDownloadStatus::Downloading
+            .map(|(i, a)| {
+                let status = if let Some(_sk) = skipped_by_label.get(a.label.as_str()) {
+                    // DL-Run-1 already-present-by-hash ⇒ Skipped status
+                    // (the unified "✓ downloaded" caption under Imp-2).
+                    ModDownloadStatus::Skipped
                 } else {
-                    ModDownloadStatus::Queued
+                    let downloaded = label_done(&s2.update_selected_downloaded_sources, &a.label);
+                    let extracted = label_done(&s2.update_selected_extracted_sources, &a.label);
+                    if extracted {
+                        ModDownloadStatus::Staged
+                    } else if downloaded {
+                        // Downloaded; extract pending or running.
+                        ModDownloadStatus::Extracting
+                    } else if s2.update_selected_download_running {
+                        // #1 / DL-Run 2 — the per-mod bar uses the REAL
+                        // byte fraction from `per_byte` (merged below
+                        // from the persistent map) over the whole 0→1
+                        // bar.
+                        ModDownloadStatus::Downloading
+                    } else {
+                        ModDownloadStatus::Queued
+                    }
                 };
-                Some(ModDownloadRow {
+                // expected_size: prefer the prior_expected map (the
+                // share-code-baked size); fall back to the
+                // skipped-mod's recorded size (the skip pass
+                // populated it from the same share-code data).
+                let expected_size = prior_expected
+                    .get(&i)
+                    .copied()
+                    .or_else(|| skipped_by_label.get(a.label.as_str()).and_then(|s| s.size));
+                ModDownloadRow {
                     name: a.label.clone(),
                     source: a.source_id.clone(),
                     status,
-                    // Carry the live byte readout + the share-code expected
-                    // size for THIS asset index through the per-frame
-                    // rebuild (#1 / DL-Run 2). Indices are stable under
-                    // Fix 1e (asset list is never mutated).
+                    // Carry the live byte readout for THIS asset index
+                    // through the per-frame rebuild (#1 / DL-Run 2).
+                    // Indices are stable under Fix 1e (asset list is
+                    // never mutated).
                     per_byte: prior_bytes.get(&i).copied(),
-                    expected_size: prior_expected.get(&i).copied(),
-                })
+                    expected_size,
+                }
             })
             .collect();
 
+        // **DL Fix-Set v3 (Change C / Imp-3) — sort by status
+        // priority** so the rendered grid is honest about state:
+        //   1. Hashing — active, top.
+        //   2. Downloading — active, top.
+        //   3. Queued — pending, middle.
+        //   4. Extracting / Staged / Skipped — downloaded, bottom.
+        // Stable sort preserves original asset order within each
+        // tier.
+        fn sort_key(s: ModDownloadStatus) -> u8 {
+            match s {
+                ModDownloadStatus::Hashing => 0,
+                ModDownloadStatus::Downloading => 1,
+                ModDownloadStatus::Queued => 2,
+                ModDownloadStatus::Extracting
+                | ModDownloadStatus::Staged
+                | ModDownloadStatus::Skipped => 3,
+            }
+        }
+        rows.sort_by_key(|r| sort_key(r.status));
+
         Self {
             rows,
-            skipped: prior_skipped.to_vec(),
+            // **DL Fix-Set v3 (Change C)** — `skipped` is vestigial in
+            // v3; never populated by `from_wizard_state_full`. The
+            // skipped-mod rendering path is dropped (skipped assets
+            // render as `Skipped`-status rows in `rows`). Left
+            // empty so the field exists for back-compat callers /
+            // tests.
+            skipped: Vec::new(),
             expected_sizes: prior_expected.clone(),
             asset_bytes: prior_bytes.clone(),
-            // The live snapshot is sourced by `render_live` from the
-            // orchestrator-owned handle, not from BIO state — leave it
-            // `None` here; the caller fills it after the rebuild (see
-            // `render_live`).
+            // The live snapshots are sourced by `render_live` from the
+            // orchestrator-owned handles, not from BIO state — leave
+            // them `None` here; the caller fills them after the
+            // rebuild (see `render_live`).
             extract_progress: None,
+            hash_progress: None,
         }
     }
 
@@ -690,12 +829,27 @@ impl DownloadProgress {
 }
 
 impl DownloadProgress {
-    /// **DL-Run 2 — which of the two ordered phases is live.** `Extracting`
-    /// once every to-fetch archive is downloaded (or skipped) — i.e. no row
-    /// is still `Downloading`/`Queued` AND there is at least one row/skip
-    /// (an extract really is the next phase). Otherwise `Downloading`. The
-    /// chassis / empty model is `Downloading` (the default, no-op).
+    /// **DL Fix-Set v3 (Change C) — which of the THREE ordered phases
+    /// is live.** Hashing → Downloading → Extracting (then Preparing
+    /// to install — see [`Self::is_preparing_install`]):
+    ///
+    ///   - `Hashing` ⇒ any row's status is `Hashing` (the async skip
+    ///     pass is actively hashing assets).
+    ///   - `Downloading` ⇒ any row is `Downloading`/`Queued` (and no
+    ///     row is Hashing — the skip pass has handed off).
+    ///   - `Extracting` ⇒ any work present (skipped/extracting/staged
+    ///     rows) and no row is Hashing/Downloading/Queued — i.e. all
+    ///     archives are either downloaded-complete or being unpacked.
+    ///
+    /// The chassis / empty model is `Downloading` (the default, no-op).
     pub fn phase(&self) -> InstallPhase {
+        let any_hashing = self
+            .rows
+            .iter()
+            .any(|r| r.status == ModDownloadStatus::Hashing);
+        if any_hashing {
+            return InstallPhase::Hashing;
+        }
         let any_work = !self.rows.is_empty() || !self.skipped.is_empty();
         let still_fetching = self.rows.iter().any(|r| {
             matches!(
@@ -708,6 +862,41 @@ impl DownloadProgress {
         } else {
             InstallPhase::Downloading
         }
+    }
+
+    /// **DL Fix-Set v3 (Change C / Imp-2) — "Preparing to install"
+    /// UX moment.** `true` when:
+    ///   - the phase is `Extracting`, AND
+    ///   - the extract completion `(n, n)` snapshot indicates
+    ///     `n > 0 && n == total` (every archive unpacked), AND
+    ///   - every row's status is a downloaded-terminal
+    ///     (`Skipped`/`Extracting`/`Staged`) — i.e. nothing is
+    ///     still hashing or downloading.
+    ///
+    /// When `true`, `render_overall_progress` replaces the phase
+    /// verb line ("Extracting … N / T mods · X%") with "Preparing
+    /// to install …"; both phase bars stay visible at 100%. This is
+    /// the brief's UX request: at the tail of Extract, before the
+    /// install screen takes over, give the user a clear "we're
+    /// about to install" beat.
+    pub fn is_preparing_install(&self) -> bool {
+        if self.phase() != InstallPhase::Extracting {
+            return false;
+        }
+        let (c, t) = self.extract_completed_total();
+        if t == 0 || c != t {
+            return false;
+        }
+        // Every row must be a downloaded-terminal — no Hashing /
+        // Downloading / Queued left.
+        self.rows.iter().all(|r| {
+            matches!(
+                r.status,
+                ModDownloadStatus::Skipped
+                    | ModDownloadStatus::Extracting
+                    | ModDownloadStatus::Staged
+            )
+        })
     }
 
     /// **Total mod count = to-fetch rows + DL-Run-1-skipped.** The "T" in
@@ -749,12 +938,13 @@ impl DownloadProgress {
     }
 
     /// Generic "N / T done" for the chrome's phase line — the (N, T) for
-    /// the **currently live phase**: Download = (download-complete +
-    /// skipped) / (all mods); Extract = the live `(completed, total)` if
-    /// the Fix-1c snapshot is present, else the count-fallback. Always
-    /// non-decreasing within a run.
+    /// the **currently live phase**: Hashing = `hash_completed_total`.0;
+    /// Download = `downloaded_count`; Extract = the live
+    /// `(completed, total)` if the snapshot is present, else the
+    /// count-fallback. Always non-decreasing within a run.
     pub fn completed(&self) -> usize {
         match self.phase() {
+            InstallPhase::Hashing => self.hash_completed_total().0,
             InstallPhase::Downloading => self.downloaded_count(),
             InstallPhase::Extracting => self.extract_completed_total().0,
         }
@@ -896,20 +1086,42 @@ impl DownloadProgress {
         (self.extract_overall_fraction() * 100.0).round() as u32
     }
 
-    /// **DL Fix-Set v2 (Fix 1c) — `(completed, total)` for the Extract
-    /// phase's N/T display.** When the live snapshot is present (the
-    /// forwarder thread snapshotted a BIO `Progress` event), returns
-    /// those numbers so the §4.3 chrome's "N / T mods" line tracks the
-    /// real mid-extract progress. Otherwise falls back to the
-    /// count-based `(extracted_count(), extract_total())` (which only
-    /// updates at extract-`Finished` — the count-fallback for the
-    /// chassis / pre-snapshot path).
+    /// **DL Fix-Set v2 (Fix 1c) / v3 (Change A) — `(completed,
+    /// total)` for the Extract phase's N/T display.** When the
+    /// live snapshot is present (the parallel extract coordinator
+    /// wrote it directly under v3 — was a forwarder under v2),
+    /// returns those numbers so the §4.3 chrome's "N / T mods"
+    /// line tracks the real mid-extract progress. Otherwise falls
+    /// back to the count-based `(extracted_count(),
+    /// extract_total())` (the chassis / pre-snapshot path).
     #[must_use]
     pub fn extract_completed_total(&self) -> (usize, usize) {
         if let Some((completed, total)) = self.extract_progress {
             return (completed, total);
         }
         (self.extracted_count(), self.extract_total())
+    }
+
+    /// **DL Fix-Set v3 (Change B / C) — `(completed, total)` for
+    /// the Hashing phase's N/T display.** Reads the live
+    /// `hash_progress` snapshot (the async skip pass's drain
+    /// writes it). `(0, 0)` outside the hash window (the chrome's
+    /// chrome's Hashing bar then reads 0% / muted).
+    #[must_use]
+    pub fn hash_completed_total(&self) -> (usize, usize) {
+        self.hash_progress.unwrap_or((0, 0))
+    }
+
+    /// **DL Fix-Set v3 (Change B / C) — the Hashing overall
+    /// percent** (0..=100). The Hashing bar reads this; 0 outside
+    /// the hash window.
+    #[must_use]
+    pub fn hash_overall_pct(&self) -> u32 {
+        let (n, t) = self.hash_completed_total();
+        if t == 0 {
+            return 0;
+        }
+        ((n as f32 / t as f32).clamp(0.0, 1.0) * 100.0).round() as u32
     }
 
     /// `true` when there is at least one mod and every to-fetch row is a
@@ -1232,104 +1444,51 @@ pub fn render_live(
         orchestrator.install_screen_state.archives_staged = true;
         archive_store::stage_known_archives(&mut orchestrator.wizard_state, &destination);
 
-        // ── Download-Overhaul Run 1 — **the Wabbajack-installer
-        //    checksum-then-skip core** (SPEC §13.12a / §13.3 / §13.12 #2).
-        //    `archive_store::stage_known_archives` above only reuses an
-        //    archive when THIS modlist's per-install lock recorded a hash
-        //    (a *prior attempt* of the same modlist). The real bug the user
-        //    hit is a **first** install re-downloading archives whose exact
-        //    bytes are already in the global Mods-archive folder. This pass
-        //    closes it: decode the per-archive `{name,size,hash}` the
-        //    exporter baked into the pasted code
-        //    (`share_export::decode_archive_meta`), size-pre-filter +
-        //    hash-through-the-persistent-cache the on-disk archives, and
-        //    DROP every wanted asset whose expected hash is already present
-        //    (placing those bytes at BIO's deterministic extract path so
-        //    BIO's reused-unchanged extract `.exists()` gate is satisfied)
-        //    — so the parallel `stream_downloader`, which fetches exactly
-        //    `update_selected_update_assets`, **never re-downloads them**.
-        //    Empty (fieldless / pre-redesign / third-party code) ⇒ a pure
-        //    no-op (today's always-download — never an error). Composes
-        //    with `stage_known_archives`: that runs first (prior-attempt
-        //    lock reuse), this then skips anything else already on disk by
-        //    content. ONE-SHOT via the same `archives_staged` latch (it is
-        //    set above) — `clear_preview` resets it for a re-entry. The
-        //    decoded expected set + the pre-skip asset list are cached on
-        //    `install_screen_state` so the post-download VERIFY uses the
-        //    exact same expected set + can hash exactly what the streamer
-        //    could have fetched. Zero BIO source. ──
+        // ── **DL Fix-Set v3 (Change B) — kick the ASYNC
+        //    checksum-then-skip pass** (replaces the v2 sync
+        //    `skip_present_archives` call that froze the egui render
+        //    thread for seconds on large Mods-archive folders).
+        //    `archive_skip_async::start_async_archive_skip` spawns a
+        //    coordinator thread + bounded `HASH_POOL_SIZE = 10`
+        //    worker pool; per-asset `AssetHashStarted` / `AssetHashed`
+        //    events arrive at the orchestrator's drain
+        //    (`drain_archive_skip_events`), which:
+        //      - bumps `hash_progress` for the §4.3 chrome's Hashing
+        //        bar;
+        //      - pre-populates `update_selected_downloaded_sources`
+        //        on skipped assets (the BIO-shaped entry that mirrors
+        //        the sync pass's pre-population — the §4.3 grid uses
+        //        label membership for download-complete
+        //        classification);
+        //      - on `Finished`, stores `skip_indices` on
+        //        `InstallScreenState` + flips
+        //        `archive_skip_completed = true` so the streamer's
+        //        kick gate can open.
+        //    ONE-SHOT via the same `archives_staged` latch —
+        //    `clear_preview` resets it for a re-entry. Zero BIO
+        //    source. ──
         let expected =
             crate::registry::share_export::decode_archive_meta(&code).unwrap_or_default();
-        // Capture the pre-skip resolved set for the post-download verify
-        // (a skipped archive was content-verified present; a fetched one
-        // must be verified — both come from this full list).
-        // **Fix 1e** — the list is no longer mutated by `skip_present_
-        // archives`, so `pre_skip_assets` is equal to the asset list
-        // itself; we still capture it for the verify pass (its contract
-        // didn't change — it operates on this list).
+        // Capture the pre-skip resolved set for the post-download
+        // verify (a skipped archive was content-verified present; a
+        // fetched one must be verified — both come from this full
+        // list).
         orchestrator.install_screen_state.pre_skip_assets = orchestrator
             .wizard_state
             .step2
             .update_selected_update_assets
             .clone();
-        let skip = crate::install_runtime::archive_skip::skip_present_archives(
-            &mut orchestrator.wizard_state,
-            &expected,
-        );
 
-        // ── **DL Fix-Set v2 (Fix 1e)** — `summary.skipped_assets`
-        //    carries the exact assets that were skipped (no diff
-        //    needed); read it directly. The orchestrator-side
-        //    **skip-index set** is the indices into the unchanged asset
-        //    list whose `archive_file_name` matches a skipped asset's
-        //    (a multiset-correct match by name + label pair — same-name
-        //    different-source can't both be skipped since the hash is
-        //    the identity). The §4.3 grid renders the
-        //    SkippedMod rows from `skipped_assets` (the streamer never
-        //    touches their indices). The expected-size map is keyed by
-        //    the asset index in the unchanged list. ──
+        // **DL Fix-Set v3 (Change B / C)** — also build the
+        // `skipped_mods` projection up-front from the share-code
+        // expected-meta so the §4.3 grid's Skipped-row size
+        // accounting works as soon as the async drain flips rows.
+        // The actual `skip_indices` is filled by the async drain on
+        // `Finished`; `skipped_mods` here just carries the size /
+        // source for skipped-status row rendering once the drain
+        // classifies them.
         let by_name: std::collections::HashMap<&str, &crate::registry::share_export::ArchiveMeta> =
             expected.iter().map(|m| (m.name.as_str(), m)).collect();
-        let skipped_mods: Vec<SkippedMod> = skip
-            .skipped_assets
-            .iter()
-            .map(|a| {
-                let name = crate::app::app_step2_update_download::archive_file_name(a);
-                SkippedMod {
-                    name: a.label.clone(),
-                    source: a.source_id.clone(),
-                    size: by_name.get(name.as_str()).map(|m| m.size),
-                }
-            })
-            .collect();
-        // Build the skip-index set: for each skipped asset (by label +
-        // archive_file_name pair), find its index in the unchanged asset
-        // list. A label collision is impossible in practice (BIO derives
-        // it from the source); for safety we consume occurrences so a
-        // duplicate name picks distinct indices.
-        let mut skip_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
-        let mut consumed: std::collections::HashSet<usize> = std::collections::HashSet::new();
-        for skipped_asset in &skip.skipped_assets {
-            let name = crate::app::app_step2_update_download::archive_file_name(skipped_asset);
-            for (i, a) in orchestrator
-                .wizard_state
-                .step2
-                .update_selected_update_assets
-                .iter()
-                .enumerate()
-            {
-                if consumed.contains(&i) {
-                    continue;
-                }
-                if a.label == skipped_asset.label
-                    && crate::app::app_step2_update_download::archive_file_name(a) == name
-                {
-                    skip_indices.insert(i);
-                    consumed.insert(i);
-                    break;
-                }
-            }
-        }
         let expected_sizes: std::collections::BTreeMap<usize, u64> = orchestrator
             .wizard_state
             .step2
@@ -1341,29 +1500,49 @@ pub fn render_live(
                 by_name.get(name.as_str()).map(|m| (i, m.size))
             })
             .collect();
-        orchestrator.install_screen_state.skipped_mods = skipped_mods;
+        // We populate `skipped_mods` lazily as the async pass
+        // resolves them (each AssetHashed{was_skipped:true} ->
+        // could in principle build a SkippedMod row, but Imp-3's
+        // unified-grid render no longer reads `skipped_mods`
+        // separately — Skipped status on rows in `rows` is the
+        // single source of truth). Keep `skipped_mods` empty here
+        // so the v3 unified-render path is not double-counted.
+        orchestrator.install_screen_state.skipped_mods = Vec::new();
         orchestrator.install_screen_state.expected_archive_sizes = expected_sizes;
-        orchestrator.install_screen_state.skip_indices = skip_indices;
+        // `skip_indices` is reset here (the async pass will fill it
+        // on Finished). Until then the streamer's kick gate is
+        // blocked by `archive_skip_completed == false`.
+        orchestrator.install_screen_state.skip_indices = std::collections::HashSet::new();
+        orchestrator.install_screen_state.archive_skip_completed = false;
+        orchestrator.install_screen_state.expected_archive_meta = expected.clone();
 
-        orchestrator.install_screen_state.expected_archive_meta = expected;
+        // Snapshot the input to move into the coordinator thread.
+        let archive_dir_pb =
+            std::path::PathBuf::from(orchestrator.wizard_state.step1.mods_archive_folder.trim());
+        let input = crate::install_runtime::archive_skip_async::AsyncSkipInput {
+            archive_dir: archive_dir_pb,
+            assets: orchestrator
+                .wizard_state
+                .step2
+                .update_selected_update_assets
+                .clone(),
+        };
+        let rx =
+            crate::install_runtime::archive_skip_async::start_async_archive_skip(input, expected);
+        orchestrator.archive_skip_rx = Some(rx);
         tracing::info!(
             target = "orchestrator",
-            "checksum-then-skip: {} already-present (kept in list for \
-             extract, streamer bypasses by index), {} missing (will fetch), \
-             {} no-expected-hash, {} candidates hashed ({} persistent-cache \
-             hits); DL-Run-2 captured {} skipped-mod rows + {} expected-size \
-             denominators + {} skip indices",
-            skip.skipped_present,
-            skip.missing_on_disk,
-            skip.no_expected_hash,
-            skip.hashed_candidates,
-            skip.cache_hits,
-            orchestrator.install_screen_state.skipped_mods.len(),
+            "async checksum-then-skip pool spawned for {} asset(s); {} \
+             share-code-baked expected sizes carried forward",
+            orchestrator
+                .wizard_state
+                .step2
+                .update_selected_update_assets
+                .len(),
             orchestrator
                 .install_screen_state
                 .expected_archive_sizes
                 .len(),
-            orchestrator.install_screen_state.skip_indices.len(),
         );
     }
 
@@ -1398,6 +1577,12 @@ pub fn render_live(
             .is_none()
         && auto_build_driver::download_gate_open(&orchestrator.wizard_state)
         && !orchestrator.install_screen_state.download_phase_started
+        // **DL Fix-Set v3 (Change B)** — the async skip pass MUST
+        // complete before the streamer kicks. Otherwise the
+        // streamer would fetch archives the async pass would have
+        // skipped (the per-asset `skip_indices` set is the input
+        // to the streamer's silent-bypass).
+        && orchestrator.install_screen_state.archive_skip_completed
     {
         orchestrator
             .wizard_state
@@ -1564,13 +1749,16 @@ pub fn render_live(
         &prior_skipped,
         &prior_expected,
     );
-    // **DL Fix-Set v2 (Fix 1c)** — snapshot the live BIO extract
-    // `(completed, total)` from the shared handle the forwarder thread
-    // writes; the Extract phase bar + the chrome's N/T line both read it
-    // for the real mid-extract progress (instead of the count-only
-    // post-`Finished` fallback). `None` outside the extract window ⇒ the
-    // count fallback (chassis + pre-snapshot path) is used.
+    // **DL Fix-Set v2 (Fix 1c) / v3 (Change A)** — snapshot the live
+    // extract `(completed, total)` from the orchestrator-owned handle
+    // (under v3 the parallel extract coordinator writes it directly).
     progress.extract_progress = orchestrator.extract_progress.lock().ok().and_then(|g| *g);
+    // **DL Fix-Set v3 (Change B / C)** — snapshot the live hash
+    // `(completed, total)` from the orchestrator-owned handle. The
+    // async skip pass's drain writes it via `CandidateEnumerated` /
+    // `AssetHashed` events. `None` outside the hash window ⇒ the
+    // chrome's Hashing bar reads 0% / muted.
+    progress.hash_progress = orchestrator.hash_progress.lock().ok().and_then(|g| *g);
 
     // ── **#1 — eliminate the post-extract 0/0 grid flash.** When BIO's
     //    extract empties `update_selected_update_assets` (its
@@ -1737,15 +1925,20 @@ fn render_overall_progress(
         ui.add_space(6.0);
 
         let phase = progress.phase();
-        // Download denominator = ALL mods (skipped count as satisfied);
-        // Extract denominator = the to-fetch rows BIO actually unpacks
-        // (skipped mods are a download-phase concern, not extract work) —
-        // so the Extract bar is a clean 0→100 that starts at exactly 0.
-        // **Fix 1c** — when the live snapshot is present, the Extract
-        // N/T comes from BIO's `Progress { completed, total }` (the
-        // forwarder thread's snapshot) so the chrome reads the real
-        // mid-extract progress, not the count-only post-`Finished`
-        // bulk-assign.
+        // Hash denominator/N — from the `hash_progress` snapshot
+        // mirrored onto `progress` (the chrome reads only the
+        // progress struct's fields). Empty when no async skip pass
+        // is in flight.
+        let (h_n, h_total) = progress.hash_completed_total();
+        let h_pct = progress.hash_overall_pct();
+        // Download denominator = ALL mods (skipped count as
+        // satisfied); Extract denominator = the to-fetch rows BIO
+        // actually unpacks (skipped mods are a download-phase
+        // concern, not extract work) — so the Extract bar is a clean
+        // 0→100 that starts at exactly 0. **Fix 1c** — when the live
+        // snapshot is present, the Extract N/T comes from the
+        // parallel extract coordinator's `extract_progress` snapshot
+        // so the chrome reads real mid-extract progress.
         let dl_total = progress.total();
         let dl_n = progress.downloaded_count();
         let dl_pct = progress.download_overall_pct();
@@ -1753,21 +1946,52 @@ fn render_overall_progress(
         let ex_pct = progress.extract_overall_pct();
 
         // The phase indicator: which phase is live + its N/T · P%.
-        let (verb, n, t, p) = match phase {
-            InstallPhase::Downloading => (InstallPhase::Downloading.verb(), dl_n, dl_total, dl_pct),
-            InstallPhase::Extracting => (InstallPhase::Extracting.verb(), ex_n, ex_total, ex_pct),
+        // **DL Fix-Set v3 (Change C / Imp-2)** — at the tail of
+        // Extract (every archive unpacked + every row downloaded-
+        // terminal), swap the verb line to "Preparing to install"
+        // for the UX hand-off beat.
+        let preparing = progress.is_preparing_install();
+        let phase_line = if preparing {
+            "Preparing to install \u{2026}".to_string()
+        } else {
+            let (verb, n, t, p) = match phase {
+                InstallPhase::Hashing => (InstallPhase::Hashing.verb(), h_n, h_total, h_pct),
+                InstallPhase::Downloading => {
+                    (InstallPhase::Downloading.verb(), dl_n, dl_total, dl_pct)
+                }
+                InstallPhase::Extracting => {
+                    (InstallPhase::Extracting.verb(), ex_n, ex_total, ex_pct)
+                }
+            };
+            format!("{verb} \u{2026} {n} / {t} mods \u{00B7} {p}%")
         };
         ui.label(
-            egui::RichText::new(format!("{verb} \u{2026} {n} / {t} mods \u{00B7} {p}%"))
+            egui::RichText::new(phase_line)
                 .size(15.0)
                 .family(egui::FontFamily::Name("poppins_medium".into()))
                 .color(redesign_text_primary(palette)),
         );
         ui.add_space(8.0);
 
-        // ── Phase bar 1 — Download (the byte aggregate over ALL mods).
-        //    Accent-filled while it is the live phase, muted once handed
-        //    off (it stays full so the user sees download completed). ──
+        // ── Phase bar 1 — Hashing. New in v3. Active while the
+        //    async skip pass is in flight; muted once the skip
+        //    completes. The chrome always paints all three bars so
+        //    the user sees the full pipeline at a glance. ──
+        phase_bar_row(
+            ui,
+            palette,
+            "hash",
+            h_n,
+            h_total,
+            h_pct,
+            f64::from(h_pct) / 100.0,
+            phase == InstallPhase::Hashing,
+        );
+        ui.add_space(8.0);
+        // ── Phase bar 2 — Download (the byte aggregate over ALL
+        //    mods). Accent-filled while it is the live phase, muted
+        //    once handed off (it stays full so the user sees
+        //    download completed). ──
         phase_bar_row(
             ui,
             palette,
@@ -1779,9 +2003,10 @@ fn render_overall_progress(
             phase == InstallPhase::Downloading,
         );
         ui.add_space(8.0);
-        // ── Phase bar 2 — Extract (a SEPARATE 0→100 over the to-fetch
+        // ── Phase bar 3 — Extract (a SEPARATE 0→100 over the to-fetch
         //    rows; 0 until the extract phase begins, never inheriting
-        //    Download's value). ──
+        //    Download's value). Stays full at 100% in the
+        //    "Preparing to install" state. ──
         phase_bar_row(
             ui,
             palette,
@@ -1790,7 +2015,7 @@ fn render_overall_progress(
             ex_total,
             ex_pct,
             f64::from(ex_pct) / 100.0,
-            phase == InstallPhase::Extracting,
+            phase == InstallPhase::Extracting && !preparing,
         );
 
         if let Some(h) = hint {
@@ -1950,11 +2175,12 @@ fn render_mod_progress(
                 ui.end_row();
             });
 
-        if progress.rows.is_empty() && progress.skipped.is_empty() {
-            // No rows yet (e.g. the not-yet-wired fork-download chassis, or
-            // before the pipeline resolves assets). Honest faint placeholder
-            // rather than a blank box (the redesign's honest-empty-state
-            // stance; consistent with stage_preview's parse-error path).
+        if progress.rows.is_empty() {
+            // No rows yet (e.g. the not-yet-wired fork-download chassis,
+            // or before the pipeline resolves assets). Honest faint
+            // placeholder rather than a blank box (the redesign's
+            // honest-empty-state stance; consistent with stage_preview's
+            // parse-error path).
             ui.add_space(4.0);
             ui.label(
                 egui::RichText::new("no mods queued")
@@ -1982,15 +2208,15 @@ fn render_mod_progress(
                     .spacing(egui::vec2(col_gap, 6.0))
                     .min_col_width(0.0)
                     .show(ui, |ui| {
-                        // DL-Run 2 — DL-Run-1-skipped (already-present-by-
-                        // hash) mods render FIRST as instantly-satisfied
-                        // rows ("✓ already downloaded", full bar) so a
-                        // mostly-cached install reads honestly + the user
-                        // can see exactly what was reused.
-                        for s in &progress.skipped {
-                            render_skipped_row(ui, palette, s, mod_w, src_w, status_w, prog_w);
-                            ui.end_row();
-                        }
+                        // **DL Fix-Set v3 (Change C / Imp-3)** — one
+                        // combined sorted grid (active top, pending
+                        // middle, downloaded bottom; sort is done in
+                        // `from_wizard_state_full`). Skipped assets
+                        // render here as `Skipped`-status rows (the
+                        // unified "✓ downloaded" caption under Imp-2);
+                        // the prior separate skipped-section render
+                        // path is dropped per the user-directed
+                        // unification.
                         for row in &progress.rows {
                             render_grid_row(ui, palette, row, mod_w, src_w, status_w, prog_w);
                             ui.end_row();
@@ -2000,45 +2226,11 @@ fn render_mod_progress(
     });
 }
 
-/// **DL-Run 2 — one DL-Run-1-skipped (already-present-by-hash) mod row.**
-/// Rendered instantly-satisfied: name + source normal, status the
-/// success-green `✓ already downloaded` cell, the per-mod bar full accent.
-/// (The user's "48 of 51 already present, downloading 3" honesty —
-/// skipped mods are visible, not silently dropped.)
-fn render_skipped_row(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    s: &SkippedMod,
-    mod_w: f32,
-    src_w: f32,
-    status_w: f32,
-    prog_w: f32,
-) {
-    sized_label(
-        ui,
-        mod_w,
-        &s.name,
-        14.0,
-        "poppins_medium",
-        redesign_text_primary(palette),
-    );
-    sized_label(
-        ui,
-        src_w,
-        &s.source,
-        13.0,
-        "poppins_light",
-        redesign_text_faint(palette),
-    );
-    check_prose_cell(
-        ui,
-        status_w,
-        "already downloaded",
-        redesign_success(palette),
-    );
-    let (bar_rect, _) = ui.allocate_exact_size(egui::vec2(prog_w, 14.0), egui::Sense::hover());
-    paint_bar(ui, palette, bar_rect, 1.0, true);
-}
+// **DL Fix-Set v3 (Change C / Imp-3)** — `render_skipped_row` deleted.
+// The separate skipped-rows render path is gone (the user-directed
+// unified-grid render): DL-Run-1-skipped assets now render as
+// `Skipped`-status rows via `render_grid_row`, sorted to the bottom
+// of the grid by `from_wizard_state_full`'s status-priority sort.
 
 /// One data row of the 4-column grid (mod / source / status / per-mod
 /// progress bar). **DL-Run 2:** the bar fill is the row's own live byte
@@ -2074,25 +2266,23 @@ fn render_grid_row(
         redesign_text_faint(palette),
     );
 
-    // Column 3 — status: queued → downloading → extracting... → ✓ staged
-    // (or ✓ already downloaded for a DL-Run-1 skip). Color: done →
-    // success-green, queued → text-faint, else normal text. The done case
-    // lays the `✓` glyph (firacode_nerd) before the prose (poppins_medium),
-    // mirroring `sub_flow_footer`'s glyph/prose split.
-    let status_color = if row.status.is_done() {
+    // Column 3 — status: queued → hashing... → downloading → ✓ downloaded.
+    // **DL Fix-Set v3 (Change C / Imp-2)** — `Extracting`/`Staged`/
+    // `Skipped` all render uniformly as "✓ downloaded" (the user-directed
+    // unified terminal). Color: download-complete → success-green,
+    // queued → text-faint, else normal text. The check-prose split
+    // mirrors `sub_flow_footer`'s glyph/prose split.
+    let status_color = if row.status.download_complete() {
         redesign_success(palette)
     } else if row.status.is_queued() {
         redesign_text_faint(palette)
     } else {
         redesign_text_primary(palette)
     };
-    if row.status.is_done() {
-        let prose = if row.status.is_skipped() {
-            "already downloaded"
-        } else {
-            "staged"
-        };
-        check_prose_cell(ui, status_w, prose, status_color);
+    if row.status.download_complete() {
+        // Imp-2 — uniform "downloaded" prose for every download-
+        // complete terminal (Extracting / Staged / Skipped).
+        check_prose_cell(ui, status_w, "downloaded", status_color);
     } else {
         sized_label(
             ui,
@@ -2384,17 +2574,25 @@ mod tests {
     // ───────────────────── status captions / tones ─────────────────────
 
     #[test]
-    fn status_text_has_no_fabricated_pct_and_skipped_reads_already_downloaded() {
+    fn status_text_has_no_fabricated_pct_and_unified_downloaded_caption_v3() {
+        // **DL Fix-Set v3 (Change C / Imp-2)** — the unified
+        // "downloaded" caption: Extracting / Staged / Skipped all
+        // render as "downloaded" (the user-directed simplification).
+        // Hashing is the new pre-download active state.
         assert_eq!(ModDownloadStatus::Queued.status_text(), "queued");
-        assert_eq!(ModDownloadStatus::Downloading.status_text(), "downloading");
-        assert_eq!(ModDownloadStatus::Extracting.status_text(), "extracting...");
-        assert_eq!(ModDownloadStatus::Staged.status_text(), "staged");
         assert_eq!(
-            ModDownloadStatus::Skipped.status_text(),
-            "already downloaded"
+            ModDownloadStatus::Hashing.status_text(),
+            "checking cache..."
         );
+        assert_eq!(ModDownloadStatus::Downloading.status_text(), "downloading");
+        // **Imp-2 collapse** — all three terminals share the
+        // "downloaded" caption.
+        assert_eq!(ModDownloadStatus::Extracting.status_text(), "downloaded");
+        assert_eq!(ModDownloadStatus::Staged.status_text(), "downloaded");
+        assert_eq!(ModDownloadStatus::Skipped.status_text(), "downloaded");
         for s in [
             ModDownloadStatus::Queued,
+            ModDownloadStatus::Hashing,
             ModDownloadStatus::Downloading,
             ModDownloadStatus::Extracting,
             ModDownloadStatus::Staged,
@@ -2430,15 +2628,29 @@ mod tests {
     }
 
     #[test]
-    fn phase_fraction_is_strictly_monotonic_with_satisfied_terminals_full() {
+    fn phase_fraction_is_monotonic_with_v3_collapsed_terminals() {
+        // **DL Fix-Set v3 (Change C / Imp-2)** — the lifecycle is
+        // Queued (0) < Hashing < Downloading < Extracting / Staged /
+        // Skipped (all 1.0 — Imp-2 collapsed: once the bytes are on
+        // disk the row reads as downloaded). Strict monotonic
+        // q<h<d<{e,s,k}; e == s == k.
         let q = ModDownloadStatus::Queued.phase_fraction();
+        let h = ModDownloadStatus::Hashing.phase_fraction();
         let d = ModDownloadStatus::Downloading.phase_fraction();
         let e = ModDownloadStatus::Extracting.phase_fraction();
         let s = ModDownloadStatus::Staged.phase_fraction();
         let k = ModDownloadStatus::Skipped.phase_fraction();
-        assert!(q < d && d < e && e < s, "strictly increasing q<d<e<s");
+        assert!(q < h && h < d, "strictly increasing q<h<d");
+        assert!(d < e, "Downloading < Extracting (collapsed terminal)");
         assert!((q - 0.0).abs() < f32::EPSILON);
-        assert!((s - 1.0).abs() < f32::EPSILON);
+        assert!(
+            (e - 1.0).abs() < f32::EPSILON,
+            "Extracting collapses to 1.0 under Imp-2"
+        );
+        assert!(
+            (s - 1.0).abs() < f32::EPSILON,
+            "Staged is the fully-satisfied terminal (1.0)"
+        );
         assert!(
             (k - 1.0).abs() < f32::EPSILON,
             "Skipped is a fully-satisfied terminal (1.0)"
@@ -3186,13 +3398,29 @@ mod tests {
             "the share-code expected size is merged onto the row"
         );
         assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte delta yet");
-        assert_eq!(p2.skipped.len(), 1, "skipped mods carried through");
+        // **DL Fix-Set v3 (Change C / Imp-3)** — `skipped` is now
+        // vestigial; `from_wizard_state_full` never populates it.
+        // Skipped assets become `Skipped`-status rows in `rows`
+        // (matched by label against the asset list). The test passes
+        // `&[skipped("CACHED", _)]` but "CACHED" is not in the
+        // asset list (the assets are A and B), so no Skipped row
+        // is produced — and `skipped` is empty.
+        assert!(
+            p2.skipped.is_empty(),
+            "Imp-3: `skipped` is vestigial; not populated"
+        );
         // The Downloading row renders a real 512/2048 = .25 fraction.
         assert!((p2.rows[0].bar_fraction() - 0.25).abs() < 0.001);
     }
 
     #[test]
-    fn from_wizard_state_full_classifies_lifecycle_and_carries_skipped() {
+    fn from_wizard_state_full_v3_classifies_lifecycle_and_sorts_rows() {
+        // **DL Fix-Set v3 (Change C / Imp-3)** — rows are sorted by
+        // status priority (Downloading top, Queued middle,
+        // Extracting/Staged/Skipped bottom). The classification logic
+        // (Staged ⇐ downloaded+extracted, Extracting ⇐ downloaded
+        // only, Downloading ⇐ running else Queued) stays the same;
+        // only the row order in the rebuilt grid changes.
         let mut st = WizardState::default();
         let asset = |label: &str, src: &str| crate::app::state::Step2UpdateAsset {
             game_tab: "BGEE".to_string(),
@@ -3220,12 +3448,35 @@ mod tests {
         let sk = vec![skipped("ALREADY_HERE", Some(7777))];
         let p =
             DownloadProgress::from_wizard_state_full(&st, &BTreeMap::new(), &sk, &BTreeMap::new());
-        assert_eq!(p.rows[0].status, ModDownloadStatus::Staged); // downloaded+extracted
-        assert_eq!(p.rows[1].status, ModDownloadStatus::Extracting); // downloaded only
-        assert_eq!(p.rows[2].status, ModDownloadStatus::Downloading); // running
-        assert_eq!(p.rows[3].status, ModDownloadStatus::Downloading);
-        assert_eq!(p.skipped.len(), 1);
-        assert_eq!(p.total(), 5, "4 rows + 1 skipped");
+        // 4 rows (skipped name "ALREADY_HERE" doesn't match any
+        // asset label, so no skipped-status row is added — the
+        // `sk` is dropped, per the v3 contract: skipped mods are
+        // matched against the asset list by label).
+        assert_eq!(p.rows.len(), 4);
+        // **v3 row sort** — Downloading (stratagems, spell_rev)
+        // first (priority 1), then Extracting (cdtweaks) +
+        // Staged (EET) (both priority 3, stable-sorted to keep
+        // their original order). Queued: none in this scenario.
+        let statuses: Vec<_> = p.rows.iter().map(|r| r.status).collect();
+        // First two are the active Downloading rows.
+        assert_eq!(statuses[0], ModDownloadStatus::Downloading);
+        assert_eq!(statuses[1], ModDownloadStatus::Downloading);
+        // Bottom two are the downloaded-terminal rows
+        // (Extracting / Staged collapse visually but the internal
+        // status distinction is preserved).
+        assert!(statuses[2..].iter().all(|s| s.download_complete()));
+        // **v3 — `skipped` is vestigial / always empty after
+        // `from_wizard_state_full`.**
+        assert_eq!(
+            p.skipped.len(),
+            0,
+            "v3: skipped is not populated by from_wizard_state_full"
+        );
+        // total = rows.len() + skipped.len() = 4 + 0 = 4. (Was 5
+        // under v2 where the phantom skipped contributed to total;
+        // v3's contract is one combined grid + only label-matched
+        // skipped rows.)
+        assert_eq!(p.total(), 4, "4 rows (no phantom skipped row)");
     }
 
     // ─────────────────────── copy / outcome ───────────────────────

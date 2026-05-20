@@ -378,19 +378,64 @@ pub struct OrchestratorApp {
     pub(crate) stream_download_rx:
         Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
 
-    /// **DL Fix-Set v2 (Fix 1c) — the BIO extract progress snapshot.** A
-    /// shared `Arc<Mutex<Option<(completed, total)>>>` written by the
-    /// forwarder thread `install_runtime::extract_intercept::start_
-    /// extract_with_intercept` spawns when it kicks BIO's extract; read
-    /// every frame by `stage_downloading::render_live` so the §4.3 Extract
-    /// bar shows the REAL `completed / total` mid-extract (instead of the
-    /// count-based fallback that doesn't update until BIO's `Finished`
-    /// bulk-assigns the `update_selected_extracted_sources` vector). Reset
-    /// to `None` by the intercept on entry (a fresh run starts clean) and
-    /// on `Finished` (extract phase is over; the install screen takes
-    /// over). `None` when no extract is in flight ⇒ the screen falls back
-    /// to the count path.
+    /// **DL Fix-Set v2 (Fix 1c) — kept; v3 — written directly by the
+    /// new parallel extract coordinator.** A shared `Arc<Mutex<Option<
+    /// (completed, total)>>>` the §4.3 Extract bar reads every frame.
+    /// Under v2 a forwarder thread (`extract_intercept`, deleted in v3)
+    /// snapshotted BIO's serial `Progress` events here. Under v3
+    /// `install_runtime::extract_parallel::start_parallel_extract`
+    /// writes here directly: it resets the handle to `Some((0, N))` at
+    /// extract-start so the chrome reads the correct denominator
+    /// immediately, then `drain_extract_parallel` bumps `(c+1, N)` on
+    /// every `AssetDone`, and the handle is LEFT at `Some((N, N))` on
+    /// `Finished` (not cleared — the chrome continues to show 100%
+    /// until the install screen takes over, avoiding the prior frame's
+    /// `(0, 0)` flash). The next install's `start_parallel_extract`
+    /// resets the handle. `None` only when no extract has run this
+    /// session. SPEC §4.3 / §13.12a.
     pub(crate) extract_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+
+    /// **DL Fix-Set v3 (Change A) — the parallel-extract event
+    /// channel.** Mirrors `step2_update_download_rx` (⑤) for the
+    /// orchestrator's net-new `install_runtime::extract_parallel`
+    /// pool that REPLACES BIO's serial extract loop. Drained every
+    /// frame by `poll_step2_channels` (after the BIO Step-2 callees +
+    /// after `drain_stream_download`): per-asset `AssetDone` events
+    /// bump `extract_progress` and let the §4.3 grid flip rows live;
+    /// on `Finished` the orchestrator writes the BIO-shaped vectors
+    /// onto `state.step2`, replicates BIO's serial-path post-state
+    /// cleanup (`remove_extracted_update_entries`), and kicks the
+    /// post-extract rescan. Composes the carve-out-7 BIO primitives
+    /// — no BIO source edit.
+    pub(crate) extract_parallel_rx:
+        Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>>,
+
+    /// **DL Fix-Set v3 (Change B) — the async-archive-skip event
+    /// channel.** Mirrors the other per-phase channels for the
+    /// orchestrator's net-new `install_runtime::archive_skip_async`
+    /// pool that REPLACES the synchronous `archive_skip::
+    /// skip_present_archives` UI freeze (which ran on the egui render
+    /// thread). Drained every frame by `poll_step2_channels` BEFORE
+    /// the extract drain: per-asset `AssetHashStarted` /
+    /// `AssetHashed` events drive the §4.3 grid's Hashing-phase row
+    /// transitions in real time; on `Finished` the orchestrator
+    /// stores `skip_indices` on `InstallScreenState`, clears this
+    /// receiver, and sets `archive_skip_completed = true` so the
+    /// streamer's kick gate can open. Composes `archive_skip_async`
+    /// + the existing sync `archive_skip` types — no BIO source edit.
+    pub(crate) archive_skip_rx:
+        Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
+
+    /// **DL Fix-Set v3 (Change B / C) — the hash-phase progress
+    /// snapshot.** A shared `Arc<Mutex<Option<(completed, total)>>>`
+    /// the new `InstallPhase::Hashing` phase bar reads every frame.
+    /// Written by `drain_archive_skip_events`: set to
+    /// `Some((0, total))` on `CandidateEnumerated { total }`, bumped
+    /// to `Some((c+1, total))` on each `AssetHashed`. Reset to
+    /// `None` by `InstallScreenState::clear_preview` so a re-entry
+    /// starts clean. `None` outside the hash window ⇒ the §4.3
+    /// chrome falls back to its count path / muted bar.
+    pub(crate) hash_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
 }
 
 impl OrchestratorApp {
@@ -553,11 +598,22 @@ impl OrchestratorApp {
             // `stage_downloading::render_live` when the download gate
             // opens; `None` until then.
             stream_download_rx: None,
-            // DL Fix-Set v2 (Fix 1c) — the BIO extract progress snapshot
-            // handle. Shared with the forwarder thread the intercept
-            // spawns at extract-kick; the §4.3 Extract bar reads it every
-            // frame.
+            // DL Fix-Set v2 (Fix 1c) / v3 (Change A) — the extract
+            // progress snapshot handle. Under v3 the new parallel
+            // coordinator writes here directly (no more forwarder).
             extract_progress: Arc::new(std::sync::Mutex::new(None)),
+            // DL Fix-Set v3 (Change A) — the parallel-extract event
+            // channel; armed by `drain_stream_download` on
+            // `StreamDownloadEvent::Finished`.
+            extract_parallel_rx: None,
+            // DL Fix-Set v3 (Change B) — the async-archive-skip event
+            // channel; armed by `stage_downloading::render_live` on
+            // the one-shot `archives_staged` latch entry.
+            archive_skip_rx: None,
+            // DL Fix-Set v3 (Change B / C) — the hash-phase progress
+            // snapshot. The `InstallPhase::Hashing` bar reads this;
+            // `drain_archive_skip_events` writes it.
+            hash_progress: Arc::new(std::sync::Mutex::new(None)),
         };
 
         // NOTE: do NOT call `oauth_glue::load_persisted_login` here.
@@ -891,23 +947,52 @@ impl OrchestratorApp {
             &mut self.step2_cancel,
             &mut self.step2_progress_queue,
         );
+        // **DL Fix-Set v3 (Change B) — drain the async archive-skip
+        // pool FIRST.** The skip pass must complete (and the download
+        // gate's `archive_skip_completed` latch flip true) before
+        // the streamer's kick gate opens. Per-asset `AssetHashStarted`
+        // / `AssetHashed` events drive the §4.3 grid's Hashing rows
+        // live; on `Finished` the orchestrator stores `skip_indices`
+        // on `InstallScreenState` so the streamer can bypass them.
+        Self::drain_archive_skip_events(
+            &mut self.wizard_state,
+            &mut self.archive_skip_rx,
+            &mut self.install_screen_state,
+            &self.hash_progress,
+        );
         // #1 — drain the orchestrator's net-new parallel streaming
         // downloader (replaces BIO's serial download sub-phase). Mirrors
         // BIO's own `poll_step2_update_download` (⑤) discipline: per-mod
         // byte deltas update the live grid's `Option<(bytes, total)>`;
-        // on `Finished`, write the BIO-shaped vectors onto `state.step2`
-        // + call BIO's UNCHANGED `start_step2_update_extract` (exactly
-        // what BIO's serial poller does at `app_step2_update_download.rs:
-        // 102`). Drained AFTER the BIO Step-2 callees so the extract this
-        // triggers is picked up by the next frame's
-        // `poll_step2_update_extract` — identical timing to BIO's serial
-        // path (BIO's poller likewise calls `start_step2_update_extract`
-        // and the extract poller catches it the following frame).
+        // **DL Fix-Set v3 (Change A)** — on `Finished` the orchestrator
+        // writes the BIO-shaped vectors onto `state.step2` + kicks
+        // the NEW PARALLEL extract coordinator
+        // (`extract_parallel::start_parallel_extract`) instead of
+        // BIO's serial extract via the v2 forwarder.
         Self::drain_stream_download(
             &mut self.wizard_state,
             &mut self.stream_download_rx,
-            &mut self.step2_update_extract_rx,
+            &mut self.extract_parallel_rx,
             &mut self.install_screen_state.download_progress,
+            &self.extract_progress,
+        );
+        // **DL Fix-Set v3 (Change A) — drain the parallel extract
+        // pool.** Per-asset `AssetDone` events bump the
+        // `extract_progress` snapshot so the §4.3 Extract bar climbs
+        // mid-extract; on `Finished` the orchestrator writes the
+        // BIO-shaped vectors onto `state.step2`, replicates BIO's
+        // serial-path post-state cleanup (the inline
+        // `remove_extracted_update_entries`), and kicks the
+        // post-extract rescan via `start_step2_scan` — the EXACT
+        // sequence BIO's own `poll_step2_update_extract` runs at its
+        // Finished branch (so the install hand-off downstream stays
+        // unchanged).
+        Self::drain_extract_parallel(
+            &mut self.wizard_state,
+            &mut self.extract_parallel_rx,
+            &mut self.step2_scan_rx,
+            &mut self.step2_cancel,
+            &mut self.step2_progress_queue,
             &self.extract_progress,
         );
 
@@ -939,13 +1024,13 @@ impl OrchestratorApp {
         stream_download_rx: &mut Option<
             Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>,
         >,
-        step2_update_extract_rx: &mut Option<
-            Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>,
+        extract_parallel_rx: &mut Option<
+            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
         >,
         progress: &mut crate::ui::install::stage_downloading::DownloadProgress,
         extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
     ) {
-        use crate::install_runtime::extract_intercept::start_extract_with_intercept;
+        use crate::install_runtime::extract_parallel::start_parallel_extract;
         use crate::install_runtime::stream_downloader::{
             StreamDownloadEvent, apply_result_state, deterministic_dest,
         };
@@ -1014,22 +1099,30 @@ impl OrchestratorApp {
                 }
                 Ok(StreamDownloadEvent::Finished(result)) => {
                     *stream_download_rx = None;
-                    // **DL Fix-Set v2.** The downloaded/failed vectors
-                    // have been populated per-asset by the AssetDone
-                    // branch above (Fix 1b); `apply_result_state` only
+                    // **DL Fix-Set v2 (Fix 1b).** The downloaded/failed
+                    // vectors have been populated per-asset by the
+                    // AssetDone branch above; `apply_result_state` only
                     // clears the running flag + writes the BIO-verbatim
                     // finished status line that reads the
-                    // already-populated vectors. Then **Fix 1c** kicks
-                    // BIO's `pub(crate)` `start_step2_update_extract`
-                    // through the forwarder thread that snapshots
-                    // `Progress` events into `extract_progress` so the
-                    // §4.3 Extract bar climbs mid-extract.
+                    // already-populated vectors.
                     apply_result_state(wizard_state, result);
-                    start_extract_with_intercept(
-                        wizard_state,
-                        step2_update_extract_rx,
-                        extract_progress,
-                    );
+                    // **DL Fix-Set v3 (Change A) — kick the NEW
+                    // PARALLEL extract coordinator instead of BIO's
+                    // serial extract through the v2 forwarder.** The
+                    // coordinator writes `extract_progress` directly
+                    // (no forwarder thread needed), spawns
+                    // `EXTRACT_POOL_SIZE` workers running the
+                    // carve-out-7 `archive::extract_one_archive` in
+                    // parallel, and the §4.3 Extract bar climbs
+                    // smoothly as workers finish in whatever order
+                    // their archives permit. Per-asset events are
+                    // routed through `extract_parallel_rx` (drained
+                    // by `drain_extract_parallel` on the next frame
+                    // — identical timing to the BIO serial-poll
+                    // model the v2 path used).
+                    if let Some(rx) = start_parallel_extract(wizard_state, extract_progress) {
+                        *extract_parallel_rx = Some(rx);
+                    }
                     return;
                 }
                 Err(TryRecvError::Empty) => return,
@@ -1042,6 +1135,302 @@ impl OrchestratorApp {
                     wizard_state.step2.update_selected_download_running = false;
                     wizard_state.step2.scan_status =
                         "Download updates failed: worker disconnected".to_string();
+                    return;
+                }
+            }
+        }
+    }
+
+    /// **DL Fix-Set v3 (Change A) — drain the parallel extract event
+    /// channel.** Per-asset `AssetDone` events bump the
+    /// `extract_progress` snapshot so the §4.3 Extract bar climbs
+    /// smoothly as workers finish in completion order. On `Finished`
+    /// the orchestrator:
+    ///   1. Writes the BIO-shaped vectors onto `state.step2`
+    ///      (`update_selected_extracted_sources` /
+    ///      `update_selected_extract_failed_sources`) — byte-
+    ///      identical to BIO's serial `poll_step2_update_extract`
+    ///      Finished branch.
+    ///   2. Replicates BIO's `remove_extracted_update_entries`
+    ///      inline (the private cleanup the serial poll runs;
+    ///      retains the post-state contract).
+    ///   3. **Leaves `extract_progress` at `Some((N, N))`** — the
+    ///      v3 bug fix: the v2 forwarder cleared it on Finished,
+    ///      causing a frame of `(0, 0)` flash before the screen
+    ///      took over. The next install's
+    ///      `start_parallel_extract` resets the handle.
+    ///   4. If `extracted > 0`: kicks the post-extract rescan via
+    ///      BIO's unchanged `app_step2_scan::start_step2_scan`
+    ///      (the SAME call BIO's serial poll makes). The
+    ///      `start_auto_build_install` hand-off downstream
+    ///      proceeds unchanged.
+    ///   5. Else: sets the BIO-verbatim "Extract updates finished
+    ///      …" status (matching BIO's serial poll's
+    ///      no-extracted branch).
+    ///
+    /// Associated fn (not `&mut self`) so the borrow checker
+    /// permits the simultaneous `&mut wizard_state` + `&mut
+    /// step2_scan_rx` / `&mut step2_cancel` /
+    /// `&mut step2_progress_queue` split-borrow at the call site.
+    fn drain_extract_parallel(
+        wizard_state: &mut WizardState,
+        extract_parallel_rx: &mut Option<
+            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
+        >,
+        step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
+        step2_cancel: &mut Option<Arc<AtomicBool>>,
+        step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
+        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+    ) {
+        use crate::install_runtime::extract_parallel::ExtractAssetEvent;
+        use std::collections::HashSet;
+        use std::sync::mpsc::TryRecvError;
+
+        let Some(rx) = extract_parallel_rx.as_ref() else {
+            return;
+        };
+        loop {
+            match rx.try_recv() {
+                Ok(ExtractAssetEvent::AssetDone { .. }) => {
+                    // Bump the extract_progress snapshot. The total
+                    // came from `start_parallel_extract`'s
+                    // `Some((0, N))` reset; we count completions.
+                    if let Ok(mut g) = extract_progress.lock() {
+                        let (c, t) = g.unwrap_or((0, 0));
+                        *g = Some((c + 1, t));
+                    }
+                    // NOTE: do NOT push to
+                    // `update_selected_extracted_sources` here. The
+                    // bulk-assign at `Finished` matches BIO's
+                    // serial-path post-state contract
+                    // (`poll_step2_update_extract` only sets the
+                    // vector at Finished — the status-vector model
+                    // the §4.3 grid + the
+                    // `remove_extracted_update_entries` cleanup
+                    // both depend on). The §4.3 Extract bar
+                    // climbs via `extract_progress`, not via the
+                    // vector's count.
+                }
+                Ok(ExtractAssetEvent::Finished(result)) => {
+                    *extract_parallel_rx = None;
+                    wizard_state.step2.update_selected_extract_running = false;
+                    wizard_state.step2.update_selected_extracted_sources = result.extracted;
+
+                    // Replicate BIO's private
+                    // `remove_extracted_update_entries`
+                    // (`app_step2_update_extract.rs:120-146`)
+                    // inline. The serial poll runs this cleanup
+                    // post-Finished to drop the now-extracted
+                    // entries from the missing / update source
+                    // lists + the asset list (so BIO's downstream
+                    // sees an honest state).
+                    let extracted_labels: HashSet<String> = wizard_state
+                        .step2
+                        .update_selected_extracted_sources
+                        .iter()
+                        .filter_map(|e| e.split_once(" -> ").map(|(l, _)| l.trim().to_string()))
+                        .filter(|l| !l.is_empty())
+                        .collect();
+                    if !extracted_labels.is_empty() {
+                        wizard_state
+                            .step2
+                            .update_selected_missing_sources
+                            .retain(|e| {
+                                !extracted_labels
+                                    .iter()
+                                    .any(|l| e.starts_with(&format!("{l} (")))
+                            });
+                        wizard_state
+                            .step2
+                            .update_selected_update_sources
+                            .retain(|e| {
+                                !extracted_labels
+                                    .iter()
+                                    .any(|l| e.starts_with(&format!("{l} (")))
+                            });
+                        wizard_state
+                            .step2
+                            .update_selected_update_assets
+                            .retain(|a| !extracted_labels.contains(&a.label));
+                    }
+
+                    wizard_state
+                        .step2
+                        .update_selected_extract_failed_sources
+                        .extend(result.failed);
+
+                    let extracted = wizard_state.step2.update_selected_extracted_sources.len();
+                    let failed = wizard_state
+                        .step2
+                        .update_selected_extract_failed_sources
+                        .len();
+
+                    // **DL Fix-Set v3 (Change A) bug fix.** Do NOT
+                    // clear `extract_progress`. Leave it at
+                    // `Some((N, N))` so the §4.3 chrome continues
+                    // to show 100% until the install screen takes
+                    // over (the v2 forwarder cleared it, causing
+                    // a frame of `(0, 0)` flash). The next
+                    // install's `start_parallel_extract` resets
+                    // the handle.
+
+                    if extracted > 0 {
+                        wizard_state.step1_mods_folder_has_tp2 = Some(true);
+                        wizard_state.step2.log_pending_downloads.clear();
+                        wizard_state.step2.scan_status =
+                            format!("Extracted {extracted} updates; rescanning Mods Folder");
+                        // Kick BIO's unchanged post-extract rescan
+                        // — the SAME call BIO's serial poll makes
+                        // (`app_step2_update_extract.rs:108-113`).
+                        // The install hand-off downstream
+                        // (`start_auto_build_install`) is unchanged.
+                        app_step2_scan::start_step2_scan(
+                            wizard_state,
+                            step2_scan_rx,
+                            step2_cancel,
+                            step2_progress_queue,
+                        );
+                    } else {
+                        wizard_state.step2.scan_status = format!(
+                            "Extract updates finished: {extracted} updated, \
+                             {failed} failed"
+                        );
+                    }
+                    return;
+                }
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => {
+                    *extract_parallel_rx = None;
+                    wizard_state.step2.update_selected_extract_running = false;
+                    wizard_state.step2.scan_status =
+                        "Extract updates failed: worker disconnected".to_string();
+                    return;
+                }
+            }
+        }
+    }
+
+    /// **DL Fix-Set v3 (Change B) — drain the async archive-skip
+    /// event channel.** Per-asset events drive the §4.3 grid's
+    /// Hashing-phase row transitions in real time + maintain the
+    /// `hash_progress` snapshot the new `InstallPhase::Hashing` bar
+    /// reads:
+    ///   - `CandidateEnumerated { total }`: set
+    ///     `hash_progress = Some((0, total))` so the chrome shows
+    ///     "0 / N" immediately.
+    ///   - `AssetHashStarted { index }`: no-op on state (the row's
+    ///     status is derived from the per-frame
+    ///     `from_wizard_state_full` rebuild + the `skip_indices`
+    ///     set already in `InstallScreenState`).
+    ///   - `AssetHashed { index, was_skipped, label, dest_display }`:
+    ///     bump `hash_progress = Some((c+1, t))`; if `was_skipped`,
+    ///     push the BIO-shaped `"{label} -> {dest_display}"` entry
+    ///     into `update_selected_downloaded_sources` (mirroring the
+    ///     sync `archive_skip::skip_present_archives` pre-
+    ///     population — the §4.3 grid uses label membership for
+    ///     download-complete classification).
+    ///   - `Finished { summary, skipped_indices }`: store
+    ///     `skip_indices` on `InstallScreenState`, clear
+    ///     `archive_skip_rx`, set `archive_skip_completed = true`
+    ///     so the streamer kick gate can open.
+    ///
+    /// The `summary` is observational (counts) and is logged via
+    /// `tracing::info!` (matching the sync pass's log shape) — the
+    /// orchestrator's other state (`skipped_mods`,
+    /// `expected_archive_sizes`, the `pre_skip_assets`,
+    /// `expected_archive_meta`) is already populated in
+    /// `stage_downloading::render_live`'s one-shot
+    /// `archives_staged` block, BEFORE this async pass kicks (the
+    /// brief: the kick replaces only the sync `skip_present_
+    /// archives` call; the per-asset metadata cache is set up
+    /// alongside).
+    fn drain_archive_skip_events(
+        wizard_state: &mut WizardState,
+        archive_skip_rx: &mut Option<
+            Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>,
+        >,
+        install_screen_state: &mut crate::ui::install::state_install::InstallScreenState,
+        hash_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+    ) {
+        use crate::install_runtime::archive_skip_async::ArchiveSkipEvent;
+        use std::sync::mpsc::TryRecvError;
+
+        let Some(rx) = archive_skip_rx.as_ref() else {
+            return;
+        };
+        loop {
+            match rx.try_recv() {
+                Ok(ArchiveSkipEvent::CandidateEnumerated { total }) => {
+                    if let Ok(mut g) = hash_progress.lock() {
+                        *g = Some((0, total));
+                    }
+                }
+                Ok(ArchiveSkipEvent::AssetHashStarted { .. }) => {
+                    // No state mutation — the row's `Hashing`
+                    // status is the from_wizard_state_full
+                    // classification (Change C wires it). The
+                    // event arrival itself + the per-frame
+                    // `step2_needs_repaint` (which includes
+                    // `archive_skip_rx.is_some()`) keep the grid
+                    // alive.
+                }
+                Ok(ArchiveSkipEvent::AssetHashed {
+                    was_skipped,
+                    label,
+                    dest_display,
+                    ..
+                }) => {
+                    if let Ok(mut g) = hash_progress.lock() {
+                        let (c, t) = g.unwrap_or((0, 0));
+                        *g = Some((c + 1, t));
+                    }
+                    if was_skipped {
+                        if let Some(dest) = dest_display {
+                            // Mirror the sync pass's BIO-shaped
+                            // pre-population so the §4.3 grid sees
+                            // download-complete from the moment
+                            // the asset's hash resolves.
+                            wizard_state
+                                .step2
+                                .update_selected_downloaded_sources
+                                .push(format!("{label} -> {dest}"));
+                        }
+                    }
+                }
+                Ok(ArchiveSkipEvent::Finished {
+                    summary,
+                    skipped_indices,
+                }) => {
+                    *archive_skip_rx = None;
+                    install_screen_state.skip_indices = skipped_indices.into_iter().collect();
+                    install_screen_state.archive_skip_completed = true;
+                    tracing::info!(
+                        target = "orchestrator",
+                        "async archive-skip finished: {} already-present, \
+                         {} missing (will fetch), {} no-expected-hash, \
+                         {} candidates hashed ({} persistent-cache hits)",
+                        summary.skipped_present,
+                        summary.missing_on_disk,
+                        summary.no_expected_hash,
+                        summary.hashed_candidates,
+                        summary.cache_hits,
+                    );
+                    return;
+                }
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => {
+                    *archive_skip_rx = None;
+                    // The coordinator dropped the sender without
+                    // Finished (panic / abort). Mark complete with
+                    // an empty skip set so the streamer can still
+                    // open (it will just fetch everything — the
+                    // honest fallback).
+                    install_screen_state.archive_skip_completed = true;
+                    tracing::warn!(
+                        target = "orchestrator",
+                        "async archive-skip worker disconnected without \
+                         Finished — falling back to download-all"
+                    );
                     return;
                 }
             }
@@ -1131,6 +1520,19 @@ impl OrchestratorApp {
             // live, egui would paint lazily and the per-mod bars would
             // appear frozen until the next user input.
             || self.stream_download_rx.is_some()
+            // **DL Fix-Set v3 (Change A)** — the parallel extract
+            // coordinator reports per-archive `AssetDone` events off-
+            // thread; the same repaint discipline as the download
+            // channel applies (per-archive bumps to `extract_progress`
+            // must reach the chrome on the next frame, not wait for a
+            // user input).
+            || self.extract_parallel_rx.is_some()
+            // **DL Fix-Set v3 (Change B)** — the async archive-skip
+            // pool reports per-asset `AssetHashStarted` / `AssetHashed`
+            // events off-thread; the §4.3 grid's Hashing-phase row
+            // transitions + the `hash_progress` snapshot must repaint
+            // continuously while a skip pass is in flight.
+            || self.archive_skip_rx.is_some()
             // **DL-Run 2 — keep repainting CONTINUOUSLY for the WHOLE
             // active-phase window** (the Install-Modlist Downloading screen
             // / Workspace auto-build). The Phase-7 channel-only coverage

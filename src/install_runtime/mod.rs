@@ -118,16 +118,32 @@
 //                               — zero BIO source. SPEC §13.13/§13.1/§13.3/
 //                               §4.x/§3.1. ──
 pub mod archive_skip;
+// ── DL Fix-Set v3 (Change B) — async hashing with per-asset progress.
+//    Replaces the sync `archive_skip::skip_present_archives` UI freeze
+//    on the egui render thread with a bounded parallel pool
+//    (`HASH_POOL_SIZE = 10`) running on a spawned coordinator thread.
+//    Per-asset `AssetHashStarted` / `AssetHashed` events drive the
+//    §4.3 grid's Hashing-phase rows in real time. The existing sync
+//    pass is LEFT in place (tests still use it). Zero BIO source.
+//    SPEC §4.3 / §13.12a / §1.
+pub mod archive_skip_async;
 pub mod archive_store;
 pub mod auto_build_driver;
-// ── DL Fix-Set v2 (Fix 1c) — extract-progress intercept. Wraps BIO's
-//    `pub(crate)` `app_step2_update_extract` receiver-end stream with a
-//    forwarder that snapshots `Progress` events into a shared handle the
-//    orchestrator reads every frame (so the §4.3 Extract bar climbs
-//    mid-extract, instead of staying at 0 until `Finished`). Zero BIO
-//    source — only the receiver-end is intercepted; BIO's enum +
-//    `poll_step2_update_extract` are untouched. SPEC §4.3 / §13.12a / §1.
-pub mod extract_intercept;
+// ── DL Fix-Set v3 (Change A) — net-new PARALLEL extract coordinator.
+//    Replaces BIO's serial extract loop AND the v2 `extract_intercept`
+//    forwarder with a bounded `EXTRACT_POOL_SIZE = 10` worker pool
+//    that runs `archive::extract_one_archive` in parallel (the
+//    user-reported 51-mod EET serial extraction productivity cliff).
+//    Composes the carve-out-7 visibility-widened BIO primitives
+//    (`archive::extract_one_archive`, `plan::Step2UpdateExtractJob`,
+//    `plan::build_extract_jobs`) — all `pub(super)`/private →
+//    `pub(crate)`, ZERO behavior change. Replaces `extract_intercept`
+//    (deleted in v3): the parallel coordinator writes the
+//    `Arc<Mutex<Option<(usize, usize)>>>` `extract_progress` handle
+//    directly so the §4.3 Extract bar still climbs mid-extract,
+//    without the forwarder thread. SPEC §1 carve-out 7 / §4.3 /
+//    §13.12a.
+pub mod extract_parallel;
 pub mod flag_policies;
 pub mod import_code_writer;
 pub mod install_concurrency;

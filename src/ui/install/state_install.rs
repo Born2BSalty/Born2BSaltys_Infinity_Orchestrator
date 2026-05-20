@@ -365,6 +365,17 @@ pub struct InstallScreenState {
     /// the streamer every frame. Reset by `clear_preview()`. Not
     /// persisted.
     pub download_phase_started: bool,
+    /// **DL Fix-Set v3 (Change B) — async archive-skip completion
+    /// latch.** `false` while the async hash pass is still in flight
+    /// (`OrchestratorApp::archive_skip_rx.is_some()`); `true` the
+    /// moment its `Finished` event is drained (and the
+    /// `skip_indices` are stored on this state). The download kick
+    /// gate (`download_phase_started` predicate) ALSO requires this
+    /// to be true — the streamer must not fire until the skip set is
+    /// known, otherwise it would download archives the async pass
+    /// would have skipped. Reset by `clear_preview()` so a re-entry
+    /// re-runs the skip pass from scratch. Not persisted.
+    pub archive_skip_completed: bool,
 }
 
 impl InstallScreenState {
@@ -412,6 +423,10 @@ impl InstallScreenState {
         // from scratch).
         self.skip_indices = std::collections::HashSet::new();
         self.download_phase_started = false;
+        // DL Fix-Set v3 (Change B): the async-skip completion latch
+        // resets too — a re-entry re-runs the async hash pass from
+        // scratch.
+        self.archive_skip_completed = false;
     }
 }
 
@@ -505,6 +520,8 @@ mod tests {
         st.pipeline_arm_error = Some("arm boom".to_string());
         st.archives_staged = true;
         st.archives_ingested = true;
+        st.download_phase_started = true;
+        st.archive_skip_completed = true;
         st.clear_preview();
         assert!(st.parsed_preview.is_none());
         assert!(st.preview_parse_error.is_none());
@@ -515,6 +532,14 @@ mod tests {
         assert!(
             !st.archives_staged && !st.archives_ingested,
             "D1: a re-entry must re-stage/re-ingest from scratch"
+        );
+        assert!(
+            !st.download_phase_started,
+            "Fix 1e: a re-entry must re-kick the streamer"
+        );
+        assert!(
+            !st.archive_skip_completed,
+            "v3 Change B: a re-entry must re-run the async skip pass"
         );
     }
 }

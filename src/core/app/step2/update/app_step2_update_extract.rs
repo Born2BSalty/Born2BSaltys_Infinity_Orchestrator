@@ -12,9 +12,9 @@ use crate::app::state::WizardState;
 use crate::app::step2_worker::Step2ScanEvent;
 
 #[path = "app_step2_update_extract_archive.rs"]
-mod archive;
+pub(crate) mod archive;
 #[path = "app_step2_update_extract_plan.rs"]
-mod plan;
+pub(crate) mod plan;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Step2UpdateExtractResult {
