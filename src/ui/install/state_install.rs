@@ -209,6 +209,13 @@ pub struct InstallScreenState {
     pub skipped_mods: Vec<SkippedMod>,
     pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
     pub skip_indices: std::collections::HashSet<usize>,
+    /// Asset indices the async hash pass has already classified
+    /// (`AssetHashed` arrived). Assets present in the asset list but
+    /// absent here are still in-flight (the `Hashing` row state); any
+    /// other status only applies once the index has been recorded. Reset
+    /// to empty by [`Self::clear_preview`] so a re-armed install starts
+    /// from a clean Hashing-everywhere classification.
+    pub hashed_indices: std::collections::HashSet<usize>,
 }
 
 impl InstallScreenState {
@@ -230,6 +237,7 @@ impl InstallScreenState {
         self.skipped_mods = Vec::new();
         self.expected_archive_sizes = std::collections::BTreeMap::new();
         self.skip_indices = std::collections::HashSet::new();
+        self.hashed_indices = std::collections::HashSet::new();
     }
 }
 
@@ -320,6 +328,8 @@ mod tests {
         st.pipeline_flags.set_archives_ingested(true);
         st.pipeline_flags.set_download_phase_started(true);
         st.pipeline_flags.set_archive_skip_completed(true);
+        st.hashed_indices.insert(0);
+        st.hashed_indices.insert(7);
         st.clear_preview();
         assert!(st.parsed_preview.is_none());
         assert!(st.preview_parse_error.is_none());
@@ -338,6 +348,26 @@ mod tests {
         assert!(
             !st.pipeline_flags.archive_skip_completed(),
             "a re-entry must re-run the async skip pass"
+        );
+        assert!(
+            st.hashed_indices.is_empty(),
+            "a re-entry must start with no asset hash decisions carried in"
+        );
+    }
+
+    #[test]
+    fn clear_preview_resets_per_install_hash_and_extract_snapshots() {
+        let mut st = InstallScreenState::default();
+        st.download_progress.hash_progress = Some((51, 51));
+        st.download_progress.extract_progress = Some((51, 51));
+        st.clear_preview();
+        assert!(
+            st.download_progress.hash_progress.is_none(),
+            "a fresh install must not inherit the previous install's hash 51/51"
+        );
+        assert!(
+            st.download_progress.extract_progress.is_none(),
+            "a fresh install must not flash the previous install's extract 51/51"
         );
     }
 }

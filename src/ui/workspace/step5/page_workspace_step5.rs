@@ -35,15 +35,24 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
         .and_then(|e| post_install_actions::render(ui, palette, &orchestrator.wizard_state, e));
 
     let exe_fingerprint = orchestrator.exe_fingerprint.clone();
-    let action: Option<Step5Action> = crate::ui::step5::page_step5::render(
-        ui,
-        &mut orchestrator.wizard_state,
-        &mut orchestrator.step5_console_view,
-        orchestrator.step5_terminal.as_mut(),
-        orchestrator.step5_terminal_error.as_deref(),
-        orchestrator.dev_mode,
-        &exe_fingerprint,
-    );
+    // BIO's Step-5 console hard-codes `TextWrapMode::Extend` inside its
+    // own `ScrollArea::vertical()` so long install-log lines paint past
+    // the right edge of the available width. Wrap the BIO render in a
+    // clipped child Ui so any over-wide paint is clipped to the
+    // orchestrator's allocated rect rather than bleeding into the shell.
+    let panel_rect = ui.available_rect_before_wrap();
+    let mut action: Option<Step5Action> = None;
+    clipped_pane(ui, panel_rect, |ui| {
+        action = crate::ui::step5::page_step5::render(
+            ui,
+            &mut orchestrator.wizard_state,
+            &mut orchestrator.step5_console_view,
+            orchestrator.step5_terminal.as_mut(),
+            orchestrator.step5_terminal_error.as_deref(),
+            orchestrator.dev_mode,
+            &exe_fingerprint,
+        );
+    });
 
     if action == Some(Step5Action::StartInstall) && !handle_start_install(orchestrator, modlist_id)
     {
@@ -75,6 +84,22 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
             &entry_for_dialog,
         );
     }
+}
+
+/// Run `add` against a child `Ui` whose draw region is clipped to
+/// `rect`. Paint operations issued inside `add` that fall outside the
+/// rect are dropped by egui's painter, so a child widget that ignores
+/// width hints cannot bleed pixels into surrounding chrome.
+fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    let clip = rect.intersect(ui.clip_rect());
+    child.set_clip_rect(clip);
+    add(&mut child);
+    ui.allocate_rect(rect, egui::Sense::hover());
 }
 
 fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {

@@ -36,6 +36,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 
     clear_pending_reinstall_on_nav_away_from_install(orchestrator);
 
+    reset_install_screen_on_nav_away_after_complete(orchestrator);
+
     match orchestrator.nav.clone() {
         NavDestination::Home => page_home::render(ui, orchestrator, ctx),
         NavDestination::Install => page_install::render(ui, orchestrator, ctx),
@@ -180,6 +182,42 @@ fn flush_workspace_on_nav_away(orchestrator: &mut OrchestratorApp) {
     }
 
     orchestrator.workspace_view.loaded_workspace_id = None;
+}
+
+/// If the user is leaving the Install screen after a completed install
+/// (Stage 4 — `InstallingStub`), tear the Install screen down to its
+/// fresh paste state so the next Install nav-in lands them on a clean
+/// paste form rather than the stale completed Step-5 view. Idle until
+/// the user actually leaves Install — they still see the success
+/// banner while they remain on the screen.
+///
+/// Defers when an install is still running / starting / prepping (the
+/// rail-lock handles those cases) and when the stage is not
+/// `InstallingStub` (Paste / Preview / Downloading reset paths are
+/// handled by their own cancel hooks).
+fn reset_install_screen_on_nav_away_after_complete(orchestrator: &mut OrchestratorApp) {
+    if matches!(orchestrator.nav, NavDestination::Install) {
+        return;
+    }
+    if orchestrator.install_screen_state.stage
+        != crate::ui::install::state_install::InstallStage::InstallingStub
+    {
+        return;
+    }
+    if orchestrator.wizard_state.step5.install_running
+        || orchestrator.wizard_state.step5.start_install_requested
+        || orchestrator.wizard_state.step5.prep_running
+    {
+        return;
+    }
+    orchestrator.reset_install_screen_to_paste();
+    tracing::debug!(
+        target = "orchestrator",
+        "Install screen reset to Paste on nav-away after a completed Stage-4 \
+         render — next Install entry lands at the paste form, terminal buffer \
+         and console-view filter cleared so a second session does not inherit \
+         the previous install's log"
+    );
 }
 
 fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut OrchestratorApp) {

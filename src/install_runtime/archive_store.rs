@@ -188,6 +188,25 @@ pub struct IngestSummary {
     pub missing: usize,
 }
 
+/// Place `src` at `dst` as a hardlink when possible; fall back to a full
+/// byte-copy only when hardlinking is not available (cross-volume,
+/// non-NTFS, etc.). Two filesystem names share one set of bytes on the
+/// hardlink path, so re-staging a known archive into BIO's deterministic
+/// extract path costs zero extra disk for the common single-volume case.
+/// Mirrors `archive_skip::link_or_copy` (the staging-time companion).
+fn link_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    if dst.exists() {
+        let _ = std::fs::remove_file(dst);
+    }
+    match std::fs::hard_link(src, dst) {
+        Ok(()) => Ok(()),
+        Err(_) => std::fs::copy(src, dst).map(|_| ()),
+    }
+}
+
 pub fn stage_known_archives(state: &mut WizardState, destination: &str) -> usize {
     let archive_dir = PathBuf::from(state.step1.mods_archive_folder.trim());
     if archive_dir.as_os_str().is_empty() {
@@ -214,14 +233,14 @@ pub fn stage_known_archives(state: &mut WizardState, destination: &str) -> usize
         }
         let stored = archive_dir.join(stored_filename(&name, hash));
         let deterministic = archive_dir.join(&name);
-        match std::fs::copy(&stored, &deterministic) {
-            Ok(_) => {
+        match link_or_copy(&stored, &deterministic) {
+            Ok(()) => {
                 satisfied += 1;
             }
             Err(err) => {
                 warn!(
                     target = "orchestrator",
-                    "stage stored archive {} → {}: {err} (falling back to download)",
+                    "stage stored archive {} \u{2192} {}: {err} (falling back to download)",
                     stored.display(),
                     deterministic.display()
                 );
@@ -278,10 +297,10 @@ pub fn ingest_downloaded_archives(
             continue;
         }
 
-        if let Err(err) = std::fs::copy(&deterministic, &stored) {
+        if let Err(err) = link_or_copy(&deterministic, &stored) {
             warn!(
                 target = "orchestrator",
-                "store content-addressed copy {} → {}: {err} \
+                "store content-addressed copy {} \u{2192} {}: {err} \
                  (the deterministic copy is intact; dedupe just won't help next time)",
                 deterministic.display(),
                 stored.display()
@@ -497,6 +516,129 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&archive_dir);
         let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    /// Returns true when `a` and `b` share the same inode (hardlink) on
+    /// the active filesystem. Detection is by behavior, not API: a
+    /// rewrite of `a` propagates to `b` only if they point at the same
+    /// bytes on disk. Stable on every platform — no `file_index` /
+    /// unstable feature.
+    #[cfg(windows)]
+    fn share_inode(a: &Path, b: &Path) -> bool {
+        let original = std::fs::read(a).unwrap();
+        let probe = b"__BIO_TEST_HARDLINK_PROBE__";
+        std::fs::write(a, probe).unwrap();
+        let b_after = std::fs::read(b).unwrap_or_default();
+        std::fs::write(a, &original).unwrap();
+        b_after == probe
+    }
+
+    #[test]
+    fn link_or_copy_produces_content_equivalent_dst() {
+        let dir = td();
+        let src = dir.join("src.bin");
+        let dst = dir.join("dst.bin");
+        std::fs::write(&src, b"the-payload-bytes").unwrap();
+        link_or_copy(&src, &dst).unwrap();
+        assert_eq!(std::fs::read(&src).unwrap(), std::fs::read(&dst).unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn link_or_copy_hardlinks_on_same_volume_so_one_inode_two_names() {
+        let dir = td();
+        let src = dir.join("src.bin");
+        let dst = dir.join("dst.bin");
+        std::fs::write(&src, b"the-payload-bytes").unwrap();
+        link_or_copy(&src, &dst).unwrap();
+        assert!(
+            share_inode(&src, &dst),
+            "same NTFS volume ⇒ hardlink ⇒ src + dst share one set of bytes \
+             (truncating src reports zero length on dst)"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ingest_does_not_duplicate_bytes_on_first_store_hardlink_path() {
+        let archive_dir = td();
+        let dest = td();
+        let mut state = WizardState::default();
+        state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        let dest_s = dest.to_string_lossy().into_owned();
+
+        let a = asset("MOD/MOD.TP2", "github", "v1", "MOD-v1.zip");
+        let name = archive_file_name(&a);
+
+        std::fs::write(archive_dir.join(&name), b"DEDUPED-CONTENT-BYTES").unwrap();
+        let s = ingest_downloaded_archives(&state, &dest_s, std::slice::from_ref(&name));
+        assert_eq!(s.stored, 1);
+        let h = hash_file(&archive_dir.join(&name)).unwrap();
+        let stored = archive_dir.join(stored_filename(&name, &h));
+        let deterministic = archive_dir.join(&name);
+        assert!(stored.exists());
+        assert!(deterministic.exists());
+        assert_eq!(
+            std::fs::read(&stored).unwrap(),
+            std::fs::read(&deterministic).unwrap()
+        );
+        #[cfg(windows)]
+        {
+            assert!(
+                share_inode(&deterministic, &stored),
+                "ingest hardlinks the content-addressed copy ⇒ no full duplicate \
+                 (truncating the deterministic file should also empty the stored one)"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&archive_dir);
+        let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn stage_known_archives_hardlinks_into_deterministic_path() {
+        let archive_dir = td();
+        let dest_a = td();
+        let dest_b = td();
+        let mut state = WizardState::default();
+        state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+
+        let a = asset("MOD/MOD.TP2", "github", "v1", "MOD-v1.zip");
+        let name = archive_file_name(&a);
+
+        std::fs::write(archive_dir.join(&name), b"SHARED-CONTENT").unwrap();
+        ingest_downloaded_archives(
+            &state,
+            &dest_a.to_string_lossy(),
+            std::slice::from_ref(&name),
+        );
+        let h = hash_file(&archive_dir.join(&name)).unwrap();
+
+        std::fs::remove_file(archive_dir.join(&name)).unwrap();
+
+        let mut lock_b = InstallArchiveLock::default();
+        lock_b.resolved.insert(name.clone(), h.clone());
+        lock_b.save(Path::new(dest_b.to_string_lossy().trim()));
+
+        state.step2.update_selected_update_assets = vec![a];
+        let satisfied = stage_known_archives(&mut state, &dest_b.to_string_lossy());
+        assert_eq!(satisfied, 1);
+
+        let stored = archive_dir.join(stored_filename(&name, &h));
+        let deterministic = archive_dir.join(&name);
+        assert!(stored.exists());
+        assert!(deterministic.exists());
+        #[cfg(windows)]
+        {
+            assert!(
+                share_inode(&stored, &deterministic),
+                "stage hardlinks the stored copy at BIO's extract path ⇒ \
+                 no full duplicate"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&archive_dir);
+        let _ = std::fs::remove_dir_all(&dest_a);
+        let _ = std::fs::remove_dir_all(&dest_b);
     }
 
     #[test]

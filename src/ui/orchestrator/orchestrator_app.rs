@@ -320,6 +320,40 @@ impl OrchestratorApp {
         self.workspace_state_dirty = DirtyFlag(true);
     }
 
+    /// Tear the Install screen back to its paste-stage zero state.
+    ///
+    /// Drops every background-channel receiver the Downloading pipeline
+    /// owns, clears the auto-build / saved-log latches BIO uses to drive
+    /// the import->scan->download->extract->install chain, resets the
+    /// per-install pipeline flags and progress snapshots, blanks the
+    /// Install-screen stage to `Paste`, and clears the orchestrator's
+    /// owned hash + extract snapshot mutexes so a fresh install does not
+    /// inherit the previous one's `(N, N)` ceiling. Also drains the
+    /// Step-5 console buffer + the console-view filter selection so a
+    /// second install in the same session starts with an empty log.
+    ///
+    /// Used by both the Downloading-screen Cancel handler (rolling back
+    /// to Paste after a partial run) and the install-completion edge
+    /// (so navigating away from Install + back lands the user at a
+    /// clean paste form rather than a stale completed Step 5).
+    pub(crate) fn reset_install_screen_to_paste(&mut self) {
+        reset_install_pipeline_state(InstallPipelineResetSet {
+            stream_download_rx: &mut self.stream_download_rx,
+            archive_skip_rx: &mut self.archive_skip_rx,
+            extract_parallel_rx: &mut self.extract_parallel_rx,
+            wizard_state: &mut self.wizard_state,
+            install_screen_state: &mut self.install_screen_state,
+            hash_progress: &self.hash_progress,
+            extract_progress: &self.extract_progress,
+            pending_reinstall_id: &mut self.pending_reinstall_id,
+            active_install_modlist_id: &mut self.active_install_modlist_id,
+        });
+        if let Some(term) = self.step5_terminal.as_mut() {
+            term.clear_console();
+        }
+        self.step5_console_view = Step5ConsoleViewState::default();
+    }
+
     fn maybe_flip_to_installed_on_clean_exit(&mut self) {
         if !crate::ui::workspace::step5::success_banner::clean_exit(&self.wizard_state) {
             return;
@@ -505,10 +539,18 @@ impl OrchestratorApp {
                     index,
                     ok,
                     final_bytes,
-                    total,
+                    total: _,
                     error,
                 }) => {
-                    progress.set_asset_bytes(index, final_bytes, total);
+                    // Pin the row's per-byte readout to a synthetic
+                    // `(final_bytes, Some(final_bytes))` so the bar
+                    // renders as `final_bytes / final_bytes = 1.0`
+                    // even on the rare path where the server lied
+                    // about `Content-Length` or never sent it. This
+                    // guarantees the bar paints full BEFORE the row's
+                    // status text flips to "✓ downloaded" on the
+                    // next `from_wizard_state_full` rebuild.
+                    progress.set_asset_bytes(index, final_bytes, Some(final_bytes));
                     let archive_dir = PathBuf::from(wizard_state.step1.mods_archive_folder.trim());
                     if let Some(asset) = wizard_state.step2.update_selected_update_assets.get(index)
                     {
@@ -766,20 +808,23 @@ impl OrchestratorApp {
                     // alive.
                 }
                 Ok(ArchiveSkipEvent::AssetHashed {
+                    index,
                     was_skipped,
                     label,
                     dest_display,
-                    ..
                 }) => {
                     if let Ok(mut g) = hash_progress.lock() {
                         let (c, t) = g.unwrap_or((0, 0));
                         *g = Some((c + 1, t));
                     }
+                    // Record the per-asset hash decision so
+                    // `from_wizard_state_full` knows this index is no
+                    // longer in-flight. Indices still absent from the
+                    // set continue to render as `Hashing` rows; indices
+                    // present fall back to BIO's Queued / Downloading
+                    // / Extracting / Staged grouping.
+                    install_screen_state.hashed_indices.insert(index);
                     if was_skipped && let Some(dest) = dest_display {
-                        // Mirror the sync pass's BIO-shaped
-                        // pre-population so the §4.3 grid sees
-                        // download-complete from the moment
-                        // the asset's hash resolves.
                         wizard_state
                             .step2
                             .update_selected_downloaded_sources
@@ -1066,6 +1111,71 @@ impl OrchestratorApp {
     }
 }
 
+/// Pieces of [`OrchestratorApp`] state involved in the Install pipeline.
+///
+/// Borrowed by [`reset_install_pipeline_state`] so the reset can be
+/// tested in isolation without constructing a full `OrchestratorApp`
+/// (which would touch the real config dir and trip the DATA-LOSS
+/// sentinel).
+pub struct InstallPipelineResetSet<'a> {
+    pub stream_download_rx:
+        &'a mut Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
+    pub archive_skip_rx:
+        &'a mut Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
+    pub extract_parallel_rx:
+        &'a mut Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>>,
+    pub wizard_state: &'a mut WizardState,
+    pub install_screen_state: &'a mut InstallScreenState,
+    pub hash_progress: &'a Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+    pub extract_progress: &'a Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+    pub pending_reinstall_id: &'a mut Option<String>,
+    pub active_install_modlist_id: &'a mut Option<String>,
+}
+
+/// Tear the Install pipeline down to its paste-stage zero state.
+///
+/// Mirror of [`OrchestratorApp::reset_install_screen_to_paste`] minus
+/// the terminal/console-view cleanup — those touch fields no testable
+/// stub can produce without real I/O.
+pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
+    let InstallPipelineResetSet {
+        stream_download_rx,
+        archive_skip_rx,
+        extract_parallel_rx,
+        wizard_state,
+        install_screen_state,
+        hash_progress,
+        extract_progress,
+        pending_reinstall_id,
+        active_install_modlist_id,
+    } = set;
+
+    *stream_download_rx = None;
+    *archive_skip_rx = None;
+    *extract_parallel_rx = None;
+
+    wizard_state.modlist_auto_build_active = false;
+    wizard_state.modlist_auto_build_waiting_for_install = false;
+    wizard_state.step2.pending_saved_log_apply = false;
+    wizard_state.step2.pending_saved_log_update_preview = false;
+    wizard_state.step2.pending_saved_log_download = false;
+    wizard_state.step2.update_selected_download_running = false;
+    wizard_state.step2.update_selected_extract_running = false;
+
+    install_screen_state.clear_preview();
+    install_screen_state.stage = crate::ui::install::state_install::InstallStage::Paste;
+
+    if let Ok(mut g) = hash_progress.lock() {
+        *g = None;
+    }
+    if let Ok(mut g) = extract_progress.lock() {
+        *g = None;
+    }
+
+    *pending_reinstall_id = None;
+    *active_install_modlist_id = None;
+}
+
 impl eframe::App for OrchestratorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let palette = self.theme_palette;
@@ -1193,4 +1303,246 @@ fn next_debounce_due_in(app: &OrchestratorApp) -> Option<std::time::Duration> {
             threshold.saturating_sub(elapsed)
         })
         .min()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::TryRecvError;
+
+    fn dirty_ws() -> WizardState {
+        let mut ws = WizardState {
+            modlist_auto_build_active: true,
+            modlist_auto_build_waiting_for_install: true,
+            ..Default::default()
+        };
+        ws.step2.pending_saved_log_apply = true;
+        ws.step2.pending_saved_log_update_preview = true;
+        ws.step2.pending_saved_log_download = true;
+        ws.step2.update_selected_download_running = true;
+        ws.step2.update_selected_extract_running = true;
+        ws
+    }
+
+    fn dirty_iss() -> InstallScreenState {
+        let mut iss = InstallScreenState {
+            stage: crate::ui::install::state_install::InstallStage::Downloading,
+            ..Default::default()
+        };
+        iss.pipeline_flags.set_armed(true);
+        iss.pipeline_flags.set_archives_staged(true);
+        iss.pipeline_flags.set_archive_skip_completed(true);
+        iss.pipeline_flags.set_download_phase_started(true);
+        iss.pipeline_flags.set_archives_verified(true);
+        iss.download_progress.hash_progress = Some((10, 51));
+        iss.download_progress.extract_progress = Some((5, 51));
+        iss.hashed_indices.insert(0);
+        iss.hashed_indices.insert(3);
+        iss
+    }
+
+    #[test]
+    fn reset_install_pipeline_state_drops_all_receivers_and_clears_wizard_latches() {
+        let (s_dl, r_dl) = std::sync::mpsc::channel::<
+            crate::install_runtime::stream_downloader::StreamDownloadEvent,
+        >();
+        let (s_sk, r_sk) = std::sync::mpsc::channel::<
+            crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
+        >();
+        let (s_ex, r_ex) = std::sync::mpsc::channel::<
+            crate::install_runtime::extract_parallel::ExtractAssetEvent,
+        >();
+        let mut stream = Some(r_dl);
+        let mut skip = Some(r_sk);
+        let mut extract = Some(r_ex);
+        let mut ws = dirty_ws();
+        let mut iss = dirty_iss();
+        let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
+        let extract_lock = Arc::new(std::sync::Mutex::new(Some((5usize, 51usize))));
+        let mut pending = Some("modlist-id".to_string());
+        let mut active = Some("modlist-id".to_string());
+
+        reset_install_pipeline_state(InstallPipelineResetSet {
+            stream_download_rx: &mut stream,
+            archive_skip_rx: &mut skip,
+            extract_parallel_rx: &mut extract,
+            wizard_state: &mut ws,
+            install_screen_state: &mut iss,
+            hash_progress: &hash,
+            extract_progress: &extract_lock,
+            pending_reinstall_id: &mut pending,
+            active_install_modlist_id: &mut active,
+        });
+
+        assert!(stream.is_none(), "stream_download_rx dropped");
+        assert!(skip.is_none(), "archive_skip_rx dropped");
+        assert!(extract.is_none(), "extract_parallel_rx dropped");
+
+        // Senders survive (the workers still exist); a send from the
+        // worker side after the receiver was dropped fails — i.e. the
+        // drain loops will never see another event from this run.
+        assert!(
+            s_dl.send(
+                crate::install_runtime::stream_downloader::StreamDownloadEvent::Finished(
+                    crate::install_runtime::stream_downloader::StreamDownloadResult::default()
+                )
+            )
+            .is_err()
+        );
+        assert!(
+            s_sk.send(
+                crate::install_runtime::archive_skip_async::ArchiveSkipEvent::CandidateEnumerated {
+                    total: 1
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            s_ex.send(
+                crate::install_runtime::extract_parallel::ExtractAssetEvent::AssetDone {
+                    index: 0,
+                    ok: true,
+                    label: "MOD".to_string(),
+                    target_or_err: "C:/x".to_string(),
+                }
+            )
+            .is_err()
+        );
+        drop((s_dl, s_sk, s_ex));
+
+        assert!(!ws.modlist_auto_build_active);
+        assert!(!ws.modlist_auto_build_waiting_for_install);
+        assert!(!ws.step2.pending_saved_log_apply);
+        assert!(!ws.step2.pending_saved_log_update_preview);
+        assert!(!ws.step2.pending_saved_log_download);
+        assert!(!ws.step2.update_selected_download_running);
+        assert!(!ws.step2.update_selected_extract_running);
+
+        assert!(pending.is_none());
+        assert!(active.is_none());
+    }
+
+    #[test]
+    fn reset_install_pipeline_state_clears_screen_state_and_shared_progress_mutexes() {
+        let mut stream: Option<
+            Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>,
+        > = None;
+        let mut skip: Option<
+            Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>,
+        > = None;
+        let mut extract: Option<
+            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
+        > = None;
+        let mut ws = dirty_ws();
+        let mut iss = dirty_iss();
+        let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
+        let extract_lock = Arc::new(std::sync::Mutex::new(Some((5usize, 51usize))));
+        let mut pending: Option<String> = None;
+        let mut active: Option<String> = None;
+
+        reset_install_pipeline_state(InstallPipelineResetSet {
+            stream_download_rx: &mut stream,
+            archive_skip_rx: &mut skip,
+            extract_parallel_rx: &mut extract,
+            wizard_state: &mut ws,
+            install_screen_state: &mut iss,
+            hash_progress: &hash,
+            extract_progress: &extract_lock,
+            pending_reinstall_id: &mut pending,
+            active_install_modlist_id: &mut active,
+        });
+
+        assert!(!iss.pipeline_flags.armed());
+        assert!(!iss.pipeline_flags.archives_staged());
+        assert!(!iss.pipeline_flags.archive_skip_completed());
+        assert!(!iss.pipeline_flags.download_phase_started());
+        assert!(!iss.pipeline_flags.archives_verified());
+        assert!(iss.download_progress.hash_progress.is_none());
+        assert!(iss.download_progress.extract_progress.is_none());
+        assert!(iss.hashed_indices.is_empty());
+        assert_eq!(
+            iss.stage,
+            crate::ui::install::state_install::InstallStage::Paste
+        );
+
+        assert!(hash.lock().unwrap().is_none(), "shared hash mutex blanked");
+        assert!(
+            extract_lock.lock().unwrap().is_none(),
+            "shared extract mutex blanked"
+        );
+    }
+
+    #[test]
+    fn composed_cancel_drains_all_three_event_streams_after_reset() {
+        // Composed-pipeline cancel: kick events into all three
+        // channels, then run the reset. The drained receivers can no
+        // longer be retrieved.
+        let (s_dl, r_dl) = std::sync::mpsc::channel::<
+            crate::install_runtime::stream_downloader::StreamDownloadEvent,
+        >();
+        let (s_sk, r_sk) = std::sync::mpsc::channel::<
+            crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
+        >();
+        let (s_ex, r_ex) = std::sync::mpsc::channel::<
+            crate::install_runtime::extract_parallel::ExtractAssetEvent,
+        >();
+        let _ = s_dl.send(
+            crate::install_runtime::stream_downloader::StreamDownloadEvent::AssetProgress {
+                index: 0,
+                bytes: 100,
+                total: Some(1000),
+            },
+        );
+        let _ = s_sk.send(
+            crate::install_runtime::archive_skip_async::ArchiveSkipEvent::AssetHashStarted {
+                index: 0,
+            },
+        );
+        let _ = s_ex.send(
+            crate::install_runtime::extract_parallel::ExtractAssetEvent::AssetDone {
+                index: 0,
+                ok: true,
+                label: "MOD".to_string(),
+                target_or_err: "C:/x".to_string(),
+            },
+        );
+        let mut stream = Some(r_dl);
+        let mut skip = Some(r_sk);
+        let mut extract = Some(r_ex);
+        let mut ws = WizardState::default();
+        let mut iss = InstallScreenState::default();
+        let hash = Arc::new(std::sync::Mutex::new(None));
+        let extract_lock = Arc::new(std::sync::Mutex::new(None));
+        let mut pending = None;
+        let mut active = None;
+        reset_install_pipeline_state(InstallPipelineResetSet {
+            stream_download_rx: &mut stream,
+            archive_skip_rx: &mut skip,
+            extract_parallel_rx: &mut extract,
+            wizard_state: &mut ws,
+            install_screen_state: &mut iss,
+            hash_progress: &hash,
+            extract_progress: &extract_lock,
+            pending_reinstall_id: &mut pending,
+            active_install_modlist_id: &mut active,
+        });
+        // No further drain events can come out: the receivers are
+        // gone. The senders survive but their queued events are
+        // discarded with the dropped receiver.
+        assert!(stream.is_none());
+        assert!(skip.is_none());
+        assert!(extract.is_none());
+        // Sending after the receiver was dropped now errors —
+        // i.e. the drain loops would never see another event from
+        // this composed pipeline.
+        assert!(
+            s_dl.send(
+                crate::install_runtime::stream_downloader::StreamDownloadEvent::Finished(
+                    crate::install_runtime::stream_downloader::StreamDownloadResult::default()
+                )
+            )
+            .is_err()
+        );
+        let _ = TryRecvError::Empty;
+    }
 }
