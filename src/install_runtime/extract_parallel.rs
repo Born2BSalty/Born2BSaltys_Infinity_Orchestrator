@@ -128,7 +128,14 @@ fn run_parallel_extract(
 ) {
     let mut result = ExtractResult::default();
     if total == 0 {
-        let _ = tx.send(ExtractAssetEvent::Finished(result));
+        if let Err(err) = tx.send(ExtractAssetEvent::Finished(result)) {
+            tracing::warn!(
+                target = "orchestrator",
+                "extract coordinator: Finished send failed on empty-jobs \
+                 path: {err} (receiver dropped — Downloading screen will \
+                 not auto-advance; install runtime hands back to user)"
+            );
+        }
         return;
     }
 
@@ -146,56 +153,19 @@ fn run_parallel_extract(
         let results = Arc::clone(&results);
         let tx = tx.clone();
         handles.push(thread::spawn(move || {
-            loop {
-                let index = next.fetch_add(1, Ordering::SeqCst);
-                if index >= jobs.len() {
-                    break;
-                }
-                let job = &jobs[index];
-                let label = job.label.clone();
-                match extract_one_archive(job) {
-                    Ok(target_root) => {
-                        let target_display = target_root.display().to_string();
-                        // Push the success record (ordered later).
-                        results
-                            .lock()
-                            .expect("extract results mutex")
-                            .push(AssetExtractResult {
-                                index,
-                                label: label.clone(),
-                                outcome: Ok(target_display.clone()),
-                            });
-                        let _ = tx.send(ExtractAssetEvent::AssetDone {
-                            index,
-                            ok: true,
-                            label,
-                            target_or_err: target_display,
-                        });
-                    }
-                    Err(err) => {
-                        // Push the failure record (ordered later).
-                        results
-                            .lock()
-                            .expect("extract results mutex")
-                            .push(AssetExtractResult {
-                                index,
-                                label: label.clone(),
-                                outcome: Err(err.clone()),
-                            });
-                        let _ = tx.send(ExtractAssetEvent::AssetDone {
-                            index,
-                            ok: false,
-                            label,
-                            target_or_err: err,
-                        });
-                    }
-                }
-            }
+            worker_loop(&jobs, &next, &results, &tx)
         }));
     }
 
-    for h in handles {
-        let _ = h.join();
+    for (i, h) in handles.into_iter().enumerate() {
+        if let Err(panic) = h.join() {
+            tracing::warn!(
+                target = "orchestrator",
+                "extract worker {i}: panicked during join: {panic:?} \
+                 (coordinator continues; missing AssetDone events will \
+                 leave the Extract bar short by one or more counts)"
+            );
+        }
     }
 
     // Order results by original job index and format the result vectors.
@@ -211,7 +181,86 @@ fn run_parallel_extract(
     }
     drop(recs);
 
-    let _ = tx.send(ExtractAssetEvent::Finished(result));
+    if let Err(err) = tx.send(ExtractAssetEvent::Finished(result)) {
+        tracing::warn!(
+            target = "orchestrator",
+            "extract coordinator: Finished send failed: {err} (receiver \
+             dropped — Downloading screen will not auto-advance; install \
+             runtime stays armed until user action)"
+        );
+    }
+}
+
+/// One worker's pull loop. Pulls the next job index, runs
+/// `extract_one_archive`, records the outcome into the shared results
+/// vec for the coordinator to order, and emits an `AssetDone` event.
+/// A send failure surfaces via `tracing::warn` so a stalled progress
+/// bar is diagnostic, not silent.
+fn worker_loop(
+    jobs: &Arc<Vec<Step2UpdateExtractJob>>,
+    next: &Arc<AtomicUsize>,
+    results: &Arc<Mutex<Vec<AssetExtractResult>>>,
+    tx: &Sender<ExtractAssetEvent>,
+) {
+    loop {
+        let index = next.fetch_add(1, Ordering::SeqCst);
+        if index >= jobs.len() {
+            break;
+        }
+        let job = &jobs[index];
+        let label = job.label.clone();
+        match extract_one_archive(job) {
+            Ok(target_root) => {
+                let target_display = target_root.display().to_string();
+                results
+                    .lock()
+                    .expect("extract results mutex")
+                    .push(AssetExtractResult {
+                        index,
+                        label: label.clone(),
+                        outcome: Ok(target_display.clone()),
+                    });
+                if let Err(err) = tx.send(ExtractAssetEvent::AssetDone {
+                    index,
+                    ok: true,
+                    label: label.clone(),
+                    target_or_err: target_display,
+                }) {
+                    tracing::warn!(
+                        target = "orchestrator",
+                        "extract worker: AssetDone send failed for \
+                         index {index} ({label}): {err} (receiver \
+                         dropped — progress bar will stall)"
+                    );
+                }
+            }
+            Err(err) => {
+                results
+                    .lock()
+                    .expect("extract results mutex")
+                    .push(AssetExtractResult {
+                        index,
+                        label: label.clone(),
+                        outcome: Err(err.clone()),
+                    });
+                if let Err(send_err) = tx.send(ExtractAssetEvent::AssetDone {
+                    index,
+                    ok: false,
+                    label: label.clone(),
+                    target_or_err: err,
+                }) {
+                    tracing::warn!(
+                        target = "orchestrator",
+                        "extract worker: AssetDone (failure) send \
+                         failed for index {index} ({label}): \
+                         {send_err} (receiver dropped — failed \
+                         archive will not appear in the Downloading \
+                         screen's failed list)"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -335,5 +384,70 @@ mod tests {
         };
         assert_eq!(r.extracted[0], "MyMod -> C:\\Mods\\MyMod");
         assert_eq!(r.failed[0], "BadMod: archive corrupt");
+    }
+
+    /// The Extract bar's total comes from the actual job count
+    /// `build_extract_jobs` produces, not the pre-`archive_skip_async`
+    /// asset count. So when the skip pass kept N assets in the asset
+    /// list but only M < N have archives on disk (e.g. one was
+    /// hash-mismatched, deleted by `verify_downloaded_archives`, and
+    /// dropped from the deterministic path), the bar reads `c / M`,
+    /// reaches `M / M = 100%`, and the coordinator fires Finished.
+    /// A regression here is the "extract stalls at N-1/N forever"
+    /// shape the user reported.
+    #[test]
+    fn extract_progress_total_tracks_actual_jobs_not_asset_count() {
+        use crate::app::app_step2_update_download::archive_file_name;
+        use crate::app::state::Step2UpdateAsset;
+
+        let archive_dir = td();
+        let mods_folder = td();
+
+        let mut state = WizardState::default();
+        state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        state.step1.mods_folder = mods_folder.to_string_lossy().into_owned();
+
+        // Three assets in the list; only two archives present on disk
+        // (the third's bytes are gone, simulating a hash-mismatch
+        // delete or any other reason the deterministic path is empty).
+        let assets: Vec<Step2UpdateAsset> = (0..3)
+            .map(|i| Step2UpdateAsset {
+                game_tab: "BGEE".to_string(),
+                tp_file: format!("MOD{i}/MOD{i}.TP2"),
+                label: format!("MOD{i}"),
+                source_id: "github".to_string(),
+                tag: "v1".to_string(),
+                asset_name: format!("MOD{i}-v1.zip"),
+                asset_url: format!("https://example/MOD{i}-v1.zip"),
+                installed_source_ref: None,
+            })
+            .collect();
+        for asset in assets.iter().take(2) {
+            let name = archive_file_name(asset);
+            std::fs::write(archive_dir.join(&name), b"fake-archive-body").unwrap();
+        }
+        state.step2.update_selected_update_assets = assets;
+
+        let handle = Arc::new(Mutex::new(None));
+        let rx = start_parallel_extract(&mut state, &handle);
+        assert!(
+            rx.is_some(),
+            "two on-disk archives ⇒ at least one job ⇒ Some(rx)"
+        );
+
+        let (completed, total) = {
+            let progress = handle.lock().unwrap();
+            progress.expect("extract_progress was initialised by start")
+        };
+        assert_eq!(completed, 0, "Extract bar starts at 0/total");
+        assert_eq!(
+            total, 2,
+            "Extract bar denominator MUST equal the actual job count \
+             (two archives on disk), NOT the asset-list count (three) — \
+             a stale denominator would freeze the bar at N-1 / N forever"
+        );
+
+        let _ = std::fs::remove_dir_all(&archive_dir);
+        let _ = std::fs::remove_dir_all(&mods_folder);
     }
 }

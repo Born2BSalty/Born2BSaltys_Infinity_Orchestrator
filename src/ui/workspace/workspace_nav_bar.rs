@@ -245,6 +245,7 @@ fn paint_glyph_button(
                 second: paint.label,
                 gap: paint.gap,
                 first_galley: paint.glyph_galley,
+                leading_is_glyph: true,
             },
             visuals,
         );
@@ -258,6 +259,7 @@ fn paint_glyph_button(
                 second: paint.glyph,
                 gap: paint.gap,
                 first_galley: paint.prose_galley,
+                leading_is_glyph: false,
             },
             visuals,
         );
@@ -271,6 +273,24 @@ struct ButtonTextPaint<'a> {
     second: &'a str,
     gap: f32,
     first_galley: &'a std::sync::Arc<egui::Galley>,
+    leading_is_glyph: bool,
+}
+
+/// Picks the `(first_font, second_font)` pair for the two text pieces in
+/// a glyph+prose button. `leading_is_glyph == true` means the first piece
+/// is the icon glyph (the rendering font must be the `FiraCode` Nerd one
+/// that carries the arrow PUA range); the second piece is the prose
+/// label. `false` flips it. The Latin prose font carries no arrow glyphs,
+/// so a swap drops the arrow to the missing-glyph `?` fallback.
+fn pick_button_fonts(
+    visuals: &GlyphButtonVisuals,
+    leading_is_glyph: bool,
+) -> (egui::FontId, egui::FontId) {
+    if leading_is_glyph {
+        (visuals.glyph_font.clone(), visuals.prose_font.clone())
+    } else {
+        (visuals.prose_font.clone(), visuals.glyph_font.clone())
+    }
 }
 
 fn paint_button_text(
@@ -278,16 +298,7 @@ fn paint_button_text(
     paint: &ButtonTextPaint<'_>,
     visuals: &GlyphButtonVisuals,
 ) {
-    let first_font = if paint.first.len() == 1 {
-        visuals.glyph_font.clone()
-    } else {
-        visuals.prose_font.clone()
-    };
-    let second_font = if paint.second.len() == 1 {
-        visuals.glyph_font.clone()
-    } else {
-        visuals.prose_font.clone()
-    };
+    let (first_font, second_font) = pick_button_fonts(visuals, paint.leading_is_glyph);
     painter.text(
         egui::pos2(paint.start_x, paint.cy),
         egui::Align2::LEFT_CENTER,
@@ -332,5 +343,54 @@ fn button_alpha(c: egui::Color32, disabled: bool) -> egui::Color32 {
         redesign_with_alpha(c, 1, 2)
     } else {
         c
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GlyphButtonVisuals, pick_button_fonts};
+    use crate::ui::shared::redesign_tokens::ThemePalette;
+    use eframe::egui;
+
+    fn visuals() -> GlyphButtonVisuals {
+        GlyphButtonVisuals::new(ThemePalette::Dark, false, false)
+    }
+
+    fn family_name(font: &egui::FontId) -> String {
+        match &font.family {
+            egui::FontFamily::Name(name) => name.as_ref().to_string(),
+            egui::FontFamily::Proportional => "proportional".to_string(),
+            egui::FontFamily::Monospace => "monospace".to_string(),
+        }
+    }
+
+    #[test]
+    fn pick_button_fonts_leading_glyph_routes_arrow_to_firacode_nerd() {
+        let v = visuals();
+        let (first, second) = pick_button_fonts(&v, true);
+        assert_eq!(
+            family_name(&first),
+            "firacode_nerd",
+            "Previous-style button: leading piece is the arrow glyph and \
+             MUST use the FiraCode Nerd family that carries the arrow PUA \
+             range; got `{}`",
+            family_name(&first)
+        );
+        assert_eq!(family_name(&second), "poppins_medium");
+    }
+
+    #[test]
+    fn pick_button_fonts_trailing_glyph_routes_arrow_to_firacode_nerd() {
+        let v = visuals();
+        let (first, second) = pick_button_fonts(&v, false);
+        assert_eq!(family_name(&first), "poppins_medium");
+        assert_eq!(
+            family_name(&second),
+            "firacode_nerd",
+            "Next-style button: trailing piece is the arrow glyph and MUST \
+             use FiraCode Nerd — Poppins is a Latin subset that drops the \
+             arrow to the missing-glyph `?` fallback; got `{}`",
+            family_name(&second)
+        );
     }
 }

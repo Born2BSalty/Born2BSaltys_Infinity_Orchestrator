@@ -190,10 +190,14 @@ pub struct IngestSummary {
 
 /// Place `src` at `dst` as a hardlink when possible; fall back to a full
 /// byte-copy only when hardlinking is not available (cross-volume,
-/// non-NTFS, etc.). Two filesystem names share one set of bytes on the
-/// hardlink path, so re-staging a known archive into BIO's deterministic
-/// extract path costs zero extra disk for the common single-volume case.
-/// Mirrors `archive_skip::link_or_copy` (the staging-time companion).
+/// non-NTFS, antivirus, permissions, etc.). Two filesystem names share
+/// one set of bytes on the hardlink path, so re-staging a known archive
+/// into BIO's deterministic extract path costs zero extra disk for the
+/// common single-volume case.
+///
+/// A hardlink failure surfaces via `tracing::warn` before falling back so
+/// any future skew on a different filesystem / environment is diagnostic,
+/// not silent.
 fn link_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent)?;
@@ -203,7 +207,16 @@ fn link_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
     match std::fs::hard_link(src, dst) {
         Ok(()) => Ok(()),
-        Err(_) => std::fs::copy(src, dst).map(|_| ()),
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "hardlink {} -> {} failed: {err}; falling back to byte-copy \
+                 (no dedupe — disk usage doubles)",
+                src.display(),
+                dst.display()
+            );
+            std::fs::copy(src, dst).map(|_| ())
+        }
     }
 }
 

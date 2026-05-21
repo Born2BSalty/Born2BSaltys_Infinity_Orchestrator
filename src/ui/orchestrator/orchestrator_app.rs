@@ -1032,8 +1032,17 @@ impl OrchestratorApp {
     }
 
     fn bio_settings_snapshot(&self) -> AppSettings {
-        let mut step1: crate::settings::model::Step1Settings =
-            self.wizard_state.step1.clone().into();
+        // Clone the live Step1State and strip the per-install fields
+        // (Mods folder, weidu_component_logs, WeiDU-log source folders,
+        // game-clone dirs) so they never land in `bio_settings.json`.
+        // The live `wizard_state.step1` is left intact — the in-flight
+        // install still resolves the per-install dirs correctly.
+        let mut step1_clone = self.wizard_state.step1.clone();
+        crate::install_runtime::settings_sanitizer::sanitize_step1_for_settings_persistence(
+            &mut step1_clone,
+            &self.bio_settings_last_saved.step1,
+        );
+        let mut step1: crate::settings::model::Step1Settings = step1_clone.into();
         step1
             .game_install
             .clone_from(&self.bio_settings_last_saved.step1.game_install);
