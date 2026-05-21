@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use bio::app::state::WizardState;
+use bio::app::terminal::EmbeddedTerminal;
 use bio::registry::model::ModlistEntry;
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{
@@ -50,6 +51,24 @@ fn render_workspace_step5_pre_install_matrix() {
     );
 }
 
+#[test]
+fn render_workspace_step5_long_console_line_matrix() {
+    let out_dir = snapshot_out_dir();
+    std::fs::create_dir_all(&out_dir).expect("create target/ui-snapshots dir");
+
+    let mut written = Vec::new();
+
+    for cell in &[Cell { w: 1045, h: 735 }, Cell { w: 960, h: 680 }] {
+        written.push(render_long_console_cell(&out_dir, cell));
+    }
+
+    assert_written(
+        &written,
+        2,
+        "expected 2 long-console PNGs at the narrow Phase-7 widths",
+    );
+}
+
 fn render_cell(out_dir: &Path, cell: &Cell) -> PathBuf {
     let mut frame = 0;
     let mut harness = Harness::builder()
@@ -86,6 +105,42 @@ fn render_cell(out_dir: &Path, cell: &Cell) -> PathBuf {
     path
 }
 
+fn render_long_console_cell(out_dir: &Path, cell: &Cell) -> PathBuf {
+    let mut frame = 0;
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(f32::from(cell.w), f32::from(cell.h)))
+        .with_pixels_per_point(1.0)
+        .build(move |ctx| {
+            if install_fonts_frame(ctx, &mut frame) {
+                return;
+            }
+
+            render_long_console_scaffold(ctx);
+        });
+
+    harness.run_steps(8);
+
+    let img = harness
+        .render()
+        .expect("egui_kittest wgpu render() must produce an image");
+    let path = out_dir.join(format!(
+        "workspace_step5_long_console__{}x{}.png",
+        cell.w, cell.h
+    ));
+    img.save(&path)
+        .unwrap_or_else(|e| panic!("write PNG {}: {e}", path.display()));
+
+    let abs = path.canonicalize().unwrap_or_else(|_| path.clone());
+    println!(
+        "SNAPSHOT  {}x{}  long-console  -> {}",
+        cell.w,
+        cell.h,
+        abs.display()
+    );
+
+    path
+}
+
 fn install_fonts_frame(ctx: &egui::Context, frame: &mut u64) -> bool {
     if *frame == 0 {
         install_redesign_fonts(ctx);
@@ -104,6 +159,12 @@ fn render_scaffold(ctx: &egui::Context) {
     render_titlebar(ctx);
     render_statusbar(ctx);
     render_body(ctx);
+}
+
+fn render_long_console_scaffold(ctx: &egui::Context) {
+    render_titlebar(ctx);
+    render_statusbar(ctx);
+    render_long_console_body(ctx);
 }
 
 fn render_titlebar(ctx: &egui::Context) {
@@ -133,6 +194,15 @@ fn render_body(ctx: &egui::Context) {
         });
 }
 
+fn render_long_console_body(ctx: &egui::Context) {
+    egui::CentralPanel::default()
+        .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(0x0B, 0x11, 0x16)))
+        .show(ctx, |ui| {
+            render_rail(ui);
+            render_long_console_page(ui);
+        });
+}
+
 fn render_rail(ui: &mut egui::Ui) {
     egui::SidePanel::left("scaffold_rail")
         .exact_width(REDESIGN_NAV_WIDTH_PX)
@@ -155,6 +225,16 @@ fn render_page(ui: &mut egui::Ui) {
         });
 }
 
+fn render_long_console_page(ui: &mut egui::Ui) {
+    egui::CentralPanel::default()
+        .frame(egui::Frame::NONE.inner_margin(CENTRAL_MARGIN))
+        .show_inside(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, render_step5_long_console);
+        });
+}
+
 fn render_step5(ui: &mut egui::Ui) {
     let mut wizard_state = WizardState::default();
     let mut console_view = Step5ConsoleViewState::default();
@@ -169,6 +249,34 @@ fn render_step5(ui: &mut egui::Ui) {
         &mut wizard_state,
         &mut console_view,
         None,
+        None,
+        false,
+        &exe_fingerprint,
+    );
+}
+
+fn render_step5_long_console(ui: &mut egui::Ui) {
+    let mut wizard_state = WizardState::default();
+    wizard_state.step5.install_running = true;
+    wizard_state.step5.last_status_text = "Installing".to_string();
+    let mut console_view = Step5ConsoleViewState::default();
+    let exe_fingerprint = String::new();
+    let entry = ModlistEntry::default();
+    let palette = ThemePalette::Dark;
+    let mut terminal = EmbeddedTerminal::new().expect("embedded terminal");
+
+    terminal.append_marker(&format!("LONG_UNBROKEN_{}", "X".repeat(900)));
+    terminal.append_marker(
+        "C:\\Games\\Baldur's Gate Enhanced Edition\\mods\\very-long-mod-folder-name\\setup-very-long-mod-folder-name.tp2 #1234 component with a long trailing status line",
+    );
+
+    success_banner::render(ui, palette, &wizard_state, &entry);
+    let _ = post_install_actions::render(ui, palette, &wizard_state, &entry);
+    let _ = page_step5::render(
+        ui,
+        &mut wizard_state,
+        &mut console_view,
+        Some(&mut terminal),
         None,
         false,
         &exe_fingerprint,

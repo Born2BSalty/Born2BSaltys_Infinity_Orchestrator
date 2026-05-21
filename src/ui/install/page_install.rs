@@ -70,10 +70,15 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
         InstallStage::Downloading => {
             match stage_downloading::render_live(ui, orchestrator, DownloadScreenCopy::INSTALL) {
                 DownloadingOutcome::Cancel => {
-                    orchestrator.install_screen_state.download_progress =
-                        crate::ui::install::stage_downloading::DownloadProgress::default();
-                    orchestrator.install_screen_state.pipeline_flags.reset();
-                    request = Some(InstallRequest::Stage(InstallStage::Preview));
+                    // Cancel must tear the whole pipeline (channels +
+                    // BIO auto-build latches + saved-log latches +
+                    // shared hash/extract snapshots) back to the paste
+                    // stage — without dropping the receivers the worker
+                    // chain keeps producing events into a dead grid and
+                    // eventually fires Step-5's auto-start, locking the
+                    // rail behind an install the user already cancelled.
+                    orchestrator.reset_install_screen_to_paste();
+                    request = Some(InstallRequest::Stage(InstallStage::Paste));
                 }
                 DownloadingOutcome::Advance => {
                     request = Some(InstallRequest::Stage(InstallStage::InstallingStub));

@@ -10,6 +10,11 @@ use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 
 pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorApp) {
+    // Reinstall forces Clear ON without showing the destination-not-empty
+    // warning — the reinstall confirm modal already carries the
+    // destructive consent. The destination_choice is set explicitly
+    // here so the shared arm path's prepare_destination call empties
+    // the destination before the pipeline arms.
     let st = &mut orchestrator.install_screen_state;
 
     st.destination.clone_from(&modlist.destination_folder);

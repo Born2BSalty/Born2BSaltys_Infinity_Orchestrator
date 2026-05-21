@@ -13,7 +13,8 @@ pub enum InstallStage {
     InstallingStub,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DestChoice {
     Clear,
     Backup,
@@ -209,9 +210,43 @@ pub struct InstallScreenState {
     pub skipped_mods: Vec<SkippedMod>,
     pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
     pub skip_indices: std::collections::HashSet<usize>,
+    /// Asset indices the async hash pass has already classified
+    /// (`AssetHashed` arrived). Assets present in the asset list but
+    /// absent here are still in-flight (the `Hashing` row state); any
+    /// other status only applies once the index has been recorded. Reset
+    /// to empty by [`Self::clear_preview`] so a re-armed install starts
+    /// from a clean Hashing-everywhere classification.
+    pub hashed_indices: std::collections::HashSet<usize>,
 }
 
 impl InstallScreenState {
+    #[must_use]
+    pub fn has_route_context(&self) -> bool {
+        self.stage != InstallStage::Paste
+            || !self.destination.trim().is_empty()
+            || !self.import_code.trim().is_empty()
+            || self.parsed_preview.is_some()
+            || self.preview_parse_error.is_some()
+            || self.preview_cached
+            || !self.download_progress.rows.is_empty()
+            || self.pipeline_flags.armed()
+            || self.pipeline_flags.archives_staged()
+            || self.pipeline_flags.archives_ingested()
+            || self.pipeline_flags.archives_verified()
+            || self.pipeline_flags.download_phase_started()
+            || self.pipeline_flags.archive_skip_completed()
+            || self.pipeline_arm_error.is_some()
+            || !self.expected_archive_meta.is_empty()
+            || !self.pre_skip_assets.is_empty()
+            || !self.skipped_mods.is_empty()
+            || !self.expected_archive_sizes.is_empty()
+            || !self.skip_indices.is_empty()
+    }
+
+    pub fn reset_to_paste(&mut self) {
+        *self = Self::default();
+    }
+
     #[must_use]
     pub fn is_partial(&self) -> bool {
         self.destination_choice == Some(DestChoice::Continue)
@@ -230,6 +265,7 @@ impl InstallScreenState {
         self.skipped_mods = Vec::new();
         self.expected_archive_sizes = std::collections::BTreeMap::new();
         self.skip_indices = std::collections::HashSet::new();
+        self.hashed_indices = std::collections::HashSet::new();
     }
 }
 
@@ -320,6 +356,8 @@ mod tests {
         st.pipeline_flags.set_archives_ingested(true);
         st.pipeline_flags.set_download_phase_started(true);
         st.pipeline_flags.set_archive_skip_completed(true);
+        st.hashed_indices.insert(0);
+        st.hashed_indices.insert(7);
         st.clear_preview();
         assert!(st.parsed_preview.is_none());
         assert!(st.preview_parse_error.is_none());
@@ -339,5 +377,44 @@ mod tests {
             !st.pipeline_flags.archive_skip_completed(),
             "a re-entry must re-run the async skip pass"
         );
+        assert!(
+            st.hashed_indices.is_empty(),
+            "a re-entry must start with no asset hash decisions carried in"
+        );
+    }
+
+    #[test]
+    fn clear_preview_resets_per_install_hash_and_extract_snapshots() {
+        let mut st = InstallScreenState::default();
+        st.download_progress.hash_progress = Some((51, 51));
+        st.download_progress.extract_progress = Some((51, 51));
+        st.clear_preview();
+        assert!(
+            st.download_progress.hash_progress.is_none(),
+            "a fresh install must not inherit the previous install's hash 51/51"
+        );
+        assert!(
+            st.download_progress.extract_progress.is_none(),
+            "a fresh install must not flash the previous install's extract 51/51"
+        );
+    }
+
+    #[test]
+    fn route_context_tracks_non_default_install_flow_state() {
+        let mut st = InstallScreenState::default();
+        assert!(!st.has_route_context());
+
+        st.stage = InstallStage::InstallingStub;
+        assert!(st.has_route_context());
+
+        st.reset_to_paste();
+        assert!(!st.has_route_context());
+
+        st.import_code = "BIO:example".to_string();
+        assert!(st.has_route_context());
+        st.reset_to_paste();
+        assert!(st.import_code.is_empty());
+        assert_eq!(st.stage, InstallStage::Paste);
+        assert!(!st.has_route_context());
     }
 }

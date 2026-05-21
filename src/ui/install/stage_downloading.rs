@@ -441,30 +441,36 @@ pub struct DownloadProgress {
 }
 
 impl DownloadProgress {
-    /// **live feed.** Project BIO's
-    /// auto-build / update-download / extract state onto the §4.3 per-mod
-    /// grid. One row per resolved download asset
-    /// (`step2.update_selected_update_assets` — the mods the imported
-    /// share code resolved to a concrete archive), its status derived from
-    /// the same BIO progress signals the legacy update-selected popup
-    /// reads:
-    /// Status classification by BIO source vector membership:
-    /// downloaded **and** extracted ⇒ `Staged`
-    /// downloaded only ⇒ `Extracting`
-    /// `download_running` ⇒ `Downloading` (per-mod bar from `prior_bytes`)
-    /// otherwise ⇒ `Queued`
-    /// `prior_bytes` carries the per-mod byte map from the previous frame
-    /// so a `Downloading` row shows its real `bytes / total` even though
-    /// the row vector is reconstructed each frame. `prior_skipped` and
-    /// `prior_expected` carry the already-present rows + size denominators
-    /// across rebuilds. Pass empty maps for the chassis / first-frame
-    /// path.
+    /// Project BIO's auto-build / update-download / extract state onto
+    /// the per-mod grid. One row per resolved download asset.
+    ///
+    /// Status classification by asset index `i`:
+    /// - already-present-by-hash (skipped) ⇒ `Skipped`
+    /// - extracted ⇒ `Staged`
+    /// - downloaded only ⇒ `Extracting`
+    /// - `download_running` ⇒ `Downloading`
+    /// - asset NOT in `hashed_indices` while the async skip pass is in
+    ///   flight (or the pass has not finished) ⇒ `Hashing`
+    /// - asset IN `hashed_indices` (hash decision recorded) and not
+    ///   downloaded/extracted ⇒ `Queued`
+    ///
+    /// `prior_bytes` carries the per-mod byte map across rebuilds so a
+    /// `Downloading` row shows its real `bytes / total` even though the
+    /// row vector is reconstructed every frame. `prior_skipped` and
+    /// `prior_expected` carry the already-present rows + size
+    /// denominators across rebuilds. `hashed_indices` is the asset-index
+    /// set the async skip pass has classified; an asset present in the
+    /// asset list but absent here is still in-flight (Hashing). Pass
+    /// empty maps for the chassis / first-frame path; `hashed_indices`
+    /// may be `None` to keep the chassis "every row Queued" behavior the
+    /// fork-download placeholder relies on.
     #[must_use]
     pub fn from_wizard_state_full(
         state: &WizardState,
         prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
         prior_skipped: &[SkippedMod],
         prior_expected: &std::collections::BTreeMap<usize, u64>,
+        hashed_indices: Option<&std::collections::HashSet<usize>>,
     ) -> Self {
         let s2 = &state.step2;
 
@@ -495,22 +501,20 @@ impl DownloadProgress {
                     if extracted {
                         ModDownloadStatus::Staged
                     } else if downloaded {
-                        // Downloaded; extract pending or running.
                         ModDownloadStatus::Extracting
                     } else if s2.update_selected_download_running {
-                        // #1 / the per-mod bar uses the REAL
-                        // byte fraction from `per_byte` (merged below
-                        // from the persistent map) over the whole 0→1
-                        // bar.
                         ModDownloadStatus::Downloading
+                    } else if hashed_indices.is_some_and(|h| !h.contains(&i)) {
+                        // The hash pass is alive (caller supplied the
+                        // set) but this asset's decision has not yet
+                        // arrived; surface the in-flight Hashing row
+                        // explicitly so the user never sees a "no mods
+                        // queued" silence while hash 51/51 climbs.
+                        ModDownloadStatus::Hashing
                     } else {
                         ModDownloadStatus::Queued
                     }
                 };
-                // expected_size: prefer the prior_expected map (the
-                // share-code-baked size); fall back to the
-                // skipped-mod's recorded size (the skip pass
-                // populated it from the same share-code data).
                 let expected_size = prior_expected
                     .get(&i)
                     .copied()
@@ -519,10 +523,6 @@ impl DownloadProgress {
                     name: a.label.clone(),
                     source: a.source_id.clone(),
                     status,
-                    // Carry the live byte readout for THIS asset index
-                    // through the per-frame rebuild (#1 / ).
-                    // Indices are stable under Fix 1e (asset list is
-                    // never mutated).
                     per_byte: prior_bytes.get(&i).copied(),
                     expected_size,
                 }
@@ -554,20 +554,26 @@ impl DownloadProgress {
         }
     }
 
-    /// Back-compat: rows + the byte map only (no skipped / expected map).
-    /// Kept for the existing live call site path; prefer
+    /// Back-compat: rows + the byte map only (no skipped / expected map /
+    /// hash-pass set). Kept for the existing live call site path; prefer
     /// [`Self::from_wizard_state_full`].
     #[must_use]
     pub fn from_wizard_state_with_bytes(
         state: &WizardState,
         prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
     ) -> Self {
-        Self::from_wizard_state_full(state, prior_bytes, &[], &std::collections::BTreeMap::new())
+        Self::from_wizard_state_full(
+            state,
+            prior_bytes,
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
     }
 
-    /// Back-compat / chassis convenience: the projection with no live byte
-    /// map / skipped / expected map (phase-fraction fallback). Used by the
-    /// render gate + the not-yet-wired fork-download path.
+    /// Chassis / fork-download projection with no live byte map, skipped
+    /// set, expected map, or hash-pass set (phase-fraction fallback). Used
+    /// by the render gate + the not-yet-wired fork-download path.
     #[must_use]
     pub fn from_wizard_state(state: &WizardState) -> Self {
         Self::from_wizard_state_full(
@@ -575,6 +581,7 @@ impl DownloadProgress {
             &std::collections::BTreeMap::new(),
             &[],
             &std::collections::BTreeMap::new(),
+            None,
         )
     }
 
@@ -1017,15 +1024,17 @@ pub fn render_live(
     DownloadingOutcome::Stay
 }
 
-struct LivePipelineInputs {
-    destination: String,
-    game: crate::registry::model::Game,
-    workflow: crate::install_runtime::flag_policies::InstallWorkflow,
-    code: String,
+pub(crate) struct LivePipelineInputs {
+    pub(crate) destination: String,
+    pub(crate) game: crate::registry::model::Game,
+    pub(crate) workflow: crate::install_runtime::flag_policies::InstallWorkflow,
+    pub(crate) code: String,
 }
 
 impl LivePipelineInputs {
-    fn from(orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp) -> Self {
+    pub(crate) fn from(
+        orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+    ) -> Self {
         let state = &orchestrator.install_screen_state;
         let destination = state.destination.trim().to_string();
         let game = state
@@ -1051,17 +1060,35 @@ impl LivePipelineInputs {
 /// Import the share code and arm the auto-build pipeline once per session.
 /// On failure, records the error for in-chrome display and keeps the latch
 /// set (no per-frame retry).
-fn arm_pipeline_once(
+pub(crate) fn arm_pipeline_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     inputs: &LivePipelineInputs,
 ) {
     use crate::install_runtime::auto_build_driver;
+    use crate::install_runtime::destination_prep;
 
     if !orchestrator.install_screen_state.pipeline_flags.armed() {
         orchestrator
             .install_screen_state
             .pipeline_flags
             .set_armed(true);
+
+        let dest_path = std::path::PathBuf::from(inputs.destination.trim());
+        if let Err(err) = destination_prep::prepare_destination(
+            &dest_path,
+            orchestrator.install_screen_state.destination_choice,
+        ) {
+            let msg = format!("destination prep failed: {err}");
+            orchestrator.install_screen_state.pipeline_arm_error = Some(msg.clone());
+            orchestrator.wizard_state.step2.scan_status =
+                format!("Auto Build could not start: {msg}");
+            tracing::warn!(
+                target = "orchestrator",
+                "destination prep failed: {err} (Downloading stays navigable; \
+                 surfaced on-screen)"
+            );
+            return;
+        }
 
         match auto_build_driver::prepare_install_dirs_and_maybe_import(
             &mut orchestrator.wizard_state,
@@ -1102,7 +1129,7 @@ fn arm_pipeline_once(
 
 /// Place store-known archives at BIO's extract path and spawn the async
 /// checksum-then-skip pool. One-shot per arm; reset on Cancel→Preview.
-fn stage_and_kick_archive_skip_once(
+pub(crate) fn stage_and_kick_archive_skip_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     inputs: &LivePipelineInputs,
 ) {
@@ -1189,7 +1216,7 @@ fn stage_and_kick_archive_skip_once(
 
 /// Spawn the parallel streaming downloader once the skip pass has decided
 /// which archives are already present.
-fn kick_streaming_downloader_once(
+pub(crate) fn kick_streaming_downloader_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) {
     use crate::install_runtime::auto_build_driver;
@@ -1240,7 +1267,7 @@ fn kick_streaming_downloader_once(
 /// Hash each fetched archive against the share-code expected hashes once
 /// the streamer is done; delete + record-failed any mismatch so BIO's
 /// extract never sees a corrupt download.
-fn verify_downloaded_archives_once(
+pub(crate) fn verify_downloaded_archives_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     destination: &str,
 ) {
@@ -1298,7 +1325,7 @@ fn verify_downloaded_archives_once(
 
 /// Hash + content-address the resolved archive set exactly once after the
 /// streamer finishes. Repeated per-frame hashing would freeze the UI.
-fn ingest_downloaded_archives_once(
+pub(crate) fn ingest_downloaded_archives_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     destination: &str,
 ) {
@@ -1340,7 +1367,7 @@ fn ingest_downloaded_archives_once(
 /// map / skipped / expected-size maps, snapshot the live extract + hash
 /// progress, then hold the prior frame's grid through the extract→install
 /// seam to avoid a 0/0 flash.
-fn build_and_hold_progress(
+pub(crate) fn build_and_hold_progress(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) -> DownloadProgress {
     let prior_bytes = orchestrator
@@ -1353,11 +1380,29 @@ fn build_and_hold_progress(
         .install_screen_state
         .expected_archive_sizes
         .clone();
+    // While the async skip pass is alive (the pipeline armed, the
+    // pass has not signalled `Finished`), every asset whose decision has
+    // not yet landed in `hashed_indices` is in-flight. Once the pass
+    // finishes — `archive_skip_completed == true` — every remaining
+    // asset's decision is recorded (skipped or kept), so we pass `None`
+    // to keep BIO's classical Queued/Downloading/Extracting/Staged
+    // grouping for the download + extract phases.
+    let hash_pass_active = orchestrator.install_screen_state.pipeline_flags.armed()
+        && !orchestrator
+            .install_screen_state
+            .pipeline_flags
+            .archive_skip_completed();
+    let hashed: Option<&std::collections::HashSet<usize>> = if hash_pass_active {
+        Some(&orchestrator.install_screen_state.hashed_indices)
+    } else {
+        None
+    };
     let mut progress = DownloadProgress::from_wizard_state_full(
         &orchestrator.wizard_state,
         &prior_bytes,
         &prior_skipped,
         &prior_expected,
+        hashed,
     );
     progress.extract_progress = orchestrator.extract_progress.lock().ok().and_then(|g| *g);
     progress.hash_progress = orchestrator.hash_progress.lock().ok().and_then(|g| *g);
@@ -1397,7 +1442,7 @@ fn build_and_hold_progress(
 /// empty-grid-hidden `step2.scan_status`, which made the screen look like a
 /// permanent inert mystery). `None` for the chassis / happy path → the
 /// chrome is bit-identical to before.
-fn render_chrome(
+pub(crate) fn render_chrome(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     copy: DownloadScreenCopy,
@@ -2950,6 +2995,7 @@ mod tests {
             &p.asset_bytes,
             &[skipped("CACHED", Some(4096))],
             &expected,
+            None,
         );
         assert_eq!(
             p2.rows[0].per_byte,
@@ -3010,8 +3056,13 @@ mod tests {
         st.step2.update_selected_download_running = true;
 
         let sk = vec![skipped("ALREADY_HERE", Some(7777))];
-        let p =
-            DownloadProgress::from_wizard_state_full(&st, &BTreeMap::new(), &sk, &BTreeMap::new());
+        let p = DownloadProgress::from_wizard_state_full(
+            &st,
+            &BTreeMap::new(),
+            &sk,
+            &BTreeMap::new(),
+            None,
+        );
         // 4 rows (skipped name "ALREADY_HERE" doesn't match any
         // asset label, so no skipped-status row is added — the
         // `sk` is dropped, per the v3 contract: skipped mods are
@@ -3041,6 +3092,97 @@ mod tests {
         // v3's contract is one combined grid + only label-matched
         // skipped rows.)
         assert_eq!(p.total(), 4, "4 rows (no phantom skipped row)");
+    }
+
+    #[test]
+    fn hashing_classification_drives_hashing_status_while_hash_pass_alive() {
+        let mut st = WizardState::default();
+        let asset = |label: &str| crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: format!("{label}/{label}.TP2"),
+            label: label.to_string(),
+            source_id: "github".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{label}.zip"),
+            asset_url: format!("https://x/{label}.zip"),
+            installed_source_ref: None,
+        };
+        st.step2.update_selected_update_assets =
+            vec![asset("A"), asset("B"), asset("C"), asset("D")];
+        // No download is running yet (we are inside the hash pass).
+        st.step2.update_selected_download_running = false;
+
+        let mut hashed = std::collections::HashSet::new();
+        // Indices 0 + 2 have been classified; 1 + 3 are still in flight.
+        hashed.insert(0usize);
+        hashed.insert(2usize);
+        let p = DownloadProgress::from_wizard_state_full(
+            &st,
+            &BTreeMap::new(),
+            &[],
+            &BTreeMap::new(),
+            Some(&hashed),
+        );
+        // Rows are sorted by status priority: Hashing (priority 0) on
+        // top, Queued (priority 2) below.
+        assert_eq!(p.rows.len(), 4);
+        let hashing_labels: Vec<&str> = p
+            .rows
+            .iter()
+            .filter(|r| r.status == ModDownloadStatus::Hashing)
+            .map(|r| r.name.as_str())
+            .collect();
+        let queued_labels: Vec<&str> = p
+            .rows
+            .iter()
+            .filter(|r| r.status == ModDownloadStatus::Queued)
+            .map(|r| r.name.as_str())
+            .collect();
+        assert_eq!(
+            hashing_labels,
+            vec!["B", "D"],
+            "indices NOT in hashed_indices are in-flight Hashing"
+        );
+        assert_eq!(
+            queued_labels,
+            vec!["A", "C"],
+            "indices in hashed_indices that are not yet downloaded show as Queued"
+        );
+        // While ANY row is Hashing, `phase()` is `Hashing` (matches
+        // the `render_overall_progress` phase indicator's behavior).
+        assert_eq!(p.phase(), InstallPhase::Hashing);
+    }
+
+    #[test]
+    fn hashing_classification_off_after_pass_completes_no_more_hashing_rows() {
+        let mut st = WizardState::default();
+        let asset = |label: &str| crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: format!("{label}/{label}.TP2"),
+            label: label.to_string(),
+            source_id: "github".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{label}.zip"),
+            asset_url: format!("https://x/{label}.zip"),
+            installed_source_ref: None,
+        };
+        st.step2.update_selected_update_assets = vec![asset("A"), asset("B")];
+        st.step2.update_selected_download_running = false;
+        // After the pass: caller passes `None`. Every row falls back
+        // to Queued (no Hashing rows in the grid).
+        let p = DownloadProgress::from_wizard_state_full(
+            &st,
+            &BTreeMap::new(),
+            &[],
+            &BTreeMap::new(),
+            None,
+        );
+        assert!(
+            p.rows
+                .iter()
+                .all(|r| r.status != ModDownloadStatus::Hashing),
+            "after the hash pass finishes the classifier must not produce Hashing rows"
+        );
     }
 
     // ─────────────────────── copy / outcome ───────────────────────

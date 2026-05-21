@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ui::install::state_install::DestChoice;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ComponentRef {
@@ -43,6 +45,16 @@ pub struct ModlistWorkspaceState {
     pub last_share_code: Option<String>,
 
     pub dev_scanned_mods_folder: Option<String>,
+
+    /// The user's Clear / Backup choice captured on Create / Fork
+    /// import; consumed when the workspace's first install reaches its
+    /// arm point so the destination prep runs once and is cleared.
+    /// `None` ⇒ no prep deferred (the destination was either empty,
+    /// already prepped on the Install-paste / Reinstall path, or the
+    /// user picked Continue). Skipped on serialize when None so the
+    /// emitted JSON is byte-identical to a pre-field workspace.json.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_destination_prep: Option<DestChoice>,
 }
 
 impl ModlistWorkspaceState {
@@ -56,6 +68,7 @@ impl ModlistWorkspaceState {
             && self.prompt_overrides.is_empty()
             && self.last_share_code.is_none()
             && self.dev_scanned_mods_folder.is_none()
+            && self.pending_destination_prep.is_none()
     }
 }
 
@@ -91,6 +104,46 @@ mod tests {
         let raw = r"{}";
         let w: ModlistWorkspaceState = serde_json::from_str(raw).expect("parse");
         assert!(w.is_empty());
+    }
+
+    #[test]
+    fn pending_destination_prep_round_trips_and_defaults() {
+        let legacy: ModlistWorkspaceState =
+            serde_json::from_str(r#"{"order_bgee":[]}"#).expect("parse legacy");
+        assert_eq!(legacy.pending_destination_prep, None);
+        assert!(legacy.is_empty());
+
+        let w = ModlistWorkspaceState {
+            pending_destination_prep: Some(DestChoice::Clear),
+            ..Default::default()
+        };
+        assert!(!w.is_empty(), "a deferred destination prep is not 'empty'");
+        let s = serde_json::to_string(&w).expect("serialize");
+        let w2: ModlistWorkspaceState = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(w2.pending_destination_prep, Some(DestChoice::Clear));
+        assert_eq!(w, w2);
+
+        for choice in [DestChoice::Clear, DestChoice::Backup, DestChoice::Continue] {
+            let with = ModlistWorkspaceState {
+                pending_destination_prep: Some(choice),
+                ..Default::default()
+            };
+            let s = serde_json::to_string(&with).unwrap();
+            let r: ModlistWorkspaceState = serde_json::from_str(&s).unwrap();
+            assert_eq!(r.pending_destination_prep, Some(choice));
+        }
+    }
+
+    #[test]
+    fn none_pending_destination_prep_is_omitted_on_serialize() {
+        let default_ws = ModlistWorkspaceState::default();
+        let s = serde_json::to_string(&default_ws).expect("serialize");
+        assert!(
+            !s.contains("pending_destination_prep"),
+            "the new field MUST be omitted on serialize when None so the \
+             emitted JSON is byte-identical to a pre-field workspace.json; \
+             got: {s}"
+        );
     }
 
     #[test]
