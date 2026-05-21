@@ -56,10 +56,6 @@ fn render_choose_with_warning(out_dir: &Path, w: u16, h: u16) -> PathBuf {
     state.modlist_name = "My modlist".to_string();
     state.destination_choice = Some(DestChoice::Clear);
     let body = move |ui: &mut egui::Ui, palette: ThemePalette| {
-        // Real Create Setup Box (renders the same warning the live screen does)
-        // plus a hand-painted destination-not-empty box to ensure the warning
-        // surface is captured visually even on the headless harness (which has
-        // no real directory to enumerate).
         let _ = stage_choose::render(ui, palette, &mut state);
         ui.add_space(8.0);
         let _ = destination_not_empty::render(ui, palette, Some(DestChoice::Clear), false);
@@ -95,8 +91,6 @@ fn render_fork_download_populated(out_dir: &Path, w: u16, h: u16) -> PathBuf {
     let path = out_dir.join(format!("fork__download_populated__{w}x{h}.png"));
     let progress = populated_progress();
     let body = move |ui: &mut egui::Ui, palette: ThemePalette| {
-        // Render the same chassis with synthetic download progress so the
-        // mid-download grid + overall progress bars are captured.
         let copy = DownloadScreenCopy {
             title: "Downloading fork",
             sub: "fetching the parent's mods — Step 2 opens automatically when ready",

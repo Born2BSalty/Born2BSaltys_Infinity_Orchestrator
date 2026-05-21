@@ -276,12 +276,6 @@ struct ButtonTextPaint<'a> {
     leading_is_glyph: bool,
 }
 
-/// Picks the `(first_font, second_font)` pair for the two text pieces in
-/// a glyph+prose button. `leading_is_glyph == true` means the first piece
-/// is the icon glyph (the rendering font must be the `FiraCode` Nerd one
-/// that carries the arrow PUA range); the second piece is the prose
-/// label. `false` flips it. The Latin prose font carries no arrow glyphs,
-/// so a swap drops the arrow to the missing-glyph `?` fallback.
 fn pick_button_fonts(
     visuals: &GlyphButtonVisuals,
     leading_is_glyph: bool,

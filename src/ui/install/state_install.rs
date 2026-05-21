@@ -210,12 +210,6 @@ pub struct InstallScreenState {
     pub skipped_mods: Vec<SkippedMod>,
     pub expected_archive_sizes: std::collections::BTreeMap<usize, u64>,
     pub skip_indices: std::collections::HashSet<usize>,
-    /// Asset indices the async hash pass has already classified
-    /// (`AssetHashed` arrived). Assets present in the asset list but
-    /// absent here are still in-flight (the `Hashing` row state); any
-    /// other status only applies once the index has been recorded. Reset
-    /// to empty by [`Self::clear_preview`] so a re-armed install starts
-    /// from a clean Hashing-everywhere classification.
     pub hashed_indices: std::collections::HashSet<usize>,
 }
 

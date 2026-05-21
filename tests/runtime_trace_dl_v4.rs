@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-//! Runtime trace harness. The two `#[test]` cases drive the orchestrator's
-//! in-process glue against synthetic inputs and write a short text trace
-//! to `target/runtime_traces/` so the orchestrator can confirm the
-//! contract is met without spinning a real network / disk pipeline.
-
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -36,11 +31,6 @@ fn write_trace(name: &str, lines: &[String]) {
     }
 }
 
-/// Bug 4 trace: the final asset's `AssetDone` pins the row to a
-/// `(final_bytes, Some(final_bytes))` bar fraction BEFORE the row's
-/// status flips to "downloaded". The trace records the `per_byte`
-/// readout for the final asset across the `AssetProgress` + `AssetDone`
-/// events the orchestrator's drain method observed.
 #[test]
 fn trace_bug4_final_asset_bar_pins_before_status_flip() {
     let mut progress = DownloadProgress::default();
@@ -58,9 +48,6 @@ fn trace_bug4_final_asset_bar_pins_before_status_flip() {
     progress.set_asset_bytes(0, 900, Some(1000));
     let b = progress.asset_bytes.get(&0);
     log.push(format!("after AssetProgress #2: asset_bytes[0]={b:?}"));
-    // AssetDone pins per_byte to (final_bytes, Some(final_bytes)) — not
-    // (final_bytes, total) — so even a server that lied about total
-    // (or omitted Content-Length entirely) renders the bar full.
     progress.set_asset_bytes(0, 1000, Some(1000));
     let c = progress.asset_bytes.get(&0);
     log.push(format!("after AssetDone (Bug 4 fix): asset_bytes[0]={c:?}"));
@@ -75,8 +62,6 @@ fn trace_bug4_final_asset_bar_pins_before_status_flip() {
         "AssetDone must pin (final_bytes, Some(final_bytes)) for bar=1.0 before status flip"
     );
 
-    // Exercise the no-Content-Length path: server never sent total
-    // but did send the final byte count.
     let mut p2 = DownloadProgress::default();
     p2.set_asset_bytes(0, 0, None);
     p2.set_asset_bytes(0, 250, None);
@@ -93,11 +78,6 @@ fn trace_bug4_final_asset_bar_pins_before_status_flip() {
     write_trace("bug4_final_asset_bar_pin", &log);
 }
 
-/// Step-5 #2/#3 trace: a completed install + nav-away from Install
-/// followed by re-entry into Install lands the user at a fresh
-/// `Paste` stage with the terminal-buffer / console-view drained.
-/// Reuses `reset_install_pipeline_state` — the helper both
-/// `Cancel` and `nav-away after complete` route through.
 #[test]
 fn trace_step5_fix2_3_nav_away_after_complete_resets_install_screen() {
     let mut log: Vec<String> = vec![

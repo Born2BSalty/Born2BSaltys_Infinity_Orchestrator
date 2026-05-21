@@ -46,13 +46,6 @@ pub struct ModlistWorkspaceState {
 
     pub dev_scanned_mods_folder: Option<String>,
 
-    /// The user's Clear / Backup choice captured on Create / Fork
-    /// import; consumed when the workspace's first install reaches its
-    /// arm point so the destination prep runs once and is cleared.
-    /// `None` ⇒ no prep deferred (the destination was either empty,
-    /// already prepped on the Install-paste / Reinstall path, or the
-    /// user picked Continue). Skipped on serialize when None so the
-    /// emitted JSON is byte-identical to a pre-field workspace.json.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_destination_prep: Option<DestChoice>,
 }

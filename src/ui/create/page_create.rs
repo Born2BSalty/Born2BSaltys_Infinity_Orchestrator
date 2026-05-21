@@ -341,13 +341,6 @@ fn run_fork_preview_parse(state: &mut crate::ui::create::state_create::CreateScr
     }
 }
 
-/// Tear the running fork-download pipeline back to the fork-preview
-/// stage. Mirrors `OrchestratorApp::reset_install_screen_to_paste` —
-/// drops the three pipeline receivers + clears the BIO auto-build
-/// latches + clears the shared hash/extract snapshots — then routes to
-/// `ForkPreview`. The minted in-progress entry stays in the registry so
-/// the user can resume via Load Draft / Home (parity with the
-/// Install-paste Cancel semantics).
 fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
     orchestrator.reset_install_screen_to_paste();
     orchestrator.create_screen_state.fork_download_progress =
@@ -355,10 +348,6 @@ fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
     orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
 }
 
-/// Fork pipeline reached extract-complete: route to the newly minted
-/// workspace at Step 2. Resets the install-pipeline scratch state so
-/// a follow-up Install-paste does not inherit the fork's latches,
-/// then navigates the rail.
 fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, id: String) {
     orchestrator.reset_install_screen_to_paste();
     orchestrator.create_screen_state.fork_code.clear();
