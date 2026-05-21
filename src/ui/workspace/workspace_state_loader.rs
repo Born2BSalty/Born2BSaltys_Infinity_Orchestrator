@@ -172,6 +172,7 @@ pub fn extract_workspace_state_from_wizard(
         prompt_overrides: prior.prompt_overrides.clone(),
         last_share_code: prior.last_share_code.clone(),
         dev_scanned_mods_folder: prior.dev_scanned_mods_folder.clone(),
+        pending_destination_prep: prior.pending_destination_prep,
     }
 }
 

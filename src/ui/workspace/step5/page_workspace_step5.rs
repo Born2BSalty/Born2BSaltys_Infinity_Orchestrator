@@ -122,6 +122,12 @@ fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) ->
 
     let variant = InstallButtonVariant::from_step5(&orchestrator.wizard_state, false);
 
+    if variant == InstallButtonVariant::Install
+        && !consume_pending_destination_prep(orchestrator, modlist_id)
+    {
+        return false;
+    }
+
     let workflow = orchestrator
         .registry
         .find(modlist_id)
@@ -162,4 +168,61 @@ fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) ->
     }
 
     true
+}
+
+/// Apply the workspace's deferred `pending_destination_prep` choice (if
+/// any) on the fresh-Install edge. Returns `false` on failure so the
+/// caller can short-circuit — failing here means the destination is in
+/// an inconsistent state and proceeding would write the install on top
+/// of unprepped content.
+fn consume_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+    use crate::install_runtime::destination_prep;
+
+    let Some(workspace_state) = orchestrator.workspace_state.get(modlist_id) else {
+        return true;
+    };
+    let Some(choice) = workspace_state.pending_destination_prep else {
+        return true;
+    };
+    let Some(entry) = orchestrator.registry.find(modlist_id) else {
+        return true;
+    };
+    let destination = std::path::PathBuf::from(entry.destination_folder.trim());
+
+    match destination_prep::prepare_destination(&destination, Some(choice)) {
+        Ok(report) => {
+            tracing::info!(
+                target = "orchestrator",
+                "Step 5 fresh-Install: destination prep applied for \
+                 {modlist_id} (choice={:?}, report={report:?})",
+                choice
+            );
+            if let Some(ws) = orchestrator.workspace_state.get_mut(modlist_id) {
+                ws.pending_destination_prep = None;
+            }
+            if let Some(store) = orchestrator.workspace_stores.get(modlist_id)
+                && let Some(ws) = orchestrator.workspace_state.get(modlist_id)
+                && let Err(err) = store.save(ws)
+            {
+                warn!(
+                    target = "orchestrator",
+                    "Step 5: persisting cleared pending_destination_prep \
+                     for {modlist_id} failed: {err}"
+                );
+            }
+            orchestrator
+                .persistence_cycle
+                .mark_workspace_dirty(modlist_id, std::time::Instant::now());
+            true
+        }
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "Step 5 fresh-Install: destination prep failed for \
+                 {modlist_id}: {err} (install not started — fix the \
+                 destination and retry)"
+            );
+            false
+        }
+    }
 }

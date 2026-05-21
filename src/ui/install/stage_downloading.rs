@@ -1024,15 +1024,17 @@ pub fn render_live(
     DownloadingOutcome::Stay
 }
 
-struct LivePipelineInputs {
-    destination: String,
-    game: crate::registry::model::Game,
-    workflow: crate::install_runtime::flag_policies::InstallWorkflow,
-    code: String,
+pub(crate) struct LivePipelineInputs {
+    pub(crate) destination: String,
+    pub(crate) game: crate::registry::model::Game,
+    pub(crate) workflow: crate::install_runtime::flag_policies::InstallWorkflow,
+    pub(crate) code: String,
 }
 
 impl LivePipelineInputs {
-    fn from(orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp) -> Self {
+    pub(crate) fn from(
+        orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+    ) -> Self {
         let state = &orchestrator.install_screen_state;
         let destination = state.destination.trim().to_string();
         let game = state
@@ -1058,17 +1060,35 @@ impl LivePipelineInputs {
 /// Import the share code and arm the auto-build pipeline once per session.
 /// On failure, records the error for in-chrome display and keeps the latch
 /// set (no per-frame retry).
-fn arm_pipeline_once(
+pub(crate) fn arm_pipeline_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     inputs: &LivePipelineInputs,
 ) {
     use crate::install_runtime::auto_build_driver;
+    use crate::install_runtime::destination_prep;
 
     if !orchestrator.install_screen_state.pipeline_flags.armed() {
         orchestrator
             .install_screen_state
             .pipeline_flags
             .set_armed(true);
+
+        let dest_path = std::path::PathBuf::from(inputs.destination.trim());
+        if let Err(err) = destination_prep::prepare_destination(
+            &dest_path,
+            orchestrator.install_screen_state.destination_choice,
+        ) {
+            let msg = format!("destination prep failed: {err}");
+            orchestrator.install_screen_state.pipeline_arm_error = Some(msg.clone());
+            orchestrator.wizard_state.step2.scan_status =
+                format!("Auto Build could not start: {msg}");
+            tracing::warn!(
+                target = "orchestrator",
+                "destination prep failed: {err} (Downloading stays navigable; \
+                 surfaced on-screen)"
+            );
+            return;
+        }
 
         match auto_build_driver::prepare_install_dirs_and_maybe_import(
             &mut orchestrator.wizard_state,
@@ -1109,7 +1129,7 @@ fn arm_pipeline_once(
 
 /// Place store-known archives at BIO's extract path and spawn the async
 /// checksum-then-skip pool. One-shot per arm; reset on Cancel→Preview.
-fn stage_and_kick_archive_skip_once(
+pub(crate) fn stage_and_kick_archive_skip_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     inputs: &LivePipelineInputs,
 ) {
@@ -1196,7 +1216,7 @@ fn stage_and_kick_archive_skip_once(
 
 /// Spawn the parallel streaming downloader once the skip pass has decided
 /// which archives are already present.
-fn kick_streaming_downloader_once(
+pub(crate) fn kick_streaming_downloader_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) {
     use crate::install_runtime::auto_build_driver;
@@ -1247,7 +1267,7 @@ fn kick_streaming_downloader_once(
 /// Hash each fetched archive against the share-code expected hashes once
 /// the streamer is done; delete + record-failed any mismatch so BIO's
 /// extract never sees a corrupt download.
-fn verify_downloaded_archives_once(
+pub(crate) fn verify_downloaded_archives_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     destination: &str,
 ) {
@@ -1305,7 +1325,7 @@ fn verify_downloaded_archives_once(
 
 /// Hash + content-address the resolved archive set exactly once after the
 /// streamer finishes. Repeated per-frame hashing would freeze the UI.
-fn ingest_downloaded_archives_once(
+pub(crate) fn ingest_downloaded_archives_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     destination: &str,
 ) {
@@ -1347,7 +1367,7 @@ fn ingest_downloaded_archives_once(
 /// map / skipped / expected-size maps, snapshot the live extract + hash
 /// progress, then hold the prior frame's grid through the extract→install
 /// seam to avoid a 0/0 flash.
-fn build_and_hold_progress(
+pub(crate) fn build_and_hold_progress(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) -> DownloadProgress {
     let prior_bytes = orchestrator
@@ -1422,7 +1442,7 @@ fn build_and_hold_progress(
 /// empty-grid-hidden `step2.scan_status`, which made the screen look like a
 /// permanent inert mystery). `None` for the chassis / happy path → the
 /// chrome is bit-identical to before.
-fn render_chrome(
+pub(crate) fn render_chrome(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     copy: DownloadScreenCopy,

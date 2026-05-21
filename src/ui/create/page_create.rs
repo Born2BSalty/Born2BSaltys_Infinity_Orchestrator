@@ -7,10 +7,9 @@ use eframe::egui;
 use tracing::warn;
 
 use crate::app::modlist_share::preview_modlist_share_code;
+use crate::install_runtime::fork_pipeline_arm;
 use crate::registry::operations;
-use crate::registry::operations_create::{
-    ForkedModlistInput, create_forked_modlist, create_modlist,
-};
+use crate::registry::operations_create::create_modlist;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::create::destination_default::default_destination;
@@ -36,7 +35,7 @@ enum CreateRequest {
     ForkPreviewBack,
     ForkBeginImport,
     ForkDownloadCancel,
-    ForkImport,
+    ForkExtractCompleteRouteToWorkspace(String),
     OpenLoadDraft,
     CloseLoadDraft,
     ResumeWorkspace(String),
@@ -99,13 +98,12 @@ fn collect_stage_request(
             ForkPreviewOutcome::BeginImport => Some(CreateRequest::ForkBeginImport),
             ForkPreviewOutcome::Stay => None,
         },
-        CreateStage::ForkDownload => match stage_fork_download::render(
-            ui,
-            palette,
-            &orchestrator.create_screen_state.fork_download_progress,
-        ) {
+        CreateStage::ForkDownload => match stage_fork_download::render_live(ui, orchestrator) {
             ForkDownloadOutcome::Cancel => Some(CreateRequest::ForkDownloadCancel),
-            ForkDownloadOutcome::Import => Some(CreateRequest::ForkImport),
+            ForkDownloadOutcome::Import => orchestrator
+                .active_install_modlist_id
+                .clone()
+                .map(CreateRequest::ForkExtractCompleteRouteToWorkspace),
             ForkDownloadOutcome::Stay => None,
         },
     }
@@ -153,17 +151,21 @@ fn handle_create_request(
             orchestrator.create_screen_state.clear_fork_preview();
             orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
         }
-        CreateRequest::ForkBeginImport => {
-            orchestrator.create_screen_state.fork_download_progress =
-                crate::ui::install::stage_downloading::DownloadProgress::default();
-            orchestrator.create_screen_state.stage = CreateStage::ForkDownload;
+        CreateRequest::ForkBeginImport => match fork_pipeline_arm::mint_and_arm(orchestrator) {
+            Ok(_) => {
+                orchestrator.create_screen_state.stage = CreateStage::ForkDownload;
+            }
+            Err(err) => {
+                warn!(
+                    target = "orchestrator",
+                    "Create fork: mint_and_arm failed: {err}"
+                );
+            }
+        },
+        CreateRequest::ForkDownloadCancel => fork_download_cancel(orchestrator),
+        CreateRequest::ForkExtractCompleteRouteToWorkspace(id) => {
+            fork_extract_complete_route_to_workspace(orchestrator, id);
         }
-        CreateRequest::ForkDownloadCancel => {
-            orchestrator.create_screen_state.fork_download_progress =
-                crate::ui::install::stage_downloading::DownloadProgress::default();
-            orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
-        }
-        CreateRequest::ForkImport => fork_import(orchestrator),
         CreateRequest::OpenLoadDraft => {
             orchestrator.create_screen_state.load_draft_open = true;
         }
@@ -268,8 +270,11 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     };
 
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
-    let empty = ModlistWorkspaceState::default();
-    if let Err(err) = canonical_store.save(&empty) {
+    let workspace_state = ModlistWorkspaceState {
+        pending_destination_prep: orchestrator.create_screen_state.destination_choice,
+        ..Default::default()
+    };
+    if let Err(err) = canonical_store.save(&workspace_state) {
         warn!(
             target = "orchestrator",
             "Create: writing canonical workspace.json for {} failed: {err} \
@@ -277,7 +282,9 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
             entry.id
         );
     }
-    orchestrator.workspace_state.insert(entry.id.clone(), empty);
+    orchestrator
+        .workspace_state
+        .insert(entry.id.clone(), workspace_state);
     orchestrator
         .workspace_stores
         .insert(entry.id.clone(), canonical_store);
@@ -320,8 +327,6 @@ fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id:
         Some(Instant::now() + Duration::from_millis(COPY_CONFIRM_MS));
 }
 
-const PARENT_FALLBACK_NAME: &str = "Shared modlist";
-
 fn run_fork_preview_parse(state: &mut crate::ui::create::state_create::CreateScreenState) {
     state.clear_fork_preview();
     match preview_modlist_share_code(state.fork_code.trim()) {
@@ -336,87 +341,36 @@ fn run_fork_preview_parse(state: &mut crate::ui::create::state_create::CreateScr
     }
 }
 
-fn fork_import(orchestrator: &mut OrchestratorApp) {
-    let Some(preview) = orchestrator.create_screen_state.fork_preview.clone() else {
-        warn!(
-            target = "orchestrator",
-            "Create fork: import requested with no parsed parent preview \u{2014} ignored"
-        );
-        return;
-    };
+/// Tear the running fork-download pipeline back to the fork-preview
+/// stage. Mirrors `OrchestratorApp::reset_install_screen_to_paste` —
+/// drops the three pipeline receivers + clears the BIO auto-build
+/// latches + clears the shared hash/extract snapshots — then routes to
+/// `ForkPreview`. The minted in-progress entry stays in the registry so
+/// the user can resume via Load Draft / Home (parity with the
+/// Install-paste Cancel semantics).
+fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
+    orchestrator.reset_install_screen_to_paste();
+    orchestrator.create_screen_state.fork_download_progress =
+        crate::ui::install::stage_downloading::DownloadProgress::default();
+    orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
+}
 
-    let parent_name = preview
-        .name
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(PARENT_FALLBACK_NAME)
-        .to_string();
-    let parent_author = preview.author.as_deref().unwrap_or("").trim().to_string();
-    let fork_name = format!("{parent_name} (fork)");
-
-    let game = crate::registry::model::Game::from_legacy_string(&preview.game_install);
-
-    let dest = default_destination(&fork_name);
-
-    let user_name = orchestrator.redesign_settings.user_name.clone();
-
-    let entry = match create_forked_modlist(
-        ForkedModlistInput {
-            name: &fork_name,
-            game,
-            destination: &dest,
-            user_name: &user_name,
-            parent_name: &parent_name,
-            parent_author: &parent_author,
-            parent_forked_from: &preview.forked_from,
-        },
-        &mut orchestrator.registry,
-    ) {
-        Ok(e) => e,
-        Err(err) => {
-            warn!(
-                target = "orchestrator",
-                "Create fork: create_forked_modlist failed: {err}"
-            );
-            return;
-        }
-    };
-
-    let canonical_store = WorkspaceStore::new_for_id(&entry.id);
-    let empty = ModlistWorkspaceState::default();
-    if let Err(err) = canonical_store.save(&empty) {
-        warn!(
-            target = "orchestrator",
-            "Create fork: writing canonical workspace.json for {} failed: {err} \
-             (the router degrades to an empty workspace)",
-            entry.id
-        );
-    }
-    orchestrator.workspace_state.insert(entry.id.clone(), empty);
-    orchestrator
-        .workspace_stores
-        .insert(entry.id.clone(), canonical_store);
-
-    if let Err(err) = orchestrator.registry_store.save(&orchestrator.registry) {
-        warn!(
-            target = "orchestrator",
-            "Create fork: atomic registry persist failed: {err} \
-             (entry is in memory + workspace.json is on disk; recoverable)"
-        );
-    }
-    orchestrator
-        .persistence_cycle
-        .mark_registry_dirty(Instant::now());
-
-    let new_id = entry.id;
+/// Fork pipeline reached extract-complete: route to the newly minted
+/// workspace at Step 2. Resets the install-pipeline scratch state so
+/// a follow-up Install-paste does not inherit the fork's latches,
+/// then navigates the rail.
+fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, id: String) {
+    orchestrator.reset_install_screen_to_paste();
     orchestrator.create_screen_state.fork_code.clear();
     orchestrator.create_screen_state.clear_fork_preview();
     orchestrator.create_screen_state.fork_download_progress =
         crate::ui::install::stage_downloading::DownloadProgress::default();
     orchestrator.create_screen_state.stage = CreateStage::Choose;
-    orchestrator.create_screen_state.resumed_build_id = Some(new_id.clone());
+    orchestrator.create_screen_state.modlist_name.clear();
+    orchestrator.create_screen_state.destination.clear();
+    orchestrator.create_screen_state.destination_choice = None;
+    orchestrator.create_screen_state.resumed_build_id = Some(id.clone());
     orchestrator.nav = NavDestination::Workspace {
-        modlist_id: Some(new_id),
+        modlist_id: Some(id),
     };
 }
