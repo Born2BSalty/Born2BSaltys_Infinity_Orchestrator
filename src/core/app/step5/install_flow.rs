@@ -74,8 +74,12 @@ pub fn prepare_start_request(
     state: &mut WizardState,
     term: &mut EmbeddedTerminal,
 ) -> Option<(PendingInstallStart, bool)> {
+    term.clear_console();
+
     state.step5.start_install_requested = false;
     state.step5.prep_running = false;
+    state.step5.last_install_failed = false;
+    state.step5.last_exit_code = None;
     state.step5.prep_ran = false;
     state.step5.prep_used_backup = false;
     state.step5.prep_backup_paths.clear();
@@ -333,4 +337,44 @@ fn now_unix_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepare_start_request_clears_previous_console_run_output() {
+        let mut state = WizardState::default();
+        let mut term = EmbeddedTerminal::new().expect("embedded terminal");
+        term.append_marker("previous run line that must not persist");
+        assert!(term.output_text().contains("previous run line"));
+
+        let _ = prepare_start_request(&mut state, &mut term);
+
+        assert!(
+            !term.output_text().contains("previous run line"),
+            "starting a new install attempt clears the session-global console \
+             buffer so logs are scoped per install run"
+        );
+    }
+
+    #[test]
+    fn prepare_start_request_invalidates_previous_clean_exit() {
+        let mut state = WizardState::default();
+        state.step5.last_exit_code = Some(0);
+        state.step5.last_install_failed = false;
+        let mut term = EmbeddedTerminal::new().expect("embedded terminal");
+
+        let _ = prepare_start_request(&mut state, &mut term);
+
+        assert_eq!(
+            state.step5.last_exit_code, None,
+            "a new attempt must not inherit the previous successful exit code"
+        );
+        assert!(
+            !crate::ui::workspace::step5::success_banner::clean_exit(&state),
+            "after a new attempt starts, nav-away reset must not see stale success"
+        );
+    }
 }

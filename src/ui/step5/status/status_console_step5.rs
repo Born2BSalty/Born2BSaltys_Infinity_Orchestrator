@@ -82,31 +82,56 @@ fn token_color(token: &str) -> egui::Color32 {
     default
 }
 
-fn render_styled_line(ui: &mut egui::Ui, line: &str) {
+fn render_styled_line(ui: &mut egui::Ui, line: &str, max_width: f32) {
+    let job = build_styled_line_job(ui, line, max_width);
+    ui.add(egui::Label::new(egui::WidgetText::from(job)).wrap());
+}
+
+fn build_styled_line_job(ui: &egui::Ui, line: &str, max_width: f32) -> egui::text::LayoutJob {
     let line_upper = line.to_ascii_uppercase();
     let success_line = line_upper.contains("SUCCESSFULLY INSTALLED");
     let success_green = crate::ui::shared::theme_global::success();
+    let font = egui::TextStyle::Monospace.resolve(ui.style());
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = max_width.max(32.0);
+    job.wrap.break_anywhere = true;
+
     if line.is_empty() {
-        ui.label(egui::RichText::new(" ").monospace().strong());
+        append_styled_text(&mut job, " ", &font, token_color(""));
+        return job;
+    }
+
+    for token in split_chunks_preserve_quotes(line) {
+        let n = normalized_token(&token);
+        let color = if success_line && (n == "SUCCESSFULLY" || n == "INSTALLED") {
+            success_green
+        } else {
+            token_color(&token)
+        };
+        append_styled_text(&mut job, &token, &font, color);
+    }
+
+    job
+}
+
+fn append_styled_text(
+    job: &mut egui::text::LayoutJob,
+    text: &str,
+    font: &egui::FontId,
+    color: egui::Color32,
+) {
+    if text.is_empty() {
         return;
     }
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        for token in split_chunks_preserve_quotes(line) {
-            let n = normalized_token(&token);
-            let color = if success_line && (n == "SUCCESSFULLY" || n == "INSTALLED") {
-                success_green
-            } else {
-                token_color(&token)
-            };
-            ui.label(
-                egui::RichText::new(&token)
-                    .monospace()
-                    .strong()
-                    .color(color),
-            );
-        }
-    });
+    job.append(
+        text,
+        0.0,
+        egui::TextFormat {
+            font_id: font.clone(),
+            color,
+            ..Default::default()
+        },
+    );
 }
 
 pub(crate) fn render_console_panel(
@@ -117,7 +142,9 @@ pub(crate) fn render_console_panel(
     terminal_error: Option<&str>,
 ) {
     ui.group(|ui| {
-        ui.set_width(ui.available_width());
+        let panel_w = ui.available_width();
+        ui.set_width(panel_w);
+        ui.set_max_width(panel_w);
         ui.label(crate::ui::shared::typography_global::section_title(
             "Console",
         ));
@@ -136,28 +163,39 @@ pub(crate) fn render_console_panel(
             let should_auto_scroll = console_view.auto_scroll
                 && selected_text_len > console_view.last_selected_console_text_len;
             console_view.last_selected_console_text_len = selected_text_len;
-            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                ui.scope(|ui| {
-                    let mut scroll = egui::style::ScrollStyle::solid();
-                    scroll.bar_width = 12.0;
-                    scroll.bar_inner_margin = 0.0;
-                    scroll.bar_outer_margin = 2.0;
-                    ui.style_mut().spacing.scroll = scroll;
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                    let out = egui::ScrollArea::vertical()
-                        .id_salt("step5_console_scroll")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            for line in selected_text.split('\n') {
-                                render_styled_line(ui, line);
-                            }
-                            if should_auto_scroll {
-                                ui.add_space(0.0);
-                                ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
-                            }
-                        });
-                    let _ = out;
-                });
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(rect)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            child.set_clip_rect(rect.intersect(ui.clip_rect()));
+            child.set_width(console_w);
+            child.set_max_width(console_w);
+            child.scope(|ui| {
+                let mut scroll = egui::style::ScrollStyle::solid();
+                scroll.bar_width = 12.0;
+                scroll.bar_inner_margin = 0.0;
+                scroll.bar_outer_margin = 2.0;
+                ui.style_mut().spacing.scroll = scroll;
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                let out = egui::ScrollArea::vertical()
+                    .id_salt("step5_console_scroll")
+                    .auto_shrink([false, false])
+                    .max_width(console_w)
+                    .max_height(console_h)
+                    .show(ui, |ui| {
+                        ui.set_width(console_w);
+                        ui.set_max_width(console_w);
+                        for line in selected_text.split('\n') {
+                            let line_w = ui.available_width();
+                            render_styled_line(ui, line, line_w);
+                        }
+                        if should_auto_scroll {
+                            ui.add_space(0.0);
+                            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                        }
+                    });
+                let _ = out;
             });
         } else {
             ui.add_sized(

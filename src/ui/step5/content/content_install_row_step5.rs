@@ -19,7 +19,7 @@ pub(crate) fn render_install_row(
     exe_fingerprint: &str,
 ) -> Option<Step5Action> {
     let mut action: Option<Step5Action> = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         render_progress_label(ui, state);
         action = render_install_control(ui, state, &mut terminal, terminal_error, dev_mode);
         render_step5_menus(ui, state, &mut terminal, dev_mode, exe_fingerprint);

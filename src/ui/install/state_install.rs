@@ -221,6 +221,33 @@ pub struct InstallScreenState {
 
 impl InstallScreenState {
     #[must_use]
+    pub fn has_route_context(&self) -> bool {
+        self.stage != InstallStage::Paste
+            || !self.destination.trim().is_empty()
+            || !self.import_code.trim().is_empty()
+            || self.parsed_preview.is_some()
+            || self.preview_parse_error.is_some()
+            || self.preview_cached
+            || !self.download_progress.rows.is_empty()
+            || self.pipeline_flags.armed()
+            || self.pipeline_flags.archives_staged()
+            || self.pipeline_flags.archives_ingested()
+            || self.pipeline_flags.archives_verified()
+            || self.pipeline_flags.download_phase_started()
+            || self.pipeline_flags.archive_skip_completed()
+            || self.pipeline_arm_error.is_some()
+            || !self.expected_archive_meta.is_empty()
+            || !self.pre_skip_assets.is_empty()
+            || !self.skipped_mods.is_empty()
+            || !self.expected_archive_sizes.is_empty()
+            || !self.skip_indices.is_empty()
+    }
+
+    pub fn reset_to_paste(&mut self) {
+        *self = Self::default();
+    }
+
+    #[must_use]
     pub fn is_partial(&self) -> bool {
         self.destination_choice == Some(DestChoice::Continue)
     }
@@ -370,5 +397,24 @@ mod tests {
             st.download_progress.extract_progress.is_none(),
             "a fresh install must not flash the previous install's extract 51/51"
         );
+    }
+
+    #[test]
+    fn route_context_tracks_non_default_install_flow_state() {
+        let mut st = InstallScreenState::default();
+        assert!(!st.has_route_context());
+
+        st.stage = InstallStage::InstallingStub;
+        assert!(st.has_route_context());
+
+        st.reset_to_paste();
+        assert!(!st.has_route_context());
+
+        st.import_code = "BIO:example".to_string();
+        assert!(st.has_route_context());
+        st.reset_to_paste();
+        assert!(st.import_code.is_empty());
+        assert_eq!(st.stage, InstallStage::Paste);
+        assert!(!st.has_route_context());
     }
 }

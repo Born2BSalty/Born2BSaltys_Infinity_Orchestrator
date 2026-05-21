@@ -9,6 +9,7 @@ use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::home::page_home;
 use crate::ui::install::page_install;
+use crate::ui::install::state_install::InstallScreenState;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::registry_error_panel;
@@ -20,6 +21,7 @@ use crate::ui::workspace::step2::step2_resume_scan;
 use crate::ui::workspace::{workspace_state_loader, workspace_view};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
+    let previous_nav = orchestrator.last_rendered_nav.clone();
     let palette = orchestrator.theme_palette;
 
     if let Some(err) = orchestrator.registry_error.as_ref() {
@@ -29,16 +31,19 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             err,
             orchestrator.registry_backup_path.as_ref(),
         );
+        orchestrator.last_rendered_nav = orchestrator.nav.clone();
         return;
     }
 
     flush_workspace_on_nav_away(orchestrator);
 
+    reset_completed_install_route_on_nav_away(orchestrator);
+    reset_completed_install_route_on_enter_install(orchestrator, &previous_nav);
+
     clear_pending_reinstall_on_nav_away_from_install(orchestrator);
 
-    reset_install_screen_on_nav_away_after_complete(orchestrator);
-
-    match orchestrator.nav.clone() {
+    let rendered_nav = orchestrator.nav.clone();
+    match rendered_nav.clone() {
         NavDestination::Home => page_home::render(ui, orchestrator, ctx),
         NavDestination::Install => page_install::render(ui, orchestrator, ctx),
         NavDestination::Create => crate::ui::create::page_create::render(ui, orchestrator, ctx),
@@ -48,6 +53,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             None => stubs::render_workspace_stub(ui, palette, None),
         },
     }
+
+    orchestrator.last_rendered_nav = rendered_nav;
 }
 
 fn render_workspace(
@@ -184,42 +191,6 @@ fn flush_workspace_on_nav_away(orchestrator: &mut OrchestratorApp) {
     orchestrator.workspace_view.loaded_workspace_id = None;
 }
 
-/// If the user is leaving the Install screen after a completed install
-/// (Stage 4 — `InstallingStub`), tear the Install screen down to its
-/// fresh paste state so the next Install nav-in lands them on a clean
-/// paste form rather than the stale completed Step-5 view. Idle until
-/// the user actually leaves Install — they still see the success
-/// banner while they remain on the screen.
-///
-/// Defers when an install is still running / starting / prepping (the
-/// rail-lock handles those cases) and when the stage is not
-/// `InstallingStub` (Paste / Preview / Downloading reset paths are
-/// handled by their own cancel hooks).
-fn reset_install_screen_on_nav_away_after_complete(orchestrator: &mut OrchestratorApp) {
-    if matches!(orchestrator.nav, NavDestination::Install) {
-        return;
-    }
-    if orchestrator.install_screen_state.stage
-        != crate::ui::install::state_install::InstallStage::InstallingStub
-    {
-        return;
-    }
-    if orchestrator.wizard_state.step5.install_running
-        || orchestrator.wizard_state.step5.start_install_requested
-        || orchestrator.wizard_state.step5.prep_running
-    {
-        return;
-    }
-    orchestrator.reset_install_screen_to_paste();
-    tracing::debug!(
-        target = "orchestrator",
-        "Install screen reset to Paste on nav-away after a completed Stage-4 \
-         render — next Install entry lands at the paste form, terminal buffer \
-         and console-view filter cleared so a second session does not inherit \
-         the previous install's log"
-    );
-}
-
 fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut OrchestratorApp) {
     if orchestrator.pending_reinstall_id.is_none()
         && orchestrator.active_install_modlist_id.is_none()
@@ -251,6 +222,105 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
              clean-exit anchor is dropped, not the entry; SPEC §13.1)"
         );
     }
+}
+
+fn reset_completed_install_route_on_nav_away(orchestrator: &mut OrchestratorApp) {
+    if !should_reset_completed_install_route_on_nav_away(
+        &orchestrator.nav,
+        &orchestrator.install_screen_state,
+        &orchestrator.wizard_state,
+        orchestrator.step5_prep_rx.is_some() || orchestrator.step5_pending_start.is_some(),
+    ) {
+        return;
+    }
+
+    reset_completed_install_runtime(orchestrator);
+}
+
+fn reset_completed_install_route_on_enter_install(
+    orchestrator: &mut OrchestratorApp,
+    previous_nav: &NavDestination,
+) {
+    if !should_reset_completed_install_route_on_enter_install(
+        previous_nav,
+        &orchestrator.nav,
+        &orchestrator.install_screen_state,
+        &orchestrator.wizard_state,
+        orchestrator.step5_prep_rx.is_some() || orchestrator.step5_pending_start.is_some(),
+    ) {
+        return;
+    }
+
+    reset_completed_install_runtime(orchestrator);
+}
+
+fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
+    if let Some(term) = orchestrator.step5_terminal.as_mut() {
+        term.clear_console();
+    }
+    orchestrator.step5_terminal = None;
+    orchestrator.step5_terminal_error = None;
+    orchestrator.step5_console_view =
+        crate::ui::step5::state_step5::Step5ConsoleViewState::default();
+    orchestrator.step5_prep_rx = None;
+    orchestrator.step5_pending_start = None;
+    orchestrator.install_running_since = None;
+    orchestrator.pending_reinstall_id = None;
+    orchestrator.active_install_modlist_id = None;
+    orchestrator.install_screen_state.reset_to_paste();
+    orchestrator.wizard_state.reset_workflow_keep_step1();
+}
+
+fn should_reset_completed_install_route_on_nav_away(
+    nav: &NavDestination,
+    install_screen_state: &InstallScreenState,
+    wizard_state: &crate::app::state::WizardState,
+    has_pending_step5_start: bool,
+) -> bool {
+    !matches!(nav, NavDestination::Install)
+        && should_reset_completed_install_route(
+            install_screen_state,
+            wizard_state,
+            has_pending_step5_start,
+        )
+}
+
+fn should_reset_completed_install_route_on_enter_install(
+    previous_nav: &NavDestination,
+    current_nav: &NavDestination,
+    install_screen_state: &InstallScreenState,
+    wizard_state: &crate::app::state::WizardState,
+    has_pending_step5_start: bool,
+) -> bool {
+    matches!(current_nav, NavDestination::Install)
+        && !matches!(previous_nav, NavDestination::Install)
+        && should_reset_completed_install_route(
+            install_screen_state,
+            wizard_state,
+            has_pending_step5_start,
+        )
+}
+
+fn should_reset_completed_install_route(
+    install_screen_state: &InstallScreenState,
+    wizard_state: &crate::app::state::WizardState,
+    has_pending_step5_start: bool,
+) -> bool {
+    install_screen_state.has_route_context()
+        && !step5_attempt_in_progress(wizard_state, has_pending_step5_start)
+        && crate::ui::workspace::step5::success_banner::clean_exit(wizard_state)
+}
+
+const fn step5_attempt_in_progress(
+    wizard_state: &crate::app::state::WizardState,
+    has_pending_step5_start: bool,
+) -> bool {
+    wizard_state.step5.start_install_requested
+        || wizard_state.step5.prep_running
+        || wizard_state.step5.install_running
+        || wizard_state.step5.cancel_pending
+        || wizard_state.step5.cancel_requested
+        || has_pending_step5_start
 }
 
 fn fork_meta_from_entry(entry: &ModlistEntry) -> Option<ForkMeta> {
@@ -347,5 +417,176 @@ mod tests {
             "no restore pending ⇒ guard must NOT fire (a genuine deselect-all \
              edit still persists; the guard must not over-block)"
         );
+    }
+
+    #[test]
+    fn completed_install_route_resets_only_after_nav_away() {
+        let mut install = InstallScreenState {
+            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
+            ..Default::default()
+        };
+        let mut wizard = crate::app::state::WizardState::default();
+        wizard.step5.last_exit_code = Some(0);
+        wizard.step5.last_install_failed = false;
+        wizard.step5.install_running = false;
+
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Install,
+            &install,
+            &wizard,
+            false
+        ));
+        assert!(should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+
+        install.reset_to_paste();
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+    }
+
+    #[test]
+    fn failed_install_route_does_not_reset_on_nav_away() {
+        let install = InstallScreenState {
+            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
+            ..Default::default()
+        };
+        let mut wizard = crate::app::state::WizardState::default();
+        wizard.step5.last_exit_code = Some(1);
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+
+        wizard.step5.last_exit_code = Some(0);
+        wizard.step5.last_install_failed = true;
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+    }
+
+    #[test]
+    fn unfinished_or_running_install_route_does_not_reset_on_nav_away() {
+        let install = InstallScreenState {
+            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
+            ..Default::default()
+        };
+        let mut wizard = crate::app::state::WizardState::default();
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+
+        wizard.step5.last_exit_code = Some(0);
+        wizard.step5.install_running = true;
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+    }
+
+    #[test]
+    fn completed_install_route_resets_on_enter_install_from_other_page() {
+        let install = InstallScreenState {
+            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
+            ..Default::default()
+        };
+        let mut wizard = crate::app::state::WizardState::default();
+        wizard.step5.last_exit_code = Some(0);
+
+        assert!(should_reset_completed_install_route_on_enter_install(
+            &NavDestination::Settings,
+            &NavDestination::Install,
+            &install,
+            &wizard,
+            false
+        ));
+        assert!(should_reset_completed_install_route_on_enter_install(
+            &NavDestination::Home,
+            &NavDestination::Install,
+            &install,
+            &wizard,
+            false
+        ));
+        assert!(!should_reset_completed_install_route_on_enter_install(
+            &NavDestination::Install,
+            &NavDestination::Install,
+            &install,
+            &wizard,
+            false
+        ));
+        assert!(!should_reset_completed_install_route_on_enter_install(
+            &NavDestination::Settings,
+            &NavDestination::Create,
+            &install,
+            &wizard,
+            false
+        ));
+    }
+
+    #[test]
+    fn stale_success_does_not_reset_when_new_attempt_is_pending() {
+        let install = InstallScreenState {
+            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
+            ..Default::default()
+        };
+        let mut wizard = crate::app::state::WizardState::default();
+        wizard.step5.last_exit_code = Some(0);
+        wizard.step5.last_install_failed = false;
+
+        wizard.step5.start_install_requested = true;
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+        assert!(!should_reset_completed_install_route_on_enter_install(
+            &NavDestination::Settings,
+            &NavDestination::Install,
+            &install,
+            &wizard,
+            false
+        ));
+
+        wizard.step5.start_install_requested = false;
+        wizard.step5.prep_running = true;
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            false
+        ));
+
+        wizard.step5.prep_running = false;
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Home,
+            &install,
+            &wizard,
+            true
+        ));
+        assert!(!should_reset_completed_install_route_on_enter_install(
+            &NavDestination::Settings,
+            &NavDestination::Install,
+            &install,
+            &wizard,
+            true
+        ));
     }
 }

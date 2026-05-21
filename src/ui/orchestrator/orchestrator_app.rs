@@ -82,6 +82,7 @@ impl std::ops::Not for DirtyFlag {
 
 pub struct OrchestratorApp {
     pub nav: NavDestination,
+    pub(crate) last_rendered_nav: NavDestination,
     pub wizard_state: WizardState,
     pub settings_store: SettingsStore,
     pub dev_mode: bool,
@@ -249,6 +250,7 @@ impl OrchestratorApp {
 
         let mut app = Self {
             nav: NavDestination::default(),
+            last_rendered_nav: NavDestination::default(),
             wizard_state,
             settings_store: bootstrap.settings_store,
             dev_mode: effective_dev_mode,
