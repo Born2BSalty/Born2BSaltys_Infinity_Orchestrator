@@ -269,6 +269,16 @@ fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
     orchestrator.active_install_modlist_id = None;
     orchestrator.install_screen_state.reset_to_paste();
     orchestrator.wizard_state.reset_workflow_keep_step1();
+    // Restore `step1`'s per-install fields to the global Settings →
+    // Paths values so a polluted `step1` from the install that just
+    // completed does not linger in memory for the next install or any
+    // UI read of step1 (the Settings tab binds to step1 directly for
+    // its global path fields and would otherwise show the per-install
+    // values until the next settings edit re-feeds step1).
+    crate::install_runtime::settings_sanitizer::sanitize_step1_for_settings_persistence(
+        &mut orchestrator.wizard_state.step1,
+        &orchestrator.bio_settings_last_saved.step1,
+    );
 }
 
 fn should_reset_completed_install_route_on_nav_away(

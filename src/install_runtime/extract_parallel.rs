@@ -153,7 +153,7 @@ fn run_parallel_extract(
         let results = Arc::clone(&results);
         let tx = tx.clone();
         handles.push(thread::spawn(move || {
-            worker_loop(&jobs, &next, &results, &tx)
+            worker_loop(&jobs, &next, &results, &tx);
         }));
     }
 
