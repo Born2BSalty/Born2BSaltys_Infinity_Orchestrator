@@ -44,6 +44,9 @@ pub struct ModlistWorkspaceState {
 
     pub last_share_code: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scratch_mods_folder: Option<String>,
+
     pub dev_scanned_mods_folder: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,6 +63,7 @@ impl ModlistWorkspaceState {
             && self.step3_group_collapse.is_empty()
             && self.prompt_overrides.is_empty()
             && self.last_share_code.is_none()
+            && self.scratch_mods_folder.is_none()
             && self.dev_scanned_mods_folder.is_none()
             && self.pending_destination_prep.is_none()
     }
@@ -156,6 +160,27 @@ mod tests {
         assert_eq!(
             w2.dev_scanned_mods_folder.as_deref(),
             Some(r"D:\mods\test-corpus")
+        );
+        assert_eq!(w, w2);
+    }
+
+    #[test]
+    fn scratch_mods_folder_round_trips_and_defaults() {
+        let legacy: ModlistWorkspaceState =
+            serde_json::from_str(r#"{"order_bgee":[]}"#).expect("parse legacy");
+        assert_eq!(legacy.scratch_mods_folder, None);
+        assert!(legacy.is_empty());
+
+        let w = ModlistWorkspaceState {
+            scratch_mods_folder: Some(r"D:\BIO\my-list\mods".to_string()),
+            ..Default::default()
+        };
+        assert!(!w.is_empty(), "a scratch mods folder is not 'empty'");
+        let s = serde_json::to_string(&w).expect("serialize");
+        let w2: ModlistWorkspaceState = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(
+            w2.scratch_mods_folder.as_deref(),
+            Some(r"D:\BIO\my-list\mods")
         );
         assert_eq!(w, w2);
     }

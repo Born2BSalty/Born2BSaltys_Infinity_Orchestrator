@@ -6,13 +6,12 @@ use eframe::egui;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, WORKSPACE_CONTENT_TEXT_INSET, redesign_border_strong,
-    redesign_text_faint, redesign_text_primary, redesign_warning_soft,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_SHELL_BORDER_WIDTH_PX, WORKSPACE_CONTENT_TEXT_INSET,
+    redesign_border_strong, redesign_text_primary,
 };
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::step2::{step2_log_confirm, step2_search, step2_tab_row};
 
-const DETAILS_PANE_W: f32 = 420.0;
 const TITLE_H: f32 = 24.0;
 const TITLE_GAP: f32 = 8.0;
 const SEARCH_H: f32 = 30.0;
@@ -20,10 +19,9 @@ const SEARCH_GAP: f32 = 10.0;
 const TAB_ROW_H: f32 = 30.0;
 const TAB_TO_GRID_OVERLAP: f32 = 1.5;
 const GRID_GAP: f32 = 12.0;
-const FOOTER_H: f32 = 20.0;
-const FOOTER_GAP: f32 = 8.0;
 const LEFT_MIN_W: f32 = 420.0;
-const RIGHT_MIN_W: f32 = 240.0;
+const DETAILS_W: f32 = 560.0;
+const DETAILS_MIN_W: f32 = 420.0;
 const CONTENT_MIN_H: f32 = 160.0;
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<Step2Action> {
@@ -45,8 +43,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
         action = Some(a);
     }
 
-    sync_details_open(orchestrator);
-
     let details_open = orchestrator.workspace_view.step2.details_open;
     let panes = Step2PaneRects::from_content(rects.content, details_open);
 
@@ -56,6 +52,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
             &mut orchestrator.wizard_state,
             &mut action,
             panes.left,
+            &mut orchestrator.workspace_view.step2.details_open,
+            palette,
         );
     });
 
@@ -66,10 +64,14 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
                 &mut orchestrator.wizard_state,
                 &mut action,
                 right_rect,
+                palette,
+                &mut orchestrator.workspace_view.step2.details_open,
             );
         });
-        paint_details_splitter(ui, palette, panes.left);
+        paint_details_panel_border(ui, palette, right_rect);
     }
+
+    sync_details_selection(orchestrator);
 
     let ctx = ui.ctx().clone();
     render_popups(ui, orchestrator, &ctx, &mut action);
@@ -80,7 +82,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     crate::ui::step2::service_list_ops_step2::recompute_selection_counts(
         &mut orchestrator.wizard_state,
     );
-    render_footer(ui, orchestrator, palette, rects.footer);
 
     action
 }
@@ -91,7 +92,6 @@ struct Step2LayoutRects {
     search: egui::Rect,
     tab_row: egui::Rect,
     content: egui::Rect,
-    footer: egui::Rect,
 }
 
 impl Step2LayoutRects {
@@ -109,19 +109,14 @@ impl Step2LayoutRects {
         let tab_row = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, TAB_ROW_H));
         y += TAB_ROW_H - TAB_TO_GRID_OVERLAP;
 
-        let content_h = (root.bottom() - y - FOOTER_H - FOOTER_GAP).max(CONTENT_MIN_H);
+        let content_h = (root.bottom() - y).max(CONTENT_MIN_H);
         let content = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, content_h));
-        let footer = egui::Rect::from_min_size(
-            egui::pos2(x, content.bottom() + FOOTER_GAP),
-            egui::vec2(w, FOOTER_H),
-        );
 
         Self {
             title,
             search,
             tab_row,
             content,
-            footer,
         }
     }
 }
@@ -140,9 +135,15 @@ impl Step2PaneRects {
                 right: None,
             };
         }
-        let right_w = DETAILS_PANE_W.min((content.width() - LEFT_MIN_W).max(0.0));
-        let right_w = right_w.max(RIGHT_MIN_W.min(content.width()));
-        let left_w = (content.width() - right_w - GRID_GAP).max(LEFT_MIN_W);
+        let usable_w = (content.width() - GRID_GAP).max(0.0);
+        let right_w = if usable_w >= LEFT_MIN_W + DETAILS_MIN_W {
+            DETAILS_W.min(usable_w - LEFT_MIN_W).max(DETAILS_MIN_W)
+        } else {
+            let max_right_w = usable_w.min(DETAILS_W);
+            let min_right_w = DETAILS_MIN_W.min(max_right_w);
+            (usable_w * 0.56).clamp(min_right_w, max_right_w)
+        };
+        let left_w = (content.width() - GRID_GAP - right_w).max(0.0);
         let left = egui::Rect::from_min_size(content.min, egui::vec2(left_w, content.height()));
         let right = egui::Rect::from_min_size(
             egui::pos2(left.right() + GRID_GAP, content.top()),
@@ -174,26 +175,24 @@ fn render_title(
     });
 }
 
-fn sync_details_open(orchestrator: &mut OrchestratorApp) {
+fn sync_details_selection(orchestrator: &mut OrchestratorApp) {
     let live_sel = orchestrator.wizard_state.step2.selected.clone();
-    if live_sel.is_some() && live_sel != orchestrator.workspace_view.step2.last_selection {
-        orchestrator.workspace_view.step2.details_open = true;
-    }
     orchestrator.workspace_view.step2.last_selection = live_sel;
 }
 
-fn paint_details_splitter(
+fn paint_details_panel_border(
     ui: &egui::Ui,
     palette: crate::ui::shared::redesign_tokens::ThemePalette,
-    left_rect: egui::Rect,
+    rect: egui::Rect,
 ) {
-    let dx = left_rect.right() - 1.0;
-    ui.painter().line_segment(
-        [
-            egui::pos2(dx, left_rect.top() + 1.0),
-            egui::pos2(dx, left_rect.bottom() - 1.0),
-        ],
-        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
+    ui.painter().rect_stroke(
+        rect.shrink(1.0),
+        egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
+        egui::Stroke::new(
+            REDESIGN_SHELL_BORDER_WIDTH_PX,
+            redesign_border_strong(palette),
+        ),
+        egui::StrokeKind::Inside,
     );
 }
 
@@ -206,37 +205,6 @@ fn render_popups(
     crate::ui::step2::compat_window_step2::render(ui, &mut orchestrator.wizard_state);
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, &mut orchestrator.wizard_state);
     crate::ui::step2::update_check_popup_step2::render(ctx, &mut orchestrator.wizard_state, action);
-}
-
-fn render_footer(
-    ui: &mut egui::Ui,
-    orchestrator: &OrchestratorApp,
-    palette: crate::ui::shared::redesign_tokens::ThemePalette,
-    footer_rect: egui::Rect,
-) {
-    let drop_warning = orchestrator
-        .workspace_view
-        .step2
-        .rescan_drop_warning
-        .clone();
-    ui.scope_builder(egui::UiBuilder::new().max_rect(footer_rect), |ui| {
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(&orchestrator.wizard_state.step2.scan_status)
-                    .size(12.0)
-                    .family(egui::FontFamily::Name("poppins_medium".into()))
-                    .color(redesign_text_faint(palette)),
-            );
-            if let Some(warning) = drop_warning.as_deref() {
-                ui.label(
-                    egui::RichText::new(format!("\u{2014} {warning}"))
-                        .size(12.0)
-                        .family(egui::FontFamily::Name("poppins_medium".into()))
-                        .color(redesign_warning_soft(palette)),
-                );
-            }
-        });
-    });
 }
 
 fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {

@@ -3,31 +3,27 @@
 
 use eframe::egui;
 
+use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::Step2Details;
 
-struct SelectionGridLayout {
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
+#[derive(Clone, Copy)]
+pub(crate) struct SelectionGridLayout {
+    pub(crate) palette: ThemePalette,
+    pub(crate) label_w: f32,
+    pub(crate) value_w: f32,
+    pub(crate) action_w: f32,
+    pub(crate) row_h: f32,
+    pub(crate) value_chars: usize,
 }
 
 pub(crate) fn render_selection_grid(
     ui: &mut egui::Ui,
     details: &Step2Details,
     action: &mut Option<Step2Action>,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
+    layout: SelectionGridLayout,
 ) {
-    let layout = SelectionGridLayout {
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
-    };
     ui.label(crate::ui::shared::typography_global::small_strong(
         "Selection",
     ));
@@ -53,10 +49,10 @@ pub(crate) fn render_selection_grid(
                 None,
                 action,
             );
-            render_checked_row(ui, details, label_w, value_w, row_h);
-            render_state_row(ui, details, label_w, value_w, row_h);
+            render_checked_row(ui, details, &layout);
+            render_state_row(ui, details, &layout);
             if details.compat_kind.is_some() {
-                render_compat_rows(ui, details, label_w, value_w, row_h, value_chars);
+                render_compat_rows(ui, details, layout);
             }
             render_value_row(
                 ui,
@@ -123,7 +119,7 @@ fn render_value_row(
     let Some(raw) = value else {
         return;
     };
-    ui.add_sized(
+    let label_resp = ui.add_sized(
         [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong(label)),
     );
@@ -133,38 +129,20 @@ fn render_value_row(
     } else {
         crate::ui::shared::typography_global::plain(display)
     };
-    ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
+    let value_resp = ui
+        .add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
         .on_hover_text(raw);
-    if ui
-        .small_button("C")
-        .on_hover_text(crate::ui::shared::tooltip_global::COPY)
-        .clicked()
-    {
-        ui.ctx().copy_text(raw.to_string());
-    }
-    if let Some(next_action) = open_action
-        && ui
-            .small_button("O")
-            .on_hover_text(crate::ui::shared::tooltip_global::OPEN)
-            .clicked()
-    {
-        *action = Some(next_action);
-    }
+    let visible = row_action_visible(ui, label_resp.rect, value_resp.rect, layout.action_w);
+    render_action_cell(ui, layout, Some(raw), open_action, action, visible);
     ui.end_row();
 }
 
-fn render_checked_row(
-    ui: &mut egui::Ui,
-    details: &Step2Details,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-) {
+fn render_checked_row(ui: &mut egui::Ui, details: &Step2Details, layout: &SelectionGridLayout) {
     let Some(checked) = details.is_checked else {
         return;
     };
     ui.add_sized(
-        [label_w, row_h],
+        [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("Checked")),
     );
     let checked_pill = if checked {
@@ -174,23 +152,20 @@ fn render_checked_row(
         crate::ui::shared::typography_global::strong("Unchecked")
             .color(crate::ui::shared::theme_global::text_muted())
     };
-    ui.add_sized([value_w, row_h], egui::Label::new(checked_pill));
-    ui.label("");
+    ui.add_sized(
+        [layout.value_w, layout.row_h],
+        egui::Label::new(checked_pill),
+    );
+    render_empty_action_cell(ui, layout);
     ui.end_row();
 }
 
-fn render_state_row(
-    ui: &mut egui::Ui,
-    details: &Step2Details,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-) {
+fn render_state_row(ui: &mut egui::Ui, details: &Step2Details, layout: &SelectionGridLayout) {
     let Some(is_disabled) = details.is_disabled else {
         return;
     };
     ui.add_sized(
-        [label_w, row_h],
+        [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("State")),
     );
     let state_text = if is_disabled {
@@ -200,28 +175,15 @@ fn render_state_row(
         crate::ui::shared::typography_global::strong("Selectable")
             .color(crate::ui::shared::theme_global::success())
     };
-    let state_resp = ui.add_sized([value_w, row_h], egui::Label::new(state_text));
+    let state_resp = ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(state_text));
     if let Some(reason) = details.disabled_reason.as_deref() {
         state_resp.on_hover_text(reason);
     }
-    ui.label("");
+    render_empty_action_cell(ui, layout);
     ui.end_row();
 }
 
-fn render_compat_rows(
-    ui: &mut egui::Ui,
-    details: &Step2Details,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
-) {
-    let layout = SelectionGridLayout {
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
-    };
+fn render_compat_rows(ui: &mut egui::Ui, details: &Step2Details, layout: SelectionGridLayout) {
     let mut ignored_action = None;
     render_value_row(
         ui,
@@ -242,102 +204,73 @@ fn render_compat_rows(
         &mut ignored_action,
     );
 
-    render_reason_row(ui, details, label_w, value_w, row_h, value_chars);
-    render_origin_row(ui, details, label_w, value_w, row_h, value_chars);
+    render_reason_row(ui, details, &layout);
+    render_origin_row(ui, details, &layout);
     render_optional_monospace_row(
         ui,
         "Related",
         details.compat_related_target.as_deref(),
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
+        &layout,
     );
     render_optional_monospace_row(
         ui,
         "Conflict Graph",
         details.compat_graph.as_deref(),
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
+        &layout,
     );
     render_optional_monospace_row(
         ui,
         "Matched Rule",
         details.compat_evidence.as_deref(),
-        label_w,
-        value_w,
-        row_h,
-        value_chars,
+        &layout,
     );
 }
 
-fn render_reason_row(
-    ui: &mut egui::Ui,
-    details: &Step2Details,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
-) {
-    ui.add_sized(
-        [label_w, row_h],
+fn render_reason_row(ui: &mut egui::Ui, details: &Step2Details, layout: &SelectionGridLayout) {
+    let label_resp = ui.add_sized(
+        [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("Reason")),
     );
     let reason = details
         .disabled_reason
         .as_deref()
         .unwrap_or("Matched compatibility rule.");
-    let display = ellipsize_end(reason, value_chars);
-    ui.add_sized(
-        [value_w, row_h],
-        egui::Label::new(
-            crate::ui::shared::typography_global::plain(display)
-                .color(crate::ui::shared::theme_global::warning()),
-        ),
-    )
-    .on_hover_text(reason);
-    if ui
-        .small_button("C")
-        .on_hover_text(crate::ui::shared::tooltip_global::COPY)
-        .clicked()
-    {
-        ui.ctx().copy_text(reason.to_string());
-    }
+    let display = ellipsize_end(reason, layout.value_chars);
+    let value_resp = ui
+        .add_sized(
+            [layout.value_w, layout.row_h],
+            egui::Label::new(
+                crate::ui::shared::typography_global::plain(display)
+                    .color(crate::ui::shared::theme_global::warning()),
+            ),
+        )
+        .on_hover_text(reason);
+    let mut ignored_action = None;
+    let visible = row_action_visible(ui, label_resp.rect, value_resp.rect, layout.action_w);
+    render_action_cell(ui, layout, Some(reason), None, &mut ignored_action, visible);
     ui.end_row();
 }
 
-fn render_origin_row(
-    ui: &mut egui::Ui,
-    details: &Step2Details,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
-) {
-    ui.add_sized(
-        [label_w, row_h],
+fn render_origin_row(ui: &mut egui::Ui, details: &Step2Details, layout: &SelectionGridLayout) {
+    let label_resp = ui.add_sized(
+        [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong("Rule Origin")),
     );
     let origin = details
         .compat_source
         .as_deref()
         .unwrap_or("step2_compat_rules_user.toml");
-    ui.add_sized(
-        [value_w, row_h],
-        egui::Label::new(crate::ui::shared::typography_global::monospace(
-            ellipsize_end(origin, value_chars),
-        )),
-    )
-    .on_hover_text(origin);
-    if ui
-        .small_button("C")
-        .on_hover_text(crate::ui::shared::tooltip_global::COPY)
-        .clicked()
-    {
-        ui.ctx().copy_text(origin.to_string());
-    }
+    let value_resp = ui
+        .add_sized(
+            [layout.value_w, layout.row_h],
+            egui::Label::new(crate::ui::shared::typography_global::monospace(
+                ellipsize_end(origin, layout.value_chars),
+            )),
+        )
+        .on_hover_text(origin);
+    let mut ignored_action = None;
+    let visible = row_action_visible(ui, label_resp.rect, value_resp.rect, layout.action_w);
+    render_action_cell(ui, layout, Some(origin), None, &mut ignored_action, visible);
     ui.end_row();
 }
 
@@ -345,33 +278,85 @@ fn render_optional_monospace_row(
     ui: &mut egui::Ui,
     label: &str,
     value: Option<&str>,
-    label_w: f32,
-    value_w: f32,
-    row_h: f32,
-    value_chars: usize,
+    layout: &SelectionGridLayout,
 ) {
     let Some(raw) = value else {
         return;
     };
-    ui.add_sized(
-        [label_w, row_h],
+    let label_resp = ui.add_sized(
+        [layout.label_w, layout.row_h],
         egui::Label::new(crate::ui::shared::typography_global::strong(label)),
     );
-    ui.add_sized(
-        [value_w, row_h],
-        egui::Label::new(crate::ui::shared::typography_global::monospace(
-            ellipsize_end(raw, value_chars),
-        )),
-    )
-    .on_hover_text(raw);
-    if ui
-        .small_button("C")
-        .on_hover_text(crate::ui::shared::tooltip_global::COPY)
-        .clicked()
-    {
-        ui.ctx().copy_text(raw.to_string());
-    }
+    let value_resp = ui
+        .add_sized(
+            [layout.value_w, layout.row_h],
+            egui::Label::new(crate::ui::shared::typography_global::monospace(
+                ellipsize_end(raw, layout.value_chars),
+            )),
+        )
+        .on_hover_text(raw);
+    let mut ignored_action = None;
+    let visible = row_action_visible(ui, label_resp.rect, value_resp.rect, layout.action_w);
+    render_action_cell(ui, layout, Some(raw), None, &mut ignored_action, visible);
     ui.end_row();
+}
+
+fn render_action_cell(
+    ui: &mut egui::Ui,
+    layout: &SelectionGridLayout,
+    copy_value: Option<&str>,
+    open_action: Option<Step2Action>,
+    action: &mut Option<Step2Action>,
+    visible: bool,
+) {
+    ui.allocate_ui_with_layout(
+        egui::vec2(layout.action_w, layout.row_h),
+        egui::Layout::right_to_left(egui::Align::Center),
+        |ui| {
+            if let Some(next_action) = open_action
+                && render_icon_button(
+                    ui,
+                    layout.palette,
+                    ButtonIcon::Open,
+                    crate::ui::shared::tooltip_global::OPEN,
+                    visible,
+                )
+                .clicked()
+            {
+                *action = Some(next_action);
+            }
+            if let Some(value) = copy_value
+                && render_icon_button(
+                    ui,
+                    layout.palette,
+                    ButtonIcon::Copy,
+                    crate::ui::shared::tooltip_global::COPY,
+                    visible,
+                )
+                .clicked()
+            {
+                ui.ctx().copy_text(value.to_string());
+            }
+        },
+    );
+}
+
+fn render_empty_action_cell(ui: &mut egui::Ui, layout: &SelectionGridLayout) {
+    ui.allocate_ui(egui::vec2(layout.action_w, layout.row_h), |_| {});
+}
+
+fn row_action_visible(
+    ui: &egui::Ui,
+    label_rect: egui::Rect,
+    value_rect: egui::Rect,
+    action_w: f32,
+) -> bool {
+    let hover_rect = egui::Rect::from_min_max(
+        label_rect.min,
+        egui::pos2(value_rect.right() + action_w + 8.0, value_rect.bottom()),
+    )
+    .expand(2.0);
+    ui.rect_contains_pointer(hover_rect)
 }
 
 fn ellipsize_end(value: &str, max_chars: usize) -> String {

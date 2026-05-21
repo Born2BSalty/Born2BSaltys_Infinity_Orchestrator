@@ -27,6 +27,7 @@ pub fn render(
     palette: ThemePalette,
     current: WorkspaceStep,
     disable_prev: bool,
+    left_status: Option<&str>,
 ) -> NavBarOutcome {
     let mut outcome = NavBarOutcome::default();
 
@@ -61,6 +62,9 @@ pub fn render(
         if prev_disabled {
             prev_resp.on_hover_text(PREV_DISABLED_TOOLTIP);
         }
+        if let Some(status) = left_status.filter(|text| !text.trim().is_empty()) {
+            render_left_status(ui, palette, status);
+        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 10.0;
@@ -91,6 +95,22 @@ pub fn render(
     });
 
     outcome
+}
+
+fn render_left_status(ui: &mut egui::Ui, palette: ThemePalette, status: &str) {
+    ui.scope(|ui| {
+        ui.set_max_width(320.0);
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(status)
+                    .size(12.0)
+                    .family(egui::FontFamily::Name("poppins_medium".into()))
+                    .color(redesign_text_faint(palette)),
+            )
+            .truncate(),
+        )
+        .on_hover_text(status);
+    });
 }
 
 #[derive(Clone, Copy)]

@@ -6,6 +6,8 @@ use eframe::egui;
 use crate::app::prompt_popup_text::{build_mod_prompt_popup_text, mod_has_any_prompt};
 use crate::app::state::{Step2ModState, Step2Selection};
 use crate::parser::prompt_eval_expr::PromptEvalContext;
+use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::tree_compat_display_step2::{parent_compat_summary, parent_compat_target};
 use crate::ui::step2::tree_selection_rules_step2::{
     enforce_collapsible_group_umbrella_after_bulk, enforce_meta_mode_after_bulk,
@@ -18,6 +20,7 @@ pub(crate) struct ParentRowResult {
     pub selection: Option<Step2Selection>,
     pub open_compat_for_component: Option<(String, String, String)>,
     pub open_prompt_popup: Option<(String, String)>,
+    pub open_details: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -34,17 +37,31 @@ struct ParentRenderContext<'a> {
     selected: Option<&'a Step2Selection>,
     prompt_eval: &'a PromptEvalContext,
     jump_to_selected_requested: &'a mut bool,
+    palette: ThemePalette,
+}
+
+pub(crate) struct ParentRowInput<'a> {
+    pub active_tab: &'a str,
+    pub selected: Option<&'a Step2Selection>,
+    pub next_selection_order: &'a mut usize,
+    pub prompt_eval: &'a PromptEvalContext,
+    pub jump_to_selected_requested: &'a mut bool,
+    pub palette: ThemePalette,
 }
 
 pub(crate) fn render_parent_row(
     ui: &mut egui::Ui,
     mod_state: &mut Step2ModState,
-    active_tab: &str,
-    selected: Option<&Step2Selection>,
-    next_selection_order: &mut usize,
-    prompt_eval: &PromptEvalContext,
-    jump_to_selected_requested: &mut bool,
+    input: ParentRowInput<'_>,
 ) -> ParentRowResult {
+    let ParentRowInput {
+        active_tab,
+        selected,
+        next_selection_order,
+        prompt_eval,
+        jump_to_selected_requested,
+        palette,
+    } = input;
     let mod_name = mod_state.name.clone();
     let counts = parent_selection_counts(mod_state);
     let mod_header_label = format!(
@@ -58,6 +75,7 @@ pub(crate) fn render_parent_row(
         selected,
         prompt_eval,
         jump_to_selected_requested,
+        palette,
     };
 
     ui.horizontal(|ui| {
@@ -177,17 +195,39 @@ fn render_parent_label_area(
     parent_summary: Option<&(egui::Color32, egui::Color32, String)>,
 ) {
     let row_w = ui.available_width().max(0.0);
-    ui.allocate_ui_with_layout(
-        egui::vec2(row_w, ui.spacing().interact_size.y),
-        egui::Layout::left_to_right(egui::Align::Center),
+    let row_h = ui.spacing().interact_size.y;
+    let (row_rect, row_response) =
+        ui.allocate_exact_size(egui::vec2(row_w, row_h), egui::Sense::hover());
+    let row_hovered = row_response.hovered() || ui.rect_contains_pointer(row_rect);
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(row_rect)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
         |ui| {
             ui.set_max_width(row_w);
-            render_parent_selection_label(ui, mod_state, ctx, result, mod_header_label);
+            let is_selected = parent_is_selected(mod_state, ctx);
+            render_parent_selection_label(
+                ui,
+                mod_state,
+                ctx,
+                result,
+                mod_header_label,
+                is_selected,
+            );
             crate::ui::step2::tree_header_marker_step2::render(ui, mod_state);
             render_parent_compat_pill(ui, mod_state, result, parent_summary);
             render_parent_prompt_pill(ui, mod_state, ctx, result);
+            render_parent_details_action(ui, mod_state, ctx, result, row_hovered || is_selected);
         },
     );
+}
+
+fn parent_is_selected(mod_state: &Step2ModState, ctx: &ParentRenderContext<'_>) -> bool {
+    matches!(
+        ctx.selected,
+        Some(Step2Selection::Mod { game_tab, tp_file })
+            if game_tab == ctx.active_tab && tp_file == &mod_state.tp_file
+    )
 }
 
 fn render_parent_selection_label(
@@ -196,12 +236,8 @@ fn render_parent_selection_label(
     ctx: &mut ParentRenderContext<'_>,
     result: &mut ParentRowResult,
     mod_header_label: &str,
+    is_selected: bool,
 ) {
-    let is_selected = matches!(
-        ctx.selected,
-        Some(Step2Selection::Mod { game_tab, tp_file })
-            if game_tab == ctx.active_tab && tp_file == &mod_state.tp_file
-    );
     let row = ui.selectable_label(is_selected, mod_header_label);
     if *ctx.jump_to_selected_requested && is_selected {
         ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
@@ -209,6 +245,29 @@ fn render_parent_selection_label(
     }
     if row.clicked() {
         select_parent(result, ctx.active_tab, &mod_state.tp_file);
+    }
+}
+
+fn render_parent_details_action(
+    ui: &mut egui::Ui,
+    mod_state: &Step2ModState,
+    ctx: &ParentRenderContext<'_>,
+    result: &mut ParentRowResult,
+    visible: bool,
+) {
+    let spare = (ui.available_width() - 24.0).max(0.0);
+    ui.add_space(spare);
+    if render_icon_button(
+        ui,
+        ctx.palette,
+        ButtonIcon::Details,
+        "Show details",
+        visible,
+    )
+    .clicked()
+    {
+        select_parent(result, ctx.active_tab, &mod_state.tp_file);
+        result.open_details = true;
     }
 }
 

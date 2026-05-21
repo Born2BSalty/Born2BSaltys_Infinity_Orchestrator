@@ -5,6 +5,7 @@ use eframe::egui;
 
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::service_list_ops_step2::mod_matches_filter;
 use crate::ui::step2::state_step2::active_mods_mut;
@@ -17,6 +18,8 @@ pub(crate) fn render_list_pane(
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
     left_rect: egui::Rect,
+    details_open: &mut bool,
+    palette: ThemePalette,
 ) {
     let selection_before = selection_snapshot(state);
     ui.scope_builder(egui::UiBuilder::new().max_rect(left_rect), |ui| {
@@ -34,7 +37,7 @@ pub(crate) fn render_list_pane(
                     configure_scroll_style(ui);
                     ui.add_enabled_ui(
                         !state.step1.installs_exactly_from_weidu_logs() && !state.step2.is_scanning,
-                        |ui| render_mods_scroll(ui, state, action),
+                        |ui| render_mods_scroll(ui, state, action, details_open, palette),
                     );
                 });
             });
@@ -62,16 +65,22 @@ fn render_mods_scroll(
     ui: &mut egui::Ui,
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
+    details_open: &mut bool,
+    palette: ThemePalette,
 ) {
     egui::ScrollArea::both()
         .auto_shrink([false, false])
-        .show(ui, |ui| render_mods_scroll_content(ui, state, action));
+        .show(ui, |ui| {
+            render_mods_scroll_content(ui, state, action, details_open, palette);
+        });
 }
 
 fn render_mods_scroll_content(
     ui: &mut egui::Ui,
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
+    details_open: &mut bool,
+    palette: ThemePalette,
 ) {
     let filter = state.step2.search_query.trim().to_lowercase();
     let active_tab = state.step2.active_game_tab.clone();
@@ -96,6 +105,8 @@ fn render_mods_scroll_content(
             collapse_default_open,
             jump_to_selected_requested: &mut jump_to_selected_requested,
             prompt_popup: &mut prompt_popup,
+            details_open,
+            palette,
         };
         render_active_mods(ui, mods, &mut ctx, action);
     }
@@ -117,6 +128,8 @@ struct ActiveModsRenderContext<'a> {
     collapse_default_open: bool,
     jump_to_selected_requested: &'a mut bool,
     prompt_popup: &'a mut Option<(String, String)>,
+    details_open: &'a mut bool,
+    palette: ThemePalette,
 }
 
 fn render_active_mods(
@@ -154,6 +167,7 @@ fn render_one_mod(
         collapse_epoch: ctx.collapse_epoch,
         collapse_default_open: ctx.collapse_default_open,
         jump_to_selected_requested: ctx.jump_to_selected_requested,
+        palette: ctx.palette,
     };
     if let Some(result) = render_mod_tree(ui, &mut render_ctx, mod_state) {
         apply_mod_tree_result(ctx, action, result);
@@ -169,8 +183,12 @@ fn apply_mod_tree_result(
         selected,
         open_compat_for_component,
         open_prompt_popup,
+        open_details,
     } = result;
     *ctx.selected = Some(selected);
+    if open_details {
+        *ctx.details_open = true;
+    }
     if let Some((tp_file, component_id, component_key)) = open_compat_for_component {
         *action = Some(Step2Action::OpenCompatForComponent {
             game_tab: ctx.active_tab.to_string(),

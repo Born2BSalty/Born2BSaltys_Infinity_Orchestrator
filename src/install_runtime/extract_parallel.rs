@@ -40,10 +40,18 @@ pub fn start_parallel_extract(
     extract_progress: &Arc<Mutex<Option<(usize, usize)>>>,
 ) -> Option<Receiver<ExtractAssetEvent>> {
     if state.step2.update_selected_extract_running {
+        tracing::info!(
+            target = "orchestrator",
+            "parallel extract not started: extractor already running"
+        );
         return None;
     }
     let archive_dir = PathBuf::from(state.step1.mods_archive_folder.trim());
     if archive_dir.as_os_str().is_empty() {
+        tracing::info!(
+            target = "orchestrator",
+            "parallel extract not started: archive dir is empty"
+        );
         return None;
     }
     let jobs = build_extract_jobs(state, &archive_dir);
@@ -53,6 +61,12 @@ pub fn start_parallel_extract(
             state.step2.scan_status =
                 format!("Extract updates finished: 0 updated, {failed} failed");
         }
+        tracing::info!(
+            target = "orchestrator",
+            failed,
+            archive_dir = %archive_dir.display(),
+            "parallel extract not started: no extract jobs"
+        );
         return None;
     }
 
@@ -64,6 +78,12 @@ pub fn start_parallel_extract(
 
     let (tx, rx) = mpsc::channel::<ExtractAssetEvent>();
     let jobs_total = jobs.len();
+    tracing::info!(
+        target = "orchestrator",
+        jobs_total,
+        archive_dir = %archive_dir.display(),
+        "parallel extract starting"
+    );
     thread::spawn(move || {
         run_parallel_extract(jobs, jobs_total, &tx);
     });
@@ -77,13 +97,17 @@ fn run_parallel_extract(
 ) {
     let mut result = ExtractResult::default();
     if total == 0 {
-        if let Err(err) = tx.send(ExtractAssetEvent::Finished(result)) {
-            tracing::warn!(
+        match tx.send(ExtractAssetEvent::Finished(result)) {
+            Ok(()) => tracing::info!(
+                target = "orchestrator",
+                "extract coordinator: Finished sent on empty-jobs path"
+            ),
+            Err(err) => tracing::warn!(
                 target = "orchestrator",
                 "extract coordinator: Finished send failed on empty-jobs \
                  path: {err} (receiver dropped — Downloading screen will \
                  not auto-advance; install runtime hands back to user)"
-            );
+            ),
         }
         return;
     }
@@ -128,13 +152,27 @@ fn run_parallel_extract(
     }
     drop(recs);
 
-    if let Err(err) = tx.send(ExtractAssetEvent::Finished(result)) {
-        tracing::warn!(
+    let extracted = result.extracted.len();
+    let failed = result.failed.len();
+    tracing::info!(
+        target = "orchestrator",
+        extracted,
+        failed,
+        "parallel extract coordinator: all workers joined"
+    );
+    match tx.send(ExtractAssetEvent::Finished(result)) {
+        Ok(()) => tracing::info!(
+            target = "orchestrator",
+            extracted,
+            failed,
+            "extract coordinator: Finished sent"
+        ),
+        Err(err) => tracing::warn!(
             target = "orchestrator",
             "extract coordinator: Finished send failed: {err} (receiver \
              dropped — Downloading screen will not auto-advance; install \
              runtime stays armed until user action)"
-        );
+        ),
     }
 }
 
@@ -162,18 +200,24 @@ fn worker_loop(
                         label: label.clone(),
                         outcome: Ok(target_display.clone()),
                     });
-                if let Err(err) = tx.send(ExtractAssetEvent::AssetDone {
+                match tx.send(ExtractAssetEvent::AssetDone {
                     index,
                     ok: true,
                     label: label.clone(),
                     target_or_err: target_display,
                 }) {
-                    tracing::warn!(
+                    Ok(()) => tracing::info!(
+                        target = "orchestrator",
+                        index,
+                        label = %label,
+                        "extract worker: AssetDone sent"
+                    ),
+                    Err(err) => tracing::warn!(
                         target = "orchestrator",
                         "extract worker: AssetDone send failed for \
                          index {index} ({label}): {err} (receiver \
                          dropped — progress bar will stall)"
-                    );
+                    ),
                 }
             }
             Err(err) => {
@@ -185,20 +229,26 @@ fn worker_loop(
                         label: label.clone(),
                         outcome: Err(err.clone()),
                     });
-                if let Err(send_err) = tx.send(ExtractAssetEvent::AssetDone {
+                match tx.send(ExtractAssetEvent::AssetDone {
                     index,
                     ok: false,
                     label: label.clone(),
                     target_or_err: err,
                 }) {
-                    tracing::warn!(
+                    Ok(()) => tracing::info!(
+                        target = "orchestrator",
+                        index,
+                        label = %label,
+                        "extract worker: AssetDone sent for failed archive"
+                    ),
+                    Err(send_err) => tracing::warn!(
                         target = "orchestrator",
                         "extract worker: AssetDone (failure) send \
                          failed for index {index} ({label}): \
                          {send_err} (receiver dropped — failed \
                          archive will not appear in the Downloading \
                          screen's failed list)"
-                    );
+                    ),
                 }
             }
         }

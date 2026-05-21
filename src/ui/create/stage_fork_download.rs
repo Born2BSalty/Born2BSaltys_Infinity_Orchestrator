@@ -85,33 +85,46 @@ pub fn render_live(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> For
 
 fn fork_extract_complete(orchestrator: &OrchestratorApp) -> bool {
     let flags = orchestrator.install_screen_state.pipeline_flags;
-    if !flags.armed()
-        || orchestrator
-            .install_screen_state
-            .pipeline_arm_error
-            .is_some()
-    {
-        return false;
-    }
-    if !flags.archive_skip_completed() {
-        return false;
-    }
-    if !flags.download_phase_started() {
-        return false;
-    }
-    if !flags.archives_verified() {
-        return false;
-    }
-    if !flags.archives_ingested() {
-        return false;
-    }
     let step2 = &orchestrator.wizard_state.step2;
-    if step2.update_selected_download_running || step2.update_selected_extract_running {
-        return false;
-    }
     let archives_observed = step2.update_selected_extracted_sources.len()
         + orchestrator.install_screen_state.skip_indices.len();
-    archives_observed > 0 || step2.update_selected_update_assets.is_empty()
+    let arm_error = orchestrator
+        .install_screen_state
+        .pipeline_arm_error
+        .is_some();
+    let download_running = step2.update_selected_download_running;
+    let extract_running = step2.update_selected_extract_running;
+    let complete = flags.armed()
+        && !arm_error
+        && flags.archive_skip_completed()
+        && flags.download_phase_started()
+        && flags.archives_verified()
+        && flags.archives_ingested()
+        && !download_running
+        && !extract_running
+        && (archives_observed > 0 || step2.update_selected_update_assets.is_empty());
+
+    if flags.armed() && flags.download_phase_started() && !download_running && !extract_running {
+        tracing::info!(
+            target = "orchestrator",
+            complete,
+            armed = flags.armed(),
+            arm_error,
+            archive_skip_completed = flags.archive_skip_completed(),
+            download_phase_started = flags.download_phase_started(),
+            archives_verified = flags.archives_verified(),
+            archives_ingested = flags.archives_ingested(),
+            download_running,
+            extract_running,
+            extracted_sources = step2.update_selected_extracted_sources.len(),
+            skipped_archives = orchestrator.install_screen_state.skip_indices.len(),
+            update_assets_remaining = step2.update_selected_update_assets.len(),
+            archives_observed,
+            "fork extract completion gate"
+        );
+    }
+
+    complete
 }
 
 #[cfg(test)]

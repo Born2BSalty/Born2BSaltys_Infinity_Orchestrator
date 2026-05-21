@@ -185,11 +185,25 @@ fn can_bootstrap_from_log(
 ) -> bool {
     if exact_log_mode {
         false
+    } else if scratch_workspace_has_mods_folder(orchestrator) {
+        true
     } else if orchestrator.wizard_state.step1.bootstraps_from_weidu_logs() {
         review_edit_scan_complete(&orchestrator.wizard_state)
     } else {
         has_completed_scan
     }
+}
+
+fn scratch_workspace_has_mods_folder(orchestrator: &OrchestratorApp) -> bool {
+    let id = orchestrator.workspace_view.modlist_id.trim();
+    if id.is_empty() {
+        return false;
+    }
+    orchestrator
+        .workspace_state
+        .get(id)
+        .and_then(|workspace| workspace.scratch_mods_folder.as_deref())
+        .is_some_and(|folder| !folder.trim().is_empty())
 }
 
 struct UpdatesInput {

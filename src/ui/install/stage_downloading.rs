@@ -822,25 +822,34 @@ pub(crate) fn ingest_downloaded_archives_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     destination: &str,
 ) {
-    if !orchestrator
-        .install_screen_state
-        .pipeline_flags
-        .archives_ingested()
-        && !destination.is_empty()
-        && !orchestrator
-            .wizard_state
-            .step2
-            .update_selected_download_running
-        && orchestrator
-            .install_screen_state
-            .pipeline_flags
-            .download_phase_started()
-        && !orchestrator
-            .wizard_state
-            .step2
-            .update_selected_downloaded_sources
-            .is_empty()
-    {
+    let flags = orchestrator.install_screen_state.pipeline_flags;
+    let destination_empty = destination.is_empty();
+    let download_running = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_download_running;
+    let downloaded_sources = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_downloaded_sources
+        .len();
+    let should_ingest = !flags.archives_ingested()
+        && !destination_empty
+        && !download_running
+        && flags.download_phase_started()
+        && downloaded_sources > 0;
+    if flags.download_phase_started() && !flags.archives_ingested() && !download_running {
+        tracing::info!(
+            target = "orchestrator",
+            destination_empty,
+            download_running,
+            download_phase_started = flags.download_phase_started(),
+            downloaded_sources,
+            should_ingest,
+            "downloaded archive ingest gate"
+        );
+    }
+    if should_ingest {
         orchestrator
             .install_screen_state
             .pipeline_flags
@@ -853,6 +862,11 @@ pub(crate) fn ingest_downloaded_archives_once(
             .map(crate::app::app_step2_update_download::archive_file_name)
             .collect();
         archive_store::ingest_downloaded_archives(&orchestrator.wizard_state, destination, &names);
+        tracing::info!(
+            target = "orchestrator",
+            archive_names = names.len(),
+            "downloaded archive ingest latch set"
+        );
     }
 }
 

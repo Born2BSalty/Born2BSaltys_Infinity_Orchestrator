@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::controller::step3_sync;
-use crate::app::state::{Step2ModState, Step3ItemState, WizardState};
+use crate::app::state::{Step1State, Step2ModState, Step3ItemState, WizardState};
 use crate::registry::model::{Game, ModlistEntry};
 use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState};
 use crate::settings::store::SettingsStore;
@@ -18,6 +18,7 @@ pub fn populate_wizard_state_from_workspace(
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
 
     sync_paths_from_settings(settings_store, wizard_state);
+    apply_scratch_mods_folder(workspace, wizard_state);
 
     reset_scanned_step2_set(wizard_state);
 
@@ -171,6 +172,7 @@ pub fn extract_workspace_state_from_wizard(
         step3_group_collapse,
         prompt_overrides: prior.prompt_overrides.clone(),
         last_share_code: prior.last_share_code.clone(),
+        scratch_mods_folder: prior.scratch_mods_folder.clone(),
         dev_scanned_mods_folder: prior.dev_scanned_mods_folder.clone(),
         pending_destination_prep: prior.pending_destination_prep,
     }
@@ -247,6 +249,21 @@ pub fn sync_paths_from_settings(settings_store: &SettingsStore, wizard_state: &m
 
     dst.weidu_binary = from.weidu_binary;
     dst.mod_installer_binary = from.mod_installer_binary;
+}
+
+fn apply_scratch_mods_folder(workspace: &ModlistWorkspaceState, wizard_state: &mut WizardState) {
+    let Some(folder) = workspace
+        .scratch_mods_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|folder| !folder.is_empty())
+    else {
+        return;
+    };
+
+    wizard_state.step1.mods_folder = folder.to_string();
+    wizard_state.step1.install_mode = Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
+    wizard_state.step1.sync_install_mode_flags();
 }
 
 #[cfg(test)]

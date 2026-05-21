@@ -548,10 +548,27 @@ impl OrchestratorApp {
                     }
                 }
                 Ok(StreamDownloadEvent::Finished(result)) => {
+                    let downloaded = result.downloaded.len();
+                    let failed = result.failed.len();
+                    tracing::info!(
+                        target = "orchestrator",
+                        downloaded,
+                        failed,
+                        "stream download Finished drained; starting parallel extract"
+                    );
                     *stream_download_rx = None;
                     apply_result_state(wizard_state, result);
                     if let Some(rx) = start_parallel_extract(wizard_state, extract_progress) {
                         *extract_parallel_rx = Some(rx);
+                        tracing::info!(
+                            target = "orchestrator",
+                            "parallel extract receiver installed"
+                        );
+                    } else {
+                        tracing::info!(
+                            target = "orchestrator",
+                            "parallel extract receiver not installed"
+                        );
                     }
                     return;
                 }
@@ -586,13 +603,22 @@ impl OrchestratorApp {
         };
         loop {
             match rx.try_recv() {
-                Ok(ExtractAssetEvent::AssetDone { .. }) => {
-                    if let Ok(mut g) = extract_progress.lock() {
-                        let (c, t) = g.unwrap_or((0, 0));
-                        *g = Some((c + 1, t));
-                    }
+                Ok(ExtractAssetEvent::AssetDone {
+                    index,
+                    ok,
+                    label,
+                    target_or_err,
+                }) => {
+                    Self::record_extract_asset_done(
+                        index,
+                        ok,
+                        &label,
+                        &target_or_err,
+                        extract_progress,
+                    );
                 }
                 Ok(ExtractAssetEvent::Finished(result)) => {
+                    Self::log_extract_finished(&result, extract_progress);
                     *extract_parallel_rx = None;
                     wizard_state.step2.update_selected_extract_running = false;
                     wizard_state.step2.update_selected_extracted_sources = result.extracted;
@@ -659,6 +685,12 @@ impl OrchestratorApp {
                 }
                 Err(TryRecvError::Empty) => return,
                 Err(TryRecvError::Disconnected) => {
+                    let progress_before = extract_progress.lock().ok().and_then(|g| *g);
+                    tracing::info!(
+                        target = "orchestrator",
+                        progress_before = ?progress_before,
+                        "extract drain: channel disconnected"
+                    );
                     *extract_parallel_rx = None;
                     wizard_state.step2.update_selected_extract_running = false;
                     wizard_state.step2.scan_status =
@@ -667,6 +699,47 @@ impl OrchestratorApp {
                 }
             }
         }
+    }
+
+    fn record_extract_asset_done(
+        index: usize,
+        ok: bool,
+        label: &str,
+        target_or_err: &str,
+        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+    ) {
+        let mut progress_after = None;
+        let progress_lock_ok = extract_progress.lock().is_ok_and(|mut g| {
+            let (c, t) = g.unwrap_or((0, 0));
+            let next = (c + 1, t);
+            *g = Some(next);
+            progress_after = Some(next);
+            true
+        });
+        tracing::info!(
+            target = "orchestrator",
+            index,
+            ok,
+            label,
+            target_or_err,
+            progress_lock_ok,
+            progress_after = ?progress_after,
+            "extract drain: AssetDone received"
+        );
+    }
+
+    fn log_extract_finished(
+        result: &crate::install_runtime::extract_parallel::ExtractResult,
+        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+    ) {
+        let progress_before = extract_progress.lock().ok().and_then(|g| *g);
+        tracing::info!(
+            target = "orchestrator",
+            extracted_count = result.extracted.len(),
+            failed_count = result.failed.len(),
+            progress_before = ?progress_before,
+            "extract drain: Finished received"
+        );
     }
 
     fn drain_archive_skip_events(
