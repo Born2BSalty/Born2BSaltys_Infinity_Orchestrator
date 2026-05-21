@@ -197,4 +197,4 @@ If your install uses flags/modes that trigger extra EET pre-checks (for example 
     Source BG2EE Folder (-n): = then BG2EE Game Folder:
         New EET Directory: = empty folder on your desired location to install the BG2EE game
         
-        ## Common Problems and Fixes
+        ### Common Problems and Fixes
