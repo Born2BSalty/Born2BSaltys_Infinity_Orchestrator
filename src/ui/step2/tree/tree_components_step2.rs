@@ -43,6 +43,7 @@ struct ComponentRowBuffers {
     selection: Option<Step2Selection>,
     compat_popup: CompatPopupTarget,
     prompt_popup: PromptPopupTarget,
+    open_details: bool,
     enforce_single_select_for: Vec<usize>,
     enforce_collapsible_group_for: Vec<usize>,
     enforce_meta_for: Vec<usize>,
@@ -54,6 +55,7 @@ impl ComponentRowBuffers {
             selection: &mut self.selection,
             compat_popup: &mut self.compat_popup,
             prompt_popup: &mut self.prompt_popup,
+            open_details: &mut self.open_details,
             enforce_single_select_for: &mut self.enforce_single_select_for,
             enforce_collapsible_group_for: &mut self.enforce_collapsible_group_for,
             enforce_meta_for: &mut self.enforce_meta_for,
@@ -65,6 +67,7 @@ impl ComponentRowBuffers {
             selection: self.selection,
             compat_popup: self.compat_popup,
             prompt_popup: self.prompt_popup,
+            open_details: self.open_details,
         }
     }
 }

@@ -6,6 +6,7 @@ use eframe::egui;
 use crate::app::prompt_eval_summary::evaluate_component_prompt_summary;
 use crate::app::prompt_popup_text::format_component_prompt_popup_text_with_body;
 use crate::app::state::{Step2ComponentState, Step2Selection};
+use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
 use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
     format_component_row_label_with_display,
@@ -139,9 +140,14 @@ fn render_component_label_area(
 ) {
     let widget_text = component_widget_text(ui, view.display_label, view.effectively_disabled);
     let row_w = ui.available_width().max(0.0);
-    ui.allocate_ui_with_layout(
-        egui::vec2(row_w, ui.spacing().interact_size.y),
-        egui::Layout::left_to_right(egui::Align::Center),
+    let row_h = ui.spacing().interact_size.y;
+    let (row_rect, row_response) =
+        ui.allocate_exact_size(egui::vec2(row_w, row_h), egui::Sense::hover());
+    let row_hovered = row_response.hovered() || ui.rect_contains_pointer(row_rect);
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(row_rect)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
         |ui| {
             ui.set_max_width(row_w);
             let mut row = ui.selectable_label(view.is_selected, widget_text);
@@ -159,6 +165,13 @@ fn render_component_label_area(
             }
             render_compat_pill(ui, ctx, ui_state, component);
             render_prompt_pill(ui, ctx, ui_state, component);
+            render_component_details_action(
+                ui,
+                ctx,
+                ui_state,
+                component,
+                row_hovered || view.is_selected,
+            );
         },
     );
 }
@@ -189,6 +202,29 @@ fn select_component(
         component_id: component.component_id.clone(),
         component_key: component.raw_line.clone(),
     });
+}
+
+fn render_component_details_action(
+    ui: &mut egui::Ui,
+    ctx: &ComponentRowsContext<'_>,
+    ui_state: &mut ComponentRenderState<'_>,
+    component: &Step2ComponentState,
+    visible: bool,
+) {
+    let spare = (ui.available_width() - 24.0).max(0.0);
+    ui.add_space(spare);
+    if render_icon_button(
+        ui,
+        ctx.palette,
+        ButtonIcon::Details,
+        "Show details",
+        visible,
+    )
+    .clicked()
+    {
+        select_component(ctx, ui_state, component);
+        *ui_state.open_details = true;
+    }
 }
 
 fn render_compat_pill(

@@ -1,13 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// Render gate for the workspace Step-5 console width clip. Paints
-// `page_step5::render` inside an orchestrator-side `clipped_pane`
-// (the same pattern `stage_installing::clipped_pane` uses and that
-// `page_workspace_step5` also wraps with). The terminal-error path
-// is rendered with an exaggeratedly long line to prove the clip
-// keeps over-wide paint inside the allocated central column instead
-// of bleeding past the right edge.
 
 use std::path::{Path, PathBuf};
 
@@ -161,11 +153,6 @@ fn render_scaffold(ctx: &egui::Context) {
         });
 }
 
-/// Mirror of the orchestrator-side `clipped_pane` helper in
-/// `stage_installing.rs` / `page_workspace_step5.rs`. Clipping the
-/// child Ui's draw region to the allocated rect drops any paint past
-/// the edge, so a long terminal-error line cannot bleed past the
-/// central column's right side.
 fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
     let mut child = ui.new_child(
         egui::UiBuilder::new()

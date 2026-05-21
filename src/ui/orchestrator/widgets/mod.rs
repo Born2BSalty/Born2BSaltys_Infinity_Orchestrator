@@ -3,6 +3,7 @@
 
 pub mod btn;
 pub mod dialogs;
+pub mod icon_button;
 pub mod input;
 pub mod kebab;
 pub mod label;
@@ -11,6 +12,7 @@ pub mod r_box;
 pub mod screen_title;
 
 pub use btn::{BtnOpts, redesign_btn};
+pub(crate) use icon_button::{ButtonIcon, render as render_icon_button};
 pub use input::{InputOpts, redesign_text_input};
 pub use kebab::{KebabItem, render as render_kebab};
 pub use label::{redesign_label, redesign_label_hand};

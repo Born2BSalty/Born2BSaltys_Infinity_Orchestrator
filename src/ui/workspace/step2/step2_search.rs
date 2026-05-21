@@ -10,7 +10,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_input_bg, redesign_text_faint, redesign_text_primary,
 };
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::workspace::step2::step2_dev_scan;
+use crate::ui::workspace::step2::{step2_dev_scan, step2_rescan_reconcile};
 
 const SEARCH_INPUT_H: f32 = 30.0;
 const ROW_GAP: f32 = 10.0;
@@ -28,6 +28,7 @@ pub fn render(
     dev_mode: bool,
 ) -> Option<Step2Action> {
     let is_scanning = orchestrator.wizard_state.step2.is_scanning;
+    let scratch_scan_enabled = scratch_scan_enabled(orchestrator);
 
     let mut action: Option<Step2Action> = None;
 
@@ -87,17 +88,27 @@ pub fn render(
                     action = Some(Step2Action::CancelScan);
                 }
             } else {
-                redesign_btn(
+                let resp = redesign_btn(
                     ui,
                     palette,
                     scan_btn_label,
                     BtnOpts {
                         small: true,
-                        disabled: true,
+                        disabled: !scratch_scan_enabled,
                         ..Default::default()
                     },
-                )
-                .on_hover_text(RESCAN_DISABLED_TIP);
+                );
+                if scratch_scan_enabled {
+                    if resp
+                        .on_hover_text("Scan this modlist's prepared mods folder.")
+                        .clicked()
+                    {
+                        step2_rescan_reconcile::snapshot_current_selection(orchestrator);
+                        action = Some(Step2Action::StartScan);
+                    }
+                } else {
+                    resp.on_hover_text(RESCAN_DISABLED_TIP);
+                }
             }
 
             if dev_mode && dev_scan_button(ui, palette, dev_label).clicked() {
@@ -107,6 +118,25 @@ pub fn render(
     });
 
     action
+}
+
+fn scratch_scan_enabled(orchestrator: &OrchestratorApp) -> bool {
+    let id = orchestrator.workspace_view.modlist_id.trim();
+    if id.is_empty()
+        || orchestrator
+            .wizard_state
+            .step1
+            .mods_folder
+            .trim()
+            .is_empty()
+    {
+        return false;
+    }
+    orchestrator
+        .workspace_state
+        .get(id)
+        .and_then(|workspace| workspace.scratch_mods_folder.as_deref())
+        .is_some_and(|folder| !folder.trim().is_empty())
 }
 
 fn small_btn_width(ui: &egui::Ui, label: &str) -> f32 {

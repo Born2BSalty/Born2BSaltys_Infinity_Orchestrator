@@ -7,7 +7,8 @@ use eframe::egui;
 use tracing::warn;
 
 use crate::app::modlist_share::preview_modlist_share_code;
-use crate::install_runtime::fork_pipeline_arm;
+use crate::install_runtime::{destination_prep, fork_pipeline_arm, per_install_dirs};
+use crate::registry::model::Game;
 use crate::registry::operations;
 use crate::registry::operations_create::create_modlist;
 use crate::registry::store_workspace::WorkspaceStore;
@@ -257,6 +258,20 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
             d.to_string()
         }
     };
+    let scratch_mods_folder = match prepare_scratch_mods_folder(
+        &dest,
+        game,
+        orchestrator.create_screen_state.destination_choice,
+    ) {
+        Ok(path) => path,
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "Create: preparing scratch mods folder failed: {err}"
+            );
+            return;
+        }
+    };
 
     let entry = match create_modlist(&name, game, &dest, &mut orchestrator.registry) {
         Ok(e) => e,
@@ -271,7 +286,7 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
 
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
     let workspace_state = ModlistWorkspaceState {
-        pending_destination_prep: orchestrator.create_screen_state.destination_choice,
+        scratch_mods_folder: Some(scratch_mods_folder),
         ..Default::default()
     };
     if let Err(err) = canonical_store.save(&workspace_state) {
@@ -310,6 +325,23 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     };
 }
 
+fn prepare_scratch_mods_folder(
+    destination: &str,
+    game: Game,
+    choice: Option<crate::ui::install::state_install::DestChoice>,
+) -> Result<String, String> {
+    let dest = std::path::Path::new(destination.trim());
+    if let Some(choice) = choice {
+        destination_prep::prepare_destination(dest, Some(choice))
+            .map_err(|err| format!("prepare destination {}: {err}", dest.display()))?;
+    }
+
+    let dirs = per_install_dirs::resolve(destination, game);
+    std::fs::create_dir_all(&dirs.mods_folder)
+        .map_err(|err| format!("create mods folder {}: {err}", dirs.mods_folder.display()))?;
+    Ok(dirs.mods_folder.to_string_lossy().to_string())
+}
+
 fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id: &str) {
     let name = orchestrator
         .registry
@@ -341,13 +373,6 @@ fn run_fork_preview_parse(state: &mut crate::ui::create::state_create::CreateScr
     }
 }
 
-/// Tear the running fork-download pipeline back to the fork-preview
-/// stage. Mirrors `OrchestratorApp::reset_install_screen_to_paste` —
-/// drops the three pipeline receivers + clears the BIO auto-build
-/// latches + clears the shared hash/extract snapshots — then routes to
-/// `ForkPreview`. The minted in-progress entry stays in the registry so
-/// the user can resume via Load Draft / Home (parity with the
-/// Install-paste Cancel semantics).
 fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
     orchestrator.reset_install_screen_to_paste();
     orchestrator.create_screen_state.fork_download_progress =
@@ -355,10 +380,6 @@ fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
     orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
 }
 
-/// Fork pipeline reached extract-complete: route to the newly minted
-/// workspace at Step 2. Resets the install-pipeline scratch state so
-/// a follow-up Install-paste does not inherit the fork's latches,
-/// then navigates the rail.
 fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, id: String) {
     orchestrator.reset_install_screen_to_paste();
     orchestrator.create_screen_state.fork_code.clear();

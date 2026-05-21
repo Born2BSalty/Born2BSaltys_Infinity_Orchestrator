@@ -35,11 +35,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
         .and_then(|e| post_install_actions::render(ui, palette, &orchestrator.wizard_state, e));
 
     let exe_fingerprint = orchestrator.exe_fingerprint.clone();
-    // BIO's Step-5 console hard-codes `TextWrapMode::Extend` inside its
-    // own `ScrollArea::vertical()` so long install-log lines paint past
-    // the right edge of the available width. Wrap the BIO render in a
-    // clipped child Ui so any over-wide paint is clipped to the
-    // orchestrator's allocated rect rather than bleeding into the shell.
     let panel_rect = ui.available_rect_before_wrap();
     let mut action: Option<Step5Action> = None;
     clipped_pane(ui, panel_rect, |ui| {
@@ -86,10 +81,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
     }
 }
 
-/// Run `add` against a child `Ui` whose draw region is clipped to
-/// `rect`. Paint operations issued inside `add` that fall outside the
-/// rect are dropped by egui's painter, so a child widget that ignores
-/// width hints cannot bleed pixels into surrounding chrome.
 fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
     let mut child = ui.new_child(
         egui::UiBuilder::new()
@@ -170,11 +161,6 @@ fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) ->
     true
 }
 
-/// Apply the workspace's deferred `pending_destination_prep` choice (if
-/// any) on the fresh-Install edge. Returns `false` on failure so the
-/// caller can short-circuit — failing here means the destination is in
-/// an inconsistent state and proceeding would write the install on top
-/// of unprepped content.
 fn consume_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
     use crate::install_runtime::destination_prep;
 

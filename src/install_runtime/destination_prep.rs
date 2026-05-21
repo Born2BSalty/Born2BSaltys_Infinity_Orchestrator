@@ -10,24 +10,15 @@ use crate::ui::install::state_install::DestChoice;
 
 const BACKUP_PREFIX: &str = "_bio_backup";
 
-/// Outcome of a destination-prep pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DestinationPrepReport {
-    /// No work performed; the destination either does not exist, is
-    /// already empty, or the user picked a no-op option.
     Skipped { reason: SkipReason },
 
-    /// The destination's contents were removed and the directory
-    /// recreated as empty.
     Cleaned { children_removed: usize },
 
-    /// The destination was renamed aside and an empty directory was
-    /// recreated in its place.
     BackedUp { backup_path: PathBuf },
 }
 
-/// Why a `prepare_destination` call short-circuited without touching
-/// the disk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReason {
     AlreadyEmpty,
@@ -35,13 +26,6 @@ pub enum SkipReason {
     DoesNotExist,
 }
 
-/// Apply the user's destination choice across the entire destination
-/// directory, not just the EET subdirs BIO's
-/// `prepare_target_dirs_before_install` covers.
-///
-/// `Clear` empties the directory; `Backup` renames it aside with a
-/// timestamp and recreates it empty; `Continue` / `None` are no-ops;
-/// an absent or already-empty destination is also a no-op.
 pub fn prepare_destination(
     dest: &Path,
     choice: Option<DestChoice>,
@@ -266,14 +250,6 @@ mod tests {
 
     #[test]
     fn nonexistent_dest_short_circuits_to_skipped() {
-        // The Backup path's error-surfacing test in the harness needs a
-        // platform-stable trigger; on Windows `fs::rename` semantics
-        // around missing parents vary, so this test fixes the
-        // surrounding invariant: a non-existent destination MUST
-        // short-circuit as `Skipped { DoesNotExist }` regardless of
-        // choice. The error-on-failure path is covered by the
-        // `not_a_directory_returns_error` test below + the read_dir Err
-        // bubble inherent in `?`.
         let bogus_dest = td("bogus_parent").join("missing_intermediate").join("dest");
         for choice in [DestChoice::Clear, DestChoice::Backup] {
             let r = prepare_destination(&bogus_dest, Some(choice));
@@ -302,12 +278,6 @@ mod tests {
 
     #[test]
     fn clear_does_not_route_through_recycle_bin() {
-        // Status-quo confirmation: prepare_destination uses
-        // fs::remove_dir_all (a permanent delete), not a Recycle Bin
-        // route. The user has consented via the destination-not-empty
-        // warning; the spec's no-extra-confirm decision is encoded by
-        // calling the plain std::fs API directly with no
-        // SHFileOperation / trash crate interposition.
         let dest = td("no_recycle_bin");
         make_populated_dir(&dest);
         let canary = dest.join("canary.bin");

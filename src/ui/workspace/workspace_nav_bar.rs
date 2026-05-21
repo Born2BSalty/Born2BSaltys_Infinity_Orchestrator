@@ -27,6 +27,7 @@ pub fn render(
     palette: ThemePalette,
     current: WorkspaceStep,
     disable_prev: bool,
+    left_status: Option<&str>,
 ) -> NavBarOutcome {
     let mut outcome = NavBarOutcome::default();
 
@@ -61,6 +62,9 @@ pub fn render(
         if prev_disabled {
             prev_resp.on_hover_text(PREV_DISABLED_TOOLTIP);
         }
+        if let Some(status) = left_status.filter(|text| !text.trim().is_empty()) {
+            render_left_status(ui, palette, status);
+        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 10.0;
@@ -91,6 +95,22 @@ pub fn render(
     });
 
     outcome
+}
+
+fn render_left_status(ui: &mut egui::Ui, palette: ThemePalette, status: &str) {
+    ui.scope(|ui| {
+        ui.set_max_width(320.0);
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(status)
+                    .size(12.0)
+                    .family(egui::FontFamily::Name("poppins_medium".into()))
+                    .color(redesign_text_faint(palette)),
+            )
+            .truncate(),
+        )
+        .on_hover_text(status);
+    });
 }
 
 #[derive(Clone, Copy)]
@@ -276,12 +296,6 @@ struct ButtonTextPaint<'a> {
     leading_is_glyph: bool,
 }
 
-/// Picks the `(first_font, second_font)` pair for the two text pieces in
-/// a glyph+prose button. `leading_is_glyph == true` means the first piece
-/// is the icon glyph (the rendering font must be the `FiraCode` Nerd one
-/// that carries the arrow PUA range); the second piece is the prose
-/// label. `false` flips it. The Latin prose font carries no arrow glyphs,
-/// so a swap drops the arrow to the missing-glyph `?` fallback.
 fn pick_button_fonts(
     visuals: &GlyphButtonVisuals,
     leading_is_glyph: bool,

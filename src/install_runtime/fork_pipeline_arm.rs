@@ -16,11 +16,6 @@ use crate::ui::create::state_create::CreateScreenState;
 use crate::ui::install::state_install::{DestChoice, InstallStage, PreviewTab};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 
-/// Where the fork sub-flow should route after the mint succeeds.
-///
-/// Carries the minted modlist id so the caller can flip its UI stage to
-/// the Downloading screen and (later) navigate the workspace using the
-/// same id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForkMintReport {
     pub modlist_id: String,
@@ -28,25 +23,6 @@ pub struct ForkMintReport {
 
 const PARENT_FALLBACK_NAME: &str = "Shared modlist";
 
-/// Mint the forked modlist and arm the shared Install-pipeline state.
-///
-/// Consumes:
-/// - `create_screen_state.fork_preview` (must be Some — caller's
-///   responsibility to have parsed it).
-/// - `create_screen_state.modlist_name` (the fork's chosen name; falls
-///   back to "<parent> (fork)" when blank).
-/// - `create_screen_state.destination` (falls back to the
-///   `default_destination(name)` only when blank).
-/// - `create_screen_state.destination_choice` (Clear / Backup; cleared
-///   once consumed so a subsequent Cancel→retry does not double-fire).
-///
-/// Produces a registered fork entry, an on-disk `workspace.json`, the
-/// associated `WorkspaceStore`, and populates the orchestrator's
-/// `install_screen_state.destination` / `import_code` /
-/// `destination_choice` so the shared `stage_downloading::render_live`
-/// pipeline (arm + skip + stream + extract) runs against the fork's
-/// destination on subsequent frames. Returns the minted modlist id so
-/// the caller can route to the Workspace once the pipeline completes.
 pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport, ForkMintError> {
     let preview = orchestrator
         .create_screen_state
@@ -171,7 +147,6 @@ fn derive_inputs(
     )
 }
 
-/// Failure modes for [`mint_and_arm`].
 #[derive(Debug)]
 pub enum ForkMintError {
     NoParsedPreview,
@@ -271,8 +246,6 @@ mod tests {
         let s = state("My fork", "  ", "code");
         let (_, _, _, fork_name, dest, _, _) = derive_inputs(&p, &s);
         assert_eq!(fork_name, "My fork");
-        // default_destination slugifies — "My fork" ⇒ "my-fork" — so
-        // assert the slug ends the path rather than the raw name.
         assert!(
             dest.ends_with("my-fork"),
             "default_destination(name) ends with the slugified fork name; got {dest}"

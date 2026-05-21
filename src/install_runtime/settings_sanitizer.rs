@@ -1,45 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-//! Strips per-install fields from a `Step1State` clone before it is
-//! converted to a `Step1Settings` snapshot and persisted to
-//! `bio_settings.json`.
-//!
-//! Global path settings (Mods archive, Mods backup, Game sources) are
-//! user-owned and live in `bio_settings.json`. Per-install derived
-//! dirs (Mods folder, `weidu_component_logs`, WeiDU-log source folders,
-//! game-clone dirs) are computed at install-arm from the destination,
-//! written onto `wizard_state.step1` so the BIO install pipeline reads
-//! them, and must NOT round-trip through the global settings file.
-//! Without this sanitizer, the orchestrator's debounced settings tick
-//! clones `step1` and converts it to `Step1Settings` whole, leaking
-//! per-install state into the persistence and dragging the per-install
-//! paths into Settings → Paths for the next session.
-//!
-//! The live `wizard_state.step1` is NOT touched — the in-flight
-//! install still resolves the per-install dirs correctly. Only the
-//! persistence path sees the sanitized clone.
-
 use crate::app::state::Step1State;
 use crate::settings::model::Step1Settings;
 
-/// Overwrites every per-install path / flag on `step1` with the
-/// matching value from `settings` (the persisted Settings → Paths
-/// snapshot).
-///
-/// After this call, the clone can be safely converted to a
-/// `Step1Settings` for serialization without leaking per-install dirs
-/// such as `<dest>/mods` into the global settings file. The global
-/// fields BIO settings persist correctly — Mods archive, Mods backup,
-/// Game sources, the user-toggleable Advanced flags — are not touched
-/// by this function; they are read from `step1` as the user edits them.
 pub fn sanitize_step1_for_settings_persistence(step1: &mut Step1State, settings: &Step1Settings) {
-    // Per-install derived path strings — every field
-    // `derive_per_install_dirs` writes onto `step1`.
     step1.mods_folder.clone_from(&settings.mods_folder);
-    step1.weidu_log_folder.clone_from(&settings.weidu_log_folder);
+    step1
+        .weidu_log_folder
+        .clone_from(&settings.weidu_log_folder);
     step1.bgee_log_folder.clone_from(&settings.bgee_log_folder);
-    step1.bg2ee_log_folder.clone_from(&settings.bg2ee_log_folder);
+    step1
+        .bg2ee_log_folder
+        .clone_from(&settings.bg2ee_log_folder);
     step1
         .eet_bgee_log_folder
         .clone_from(&settings.eet_bgee_log_folder);
@@ -54,12 +27,8 @@ pub fn sanitize_step1_for_settings_persistence(step1: &mut Step1State, settings:
         .generate_directory
         .clone_from(&settings.generate_directory);
 
-    // The `weidu_log_mode` string is rebuilt by `sync_weidu_log_mode`
-    // and embeds the per-install `log <folder>` token — restore it to
-    // the persisted value so the token does not leak.
     step1.weidu_log_mode.clone_from(&settings.weidu_log_mode);
 
-    // Per-install booleans that `derive_per_install_dirs` toggles.
     step1.weidu_log_log_component = settings.weidu_log_log_component;
     step1.have_weidu_logs = settings.have_weidu_logs;
     step1.new_pre_eet_dir_enabled = settings.new_pre_eet_dir_enabled;
@@ -73,16 +42,11 @@ mod tests {
 
     fn global_settings() -> Step1Settings {
         Step1Settings {
-            // Global path values the user maintains in Settings → Paths.
             mods_archive_folder: r"C:\Games\BIO\archive".to_string(),
             mods_backup_folder: r"C:\Games\BIO\backup".to_string(),
             bgee_game_folder: r"C:\Games\src\BGEE".to_string(),
             bg2ee_game_folder: r"C:\Games\src\BG2EE".to_string(),
             iwdee_game_folder: r"C:\Games\src\IWDEE".to_string(),
-            // Global per-install field defaults — empty in a clean
-            // Settings → Paths state (the user never sets these by
-            // hand; `derive_per_install_dirs` populates them at
-            // install-arm).
             mods_folder: String::new(),
             weidu_log_folder: String::new(),
             bgee_log_folder: String::new(),
@@ -106,7 +70,6 @@ mod tests {
 
     fn polluted_step1() -> Step1State {
         Step1State {
-            // Per-install values the install runtime wrote.
             mods_folder: r"C:\Games\BIO\installations\simpletest fork\mods".to_string(),
             weidu_log_folder: r"C:\Games\BIO\installations\simpletest fork\weidu_component_logs"
                 .to_string(),
@@ -140,7 +103,6 @@ mod tests {
             new_pre_eet_dir_enabled: true,
             new_eet_dir_enabled: true,
             generate_directory_enabled: false,
-            // Global values that must NOT be touched by the sanitizer.
             mods_archive_folder: r"C:\Games\BIO\archive".to_string(),
             mods_backup_folder: r"C:\Games\BIO\backup".to_string(),
             bgee_game_folder: r"C:\Games\src\BGEE".to_string(),
@@ -157,7 +119,6 @@ mod tests {
 
         sanitize_step1_for_settings_persistence(&mut step1, &settings);
 
-        // Per-install string fields reset to the global (empty) values.
         assert_eq!(step1.mods_folder, "", "mods_folder reset");
         assert_eq!(step1.weidu_log_folder, "", "weidu_log_folder reset");
         assert_eq!(step1.bgee_log_folder, "", "bgee_log_folder reset");
@@ -180,9 +141,6 @@ mod tests {
         assert!(!step1.new_eet_dir_enabled, "boolean reset");
         assert!(!step1.generate_directory_enabled, "boolean reset");
 
-        // Global fields the user maintains in Settings → Paths are NOT
-        // touched — these are the values the orchestrator must let
-        // settings.json round-trip.
         assert_eq!(
             step1.mods_archive_folder, r"C:\Games\BIO\archive",
             "Mods archive must NOT be touched (global, user-owned)"

@@ -41,7 +41,9 @@ pub fn render(
     let disable_prev = orchestrator.workspace_view.install_complete
         || orchestrator.wizard_state.step5.install_running
         || orchestrator.workspace_step5.install_clicked;
-    let outcome = workspace_nav_bar::render(ui, palette, current, disable_prev);
+    let nav_status = nav_status_text(orchestrator, current);
+    let outcome =
+        workspace_nav_bar::render(ui, palette, current, disable_prev, nav_status.as_deref());
 
     if outcome.next_clicked {
         if let Some(next) = current.next() {
@@ -58,6 +60,29 @@ pub fn render(
             orchestrator.nav = NavDestination::Home;
         }
     }
+}
+
+fn nav_status_text(orchestrator: &OrchestratorApp, current: WorkspaceStep) -> Option<String> {
+    if current != WorkspaceStep::Step2 {
+        return None;
+    }
+
+    let status = orchestrator.wizard_state.step2.scan_status.trim();
+    if status.is_empty() {
+        return None;
+    }
+
+    Some(
+        orchestrator
+            .workspace_view
+            .step2
+            .rescan_drop_warning
+            .as_deref()
+            .map_or_else(
+                || status.to_string(),
+                |warning| format!("{status} - {warning}"),
+            ),
+    )
 }
 
 fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {

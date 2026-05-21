@@ -190,8 +190,24 @@ fn render_step2_content(
     );
     crate::ui::step2::content_step2::render_controls(ui, state, action, layout.controls_rect);
     crate::ui::step2::content_step2::render_tabs(ui, state, action, layout.tabs_rect);
-    crate::ui::step2::list_pane_step2::render_list_pane(ui, state, action, layout.left_rect);
-    crate::ui::step2::details_pane_step2::render_pane(ui, state, action, layout.right_rect);
+    let mut details_open = true;
+    let palette = crate::ui::shared::redesign_tokens::ThemePalette::default();
+    crate::ui::step2::list_pane_step2::render_list_pane(
+        ui,
+        state,
+        action,
+        layout.left_rect,
+        &mut details_open,
+        palette,
+    );
+    crate::ui::step2::details_pane_step2::render_pane(
+        ui,
+        state,
+        action,
+        layout.right_rect,
+        palette,
+        &mut details_open,
+    );
     crate::ui::step2::compat_window_step2::render(ui, state);
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, state);
 }

@@ -1,23 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
-//
-// Render gate covering four Install Downloading-screen scenes:
-//   - fresh_install_first_frame: a re-entered install with the
-//     hash + extract snapshots blanked on clear_preview so the new
-//     first frame cannot inherit a previous install's `(N, N)`.
-//   - mid_hash_classified: rows whose hash decision is in flight
-//     render as Hashing; rows already classified render as Queued
-//     or Skipped.
-//   - mid_download_final_pinned: the final asset's per_byte is
-//     `(final_bytes, Some(final_bytes))` so the bar reads 100%
-//     even when Content-Length lied.
-//   - paste_stage_after_reset: the Paste-stage scaffolding the
-//     user lands on after the reset.
-//
-// All scenes are rendered at three widths (1280 / 1045 / 960) and
-// written under `target/ui-snapshots/`. Constructs no
-// `OrchestratorApp` / `RegistryStore` / `WorkspaceStore`; touches no
-// `%APPDATA%` / real config dir.
 
 use bio::ui::install::stage_downloading::{
     self, DownloadProgress, DownloadScreenCopy, ModDownloadRow, ModDownloadStatus,
@@ -59,19 +41,10 @@ fn row(
     }
 }
 
-/// Scene: a freshly-armed install for which `clear_preview` has been
-/// called on entry; `hash_progress` and `extract_progress` on the
-/// `DownloadProgress` are reset to None so the chrome cannot show the
-/// previous install's 51/51. With no rows yet, the screen reads as
-/// "queue is being built" rather than "no mods queued while hash
-/// reports 100%".
 fn scene_fresh_install_first_frame() -> DownloadProgress {
     DownloadProgress::default()
 }
 
-/// Scene: classification mid-hash. Indices 1 and 3 already came back
-/// (their hash decision is recorded → row status is Queued or
-/// Skipped). Indices 0, 2, 4 are still Hashing.
 fn scene_mid_hash_classified() -> DownloadProgress {
     let mut p = DownloadProgress {
         rows: vec![
@@ -96,9 +69,6 @@ fn scene_mid_hash_classified() -> DownloadProgress {
                 None,
                 Some(40_000_000),
             ),
-            // The pass classified indices 1 and 3 so far — they fall
-            // through to Queued (download has not run yet) or Skipped
-            // (their bytes already on disk).
             row(
                 "item_rev",
                 "github:..",
@@ -120,12 +90,6 @@ fn scene_mid_hash_classified() -> DownloadProgress {
     p
 }
 
-/// Scene: mid-download with the final asset's bar pinned to 100%
-/// before the status flips. The penultimate row is still downloading
-/// at 80%; the final row's `AssetDone` has fired so its `per_byte` is
-/// `(final, Some(final))` ⇒ bar = 1.0 — but the row's *status* is
-/// still `Downloading` because the next `from_wizard_state_full`
-/// rebuild has not yet re-classified it to Extracting / Staged.
 fn scene_mid_download_final_pinned() -> DownloadProgress {
     DownloadProgress {
         rows: vec![
@@ -136,9 +100,6 @@ fn scene_mid_download_final_pinned() -> DownloadProgress {
                 Some((80_000_000, Some(100_000_000))),
                 Some(100_000_000),
             ),
-            // Final asset: AssetDone arrived. Bug 4 fix: per_byte is
-            // (final_bytes, Some(final_bytes)) so bar_fraction == 1.0
-            // even when Content-Length was wrong or absent.
             row(
                 "cdtweaks",
                 "github:..",
@@ -158,9 +119,6 @@ fn scene_mid_download_final_pinned() -> DownloadProgress {
     }
 }
 
-/// Scene: post-reset Paste-stage (the empty grid + arm gate cleared).
-/// Rendered via `DownloadProgress::default()` because the reset
-/// replaces `download_progress` with the default value.
 fn scene_paste_stage_after_reset() -> DownloadProgress {
     DownloadProgress::default()
 }
