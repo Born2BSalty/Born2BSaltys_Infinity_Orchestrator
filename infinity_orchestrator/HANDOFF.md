@@ -14,16 +14,16 @@ The project is the redesign of the existing `bio` Rust crate (Born2BSalty's Infi
 | 2 | Navigation + routing (`OrchestratorApp`, shell chrome, left rail, page router, stubs) | ✓ done, builds clean |
 | 3 | Modlist registry + per-modlist workspace state files | ✓ done, builds clean |
 | 4 | Settings screen (5 sub-tabs) + per-edit debounced path validation | ✓ done, builds clean |
-| 5 | Home + Install Modlist (paste / preview / download stages) | ✓ done — Runs 1–5 (Home + actions + Install shell/paste/Preview+provenance/stage-4 stub + Run 5 = §4.3 Downloading **chassis**). Live download data + per-install dirs + content-addressed staging deferred to Phase 7 P7.T17 (pipeline terminates in the install runtime) — SPEC §13.12a |
-| 6 | Create screen + Workspace shell (Steps 2–4) | ✓ **COMPLETE** — 4-run slice: **R1 done** (workspace spine + Step-2 C4 chrome, hardened 1b–1e), **R2 done** (Step-4 C4 renderer + workspace header/rename + save-draft + game tabs), **Step-3 C4 chrome done** (P6.T2d — `src/ui/workspace/step3/`, net-new chrome wrapping BIO's reused drag-reorder list; SPEC §7.1 / phase-06 P6.T2d / phase-08 P8.T5 cascade landed with it; overview 2026-05-17 §4); **R3 done** (Create screen `stage_choose` + Load Draft dialog + Create/Resume routing — P6.T7/T9/T13/T14; the `create_modlist` 5-arg PLAN-GAP + the SPEC §10.2 file-picker doc-drift were premise-checked and fixed in the same commit; overview 2026-05-17 §5); **R4 done** (P6.T8 fork sub-flow + lineage append + P6.T11 dirty-bit workspace persistence + P6.T15 nav-away flush; overview 2026-05-17 §6) — **Phase 6 COMPLETE; next is Phase 7 (install runtime).** Post-completion hardening: DATA-LOSS order-wipe regression closed (Fix-Run-3/4), Create #4 wireframe-alignment fixed + orchestrator-render-verified (Fix-Run-5/6), `egui_kittest` UI render gate added. 5 minor Create issues + box-equal-height + save-model redesign + deselect-last → Phase 8. Detail: overview.md 2026-05-18 revision log |
-| 7 | Step 5 install runtime + Reinstall + import-code auto-write + install concurrency + rail-nav lock | IN PROGRESS — 4-run slice (orchestrator-internal). **Run 1 done** (Step-5 runtime spine + workspace chrome): P7.T1 (`OrchestratorApp` formalizes `step5_terminal`/`step5_terminal_error`/`step5_console_view`/`step5_prep_rx`/`step5_pending_start`; the orchestrator `update` loop drives the Step-5 channels every frame via the SAME `bio::app::app_step5_flow` sequence `bio::ui::app::update_loop::run` uses — `poll_step5_terminal`+`poll_step5_prep` pre-render, `start_if_requested` post-render; `mod install_runtime` registered in `src/lib.rs` [the plan's "in `src/bin/infinity_orchestrator.rs`" is a PLAN GAP — that binary is a shim with no `mod` block; `mod registry;` actually lives in `lib.rs`, the established carve-out-#3 companion-provision pattern]); P7.T2 (`src/ui/workspace/step5/` net-new — `page_workspace_step5::render` wraps `bio::ui::step5::page_step5::render` read-only with the empty-pre-install success-banner + post-install rows ABOVE the panel per H9; replaced + deleted the Phase-6 `workspace_step5_stub`; `success_banner`/`post_install_actions` C3-gated render nothing pre-install; `share_paste_code_dialog`/`state_workspace_step5` minimal — the latter holds the Run-1 install-clicked marker); P7.T8 (`workspace_nav_bar` `← Previous` carries the VERBATIM SPEC §9.2 tooltip when disabled; `workspace_view` computes `disable_prev = install_complete \|\| step5.install_running \|\| workspace_step5.install_clicked`). Zero BIO-source edits; `page_step5::render` + `bio::app::*` read-only; `terminal: None` pre-install path. 298/0 lib tests (+9 vs 289). Render gate `tests/ui_snapshot_workspace_step5.rs` (1280/1045/960). **Runs 2–4 + fix-runs done — Phase 7 COMPLETE** (the per-run + per-fix-run record lives in `infinity_orchestrator/PENDING_VERIFICATION.md`, the authoritative live state). **Bundled Fix-Run (2026-05-18, plan P7.T17 "Bundled Fix-Run" entry) — T-C / T-D stand; T-A + T-B UNWOUND by THE AMENDMENT:** T-C Install-screen console right-edge clip + T-D Downloading screen (D1 off-render-thread one-shot staging — the freeze fix; D2 scrollable grid) stand. **Downloading-window follow-up (2026-05-18, user-directed — interim; SUPERSEDED by DL-Run 2 `2747d06`, see the post-arc fix-set at the end of this row):** the per-mod progress bar restored + the scroll area height-bounded so the Cancel footer stays on-screen (both still hold); the interim BIO-"N/M"-aggregate overall bar + lifecycle-phase per-mod fill were replaced by DL-Run 2's byte-accurate two-phase model. **THE AMENDMENT (2026-05-18, late — Phase-7 fix-arc Run 1, "Clean base"):** upstream BIO fix `a38e360` (merged `8df994a`) removed WeiDU's "`-u` log folder cannot contain spaces" preflight from `state_validation_paths.rs` — the sole reason for the prior Fix-A relocation — so **T-A is reverted**: the `-u` `weidu_component_logs` dir is per-install **inside the destination** again (`<dest>/weidu_component_logs`; original SPEC §13.12 #2 / §13.12a; the WeiDU-log SOURCE dirs were always there and are unchanged), `per_install_dirs::{resolve,derive_per_install_dirs}` are back to the pre-Fix-A 3-arg form (the id-threading is unwound; `register_install_modlist_paste` mints its own id again — registered entry byte-identical), and **`registry::store_workspace::modlist_data_dir` is kept** as the canonical `workspace.json` parent (only its `-u` routing was removed). **T-B is dropped** (user decision): the appdata dir now holds only `workspace.json`, so the Home Kebab "Open data folder" item + its wiring + the now-dead `open_modlist_data_folder` helper are removed; **"Open install folder" is unchanged** on both card states. Zero BIO source; `BIO` build a true no-op; `cargo test --lib` 386/0. SPEC §13.12 #2/§13.12a + §3 Kebab tables, plan P7.T17, PENDING_VERIFICATION reversed. **Phase-7 user-authorized fix arc — all 5 runs landed (corrected mechanisms; the pinned `-u`/pack_meta/D4 wording is SUPERSEDED):** **Run 1 `7339e4e`** THE AMENDMENT (above). **Run 2 `6f7f771`** A-1: Install-Modlist-paste / Reinstall **persist the held share code** (the pasted code / the entry's stored code) with only the `allow_auto_install` bit re-set via `share_export::set_allow_auto_install` — they do **NOT** regenerate via `pack_meta`/`export_modlist_share_code` (reads the empty `state.step3` on the paste pipeline — proven impossible); install-start writes the false-bit form + `install_started_at` + registers an in-progress entry; C3-clean exit `flip_to_installed(.., Some(held))` rewrites the true-bit form + flips Installed; the Workspace/build-from-scanned-mods path is unchanged (still `pack_meta`; `state.step3` IS populated there); provenance verbatim (no "Shared modlist" fallback). **Run 3 `1c36856`** B: per-component logs written via BIO's `weidu_log_mode` **`log <folder>` token** (there is **no `-u` arg in BIO** — the pinned `-u`-arg premise was a misread) by read-only reuse of BIO's own `pub fn sync_weidu_log_mode`; additive + idempotent; **ZERO BIO source — no seventh carve-out; the six stand.** **Run 4 `3d2ffed`** #1: net-new `install_runtime::stream_downloader` (bounded parallel pool, real per-asset byte progress) **replaces BIO's serial `app_step2_update_download` worker on the Install pipeline**; `pending_saved_log_download` not armed (no double-download — user-approved); `archive_file_name` reused read-only; **`app_step2_update_extract` reused unchanged** (extract not forked); 0/0 post-extract flash eliminated; `DownloadProgress` carries a real byte fraction. **Run 5** integration pass: the four fixes proven to **compose** end-to-end (the smooth Install-Modlist-paste flow, runtime-instrumented — the user's acceptance) via the throwaway `src/bin/run5_trace_integration.rs` + one net-new in-crate composed test; zero BIO source; `cargo test --lib` **408/0**; both binaries no-op; DATA-LOSS sentinel byte-identical. Doc-sync (this consolidated pass): SPEC §1/§3/§4.3/§13.3/§13.12 #2/§13.12a/§13.13, plan P7.T3/T6/T17, overview revision log, this row, PENDING_VERIFICATION. **The user's one-pass verification is now the corrected end-to-end Install-Modlist-paste flow** (paste a sources-configured code + a destination whose path may contain a space → live parallel per-mod byte download → install → `modlist-import-code.txt` written false-bit at start then rewritten true-bit on clean exit, byte-equal to `latest_share_code`, provenance preserved → Home In-progress→Installed; per-component `weidu_component_logs/` actually written inside the destination). **Post-arc user-test follow-up fix-set (2026-05-19 — the Wabbajack model; landed + orchestrator-verified; commits `7ec83d1`/`2747d06`/`cad9297`; NOT pushed):** the real root-cause fix for the three live-test findings. **DL-Run 1 `7ec83d1`** checksum-then-skip: net-new `archive_meta` `[{name,size,hash}]` schema-additive sibling ridden opaquely exactly like the provenance trio (shared `insert_archive_meta`/`pack_meta`/`bake_archive_meta_into_code`, survives `set_allow_auto_install` verbatim, orchestrator-owned `decode_archive_meta` — **not** a `ModlistSharePayload` field; empty⇒omitted⇒backward-compatible; baked at `flip_to_installed` from the per-install lock) + net-new `install_runtime::archive_skip` (size pre-filter → persistent path+(size,mtime) hash cache → skip-if-present-by-content, dropped from `update_selected_update_assets`, BIO-name hardlink/copy for extract) + post-download verify (`actual != expected` ⇒ delete + BIO-shaped failed-source + not cached, closing BIO's unverified-`.exists()` hazard); frozen hash = `archive_store::hash_file` (one path) — fixes "re-downloads every archive". **DL-Run 2 `2747d06`** Downloading-window: per-mod bar = the live byte fraction read every frame (marquee only for a no-size source), continuous repaint while `modlist_auto_build_active`, **two distinct ordered phases** `InstallPhase{Downloading→Extracting}` — Download overall = `Σ downloaded ÷ Σ expected` (`dl_aggregate_pct`/`overall_pct`/`parse_download_aggregate_pct` **deleted**), Extract overall a SEPARATE `extracted ÷ to-fetch` never inheriting Download, phase indicator + two labelled bars, skipped mods "✓ already downloaded" (count in Download, excluded from Extract) — fixes "janky/conflated Downloading window" (the ~1045px source/status collision stays a Phase-8 item). **DL-Run 3 `cad9297`** §4.4 success banner restored: §4.4 renders the EXISTING C3-gated `success_banner` (the SAME `src/ui/workspace/step5/success_banner.rs` the workspace path renders — entry-point-agnostic) ABOVE the post-install row; the §9.2-vs-§9.3 split is by **install state**, not entry point; the **only** §4.4 deviation from §9.2 is the omitted `Share import code` button (the prior Run-4b "no `success_banner` on §4.4" judgment was the **defect**, not sound). Zero BIO source; `cargo build --bin BIO --release` a true no-op; both render PNGs (two-phase Downloading + §4.4 green `Installed` banner) personally opened; final `infinity_orchestrator` no-op rebuild gate green; DATA-LOSS sentinel byte-identical; doc-synced (SPEC §4.3/§4.4/§13.3/§13.12a/§13.13, plan P7.T15/T17 + overview 2026-05-19 revision log, PENDING_VERIFICATION, this row). |
+| 5 | Home + Install Modlist (paste / preview / download stages) | ✓ done |
+| 6 | Create screen + Workspace shell (Steps 2–4) | ✓ done |
+| 7 | Step 5 install runtime + Reinstall + import-code auto-write + install concurrency + rail-nav lock | ✓ **COMPLETE** — shipped via PR #5 (merged `3d8287d`) + PR #6 (merged `6ea7b5c`). Open follow-up: Item #4 Create-fork extract hangs at "1/2 50%" on pre-v3 parent codes; PR #6 added `fork_extract_complete` gate-eval `tracing::info`, next user reproduction pins the failing condition. |
 | 8 | Popup reskins + state-aware theme reads across BIO surfaces + polish | not started |
 
 After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the deferred items in Appendix B and the known caveats below).
 
 ---
 
-## Recent ships + process / tooling changes (2026-05-20)
+## Recent ships + process / tooling changes (2026-05-20 → 2026-05-21)
 
 **Code:**
 - **DL Fix-Set v2** (`25184fa`) — 5 user-approved fixes from the live re-test of v1: pure-count download bar fallback, per-asset push to downloaded/failed vectors, `extract_intercept` snapshot infrastructure, `apply_saved_weidu_log_selection` + `sync_step3_from_step2` on the paste-path before flip, `archive_skip` keeps assets in list + pre-populates `downloaded_sources`. ZERO BIO, six carve-outs.
@@ -47,7 +47,11 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
 
 **Dispatch policy:** each fix-set as one plan-implementer run per the dispatch-grouped-fixes memory; full gate set (BIO-source guard + scoped clippy + comment hygiene + scoped rustfmt + `cargo test --lib` + both binaries + DATA-LOSS sentinel + runtime trace + render PNGs); per-run branch + PR per the workflow above. Each set must land + user-test cleanly before the next dispatches.
 
-**No fix-sets currently queued.** The DL v4 + Step-5 bundle and the Create/Fork + destination-prep bundle both land on `fix/install-screen-bundled-fixes` (PR #5, two commits). Phase 8 (Popup reskins + state-aware theme reads + polish) is the next major arc once user-testing confirms the bundled fix-sets ship cleanly.
+**PR #5 (5 commits) + PR #6 (Born2BSalty cleanup) BOTH MERGED into `overhaul/infinity_orchestrator`** (HEAD `6ea7b5c` as of 2026-05-21). Working tree clean.
+
+**Open follow-up** — Item #4 Create-fork extract hangs at "1/2 50%" on the soft-fallback (pre-v3 parent code, no `archive_meta`) path. PR #5's lifecycle INFO logs proved `extract_parallel` COMPLETES (workers join, 2 extracted, coordinator emits `Finished`); the hang is downstream. PR #6 added `tracing::info!` on `fork_extract_complete`'s gate evaluation (logs each flag + step2 condition the predicate inspects). **Next step: user reproduces the hang with the post-PR-#6 build + RUST_LOG-default (warns are emitted at INFO, the new gate-eval logs are at INFO too); the `fork extract completion gate` line will pinpoint which condition is false** (leading hypotheses: `archives_ingested` never flips true on the all-unverifiable path, OR `drain_extract_parallel` isn't processing the 2nd AssetDone + Finished events).
+
+**Next major arc:** Phase 8 (Popup reskins + state-aware theme reads + polish) is the open project work after Item #4 is closed (or independently scheduled if Item #4 turns out to be a small fix).
 
 ---
 
@@ -56,40 +60,33 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
 - Two binaries coexist:
   - `BIO` — the legacy linear-wizard app, untouched in behavior, still launches from `cargo run --bin BIO`.
   - `infinity_orchestrator` — the new redesigned app, launches from `cargo run --bin infinity_orchestrator`.
-- Both build cleanly on macOS. Windows cross-compilation from macOS is not currently working — see the *Windows builds* section at the bottom of this doc.
-- 163/163 lib tests pass (Phase 5 Run 3 added DestChoice→flag + warning-option-label tests).
+- Builds natively on Windows, Linux (Ubuntu CI), and macOS. Cross-compilation has known toolchain issues — see *Windows builds* below for the historical detail.
+- 501/501 lib tests pass.
+- Cargo version `0.1.0-Alpha.1`.
 - The orchestrator binary opens an `eframe` window (1280×820, min 1024×700) with:
   - **Titlebar** (34px, sketchy border, `Infinity Orchestrator` title centered, traffic-light dots top-left).
   - **Left rail** (200px) with the brand mark + 4 nav items (Home / Install / Create / Settings) + a bottom status indicator (`weidu vN · all paths ok` or per-path error count).
   - **Body** with the active destination's content.
   - **Statusbar** (26px) at the bottom showing modlist count + jobs-running placeholder.
-- **Home** is the real screen (Phase 5 Runs 1–2): title + subtitle, filter chips (Installed / In progress / All) with counts + default-selection logic, modlist cards (in-progress `resume` / installed `open` + Kebab), `add a modlist` CTAs, `game installs detected` block, first-launch setup CTA, bottom-center toasts. Kebab actions are live: Copy import code (clipboard + toast), Delete (danger confirm → registry entry + guarded on-disk folder removal), Open install folder, Reinstall (Phase-7 placeholder toast). **Rename ships visible but inert by design in Phase 5** — the registry-write rename mechanism + the Workspace ✎ inline rename land in Phase 6 (`operations_rename.rs`, SPEC §2.2). Recorded as an intentional staged deviation (SPEC §3.2 in-progress/installed Kebab tables + plan P5.T2 acceptance), not drift — do not re-flag.
-- **Install Modlist** is wired (Phase 5 Runs 3–5): the paste stage (destination FolderInput + `DestinationNotEmptyWarning` with Clear/Backup/Continue + import-code textarea, capped-to-footer + internal scroll; **a valid destination — a real existing folder — is required before proceeding** (SPEC §4.1); the warning Box is legible in Light + Dark), the **Preview** stage (parsed `ModlistSharePreview` → packed name/author title+subline with honest fallback, Overview Box, 6 file-folder tabs, `allow_auto_install` draft-gate with disabled Import + `Open in Create →`, `⑂ fork info` → `ForkInfoPopup`), the **Downloading** stage as the §4.3 **chassis** (overall-progress Box + 4-col mod grid + Cancel/auto-advance, grid empty until Phase 7 binds live data), and the stage-4 stub render.
-- **Create** is the real screen (Phase 6 Runs 3–4 + Fix-Run 2): the `choose` mode = Setup Box (modlist name + game + destination `FolderInput` + conditional `DestinationNotEmptyWarning`, Clear/Backup only) and — **Fix-Run 2 (user-directed deviation, SPEC §5.1/§5/§5.3)** — a `Choose one` header + **two selectable boxes** (whole-box click selects; no in-box CTAs) + a single bottom-right **`Start →`** (styled like the workspace `Next →`); the **game ComboBox shows only for the from-scratch box** (redesign chrome, EET default), the **import box derives the game from the pasted share code** (read-only note instead). `Start →` routes to the Workspace (scratch) or fork-paste. The fork sub-flow (paste → preview → download chassis; lineage append) + Load Draft dialog ship; **Fix-Run 2 wired the Load Draft Kebab `Delete`** to the shared Home delete machinery (danger confirm → `operations::delete_modlist`; SPEC §5.2 deviation). App-wide: every text input's sketchy border now hugs the outer box (a shared input primitive — the indented-input fix); affected glyphs (`→`, `✓`) render in `firacode_nerd` (the symbol-glyph rule). The workspace nav step-indicator is removed on all 4 steps (SPEC §2.2 deviation); Step 3 renders both hint lines + no count line (SPEC §7.1 amended); the left rail highlights `Create` inside a Workspace (SPEC §2.1).
-- **Settings**: real five-tab screen (General / Paths / Tools / Accounts / Advanced) with:
-  - Live theme-palette toggle (Light / Dark) that updates next frame.
-  - Per-keystroke debounced path validation that updates the rail status row.
-  - GitHub OAuth `connect` button opens BIO's existing device-flow popup verbatim.
-  - All settings persist immediately to `bio_settings.json` (existing BIO fields) and a new `bio_redesign_settings.json` (orchestrator-only fields).
-- Modlist registry (`modlists.json`) + per-modlist workspace state (`modlists/<id>/workspace.json`) read/write via the new orchestrator-owned persistence cycle. Atomic writes via temp-file-then-rename. Corrupt registry → terminal error pane on next launch (no silent recovery).
+- **Home**: title + subtitle, filter chips (Installed / In progress / All) with counts + default-selection logic, modlist cards (in-progress `resume` / installed `open` + Kebab), `add a modlist` CTAs, `game installs detected` block, first-launch setup CTA, bottom-center toasts. Kebab actions: Copy import code, Rename (registry write), Delete (danger confirm → registry entry + guarded on-disk folder removal), Open install folder, Reinstall.
+- **Install Modlist (paste)**: 4-stage flow — Paste → Preview → Downloading → Installing. Paste collects destination + `DestinationNotEmptyWarning` (Clear / Backup / Continue) + the import-code textarea; a valid existing destination directory is required to proceed (SPEC §4.1). Preview parses the share code → packed `name`/`author` title + subline + Overview Box + 6 file-folder tabs + `allow_auto_install` draft-gate (disabled Import + `Open in Create →` for draft codes); `⑂ fork info` opens `ForkInfoPopup` when the lineage is non-empty. Downloading runs the live three-phase pipeline (Hashing → Downloading → Extracting), 10-worker pool per phase, real per-mod byte progress, checksum-then-skip cache. Installing embeds BIO's Step 5 console + post-install actions (Return to Home / Open install folder).
+- **Create**: Choose stage = Setup Box (modlist name + game + destination + conditional `DestinationNotEmptyWarning` with Clear / Backup only) + a `Choose one` header + two selectable boxes (`New modlist from downloaded mods` / `Import and modify another modlist`) + a single bottom-right `Start →`. From-scratch lands on the Workspace at Step 2 with an empty selection. Import-and-modify routes through paste → preview → fork-download (live pipeline targeting the destination's per-install Mods folder); lands on Workspace Step 2 at extract-complete with the parent's lineage appended. Load Draft dialog lists in-progress builds with `resume` + Kebab (Copy import code / Delete).
+- **Workspace** (Steps 2–5): workspace header with editable modlist name (✎ inline rename) + Share-import-code button; nav bar with `← Previous` / `Next →` glyph buttons (rail-locked during in-flight installs). Step 2 = Scan and Select; Step 3 = Reorder and Resolve; Step 4 = Review; Step 5 = Install with BIO's runtime, C3-gated success banner, post-install actions, and an embedded console with wrap + `break_anywhere` for long log lines.
+- **Settings**: five-tab screen (General / Paths / Tools / Accounts / Advanced):
+  - Live theme-palette toggle (Light / Dark) updates next frame.
+  - Per-keystroke debounced path validation updates the rail status row.
+  - GitHub OAuth `connect` opens BIO's existing device-flow popup.
+  - Persistence: global paths → `bio_settings.json`; orchestrator-only prefs (theme, user name for the share-code `author`, etc.) → `bio_redesign_settings.json`. Per-install fields are filtered out of the persistence snapshot by `install_runtime::settings_sanitizer` so per-install Mods folder / weidu_component_logs / game-clone paths never leak into Settings → Paths across sessions.
+- Modlist registry (`modlists.json`) + per-modlist workspace state (`modlists/<id>/workspace.json`) read/write via the orchestrator-owned persistence cycle. Atomic writes via temp-file-then-rename. Corrupt registry → terminal error pane on next launch (no silent recovery).
 
 ---
 
 ## Build setup
 
-Required toolchains on macOS (Apple Silicon — adapt paths for Intel):
+Required toolchains (Windows / Linux / macOS — all native, no cross-compile):
 
-```bash
-# Rust
-export PATH="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"
-
-# Java (needed by `lapdu-parser-rust`'s build script for ANTLR codegen)
-export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
-```
-
-If either is missing:
-- `rustup` from `https://rustup.rs/` (Homebrew has `brew install rustup` as a wrapper).
-- `brew install openjdk` (or any JDK 11+).
+- **Rust** stable, via [rustup](https://rustup.rs/).
+- **Java** (JDK 11+), needed by `lapdu-parser-rust`'s build script for ANTLR codegen.
 
 Build / test commands:
 
@@ -99,13 +96,19 @@ cargo build --bin infinity_orchestrator --release
 cargo test --lib
 ```
 
-Both binaries land in `target/release/`. The orchestrator binary is ~11 MB after Phase 4.
+Both binaries land in `target/release/`.
 
-Run the orchestrator (the eframe window will appear; on macOS it may open behind your Terminal — Cmd+Tab to switch):
+Run the orchestrator:
 
 ```bash
 ./target/release/infinity_orchestrator        # production mode
-./target/release/infinity_orchestrator -d     # dev mode (diagnostics export + extra logging; the Phase-3 "Seed test modlist" button was stub-only and is gone since Phase 5 replaced the Home stub — re-prep the seed registry per orchestrator-handoff "Test fixtures / runtime")
+./target/release/infinity_orchestrator -d     # dev mode (diagnostics export + extra logging)
+```
+
+Logging level is controlled via `--log-level {trace|debug|info|warn|error}` (default `info`). Note that `RUST_LOG` is not read by this codebase — use the CLI flag. On Windows, capture logs via PowerShell:
+
+```powershell
+& .\target\release\infinity_orchestrator.exe -d 2>&1 | Tee-Object -FilePath log.txt
 ```
 
 ---
@@ -447,40 +450,9 @@ These tripped us up in earlier phases; flagging so future phases can avoid them.
 
 ## Windows builds
 
-Not currently working from macOS. We tried:
+Native Windows is the primary development platform — `cargo build --bin infinity_orchestrator --release` runs without issue on any real Windows machine. Linux (Ubuntu CI) and macOS native builds also work.
 
-1. **MinGW local (`x86_64-pc-windows-gnu`)** — failed on `unrar-sys`'s missing Windows-API symbols (`WinNT()`, `IsWindows11OrGreater()`) + a pthread static-vs-dynamic library conflict.
-2. **`cross` (Docker MinGW)** — failed on a case-sensitive header (`#include <PowrProf.h>` vs filesystem `powrprof.h`).
-3. **`cargo-xwin` (MSVC ABI via Windows SDK)** — failed on SSSE3 intrinsics in `unrar-sys`'s `rs16.cpp` without a `-mssse3` flag; flag wasn't propagatable via env vars to the build script.
-
-The root cause is `unrar-sys`'s heavy Windows-native C++ build assumptions. Each toolchain hits a different paper cut.
-
-The pragmatic Windows build path is **GitHub Actions** running on `windows-latest` (real native Windows, no cross-compile). Sample workflow:
-
-```yaml
-# .github/workflows/build-windows.yml
-name: Build Windows
-on: [push, workflow_dispatch]
-jobs:
-  build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - run: cargo build --bin infinity_orchestrator --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: infinity_orchestrator-windows
-          path: target/release/infinity_orchestrator.exe
-```
-
-Push the workflow file; download the `.exe` from the Actions tab when done. Alternatively, build on any real Windows machine — `cargo build --bin infinity_orchestrator --release` runs natively without issue (we verified the codebase has no Windows-specific bugs; the issue is purely cross-compile tooling).
-
-The macOS / Linux native builds work fine and are the default in development. Cross-platform release builds can be set up at any time without affecting the rest of the plan.
+**Cross-compilation is the only known issue.** The `unrar-sys` crate has heavy Windows-native C++ build assumptions; targeting Windows from macOS / Linux fails under MinGW (missing Win32 symbols, pthread static-vs-dynamic conflicts), `cross` (Docker MinGW header-case sensitivity on `PowrProf.h`), and `cargo-xwin` (SSSE3 intrinsics in `unrar-sys` need `-mssse3`, not propagatable via env vars). Use the native toolchain on each platform — or GitHub Actions on `windows-latest` / `ubuntu-latest` / `macos-latest` for release artifacts. The repo's CI already runs the Ubuntu native build (`cargo test --all-targets --locked`).
 
 ---
 
