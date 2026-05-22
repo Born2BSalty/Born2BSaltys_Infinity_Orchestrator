@@ -60,40 +60,33 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
 - Two binaries coexist:
   - `BIO` — the legacy linear-wizard app, untouched in behavior, still launches from `cargo run --bin BIO`.
   - `infinity_orchestrator` — the new redesigned app, launches from `cargo run --bin infinity_orchestrator`.
-- Both build cleanly on macOS. Windows cross-compilation from macOS is not currently working — see the *Windows builds* section at the bottom of this doc.
-- 501/501 lib tests pass (PR #5 + PR #6 cumulative; baseline pre-redesign was 163).
+- Builds natively on Windows, Linux (Ubuntu CI), and macOS. Cross-compilation has known toolchain issues — see *Windows builds* below for the historical detail.
+- 501/501 lib tests pass.
+- Cargo version `0.1.0-Alpha.1`.
 - The orchestrator binary opens an `eframe` window (1280×820, min 1024×700) with:
   - **Titlebar** (34px, sketchy border, `Infinity Orchestrator` title centered, traffic-light dots top-left).
   - **Left rail** (200px) with the brand mark + 4 nav items (Home / Install / Create / Settings) + a bottom status indicator (`weidu vN · all paths ok` or per-path error count).
   - **Body** with the active destination's content.
   - **Statusbar** (26px) at the bottom showing modlist count + jobs-running placeholder.
-- **Home** is the real screen (Phase 5 Runs 1–2): title + subtitle, filter chips (Installed / In progress / All) with counts + default-selection logic, modlist cards (in-progress `resume` / installed `open` + Kebab), `add a modlist` CTAs, `game installs detected` block, first-launch setup CTA, bottom-center toasts. Kebab actions are live: Copy import code (clipboard + toast), Delete (danger confirm → registry entry + guarded on-disk folder removal), Open install folder, Reinstall (Phase-7 placeholder toast). **Rename ships visible but inert by design in Phase 5** — the registry-write rename mechanism + the Workspace ✎ inline rename land in Phase 6 (`operations_rename.rs`, SPEC §2.2). Recorded as an intentional staged deviation (SPEC §3.2 in-progress/installed Kebab tables + plan P5.T2 acceptance), not drift — do not re-flag.
-- **Install Modlist** is wired (Phase 5 Runs 3–5): the paste stage (destination FolderInput + `DestinationNotEmptyWarning` with Clear/Backup/Continue + import-code textarea, capped-to-footer + internal scroll; **a valid destination — a real existing folder — is required before proceeding** (SPEC §4.1); the warning Box is legible in Light + Dark), the **Preview** stage (parsed `ModlistSharePreview` → packed name/author title+subline with honest fallback, Overview Box, 6 file-folder tabs, `allow_auto_install` draft-gate with disabled Import + `Open in Create →`, `⑂ fork info` → `ForkInfoPopup`), the **Downloading** stage as the §4.3 **chassis** (overall-progress Box + 4-col mod grid + Cancel/auto-advance, grid empty until Phase 7 binds live data), and the stage-4 stub render.
-- **Create** is the real screen (Phase 6 Runs 3–4 + Fix-Run 2): the `choose` mode = Setup Box (modlist name + game + destination `FolderInput` + conditional `DestinationNotEmptyWarning`, Clear/Backup only) and — **Fix-Run 2 (user-directed deviation, SPEC §5.1/§5/§5.3)** — a `Choose one` header + **two selectable boxes** (whole-box click selects; no in-box CTAs) + a single bottom-right **`Start →`** (styled like the workspace `Next →`); the **game ComboBox shows only for the from-scratch box** (redesign chrome, EET default), the **import box derives the game from the pasted share code** (read-only note instead). `Start →` routes to the Workspace (scratch) or fork-paste. The fork sub-flow (paste → preview → download chassis; lineage append) + Load Draft dialog ship; **Fix-Run 2 wired the Load Draft Kebab `Delete`** to the shared Home delete machinery (danger confirm → `operations::delete_modlist`; SPEC §5.2 deviation). App-wide: every text input's sketchy border now hugs the outer box (a shared input primitive — the indented-input fix); affected glyphs (`→`, `✓`) render in `firacode_nerd` (the symbol-glyph rule). The workspace nav step-indicator is removed on all 4 steps (SPEC §2.2 deviation); Step 3 renders both hint lines + no count line (SPEC §7.1 amended); the left rail highlights `Create` inside a Workspace (SPEC §2.1).
-- **Settings**: real five-tab screen (General / Paths / Tools / Accounts / Advanced) with:
-  - Live theme-palette toggle (Light / Dark) that updates next frame.
-  - Per-keystroke debounced path validation that updates the rail status row.
-  - GitHub OAuth `connect` button opens BIO's existing device-flow popup verbatim.
-  - All settings persist immediately to `bio_settings.json` (existing BIO fields) and a new `bio_redesign_settings.json` (orchestrator-only fields).
-- Modlist registry (`modlists.json`) + per-modlist workspace state (`modlists/<id>/workspace.json`) read/write via the new orchestrator-owned persistence cycle. Atomic writes via temp-file-then-rename. Corrupt registry → terminal error pane on next launch (no silent recovery).
+- **Home**: title + subtitle, filter chips (Installed / In progress / All) with counts + default-selection logic, modlist cards (in-progress `resume` / installed `open` + Kebab), `add a modlist` CTAs, `game installs detected` block, first-launch setup CTA, bottom-center toasts. Kebab actions: Copy import code, Rename (registry write), Delete (danger confirm → registry entry + guarded on-disk folder removal), Open install folder, Reinstall.
+- **Install Modlist (paste)**: 4-stage flow — Paste → Preview → Downloading → Installing. Paste collects destination + `DestinationNotEmptyWarning` (Clear / Backup / Continue) + the import-code textarea; a valid existing destination directory is required to proceed (SPEC §4.1). Preview parses the share code → packed `name`/`author` title + subline + Overview Box + 6 file-folder tabs + `allow_auto_install` draft-gate (disabled Import + `Open in Create →` for draft codes); `⑂ fork info` opens `ForkInfoPopup` when the lineage is non-empty. Downloading runs the live three-phase pipeline (Hashing → Downloading → Extracting), 10-worker pool per phase, real per-mod byte progress, checksum-then-skip cache. Installing embeds BIO's Step 5 console + post-install actions (Return to Home / Open install folder).
+- **Create**: Choose stage = Setup Box (modlist name + game + destination + conditional `DestinationNotEmptyWarning` with Clear / Backup only) + a `Choose one` header + two selectable boxes (`New modlist from downloaded mods` / `Import and modify another modlist`) + a single bottom-right `Start →`. From-scratch lands on the Workspace at Step 2 with an empty selection. Import-and-modify routes through paste → preview → fork-download (live pipeline targeting the destination's per-install Mods folder); lands on Workspace Step 2 at extract-complete with the parent's lineage appended. Load Draft dialog lists in-progress builds with `resume` + Kebab (Copy import code / Delete).
+- **Workspace** (Steps 2–5): workspace header with editable modlist name (✎ inline rename) + Share-import-code button; nav bar with `← Previous` / `Next →` glyph buttons (rail-locked during in-flight installs). Step 2 = Scan and Select; Step 3 = Reorder and Resolve; Step 4 = Review; Step 5 = Install with BIO's runtime, C3-gated success banner, post-install actions, and an embedded console with wrap + `break_anywhere` for long log lines.
+- **Settings**: five-tab screen (General / Paths / Tools / Accounts / Advanced):
+  - Live theme-palette toggle (Light / Dark) updates next frame.
+  - Per-keystroke debounced path validation updates the rail status row.
+  - GitHub OAuth `connect` opens BIO's existing device-flow popup.
+  - Persistence: global paths → `bio_settings.json`; orchestrator-only prefs (theme, user name for the share-code `author`, etc.) → `bio_redesign_settings.json`. Per-install fields are filtered out of the persistence snapshot by `install_runtime::settings_sanitizer` so per-install Mods folder / weidu_component_logs / game-clone paths never leak into Settings → Paths across sessions.
+- Modlist registry (`modlists.json`) + per-modlist workspace state (`modlists/<id>/workspace.json`) read/write via the orchestrator-owned persistence cycle. Atomic writes via temp-file-then-rename. Corrupt registry → terminal error pane on next launch (no silent recovery).
 
 ---
 
 ## Build setup
 
-Required toolchains on macOS (Apple Silicon — adapt paths for Intel):
+Required toolchains (Windows / Linux / macOS — all native, no cross-compile):
 
-```bash
-# Rust
-export PATH="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"
-
-# Java (needed by `lapdu-parser-rust`'s build script for ANTLR codegen)
-export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
-```
-
-If either is missing:
-- `rustup` from `https://rustup.rs/` (Homebrew has `brew install rustup` as a wrapper).
-- `brew install openjdk` (or any JDK 11+).
+- **Rust** stable, via [rustup](https://rustup.rs/).
+- **Java** (JDK 11+), needed by `lapdu-parser-rust`'s build script for ANTLR codegen.
 
 Build / test commands:
 
@@ -103,13 +96,19 @@ cargo build --bin infinity_orchestrator --release
 cargo test --lib
 ```
 
-Both binaries land in `target/release/`. The orchestrator binary is ~11 MB after Phase 4.
+Both binaries land in `target/release/`.
 
-Run the orchestrator (the eframe window will appear; on macOS it may open behind your Terminal — Cmd+Tab to switch):
+Run the orchestrator:
 
 ```bash
 ./target/release/infinity_orchestrator        # production mode
-./target/release/infinity_orchestrator -d     # dev mode (diagnostics export + extra logging; the Phase-3 "Seed test modlist" button was stub-only and is gone since Phase 5 replaced the Home stub — re-prep the seed registry per orchestrator-handoff "Test fixtures / runtime")
+./target/release/infinity_orchestrator -d     # dev mode (diagnostics export + extra logging)
+```
+
+Logging level is controlled via `--log-level {trace|debug|info|warn|error}` (default `info`). Note that `RUST_LOG` is not read by this codebase — use the CLI flag. On Windows, capture logs via PowerShell:
+
+```powershell
+& .\target\release\infinity_orchestrator.exe -d 2>&1 | Tee-Object -FilePath log.txt
 ```
 
 ---
@@ -451,40 +450,9 @@ These tripped us up in earlier phases; flagging so future phases can avoid them.
 
 ## Windows builds
 
-Not currently working from macOS. We tried:
+Native Windows is the primary development platform — `cargo build --bin infinity_orchestrator --release` runs without issue on any real Windows machine. Linux (Ubuntu CI) and macOS native builds also work.
 
-1. **MinGW local (`x86_64-pc-windows-gnu`)** — failed on `unrar-sys`'s missing Windows-API symbols (`WinNT()`, `IsWindows11OrGreater()`) + a pthread static-vs-dynamic library conflict.
-2. **`cross` (Docker MinGW)** — failed on a case-sensitive header (`#include <PowrProf.h>` vs filesystem `powrprof.h`).
-3. **`cargo-xwin` (MSVC ABI via Windows SDK)** — failed on SSSE3 intrinsics in `unrar-sys`'s `rs16.cpp` without a `-mssse3` flag; flag wasn't propagatable via env vars to the build script.
-
-The root cause is `unrar-sys`'s heavy Windows-native C++ build assumptions. Each toolchain hits a different paper cut.
-
-The pragmatic Windows build path is **GitHub Actions** running on `windows-latest` (real native Windows, no cross-compile). Sample workflow:
-
-```yaml
-# .github/workflows/build-windows.yml
-name: Build Windows
-on: [push, workflow_dispatch]
-jobs:
-  build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - run: cargo build --bin infinity_orchestrator --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: infinity_orchestrator-windows
-          path: target/release/infinity_orchestrator.exe
-```
-
-Push the workflow file; download the `.exe` from the Actions tab when done. Alternatively, build on any real Windows machine — `cargo build --bin infinity_orchestrator --release` runs natively without issue (we verified the codebase has no Windows-specific bugs; the issue is purely cross-compile tooling).
-
-The macOS / Linux native builds work fine and are the default in development. Cross-platform release builds can be set up at any time without affecting the rest of the plan.
+**Cross-compilation is the only known issue.** The `unrar-sys` crate has heavy Windows-native C++ build assumptions; targeting Windows from macOS / Linux fails under MinGW (missing Win32 symbols, pthread static-vs-dynamic conflicts), `cross` (Docker MinGW header-case sensitivity on `PowrProf.h`), and `cargo-xwin` (SSSE3 intrinsics in `unrar-sys` need `-mssse3`, not propagatable via env vars). Use the native toolchain on each platform — or GitHub Actions on `windows-latest` / `ubuntu-latest` / `macos-latest` for release artifacts. The repo's CI already runs the Ubuntu native build (`cargo test --all-targets --locked`).
 
 ---
 
