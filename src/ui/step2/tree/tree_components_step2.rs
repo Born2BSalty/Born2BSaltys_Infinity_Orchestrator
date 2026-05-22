@@ -122,22 +122,54 @@ fn render_weidu_group(
     let header = mod_state.components[component_idx].weidu_group.clone()?;
     let group_end = matching_weidu_group_end(&mod_state.components, component_idx, &header);
     let group_matches = !ctx.filter.is_empty() && header.to_lowercase().contains(ctx.filter);
-    let mut render_state = buffers.render_state();
-    render_component_group(
-        ui,
-        ctx,
-        mod_state,
-        &mut render_state,
-        mod_name_match,
-        ComponentGroupRender {
-            id_prefix: "step2_weidu_group",
-            header: header.as_str(),
-            start_idx: component_idx,
-            end_idx: group_end,
-            group_matches,
-            indent: 0.0,
-        },
+    let group = ComponentGroupRender {
+        id_prefix: "step2_weidu_group",
+        header: header.as_str(),
+        start_idx: component_idx,
+        end_idx: group_end,
+        group_matches,
+        indent: 0.0,
+    };
+    if !component_range_has_visible_row(ctx, mod_state, mod_name_match, &group) {
+        return Some(group_end);
+    }
+    let header_id = egui::Id::new((
+        group.id_prefix,
+        ctx.collapse_epoch,
+        ctx.tp_file,
+        group.start_idx,
+        group.header,
+    ));
+    let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+        ui.ctx(),
+        header_id,
+        ctx.collapse_default_open,
     );
+    if *ctx.jump_to_selected_requested
+        && selected_component_targets_range(
+            ctx.selected.as_ref(),
+            ctx.active_tab,
+            ctx.tp_file,
+            &mod_state.components[group.start_idx..group.end_idx],
+        )
+    {
+        state.set_open(true);
+    }
+    state
+        .show_header(ui, |ui| {
+            ui.label(group.header);
+        })
+        .body(|ui| {
+            let mut render_state = buffers.render_state();
+            render_component_rows_range(
+                ui,
+                ctx,
+                mod_state,
+                group.start_idx,
+                group.end_idx,
+                &mut render_state,
+            );
+        });
     Some(group_end)
 }
 
@@ -476,5 +508,121 @@ fn render_component_rows_range(
             mod_name_match,
         );
         component_idx += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::prompt_eval_expr::PromptEvalContext;
+    use crate::ui::shared::redesign_tokens::ThemePalette;
+
+    fn make_component(
+        component_id: &str,
+        label: &str,
+        group: &str,
+        family: &str,
+    ) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: component_id.to_string(),
+            label: label.to_string(),
+            weidu_group: Some(group.to_string()),
+            collapsible_group: Some(family.to_string()),
+            collapsible_group_is_umbrella: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    #[test]
+    fn weidu_group_body_reaches_nested_collapsible_umbrella() {
+        let ctx = egui::Context::default();
+        ctx.memory_mut(|mem| mem.set_everything_is_visible(true));
+
+        let collapse_epoch = 0u64;
+        let tp_file = "setup-test.tp2";
+        let weidu_header = "Engine";
+        let family_header = "Family";
+
+        let mut mod_state = Step2ModState {
+            name: "TestMod".to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: vec![
+                make_component("1", "Sub A", weidu_header, family_header),
+                make_component("2", "Sub B", weidu_header, family_header),
+            ],
+        };
+
+        let prompt_eval = PromptEvalContext::default();
+        let selected: Option<Step2Selection> = None;
+        let mut next_selection_order = 1usize;
+        let mut jump_requested = false;
+
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let mut rows_ctx = ComponentRowsContext {
+                    filter: "",
+                    active_tab: "BGEE",
+                    selected: &selected,
+                    next_selection_order: &mut next_selection_order,
+                    prompt_eval: &prompt_eval,
+                    collapse_epoch,
+                    collapse_default_open: true,
+                    jump_to_selected_requested: &mut jump_requested,
+                    tp_file,
+                    mod_name: "TestMod",
+                    palette: ThemePalette::Dark,
+                };
+                let _ = render_component_rows(ui, &mut rows_ctx, &mut mod_state);
+            });
+        });
+
+        let weidu_id = egui::Id::new((
+            "step2_weidu_group",
+            collapse_epoch,
+            tp_file,
+            0usize,
+            weidu_header,
+        ));
+        assert!(
+            egui::collapsing_header::CollapsingState::load(&ctx, weidu_id).is_some(),
+            "WeiDU-group collapsing header was not stored — render_weidu_group did not run its body",
+        );
+
+        let nested_id = egui::Id::new((
+            "step2_collapsible_group",
+            collapse_epoch,
+            tp_file,
+            0usize,
+            family_header,
+        ));
+        assert!(
+            egui::collapsing_header::CollapsingState::load(&ctx, nested_id).is_some(),
+            "Nested collapsible-group umbrella was not rendered inside the WeiDU group body — \
+             umbrella detection regression (render_weidu_group must call render_component_rows_range)",
+        );
     }
 }
