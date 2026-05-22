@@ -50,6 +50,9 @@ pub fn render(
             if current == WorkspaceStep::Step2 {
                 sync_step3_from_step2_on_nav_edge(orchestrator);
             }
+            if current == WorkspaceStep::Step4 {
+                auto_save_step4_weidu_logs_on_nav_edge(orchestrator);
+            }
             orchestrator.workspace_view.completed_steps.insert(current);
             orchestrator.workspace_view.current_step = next;
         }
@@ -99,6 +102,24 @@ fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {
     if let NextAction::SyncStep3AndAdvance { signature } = action {
         sync_step3_from_step2(state);
         state.set_last_step2_sync_signature(signature);
+    }
+}
+
+fn auto_save_step4_weidu_logs_on_nav_edge(orchestrator: &mut OrchestratorApp) {
+    // Mirrors legacy BIO wizard's `NeedStep4SaveThenAdvance` action: writes
+    // the current `step3.{bgee,bg2ee}_items` selection out to the per-install
+    // weidu.log files so the install runner consumes the user's edits
+    // instead of the imported `weidu.log` left on disk by the share-code
+    // import path.
+    if let Err(err) = crate::app::step4_weidu_log_export::auto_save_step4_weidu_logs(
+        &mut orchestrator.wizard_state,
+    ) {
+        tracing::warn!(
+            target = "orchestrator",
+            "Step 4 → Step 5 weidu.log auto-save failed: {err} \
+             (install proceeds against the on-disk file as-is — the user's \
+             Step 2/3 edits may not reach the runner)"
+        );
     }
 }
 

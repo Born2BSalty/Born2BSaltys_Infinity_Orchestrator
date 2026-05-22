@@ -80,6 +80,25 @@ impl std::ops::Not for DirtyFlag {
     }
 }
 
+/// Arms the post-install runtime reset.
+///
+/// Set by `maybe_flip_to_installed_on_clean_exit` after `flip_to_installed`
+/// succeeds; cleared inside `reset_completed_install_runtime` on the next
+/// nav-away or enter-Install edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PostInstallResetGate {
+    #[default]
+    Idle,
+    Pending,
+}
+
+impl PostInstallResetGate {
+    #[must_use]
+    pub const fn is_pending(self) -> bool {
+        matches!(self, Self::Pending)
+    }
+}
+
 pub struct OrchestratorApp {
     pub nav: NavDestination,
     pub(crate) last_rendered_nav: NavDestination,
@@ -124,6 +143,8 @@ pub struct OrchestratorApp {
     pub(crate) pending_reinstall_id: Option<String>,
 
     pub(crate) active_install_modlist_id: Option<String>,
+
+    pub post_install_reset_gate: PostInstallResetGate,
 
     pub install_running_since: Option<Instant>,
 
@@ -289,6 +310,7 @@ impl OrchestratorApp {
             workspace_step5: WorkspaceStep5State::default(),
             pending_reinstall_id: None,
             active_install_modlist_id: None,
+            post_install_reset_gate: PostInstallResetGate::Idle,
             install_running_since: None,
             install_size_worker_rx: None,
             step5_terminal: None,
@@ -395,6 +417,13 @@ impl OrchestratorApp {
         if !from_workspace {
             self.active_install_modlist_id = None;
         }
+
+        // Arms the post-install reset gate. `reset_completed_install_runtime`
+        // consumes this on the next nav-away/enter-Install edge; without it,
+        // a fork-then-modify workspace landing (which leaves destination +
+        // import_code legitimately set and may carry `last_exit_code` from a
+        // prior install) would falsely satisfy the older proxy predicate.
+        self.post_install_reset_gate = PostInstallResetGate::Pending;
     }
 
     fn drain_size_worker_result(&mut self) {

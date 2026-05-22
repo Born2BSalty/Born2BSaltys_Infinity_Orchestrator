@@ -122,7 +122,14 @@ fn fork_extract_complete(orchestrator: &OrchestratorApp) -> bool {
         && !update_preview_pending
         && (archives_observed > 0 || step2.update_selected_update_assets.is_empty());
 
-    if flags.armed() && flags.download_phase_started() && !download_running && !extract_running {
+    if flags.armed()
+        && flags.download_phase_started()
+        && !download_running
+        && !extract_running
+        && !scan_running
+        && !apply_pending
+        && !update_preview_pending
+    {
         tracing::info!(
             target = "orchestrator",
             complete,
