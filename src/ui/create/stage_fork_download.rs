@@ -2,7 +2,9 @@
 // Copyright (c) 2026 Born2BSalty
 
 use eframe::egui;
+use tracing::warn;
 
+use crate::registry::store_workspace::WorkspaceStore;
 use crate::ui::install::stage_downloading::{
     self, DownloadProgress, DownloadScreenCopy, build_and_hold_progress,
     ingest_downloaded_archives_once, kick_streaming_downloader_once, render_chrome,
@@ -10,6 +12,7 @@ use crate::ui::install::stage_downloading::{
 };
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::ThemePalette;
+use crate::ui::workspace::workspace_state_loader;
 
 const fn fork_download_copy() -> DownloadScreenCopy {
     DownloadScreenCopy {
@@ -56,12 +59,21 @@ pub fn render_live(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> For
         orchestrator
             .wizard_state
             .modlist_auto_build_waiting_for_install = false;
-        orchestrator.wizard_state.step2.pending_saved_log_apply = false;
         orchestrator
             .wizard_state
             .step2
             .pending_saved_log_update_preview = false;
         orchestrator.wizard_state.step2.pending_saved_log_download = false;
+        orchestrator.wizard_state.step2.update_selected_popup_open = false;
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_confirm_latest_fallback_open = false;
+        orchestrator
+            .wizard_state
+            .step2
+            .mod_download_forks_popup_open = false;
+        persist_fork_resume_workspace_state(orchestrator);
     }
 
     let progress = build_and_hold_progress(orchestrator);
@@ -94,6 +106,9 @@ fn fork_extract_complete(orchestrator: &OrchestratorApp) -> bool {
         .is_some();
     let download_running = step2.update_selected_download_running;
     let extract_running = step2.update_selected_extract_running;
+    let scan_running = step2.is_scanning;
+    let apply_pending = step2.pending_saved_log_apply;
+    let update_preview_pending = step2.pending_saved_log_update_preview;
     let complete = flags.armed()
         && !arm_error
         && flags.archive_skip_completed()
@@ -102,6 +117,9 @@ fn fork_extract_complete(orchestrator: &OrchestratorApp) -> bool {
         && flags.archives_ingested()
         && !download_running
         && !extract_running
+        && !scan_running
+        && !apply_pending
+        && !update_preview_pending
         && (archives_observed > 0 || step2.update_selected_update_assets.is_empty());
 
     if flags.armed() && flags.download_phase_started() && !download_running && !extract_running {
@@ -116,6 +134,9 @@ fn fork_extract_complete(orchestrator: &OrchestratorApp) -> bool {
             archives_ingested = flags.archives_ingested(),
             download_running,
             extract_running,
+            scan_running,
+            apply_pending,
+            update_preview_pending,
             extracted_sources = step2.update_selected_extracted_sources.len(),
             skipped_archives = orchestrator.install_screen_state.skip_indices.len(),
             update_assets_remaining = step2.update_selected_update_assets.len(),
@@ -125,6 +146,57 @@ fn fork_extract_complete(orchestrator: &OrchestratorApp) -> bool {
     }
 
     complete
+}
+
+fn persist_fork_resume_workspace_state(orchestrator: &mut OrchestratorApp) {
+    let Some(id) = orchestrator.active_install_modlist_id.clone() else {
+        return;
+    };
+    let scratch_mods_folder = orchestrator
+        .wizard_state
+        .step1
+        .mods_folder
+        .trim()
+        .to_string();
+    if scratch_mods_folder.is_empty() {
+        return;
+    }
+
+    workspace_state_loader::sync_step3_from_step2_if_changed(&mut orchestrator.wizard_state);
+
+    let prior = orchestrator
+        .workspace_state
+        .get(&id)
+        .cloned()
+        .unwrap_or_default();
+    let mut extracted = workspace_state_loader::extract_workspace_state_from_wizard(
+        &orchestrator.wizard_state,
+        &prior,
+    );
+    extracted.scratch_mods_folder = Some(scratch_mods_folder);
+
+    if extracted == prior {
+        return;
+    }
+
+    let store = orchestrator
+        .workspace_stores
+        .entry(id.clone())
+        .or_insert_with(|| WorkspaceStore::new_for_id(&id));
+    if let Err(err) = store.save(&extracted) {
+        warn!(
+            target = "orchestrator",
+            "Fork-complete workspace persist for {id} failed: {err} \
+             (in-memory state still updated; on-exit flush_all is the backstop)"
+        );
+    }
+    orchestrator
+        .workspace_state
+        .insert(id.clone(), extracted.clone());
+    orchestrator
+        .persistence_cycle
+        .last_saved_workspaces
+        .insert(id, extracted);
 }
 
 #[cfg(test)]
@@ -146,14 +218,9 @@ mod tests {
 
     #[test]
     fn fork_extract_complete_requires_armed_pipeline() {
-        let mut app_state = MinimalForkExtractState::default();
+        let app_state = MinimalForkExtractState::default();
         assert!(!evaluate(&app_state));
-        app_state.flags.set_armed(true);
-        app_state.flags.set_archive_skip_completed(true);
-        app_state.flags.set_download_phase_started(true);
-        app_state.flags.set_archives_verified(true);
-        app_state.flags.set_archives_ingested(true);
-        app_state.extracted_count = 3;
+        let app_state = MinimalForkExtractState::all_latches_set();
         assert!(
             evaluate(&app_state),
             "all latches set + extracted > 0 ⇒ done"
@@ -162,13 +229,7 @@ mod tests {
 
     #[test]
     fn fork_extract_complete_false_when_arm_error_present() {
-        let mut app_state = MinimalForkExtractState::default();
-        app_state.flags.set_armed(true);
-        app_state.flags.set_archive_skip_completed(true);
-        app_state.flags.set_download_phase_started(true);
-        app_state.flags.set_archives_verified(true);
-        app_state.flags.set_archives_ingested(true);
-        app_state.extracted_count = 3;
+        let mut app_state = MinimalForkExtractState::all_latches_set();
         app_state.arm_error = Some("boom".to_string());
         assert!(
             !evaluate(&app_state),
@@ -178,38 +239,22 @@ mod tests {
 
     #[test]
     fn fork_extract_complete_false_when_streamer_still_running() {
-        let mut app_state = MinimalForkExtractState::default();
-        app_state.flags.set_armed(true);
-        app_state.flags.set_archive_skip_completed(true);
-        app_state.flags.set_download_phase_started(true);
-        app_state.flags.set_archives_verified(true);
-        app_state.flags.set_archives_ingested(true);
-        app_state.extracted_count = 3;
-        app_state.download_running = true;
+        let mut app_state = MinimalForkExtractState::all_latches_set();
+        app_state.running.download = true;
         assert!(!evaluate(&app_state));
     }
 
     #[test]
     fn fork_extract_complete_false_when_extractor_still_running() {
-        let mut app_state = MinimalForkExtractState::default();
-        app_state.flags.set_armed(true);
-        app_state.flags.set_archive_skip_completed(true);
-        app_state.flags.set_download_phase_started(true);
-        app_state.flags.set_archives_verified(true);
-        app_state.flags.set_archives_ingested(true);
-        app_state.extracted_count = 3;
-        app_state.extract_running = true;
+        let mut app_state = MinimalForkExtractState::all_latches_set();
+        app_state.running.extract = true;
         assert!(!evaluate(&app_state));
     }
 
     #[test]
     fn fork_extract_complete_true_when_all_skipped_and_no_assets_to_fetch() {
-        let mut app_state = MinimalForkExtractState::default();
-        app_state.flags.set_armed(true);
-        app_state.flags.set_archive_skip_completed(true);
-        app_state.flags.set_download_phase_started(true);
-        app_state.flags.set_archives_verified(true);
-        app_state.flags.set_archives_ingested(true);
+        let mut app_state = MinimalForkExtractState::all_latches_set();
+        app_state.extracted_count = 0;
         app_state.assets_remaining = 0;
         app_state.skipped_count = 5;
         assert!(
@@ -219,15 +264,70 @@ mod tests {
         );
     }
 
+    #[test]
+    fn fork_extract_complete_false_while_post_extract_scan_running() {
+        let mut app_state = MinimalForkExtractState::all_latches_set();
+        app_state.running.scan = true;
+        assert!(
+            !evaluate(&app_state),
+            "the post-extract scan must finish before the route fires so the \
+             re-armed apply has a populated step2 to write into"
+        );
+    }
+
+    #[test]
+    fn fork_extract_complete_false_while_apply_pending() {
+        let mut app_state = MinimalForkExtractState::all_latches_set();
+        app_state.pending.apply = true;
+        assert!(
+            !evaluate(&app_state),
+            "the re-armed saved-log apply must run before the route fires so \
+             the imported WeiDU log selection is visible on landing"
+        );
+    }
+
+    #[test]
+    fn fork_extract_complete_false_while_update_preview_pending() {
+        let mut app_state = MinimalForkExtractState::all_latches_set();
+        app_state.pending.update_preview = true;
+        assert!(!evaluate(&app_state));
+    }
+
+    #[derive(Default)]
+    struct RunningPhases {
+        download: bool,
+        extract: bool,
+        scan: bool,
+    }
+
+    #[derive(Default)]
+    struct PendingFlags {
+        apply: bool,
+        update_preview: bool,
+    }
+
     #[derive(Default)]
     struct MinimalForkExtractState {
         flags: crate::ui::install::state_install::InstallPipelineFlags,
         arm_error: Option<String>,
-        download_running: bool,
-        extract_running: bool,
+        running: RunningPhases,
+        pending: PendingFlags,
         extracted_count: usize,
         skipped_count: usize,
         assets_remaining: usize,
+    }
+
+    impl MinimalForkExtractState {
+        fn all_latches_set() -> Self {
+            let mut state = Self::default();
+            state.flags.set_armed(true);
+            state.flags.set_archive_skip_completed(true);
+            state.flags.set_download_phase_started(true);
+            state.flags.set_archives_verified(true);
+            state.flags.set_archives_ingested(true);
+            state.extracted_count = 3;
+            state
+        }
     }
 
     fn evaluate(s: &MinimalForkExtractState) -> bool {
@@ -246,7 +346,12 @@ mod tests {
         if !s.flags.archives_ingested() {
             return false;
         }
-        if s.download_running || s.extract_running {
+        if s.running.download
+            || s.running.extract
+            || s.running.scan
+            || s.pending.apply
+            || s.pending.update_preview
+        {
             return false;
         }
         let archives_observed = s.extracted_count + s.skipped_count;
