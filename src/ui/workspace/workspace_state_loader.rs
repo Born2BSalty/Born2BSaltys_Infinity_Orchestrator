@@ -20,6 +20,17 @@ pub fn populate_wizard_state_from_workspace(
     sync_paths_from_settings(settings_store, wizard_state);
     apply_scratch_mods_folder(workspace, wizard_state);
 
+    if let Err(err) = crate::install_runtime::per_install_dirs::derive_per_install_dirs(
+        &mut wizard_state.step1,
+        &entry.destination_folder,
+        entry.game,
+    ) {
+        tracing::warn!(
+            target = "orchestrator",
+            "workspace cold-load re-derive failed: {err}"
+        );
+    }
+
     reset_scanned_step2_set(wizard_state);
 
     apply_order_to_mods(&workspace.order_bgee, &mut wizard_state.step2.bgee_mods);
@@ -793,5 +804,57 @@ mod tests {
             "Fix-Run 3: an empty prior must not block an empty save \
              (Create-like first write is allowed)"
         );
+    }
+
+    #[test]
+    fn cold_load_rederives_per_install_dirs_from_entry_destination_not_settings() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static C: AtomicU64 = AtomicU64::new(0);
+        let dest = std::env::temp_dir().join(format!(
+            "bio_workspace_loader_fix2_{}_{}",
+            std::process::id(),
+            C.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut fork_entry = entry(Game::EET);
+        fork_entry.destination_folder = dest.to_string_lossy().into_owned();
+
+        let mut ws = WizardState::default();
+        ws.step1.mods_folder = "GLOBAL_SETTINGS_MODS".to_string();
+        ws.step1.bg2ee_log_folder = "GLOBAL_SETTINGS_BG2EE_LOG".to_string();
+
+        populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &fork_entry,
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+
+        let expected_mods = dest.join("mods");
+        assert_eq!(
+            ws.step1.mods_folder,
+            expected_mods.to_string_lossy(),
+            "after cold-load, mods_folder MUST be rooted at entry.destination_folder \
+             (per-install per SPEC §13.12a), not the stale settings value that \
+             sync_paths_from_settings copied in just before"
+        );
+        assert_ne!(
+            ws.step1.mods_folder, "GLOBAL_SETTINGS_MODS",
+            "the per-install re-derive must overwrite the global settings value"
+        );
+
+        let expected_bg2ee_log = dest.join("weidu_log_source").join("bg2ee");
+        assert_eq!(
+            ws.step1.bg2ee_log_folder,
+            expected_bg2ee_log.to_string_lossy(),
+            "bg2ee_log_folder MUST be <dest>/weidu_log_source/bg2ee (per-install), \
+             not the stale settings value — this is what made weidu.log writes \
+             land at the previous modlist's path before the fix"
+        );
+        assert_ne!(
+            ws.step1.bg2ee_log_folder, "GLOBAL_SETTINGS_BG2EE_LOG",
+            "the per-install re-derive must overwrite the global settings value"
+        );
+
+        let _ = std::fs::remove_dir_all(&dest);
     }
 }
