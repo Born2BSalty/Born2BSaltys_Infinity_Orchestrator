@@ -7,6 +7,7 @@ use tracing::warn;
 use crate::registry::model::ModlistEntry;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
+use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::page_home;
 use crate::ui::install::page_install;
 use crate::ui::install::state_install::InstallScreenState;
@@ -198,6 +199,15 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
         return;
     }
     if matches!(orchestrator.nav, NavDestination::Install) {
+        return;
+    }
+    // The Create-fork download pipeline parks the user on the Create
+    // screen while it runs; the route from extract-complete to
+    // Workspace reads `active_install_modlist_id`, so clearing it here
+    // would break the route and trap the user on `Downloading fork`.
+    if matches!(orchestrator.nav, NavDestination::Create)
+        && orchestrator.create_screen_state.stage == CreateStage::ForkDownload
+    {
         return;
     }
     if orchestrator.wizard_state.step5.install_running
