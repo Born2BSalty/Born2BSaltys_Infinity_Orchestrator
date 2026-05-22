@@ -418,12 +418,16 @@ impl OrchestratorApp {
             self.active_install_modlist_id = None;
         }
 
-        // Arms the post-install reset gate. `reset_completed_install_runtime`
-        // consumes this on the next nav-away/enter-Install edge; without it,
-        // a fork-then-modify workspace landing (which leaves destination +
-        // import_code legitimately set and may carry `last_exit_code` from a
-        // prior install) would falsely satisfy the older proxy predicate.
-        self.post_install_reset_gate = PostInstallResetGate::Pending;
+        // Arms the post-install reset gate only for the Install-Modlist
+        // paste / Reinstall route — those install on the Install screen
+        // and the reset clears the lingering paste UI when the user
+        // navigates away. Workspace installs render their post-install
+        // chrome (success banner + Step-5 console + post-install actions)
+        // inside the workspace itself, and clearing that mid-screen would
+        // wipe the success state the user just landed on.
+        if !from_workspace {
+            self.post_install_reset_gate = PostInstallResetGate::Pending;
+        }
     }
 
     fn drain_size_worker_result(&mut self) {

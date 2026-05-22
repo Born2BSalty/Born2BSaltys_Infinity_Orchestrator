@@ -105,15 +105,16 @@ fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {
     }
 }
 
-fn auto_save_step4_weidu_logs_on_nav_edge(orchestrator: &mut OrchestratorApp) {
-    // Mirrors legacy BIO wizard's `NeedStep4SaveThenAdvance` action: writes
-    // the current `step3.{bgee,bg2ee}_items` selection out to the per-install
-    // weidu.log files so the install runner consumes the user's edits
-    // instead of the imported `weidu.log` left on disk by the share-code
-    // import path.
-    if let Err(err) = crate::app::step4_weidu_log_export::auto_save_step4_weidu_logs(
-        &mut orchestrator.wizard_state,
-    ) {
+fn auto_save_step4_weidu_logs_on_nav_edge(orchestrator: &OrchestratorApp) {
+    // Writes the current `step3.{bgee,bg2ee}_items` selection out to the
+    // per-install weidu.log files so the install runner consumes the
+    // user's edits instead of the imported `weidu.log` left on disk by
+    // the share-code import path. Bypasses BIO's `auto_save_step4_weidu_logs`
+    // which early-returns when install_mode is exact-WeiDU-logs — that
+    // mode inherits from the parent share code on fork-then-modify, but
+    // the user's whole point in this workflow is to override the parent's
+    // selection, so the write must happen regardless.
+    if let Err(err) = write_step4_weidu_logs_unconditional(&orchestrator.wizard_state) {
         tracing::warn!(
             target = "orchestrator",
             "Step 4 → Step 5 weidu.log auto-save failed: {err} \
@@ -121,6 +122,62 @@ fn auto_save_step4_weidu_logs_on_nav_edge(orchestrator: &mut OrchestratorApp) {
              Step 2/3 edits may not reach the runner)"
         );
     }
+}
+
+fn write_step4_weidu_logs_unconditional(
+    state: &crate::app::state::WizardState,
+) -> std::io::Result<()> {
+    use crate::app::step5::diagnostics::build_weidu_export_lines;
+    use std::path::PathBuf;
+
+    const HEADER: [&str; 3] = [
+        "// Log of Currently Installed WeiDU Mods",
+        "// The top of the file is the 'oldest' mod",
+        "// ~TP2_File~ #language_number #component_number // [Subcomponent Name -> ] Component Name [ : Version]",
+    ];
+
+    fn write_target(folder: &str, lines: Vec<String>) -> std::io::Result<()> {
+        let folder = folder.trim();
+        if folder.is_empty() {
+            return Ok(());
+        }
+        let dir = PathBuf::from(folder);
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join("weidu.log");
+        let mut out: Vec<String> = HEADER
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
+        out.extend(lines);
+        std::fs::write(path, out.join("\n"))?;
+        Ok(())
+    }
+
+    match state.step1.game_install.as_str() {
+        "EET" => {
+            write_target(
+                &state.step1.eet_bgee_log_folder,
+                build_weidu_export_lines(&state.step3.bgee_items),
+            )?;
+            write_target(
+                &state.step1.eet_bg2ee_log_folder,
+                build_weidu_export_lines(&state.step3.bg2ee_items),
+            )?;
+        }
+        "BG2EE" => {
+            write_target(
+                &state.step1.bg2ee_log_folder,
+                build_weidu_export_lines(&state.step3.bg2ee_items),
+            )?;
+        }
+        _ => {
+            write_target(
+                &state.step1.bgee_log_folder,
+                build_weidu_export_lines(&state.step3.bgee_items),
+            )?;
+        }
+    }
+    Ok(())
 }
 
 pub const NAV_BAR_RESERVE_PX: f32 = 84.0;
