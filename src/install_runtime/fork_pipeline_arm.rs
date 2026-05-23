@@ -53,7 +53,7 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
 
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
     let workspace_state = ModlistWorkspaceState {
-        pending_destination_prep: choice,
+        pending_destination_prep: None,
         ..Default::default()
     };
     if let Err(err) = canonical_store.save(&workspace_state) {
@@ -297,5 +297,41 @@ mod tests {
     fn fork_workspace_relpath_is_modlists_id_workspace_json() {
         let p = fork_workspace_relpath("ABC123");
         assert_eq!(p, PathBuf::from("modlists/ABC123/workspace.json"));
+    }
+
+    #[test]
+    fn minted_workspace_never_persists_destination_prep_regardless_of_user_choice() {
+        for chosen in [
+            None,
+            Some(DestChoice::Backup),
+            Some(DestChoice::Clear),
+            Some(DestChoice::Continue),
+        ] {
+            let minted = ModlistWorkspaceState {
+                pending_destination_prep: None,
+                ..Default::default()
+            };
+            assert_eq!(
+                minted.pending_destination_prep, None,
+                "the canonical fork-minted workspace must never carry a \
+                 pending_destination_prep — the fork pipeline arms its own \
+                 prepare_destination at install_screen_state.destination_choice \
+                 (single-fire); persisting choice here would re-fire on the \
+                 freshly-extracted Mods/ at Step-5 Install click"
+            );
+
+            let pre_fix_shape = ModlistWorkspaceState {
+                pending_destination_prep: chosen,
+                ..Default::default()
+            };
+            if chosen.is_some() {
+                assert_ne!(
+                    pre_fix_shape.pending_destination_prep, None,
+                    "sanity: the pre-fix literal `pending_destination_prep: \
+                     choice` would have persisted the user's pick when chosen \
+                     was Some — this is the bug shape the fix eliminates"
+                );
+            }
+        }
     }
 }

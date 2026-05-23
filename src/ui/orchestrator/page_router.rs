@@ -7,9 +7,9 @@ use tracing::warn;
 use crate::registry::model::ModlistEntry;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
+use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::page_home;
 use crate::ui::install::page_install;
-use crate::ui::install::state_install::InstallScreenState;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::registry_error_panel;
@@ -200,6 +200,15 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
     if matches!(orchestrator.nav, NavDestination::Install) {
         return;
     }
+    // The Create-fork download pipeline parks the user on the Create
+    // screen while it runs; the route from extract-complete to
+    // Workspace reads `active_install_modlist_id`, so clearing it here
+    // would break the route and trap the user on `Downloading fork`.
+    if matches!(orchestrator.nav, NavDestination::Create)
+        && orchestrator.create_screen_state.stage == CreateStage::ForkDownload
+    {
+        return;
+    }
     if orchestrator.wizard_state.step5.install_running
         || orchestrator.wizard_state.step5.start_install_requested
         || orchestrator.wizard_state.step5.prep_running
@@ -227,7 +236,7 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
 fn reset_completed_install_route_on_nav_away(orchestrator: &mut OrchestratorApp) {
     if !should_reset_completed_install_route_on_nav_away(
         &orchestrator.nav,
-        &orchestrator.install_screen_state,
+        orchestrator.post_install_reset_gate.is_pending(),
         &orchestrator.wizard_state,
         orchestrator.step5_prep_rx.is_some() || orchestrator.step5_pending_start.is_some(),
     ) {
@@ -244,7 +253,7 @@ fn reset_completed_install_route_on_enter_install(
     if !should_reset_completed_install_route_on_enter_install(
         previous_nav,
         &orchestrator.nav,
-        &orchestrator.install_screen_state,
+        orchestrator.post_install_reset_gate.is_pending(),
         &orchestrator.wizard_state,
         orchestrator.step5_prep_rx.is_some() || orchestrator.step5_pending_start.is_some(),
     ) {
@@ -255,6 +264,8 @@ fn reset_completed_install_route_on_enter_install(
 }
 
 fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
+    orchestrator.post_install_reset_gate =
+        crate::ui::orchestrator::orchestrator_app::PostInstallResetGate::Idle;
     if let Some(term) = orchestrator.step5_terminal.as_mut() {
         term.clear_console();
     }
@@ -281,44 +292,42 @@ fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
     );
 }
 
-fn should_reset_completed_install_route_on_nav_away(
+const fn should_reset_completed_install_route_on_nav_away(
     nav: &NavDestination,
-    install_screen_state: &InstallScreenState,
+    pending_post_install_reset: bool,
     wizard_state: &crate::app::state::WizardState,
     has_pending_step5_start: bool,
 ) -> bool {
     !matches!(nav, NavDestination::Install)
         && should_reset_completed_install_route(
-            install_screen_state,
+            pending_post_install_reset,
             wizard_state,
             has_pending_step5_start,
         )
 }
 
-fn should_reset_completed_install_route_on_enter_install(
+const fn should_reset_completed_install_route_on_enter_install(
     previous_nav: &NavDestination,
     current_nav: &NavDestination,
-    install_screen_state: &InstallScreenState,
+    pending_post_install_reset: bool,
     wizard_state: &crate::app::state::WizardState,
     has_pending_step5_start: bool,
 ) -> bool {
     matches!(current_nav, NavDestination::Install)
         && !matches!(previous_nav, NavDestination::Install)
         && should_reset_completed_install_route(
-            install_screen_state,
+            pending_post_install_reset,
             wizard_state,
             has_pending_step5_start,
         )
 }
 
-fn should_reset_completed_install_route(
-    install_screen_state: &InstallScreenState,
+const fn should_reset_completed_install_route(
+    pending_post_install_reset: bool,
     wizard_state: &crate::app::state::WizardState,
     has_pending_step5_start: bool,
 ) -> bool {
-    install_screen_state.has_route_context()
-        && !step5_attempt_in_progress(wizard_state, has_pending_step5_start)
-        && crate::ui::workspace::step5::success_banner::clean_exit(wizard_state)
+    pending_post_install_reset && !step5_attempt_in_progress(wizard_state, has_pending_step5_start)
 }
 
 const fn step5_attempt_in_progress(
@@ -431,32 +440,26 @@ mod tests {
 
     #[test]
     fn completed_install_route_resets_only_after_nav_away() {
-        let mut install = InstallScreenState {
-            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
-            ..Default::default()
-        };
-        let mut wizard = crate::app::state::WizardState::default();
-        wizard.step5.last_exit_code = Some(0);
-        wizard.step5.last_install_failed = false;
-        wizard.step5.install_running = false;
+        let wizard = crate::app::state::WizardState::default();
 
+        // Flag is set ⇒ nav-away resets, but staying on Install does not.
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Install,
-            &install,
+            true,
             &wizard,
             false
         ));
         assert!(should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
+            true,
             &wizard,
             false
         ));
 
-        install.reset_to_paste();
+        // Flag is not set ⇒ no reset even on nav-away.
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
+            false,
             &wizard,
             false
         ));
@@ -464,24 +467,12 @@ mod tests {
 
     #[test]
     fn failed_install_route_does_not_reset_on_nav_away() {
-        let install = InstallScreenState {
-            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
-            ..Default::default()
-        };
-        let mut wizard = crate::app::state::WizardState::default();
-        wizard.step5.last_exit_code = Some(1);
+        // A failed install never reaches `maybe_flip_to_installed_on_clean_exit`'s
+        // setter, so `pending_post_install_reset` stays false.
+        let wizard = crate::app::state::WizardState::default();
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
-            &wizard,
-            false
-        ));
-
-        wizard.step5.last_exit_code = Some(0);
-        wizard.step5.last_install_failed = true;
-        assert!(!should_reset_completed_install_route_on_nav_away(
-            &NavDestination::Home,
-            &install,
+            false,
             &wizard,
             false
         ));
@@ -489,23 +480,21 @@ mod tests {
 
     #[test]
     fn unfinished_or_running_install_route_does_not_reset_on_nav_away() {
-        let install = InstallScreenState {
-            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
-            ..Default::default()
-        };
+        // Before any install completes, the flag is false ⇒ no reset.
         let mut wizard = crate::app::state::WizardState::default();
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
+            false,
             &wizard,
             false
         ));
 
-        wizard.step5.last_exit_code = Some(0);
+        // An in-flight install: even if a stale flag is set, the
+        // step5_attempt_in_progress guard blocks the reset.
         wizard.step5.install_running = true;
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
+            true,
             &wizard,
             false
         ));
@@ -513,38 +502,33 @@ mod tests {
 
     #[test]
     fn completed_install_route_resets_on_enter_install_from_other_page() {
-        let install = InstallScreenState {
-            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
-            ..Default::default()
-        };
-        let mut wizard = crate::app::state::WizardState::default();
-        wizard.step5.last_exit_code = Some(0);
+        let wizard = crate::app::state::WizardState::default();
 
         assert!(should_reset_completed_install_route_on_enter_install(
             &NavDestination::Settings,
             &NavDestination::Install,
-            &install,
+            true,
             &wizard,
             false
         ));
         assert!(should_reset_completed_install_route_on_enter_install(
             &NavDestination::Home,
             &NavDestination::Install,
-            &install,
+            true,
             &wizard,
             false
         ));
         assert!(!should_reset_completed_install_route_on_enter_install(
             &NavDestination::Install,
             &NavDestination::Install,
-            &install,
+            true,
             &wizard,
             false
         ));
         assert!(!should_reset_completed_install_route_on_enter_install(
             &NavDestination::Settings,
             &NavDestination::Create,
-            &install,
+            true,
             &wizard,
             false
         ));
@@ -552,25 +536,19 @@ mod tests {
 
     #[test]
     fn stale_success_does_not_reset_when_new_attempt_is_pending() {
-        let install = InstallScreenState {
-            stage: crate::ui::install::state_install::InstallStage::InstallingStub,
-            ..Default::default()
-        };
         let mut wizard = crate::app::state::WizardState::default();
-        wizard.step5.last_exit_code = Some(0);
-        wizard.step5.last_install_failed = false;
 
         wizard.step5.start_install_requested = true;
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
+            true,
             &wizard,
             false
         ));
         assert!(!should_reset_completed_install_route_on_enter_install(
             &NavDestination::Settings,
             &NavDestination::Install,
-            &install,
+            true,
             &wizard,
             false
         ));
@@ -579,7 +557,7 @@ mod tests {
         wizard.step5.prep_running = true;
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
+            true,
             &wizard,
             false
         ));
@@ -587,16 +565,38 @@ mod tests {
         wizard.step5.prep_running = false;
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
-            &install,
+            true,
             &wizard,
             true
         ));
         assert!(!should_reset_completed_install_route_on_enter_install(
             &NavDestination::Settings,
             &NavDestination::Install,
-            &install,
+            true,
             &wizard,
             true
+        ));
+    }
+
+    #[test]
+    fn fork_then_modify_does_not_falsely_reset() {
+        // The bug Run 3 closes: a fork-then-modify workspace has legitimate
+        // `destination` + `import_code` in install_screen_state and may
+        // carry `last_exit_code = Some(0)` from a prior install — the old
+        // proxy predicate fired the reset and wiped Step 2. The flag-based
+        // predicate stays false because no install completed for this fork.
+        let mut wizard = crate::app::state::WizardState::default();
+        wizard.step5.last_exit_code = Some(0); // carried over from elsewhere
+        wizard.step5.last_install_failed = false;
+        wizard.step5.install_running = false;
+
+        assert!(!should_reset_completed_install_route_on_nav_away(
+            &NavDestination::Workspace {
+                modlist_id: Some("forked-id".to_string())
+            },
+            false, // flag NOT set because no install actually completed here
+            &wizard,
+            false
         ));
     }
 }

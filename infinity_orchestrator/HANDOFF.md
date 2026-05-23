@@ -16,7 +16,7 @@ The project is the redesign of the existing `bio` Rust crate (Born2BSalty's Infi
 | 4 | Settings screen (5 sub-tabs) + per-edit debounced path validation | ✓ done, builds clean |
 | 5 | Home + Install Modlist (paste / preview / download stages) | ✓ done |
 | 6 | Create screen + Workspace shell (Steps 2–4) | ✓ done |
-| 7 | Step 5 install runtime + Reinstall + import-code auto-write + install concurrency + rail-nav lock | ✓ **COMPLETE** — shipped via PR #5 (merged `3d8287d`) + PR #6 (merged `6ea7b5c`). Open follow-up: Item #4 Create-fork extract hangs at "1/2 50%" on pre-v3 parent codes; PR #6 added `fork_extract_complete` gate-eval `tracing::info`, next user reproduction pins the failing condition. |
+| 7 | Step 5 install runtime + Reinstall + install concurrency + rail-nav lock | ✓ **COMPLETE** via PR #5 + PR #6. Item #4 Create-fork post-route UX **arc-closing PR open for `xgatt/create-then-modify-fix`** — Runs 1-6 landed; both 🔴 data-loss bugs closed (R1 double `prepare_destination` + wrong-write-path `sync_paths_from_settings` clobber). Remaining deferred items: **R7** Linux symlink follow on `delete_modlist`; **R6** Continue-partial-install dead UI; **Gap #4** silent skip in `build_extract_jobs`. Full risk map in `.claude/INSTALL_WORKFLOWS_TRACE.md` (13 risks numbered R1-R13). |
 | 8 | Popup reskins + state-aware theme reads across BIO surfaces + polish | not started |
 
 After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the deferred items in Appendix B and the known caveats below).
@@ -50,7 +50,24 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
 
 **PR #5 (5 commits) + PR #6 (Born2BSalty cleanup) BOTH MERGED into `overhaul/infinity_orchestrator`** (HEAD `6ea7b5c` as of 2026-05-21). Working tree clean.
 
-**Open follow-up** — Item #4 Create-fork extract hangs at "1/2 50%" on the soft-fallback (pre-v3 parent code, no `archive_meta`) path. PR #5's lifecycle INFO logs proved `extract_parallel` COMPLETES (workers join, 2 extracted, coordinator emits `Finished`); the hang is downstream. PR #6 added `tracing::info!` on `fork_extract_complete`'s gate evaluation (logs each flag + step2 condition the predicate inspects). **Next step: user reproduces the hang with the post-PR-#6 build + RUST_LOG-default (warns are emitted at INFO, the new gate-eval logs are at INFO too); the `fork extract completion gate` line will pinpoint which condition is false** (leading hypotheses: `archives_ingested` never flips true on the all-unverifiable path, OR `drain_extract_parallel` isn't processing the 2nd AssetDone + Finished events).
+**Item #4 Create-fork post-route UX — arc-closing PR open** (branch `xgatt/create-then-modify-fix`, single-branch arc, six runs). Both 🔴 data-loss bugs surfaced by the workflow-trace audit closed by Run 6.
+
+**Verifiably fixed (Runs 1-6, all on origin):**
+- **Run 1** `2c95df9` — fork-route un-blocked. `page_router::clear_pending_reinstall_on_nav_away_from_install` was clearing `active_install_modlist_id` while the fork pipeline was mid-extract on the Create stage; skipped during `CreateStage::ForkDownload`.
+- **Run 2** `b284525` — apply imported WeiDU log selection on Workspace landing + suppress auto-opened Update Check popup + persist `scratch_mods_folder` for non-dev resume.
+- **Run 3** `b67695b` — rescan-wipes-step2 via new `PostInstallResetGate` enum flag (set in `maybe_flip_to_installed_on_clean_exit` after `flip_to_installed`, cleared in `reset_completed_install_runtime`); Step 4 → Step 5 weidu-log auto-save; `fork_extract_complete` gate-eval log spam tightened.
+- **Run 4** `57bc5c4` — suppress auto-build install regression unmasked by Run 3; `stage_fork_download::render_live` clears `modlist_auto_build_active` + `modlist_auto_build_waiting_for_install` as soon as extract is done so `advance_pending_saved_log_flow` can't fire `start_auto_build_install` post-apply.
+- **Run 5** `7386195` — Workspace install no longer wipes its own success banner + Step-5 console (gate `PostInstallResetGate::Pending` arm on `!from_workspace` in `maybe_flip_to_installed_on_clean_exit`); weidu-log write at Step-4 → Step-5 nav bypasses BIO's `install_mode` early-return via a redesign-side `write_step4_weidu_logs_unconditional`.
+- **Run 6** `e8c911f` — closes both 🔴 data-loss bugs surfaced by the post-Run-5 workflow-trace audit. (i) **R1 double `prepare_destination`**: `fork_pipeline_arm::mint_and_arm` was persisting the user's `DestChoice` (Backup/Clear) as `pending_destination_prep` even though the fork-arm's `stage_downloading::arm_pipeline_once` had already run `prepare_destination` synchronously; at Step-5 Install click, `consume_pending_destination_prep` re-ran prep against the freshly-extracted Mods/ + weidu_log_source/ + modlist-import-code.txt (Backup double-archived; Clear permanently deleted). Fix: `mint_and_arm` now writes `pending_destination_prep: None`; scratch flow's separate write site untouched. (ii) **Wrong write path**: `populate_wizard_state_from_workspace`'s `sync_paths_from_settings` call was clobbering per-install `step1` fields with stale global settings values, so weidu.log auto-save at Step-4 → Step-5 nav landed at the previous modlist's destination instead of the current fork's. Fix: call `derive_per_install_dirs(&mut wizard_state.step1, &entry.destination_folder, entry.game)` after the sync, with a `warn!`-and-continue fallback for empty destinations (in-progress drafts). Two regression tests added. ZERO BIO source touched.
+
+**Still open — 🔴 Linux-only:**
+- **R7: `delete_modlist` follows symlinks on Linux** — `fs::remove_dir_all` follows symlinks; a user with a symlinked install path gets their actual target destroyed by Delete. Cross-platform-target concern only — Windows users unaffected.
+
+**Workspace-trace audit (`.claude/INSTALL_WORKFLOWS_TRACE.md`, 918 lines):** 13 numbered risks (R1-R13) with severity icons + per-workspace TL;DR banners + inline callouts at every code site where each risk surfaces. R1 is the most critical (data destruction on common fork flow); R7 is data destruction too but Linux-only AND requires user-typed symlink. R6 (Continue partial install dead UI — the third radio in `destination_not_empty.rs` renders but `stage_paste.rs:112-116` jumps Paste → InstallingStub skipping all arming/registration/dir-derivation) is the most visible cleanup item but doesn't destroy anything.
+
+**State architecture analysis (`.claude/state-architecture.md`):** the underlying spaghetti — "current workflow settings" is shattered across 7+ fields on `OrchestratorApp` + the shared `wizard_state`. Seven scattered partial-reset functions fire on every page_router::render frame; no formal `transition_to_workflow` contract. Item #4's six runs all touched this surface; each fix unmasked the next regression. The Phase 8 refactor candidate (a `CurrentWorkflow` enum + single transition function + per-install paths off `wizard_state.step1`) is documented for future agent reference. **Not authorized work**; descriptive only.
+
+**Auto-update / asset-substitution concern remains deferred per user decision (Born2BSalty's thread).** Earlier this session a throwaway probe empirically confirmed that `apply_successful_update_check_outcome` substitutes the asset list when the TP2's parsed version differs from the upstream's current tag — but the user's specific repro dodged it because both mods' TP2 versions matched. Left as latent behavior.
 
 **Next major arc:** Phase 8 (Popup reskins + state-aware theme reads + polish) is the open project work after Item #4 is closed (or independently scheduled if Item #4 turns out to be a small fix).
 
@@ -62,7 +79,7 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
   - `BIO` — the legacy linear-wizard app, untouched in behavior, still launches from `cargo run --bin BIO`.
   - `infinity_orchestrator` — the new redesigned app, launches from `cargo run --bin infinity_orchestrator`.
 - Builds natively on Windows, Linux (Ubuntu CI), and macOS. Cross-compilation has known toolchain issues — see *Windows builds* below for the historical detail.
-- 501/501 lib tests pass.
+- 515/515 lib tests pass.
 - Cargo version `0.1.0-Alpha.1`.
 - The orchestrator binary opens an `eframe` window (1280×820, min 1024×700) with:
   - **Titlebar** (34px, sketchy border, `Infinity Orchestrator` title centered, traffic-light dots top-left).

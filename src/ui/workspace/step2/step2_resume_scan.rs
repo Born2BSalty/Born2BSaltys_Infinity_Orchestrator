@@ -12,15 +12,7 @@ pub fn maybe_trigger_resume_scan(
     orchestrator: &mut OrchestratorApp,
     workspace: &ModlistWorkspaceState,
 ) {
-    if !orchestrator.dev_mode {
-        return;
-    }
-    let Some(folder) = workspace
-        .dev_scanned_mods_folder
-        .as_deref()
-        .map(str::trim)
-        .filter(|f| !f.is_empty())
-    else {
+    let Some(folder) = pick_resume_folder(orchestrator.dev_mode, workspace) else {
         return;
     };
     let has_order = !workspace.order_bgee.is_empty()
@@ -69,6 +61,25 @@ pub fn maybe_trigger_resume_scan(
         step2_rescan_reconcile::armed_was_scanning_for_inflight_scan();
 }
 
+fn pick_resume_folder(dev_mode: bool, workspace: &ModlistWorkspaceState) -> Option<&str> {
+    let scratch = workspace
+        .scratch_mods_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|f| !f.is_empty());
+    if let Some(folder) = scratch {
+        return Some(folder);
+    }
+    if !dev_mode {
+        return None;
+    }
+    workspace
+        .dev_scanned_mods_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|f| !f.is_empty())
+}
+
 fn snapshot_from_order(order: &[ComponentRef]) -> Vec<RescanSelection> {
     order
         .iter()
@@ -112,6 +123,58 @@ mod tests {
     #[test]
     fn empty_order_yields_empty_snapshot() {
         assert!(snapshot_from_order(&[]).is_empty());
+    }
+
+    #[test]
+    fn pick_resume_folder_prefers_scratch_in_any_mode() {
+        let ws = ModlistWorkspaceState {
+            scratch_mods_folder: Some(r"D:\fork\mods".to_string()),
+            dev_scanned_mods_folder: Some(r"D:\dev\corpus".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(pick_resume_folder(false, &ws), Some(r"D:\fork\mods"));
+        assert_eq!(pick_resume_folder(true, &ws), Some(r"D:\fork\mods"));
+    }
+
+    #[test]
+    fn pick_resume_folder_uses_scratch_when_only_scratch_set() {
+        let ws = ModlistWorkspaceState {
+            scratch_mods_folder: Some(r"D:\fork\mods".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(pick_resume_folder(false, &ws), Some(r"D:\fork\mods"));
+    }
+
+    #[test]
+    fn pick_resume_folder_falls_back_to_dev_only_in_dev_mode() {
+        let ws = ModlistWorkspaceState {
+            dev_scanned_mods_folder: Some(r"D:\dev\corpus".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(pick_resume_folder(true, &ws), Some(r"D:\dev\corpus"));
+        assert_eq!(
+            pick_resume_folder(false, &ws),
+            None,
+            "non-dev sessions never resume from a dev-only scan folder"
+        );
+    }
+
+    #[test]
+    fn pick_resume_folder_ignores_whitespace_only_folders() {
+        let ws = ModlistWorkspaceState {
+            scratch_mods_folder: Some("   ".to_string()),
+            dev_scanned_mods_folder: Some("\t".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(pick_resume_folder(true, &ws), None);
+        assert_eq!(pick_resume_folder(false, &ws), None);
+    }
+
+    #[test]
+    fn pick_resume_folder_returns_none_when_neither_field_set() {
+        let ws = ModlistWorkspaceState::default();
+        assert_eq!(pick_resume_folder(true, &ws), None);
+        assert_eq!(pick_resume_folder(false, &ws), None);
     }
 
     use crate::app::controller::step3_sync;

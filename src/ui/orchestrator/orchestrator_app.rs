@@ -80,6 +80,25 @@ impl std::ops::Not for DirtyFlag {
     }
 }
 
+/// Arms the post-install runtime reset.
+///
+/// Set by `maybe_flip_to_installed_on_clean_exit` after `flip_to_installed`
+/// succeeds; cleared inside `reset_completed_install_runtime` on the next
+/// nav-away or enter-Install edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PostInstallResetGate {
+    #[default]
+    Idle,
+    Pending,
+}
+
+impl PostInstallResetGate {
+    #[must_use]
+    pub const fn is_pending(self) -> bool {
+        matches!(self, Self::Pending)
+    }
+}
+
 pub struct OrchestratorApp {
     pub nav: NavDestination,
     pub(crate) last_rendered_nav: NavDestination,
@@ -124,6 +143,8 @@ pub struct OrchestratorApp {
     pub(crate) pending_reinstall_id: Option<String>,
 
     pub(crate) active_install_modlist_id: Option<String>,
+
+    pub post_install_reset_gate: PostInstallResetGate,
 
     pub install_running_since: Option<Instant>,
 
@@ -289,6 +310,7 @@ impl OrchestratorApp {
             workspace_step5: WorkspaceStep5State::default(),
             pending_reinstall_id: None,
             active_install_modlist_id: None,
+            post_install_reset_gate: PostInstallResetGate::Idle,
             install_running_since: None,
             install_size_worker_rx: None,
             step5_terminal: None,
@@ -394,6 +416,17 @@ impl OrchestratorApp {
 
         if !from_workspace {
             self.active_install_modlist_id = None;
+        }
+
+        // Arms the post-install reset gate only for the Install-Modlist
+        // paste / Reinstall route — those install on the Install screen
+        // and the reset clears the lingering paste UI when the user
+        // navigates away. Workspace installs render their post-install
+        // chrome (success banner + Step-5 console + post-install actions)
+        // inside the workspace itself, and clearing that mid-screen would
+        // wipe the success state the user just landed on.
+        if !from_workspace {
+            self.post_install_reset_gate = PostInstallResetGate::Pending;
         }
     }
 
@@ -595,7 +628,6 @@ impl OrchestratorApp {
         extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
     ) {
         use crate::install_runtime::extract_parallel::ExtractAssetEvent;
-        use std::collections::HashSet;
         use std::sync::mpsc::TryRecvError;
 
         let Some(rx) = extract_parallel_rx.as_ref() else {
@@ -618,69 +650,15 @@ impl OrchestratorApp {
                     );
                 }
                 Ok(ExtractAssetEvent::Finished(result)) => {
-                    Self::log_extract_finished(&result, extract_progress);
-                    *extract_parallel_rx = None;
-                    wizard_state.step2.update_selected_extract_running = false;
-                    wizard_state.step2.update_selected_extracted_sources = result.extracted;
-
-                    let extracted_labels: HashSet<String> = wizard_state
-                        .step2
-                        .update_selected_extracted_sources
-                        .iter()
-                        .filter_map(|e| e.split_once(" -> ").map(|(l, _)| l.trim().to_string()))
-                        .filter(|l| !l.is_empty())
-                        .collect();
-                    if !extracted_labels.is_empty() {
-                        wizard_state
-                            .step2
-                            .update_selected_missing_sources
-                            .retain(|e| {
-                                !extracted_labels
-                                    .iter()
-                                    .any(|l| e.starts_with(&format!("{l} (")))
-                            });
-                        wizard_state
-                            .step2
-                            .update_selected_update_sources
-                            .retain(|e| {
-                                !extracted_labels
-                                    .iter()
-                                    .any(|l| e.starts_with(&format!("{l} (")))
-                            });
-                        wizard_state
-                            .step2
-                            .update_selected_update_assets
-                            .retain(|a| !extracted_labels.contains(&a.label));
-                    }
-
-                    wizard_state
-                        .step2
-                        .update_selected_extract_failed_sources
-                        .extend(result.failed);
-
-                    let extracted = wizard_state.step2.update_selected_extracted_sources.len();
-                    let failed = wizard_state
-                        .step2
-                        .update_selected_extract_failed_sources
-                        .len();
-
-                    if extracted > 0 {
-                        wizard_state.step1_mods_folder_has_tp2 = Some(true);
-                        wizard_state.step2.log_pending_downloads.clear();
-                        wizard_state.step2.scan_status =
-                            format!("Extracted {extracted} updates; rescanning Mods Folder");
-                        app_step2_scan::start_step2_scan(
-                            wizard_state,
-                            step2_scan_rx,
-                            step2_cancel,
-                            step2_progress_queue,
-                        );
-                    } else {
-                        wizard_state.step2.scan_status = format!(
-                            "Extract updates finished: {extracted} updated, \
- {failed} failed"
-                        );
-                    }
+                    Self::handle_extract_finished(
+                        result,
+                        wizard_state,
+                        extract_parallel_rx,
+                        step2_scan_rx,
+                        step2_cancel,
+                        step2_progress_queue,
+                        extract_progress,
+                    );
                     return;
                 }
                 Err(TryRecvError::Empty) => return,
@@ -698,6 +676,83 @@ impl OrchestratorApp {
                     return;
                 }
             }
+        }
+    }
+
+    fn handle_extract_finished(
+        result: crate::install_runtime::extract_parallel::ExtractResult,
+        wizard_state: &mut WizardState,
+        extract_parallel_rx: &mut Option<
+            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
+        >,
+        step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
+        step2_cancel: &mut Option<Arc<AtomicBool>>,
+        step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
+        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+    ) {
+        use std::collections::HashSet;
+
+        Self::log_extract_finished(&result, extract_progress);
+        *extract_parallel_rx = None;
+        wizard_state.step2.update_selected_extract_running = false;
+        wizard_state.step2.update_selected_extracted_sources = result.extracted;
+
+        let extracted_labels: HashSet<String> = wizard_state
+            .step2
+            .update_selected_extracted_sources
+            .iter()
+            .filter_map(|e| e.split_once(" -> ").map(|(l, _)| l.trim().to_string()))
+            .filter(|l| !l.is_empty())
+            .collect();
+        if !extracted_labels.is_empty() {
+            wizard_state
+                .step2
+                .update_selected_missing_sources
+                .retain(|e| {
+                    !extracted_labels
+                        .iter()
+                        .any(|l| e.starts_with(&format!("{l} (")))
+                });
+            wizard_state
+                .step2
+                .update_selected_update_sources
+                .retain(|e| {
+                    !extracted_labels
+                        .iter()
+                        .any(|l| e.starts_with(&format!("{l} (")))
+                });
+            wizard_state
+                .step2
+                .update_selected_update_assets
+                .retain(|a| !extracted_labels.contains(&a.label));
+        }
+
+        wizard_state
+            .step2
+            .update_selected_extract_failed_sources
+            .extend(result.failed);
+
+        let extracted = wizard_state.step2.update_selected_extracted_sources.len();
+        let failed = wizard_state
+            .step2
+            .update_selected_extract_failed_sources
+            .len();
+
+        if extracted > 0 {
+            wizard_state.step1_mods_folder_has_tp2 = Some(true);
+            wizard_state.step2.log_pending_downloads.clear();
+            wizard_state.step2.scan_status =
+                format!("Extracted {extracted} updates; rescanning Mods Folder");
+            wizard_state.step2.pending_saved_log_apply = true;
+            app_step2_scan::start_step2_scan(
+                wizard_state,
+                step2_scan_rx,
+                step2_cancel,
+                step2_progress_queue,
+            );
+        } else {
+            wizard_state.step2.scan_status =
+                format!("Extract updates finished: {extracted} updated, {failed} failed");
         }
     }
 
@@ -1456,5 +1511,92 @@ mod tests {
             .is_err()
         );
         let _ = TryRecvError::Empty;
+    }
+
+    #[test]
+    fn drain_extract_parallel_finished_with_results_rearms_saved_log_apply() {
+        use crate::install_runtime::extract_parallel::{ExtractAssetEvent, ExtractResult};
+        let (s_ex, r_ex) = std::sync::mpsc::channel::<
+            crate::install_runtime::extract_parallel::ExtractAssetEvent,
+        >();
+        let mut rx: Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>> =
+            Some(r_ex);
+        let mut scan_rx: Option<Receiver<Step2ScanEvent>> = None;
+        let mut cancel: Option<Arc<AtomicBool>> = None;
+        let mut progress_queue: VecDeque<(usize, usize, String)> = VecDeque::new();
+        let extract_lock = Arc::new(std::sync::Mutex::new(None));
+
+        let mut ws = WizardState::default();
+        ws.step2.update_selected_extract_running = true;
+        ws.step2.pending_saved_log_apply = false;
+        assert!(
+            !ws.step2.pending_saved_log_apply,
+            "precondition: the first apply pass cleared this latch"
+        );
+
+        s_ex.send(ExtractAssetEvent::Finished(ExtractResult {
+            extracted: vec!["EEFIXPACK -> C:\\dest\\mods\\eefixpack".to_string()],
+            failed: Vec::new(),
+        }))
+        .expect("send Finished");
+
+        OrchestratorApp::drain_extract_parallel(
+            &mut ws,
+            &mut rx,
+            &mut scan_rx,
+            &mut cancel,
+            &mut progress_queue,
+            &extract_lock,
+        );
+
+        assert!(
+            ws.step2.pending_saved_log_apply,
+            "extracted > 0 must re-arm pending_saved_log_apply so the next \
+             advance_pending_saved_log_flow pass writes the imported log's \
+             selection onto the now-populated step2"
+        );
+        assert!(rx.is_none(), "rx is consumed on Finished");
+        drop(s_ex);
+    }
+
+    #[test]
+    fn drain_extract_parallel_finished_with_zero_extracted_does_not_rearm_apply() {
+        use crate::install_runtime::extract_parallel::{ExtractAssetEvent, ExtractResult};
+        let (s_ex, r_ex) = std::sync::mpsc::channel::<
+            crate::install_runtime::extract_parallel::ExtractAssetEvent,
+        >();
+        let mut rx: Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>> =
+            Some(r_ex);
+        let mut scan_rx: Option<Receiver<Step2ScanEvent>> = None;
+        let mut cancel: Option<Arc<AtomicBool>> = None;
+        let mut progress_queue: VecDeque<(usize, usize, String)> = VecDeque::new();
+        let extract_lock = Arc::new(std::sync::Mutex::new(None));
+
+        let mut ws = WizardState::default();
+        ws.step2.update_selected_extract_running = true;
+        ws.step2.pending_saved_log_apply = false;
+
+        s_ex.send(ExtractAssetEvent::Finished(ExtractResult {
+            extracted: Vec::new(),
+            failed: Vec::new(),
+        }))
+        .expect("send Finished");
+
+        OrchestratorApp::drain_extract_parallel(
+            &mut ws,
+            &mut rx,
+            &mut scan_rx,
+            &mut cancel,
+            &mut progress_queue,
+            &extract_lock,
+        );
+
+        assert!(
+            !ws.step2.pending_saved_log_apply,
+            "zero extracted ⇒ no scan kicked ⇒ no re-arm (an empty re-arm \
+             with no scan to back it would deadlock advance_pending_saved_log_flow \
+             waiting for a scan that never starts)"
+        );
+        drop(s_ex);
     }
 }
