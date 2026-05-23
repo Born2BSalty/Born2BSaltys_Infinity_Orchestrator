@@ -4,7 +4,7 @@
 use tracing::warn;
 
 use crate::app::modlist_share::import_modlist_share_code;
-use crate::app::state::WizardState;
+use crate::app::state::{Step1State, WizardState};
 use crate::install_runtime::flag_policies::InstallWorkflow;
 use crate::install_runtime::per_install_dirs::{self, PerInstallDirs};
 use crate::registry::model::Game;
@@ -39,6 +39,8 @@ pub fn prepare_install_dirs_and_maybe_import(
     import_modlist_share_code(wizard_state, share_code.trim())
         .map_err(|err| format!("import_modlist_share_code failed: {err}"))?;
 
+    apply_workflow_install_mode_override(&mut wizard_state.step1, workflow);
+
     arm_auto_build(wizard_state);
 
     Ok(PrepOutcome::PipelineArmed { dirs })
@@ -47,11 +49,33 @@ pub fn prepare_install_dirs_and_maybe_import(
 #[must_use]
 pub const fn is_share_code_consuming(workflow: InstallWorkflow) -> bool {
     match workflow {
-        InstallWorkflow::ShareCodeConsuming
+        InstallWorkflow::PasteAndInstall
+        | InstallWorkflow::ForkAndModify
         | InstallWorkflow::ContinuePartialInstall
         | InstallWorkflow::Reinstall => true,
         InstallWorkflow::FreshCreate => false,
     }
+}
+
+/// Overrides `step1.install_mode` after a share-code import so the
+/// workflow controls how BIO consumes the imported `weidu.log`s, not the
+/// exporter's original `install_mode` payload value. Paste consumes the
+/// logs exactly (`EXACT_WEIDU_LOGS`); Fork hands the user a scratch
+/// modlist to scan + modify (`BUILD_FROM_SCANNED_MODS`); other workflows
+/// keep whatever the share code declared.
+pub(crate) fn apply_workflow_install_mode_override(
+    step1: &mut Step1State,
+    workflow: InstallWorkflow,
+) {
+    let forced = match workflow {
+        InstallWorkflow::PasteAndInstall => Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS,
+        InstallWorkflow::ForkAndModify => Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS,
+        InstallWorkflow::FreshCreate
+        | InstallWorkflow::ContinuePartialInstall
+        | InstallWorkflow::Reinstall => return,
+    };
+    step1.install_mode = forced.to_string();
+    step1.sync_install_mode_flags();
 }
 
 pub fn arm_download_archive_policy(state: &mut WizardState, mods_archive_folder: &str) {
@@ -164,7 +188,7 @@ mod tests {
             &mut st,
             &dest.to_string_lossy(),
             Game::EET,
-            InstallWorkflow::ShareCodeConsuming,
+            InstallWorkflow::PasteAndInstall,
             "   ",
         );
         assert!(r.is_err(), "share-code-consuming needs a code");
@@ -268,7 +292,8 @@ mod tests {
 
     #[test]
     fn is_share_code_consuming_matches_spec_13_12_5() {
-        assert!(is_share_code_consuming(InstallWorkflow::ShareCodeConsuming));
+        assert!(is_share_code_consuming(InstallWorkflow::PasteAndInstall));
+        assert!(is_share_code_consuming(InstallWorkflow::ForkAndModify));
         assert!(is_share_code_consuming(
             InstallWorkflow::ContinuePartialInstall
         ));
@@ -324,6 +349,53 @@ mod tests {
 
         assert!(st2.step1.download_archive);
         assert!(st2.step1.download);
+    }
+
+    #[test]
+    fn paste_flow_forces_exact_weidu_logs_regardless_of_share_install_mode() {
+        let mut step1 = Step1State {
+            install_mode: Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string(),
+            have_weidu_logs: false,
+            ..Default::default()
+        };
+
+        apply_workflow_install_mode_override(&mut step1, InstallWorkflow::PasteAndInstall);
+
+        assert_eq!(
+            step1.install_mode,
+            Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS,
+            "paste flow must force EXACT_WEIDU_LOGS even when the share \
+             code declared BUILD_FROM_SCANNED_MODS"
+        );
+        assert!(
+            step1.have_weidu_logs,
+            "sync_install_mode_flags must set have_weidu_logs = true for \
+             EXACT_WEIDU_LOGS so the path preflight clears via the \
+             weidu-logs-mode + download_archive exemption"
+        );
+    }
+
+    #[test]
+    fn fork_flow_forces_build_from_scanned_mods_regardless_of_share_install_mode() {
+        let mut step1 = Step1State {
+            install_mode: Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string(),
+            have_weidu_logs: true,
+            ..Default::default()
+        };
+
+        apply_workflow_install_mode_override(&mut step1, InstallWorkflow::ForkAndModify);
+
+        assert_eq!(
+            step1.install_mode,
+            Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS,
+            "fork flow must force BUILD_FROM_SCANNED_MODS even when the \
+             share code declared EXACT_WEIDU_LOGS"
+        );
+        assert!(
+            !step1.have_weidu_logs,
+            "sync_install_mode_flags must set have_weidu_logs = false for \
+             BUILD_FROM_SCANNED_MODS so Step 2 scans the Mods folder"
+        );
     }
 
     #[test]

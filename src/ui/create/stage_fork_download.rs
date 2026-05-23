@@ -46,7 +46,10 @@ pub fn render(
 
 pub fn render_live(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> ForkDownloadOutcome {
     let palette = orchestrator.theme_palette;
-    let inputs = stage_downloading::LivePipelineInputs::from(orchestrator);
+    let inputs = stage_downloading::LivePipelineInputs::from_workflow(
+        orchestrator,
+        crate::install_runtime::flag_policies::InstallWorkflow::ForkAndModify,
+    );
 
     stage_downloading::arm_pipeline_once(orchestrator, &inputs);
     stage_and_kick_archive_skip_once(orchestrator, &inputs);

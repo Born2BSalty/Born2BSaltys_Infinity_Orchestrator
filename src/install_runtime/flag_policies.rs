@@ -8,7 +8,9 @@ use crate::settings::model::Step1Settings;
 pub enum InstallWorkflow {
     FreshCreate,
 
-    ShareCodeConsuming,
+    PasteAndInstall,
+
+    ForkAndModify,
 
     ContinuePartialInstall,
 
@@ -49,7 +51,9 @@ pub const fn resolve(workflow: InstallWorkflow, settings: &Step1Settings) -> Res
             download: settings.download,
         },
 
-        InstallWorkflow::ShareCodeConsuming | InstallWorkflow::Reinstall => ResolvedFlags {
+        InstallWorkflow::PasteAndInstall
+        | InstallWorkflow::ForkAndModify
+        | InstallWorkflow::Reinstall => ResolvedFlags {
             skip_installed: false,
             check_last_installed: false,
             download: true,
@@ -97,17 +101,19 @@ mod tests {
     }
 
     #[test]
-    fn share_code_consuming_forces_download_no_sc() {
-        for settings_dl in [true, false] {
-            let on = compute_flags(
-                InstallWorkflow::ShareCodeConsuming,
-                &settings_with_download(settings_dl),
-            );
-            assert_eq!(
-                on,
-                vec!["--download"],
-                "share-code workflow forces --download (Settings={settings_dl})"
-            );
+    fn paste_and_fork_force_download_no_sc() {
+        for workflow in [
+            InstallWorkflow::PasteAndInstall,
+            InstallWorkflow::ForkAndModify,
+        ] {
+            for settings_dl in [true, false] {
+                let on = compute_flags(workflow, &settings_with_download(settings_dl));
+                assert_eq!(
+                    on,
+                    vec!["--download"],
+                    "share-code workflow {workflow:?} forces --download (Settings={settings_dl})"
+                );
+            }
         }
     }
 
