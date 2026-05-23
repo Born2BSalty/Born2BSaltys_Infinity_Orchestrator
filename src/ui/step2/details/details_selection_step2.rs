@@ -146,11 +146,13 @@ fn render_checked_row(ui: &mut egui::Ui, details: &Step2Details, layout: &Select
         egui::Label::new(crate::ui::shared::typography_global::strong("Checked")),
     );
     let checked_pill = if checked {
-        crate::ui::shared::typography_global::strong("Checked")
-            .color(crate::ui::shared::theme_global::success())
+        crate::ui::shared::typography_global::strong("Checked").color(
+            crate::ui::shared::redesign_tokens::redesign_success(layout.palette),
+        )
     } else {
-        crate::ui::shared::typography_global::strong("Unchecked")
-            .color(crate::ui::shared::theme_global::text_muted())
+        crate::ui::shared::typography_global::strong("Unchecked").color(
+            crate::ui::shared::redesign_tokens::redesign_text_muted(layout.palette),
+        )
     };
     ui.add_sized(
         [layout.value_w, layout.row_h],
@@ -169,11 +171,13 @@ fn render_state_row(ui: &mut egui::Ui, details: &Step2Details, layout: &Selectio
         egui::Label::new(crate::ui::shared::typography_global::strong("State")),
     );
     let state_text = if is_disabled {
-        crate::ui::shared::typography_global::strong("Disabled")
-            .color(crate::ui::shared::theme_global::warning())
+        crate::ui::shared::typography_global::strong("Disabled").color(
+            crate::ui::shared::redesign_tokens::redesign_warning(layout.palette),
+        )
     } else {
-        crate::ui::shared::typography_global::strong("Selectable")
-            .color(crate::ui::shared::theme_global::success())
+        crate::ui::shared::typography_global::strong("Selectable").color(
+            crate::ui::shared::redesign_tokens::redesign_success(layout.palette),
+        )
     };
     let state_resp = ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(state_text));
     if let Some(reason) = details.disabled_reason.as_deref() {
@@ -239,10 +243,9 @@ fn render_reason_row(ui: &mut egui::Ui, details: &Step2Details, layout: &Selecti
     let value_resp = ui
         .add_sized(
             [layout.value_w, layout.row_h],
-            egui::Label::new(
-                crate::ui::shared::typography_global::plain(display)
-                    .color(crate::ui::shared::theme_global::warning()),
-            ),
+            egui::Label::new(crate::ui::shared::typography_global::plain(display).color(
+                crate::ui::shared::redesign_tokens::redesign_warning(layout.palette),
+            )),
         )
         .on_hover_text(reason);
     let mut ignored_action = None;

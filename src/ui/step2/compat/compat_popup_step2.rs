@@ -72,6 +72,10 @@ pub mod compat_popup_details {
     use crate::app::compat_issue_text::display_source;
     use crate::app::selected_details::selected_compat_issue;
     use crate::app::state::WizardState;
+    use crate::ui::shared::redesign_tokens::{
+        ThemePalette, redesign_error_emphasis, redesign_text_disabled, redesign_text_muted,
+        redesign_warning_soft,
+    };
     use crate::ui::step2::compat_popup_nav_step2::{
         COMPAT_POPUP_FILTER_OPTIONS, compat_filter_matches,
     };
@@ -80,7 +84,7 @@ pub mod compat_popup_details {
     use crate::ui::step2::compat_types_step2::{CompatIssueStatusTone, display_issue};
     use crate::ui::step2::content_step2::step2_details_select::selected_details;
 
-    pub fn render_details(ui: &mut egui::Ui, state: &mut WizardState) {
+    pub fn render_details(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
         let details = selected_details(state);
         let issue = selected_or_synth_issue(state);
         let issue_display = issue.as_ref().map(display_issue);
@@ -114,13 +118,9 @@ pub mod compat_popup_details {
             ui.horizontal(|ui| {
                 ui.label(crate::ui::shared::typography_global::strong("Status"));
                 let badge_color = match issue.status_tone {
-                    CompatIssueStatusTone::Neutral => crate::ui::shared::theme_global::text_muted(),
-                    CompatIssueStatusTone::Blocking => {
-                        crate::ui::shared::theme_global::error_emphasis()
-                    }
-                    CompatIssueStatusTone::Warning => {
-                        crate::ui::shared::theme_global::warning_soft()
-                    }
+                    CompatIssueStatusTone::Neutral => redesign_text_muted(palette),
+                    CompatIssueStatusTone::Blocking => redesign_error_emphasis(palette),
+                    CompatIssueStatusTone::Warning => redesign_warning_soft(palette),
                 };
                 ui.label(
                     crate::ui::shared::typography_global::strong(issue.status_label.as_str())
@@ -177,7 +177,7 @@ pub mod compat_popup_details {
                 .as_ref()
                 .map(|issue| issue.kind.as_str())
                 .or(details.compat_kind.as_deref());
-            render_filter_row(ui, state, current_kind);
+            render_filter_row(ui, state, current_kind, palette);
         }
     }
 
@@ -186,7 +186,12 @@ pub mod compat_popup_details {
         selected_compat_issue(state)
     }
 
-    fn render_filter_row(ui: &mut egui::Ui, state: &mut WizardState, current_kind: Option<&str>) {
+    fn render_filter_row(
+        ui: &mut egui::Ui,
+        state: &mut WizardState,
+        current_kind: Option<&str>,
+        palette: ThemePalette,
+    ) {
         ui.label(crate::ui::shared::typography_global::strong("Filter"));
         ui.horizontal_wrapped(|ui| {
             for option in COMPAT_POPUP_FILTER_OPTIONS {
@@ -206,7 +211,7 @@ pub mod compat_popup_details {
                 if !compat_filter_matches(option, current_kind) {
                     button = button.stroke(egui::Stroke::new(
                         crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                        crate::ui::shared::theme_global::text_disabled(),
+                        redesign_text_disabled(palette),
                     ));
                 }
                 if ui.add(button).clicked() {

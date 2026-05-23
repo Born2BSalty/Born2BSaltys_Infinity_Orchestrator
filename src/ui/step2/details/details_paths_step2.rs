@@ -315,7 +315,9 @@ fn render_path_row(
     let display = ellipsize_end(raw, layout.value_chars);
     let mut text = crate::ui::shared::typography_global::monospace(display);
     if value.is_none() && missing_amber {
-        text = text.color(crate::ui::shared::theme_global::warning());
+        text = text.color(crate::ui::shared::redesign_tokens::redesign_pill_warn(
+            layout.palette,
+        ));
     }
     let value_resp = ui
         .add_sized([layout.value_w, layout.row_h], egui::Label::new(text))

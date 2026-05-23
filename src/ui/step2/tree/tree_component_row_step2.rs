@@ -11,7 +11,7 @@ use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
     format_component_row_label_with_display,
 };
-use crate::ui::step2::tree_compat_display_step2::compat_colors;
+use crate::ui::step2::tree_compat_display_step2::compat_colors_redesign as compat_colors;
 use crate::ui::step2::tree_component_types_step2::{ComponentRenderState, ComponentRowsContext};
 use crate::ui::step2::tree_selection_rules_step2::set_component_checked_state;
 
@@ -64,7 +64,7 @@ pub(crate) fn render_component_row(
             component.checked = false;
             component.selected_order = None;
         }
-        render_compat_dot(ui, component);
+        render_compat_dot(ui, ctx, component);
         let is_selected = matches!(
             ctx.selected,
             Some(Step2Selection::Component {
@@ -125,8 +125,12 @@ fn render_component_checkbox(
     }
 }
 
-fn render_compat_dot(ui: &mut egui::Ui, component: &Step2ComponentState) {
-    if let Some((dot_color, _, _)) = compat_colors(component.compat_kind.as_deref()) {
+fn render_compat_dot(
+    ui: &mut egui::Ui,
+    ctx: &ComponentRowsContext<'_>,
+    component: &Step2ComponentState,
+) {
+    if let Some((dot_color, _, _)) = compat_colors(component.compat_kind.as_deref(), ctx.palette) {
         ui.label(crate::ui::shared::typography_global::strong("•").color(dot_color));
     }
 }
@@ -138,7 +142,12 @@ fn render_component_label_area(
     component: &Step2ComponentState,
     view: ComponentRowView<'_>,
 ) {
-    let widget_text = component_widget_text(ui, view.display_label, view.effectively_disabled);
+    let widget_text = component_widget_text(
+        ui,
+        view.display_label,
+        view.effectively_disabled,
+        ctx.palette,
+    );
     let row_w = ui.available_width().max(0.0);
     let row_h = ui.spacing().interact_size.y;
     let (row_rect, row_response) =
@@ -180,11 +189,13 @@ fn component_widget_text(
     ui: &egui::Ui,
     display_label: &str,
     effectively_disabled: bool,
+    palette: crate::ui::shared::redesign_tokens::ThemePalette,
 ) -> egui::WidgetText {
     if effectively_disabled {
         egui::WidgetText::RichText(
-            crate::ui::shared::typography_global::strong(display_label)
-                .color(crate::ui::shared::theme_global::text_disabled()),
+            crate::ui::shared::typography_global::strong(display_label).color(
+                crate::ui::shared::redesign_tokens::redesign_text_disabled(palette),
+            ),
         )
     } else {
         colored_component_widget_text(ui, display_label)
@@ -234,7 +245,7 @@ fn render_compat_pill(
     component: &Step2ComponentState,
 ) {
     let Some((pill_text_color, pill_bg, pill_label)) =
-        compat_colors(component.compat_kind.as_deref())
+        compat_colors(component.compat_kind.as_deref(), ctx.palette)
     else {
         return;
     };
@@ -277,15 +288,19 @@ fn render_prompt_pill(
     }
     ui.add_space(6.0);
     let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
-        .color(crate::ui::shared::theme_global::prompt_text())
+        .color(crate::ui::shared::redesign_tokens::redesign_prompt_text(
+            ctx.palette,
+        ))
         .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
     let prompt_response = ui
         .add(
             egui::Button::new(prompt_text)
-                .fill(crate::ui::shared::theme_global::prompt_fill())
+                .fill(crate::ui::shared::redesign_tokens::redesign_prompt_fill(
+                    ctx.palette,
+                ))
                 .stroke(egui::Stroke::new(
                     crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                    crate::ui::shared::theme_global::prompt_stroke(),
+                    crate::ui::shared::redesign_tokens::redesign_prompt_stroke(ctx.palette),
                 ))
                 .corner_radius(egui::CornerRadius::same(7))
                 .min_size(egui::vec2(0.0, 18.0)),

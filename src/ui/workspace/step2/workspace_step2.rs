@@ -74,7 +74,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     sync_details_selection(orchestrator);
 
     let ctx = ui.ctx().clone();
-    render_popups(ui, orchestrator, &ctx, &mut action);
+    render_popups(ui, orchestrator, &ctx, &mut action, palette);
     if let Some(a) = render_weidu_log_confirm(orchestrator, &ctx) {
         action = Some(a);
     }
@@ -201,8 +201,9 @@ fn render_popups(
     orchestrator: &mut OrchestratorApp,
     ctx: &egui::Context,
     action: &mut Option<Step2Action>,
+    palette: crate::ui::shared::redesign_tokens::ThemePalette,
 ) {
-    crate::ui::step2::compat_window_step2::render(ui, &mut orchestrator.wizard_state);
+    crate::ui::step2::compat_window_step2::render(ui, &mut orchestrator.wizard_state, palette);
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, &mut orchestrator.wizard_state);
     crate::ui::step2::update_check_popup_step2::render(ctx, &mut orchestrator.wizard_state, action);
 }

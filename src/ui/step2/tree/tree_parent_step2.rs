@@ -68,7 +68,7 @@ pub(crate) fn render_parent_row(
         "{mod_name} ({}/{})",
         counts.selected_visible_count, counts.mod_visible_count
     );
-    let parent_summary = parent_compat_summary(mod_state);
+    let parent_summary = parent_compat_summary(mod_state, palette);
     let mut result = ParentRowResult::default();
     let mut row_ctx = ParentRenderContext {
         active_tab,
@@ -214,7 +214,7 @@ fn render_parent_label_area(
                 mod_header_label,
                 is_selected,
             );
-            crate::ui::step2::tree_header_marker_step2::render(ui, mod_state);
+            crate::ui::step2::tree_header_marker_step2::render(ui, mod_state, ctx.palette);
             render_parent_compat_pill(ui, mod_state, result, parent_summary);
             render_parent_prompt_pill(ui, mod_state, ctx, result);
             render_parent_details_action(ui, mod_state, ctx, result, row_hovered || is_selected);
