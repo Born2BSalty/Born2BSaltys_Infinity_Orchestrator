@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::ui::shared::redesign_dot_background::paint_dot_background;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_page_bg,
 };
@@ -16,6 +17,9 @@ pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
     running_install: Option<&RunningInstallStatus>,
     body: F,
 ) {
+    let bg_painter = ctx.layer_painter(egui::LayerId::background());
+    paint_dot_background(&bg_painter, ctx.screen_rect(), palette);
+
     egui::TopBottomPanel::top("redesign_titlebar")
         .exact_height(REDESIGN_TITLEBAR_HEIGHT_PX)
         .show_separator_line(false)

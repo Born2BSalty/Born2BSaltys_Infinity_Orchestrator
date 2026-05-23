@@ -45,6 +45,8 @@ pub(crate) struct PaletteValues {
     pub selection_highlight: Color32,
     pub selection_highlight_hover: Color32,
     pub hover_overlay: Color32,
+
+    pub dot_bg: Color32,
 }
 
 pub(crate) const LIGHT: PaletteValues = PaletteValues {
@@ -81,6 +83,8 @@ pub(crate) const LIGHT: PaletteValues = PaletteValues {
     selection_highlight: Color32::from_rgba_premultiplied(9, 84, 75, 46),
     selection_highlight_hover: Color32::from_rgba_premultiplied(11, 103, 92, 56),
     hover_overlay: Color32::from_rgba_premultiplied(2, 3, 5, 13),
+
+    dot_bg: Color32::from_rgba_premultiplied(2, 3, 4, 20),
 };
 
 pub(crate) const DARK: PaletteValues = PaletteValues {
@@ -117,6 +121,8 @@ pub(crate) const DARK: PaletteValues = PaletteValues {
     selection_highlight: Color32::from_rgba_premultiplied(9, 84, 75, 46),
     selection_highlight_hover: Color32::from_rgba_premultiplied(11, 103, 92, 56),
     hover_overlay: Color32::from_rgba_premultiplied(9, 9, 10, 10),
+
+    dot_bg: Color32::from_rgba_premultiplied(12, 12, 12, 13),
 };
 
 #[inline]
@@ -240,6 +246,10 @@ pub const fn redesign_selection_highlight_hover(palette: ThemePalette) -> Color3
 pub const fn redesign_hover_overlay(palette: ThemePalette) -> Color32 {
     values(palette).hover_overlay
 }
+#[must_use]
+pub const fn redesign_dot(palette: ThemePalette) -> Color32 {
+    values(palette).dot_bg
+}
 
 pub const REDESIGN_BORDER_WIDTH_PX: f32 = 1.5;
 pub const REDESIGN_SHELL_BORDER_WIDTH_PX: f32 = 2.0;
@@ -328,5 +338,13 @@ mod tests {
     #[test]
     fn theme_palette_default_is_dark() {
         assert_eq!(ThemePalette::default(), ThemePalette::Dark);
+    }
+
+    #[test]
+    fn dot_bg_differs_between_palettes() {
+        assert_ne!(
+            redesign_dot(ThemePalette::Light),
+            redesign_dot(ThemePalette::Dark)
+        );
     }
 }

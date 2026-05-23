@@ -15,7 +15,7 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
     let mut open = state.github_auth_popup_open;
     egui::Window::new("Connect GitHub")
         .open(&mut open)
-        .collapsible(false)
+        .collapsible(true)
         .resizable(false)
         .movable(true)
         .default_size(egui::vec2(420.0, 180.0))

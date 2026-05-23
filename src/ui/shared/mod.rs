@@ -8,5 +8,6 @@ pub mod typography_global;
 
 pub mod format_relative;
 pub mod numeric;
+pub mod redesign_dot_background;
 pub mod redesign_fonts;
 pub mod redesign_tokens;

@@ -57,20 +57,18 @@ pub const fn is_share_code_consuming(workflow: InstallWorkflow) -> bool {
     }
 }
 
-/// Overrides `step1.install_mode` after a share-code import so the
-/// workflow controls how BIO consumes the imported `weidu.log`s, not the
-/// exporter's original `install_mode` payload value. Paste consumes the
-/// logs exactly (`EXACT_WEIDU_LOGS`); Fork hands the user a scratch
-/// modlist to scan + modify (`BUILD_FROM_SCANNED_MODS`); other workflows
-/// keep whatever the share code declared.
+/// Forces `step1.install_mode = EXACT_WEIDU_LOGS` for Install-paste so
+/// BIO's path preflight clears via the `have_weidu_logs && download_archive`
+/// exemption while the per-install Mods folder is still empty. Other
+/// workflows keep whatever the share code (or upstream code path) declared.
 pub(crate) fn apply_workflow_install_mode_override(
     step1: &mut Step1State,
     workflow: InstallWorkflow,
 ) {
     let forced = match workflow {
         InstallWorkflow::PasteAndInstall => Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS,
-        InstallWorkflow::ForkAndModify => Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS,
         InstallWorkflow::FreshCreate
+        | InstallWorkflow::ForkAndModify
         | InstallWorkflow::ContinuePartialInstall
         | InstallWorkflow::Reinstall => return,
     };
@@ -376,9 +374,13 @@ mod tests {
     }
 
     #[test]
-    fn fork_flow_forces_build_from_scanned_mods_regardless_of_share_install_mode() {
+    fn fork_flow_keeps_share_install_mode_no_override() {
+        // Fork-and-modify intentionally passes through the share code's
+        // install_mode untouched. Forcing a mode here would either re-create
+        // the empty-Mods preflight failure (BUILD_FROM_SCANNED_MODS) or
+        // shadow the user-modifying flow Step 2 needs to drive.
         let mut step1 = Step1State {
-            install_mode: Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string(),
+            install_mode: Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string(),
             have_weidu_logs: true,
             ..Default::default()
         };
@@ -388,13 +390,11 @@ mod tests {
         assert_eq!(
             step1.install_mode,
             Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS,
-            "fork flow must force BUILD_FROM_SCANNED_MODS even when the \
-             share code declared EXACT_WEIDU_LOGS"
+            "fork workflow must NOT override the share's install_mode"
         );
         assert!(
-            !step1.have_weidu_logs,
-            "sync_install_mode_flags must set have_weidu_logs = false for \
-             BUILD_FROM_SCANNED_MODS so Step 2 scans the Mods folder"
+            step1.have_weidu_logs,
+            "fork workflow must not run sync_install_mode_flags"
         );
     }
 

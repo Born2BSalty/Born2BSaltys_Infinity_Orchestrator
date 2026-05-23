@@ -17,7 +17,7 @@ pub(super) fn render_source_editor_popup(
     let mut open = state.step2.mod_download_source_editor_open;
     egui::Window::new("Edit Mod Download Source")
         .open(&mut open)
-        .collapsible(false)
+        .collapsible(true)
         .resizable(true)
         .movable(true)
         .default_size(egui::vec2(620.0, 420.0))

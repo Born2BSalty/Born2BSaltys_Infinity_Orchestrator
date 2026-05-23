@@ -20,6 +20,8 @@ pub(crate) struct ForkedModlistInput<'a> {
     pub(crate) parent_name: &'a str,
     pub(crate) parent_author: &'a str,
     pub(crate) parent_forked_from: &'a [ForkAncestor],
+    pub(crate) parent_mod_count: u32,
+    pub(crate) parent_component_count: u32,
 }
 
 pub fn create_modlist(
@@ -95,6 +97,8 @@ pub(crate) fn create_forked_modlist(
         last_touched_date: now,
         author,
         forked_from,
+        mod_count: input.parent_mod_count,
+        component_count: input.parent_component_count,
         workspace_file_relpath: PathBuf::from("modlists").join(&id).join("workspace.json"),
         ..Default::default()
     };
@@ -125,6 +129,8 @@ mod tests {
             parent_name,
             parent_author,
             parent_forked_from,
+            parent_mod_count: 0,
+            parent_component_count: 0,
         }
     }
 

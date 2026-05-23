@@ -16,7 +16,7 @@ pub(crate) fn render_cancel_confirm(
     }
 
     egui::Window::new("Confirm Cancel")
-        .collapsible(false)
+        .collapsible(true)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
         .show(ui.ctx(), |ui| {
