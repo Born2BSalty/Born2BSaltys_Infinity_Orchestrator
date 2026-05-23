@@ -251,6 +251,92 @@ These files contain no `theme_global::*()` color calls and no inline `egui::Colo
 - **Where:** Manual.
 - **Acceptance:** All earlier-phase Verification checklists pass.
 
+### P8.T14 — Per-modlist data ownership refactor
+
+- **What:** Implement SPEC §13.12b. Umbrella covering five sub-tasks T14.1–T14.5: the in-memory workflow-state refactor, per-install path derivation off `wizard_state.step1`, the per-modlist file-storage plumbing, the consumer swap from global TOMLs to per-modlist TOMLs, and the orchestrator-side share-code import replacement (with the accompanying carve-out #5 schema-additive `compat_overrides` field). Promotes `.claude/reference/state-architecture.md`'s "Shape of a clean refactor" candidate (a)/(b)/(c) from descriptive to authorized and extends it with the on-disk artifact piece.
+- **SPEC:** §13.12b. Cross-refs: §13.3 (Compat-rule overrides), §1 carve-out #5 (Compat-rule overlay application).
+- **Dependencies:** Phases 1–7 plus P8.T1–P8.T13 (the visual-fidelity sweep) merged.
+
+#### P8.T14.1 — `CurrentWorkflow` enum + `transition_to`
+
+- **What:** Implement the single workflow tag on `OrchestratorApp` and the single transition function. Six variants: `Idle`, `Paste`, `CreateScratch`, `ForkImport`, `WorkspaceEdit`, `Reinstall`. Each carries the data today scattered across `install_screen_state` (`InstallScreenState`), `create_screen_state` (`CreateScreenState`), `active_install_modlist_id: Option<String>`, `pending_reinstall_id: Option<String>`, `post_install_reset_gate: PostInstallResetGate`. `transition_to(&mut self, new: CurrentWorkflow)` pattern-matches on `(self.workflow, &new)` to choose what to persist from the old variant, which subsystem cleanup runs, and what to arm in the new variant.
+- **Where (new):** `src/ui/orchestrator/workflow/{mod,current_workflow,transition}.rs`.
+- **Where (modified, orchestrator-only):** every call site of the seven retired reset functions, in `orchestrator_app.rs`, `page_router.rs`, `page_create.rs`, `stage_fork_download.rs`. Each becomes one `app.transition_to(...)` call.
+- **Retires (deletes — verified by grep):** `OrchestratorApp::reset_install_screen_to_paste()`, `page_router::reset_completed_install_runtime()`, `page_router::flush_workspace_on_nav_away()`, `page_router::clear_pending_reinstall_on_nav_away_from_install()`, `page_create::fork_extract_complete_route_to_workspace()`, the partial-clear block inside `stage_fork_download::render_live`, and the `!from_workspace` partial-clear in `maybe_flip_to_installed_on_clean_exit`. The shared `InstallScreenState` struct retires; its data moves onto the workflow variants. BIO's `reset_workflow_keep_step1()` STAYS (BIO source, called from the appropriate `transition_to` arm).
+- **Acceptance:** `git grep -E "reset_install_screen_to_paste|reset_completed_install_runtime|flush_workspace_on_nav_away|clear_pending_reinstall_on_nav_away_from_install|fork_extract_complete_route_to_workspace|post_install_reset_gate|InstallScreenState"` returns empty in orchestrator-owned files. Item #4's six-run regression scenarios (R1 double-prepare, wrong-write-path, post-install banner wipe, etc.) all still pass under their existing regression tests. New tests cover the full matrix of `(from, to)` variant transitions.
+- **SPEC:** §13.12b (in-memory).
+
+#### P8.T14.2 — Per-install paths derived on-demand
+
+- **What:** Move per-install path derivation off the persistence path. The 11 per-install string fields (`mods_folder`, `weidu_log_folder`, `bgee_log_folder` / `bg2ee_log_folder` / `eet_bgee_log_folder` / `eet_bg2ee_log_folder`, `bgee_log_file` / `bg2ee_log_file`, `eet_pre_dir` / `eet_new_dir`, `generate_directory`) + the 5 booleans (`weidu_log_log_component`, `have_weidu_logs`, `new_pre_eet_dir_enabled`, `new_eet_dir_enabled`, `generate_directory_enabled`) + the `weidu_log_mode` token are computed on-demand from the active workflow variant's destination + game + `AppSettings` / `RedesignSettings`, and written into `wizard_state.step1` immediately before BIO's install runner reads. Never round-trip through `bio_settings.json`.
+- **New helper:** `install_runtime::derive_step1::derive_step1_for_install(workflow: &CurrentWorkflow, settings: &AppSettings, redesign_settings: &RedesignSettings) -> Step1ForInstall` returning the 16 fields + the token; called from `install_runtime::start_hooks::on_install_start` just-in-time. The existing `derive_per_install_dirs` may stay as the internal derivation engine; the new gate is the just-in-time write.
+- **Where (new):** `src/install_runtime/derive_step1.rs`.
+- **Where (modified, orchestrator-only):** `src/install_runtime/start_hooks.rs` (the new just-in-time call), `src/registry/workspace_state_loader.rs::populate_wizard_state_from_workspace` (drop the per-install-path sync into step1; the global `sync_paths_from_settings` for genuine global fields stays). `OrchestratorApp::bio_settings_snapshot` no longer needs the sanitizer pass.
+- **Retires:** `install_runtime::settings_sanitizer` module + `sanitize_step1_for_settings_persistence` function — no longer needed, per-install fields literally can't be in settings.
+- **Acceptance:** `bio_settings.json` is byte-identical pre / post a full install cycle for every workflow variant. The `settings_sanitizer` module is absent from `git grep`. Run-6's wrong-write-path regression scenario passes — a Step-4 → Step-5 nav with a Settings edit mid-flight does not clobber the per-install destination.
+- **SPEC:** §13.12b (in-memory).
+
+#### P8.T14.3 — Per-modlist data resolver + typed overlay modules
+
+- **What:** Build the per-modlist file storage plumbing. A `DataOverlayKind` enum (`ModDownloadsUser`, `CompatRulesUser`, `InstalledSourceRefs`) + a resolver `redesign_data_paths::per_modlist(modlist_id: &str, kind: DataOverlayKind) -> PathBuf` returning `<config_dir>/bio/modlists/<modlist_id>/<filename>`. Each overlay gets a typed load / save module with the same atomic temp-file-then-rename writes as `WorkspaceStore`. BIO's global resolvers (`bio::app::mod_downloads::mod_downloads_user_path`, equivalents) are not called from orchestrator code; they stay valid for the legacy `BIO` binary.
+- **Where (new):**
+  - `src/registry/data_overlays/mod.rs` — `DataOverlayKind` + resolver
+  - `src/registry/data_overlays/mod_downloads_user.rs` — typed load / save
+  - `src/registry/data_overlays/compat_rules_user.rs` — same shape
+  - `src/registry/data_overlays/installed_source_refs.rs` — same shape
+- **Persistence wiring (modified):** `src/registry/persistence_cycle.rs` — extend the per-modlist debounce machinery to handle the three new overlay files alongside each modlist's `workspace.json`. Dirty-bits live alongside the workspace dirty-bit; drop-time `flush_all_now` flushes all four. No BIO source touched.
+- **Acceptance:** Unit tests assert resolver paths for each kind. Save → load round-trip byte-identical for each TOML. The DATA-LOSS sentinel widens to include the three new per-modlist files (any existing modlist's three TOMLs byte-stable across any test run).
+- **SPEC:** §13.12b (on-disk).
+
+#### P8.T14.4 — Consumers swap to per-modlist resolver
+
+- **What:** Redirect the consumers that today read / write the three global TOMLs to use the per-modlist resolver:
+  - **Set Source save action.** `Step2Action::SaveModDownloadSourceEditor` is intercepted at the orchestrator's Step-2 wrapper layer; the side-effect routes to `data_overlays::mod_downloads_user::save(active_modlist_id, ...)`. BIO's `app_step2_router::set_mod_download_source` + `bio::app::mod_downloads::save_user_mod_download_source_block` are no longer reached on the orchestrator path. `state.step2.selected_source_ids` is unchanged — already per-WizardState which is per-modlist.
+  - **Compat-rule user additions.** Identify the call site in `src/core/app/compat/` that writes `step2_compat_rules_user.toml` (locate during impl). Intercept at the orchestrator's Step-2 / compat-popup wrapper; route to `data_overlays::compat_rules_user::save`. If today's UI has no user-write path (file is edit-on-disk only), the write surface is added net-new here.
+  - **Installed-source-refs post-install write.** The post-install write of `installed_source_refs.toml` (verify exact call site — likely in the install-completion path) is intercepted in `install_runtime::start_hooks` / `flip_to_installed`; routes to `data_overlays::installed_source_refs::save(modlist_id, ...)`.
+  - **Share-code export reads.** `src/registry/share_export.rs` (the `pack_meta` envelope inputs) gains parallel reads via the per-modlist resolver. BIO's `export_modlist_share_code` is composed unchanged; only the on-disk source files it reads are routed per-modlist.
+- **Where (modified, orchestrator-only):** `src/ui/workspace/step2/*` (action interception), `src/install_runtime/start_hooks.rs` (post-install write redirect), `src/registry/share_export.rs` (export reads per-modlist). No BIO source touched.
+- **Acceptance:** Set Source in modlist A's workspace writes to `<config_dir>/bio/modlists/<A>/mod_downloads_user.toml`; modlists B / C / D's per-modlist files + the global file are byte-stable. Equivalent assertions for compat-rule additions and post-install installed-refs writes. Share-code export of modlist A reads modlist A's per-modlist TOMLs, NOT the global file (verifiable: a global file with arbitrary content does not appear in modlist A's exported share code).
+- **SPEC:** §13.12b (on-disk + share-code).
+
+#### P8.T14.5 — Orchestrator-side `import_modlist_share_code` replacement + `compat_overrides` schema-additive field
+
+- **What:** Net-new orchestrator-side share-code import that decodes the BIO-MODLIST-V1 payload and routes the embedded user-overlay TOMLs (`source_overrides.mod_downloads_user_toml`, `installed_refs.mod_installed_refs_toml`, `compat_overrides.step2_compat_rules_user_toml`) to per-modlist storage for the importing modlist — never to the global files. Other payload sections ride existing paths: `weidu_logs` + `mod_configs` go to per-install destination locations BIO already handles; the provenance trio (`name`, `author`, `forked_from`) + `allow_auto_install` + `archive_meta` ride the registry / workspace.json. Then drives the existing auto-build / scan / install pipeline.
+- **Schema-additive field (carve-out #5).** Add `compat_overrides: ModlistShareCompatOverrides` to `ModlistSharePayload` + `ModlistSharePreview` in `src/core/app/modlist_share.rs` per SPEC §1 carve-out #5 "Compat-rule overlay application". Nested struct `ModlistShareCompatOverrides { step2_compat_rules_user_toml: Option<String> }` defined alongside the existing `ModlistShareSourceOverrides` / `ModlistShareInstalledRefs`. One propagation line in `share_preview()`. Default (empty, `None` excerpt) preserves today's BIO behavior bit-for-bit. BIO's `import_modlist_share_code` ignores the field via `#[serde(default)]` — the legacy `BIO` binary's importer does not write compat overrides to disk.
+- **Composes** (does not patch) the existing envelope codec the orchestrator already owns for `pack_meta` / `set_allow_auto_install`. BIO's private `base64url_*` / `zlib_*` / `decode_share_payload` are not touched.
+- **Where (new):** `src/install_runtime/import_share_code.rs`.
+- **Where (modified, orchestrator-only):** the three orchestrator entry points that today call BIO's `import_modlist_share_code` — Install-Modlist-paste arm (`stage_downloading::arm_pipeline_once`), Create-fork arm (`install_runtime::fork_pipeline_arm::mint_and_arm`), Reinstall arm (`page_router::reinstall_route`) — swap their import call for the new orchestrator-side version. BIO's `import_modlist_share_code` stays valid (still used by the legacy `BIO` binary's Step-1 flow).
+- **Where (modified, BIO source under carve-out #5):** one field addition + one nested struct definition + one propagation line in `src/core/app/modlist_share.rs`. Per SPEC §1 carve-out #5 "Compat-rule overlay application" — same shape as the existing provenance application.
+- **Acceptance:** A fork-import from a share code with non-default `mod_downloads_user.toml` content writes that content to `<config_dir>/bio/modlists/<new-fork-id>/mod_downloads_user.toml`; the user's other modlists' per-modlist TOMLs + the global TOML are byte-stable. Equivalent assertion for `installed_refs` and `compat_overrides`. **Cross-modlist-overwrite hazard closed** — two modlists with distinct Set Source overrides, then fork-import a third, leaves both originals byte-stable. `bio::app::modlist_share::import_modlist_share_code` does not appear in orchestrator-side `git grep`.
+- **SPEC:** §13.12b (on-disk + share-code) + §13.3 Compat-rule overrides + §1 carve-out #5 Compat-rule overlay application.
+
+#### Landing strategy
+
+Two-PR split: Part A = T14.1 + T14.2 + T14.3 (foundation — in-memory + on-disk plumbing); Part B = T14.4 + T14.5 (consumer swap + import replacement + the carve-out #5 schema-additive field). Part A is internally consistent (plumbing exists but unused — global files still drive everything). Part B switches consumers, lands the BIO carve-out #5 edit, and closes the cross-modlist-overwrite hazard. One-PR landing is fine too; the user holds the call.
+
+#### Verification (cross-subtask)
+
+1. `cargo build --bin infinity_orchestrator --release` no-op rebuild at end of each subtask + at the umbrella close.
+2. `cargo build --bin BIO --release` continues to succeed; the legacy binary's behavior is unchanged.
+3. `cargo test --lib` count holds + each subtask's new tests land green.
+4. `git grep` for each retired identifier returns empty in orchestrator-owned files (the seven reset functions; `InstallScreenState`; `post_install_reset_gate`; `settings_sanitizer`; `bio::app::modlist_share::import_modlist_share_code` on orchestrator paths).
+5. **Widened DATA-LOSS sentinel** — `modlists.json` + every modlist's `workspace.json` + every modlist's three per-modlist TOMLs are byte-stable across the test suite, across a full modlist-A install, and across a fork-import targeting a fresh modlist-D.
+6. Live re-test of every Item #4 regression scenario passes.
+7. `.claude/reference/state-architecture.md` moves from "descriptive of what exists today" to "historical: superseded by SPEC §13.12b + plan P8.T14".
+8. The `compat_overrides` field on `ModlistSharePayload` + `ModlistSharePreview` is the only BIO-source edit; verified by inspecting the touched-files diff against the BIO-source path set.
+
+#### File inventory summary
+
+**New (orchestrator-owned, net-new):**
+- `src/ui/orchestrator/workflow/{mod,current_workflow,transition}.rs`
+- `src/registry/data_overlays/{mod,mod_downloads_user,compat_rules_user,installed_source_refs}.rs`
+- `src/install_runtime/derive_step1.rs`
+- `src/install_runtime/import_share_code.rs`
+
+**Modified (orchestrator-owned, additive):** `orchestrator_app.rs`, `page_router.rs`, `page_create.rs`, `stage_*.rs` (install + fork stages), `src/ui/workspace/step2/*`, `start_hooks.rs`, `fork_pipeline_arm.rs`, `share_export.rs`, `workspace_state_loader.rs`, `persistence_cycle.rs`.
+
+**BIO source touched (under existing carve-out #5):** `src/core/app/modlist_share.rs` — one schema-additive field on `ModlistSharePayload` + symmetric field on `ModlistSharePreview` + one propagation line in `share_preview()` + the `ModlistShareCompatOverrides` nested struct definition. No other BIO source touched.
+
 ## Open questions / risks
 
 - **Token extraction scope creep.** During extraction it's tempting to also rename a function, move a constant, simplify a branch, add a helper, or "clean up" the conditional structure. **All forbidden** by carve-outs #1 and #6. If a token extraction surfaces a clear bug or improvement opportunity, file an issue; do not change behavior in this phase. The bar for each touched BIO file is: the `git diff` shows only value substitutions inside existing branches, signature additions of `palette: ThemePalette`, and (where applicable) one `.collapsible()` keyword flip — nothing else. **No new branches, no removed branches, no reordered branches, no logic mutations.**
