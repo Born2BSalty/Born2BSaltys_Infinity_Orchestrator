@@ -10,9 +10,7 @@ pub enum InstallWorkflow {
 
     PasteAndInstall,
 
-    ForkDownload,
-
-    ForkInstall,
+    ForkAndModify,
 
     ContinuePartialInstall,
 
@@ -54,8 +52,7 @@ pub const fn resolve(workflow: InstallWorkflow, settings: &Step1Settings) -> Res
         },
 
         InstallWorkflow::PasteAndInstall
-        | InstallWorkflow::ForkDownload
-        | InstallWorkflow::ForkInstall
+        | InstallWorkflow::ForkAndModify
         | InstallWorkflow::Reinstall => ResolvedFlags {
             skip_installed: false,
             check_last_installed: false,
@@ -107,8 +104,7 @@ mod tests {
     fn paste_and_fork_force_download_no_sc() {
         for workflow in [
             InstallWorkflow::PasteAndInstall,
-            InstallWorkflow::ForkDownload,
-            InstallWorkflow::ForkInstall,
+            InstallWorkflow::ForkAndModify,
         ] {
             for settings_dl in [true, false] {
                 let on = compute_flags(workflow, &settings_with_download(settings_dl));
