@@ -47,7 +47,7 @@ pub fn render_pane(
             render_title_row(ui, palette, details_open);
             ui.add_space(4.0);
             if exact_log_mode {
-                details_pane_content::render_exact_log_status(ui, state);
+                details_pane_content::render_exact_log_status(ui, state, palette);
             } else {
                 details_pane_content::render(ui, &details, action, palette);
             }
@@ -88,8 +88,9 @@ pub mod details_pane_content {
     use eframe::egui;
 
     use crate::app::state::{WizardState, exact_log_ready_to_install};
-    use crate::ui::shared::redesign_tokens::ThemePalette;
-    use crate::ui::shared::theme_global as theme;
+    use crate::ui::shared::redesign_tokens::{
+        ThemePalette, redesign_error, redesign_pill_warn, redesign_success_bright,
+    };
     use crate::ui::shared::typography_global as typo;
     use crate::ui::step2::details_paths_step2::{
         PathsGridLayout, render_component_block, render_paths_grid, render_raw_line,
@@ -99,7 +100,11 @@ pub mod details_pane_content {
 
     use super::Step2Action;
 
-    pub(crate) fn render_exact_log_status(ui: &mut egui::Ui, state: &WizardState) {
+    pub(crate) fn render_exact_log_status(
+        ui: &mut egui::Ui,
+        state: &WizardState,
+        palette: ThemePalette,
+    ) {
         let ready = exact_log_ready_to_install(state);
         let downloadable_missing = state.step2.update_selected_missing_sources.len();
         let manual_sources = state.step2.update_selected_manual_sources.len();
@@ -118,10 +123,10 @@ pub mod details_pane_content {
                 let (headline, color) = if ready {
                     (
                         "All required mods are available. You can continue to install.",
-                        theme::success_bright(),
+                        redesign_success_bright(palette),
                     )
                 } else {
-                    ("Install cannot continue yet.", theme::error())
+                    ("Install cannot continue yet.", redesign_error(palette))
                 };
                 ui.label(typo::strong("Exact-Log Install Status").color(color));
                 ui.add_space(4.0);
@@ -130,7 +135,7 @@ pub mod details_pane_content {
                 if !state.step2.exact_log_mod_list_checked {
                     ui.label(
                         typo::plain("Run Check Mod List to verify required mods.")
-                            .color(theme::warning()),
+                            .color(redesign_pill_warn(palette)),
                     );
                     ui.add_space(8.0);
                 }

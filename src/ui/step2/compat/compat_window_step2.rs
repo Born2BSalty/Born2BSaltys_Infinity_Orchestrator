@@ -4,8 +4,9 @@
 use eframe::egui;
 
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState) {
+pub fn render(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
     if !state.step2.compat_popup_open {
         return;
     }
@@ -27,7 +28,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState) {
                 .max_height(details_h)
                 .show(ui, |ui| {
                     crate::ui::step2::content_step2::compat_popup_details::render_details(
-                        ui, state,
+                        ui, state, palette,
                     );
                 });
 

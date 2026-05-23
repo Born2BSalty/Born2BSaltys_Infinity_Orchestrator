@@ -447,7 +447,11 @@ fn active_mods_ref(state: &WizardState) -> &Vec<crate::app::state::Step2ModState
 }
 
 pub fn render_compat_popup(ui: &mut egui::Ui, state: &mut WizardState) {
-    crate::ui::step2::compat_window_step2::render(ui, state);
+    crate::ui::step2::compat_window_step2::render(
+        ui,
+        state,
+        crate::ui::shared::redesign_tokens::ThemePalette::Dark,
+    );
 }
 
 pub(crate) use crate::ui::step2::compat_popup_step2::compat_popup_action_row;

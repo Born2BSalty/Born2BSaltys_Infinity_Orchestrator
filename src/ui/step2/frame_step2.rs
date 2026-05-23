@@ -208,7 +208,11 @@ fn render_step2_content(
         palette,
         &mut details_open,
     );
-    crate::ui::step2::compat_window_step2::render(ui, state);
+    crate::ui::step2::compat_window_step2::render(
+        ui,
+        state,
+        crate::ui::shared::redesign_tokens::ThemePalette::Dark,
+    );
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, state);
 }
 
