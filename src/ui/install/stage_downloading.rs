@@ -540,6 +540,18 @@ impl LivePipelineInputs {
     pub(crate) fn from(
         orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     ) -> Self {
+        let workflow = if orchestrator.install_screen_state.is_partial() {
+            crate::install_runtime::flag_policies::InstallWorkflow::ContinuePartialInstall
+        } else {
+            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall
+        };
+        Self::from_workflow(orchestrator, workflow)
+    }
+
+    pub(crate) fn from_workflow(
+        orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+        workflow: crate::install_runtime::flag_policies::InstallWorkflow,
+    ) -> Self {
         let state = &orchestrator.install_screen_state;
         let destination = state.destination.trim().to_string();
         let game = state
@@ -547,11 +559,6 @@ impl LivePipelineInputs {
             .as_ref()
             .map(|p| crate::registry::model::Game::from_legacy_string(&p.game_install))
             .unwrap_or_default();
-        let workflow = if state.is_partial() {
-            crate::install_runtime::flag_policies::InstallWorkflow::ContinuePartialInstall
-        } else {
-            crate::install_runtime::flag_policies::InstallWorkflow::ShareCodeConsuming
-        };
         let code = state.import_code.trim().to_string();
         Self {
             destination,
