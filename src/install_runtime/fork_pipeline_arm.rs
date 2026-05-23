@@ -23,6 +23,25 @@ pub struct ForkMintReport {
 
 const PARENT_FALLBACK_NAME: &str = "Shared modlist";
 
+fn count_unique_mods(bgee_log_text: &str, bg2ee_log_text: &str) -> u32 {
+    let mut seen = std::collections::HashSet::new();
+    for text in [bgee_log_text, bg2ee_log_text] {
+        for line in text.lines() {
+            let Some(rest) = line.trim_start().strip_prefix('~') else {
+                continue;
+            };
+            let Some(end) = rest.find('~') else {
+                continue;
+            };
+            let tp2 = rest[..end].to_ascii_uppercase();
+            if !tp2.is_empty() {
+                seen.insert(tp2);
+            }
+        }
+    }
+    u32::try_from(seen.len()).unwrap_or(u32::MAX)
+}
+
 pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport, ForkMintError> {
     let preview = orchestrator
         .create_screen_state
@@ -35,6 +54,10 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
 
     let user_name = orchestrator.redesign_settings.user_name.clone();
 
+    let parent_component_count =
+        u32::try_from(preview.bgee_entries + preview.bg2ee_entries).unwrap_or(u32::MAX);
+    let parent_mod_count = count_unique_mods(&preview.bgee_log_text, &preview.bg2ee_log_text);
+
     let entry = create_forked_modlist(
         ForkedModlistInput {
             name: &fork_name,
@@ -44,6 +67,8 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
             parent_name: &parent_name,
             parent_author: &parent_author,
             parent_forked_from: &preview.forked_from,
+            parent_mod_count,
+            parent_component_count,
         },
         &mut orchestrator.registry,
     )
@@ -284,6 +309,8 @@ mod tests {
             parent_name: "ParentMod",
             parent_author: "@parent",
             parent_forked_from: &existing_chain,
+            parent_mod_count: 0,
+            parent_component_count: 0,
         };
         let entry = create_forked_modlist(input, &mut reg).expect("ok");
         assert_eq!(entry.forked_from.len(), 2);
