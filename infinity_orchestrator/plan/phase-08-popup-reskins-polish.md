@@ -279,13 +279,14 @@ These files contain no `theme_global::*()` color calls and no inline `egui::Colo
 #### P8.T14.3 — Per-modlist data resolver + typed overlay modules
 
 - **What:** Build the per-modlist file storage plumbing. A `DataOverlayKind` enum (`ModDownloadsUser`, `CompatRulesUser`, `InstalledSourceRefs`) + a resolver `redesign_data_paths::per_modlist(modlist_id: &str, kind: DataOverlayKind) -> PathBuf` returning `<config_dir>/bio/modlists/<modlist_id>/<filename>`. Each overlay gets a typed load / save module with the same atomic temp-file-then-rename writes as `WorkspaceStore`. BIO's global resolvers (`bio::app::mod_downloads::mod_downloads_user_path`, equivalents) are not called from orchestrator code; they stay valid for the legacy `BIO` binary.
+- **DATA-LOSS invariant (mandatory):** the resolver MUST expose a temp-path injection variant — `per_modlist_with_root(root: &Path, modlist_id: &str, kind: DataOverlayKind) -> PathBuf` — and every typed load / save module MUST take an explicit root or store handle parameter that tests can repoint at a `std::env::temp_dir()` path. The same precedent as `RegistryStore::new_default()` test repointing (the `dev_seed.rs` `temp_path()` mechanism). **No unit test may bind the real config dir** — that is a directive-grade failure on the level of a BIO-source-guard hit (per the orchestrator skill's DATA-LOSS invariant). Tests that call the no-root convenience resolver must use a `tempfile::TempDir` for the entire test body's writes.
 - **Where (new):**
-  - `src/registry/data_overlays/mod.rs` — `DataOverlayKind` + resolver
-  - `src/registry/data_overlays/mod_downloads_user.rs` — typed load / save
+  - `src/registry/data_overlays/mod.rs` — `DataOverlayKind` + the `per_modlist` + `per_modlist_with_root` resolvers
+  - `src/registry/data_overlays/mod_downloads_user.rs` — typed load / save (root-injectable)
   - `src/registry/data_overlays/compat_rules_user.rs` — same shape
   - `src/registry/data_overlays/installed_source_refs.rs` — same shape
 - **Persistence wiring (modified):** `src/registry/persistence_cycle.rs` — extend the per-modlist debounce machinery to handle the three new overlay files alongside each modlist's `workspace.json`. Dirty-bits live alongside the workspace dirty-bit; drop-time `flush_all_now` flushes all four. No BIO source touched.
-- **Acceptance:** Unit tests assert resolver paths for each kind. Save → load round-trip byte-identical for each TOML. The DATA-LOSS sentinel widens to include the three new per-modlist files (any existing modlist's three TOMLs byte-stable across any test run).
+- **Acceptance:** Unit tests assert resolver paths for each kind, **using only the temp-path variant — verified by `git grep` showing no `per_modlist(` call in test modules without a temp-root pairing**. Save → load round-trip byte-identical for each TOML. The DATA-LOSS sentinel widens to include the three new per-modlist files (any existing modlist's three TOMLs byte-stable across any test run).
 - **SPEC:** §13.12b (on-disk).
 
 #### P8.T14.4 — Consumers swap to per-modlist resolver
@@ -322,7 +323,7 @@ Two-PR split: Part A = T14.1 + T14.2 + T14.3 (foundation — in-memory + on-disk
 4. `git grep` for each retired identifier returns empty in orchestrator-owned files (the seven reset functions; `InstallScreenState`; `post_install_reset_gate`; `settings_sanitizer`; `bio::app::modlist_share::import_modlist_share_code` on orchestrator paths).
 5. **Widened DATA-LOSS sentinel** — `modlists.json` + every modlist's `workspace.json` + every modlist's three per-modlist TOMLs are byte-stable across the test suite, across a full modlist-A install, and across a fork-import targeting a fresh modlist-D.
 6. Live re-test of every Item #4 regression scenario passes.
-7. `.claude/reference/state-architecture.md` moves from "descriptive of what exists today" to "historical: superseded by SPEC §13.12b + plan P8.T14".
+7. `.claude/reference/state-architecture.md` moves from "descriptive of what exists today" to "historical: superseded by SPEC §13.12b + plan P8.T14". The doc's "What future agents should NOT do" cautions about `install_screen_state` reuse and the seven scattered reset functions become obsolete under this refactor — readers post-T14 should treat that section as describing the pre-T14 hazard, not active guidance.
 8. The `compat_overrides` field on `ModlistSharePayload` + `ModlistSharePreview` is the only BIO-source edit; verified by inspecting the touched-files diff against the BIO-source path set.
 
 #### File inventory summary
