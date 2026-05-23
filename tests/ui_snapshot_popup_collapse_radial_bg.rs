@@ -136,7 +136,7 @@ fn render_popup_collapse_and_radial_bg() {
 
     for (label, palette) in PALETTES {
         written.push(snap(&dir, &format!("shell_dot_bg__{label}"), move |ctx| {
-            render_shell_with_dot_bg(ctx, palette)
+            render_shell_with_dot_bg(ctx, palette);
         }));
         written.push(snap(
             &dir,

@@ -124,7 +124,7 @@ fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) ->
         .find(modlist_id)
         .filter(|e| !e.forked_from.is_empty())
         .map_or(InstallWorkflow::FreshCreate, |_| {
-            InstallWorkflow::ForkAndModify
+            InstallWorkflow::ForkInstall
         });
 
     let settings: crate::settings::model::Step1Settings =

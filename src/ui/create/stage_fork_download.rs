@@ -48,7 +48,7 @@ pub fn render_live(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> For
     let palette = orchestrator.theme_palette;
     let inputs = stage_downloading::LivePipelineInputs::from_workflow(
         orchestrator,
-        crate::install_runtime::flag_policies::InstallWorkflow::ForkAndModify,
+        crate::install_runtime::flag_policies::InstallWorkflow::ForkDownload,
     );
 
     stage_downloading::arm_pipeline_once(orchestrator, &inputs);
