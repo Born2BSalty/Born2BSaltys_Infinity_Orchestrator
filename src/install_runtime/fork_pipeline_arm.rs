@@ -23,9 +23,9 @@ pub struct ForkMintReport {
 
 const PARENT_FALLBACK_NAME: &str = "Shared modlist";
 
-fn count_unique_mods(bgee_log_text: &str, bg2ee_log_text: &str) -> u32 {
+fn count_unique_mods(log_texts: &[&str]) -> u32 {
     let mut seen = std::collections::HashSet::new();
-    for text in [bgee_log_text, bg2ee_log_text] {
+    for text in log_texts {
         for line in text.lines() {
             let Some(rest) = line.trim_start().strip_prefix('~') else {
                 continue;
@@ -56,7 +56,8 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
 
     let parent_component_count =
         u32::try_from(preview.bgee_entries + preview.bg2ee_entries).unwrap_or(u32::MAX);
-    let parent_mod_count = count_unique_mods(&preview.bgee_log_text, &preview.bg2ee_log_text);
+    let parent_mod_count =
+        count_unique_mods(&[&preview.bgee_log_text, &preview.bg2ee_log_text]);
 
     let entry = create_forked_modlist(
         ForkedModlistInput {
