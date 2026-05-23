@@ -119,7 +119,7 @@ fn render_main_popup(
 ) {
     egui::Window::new(popup_title(modes))
         .open(open)
-        .collapsible(false)
+        .collapsible(true)
         .resizable(true)
         .movable(true)
         .default_size(egui::vec2(560.0, 320.0))
@@ -837,7 +837,7 @@ fn render_latest_fallback_confirm(
     let mut confirm_open = true;
     egui::Window::new("Download Latest Instead?")
         .open(&mut confirm_open)
-        .collapsible(false)
+        .collapsible(true)
         .resizable(false)
         .movable(true)
         .default_size(egui::vec2(360.0, 120.0))
@@ -876,7 +876,7 @@ fn render_forks_popup(
     let mut open = state.step2.mod_download_forks_popup_open;
     egui::Window::new(state.step2.mod_download_forks_popup_title.clone())
         .open(&mut open)
-        .collapsible(false)
+        .collapsible(true)
         .resizable(true)
         .movable(true)
         .default_size(egui::vec2(620.0, 420.0))

@@ -24,7 +24,7 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     egui::Window::new(format!("Parsed prompts - {title}"))
         .open(&mut open)
         .resizable(true)
-        .collapsible(false)
+        .collapsible(true)
         .default_width(700.0)
         .default_height(320.0)
         .show(ui.ctx(), |ui| {
@@ -120,7 +120,7 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
     egui::Window::new(title)
         .open(&mut open)
         .resizable(true)
-        .collapsible(false)
+        .collapsible(true)
         .default_width(420.0)
         .default_height(320.0)
         .show(ui.ctx(), |ui| {

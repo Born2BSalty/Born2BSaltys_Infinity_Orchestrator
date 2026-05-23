@@ -13,7 +13,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState) {
     let mut open = state.step2.compat_popup_open;
     egui::Window::new("Step 2 Compatibility")
         .open(&mut open)
-        .collapsible(false)
+        .collapsible(true)
         .resizable(true)
         .movable(true)
         .default_size(egui::vec2(620.0, 300.0))
