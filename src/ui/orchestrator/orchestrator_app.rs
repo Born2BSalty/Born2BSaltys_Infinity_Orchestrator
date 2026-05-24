@@ -1158,6 +1158,7 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
 impl eframe::App for OrchestratorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let palette = self.theme_palette;
+        ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
 
         validate_debounce::tick(self, Instant::now());
         if let Some(next_due_in) = next_debounce_due_in(self) {

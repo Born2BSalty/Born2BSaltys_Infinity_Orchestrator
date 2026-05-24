@@ -12,12 +12,11 @@ use crate::ui::orchestrator::widgets::dialogs::fork_info_popup::{self, SelfNode}
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_pill_danger, redesign_shadow, redesign_shell_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    redesign_pill_danger, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
+    redesign_text_primary,
 };
 
 const FALLBACK_TITLE: &str = "Shared modlist";
-const SHADOW_OFFSET_PX: i8 = 2;
 
 const DRAFT_BANNER: &str = "Draft modlist code \u{2014} this is not from a verified install. \
 Review and customize the components in Create \u{2192} Import and modify before installing.";
@@ -266,12 +265,6 @@ fn draft_banner(ui: &mut egui::Ui, palette: ThemePalette) {
             right: 14,
             top: 10,
             bottom: 10,
-        })
-        .shadow(egui::epaint::Shadow {
-            offset: [SHADOW_OFFSET_PX, SHADOW_OFFSET_PX],
-            blur: 0,
-            spread: 0,
-            color: redesign_shadow(palette),
         });
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());

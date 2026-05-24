@@ -4,9 +4,8 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_I8,
-    ThemePalette, redesign_border_strong, redesign_hover_overlay, redesign_pill_danger,
-    redesign_shadow, redesign_shell_bg, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_hover_overlay, redesign_pill_danger, redesign_shell_bg, redesign_text_primary,
 };
 
 pub struct KebabItem<'a> {
@@ -63,16 +62,7 @@ pub fn render(
                     redesign_border_strong(palette),
                 ))
                 .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-                .inner_margin(egui::Margin::same(4))
-                .shadow(egui::epaint::Shadow {
-                    offset: [
-                        REDESIGN_SHADOW_OFFSET_BTN_I8 + 1,
-                        REDESIGN_SHADOW_OFFSET_BTN_I8 + 1,
-                    ],
-                    blur: 0,
-                    spread: 0,
-                    color: redesign_shadow(palette),
-                });
+                .inner_margin(egui::Margin::same(4));
 
             chassis.show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;

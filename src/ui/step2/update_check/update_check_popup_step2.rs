@@ -5,6 +5,8 @@ use eframe::egui;
 
 use crate::app::mod_downloads;
 use crate::app::state::{WizardState, exact_log_ready_to_install, update_selection_signature};
+use crate::ui::orchestrator::widgets::apply_primary_button_visuals;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::review_edit_any_log_applied;
 use crate::ui::step2::update_check_popup_lists_step2::{
@@ -35,7 +37,12 @@ struct PopupResources<'a> {
     source_edit_rows: &'a [SourceEditRow],
 }
 
-pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<Step2Action>) {
+pub fn render(
+    ctx: &egui::Context,
+    state: &mut WizardState,
+    action: &mut Option<Step2Action>,
+    palette: ThemePalette,
+) {
     if !state.step2.update_selected_popup_open {
         return;
     }
@@ -51,11 +58,11 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
         source_edit_rows: &source_edit_rows,
     };
     let mut open = state.step2.update_selected_popup_open;
-    render_main_popup(ctx, state, action, modes, &resources, &mut open);
+    render_main_popup(ctx, state, action, modes, &resources, &mut open, palette);
     state.step2.update_selected_popup_open = open && state.step2.update_selected_popup_open;
 
-    render_latest_fallback_confirm(ctx, state, action);
-    render_source_editor_popup(ctx, state, action);
+    render_latest_fallback_confirm(ctx, state, action, palette);
+    render_source_editor_popup(ctx, state, action, palette);
     render_forks_popup(ctx, state, action);
 }
 
@@ -116,6 +123,7 @@ fn render_main_popup(
     modes: PopupModes,
     resources: &PopupResources<'_>,
     open: &mut bool,
+    palette: ThemePalette,
 ) {
     egui::Window::new(popup_title(modes))
         .open(open)
@@ -126,7 +134,7 @@ fn render_main_popup(
         .min_width(320.0)
         .min_height(180.0)
         .show(ctx, |ui| {
-            render_popup_body(ui, state, action, modes, resources);
+            render_popup_body(ui, state, action, modes, resources, palette);
         });
 }
 
@@ -144,6 +152,7 @@ fn render_popup_body(
     action: &mut Option<Step2Action>,
     modes: PopupModes,
     resources: &PopupResources<'_>,
+    palette: ThemePalette,
 ) {
     let content_height = (ui.available_height() - 40.0).max(80.0);
     egui::ScrollArea::both()
@@ -154,7 +163,7 @@ fn render_popup_body(
             render_popup_scroll(ui, state, action, modes, resources);
         });
     ui.add_space(8.0);
-    render_footer(ui, state, action, modes, resources);
+    render_footer(ui, state, action, modes, resources, palette);
 }
 
 fn render_popup_scroll(
@@ -652,12 +661,13 @@ fn render_footer(
     action: &mut Option<Step2Action>,
     modes: PopupModes,
     resources: &PopupResources<'_>,
+    palette: ThemePalette,
 ) {
     ui.horizontal_wrapped(|ui| {
-        render_check_button(ui, state, action, modes, resources);
+        render_check_button(ui, state, action, modes, resources, palette);
         render_add_source_button(ui, action, resources);
         render_copy_report_button(ui, state, modes);
-        render_download_button(ui, state, action, modes);
+        render_download_button(ui, state, action, modes, palette);
         render_latest_retry_button(ui, state, modes);
         render_close_button(ui, state);
     });
@@ -669,16 +679,20 @@ fn render_check_button(
     action: &mut Option<Step2Action>,
     modes: PopupModes,
     resources: &PopupResources<'_>,
+    palette: ThemePalette,
 ) {
-    if ui
-        .add_enabled(
-            can_check_updates(state, modes),
-            egui::Button::new(popup_title(modes)),
-        )
-        .clicked()
-    {
-        *action = Some(check_action(modes, resources));
-    }
+    ui.scope(|ui| {
+        apply_primary_button_visuals(ui, palette);
+        if ui
+            .add_enabled(
+                can_check_updates(state, modes),
+                egui::Button::new(popup_title(modes)),
+            )
+            .clicked()
+        {
+            *action = Some(check_action(modes, resources));
+        }
+    });
 }
 
 fn can_check_updates(state: &WizardState, modes: PopupModes) -> bool {
@@ -771,16 +785,20 @@ fn render_download_button(
     state: &WizardState,
     action: &mut Option<Step2Action>,
     modes: PopupModes,
+    palette: ThemePalette,
 ) {
-    if ui
-        .add_enabled(
-            can_download_updates(state),
-            egui::Button::new(download_button_label(state, modes)),
-        )
-        .clicked()
-    {
-        *action = Some(Step2Action::DownloadUpdates);
-    }
+    ui.scope(|ui| {
+        apply_primary_button_visuals(ui, palette);
+        if ui
+            .add_enabled(
+                can_download_updates(state),
+                egui::Button::new(download_button_label(state, modes)),
+            )
+            .clicked()
+        {
+            *action = Some(Step2Action::DownloadUpdates);
+        }
+    });
 }
 
 const fn can_download_updates(state: &WizardState) -> bool {
@@ -830,6 +848,7 @@ fn render_latest_fallback_confirm(
     ctx: &egui::Context,
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
+    palette: ThemePalette,
 ) {
     if !state.step2.update_selected_confirm_latest_fallback_open {
         return;
@@ -852,10 +871,13 @@ fn render_latest_fallback_confirm(
             ui.label("Download latest instead for those mods only?");
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button("Yes").clicked() {
-                    state.step2.update_selected_confirm_latest_fallback_open = false;
-                    *action = Some(Step2Action::AcceptLatestForExactVersionMisses);
-                }
+                ui.scope(|ui| {
+                    apply_primary_button_visuals(ui, palette);
+                    if ui.button("Yes").clicked() {
+                        state.step2.update_selected_confirm_latest_fallback_open = false;
+                        *action = Some(Step2Action::AcceptLatestForExactVersionMisses);
+                    }
+                });
                 if ui.button("No").clicked() {
                     state.step2.update_selected_confirm_latest_fallback_open = false;
                 }

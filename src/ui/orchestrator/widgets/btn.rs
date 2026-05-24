@@ -5,8 +5,8 @@ use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_strong, redesign_shadow, redesign_shell_bg,
-    redesign_text_primary, redesign_with_alpha,
+    ThemePalette, redesign_accent, redesign_accent_hover, redesign_border_strong, redesign_shadow,
+    redesign_shell_bg, redesign_text_primary, redesign_pill_text, redesign_with_alpha,
 };
 
 pub type BtnFlag = bool;
@@ -110,4 +110,80 @@ pub fn redesign_btn(
     }
 
     response
+}
+
+/// Overrides the interactive widget visuals on `ui` so the next native
+/// `egui::Button` paints as a primary teal-filled button.
+///
+/// Wrap the button call in a `ui.scope(|ui| { apply_primary_button_visuals(ui, palette); ... })`
+/// block so the override is scoped to that one button.
+pub fn apply_primary_button_visuals(ui: &mut egui::Ui, palette: ThemePalette) {
+    let v = ui.visuals_mut();
+    let text_color = redesign_pill_text(palette);
+    let hover_fill = redesign_accent_hover(palette);
+
+    v.widgets.inactive.bg_fill = redesign_accent(palette);
+    v.widgets.inactive.fg_stroke.color = text_color;
+
+    v.widgets.hovered.bg_fill = hover_fill;
+    v.widgets.hovered.weak_bg_fill = hover_fill;
+    v.widgets.hovered.fg_stroke.color = text_color;
+
+    v.widgets.active.bg_fill = hover_fill;
+    v.widgets.active.fg_stroke.color = text_color;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apply_primary_button_visuals_dark_sets_accent_on_inactive() {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let palette = ThemePalette::Dark;
+                ui.scope(|ui| {
+                    apply_primary_button_visuals(ui, palette);
+                    assert_eq!(
+                        ui.visuals().widgets.inactive.bg_fill,
+                        redesign_accent(palette)
+                    );
+                    assert_eq!(
+                        ui.visuals().widgets.inactive.fg_stroke.color,
+                        redesign_pill_text(palette)
+                    );
+                    assert_eq!(
+                        ui.visuals().widgets.hovered.bg_fill,
+                        redesign_accent_hover(palette)
+                    );
+                    assert_eq!(
+                        ui.visuals().widgets.active.bg_fill,
+                        redesign_accent_hover(palette)
+                    );
+                });
+            });
+        });
+    }
+
+    #[test]
+    fn apply_primary_button_visuals_light_sets_accent_on_inactive() {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let palette = ThemePalette::Light;
+                ui.scope(|ui| {
+                    apply_primary_button_visuals(ui, palette);
+                    assert_eq!(
+                        ui.visuals().widgets.inactive.bg_fill,
+                        redesign_accent(palette)
+                    );
+                    assert_eq!(
+                        ui.visuals().widgets.active.bg_fill,
+                        redesign_accent_hover(palette)
+                    );
+                });
+            });
+        });
+    }
 }

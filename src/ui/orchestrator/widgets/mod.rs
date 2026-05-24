@@ -11,7 +11,7 @@ pub mod pill;
 pub mod r_box;
 pub mod screen_title;
 
-pub use btn::{BtnOpts, redesign_btn};
+pub use btn::{BtnOpts, apply_primary_button_visuals, redesign_btn};
 pub(crate) use icon_button::{ButtonIcon, render as render_icon_button};
 pub use input::{InputOpts, redesign_text_input};
 pub use kebab::{KebabItem, render as render_kebab};

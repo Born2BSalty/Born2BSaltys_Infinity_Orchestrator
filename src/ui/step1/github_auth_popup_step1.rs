@@ -5,9 +5,16 @@ use eframe::egui;
 
 use crate::app::controller::util::open_in_shell;
 use crate::app::state::WizardState;
+use crate::ui::orchestrator::widgets::apply_primary_button_visuals;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step1::action_step1::Step1Action;
 
-pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<Step1Action>) {
+pub fn render(
+    ctx: &egui::Context,
+    state: &mut WizardState,
+    action: &mut Option<Step1Action>,
+    palette: ThemePalette,
+) {
     if !state.github_auth_popup_open {
         return;
     }
@@ -49,11 +56,19 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
             }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                if !state.github_auth_verification_uri.trim().is_empty()
-                    && ui.button("Open GitHub").clicked()
-                    && let Err(err) = open_in_shell(&state.github_auth_verification_uri)
-                {
-                    state.github_auth_status_text = format!("Open GitHub failed: {err}");
+                if !state.github_auth_verification_uri.trim().is_empty() {
+                    let mut open_github_clicked = false;
+                    ui.scope(|ui| {
+                        apply_primary_button_visuals(ui, palette);
+                        if ui.button("Open GitHub").clicked() {
+                            open_github_clicked = true;
+                        }
+                    });
+                    if open_github_clicked
+                        && let Err(err) = open_in_shell(&state.github_auth_verification_uri)
+                    {
+                        state.github_auth_status_text = format!("Open GitHub failed: {err}");
+                    }
                 }
                 if !state.github_auth_login.trim().is_empty()
                     && !state.github_auth_running
