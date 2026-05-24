@@ -128,9 +128,18 @@ fn render_install_behavior(
         ui,
         palette,
         "Download missing mods",
-        Some("fetch GitHub/Weasel/Morpheus during install"),
+        Some("--download during install"),
         &mut orchestrator.wizard_state.step1.download,
     );
+    let mut keep_archives = orchestrator.wizard_state.step1.download_archive;
+    toggle_row(
+        ui,
+        palette,
+        "Keep downloaded mod archives",
+        Some("download missing mods and store archives"),
+        &mut keep_archives,
+    );
+    orchestrator.wizard_state.step1.download_archive = keep_archives;
     toggle_row(
         ui,
         palette,
@@ -141,6 +150,20 @@ fn render_install_behavior(
 
     ui.add_space(10.0);
     col_header(ui, palette, "WeiDU command-line flags");
+    toggle_row(
+        ui,
+        palette,
+        "-s  skip installed",
+        Some("skip entries already present in WeiDU logs"),
+        &mut orchestrator.wizard_state.step1.skip_installed,
+    );
+    toggle_row(
+        ui,
+        palette,
+        "-c  check last installed",
+        Some("validate the last installed component"),
+        &mut orchestrator.wizard_state.step1.check_last_installed,
+    );
     toggle_row(
         ui,
         palette,

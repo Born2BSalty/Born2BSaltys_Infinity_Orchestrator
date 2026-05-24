@@ -69,6 +69,7 @@ fn render_workspace(
         render_missing_modlist(ui, palette, id);
         return;
     };
+    sync_share_provenance_from_entry(orchestrator, &entry);
 
     let install_in_progress: Option<String> = None;
     if let Some(running_id) = install_in_progress.as_ref()
@@ -275,6 +276,8 @@ fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
         crate::ui::step5::state_step5::Step5ConsoleViewState::default();
     orchestrator.step5_prep_rx = None;
     orchestrator.step5_pending_start = None;
+    orchestrator.install_destination_prep_rx = None;
+    orchestrator.workspace_destination_prep_rx = None;
     orchestrator.install_running_since = None;
     orchestrator.pending_reinstall_id = None;
     orchestrator.active_install_modlist_id = None;
@@ -354,6 +357,14 @@ fn fork_meta_from_entry(entry: &ModlistEntry) -> Option<ForkMeta> {
         components: entry.component_count,
         forked_from: entry.forked_from.clone(),
     })
+}
+
+fn sync_share_provenance_from_entry(orchestrator: &mut OrchestratorApp, entry: &ModlistEntry) {
+    orchestrator.wizard_state.set_modlist_share_provenance(
+        Some(entry.name.clone()),
+        entry.author.clone(),
+        entry.forked_from.clone(),
+    );
 }
 
 fn render_missing_modlist(ui: &mut egui::Ui, palette: ThemePalette, id: &str) {

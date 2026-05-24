@@ -215,9 +215,9 @@ mod tests {
         );
         assert!(
             !st.step5.start_install_requested,
-            "arm must NOT pre-flip start_install_requested — the pipeline's \
-             start_auto_build_install does that after download/extract (a \
-             premature flip installs an empty Mods folder)"
+            "arm must NOT pre-flip start_install_requested — the pipeline \
+             waits for download/extract, then routes to Step 5 for a manual \
+             Install click"
         );
 
         let mut b = WizardState::default();
@@ -269,7 +269,7 @@ mod tests {
         st.step2.pending_saved_log_update_preview = false;
         st.step2.pending_saved_log_download = false;
         st.current_step = 4;
-        st.step5.start_install_requested = true;
+        st.step5.start_install_requested = false;
         assert!(pipeline_finished(&st));
         assert!(pipeline_reached_install(&st));
 

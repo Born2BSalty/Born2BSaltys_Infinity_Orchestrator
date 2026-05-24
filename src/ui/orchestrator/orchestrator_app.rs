@@ -21,10 +21,12 @@ use crate::app::{
     app_step2_saved_log_flow, app_step2_scan, app_step2_update_check, app_step2_update_download,
     app_step2_update_extract, app_step5_flow,
 };
+use crate::install_runtime::destination_prep::DestinationPrepReceiver;
 use crate::install_runtime::install_concurrency;
 use crate::install_runtime::rail_lock_reason::RailLockReason;
 use crate::install_runtime::registry_transition;
 use crate::registry::errors::RegistryError;
+use crate::registry::model::Game;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::persistence_cycle::RegistryPersistenceCycle;
 use crate::registry::store::RegistryStore;
@@ -97,6 +99,13 @@ impl PostInstallResetGate {
     pub const fn is_pending(self) -> bool {
         matches!(self, Self::Pending)
     }
+}
+
+pub(crate) struct PendingCreateStart {
+    pub(crate) name: String,
+    pub(crate) destination: String,
+    pub(crate) game: Game,
+    pub(crate) rx: DestinationPrepReceiver,
 }
 
 pub struct OrchestratorApp {
@@ -176,6 +185,9 @@ pub struct OrchestratorApp {
 
     pub(crate) archive_skip_rx:
         Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
+    pub(crate) create_destination_prep_rx: Option<PendingCreateStart>,
+    pub(crate) install_destination_prep_rx: Option<DestinationPrepReceiver>,
+    pub(crate) workspace_destination_prep_rx: Option<(String, DestinationPrepReceiver)>,
 
     pub(crate) hash_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
 }
@@ -329,6 +341,9 @@ impl OrchestratorApp {
             extract_progress: Arc::new(std::sync::Mutex::new(None)),
             extract_parallel_rx: None,
             archive_skip_rx: None,
+            create_destination_prep_rx: None,
+            install_destination_prep_rx: None,
+            workspace_destination_prep_rx: None,
             hash_progress: Arc::new(std::sync::Mutex::new(None)),
         };
 
@@ -349,6 +364,7 @@ impl OrchestratorApp {
             stream_download_rx: &mut self.stream_download_rx,
             archive_skip_rx: &mut self.archive_skip_rx,
             extract_parallel_rx: &mut self.extract_parallel_rx,
+            install_destination_prep_rx: &mut self.install_destination_prep_rx,
             wizard_state: &mut self.wizard_state,
             install_screen_state: &mut self.install_screen_state,
             hash_progress: &self.hash_progress,
@@ -908,6 +924,7 @@ impl OrchestratorApp {
             .as_ref()
             .is_some_and(EmbeddedTerminal::has_new_data)
             || self.step5_prep_rx.is_some()
+            || self.workspace_destination_prep_rx.is_some()
             || self.wizard_state.step5.prep_running
             || self.wizard_state.step5.install_running
             || self.wizard_state.modlist_auto_build_active
@@ -921,6 +938,8 @@ impl OrchestratorApp {
             || self.stream_download_rx.is_some()
             || self.extract_parallel_rx.is_some()
             || self.archive_skip_rx.is_some()
+            || self.create_destination_prep_rx.is_some()
+            || self.install_destination_prep_rx.is_some()
             || self.wizard_state.modlist_auto_build_active
             || !self.step2_progress_queue.is_empty()
     }
@@ -1108,6 +1127,7 @@ pub struct InstallPipelineResetSet<'a> {
         &'a mut Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
     pub extract_parallel_rx:
         &'a mut Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>>,
+    pub install_destination_prep_rx: &'a mut Option<DestinationPrepReceiver>,
     pub wizard_state: &'a mut WizardState,
     pub install_screen_state: &'a mut InstallScreenState,
     pub hash_progress: &'a Arc<std::sync::Mutex<Option<(usize, usize)>>>,
@@ -1121,6 +1141,7 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
         stream_download_rx,
         archive_skip_rx,
         extract_parallel_rx,
+        install_destination_prep_rx,
         wizard_state,
         install_screen_state,
         hash_progress,
@@ -1132,6 +1153,7 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     *stream_download_rx = None;
     *archive_skip_rx = None;
     *extract_parallel_rx = None;
+    *install_destination_prep_rx = None;
 
     wizard_state.modlist_auto_build_active = false;
     wizard_state.modlist_auto_build_waiting_for_install = false;
@@ -1331,9 +1353,13 @@ mod tests {
         let (s_ex, r_ex) = std::sync::mpsc::channel::<
             crate::install_runtime::extract_parallel::ExtractAssetEvent,
         >();
+        let (_destination_prep_sender, destination_prep_receiver) = std::sync::mpsc::channel::<
+            crate::install_runtime::destination_prep::DestinationPrepResult,
+        >();
         let mut stream = Some(r_dl);
         let mut skip = Some(r_sk);
         let mut extract = Some(r_ex);
+        let mut dest_prep = Some(destination_prep_receiver);
         let mut ws = dirty_ws();
         let mut iss = dirty_iss();
         let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
@@ -1345,6 +1371,7 @@ mod tests {
             stream_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
+            install_destination_prep_rx: &mut dest_prep,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,
@@ -1356,6 +1383,7 @@ mod tests {
         assert!(stream.is_none(), "stream_download_rx dropped");
         assert!(skip.is_none(), "archive_skip_rx dropped");
         assert!(extract.is_none(), "extract_parallel_rx dropped");
+        assert!(dest_prep.is_none(), "install_destination_prep_rx dropped");
 
         assert!(
             s_dl.send(
@@ -1409,6 +1437,9 @@ mod tests {
         let mut extract: Option<
             Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
         > = None;
+        let mut dest_prep: Option<
+            crate::install_runtime::destination_prep::DestinationPrepReceiver,
+        > = None;
         let mut ws = dirty_ws();
         let mut iss = dirty_iss();
         let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
@@ -1420,6 +1451,7 @@ mod tests {
             stream_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
+            install_destination_prep_rx: &mut dest_prep,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,
@@ -1482,6 +1514,9 @@ mod tests {
         let mut stream = Some(r_dl);
         let mut skip = Some(r_sk);
         let mut extract = Some(r_ex);
+        let mut dest_prep: Option<
+            crate::install_runtime::destination_prep::DestinationPrepReceiver,
+        > = None;
         let mut ws = WizardState::default();
         let mut iss = InstallScreenState::default();
         let hash = Arc::new(std::sync::Mutex::new(None));
@@ -1492,6 +1527,7 @@ mod tests {
             stream_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
+            install_destination_prep_rx: &mut dest_prep,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,

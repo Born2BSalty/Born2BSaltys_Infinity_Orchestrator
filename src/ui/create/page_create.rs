@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::path::PathBuf;
+use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
@@ -10,7 +12,7 @@ use crate::app::modlist_share::preview_modlist_share_code;
 use crate::install_runtime::{destination_prep, fork_pipeline_arm, per_install_dirs};
 use crate::registry::model::Game;
 use crate::registry::operations;
-use crate::registry::operations_create::create_modlist;
+use crate::registry::operations_create::create_modlist_with_author;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::create::destination_default::default_destination;
@@ -21,8 +23,9 @@ use crate::ui::create::stage_fork_paste::{self, ForkPasteOutcome};
 use crate::ui::create::stage_fork_preview::{self, ForkPreviewOutcome};
 use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::confirm_delete;
+use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::nav_destination::NavDestination;
-use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::orchestrator_app::{OrchestratorApp, PendingCreateStart};
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
@@ -46,6 +49,8 @@ enum CreateRequest {
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
     let palette = orchestrator.theme_palette;
+
+    poll_create_destination_prep(orchestrator);
 
     if let Some(deadline) = orchestrator.create_screen_state.load_draft_copied_until
         && Instant::now() >= deadline
@@ -75,7 +80,12 @@ fn collect_stage_request(
 ) -> Option<CreateRequest> {
     match orchestrator.create_screen_state.stage {
         CreateStage::Choose => {
-            match stage_choose::render(ui, palette, &mut orchestrator.create_screen_state) {
+            match stage_choose::render(
+                ui,
+                palette,
+                &mut orchestrator.create_screen_state,
+                orchestrator.create_destination_prep_rx.is_some(),
+            ) {
                 ChooseOutcome::StartScratch => Some(CreateRequest::StartScratch),
                 ChooseOutcome::GoForkPaste => Some(CreateRequest::GoForkPaste),
                 ChooseOutcome::OpenLoadDraft => Some(CreateRequest::OpenLoadDraft),
@@ -237,6 +247,14 @@ fn render_load_draft_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &eg
 }
 
 fn start_scratch(orchestrator: &mut OrchestratorApp) {
+    if orchestrator.create_destination_prep_rx.is_some() {
+        warn!(
+            target = "orchestrator",
+            "Create: scratch start ignored because destination prep is already running"
+        );
+        return;
+    }
+
     let name = orchestrator
         .create_screen_state
         .modlist_name
@@ -258,22 +276,92 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
             d.to_string()
         }
     };
-    let scratch_mods_folder = match prepare_scratch_mods_folder(
-        &dest,
-        game,
-        orchestrator.create_screen_state.destination_choice,
-    ) {
+
+    let choice = orchestrator.create_screen_state.destination_choice;
+    if destination_choice_requires_worker(choice) {
+        orchestrator.create_destination_prep_rx = Some(PendingCreateStart {
+            name,
+            destination: dest.clone(),
+            game,
+            rx: destination_prep::spawn_prepare_destination_worker(PathBuf::from(dest), choice),
+        });
+        return;
+    }
+
+    finish_start_scratch(orchestrator, &name, game, &dest);
+}
+
+fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
+    let result = match orchestrator.create_destination_prep_rx.as_ref() {
+        Some(pending) => pending.rx.try_recv(),
+        None => return,
+    };
+
+    match result {
+        Ok(Ok(_report)) => {
+            if let Some(pending) = orchestrator.create_destination_prep_rx.take() {
+                finish_start_scratch(
+                    orchestrator,
+                    &pending.name,
+                    pending.game,
+                    &pending.destination,
+                );
+            }
+        }
+        Ok(Err(err)) => {
+            let pending = orchestrator.create_destination_prep_rx.take();
+            if let Some(pending) = pending {
+                warn!(
+                    target = "orchestrator",
+                    "Create: preparing destination {} for {} failed: {err}",
+                    pending.destination,
+                    pending.name
+                );
+            } else {
+                warn!(
+                    target = "orchestrator",
+                    "Create: preparing destination failed: {err}"
+                );
+            }
+        }
+        Err(TryRecvError::Empty) => {}
+        Err(TryRecvError::Disconnected) => {
+            let pending = orchestrator.create_destination_prep_rx.take();
+            if let Some(pending) = pending {
+                warn!(
+                    target = "orchestrator",
+                    "Create: destination prep worker disconnected for {}", pending.destination
+                );
+            } else {
+                warn!(
+                    target = "orchestrator",
+                    "Create: destination prep worker disconnected"
+                );
+            }
+        }
+    }
+}
+
+fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Game, dest: &str) {
+    let scratch_mods_folder = match create_scratch_mods_folder(dest, game) {
         Ok(path) => path,
         Err(err) => {
             warn!(
                 target = "orchestrator",
-                "Create: preparing scratch mods folder failed: {err}"
+                "Create: creating scratch mods folder failed: {err}"
             );
             return;
         }
     };
 
-    let entry = match create_modlist(&name, game, &dest, &mut orchestrator.registry) {
+    let author = orchestrator.redesign_settings.user_name.clone();
+    let entry = match create_modlist_with_author(
+        name,
+        game,
+        dest,
+        Some(author.as_str()),
+        &mut orchestrator.registry,
+    ) {
         Ok(e) => e,
         Err(err) => {
             warn!(
@@ -325,21 +413,15 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     };
 }
 
-fn prepare_scratch_mods_folder(
-    destination: &str,
-    game: Game,
-    choice: Option<crate::ui::install::state_install::DestChoice>,
-) -> Result<String, String> {
-    let dest = std::path::Path::new(destination.trim());
-    if let Some(choice) = choice {
-        destination_prep::prepare_destination(dest, Some(choice))
-            .map_err(|err| format!("prepare destination {}: {err}", dest.display()))?;
-    }
-
+fn create_scratch_mods_folder(destination: &str, game: Game) -> Result<String, String> {
     let dirs = per_install_dirs::resolve(destination, game);
     std::fs::create_dir_all(&dirs.mods_folder)
         .map_err(|err| format!("create mods folder {}: {err}", dirs.mods_folder.display()))?;
     Ok(dirs.mods_folder.to_string_lossy().to_string())
+}
+
+const fn destination_choice_requires_worker(choice: Option<DestChoice>) -> bool {
+    matches!(choice, Some(DestChoice::Clear | DestChoice::Backup))
 }
 
 fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id: &str) {
@@ -394,4 +476,19 @@ fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, 
     orchestrator.nav = NavDestination::Workspace {
         modlist_id: Some(id),
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn destination_choices_that_touch_disk_run_on_worker() {
+        assert!(destination_choice_requires_worker(Some(DestChoice::Clear)));
+        assert!(destination_choice_requires_worker(Some(DestChoice::Backup)));
+        assert!(!destination_choice_requires_worker(Some(
+            DestChoice::Continue
+        )));
+        assert!(!destination_choice_requires_worker(None));
+    }
 }

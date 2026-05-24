@@ -50,6 +50,7 @@ pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut CreateScreenState,
+    destination_prep_running: bool,
 ) -> ChooseOutcome {
     let mut outcome = ChooseOutcome::Stay;
 
@@ -67,8 +68,12 @@ pub fn render(
         None::<sub_flow_footer::SecondaryBtn<'_>>,
         None,
         PrimaryBtn {
-            label: "Start",
-            disabled: false,
+            label: if destination_prep_running {
+                "Preparing"
+            } else {
+                "Start"
+            },
+            disabled: destination_prep_running,
         },
     );
     if footer.primary_clicked {

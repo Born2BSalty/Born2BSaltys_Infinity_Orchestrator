@@ -33,7 +33,7 @@ pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, S
         |_| false,
     );
     let mod_configs = export_mod_config_files(state)?;
-    let payload = json!({
+    let mut payload = json!({
         "format_version": 1,
         "bio_version": env!("CARGO_PKG_VERSION"),
         "game_install": state.step1.game_install.clone(),
@@ -52,12 +52,41 @@ pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, S
             "files": mod_configs,
         },
     });
+    insert_export_provenance(&mut payload, state);
     let payload_text = serde_json::to_string(&payload).map_err(|err| err.to_string())?;
     let compressed = zlib_compress(payload_text.as_bytes())?;
     Ok(format!(
         "{SHARE_CODE_PREFIX}{}",
         base64url_encode(&compressed)
     ))
+}
+
+fn insert_export_provenance(payload: &mut serde_json::Value, state: &WizardState) {
+    let Some(obj) = payload.as_object_mut() else {
+        return;
+    };
+    if let Some(name) = state
+        .modlist_share_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        obj.insert("name".to_string(), json!(name));
+    }
+    if let Some(author) = state
+        .modlist_share_author
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        obj.insert("author".to_string(), json!(author));
+    }
+    if !state.modlist_share_forked_from.is_empty() {
+        obj.insert(
+            "forked_from".to_string(),
+            json!(state.modlist_share_forked_from.clone()),
+        );
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -736,6 +765,24 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
+    fn state_with_one_bgee_component() -> WizardState {
+        let mut state = WizardState::default();
+        state.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
+            component_id: "0".to_string(),
+            mod_name: "EEFixPack".to_string(),
+            component_label: "Core Fixes".to_string(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 1,
+            block_id: String::new(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+        state
+    }
+
     const FIELDLESS_PAYLOAD_JSON: &str = r#"{
         "format_version": 1,
         "bio_version": "0.1.0-test",
@@ -825,5 +872,31 @@ mod tests {
         let json = serde_json::to_string(&original).expect("serialize");
         let back: ForkAncestor = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(original, back);
+    }
+
+    #[test]
+    fn export_share_code_bakes_current_modlist_provenance() {
+        let mut state = state_with_one_bgee_component();
+        state.set_modlist_share_provenance(
+            Some("  Tactical EET 2026  ".to_string()),
+            Some("  @b2bs  ".to_string()),
+            vec![ForkAncestor {
+                name: "Root build".to_string(),
+                author: "@root".to_string(),
+            }],
+        );
+
+        let code = export_modlist_share_code(&state).expect("export");
+        let preview = preview_modlist_share_code(&code).expect("preview");
+
+        assert_eq!(preview.name.as_deref(), Some("Tactical EET 2026"));
+        assert_eq!(preview.author.as_deref(), Some("@b2bs"));
+        assert_eq!(
+            preview.forked_from,
+            vec![ForkAncestor {
+                name: "Root build".to_string(),
+                author: "@root".to_string(),
+            }]
+        );
     }
 }

@@ -57,13 +57,12 @@ pub fn render_live(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> For
     verify_downloaded_archives_once(orchestrator, &inputs.destination);
     ingest_downloaded_archives_once(orchestrator, &inputs.destination);
 
-    // Once extract finishes, suppress the auto-build install trigger.
+    // Once extract finishes, suppress the auto-build Step 5 handoff.
     // `arm_auto_build` (called during fork-arm) leaves
     // `modlist_auto_build_active` + `modlist_auto_build_waiting_for_install`
     // true; the legacy `advance_pending_saved_log_flow` would otherwise fire
-    // `start_auto_build_install` once the post-extract apply settles, which
-    // sets `start_install_requested = true` and auto-routes to Step 5
-    // install — wrong for the fork path, where the user should land on
+    // the post-extract handoff once the apply settles and route to Step 5.
+    // That is wrong for the fork path, where the user should land on
     // Workspace for review. Idempotent: subsequent frames re-clear-no-op.
     if orchestrator.install_screen_state.pipeline_flags.armed()
         && orchestrator

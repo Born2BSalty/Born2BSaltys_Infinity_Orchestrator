@@ -11,9 +11,7 @@ use crate::ui::step4::action_step4::Step4Action;
 use crate::ui::step4::service_step4::read_source_log_lines;
 use crate::ui::step4::state_step4::active_tab_mut;
 use crate::ui::step5::diagnostics::format_step4_item;
-use crate::ui::step5::service_diagnostics_support_step5::{
-    export_diagnostics, restart_app_with_diagnostics, source_log_infos,
-};
+use crate::ui::step5::service_diagnostics_support_step5::{export_diagnostics, source_log_infos};
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -30,21 +28,16 @@ pub fn render(
     ui.horizontal(|ui| {
         ui.heading("Step 4: Review");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if dev_mode {
-                if ui.button("Export diagnostics").clicked() {
-                    match export_diagnostics(state, None, dev_mode, exe_fingerprint) {
-                        Ok(path) => {
-                            state.step5.last_status_text =
-                                format!("Diagnostics exported: {}", path.display());
-                        }
-                        Err(err) => {
-                            state.step5.last_status_text =
-                                format!("Diagnostics export failed: {err}");
-                        }
+            if dev_mode && ui.button("Export diagnostics").clicked() {
+                match export_diagnostics(state, None, dev_mode, exe_fingerprint) {
+                    Ok(path) => {
+                        state.step5.last_status_text =
+                            format!("Diagnostics exported: {}", path.display());
+                    }
+                    Err(err) => {
+                        state.step5.last_status_text = format!("Diagnostics export failed: {err}");
                     }
                 }
-            } else if ui.button("Restart App With Diagnostics").clicked() {
-                restart_app_with_diagnostics(state);
             }
         });
     });

@@ -42,6 +42,13 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         ui,
         palette,
         orchestrator,
+        "Mods folder",
+        validate_now::FIELD_MODS_FOLDER,
+    );
+    path_row_for_field(
+        ui,
+        palette,
+        orchestrator,
         "Mods archive",
         validate_now::FIELD_MODS_ARCHIVE_FOLDER,
     );
@@ -52,12 +59,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         "Mods backup",
         validate_now::FIELD_MODS_BACKUP_FOLDER,
     );
-    // The per-install Mods folder (BIO's `step1.mods_folder`) is
-    // derived from the install destination at arm time and is never a
-    // user-owned global setting — Settings → Paths does not surface
-    // it. The install runtime writes it onto `step1` transiently; the
-    // install-end edge restores `step1` to the global values so a
-    // subsequent UI read does not see the per-install path.
 }
 
 fn path_row_for_field(

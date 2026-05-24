@@ -91,6 +91,9 @@ impl WizardState {
             modlist_import_preview_source_overrides: String::new(),
             modlist_import_preview_installed_refs: String::new(),
             modlist_import_preview_mod_configs: String::new(),
+            modlist_share_name: None,
+            modlist_share_author: None,
+            modlist_share_forked_from: Vec::new(),
             modlist_auto_build_active: false,
             modlist_auto_build_waiting_for_install: false,
             last_step2_sync_signature: None,
@@ -125,6 +128,7 @@ impl WizardState {
         self.modlist_import_preview_source_overrides.clear();
         self.modlist_import_preview_installed_refs.clear();
         self.modlist_import_preview_mod_configs.clear();
+        self.clear_modlist_share_provenance();
         self.modlist_auto_build_active = false;
         self.modlist_auto_build_waiting_for_install = false;
         self.last_step2_sync_signature = None;
@@ -135,4 +139,27 @@ impl WizardState {
         self.step3 = Step3State::default();
         self.step5 = Step5State::default();
     }
+
+    pub(crate) fn set_modlist_share_provenance(
+        &mut self,
+        name: Option<String>,
+        author: Option<String>,
+        forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
+    ) {
+        self.modlist_share_name = normalized_optional_text(name);
+        self.modlist_share_author = normalized_optional_text(author);
+        self.modlist_share_forked_from = forked_from;
+    }
+
+    pub(crate) fn clear_modlist_share_provenance(&mut self) {
+        self.modlist_share_name = None;
+        self.modlist_share_author = None;
+        self.modlist_share_forked_from.clear();
+    }
+}
+
+fn normalized_optional_text(value: Option<String>) -> Option<String> {
+    value
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }

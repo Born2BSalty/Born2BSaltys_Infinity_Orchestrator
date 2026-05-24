@@ -74,12 +74,6 @@ pub fn render_header(
                             exe_fingerprint,
                         );
                     }
-                } else {
-                    let restart_response = ui.button("Restart App With Diagnostics");
-                    export_button_rect = Some(restart_response.rect);
-                    if restart_response.clicked() {
-                        toolbar_actions_step2::restart_app_with_diagnostics_from_step2(state);
-                    }
                 }
             });
         });

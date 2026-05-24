@@ -56,8 +56,7 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
 
     let parent_component_count =
         u32::try_from(preview.bgee_entries + preview.bg2ee_entries).unwrap_or(u32::MAX);
-    let parent_mod_count =
-        count_unique_mods(&[&preview.bgee_log_text, &preview.bg2ee_log_text]);
+    let parent_mod_count = count_unique_mods(&[&preview.bgee_log_text, &preview.bg2ee_log_text]);
 
     let entry = create_forked_modlist(
         ForkedModlistInput {

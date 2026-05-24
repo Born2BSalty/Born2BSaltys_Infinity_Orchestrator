@@ -160,9 +160,15 @@ fn tab_text(tab: PreviewTab, p: &ModlistSharePreview) -> String {
 
 fn summary_text(p: &ModlistSharePreview) -> String {
     let yn = |b: bool| if b { "Yes" } else { "No" };
+    let modlist_name = p
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Shared modlist");
     format!(
         "BIO Modlist Import Preview\n\n\
-         Modlist\n\
+         Modlist: {modlist_name}\n\
          BIO version: {bio}\n\
          Game install: {game}\n\
          Install mode: {mode}\n\n\
@@ -219,14 +225,27 @@ mod tests {
 
     #[test]
     fn summary_is_populated_from_preview() {
-        let s = summary_text(&sample_preview());
+        let mut p = sample_preview();
+        p.name = Some("Tactical EET 2026".to_string());
+        p.author = Some("@hidden".to_string());
+        p.forked_from = vec![crate::app::modlist_share::ForkAncestor {
+            name: "Root".to_string(),
+            author: "@root".to_string(),
+        }];
+
+        let s = summary_text(&p);
         assert!(s.starts_with("BIO Modlist Import Preview"));
+        assert!(s.contains("Modlist: Tactical EET 2026"));
         assert!(s.contains("Game install: EET"));
         assert!(s.contains("BGEE: 21 entries"));
         assert!(s.contains("BG2EE: 115 entries"));
         assert!(s.contains("Source overrides: Yes"));
         assert!(s.contains("Mod config files: 4"));
         assert!(!s.contains("Step 1"));
+        assert!(
+            !s.contains("@hidden") && !s.contains("Root"),
+            "summary shows the modlist name, not author/fork details"
+        );
     }
 
     #[test]

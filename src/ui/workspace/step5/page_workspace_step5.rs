@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use eframe::egui;
+use std::sync::mpsc::TryRecvError;
 use tracing::warn;
 
 use crate::install_runtime::flag_policies::InstallWorkflow;
@@ -21,6 +22,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
     {
         orchestrator.workspace_step5.reset_for_modlist();
     }
+    poll_pending_destination_prep(orchestrator);
 
     let palette = orchestrator.theme_palette;
 
@@ -114,11 +116,16 @@ fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) ->
     let variant = InstallButtonVariant::from_step5(&orchestrator.wizard_state, false);
 
     if variant == InstallButtonVariant::Install
-        && !consume_pending_destination_prep(orchestrator, modlist_id)
+        && start_pending_destination_prep(orchestrator, modlist_id)
     {
         return false;
     }
 
+    start_workspace_install(orchestrator, modlist_id)
+}
+
+fn start_workspace_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+    let variant = InstallButtonVariant::from_step5(&orchestrator.wizard_state, false);
     let workflow = orchestrator
         .registry
         .find(modlist_id)
@@ -161,54 +168,107 @@ fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) ->
     true
 }
 
-fn consume_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+fn start_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
     use crate::install_runtime::destination_prep;
 
-    let Some(workspace_state) = orchestrator.workspace_state.get(modlist_id) else {
+    if orchestrator.workspace_destination_prep_rx.is_some() {
         return true;
+    }
+
+    let Some(workspace_state) = orchestrator.workspace_state.get(modlist_id) else {
+        return false;
     };
     let Some(choice) = workspace_state.pending_destination_prep else {
-        return true;
+        return false;
     };
     let Some(entry) = orchestrator.registry.find(modlist_id) else {
-        return true;
+        return false;
     };
     let destination = std::path::PathBuf::from(entry.destination_folder.trim());
 
-    match destination_prep::prepare_destination(&destination, Some(choice)) {
-        Ok(report) => {
+    orchestrator.workspace_destination_prep_rx = Some((
+        modlist_id.to_string(),
+        destination_prep::spawn_prepare_destination_worker(destination, Some(choice)),
+    ));
+    orchestrator.wizard_state.step5.prep_running = true;
+    orchestrator.wizard_state.step5.last_status_text = "Preparing target destination".to_string();
+    if let Some(term) = orchestrator.step5_terminal.as_mut() {
+        term.append_marker("Preparing target destination");
+    }
+    true
+}
+
+fn poll_pending_destination_prep(orchestrator: &mut OrchestratorApp) {
+    let Some((modlist_id, rx)) = orchestrator.workspace_destination_prep_rx.as_ref() else {
+        return;
+    };
+    let id = modlist_id.clone();
+    match rx.try_recv() {
+        Ok(Ok(report)) => {
+            orchestrator.workspace_destination_prep_rx = None;
+            orchestrator.wizard_state.step5.prep_running = false;
             tracing::info!(
                 target = "orchestrator",
                 "Step 5 fresh-Install: destination prep applied for \
-                 {modlist_id} (choice={:?}, report={report:?})",
-                choice
+                 {id} (report={report:?})"
             );
-            if let Some(ws) = orchestrator.workspace_state.get_mut(modlist_id) {
-                ws.pending_destination_prep = None;
+            clear_pending_destination_prep(orchestrator, &id);
+            if let Some(term) = orchestrator.step5_terminal.as_mut() {
+                term.append_marker("Target destination prepared");
             }
-            if let Some(store) = orchestrator.workspace_stores.get(modlist_id)
-                && let Some(ws) = orchestrator.workspace_state.get(modlist_id)
-                && let Err(err) = store.save(ws)
-            {
-                warn!(
-                    target = "orchestrator",
-                    "Step 5: persisting cleared pending_destination_prep \
-                     for {modlist_id} failed: {err}"
-                );
-            }
-            orchestrator
-                .persistence_cycle
-                .mark_workspace_dirty(modlist_id, std::time::Instant::now());
-            true
+            let _ = start_workspace_install(orchestrator, &id);
         }
-        Err(err) => {
+        Ok(Err(err)) => {
+            orchestrator.workspace_destination_prep_rx = None;
+            orchestrator.wizard_state.step5.prep_running = false;
+            orchestrator
+                .wizard_state
+                .step5
+                .last_status_text
+                .clone_from(&err);
+            if let Some(term) = orchestrator.step5_terminal.as_mut() {
+                term.append_marker(&err);
+            }
             warn!(
                 target = "orchestrator",
                 "Step 5 fresh-Install: destination prep failed for \
-                 {modlist_id}: {err} (install not started — fix the \
+                 {id}: {err} (install not started — fix the \
                  destination and retry)"
             );
-            false
+        }
+        Err(TryRecvError::Empty) => {}
+        Err(TryRecvError::Disconnected) => {
+            orchestrator.workspace_destination_prep_rx = None;
+            orchestrator.wizard_state.step5.prep_running = false;
+            let err = "Target destination prep failed: worker disconnected".to_string();
+            orchestrator
+                .wizard_state
+                .step5
+                .last_status_text
+                .clone_from(&err);
+            if let Some(term) = orchestrator.step5_terminal.as_mut() {
+                term.append_marker(&err);
+            }
+            warn!(target = "orchestrator", "{err}");
         }
     }
+}
+
+fn clear_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) {
+    if let Some(ws) = orchestrator.workspace_state.get_mut(modlist_id) {
+        ws.pending_destination_prep = None;
+    }
+    if let Some(store) = orchestrator.workspace_stores.get(modlist_id)
+        && let Some(ws) = orchestrator.workspace_state.get(modlist_id)
+        && let Err(err) = store.save(ws)
+    {
+        warn!(
+            target = "orchestrator",
+            "Step 5: persisting cleared pending_destination_prep \
+             for {modlist_id} failed: {err}"
+        );
+    }
+    orchestrator
+        .persistence_cycle
+        .mark_workspace_dirty(modlist_id, std::time::Instant::now());
 }

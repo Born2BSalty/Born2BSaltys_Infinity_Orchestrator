@@ -30,6 +30,16 @@ pub fn create_modlist(
     destination: &str,
     registry: &mut ModlistRegistry,
 ) -> Result<ModlistEntry, RegistryError> {
+    create_modlist_with_author(name, game, destination, None, registry)
+}
+
+pub(crate) fn create_modlist_with_author(
+    name: &str,
+    game: Game,
+    destination: &str,
+    author: Option<&str>,
+    registry: &mut ModlistRegistry,
+) -> Result<ModlistEntry, RegistryError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err(RegistryError::Io(io::Error::new(
@@ -40,6 +50,10 @@ pub fn create_modlist(
 
     let id = new_modlist_id();
     let now = Utc::now();
+    let author = author
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
 
     let entry = ModlistEntry {
         id: id.clone(),
@@ -49,6 +63,7 @@ pub fn create_modlist(
         state: ModlistState::InProgress,
         creation_date: now,
         last_touched_date: now,
+        author,
         workspace_file_relpath: PathBuf::from("modlists").join(&id).join("workspace.json"),
         ..Default::default()
     };
@@ -150,6 +165,25 @@ mod tests {
 
         assert_eq!(entry.author, None);
         assert!(entry.forked_from.is_empty());
+    }
+
+    #[test]
+    fn create_with_author_trims_and_stores_credit() {
+        let mut reg = ModlistRegistry::default();
+        let entry = create_modlist_with_author(
+            "Tactical EET 2026",
+            Game::EET,
+            "D:\\eet",
+            Some("  @b2bs  "),
+            &mut reg,
+        )
+        .expect("create ok");
+
+        assert_eq!(entry.author.as_deref(), Some("@b2bs"));
+        assert_eq!(
+            reg.find(&entry.id).unwrap().author.as_deref(),
+            Some("@b2bs")
+        );
     }
 
     #[test]

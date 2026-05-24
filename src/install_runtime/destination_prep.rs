@@ -4,11 +4,15 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::install::state_install::DestChoice;
 
 const BACKUP_PREFIX: &str = "_bio_backup";
+
+pub type DestinationPrepResult = Result<DestinationPrepReport, String>;
+pub type DestinationPrepReceiver = Receiver<DestinationPrepResult>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DestinationPrepReport {
@@ -85,6 +89,21 @@ pub fn prepare_destination(
         }
         DestChoice::Continue => unreachable!("Continue handled above"),
     }
+}
+
+#[must_use]
+pub fn spawn_prepare_destination_worker(
+    dest: PathBuf,
+    choice: Option<DestChoice>,
+) -> DestinationPrepReceiver {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let display = dest.display().to_string();
+        let result = prepare_destination(&dest, choice)
+            .map_err(|err| format!("destination prep failed for {display}: {err}"));
+        let _ = tx.send(result);
+    });
+    rx
 }
 
 fn count_children(dir: &Path) -> io::Result<usize> {

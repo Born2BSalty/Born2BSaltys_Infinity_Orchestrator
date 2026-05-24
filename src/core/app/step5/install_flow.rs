@@ -74,8 +74,6 @@ pub fn prepare_start_request(
     state: &mut WizardState,
     term: &mut EmbeddedTerminal,
 ) -> Option<(PendingInstallStart, bool)> {
-    term.clear_console();
-
     state.step5.start_install_requested = false;
     state.step5.prep_running = false;
     state.step5.last_install_failed = false;
@@ -344,18 +342,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prepare_start_request_clears_previous_console_run_output() {
+    fn prepare_start_request_preserves_previous_console_run_output() {
         let mut state = WizardState::default();
         let mut term = EmbeddedTerminal::new().expect("embedded terminal");
-        term.append_marker("previous run line that must not persist");
+        term.append_marker("previous run line that must persist");
         assert!(term.output_text().contains("previous run line"));
 
         let _ = prepare_start_request(&mut state, &mut term);
 
         assert!(
-            !term.output_text().contains("previous run line"),
-            "starting a new install attempt clears the session-global console \
-             buffer so logs are scoped per install run"
+            term.output_text().contains("previous run line"),
+            "starting a new install attempt must not clear the Step 5 console"
         );
     }
 
