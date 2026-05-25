@@ -5,12 +5,16 @@ use eframe::egui;
 
 use crate::app::mod_downloads;
 use crate::app::state::{WizardState, exact_log_ready_to_install, update_selection_signature};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_section_header};
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_shell_bg,
+};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::review_edit_any_log_applied;
 use crate::ui::step2::update_check_popup_lists_step2::{
-    SourceChoiceRow, SourceEditRow, collect_source_choices, collect_source_edit_rows,
-    pending_log_labels, render_list, render_section_header, render_source_choices,
-    single_mod_popup_target,
+    ListCtx, SourceChoiceRow, SourceEditRow, collect_source_choices, collect_source_edit_rows,
+    pending_log_labels, render_list, render_source_choices, single_mod_popup_target,
 };
 use crate::ui::step2::update_check_popup_report_step2::build_popup_report;
 use crate::ui::step2::update_check_popup_source_editor_step2::render_source_editor_popup;
@@ -35,7 +39,12 @@ struct PopupResources<'a> {
     source_edit_rows: &'a [SourceEditRow],
 }
 
-pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<Step2Action>) {
+pub fn render(
+    ctx: &egui::Context,
+    state: &mut WizardState,
+    action: &mut Option<Step2Action>,
+    palette: ThemePalette,
+) {
     if !state.step2.update_selected_popup_open {
         return;
     }
@@ -51,12 +60,12 @@ pub fn render(ctx: &egui::Context, state: &mut WizardState, action: &mut Option<
         source_edit_rows: &source_edit_rows,
     };
     let mut open = state.step2.update_selected_popup_open;
-    render_main_popup(ctx, state, action, modes, &resources, &mut open);
+    render_main_popup(ctx, state, action, modes, &resources, &mut open, palette);
     state.step2.update_selected_popup_open = open && state.step2.update_selected_popup_open;
 
-    render_latest_fallback_confirm(ctx, state, action);
-    render_source_editor_popup(ctx, state, action);
-    render_forks_popup(ctx, state, action);
+    render_latest_fallback_confirm(ctx, state, action, palette);
+    render_source_editor_popup(ctx, state, action, palette);
+    render_forks_popup(ctx, state, action, palette);
 }
 
 fn popup_modes(state: &WizardState, has_single_mod_target: bool) -> PopupModes {
@@ -116,7 +125,11 @@ fn render_main_popup(
     modes: PopupModes,
     resources: &PopupResources<'_>,
     open: &mut bool,
+    palette: ThemePalette,
 ) {
+    let screen = ctx.input(|i| i.screen_rect);
+    let max_w = (screen.width() - 40.0).max(360.0);
+    let max_h = (screen.height() - 80.0).max(220.0);
     egui::Window::new(popup_title(modes))
         .open(open)
         .collapsible(true)
@@ -125,8 +138,10 @@ fn render_main_popup(
         .default_size(egui::vec2(560.0, 320.0))
         .min_width(320.0)
         .min_height(180.0)
+        .max_width(max_w)
+        .max_height(max_h)
         .show(ctx, |ui| {
-            render_popup_body(ui, state, action, modes, resources);
+            render_popup_body(ui, state, action, modes, resources, palette);
         });
 }
 
@@ -144,17 +159,18 @@ fn render_popup_body(
     action: &mut Option<Step2Action>,
     modes: PopupModes,
     resources: &PopupResources<'_>,
+    palette: ThemePalette,
 ) {
     let content_height = (ui.available_height() - 40.0).max(80.0);
-    egui::ScrollArea::both()
+    egui::ScrollArea::vertical()
         .auto_shrink([false, false])
-        .max_width(ui.available_width())
         .max_height(content_height)
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
         .show(ui, |ui| {
-            render_popup_scroll(ui, state, action, modes, resources);
+            render_popup_scroll(ui, state, action, modes, resources, palette);
         });
     ui.add_space(8.0);
-    render_footer(ui, state, action, modes, resources);
+    render_footer(ui, state, action, modes, resources, palette);
 }
 
 fn render_popup_scroll(
@@ -163,35 +179,23 @@ fn render_popup_scroll(
     action: &mut Option<Step2Action>,
     modes: PopupModes,
     resources: &PopupResources<'_>,
+    palette: ThemePalette,
 ) {
     render_status_lines(ui, state, modes);
     render_summary(ui, state, modes);
     render_selection_stale_message(ui, modes);
-    let source_choice_prefix_width = render_source_choice_area(ui, modes, resources, action);
-    render_primary_list(
-        ui,
-        state,
+    let source_choice_prefix_width =
+        render_source_choice_area(ui, palette, modes, resources, action);
+    let mut list_ctx = ListCtx {
+        palette,
+        source_edit_rows: resources.source_edit_rows,
+        popup_busy: modes.busy,
+        prefix_width: source_choice_prefix_width,
         action,
-        modes,
-        resources,
-        source_choice_prefix_width,
-    );
-    render_mode_lists(
-        ui,
-        state,
-        action,
-        modes,
-        resources,
-        source_choice_prefix_width,
-    );
-    render_result_lists(
-        ui,
-        state,
-        action,
-        modes,
-        resources,
-        source_choice_prefix_width,
-    );
+    };
+    render_primary_list(ui, state, modes, &mut list_ctx);
+    render_mode_lists(ui, state, modes, &mut list_ctx);
+    render_result_lists(ui, state, modes, &mut list_ctx);
 }
 
 fn render_status_lines(ui: &mut egui::Ui, state: &WizardState, modes: PopupModes) {
@@ -366,6 +370,7 @@ fn render_selection_stale_message(ui: &mut egui::Ui, modes: PopupModes) {
 
 fn render_source_choice_area(
     ui: &mut egui::Ui,
+    palette: ThemePalette,
     modes: PopupModes,
     resources: &PopupResources<'_>,
     action: &mut Option<Step2Action>,
@@ -375,31 +380,22 @@ fn render_source_choice_area(
     }
     ui.add_space(8.0);
     Some(
-        render_source_choices(ui, resources.source_choices, modes.busy, action).list_prefix_width(),
+        render_source_choices(ui, palette, resources.source_choices, modes.busy, action)
+            .list_prefix_width(),
     )
 }
 
 fn render_primary_list(
     ui: &mut egui::Ui,
     state: &WizardState,
-    action: &mut Option<Step2Action>,
     modes: PopupModes,
-    resources: &PopupResources<'_>,
-    prefix_width: Option<f32>,
+    ctx: &mut ListCtx<'_>,
 ) {
     let pending_labels = modes
         .hybrid_source_pending
         .then(|| pending_log_labels(state));
     let (title, values) = primary_list_values(state, modes, pending_labels.as_deref());
-    render_list(
-        ui,
-        title,
-        values,
-        resources.source_edit_rows,
-        modes.busy,
-        prefix_width,
-        action,
-    );
+    render_list(ui, title, values, ctx);
 }
 
 fn primary_list_values<'a>(
@@ -425,139 +421,87 @@ fn primary_list_values<'a>(
 fn render_mode_lists(
     ui: &mut egui::Ui,
     state: &WizardState,
-    action: &mut Option<Step2Action>,
     modes: PopupModes,
-    resources: &PopupResources<'_>,
-    prefix_width: Option<f32>,
+    ctx: &mut ListCtx<'_>,
 ) {
     if modes.exact_log {
-        render_exact_log_lists(ui, state, action, modes, resources, prefix_width);
+        render_exact_log_lists(ui, state, ctx);
     } else if modes.hybrid_missing {
-        render_hybrid_lists(ui, state, action, modes, resources, prefix_width);
+        render_hybrid_lists(ui, state, ctx);
     } else {
-        render_update_lists(ui, state, action, modes, resources, prefix_width);
+        render_update_lists(ui, state, ctx);
     }
 }
 
-fn render_exact_log_lists(
-    ui: &mut egui::Ui,
-    state: &WizardState,
-    action: &mut Option<Step2Action>,
-    modes: PopupModes,
-    resources: &PopupResources<'_>,
-    prefix_width: Option<f32>,
-) {
+fn render_exact_log_lists(ui: &mut egui::Ui, state: &WizardState, ctx: &mut ListCtx<'_>) {
     render_spaced_list(
         ui,
         "Auto Sources",
         &state.step2.update_selected_known_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_spaced_list(
         ui,
         "Manual Sources",
         &state.step2.update_selected_manual_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_spaced_list(
         ui,
         "No Source Entries",
         &state.step2.update_selected_unknown_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
 }
 
-fn render_hybrid_lists(
-    ui: &mut egui::Ui,
-    state: &WizardState,
-    action: &mut Option<Step2Action>,
-    modes: PopupModes,
-    resources: &PopupResources<'_>,
-    prefix_width: Option<f32>,
-) {
+fn render_hybrid_lists(ui: &mut egui::Ui, state: &WizardState, ctx: &mut ListCtx<'_>) {
     render_non_empty_spaced_list(
         ui,
         "Updates",
         &state.step2.update_selected_update_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_non_empty_spaced_list(
         ui,
         "Manual Sources",
         &state.step2.update_selected_manual_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_non_empty_spaced_list(
         ui,
         "No Source Entries",
         &state.step2.update_selected_unknown_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
 }
 
-fn render_update_lists(
-    ui: &mut egui::Ui,
-    state: &WizardState,
-    action: &mut Option<Step2Action>,
-    modes: PopupModes,
-    resources: &PopupResources<'_>,
-    prefix_width: Option<f32>,
-) {
+fn render_update_lists(ui: &mut egui::Ui, state: &WizardState, ctx: &mut ListCtx<'_>) {
     render_non_empty_spaced_list(
         ui,
         "Manual",
         &state.step2.update_selected_manual_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_non_empty_spaced_list(
         ui,
         "Missing",
         &state.step2.update_selected_unknown_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
 }
 
 fn render_result_lists(
     ui: &mut egui::Ui,
     state: &WizardState,
-    action: &mut Option<Step2Action>,
     modes: PopupModes,
-    resources: &PopupResources<'_>,
-    prefix_width: Option<f32>,
+    ctx: &mut ListCtx<'_>,
 ) {
     if modes.exact_log || modes.hybrid_missing {
         render_non_empty_spaced_list(
             ui,
             "Exact Version Not Available",
             &state.step2.update_selected_exact_version_failed_sources,
-            resources,
-            modes,
-            prefix_width,
-            action,
+            ctx,
         );
     }
     render_non_empty_spaced_list(
@@ -568,46 +512,31 @@ fn render_result_lists(
             "Failed"
         },
         &state.step2.update_selected_failed_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_non_empty_spaced_list(
         ui,
         "Downloaded",
         &state.step2.update_selected_downloaded_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_non_empty_spaced_list(
         ui,
         "Download Failed",
         &state.step2.update_selected_download_failed_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_non_empty_spaced_list(
         ui,
         "Extracted",
         &state.step2.update_selected_extracted_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
     render_non_empty_spaced_list(
         ui,
         "Extract Failed",
         &state.step2.update_selected_extract_failed_sources,
-        resources,
-        modes,
-        prefix_width,
-        action,
+        ctx,
     );
 }
 
@@ -615,35 +544,16 @@ fn render_non_empty_spaced_list(
     ui: &mut egui::Ui,
     title: &str,
     values: &[String],
-    resources: &PopupResources<'_>,
-    modes: PopupModes,
-    prefix_width: Option<f32>,
-    action: &mut Option<Step2Action>,
+    ctx: &mut ListCtx<'_>,
 ) {
     if !values.is_empty() {
-        render_spaced_list(ui, title, values, resources, modes, prefix_width, action);
+        render_spaced_list(ui, title, values, ctx);
     }
 }
 
-fn render_spaced_list(
-    ui: &mut egui::Ui,
-    title: &str,
-    values: &[String],
-    resources: &PopupResources<'_>,
-    modes: PopupModes,
-    prefix_width: Option<f32>,
-    action: &mut Option<Step2Action>,
-) {
+fn render_spaced_list(ui: &mut egui::Ui, title: &str, values: &[String], ctx: &mut ListCtx<'_>) {
     ui.add_space(8.0);
-    render_list(
-        ui,
-        title,
-        values,
-        resources.source_edit_rows,
-        modes.busy,
-        prefix_width,
-        action,
-    );
+    render_list(ui, title, values, ctx);
 }
 
 fn render_footer(
@@ -652,14 +562,15 @@ fn render_footer(
     action: &mut Option<Step2Action>,
     modes: PopupModes,
     resources: &PopupResources<'_>,
+    palette: ThemePalette,
 ) {
     ui.horizontal_wrapped(|ui| {
-        render_check_button(ui, state, action, modes, resources);
-        render_add_source_button(ui, action, resources);
-        render_copy_report_button(ui, state, modes);
-        render_download_button(ui, state, action, modes);
-        render_latest_retry_button(ui, state, modes);
-        render_close_button(ui, state);
+        render_check_button(ui, state, action, modes, resources, palette);
+        render_add_source_button(ui, palette, action, resources);
+        render_copy_report_button(ui, palette, state, modes);
+        render_download_button(ui, state, action, modes, palette);
+        render_latest_retry_button(ui, palette, state, modes);
+        render_close_button(ui, palette, state);
     });
 }
 
@@ -669,13 +580,22 @@ fn render_check_button(
     action: &mut Option<Step2Action>,
     modes: PopupModes,
     resources: &PopupResources<'_>,
+    palette: ThemePalette,
 ) {
-    if ui
-        .add_enabled(
-            can_check_updates(state, modes),
-            egui::Button::new(popup_title(modes)),
-        )
-        .clicked()
+    let enabled = can_check_updates(state, modes);
+    if redesign_btn(
+        ui,
+        palette,
+        popup_title(modes),
+        BtnOpts {
+            primary: true,
+            small: true,
+            disabled: !enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && enabled
     {
         *action = Some(check_action(modes, resources));
     }
@@ -721,10 +641,22 @@ const fn check_action(modes: PopupModes, resources: &PopupResources<'_>) -> Step
 
 fn render_add_source_button(
     ui: &mut egui::Ui,
+    palette: ThemePalette,
     action: &mut Option<Step2Action>,
     resources: &PopupResources<'_>,
 ) {
-    if ui.button("Add Source").clicked() && action.is_none() {
+    if redesign_btn(
+        ui,
+        palette,
+        "Add Source",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && action.is_none()
+    {
         let (tp2, label) = add_source_target(resources)
             .unwrap_or_else(|| ("newmod".to_string(), "New Mod".to_string()));
         *action = Some(Step2Action::OpenModDownloadSourceEditor {
@@ -755,11 +687,25 @@ fn add_source_target(resources: &PopupResources<'_>) -> Option<(String, String)>
         })
 }
 
-fn render_copy_report_button(ui: &mut egui::Ui, state: &WizardState, modes: PopupModes) {
+fn render_copy_report_button(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &WizardState,
+    modes: PopupModes,
+) {
     let can_copy_report = !modes.scanned_mods || state.step2.update_selected_has_run;
-    if ui
-        .add_enabled(can_copy_report, egui::Button::new("Copy Report"))
-        .clicked()
+    if redesign_btn(
+        ui,
+        palette,
+        "Copy Report",
+        BtnOpts {
+            small: true,
+            disabled: !can_copy_report,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && can_copy_report
     {
         ui.ctx()
             .copy_text(build_popup_report(state, modes.exact_log, modes.good_to_go));
@@ -771,13 +717,22 @@ fn render_download_button(
     state: &WizardState,
     action: &mut Option<Step2Action>,
     modes: PopupModes,
+    palette: ThemePalette,
 ) {
-    if ui
-        .add_enabled(
-            can_download_updates(state),
-            egui::Button::new(download_button_label(state, modes)),
-        )
-        .clicked()
+    let enabled = can_download_updates(state);
+    if redesign_btn(
+        ui,
+        palette,
+        download_button_label(state, modes),
+        BtnOpts {
+            primary: true,
+            small: true,
+            disabled: !enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && enabled
     {
         *action = Some(Step2Action::DownloadUpdates);
     }
@@ -802,25 +757,50 @@ const fn download_button_label(state: &WizardState, modes: PopupModes) -> &'stat
     }
 }
 
-fn render_latest_retry_button(ui: &mut egui::Ui, state: &mut WizardState, modes: PopupModes) {
-    if modes.exact_log
-        && !state
+fn render_latest_retry_button(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut WizardState,
+    modes: PopupModes,
+) {
+    if !modes.exact_log
+        || state
             .step2
             .update_selected_exact_version_retry_requests
             .is_empty()
-        && ui
-            .add_enabled(
-                modes.retry_latest,
-                egui::Button::new("Use Latest For Exact-Version Misses"),
-            )
-            .clicked()
+    {
+        return;
+    }
+    let enabled = modes.retry_latest;
+    if redesign_btn(
+        ui,
+        palette,
+        "Use Latest For Exact-Version Misses",
+        BtnOpts {
+            small: true,
+            disabled: !enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && enabled
     {
         state.step2.update_selected_confirm_latest_fallback_open = true;
     }
 }
 
-fn render_close_button(ui: &mut egui::Ui, state: &mut WizardState) {
-    if ui.button("Close").clicked() {
+fn render_close_button(ui: &mut egui::Ui, palette: ThemePalette, state: &mut WizardState) {
+    if redesign_btn(
+        ui,
+        palette,
+        "Close",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked()
+    {
         state.step2.update_selected_popup_open = false;
         state.step2.update_selected_confirm_latest_fallback_open = false;
     }
@@ -830,6 +810,7 @@ fn render_latest_fallback_confirm(
     ctx: &egui::Context,
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
+    palette: ThemePalette,
 ) {
     if !state.step2.update_selected_confirm_latest_fallback_open {
         return;
@@ -852,11 +833,32 @@ fn render_latest_fallback_confirm(
             ui.label("Download latest instead for those mods only?");
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button("Yes").clicked() {
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "Yes",
+                    BtnOpts {
+                        primary: true,
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                {
                     state.step2.update_selected_confirm_latest_fallback_open = false;
                     *action = Some(Step2Action::AcceptLatestForExactVersionMisses);
                 }
-                if ui.button("No").clicked() {
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "No",
+                    BtnOpts {
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                {
                     state.step2.update_selected_confirm_latest_fallback_open = false;
                 }
             });
@@ -869,6 +871,7 @@ fn render_forks_popup(
     ctx: &egui::Context,
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
+    palette: ThemePalette,
 ) {
     if !state.step2.mod_download_forks_popup_open {
         return;
@@ -881,52 +884,108 @@ fn render_forks_popup(
         .movable(true)
         .default_size(egui::vec2(620.0, 420.0))
         .show(ctx, |ui| {
-            render_section_header(ui, &state.step2.mod_download_forks_popup_label);
-            ui.add_space(8.0);
-            if let Some(err) = state.step2.mod_download_forks_popup_error.as_ref() {
-                ui.label(err);
-                ui.add_space(8.0);
-            }
+            render_forks_popup_body(ui, state, action, palette);
+        });
+    state.step2.mod_download_forks_popup_open = open;
+}
+
+fn render_forks_popup_body(
+    ui: &mut egui::Ui,
+    state: &WizardState,
+    action: &mut Option<Step2Action>,
+    palette: ThemePalette,
+) {
+    let forks_count = state.step2.mod_download_forks.len();
+    redesign_section_header(
+        ui,
+        palette,
+        &state.step2.mod_download_forks_popup_label,
+        Some(forks_count),
+    );
+    ui.add_space(8.0);
+    if let Some(err) = state.step2.mod_download_forks_popup_error.as_ref() {
+        ui.label(err);
+        ui.add_space(8.0);
+    }
+    egui::Frame::group(ui.style())
+        .fill(redesign_shell_bg(palette))
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            redesign_border_strong(palette),
+        ))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .inner_margin(egui::Margin::same(8))
+        .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    egui::Grid::new("step2-discovered-forks")
-                        .num_columns(5)
-                        .spacing([8.0, 4.0])
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.label(crate::ui::shared::typography_global::strong("Repo"));
-                            ui.label(crate::ui::shared::typography_global::strong("Branch"));
-                            ui.label(crate::ui::shared::typography_global::strong("Updated"));
-                            ui.label("");
-                            ui.label("");
-                            ui.end_row();
-                            for fork in &state.step2.mod_download_forks {
-                                let updated_date = fork
-                                    .updated_at
-                                    .split('T')
-                                    .next()
-                                    .unwrap_or(&fork.updated_at);
-                                ui.label(&fork.full_name);
-                                ui.label(&fork.default_branch);
-                                ui.label(updated_date);
-                                if ui.button("Open").clicked() && action.is_none() {
-                                    *action =
-                                        Some(Step2Action::OpenSelectedWeb(fork.html_url.clone()));
-                                }
-                                if ui.button("Add Source").clicked() && action.is_none() {
-                                    *action = Some(Step2Action::AddDiscoveredModDownloadFork {
-                                        tp2: state.step2.mod_download_forks_popup_tp2.clone(),
-                                        label: state.step2.mod_download_forks_popup_label.clone(),
-                                        full_name: fork.full_name.clone(),
-                                        owner_login: fork.owner_login.clone(),
-                                        default_branch: fork.default_branch.clone(),
-                                    });
-                                }
-                                ui.end_row();
-                            }
-                        });
+                    render_forks_grid(ui, state, action, palette);
                 });
         });
-    state.step2.mod_download_forks_popup_open = open;
+    ui.add_space(8.0);
+}
+
+fn render_forks_grid(
+    ui: &mut egui::Ui,
+    state: &WizardState,
+    action: &mut Option<Step2Action>,
+    palette: ThemePalette,
+) {
+    egui::Grid::new("step2-discovered-forks")
+        .num_columns(5)
+        .spacing([8.0, 4.0])
+        .striped(true)
+        .show(ui, |ui| {
+            ui.label(crate::ui::shared::typography_global::strong("Repo"));
+            ui.label(crate::ui::shared::typography_global::strong("Branch"));
+            ui.label(crate::ui::shared::typography_global::strong("Updated"));
+            ui.label("");
+            ui.label("");
+            ui.end_row();
+            for fork in &state.step2.mod_download_forks {
+                let updated_date = fork
+                    .updated_at
+                    .split('T')
+                    .next()
+                    .unwrap_or(&fork.updated_at);
+                ui.label(&fork.full_name);
+                ui.label(&fork.default_branch);
+                ui.label(updated_date);
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "Open",
+                    BtnOpts {
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                    && action.is_none()
+                {
+                    *action = Some(Step2Action::OpenSelectedWeb(fork.html_url.clone()));
+                }
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "Add Source",
+                    BtnOpts {
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                    && action.is_none()
+                {
+                    *action = Some(Step2Action::AddDiscoveredModDownloadFork {
+                        tp2: state.step2.mod_download_forks_popup_tp2.clone(),
+                        label: state.step2.mod_download_forks_popup_label.clone(),
+                        full_name: fork.full_name.clone(),
+                        owner_login: fork.owner_login.clone(),
+                        default_branch: fork.default_branch.clone(),
+                    });
+                }
+                ui.end_row();
+            }
+        });
 }

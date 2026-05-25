@@ -6,9 +6,9 @@ use eframe::egui;
 use crate::registry::model::{ModlistRegistry, ModlistState};
 use crate::ui::home::modlist_card::{self, ModlistCardActions};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_I8, ThemePalette,
-    redesign_border_strong, redesign_shadow, redesign_shell_bg, redesign_success,
-    redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_shell_bg, redesign_success, redesign_text_faint, redesign_text_muted,
+    redesign_text_primary,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -54,12 +54,6 @@ fn dialog_frame(palette: ThemePalette) -> egui::Frame {
         ))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
         .inner_margin(egui::Margin::same(22))
-        .shadow(egui::epaint::Shadow {
-            offset: [REDESIGN_SHADOW_OFFSET_I8 - 1, REDESIGN_SHADOW_OFFSET_I8 - 1],
-            blur: 0,
-            spread: 0,
-            color: redesign_shadow(palette),
-        })
 }
 
 fn render_body(

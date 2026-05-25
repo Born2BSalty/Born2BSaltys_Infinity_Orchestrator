@@ -125,13 +125,18 @@ If you run BIO for the first time and want to help fix things faster, run BIO in
 ## Requirements
 
 - Runtime target: Windows/Linux/macOS.
-- For building from source: Rust stable + cargo.
 - External tools configured in Step 1:
 - mod_installer (.exe on Windows)
 - weidu (.exe on Windows)
 
 
 ## Build and Run (Source Users)
+
+Build dependencies:
+- Rust stable 1.85+ (Edition 2024) via [rustup](https://rustup.rs/).
+- JDK 11+ on PATH (ANTLR codegen for the vendored TP2 parser).
+- Windows: MSVC Build Tools with the C++ workload — `winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait"`
+- Linux: `sudo apt-get install -y libdbus-1-dev pkg-config` (keyring backend).
 
 Build:
 cargo build --release

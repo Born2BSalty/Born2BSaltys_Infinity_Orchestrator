@@ -4,12 +4,15 @@
 use eframe::egui;
 
 use crate::app::state::WizardState;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::action_step2::Step2Action;
 
 pub(super) fn render_source_editor_popup(
     ctx: &egui::Context,
     state: &mut WizardState,
     action: &mut Option<Step2Action>,
+    palette: ThemePalette,
 ) {
     if !state.step2.mod_download_source_editor_open {
         return;
@@ -39,10 +42,32 @@ pub(super) fn render_source_editor_popup(
                     .desired_rows(16),
             );
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Save").clicked() && action.is_none() {
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "Save",
+                    BtnOpts {
+                        primary: true,
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                    && action.is_none()
+                {
                     *action = Some(Step2Action::SaveModDownloadSourceEditor);
                 }
-                if ui.button("Cancel").clicked() {
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "Cancel",
+                    BtnOpts {
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                {
                     state.step2.mod_download_source_editor_open = false;
                     state.step2.mod_download_source_editor_error = None;
                 }

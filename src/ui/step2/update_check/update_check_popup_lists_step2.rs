@@ -5,6 +5,11 @@ use eframe::egui;
 
 use crate::app::mod_downloads;
 use crate::app::state::WizardState;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_section_header};
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_shell_bg,
+};
 use crate::ui::step2::action_step2::Step2Action;
 
 const UPDATE_CHECK_GRID_SPACING_X: f32 = 8.0;
@@ -21,85 +26,143 @@ impl SourceChoiceLayout {
     }
 }
 
+/// Context bundle for list rendering helpers to stay within argument-count limits.
+pub(super) struct ListCtx<'a> {
+    pub(super) palette: ThemePalette,
+    pub(super) source_edit_rows: &'a [SourceEditRow],
+    pub(super) popup_busy: bool,
+    pub(super) prefix_width: Option<f32>,
+    pub(super) action: &'a mut Option<Step2Action>,
+}
+
 pub(super) fn render_source_choices(
     ui: &mut egui::Ui,
+    palette: ThemePalette,
     source_choices: &[SourceChoiceRow],
     popup_busy: bool,
     action: &mut Option<Step2Action>,
 ) -> SourceChoiceLayout {
-    render_section_header(ui, "Source Choices");
+    let count = source_choices.len();
+    redesign_section_header(ui, palette, "Source Choices", Some(count));
+    ui.add_space(8.0);
     let layout = source_choice_layout(ui, source_choices);
-    egui::Grid::new("step2-update-source-choices")
-        .num_columns(5)
-        .spacing([UPDATE_CHECK_GRID_SPACING_X, 4.0])
-        .striped(true)
+    egui::Frame::group(ui.style())
+        .fill(redesign_shell_bg(palette))
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            redesign_border_strong(palette),
+        ))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
-            for choice in source_choices {
-                let mut selected_source_id = choice.selected_source_id.clone();
-                ui.label(&choice.label);
-                ui.add_enabled_ui(!popup_busy, |ui| {
-                    egui::ComboBox::from_id_salt(format!("step2-source-{}", choice.tp2_key))
-                        .selected_text(&choice.selected_label)
-                        .width(layout.dropdown_width)
-                        .show_ui(ui, |ui| {
-                            for option in &choice.options {
-                                ui.selectable_value(
-                                    &mut selected_source_id,
-                                    option.source_id.clone(),
-                                    &option.label,
-                                );
-                            }
-                        });
+            egui::Grid::new("step2-update-source-choices")
+                .num_columns(5)
+                .spacing([UPDATE_CHECK_GRID_SPACING_X, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    for choice in source_choices {
+                        render_source_choice_row(ui, palette, choice, popup_busy, layout, action);
+                    }
                 });
-                if ui
-                    .add_enabled(!popup_busy, egui::Button::new("Edit Source"))
-                    .clicked()
-                    && action.is_none()
-                {
-                    *action = Some(Step2Action::OpenModDownloadSourceEditor {
-                        tp2: choice.tp2_key.clone(),
-                        label: choice.label.clone(),
-                        source_id: choice.selected_source_id.clone(),
-                        allow_source_id_change: false,
-                    });
-                }
-                if ui
-                    .add_enabled(
-                        !popup_busy && choice.selected_source_url.is_some(),
-                        egui::Button::new("Open Source"),
-                    )
-                    .clicked()
-                    && action.is_none()
-                    && let Some(url) = choice.selected_source_url.as_ref()
-                {
-                    *action = Some(Step2Action::OpenSelectedWeb(url.clone()));
-                }
-                if ui
-                    .add_enabled(
-                        !popup_busy && choice.selected_source_repo.is_some(),
-                        egui::Button::new("Discover Forks"),
-                    )
-                    .clicked()
-                    && action.is_none()
-                    && let Some(repo) = choice.selected_source_repo.as_ref()
-                {
-                    *action = Some(Step2Action::DiscoverModDownloadForks {
-                        tp2: choice.tp2_key.clone(),
-                        label: choice.label.clone(),
-                        repo: repo.clone(),
-                    });
-                }
-                ui.end_row();
-
-                if selected_source_id != choice.selected_source_id && action.is_none() {
-                    *action = Some(Step2Action::SetModDownloadSource {
-                        tp2: choice.tp2_key.clone(),
-                        source_id: selected_source_id,
-                    });
-                }
-            }
         });
+    ui.add_space(8.0);
     layout
+}
+
+fn render_source_choice_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    choice: &SourceChoiceRow,
+    popup_busy: bool,
+    layout: SourceChoiceLayout,
+    action: &mut Option<Step2Action>,
+) {
+    let mut selected_source_id = choice.selected_source_id.clone();
+    ui.label(&choice.label);
+    ui.add_enabled_ui(!popup_busy, |ui| {
+        egui::ComboBox::from_id_salt(format!("step2-source-{}", choice.tp2_key))
+            .selected_text(&choice.selected_label)
+            .width(layout.dropdown_width)
+            .show_ui(ui, |ui| {
+                for option in &choice.options {
+                    ui.selectable_value(
+                        &mut selected_source_id,
+                        option.source_id.clone(),
+                        &option.label,
+                    );
+                }
+            });
+    });
+    let edit_enabled = !popup_busy;
+    if redesign_btn(
+        ui,
+        palette,
+        "Edit Source",
+        BtnOpts {
+            small: true,
+            disabled: !edit_enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && edit_enabled
+        && action.is_none()
+    {
+        *action = Some(Step2Action::OpenModDownloadSourceEditor {
+            tp2: choice.tp2_key.clone(),
+            label: choice.label.clone(),
+            source_id: choice.selected_source_id.clone(),
+            allow_source_id_change: false,
+        });
+    }
+    let open_enabled = !popup_busy && choice.selected_source_url.is_some();
+    if redesign_btn(
+        ui,
+        palette,
+        "Open Source",
+        BtnOpts {
+            small: true,
+            disabled: !open_enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && open_enabled
+        && action.is_none()
+        && let Some(url) = choice.selected_source_url.as_ref()
+    {
+        *action = Some(Step2Action::OpenSelectedWeb(url.clone()));
+    }
+    let forks_enabled = !popup_busy && choice.selected_source_repo.is_some();
+    if redesign_btn(
+        ui,
+        palette,
+        "Discover Forks",
+        BtnOpts {
+            small: true,
+            disabled: !forks_enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && forks_enabled
+        && action.is_none()
+        && let Some(repo) = choice.selected_source_repo.as_ref()
+    {
+        *action = Some(Step2Action::DiscoverModDownloadForks {
+            tp2: choice.tp2_key.clone(),
+            label: choice.label.clone(),
+            repo: repo.clone(),
+        });
+    }
+    ui.end_row();
+
+    if selected_source_id != choice.selected_source_id && action.is_none() {
+        *action = Some(Step2Action::SetModDownloadSource {
+            tp2: choice.tp2_key.clone(),
+            source_id: selected_source_id,
+        });
+    }
 }
 
 fn source_choice_layout(ui: &egui::Ui, source_choices: &[SourceChoiceRow]) -> SourceChoiceLayout {
@@ -150,81 +213,94 @@ pub(super) fn render_list(
     ui: &mut egui::Ui,
     title: &str,
     values: &[String],
-    source_edit_rows: &[SourceEditRow],
-    popup_busy: bool,
-    prefix_width: Option<f32>,
-    action: &mut Option<Step2Action>,
+    ctx: &mut ListCtx<'_>,
 ) {
-    render_section_header(ui, title);
+    let count = values.len();
+    redesign_section_header(ui, ctx.palette, title, Some(count));
+    ui.add_space(8.0);
     let add_mod = title == "No Source Entries" || title == "Missing";
-    if values.is_empty() {
-        ui.label("None");
-    } else {
-        egui::Grid::new(format!("step2-update-list-{title}"))
-            .num_columns(2)
-            .spacing([8.0, 4.0])
-            .striped(true)
-            .show(ui, |ui| {
-                let mut sorted_values = values.iter().collect::<Vec<_>>();
-                sorted_values.sort_by_key(|value| value.to_ascii_lowercase());
-                for value in sorted_values {
-                    if let Some(width) = prefix_width {
-                        ui.scope(|ui| {
-                            ui.set_min_width(width);
-                            ui.label(value);
-                        });
-                    } else {
-                        ui.label(value);
-                    }
-                    if let Some(row) = source_edit_rows
-                        .iter()
-                        .find(|row| source_edit_row_matches_value(row, value))
-                    {
-                        if ui
-                            .add_enabled(
-                                !popup_busy,
-                                egui::Button::new(if add_mod { "Add Mod" } else { "Edit Source" }),
-                            )
-                            .clicked()
-                            && action.is_none()
-                        {
-                            *action = Some(Step2Action::OpenModDownloadSourceEditor {
-                                tp2: row.tp2.clone(),
-                                label: row.label.clone(),
-                                source_id: row.source_id.clone(),
-                                allow_source_id_change: add_mod,
-                            });
-                        }
-                    } else {
-                        ui.label("");
-                    }
-                    ui.end_row();
-                }
-            });
-    }
+    egui::Frame::group(ui.style())
+        .fill(redesign_shell_bg(ctx.palette))
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            redesign_border_strong(ctx.palette),
+        ))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .inner_margin(egui::Margin::same(8))
+        .show(ui, |ui| {
+            if values.is_empty() {
+                ui.label("None");
+            } else {
+                render_list_grid(ui, title, values, add_mod, ctx);
+            }
+        });
+    ui.add_space(8.0);
 }
 
-pub(super) fn render_section_header(ui: &mut egui::Ui, title: &str) {
-    let text = crate::ui::shared::typography_global::strong(title)
-        .color(crate::ui::shared::theme_global::text_primary());
-    egui::Frame::group(ui.style())
-        .fill(crate::ui::shared::theme_global::info_fill())
-        .inner_margin(egui::Margin {
-            left: 8,
-            right: 8,
-            top: 4,
-            bottom: 4,
-        })
+fn render_list_grid(
+    ui: &mut egui::Ui,
+    title: &str,
+    values: &[String],
+    add_mod: bool,
+    ctx: &mut ListCtx<'_>,
+) {
+    egui::Grid::new(format!("step2-update-list-{title}"))
+        .num_columns(2)
+        .spacing([8.0, 4.0])
+        .striped(true)
         .show(ui, |ui| {
-            ui.label(text);
+            let mut sorted_values = values.iter().collect::<Vec<_>>();
+            sorted_values.sort_by_key(|value| value.to_ascii_lowercase());
+            for value in sorted_values {
+                if let Some(width) = ctx.prefix_width {
+                    ui.scope(|ui| {
+                        ui.set_min_width(width);
+                        ui.label(value);
+                    });
+                } else {
+                    ui.label(value);
+                }
+                if let Some(row) = ctx
+                    .source_edit_rows
+                    .iter()
+                    .find(|row| source_edit_row_matches_value(row, value))
+                {
+                    let btn_label = if add_mod { "Add Mod" } else { "Edit Source" };
+                    let btn_enabled = !ctx.popup_busy;
+                    if redesign_btn(
+                        ui,
+                        ctx.palette,
+                        btn_label,
+                        BtnOpts {
+                            small: true,
+                            disabled: !btn_enabled,
+                            ..Default::default()
+                        },
+                    )
+                    .clicked()
+                        && btn_enabled
+                        && ctx.action.is_none()
+                    {
+                        *ctx.action = Some(Step2Action::OpenModDownloadSourceEditor {
+                            tp2: row.tp2.clone(),
+                            label: row.label.clone(),
+                            source_id: row.source_id.clone(),
+                            allow_source_id_change: add_mod,
+                        });
+                    }
+                } else {
+                    ui.label("");
+                }
+                ui.end_row();
+            }
         });
 }
 
 #[derive(Debug, Clone)]
 pub(super) struct SourceEditRow {
-    tp2: String,
-    label: String,
-    source_id: String,
+    pub(super) tp2: String,
+    pub(super) label: String,
+    pub(super) source_id: String,
 }
 
 pub(super) fn collect_source_edit_rows(state: &WizardState) -> Vec<SourceEditRow> {

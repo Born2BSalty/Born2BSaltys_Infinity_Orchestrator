@@ -6,9 +6,9 @@ use eframe::egui;
 use crate::app::modlist_share::ForkAncestor;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_I8, ThemePalette,
-    redesign_accent_deep, redesign_border_strong, redesign_shadow, redesign_shell_bg,
-    redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
+    redesign_border_strong, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
+    redesign_text_primary,
 };
 
 const MAX_WIDTH_PX: f32 = 480.0;
@@ -47,13 +47,7 @@ pub(crate) fn render(
             redesign_border_strong(palette),
         ))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-        .inner_margin(egui::Margin::same(18))
-        .shadow(egui::epaint::Shadow {
-            offset: [REDESIGN_SHADOW_OFFSET_I8 - 1, REDESIGN_SHADOW_OFFSET_I8 - 1],
-            blur: 0,
-            spread: 0,
-            color: redesign_shadow(palette),
-        });
+        .inner_margin(egui::Margin::same(18));
 
     egui::Window::new("orchestrator_fork_info_popup")
         .id(egui::Id::new(("orchestrator_fork_info_popup", id_salt)))

@@ -15,6 +15,7 @@ Thumbs.db
 *.tmp
 *.bak
 *~
+/log.txt
 
 Push\ Github.bat
 
