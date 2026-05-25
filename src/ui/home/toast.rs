@@ -7,9 +7,8 @@ use eframe::egui;
 
 use crate::ui::home::state_home::{ToastMessage, ToastTone};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_I8,
-    ThemePalette, redesign_border_strong, redesign_pill_danger, redesign_shadow, redesign_shell_bg,
-    redesign_success,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_pill_danger, redesign_shell_bg, redesign_success,
 };
 
 pub const TOAST_TTL: Duration = Duration::from_millis(1800);
@@ -57,15 +56,6 @@ pub fn render(ctx: &egui::Context, palette: ThemePalette, toast: Option<&ToastMe
                     right: 16,
                     top: 8,
                     bottom: 8,
-                })
-                .shadow(egui::epaint::Shadow {
-                    offset: [
-                        REDESIGN_SHADOW_OFFSET_BTN_I8 + 1,
-                        REDESIGN_SHADOW_OFFSET_BTN_I8 + 1,
-                    ],
-                    blur: 0,
-                    spread: 0,
-                    color: redesign_shadow(palette),
                 });
 
             chassis.show(ui, |ui| {

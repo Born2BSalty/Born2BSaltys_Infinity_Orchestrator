@@ -74,7 +74,7 @@ pub mod compat_popup_details {
     use crate::app::state::WizardState;
     use crate::ui::shared::redesign_tokens::{
         ThemePalette, redesign_error_emphasis, redesign_text_disabled, redesign_text_muted,
-        redesign_warning_soft,
+        redesign_text_primary, redesign_warning_soft,
     };
     use crate::ui::step2::compat_popup_nav_step2::{
         COMPAT_POPUP_FILTER_OPTIONS, compat_filter_matches,
@@ -83,6 +83,10 @@ pub mod compat_popup_details {
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_kind as issue_text_kind;
     use crate::ui::step2::compat_types_step2::{CompatIssueStatusTone, display_issue};
     use crate::ui::step2::content_step2::step2_details_select::selected_details;
+
+    fn strong_text_primary(label: impl Into<String>, palette: ThemePalette) -> egui::RichText {
+        crate::ui::shared::typography_global::strong(label).color(redesign_text_primary(palette))
+    }
 
     pub fn render_details(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
         let details = selected_details(state);
@@ -99,7 +103,7 @@ pub mod compat_popup_details {
             }
             _ => base_title.to_string(),
         };
-        ui.label(crate::ui::shared::typography_global::strong(title));
+        ui.label(strong_text_primary(title, palette));
         ui.add_space(6.0);
 
         if issue.is_none() && details.compat_kind.is_none() && details.disabled_reason.is_none() {
@@ -116,7 +120,7 @@ pub mod compat_popup_details {
             && !kind.eq_ignore_ascii_case("included")
         {
             ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Status"));
+                ui.label(strong_text_primary("Status", palette));
                 let badge_color = match issue.status_tone {
                     CompatIssueStatusTone::Neutral => redesign_text_muted(palette),
                     CompatIssueStatusTone::Blocking => redesign_error_emphasis(palette),
@@ -129,7 +133,7 @@ pub mod compat_popup_details {
             });
         }
         ui.horizontal(|ui| {
-            ui.label(crate::ui::shared::typography_global::strong("Kind"));
+            ui.label(strong_text_primary("Kind", palette));
             ui.label(issue_text_kind::human_kind(kind));
         });
 
@@ -157,18 +161,16 @@ pub mod compat_popup_details {
             .or_else(|| issue.as_ref().map(|issue| issue.source.as_str()));
         if let Some(source) = source {
             ui.add_space(6.0);
-            ui.label(crate::ui::shared::typography_global::strong("Rule source"));
+            ui.label(strong_text_primary("Rule source", palette));
             ui.monospace(display_source(source));
         }
         if let Some(block) = details.compat_component_block.as_deref() {
             ui.add_space(6.0);
-            egui::CollapsingHeader::new(crate::ui::shared::typography_global::strong(
-                "Component block",
-            ))
-            .default_open(false)
-            .show(ui, |ui| {
-                ui.monospace(block);
-            });
+            egui::CollapsingHeader::new(strong_text_primary("Component block", palette))
+                .default_open(false)
+                .show(ui, |ui| {
+                    ui.monospace(block);
+                });
         }
 
         if issue.is_some() || details.compat_kind.is_some() {
@@ -192,7 +194,7 @@ pub mod compat_popup_details {
         current_kind: Option<&str>,
         palette: ThemePalette,
     ) {
-        ui.label(crate::ui::shared::typography_global::strong("Filter"));
+        ui.label(strong_text_primary("Filter", palette));
         ui.horizontal_wrapped(|ui| {
             for option in COMPAT_POPUP_FILTER_OPTIONS {
                 let is_selected = state.step2.compat_popup_filter.eq_ignore_ascii_case(option);

@@ -6,12 +6,11 @@ use eframe::egui;
 use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_shadow,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette,
 };
 
 const WARN_BORDER: egui::Color32 = egui::Color32::from_rgb(0xed, 0xc5, 0x47);
 const WARN_INK: egui::Color32 = egui::Color32::from_rgb(0xff, 0xff, 0xff);
-const SHADOW_OFFSET_PX: i8 = 2;
 fn warn_fill() -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(0xED, 0xC5, 0x47, 46)
 }
@@ -35,12 +34,6 @@ pub fn render(
             right: 14,
             top: 10,
             bottom: 10,
-        })
-        .shadow(egui::epaint::Shadow {
-            offset: [SHADOW_OFFSET_PX, SHADOW_OFFSET_PX],
-            blur: 0,
-            spread: 0,
-            color: redesign_shadow(palette),
         });
 
     frame.show(ui, |ui| {

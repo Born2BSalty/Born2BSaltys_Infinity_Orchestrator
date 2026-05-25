@@ -205,7 +205,7 @@ fn render_popups(
 ) {
     crate::ui::step2::compat_window_step2::render(ui, &mut orchestrator.wizard_state, palette);
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, &mut orchestrator.wizard_state);
-    crate::ui::step2::update_check_popup_step2::render(ctx, &mut orchestrator.wizard_state, action);
+    crate::ui::step2::update_check_popup_step2::render(ctx, &mut orchestrator.wizard_state, action, palette);
 }
 
 fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {

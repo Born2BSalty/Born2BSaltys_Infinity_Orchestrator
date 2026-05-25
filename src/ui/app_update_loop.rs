@@ -75,12 +75,22 @@ mod dispatch {
 
     pub(super) fn render_shared_popups(app: &mut WizardApp, ctx: &egui::Context) {
         let mut step1_action = None;
-        crate::ui::step1::github_auth_popup_step1::render(ctx, &mut app.state, &mut step1_action);
+        crate::ui::step1::github_auth_popup_step1::render(
+            ctx,
+            &mut app.state,
+            &mut step1_action,
+            crate::ui::shared::redesign_tokens::ThemePalette::Dark,
+        );
         if let Some(action) = step1_action {
             app.handle_step1_action(action);
         }
         let mut step2_action = None;
-        crate::ui::step2::update_check_popup_step2::render(ctx, &mut app.state, &mut step2_action);
+        crate::ui::step2::update_check_popup_step2::render(
+            ctx,
+            &mut app.state,
+            &mut step2_action,
+            crate::ui::shared::redesign_tokens::ThemePalette::Dark,
+        );
         if let Some(action) = step2_action {
             app.handle_step2_action(action);
         }
