@@ -57,7 +57,17 @@ pub(super) fn render_source_editor_popup(
                 {
                     *action = Some(Step2Action::SaveModDownloadSourceEditor);
                 }
-                if ui.button("Cancel").clicked() {
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "Cancel",
+                    BtnOpts {
+                        small: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                {
                     state.step2.mod_download_source_editor_open = false;
                     state.step2.mod_download_source_editor_error = None;
                 }
