@@ -11,7 +11,9 @@ use crate::ui::shared::redesign_tokens::{
 };
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::prompt_popup_step2::collect_step2_prompt_toolbar_entries;
-use crate::ui::step2::state_step2::{non_scan_controls_locked, review_edit_scan_complete};
+use crate::ui::step2::state_step2::{
+    applied_weidu_log_has_pending_downloads, non_scan_controls_locked, review_edit_scan_complete,
+};
 use crate::ui::step2::toolbar_actions_step2;
 use crate::ui::step2::toolbar_compat_step2::{
     active_tab_compat_summary, first_active_tab_issue_target,
@@ -101,6 +103,8 @@ impl Step2TabRowState {
         let active_tab = orchestrator.wizard_state.step2.active_game_tab.clone();
         let build_from_scanned = !orchestrator.wizard_state.step1.uses_source_weidu_logs();
         let is_scanning = orchestrator.wizard_state.step2.is_scanning;
+        let has_pending_log_downloads =
+            applied_weidu_log_has_pending_downloads(&orchestrator.wizard_state);
         let updates = updates_state(&UpdatesInput {
             mode: UpdateMode {
                 build_from_scanned,
@@ -109,8 +113,9 @@ impl Step2TabRowState {
             scan: UpdateScan {
                 reviewed: reviewed_scan,
                 completed: has_completed_scan,
-                is_scanning,
+                has_pending_log_downloads,
             },
+            activity: ScanActivity::from_is_scanning(is_scanning),
         });
 
         Self {
@@ -209,6 +214,7 @@ fn scratch_workspace_has_mods_folder(orchestrator: &OrchestratorApp) -> bool {
 struct UpdatesInput {
     mode: UpdateMode,
     scan: UpdateScan,
+    activity: ScanActivity,
 }
 
 struct UpdateMode {
@@ -219,25 +225,115 @@ struct UpdateMode {
 struct UpdateScan {
     reviewed: bool,
     completed: bool,
-    is_scanning: bool,
+    has_pending_log_downloads: bool,
+}
+
+#[derive(Clone, Copy)]
+enum ScanActivity {
+    Idle,
+    Scanning,
+}
+
+impl ScanActivity {
+    const fn from_is_scanning(is_scanning: bool) -> Self {
+        if is_scanning {
+            Self::Scanning
+        } else {
+            Self::Idle
+        }
+    }
+
+    const fn allows_updates(self) -> bool {
+        matches!(self, Self::Idle)
+    }
 }
 
 const fn updates_state(input: &UpdatesInput) -> UpdatesState {
+    let log_update_context = input.scan.reviewed || input.scan.has_pending_log_downloads;
     if input.mode.build_from_scanned {
         UpdatesState {
             label: "Updates...",
-            enabled: input.scan.completed && !input.scan.is_scanning,
+            enabled: (input.scan.completed || input.scan.has_pending_log_downloads)
+                && input.activity.allows_updates(),
         }
     } else if input.mode.exact_log {
         UpdatesState {
             label: "Mod List...",
-            enabled: !input.scan.is_scanning,
+            enabled: input.activity.allows_updates(),
         }
     } else {
         UpdatesState {
             label: "Updates...",
-            enabled: input.scan.reviewed && !input.scan.is_scanning,
+            enabled: log_update_context && input.activity.allows_updates(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ScanActivity, UpdateMode, UpdateScan, UpdatesInput, updates_state};
+
+    fn review_edit_input(reviewed: bool, has_pending_log_downloads: bool) -> UpdatesInput {
+        UpdatesInput {
+            mode: UpdateMode {
+                build_from_scanned: false,
+                exact_log: false,
+            },
+            scan: UpdateScan {
+                reviewed,
+                completed: reviewed,
+                has_pending_log_downloads,
+            },
+            activity: ScanActivity::Idle,
+        }
+    }
+
+    fn scanned_input(completed: bool, has_pending_log_downloads: bool) -> UpdatesInput {
+        UpdatesInput {
+            mode: UpdateMode {
+                build_from_scanned: true,
+                exact_log: false,
+            },
+            scan: UpdateScan {
+                reviewed: false,
+                completed,
+                has_pending_log_downloads,
+            },
+            activity: ScanActivity::Idle,
+        }
+    }
+
+    #[test]
+    fn review_edit_pending_log_downloads_enable_updates() {
+        let state = updates_state(&review_edit_input(false, true));
+
+        assert_eq!(state.label, "Updates...");
+        assert!(state.enabled);
+    }
+
+    #[test]
+    fn review_edit_without_scan_or_pending_downloads_disables_updates() {
+        let state = updates_state(&review_edit_input(false, false));
+
+        assert!(!state.enabled);
+    }
+
+    #[test]
+    fn scanning_still_disables_pending_log_updates() {
+        let mut input = review_edit_input(false, true);
+        input.activity = ScanActivity::Scanning;
+
+        let state = updates_state(&input);
+
+        assert!(!state.enabled);
+    }
+
+    #[test]
+    fn scanned_mode_pending_log_downloads_enable_updates() {
+        let state = updates_state(&scanned_input(false, true));
+
+        assert_eq!(state.label, "Updates...");
+        assert!(state.enabled);
     }
 }
 

@@ -11,6 +11,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_shell_bg,
 };
 use crate::ui::step2::action_step2::Step2Action;
+use crate::ui::step2::state_step2::applied_weidu_log_has_pending_downloads;
 
 const UPDATE_CHECK_GRID_SPACING_X: f32 = 8.0;
 
@@ -409,7 +410,7 @@ pub(super) fn collect_source_choices(
             }
         }
     } else {
-        if state.step1.bootstraps_from_weidu_logs() {
+        if applied_weidu_log_has_pending_downloads(state) {
             for pending in &state.step2.log_pending_downloads {
                 let tp2_key = mod_downloads::normalize_mod_download_tp2(&pending.tp_file);
                 if !tp2_key.is_empty() && !targets.iter().any(|(key, _)| key == &tp2_key) {

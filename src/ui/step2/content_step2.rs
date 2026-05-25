@@ -12,7 +12,9 @@ use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::prompt_popup_step2::{
     collect_step2_prompt_toolbar_entries, draw_prompt_toolbar_badge,
 };
-use crate::ui::step2::state_step2::{non_scan_controls_locked, review_edit_scan_complete};
+use crate::ui::step2::state_step2::{
+    applied_weidu_log_has_pending_downloads, non_scan_controls_locked, review_edit_scan_complete,
+};
 use crate::ui::step2::toolbar_actions_step2;
 use crate::ui::step2::toolbar_compat_step2::{
     active_tab_compat_summary, draw_active_tab_issue_badge, first_active_tab_issue_target,
@@ -377,12 +379,13 @@ fn render_updates_button(
     scan: TabScanState,
 ) {
     let build_from_scanned_mods = !state.step1.uses_source_weidu_logs();
+    let has_pending_log_downloads = applied_weidu_log_has_pending_downloads(state);
     let enabled = if build_from_scanned_mods {
-        scan.has_completed_scan && !state.step2.is_scanning
+        (scan.has_completed_scan || has_pending_log_downloads) && !state.step2.is_scanning
     } else if scan.exact_log_mode {
         !state.step2.is_scanning
     } else {
-        review_edit_scan_complete(state) && !state.step2.is_scanning
+        (review_edit_scan_complete(state) || has_pending_log_downloads) && !state.step2.is_scanning
     };
     let label = if scan.exact_log_mode {
         "Mod List..."

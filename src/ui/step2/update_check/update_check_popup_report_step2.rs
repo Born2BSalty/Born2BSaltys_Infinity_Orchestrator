@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::state::WizardState;
+use crate::ui::step2::state_step2::applied_weidu_log_has_pending_downloads;
 use crate::ui::step2::update_check_popup_lists_step2::pending_log_labels;
 
 #[derive(Clone, Copy)]
@@ -43,11 +44,12 @@ pub(super) fn build_popup_report(
     lines.join("\n")
 }
 
-fn popup_report_modes(state: &WizardState, exact_log: bool, good_to_go: bool) -> PopupReportModes {
-    let review_edit_mode = state.step1.bootstraps_from_weidu_logs();
-    let has_pending_missing_mods =
-        review_edit_mode && !state.step2.log_pending_downloads.is_empty();
-    let hybrid_missing_mode = review_edit_mode && has_pending_missing_mods;
+const fn popup_report_modes(
+    state: &WizardState,
+    exact_log: bool,
+    good_to_go: bool,
+) -> PopupReportModes {
+    let hybrid_missing_mode = applied_weidu_log_has_pending_downloads(state);
     PopupReportModes {
         exact_log,
         good_to_go,
