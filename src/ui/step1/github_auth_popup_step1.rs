@@ -63,6 +63,7 @@ pub fn render(
                         "Open GitHub",
                         BtnOpts {
                             primary: true,
+                            small: true,
                             ..Default::default()
                         },
                     )

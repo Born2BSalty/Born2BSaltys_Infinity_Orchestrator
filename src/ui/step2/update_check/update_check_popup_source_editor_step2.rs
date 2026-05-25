@@ -48,6 +48,7 @@ pub(super) fn render_source_editor_popup(
                     "Save",
                     BtnOpts {
                         primary: true,
+                        small: true,
                         ..Default::default()
                     },
                 )

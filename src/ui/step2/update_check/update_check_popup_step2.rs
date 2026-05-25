@@ -125,6 +125,9 @@ fn render_main_popup(
     open: &mut bool,
     palette: ThemePalette,
 ) {
+    let screen = ctx.input(|i| i.screen_rect);
+    let max_w = (screen.width() - 40.0).max(360.0);
+    let max_h = (screen.height() - 80.0).max(220.0);
     egui::Window::new(popup_title(modes))
         .open(open)
         .collapsible(true)
@@ -133,6 +136,8 @@ fn render_main_popup(
         .default_size(egui::vec2(560.0, 320.0))
         .min_width(320.0)
         .min_height(180.0)
+        .max_width(max_w)
+        .max_height(max_h)
         .show(ctx, |ui| {
             render_popup_body(ui, state, action, modes, resources, palette);
         });
@@ -688,6 +693,7 @@ fn render_check_button(
         popup_title(modes),
         BtnOpts {
             primary: true,
+            small: true,
             disabled: !enabled,
             ..Default::default()
         },
@@ -798,6 +804,7 @@ fn render_download_button(
         download_button_label(state, modes),
         BtnOpts {
             primary: true,
+            small: true,
             disabled: !enabled,
             ..Default::default()
         },
@@ -885,6 +892,7 @@ fn render_latest_fallback_confirm(
                     "Yes",
                     BtnOpts {
                         primary: true,
+                        small: true,
                         ..Default::default()
                     },
                 )
