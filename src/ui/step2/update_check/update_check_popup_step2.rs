@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::app::mod_downloads;
 use crate::app::state::{WizardState, exact_log_ready_to_install, update_selection_signature};
-use crate::ui::orchestrator::widgets::apply_primary_button_visuals;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::review_edit_any_log_applied;
@@ -681,18 +681,22 @@ fn render_check_button(
     resources: &PopupResources<'_>,
     palette: ThemePalette,
 ) {
-    ui.scope(|ui| {
-        apply_primary_button_visuals(ui, palette);
-        if ui
-            .add_enabled(
-                can_check_updates(state, modes),
-                egui::Button::new(popup_title(modes)),
-            )
-            .clicked()
-        {
-            *action = Some(check_action(modes, resources));
-        }
-    });
+    let enabled = can_check_updates(state, modes);
+    if redesign_btn(
+        ui,
+        palette,
+        popup_title(modes),
+        BtnOpts {
+            primary: true,
+            disabled: !enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && enabled
+    {
+        *action = Some(check_action(modes, resources));
+    }
 }
 
 fn can_check_updates(state: &WizardState, modes: PopupModes) -> bool {
@@ -787,18 +791,22 @@ fn render_download_button(
     modes: PopupModes,
     palette: ThemePalette,
 ) {
-    ui.scope(|ui| {
-        apply_primary_button_visuals(ui, palette);
-        if ui
-            .add_enabled(
-                can_download_updates(state),
-                egui::Button::new(download_button_label(state, modes)),
-            )
-            .clicked()
-        {
-            *action = Some(Step2Action::DownloadUpdates);
-        }
-    });
+    let enabled = can_download_updates(state);
+    if redesign_btn(
+        ui,
+        palette,
+        download_button_label(state, modes),
+        BtnOpts {
+            primary: true,
+            disabled: !enabled,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && enabled
+    {
+        *action = Some(Step2Action::DownloadUpdates);
+    }
 }
 
 const fn can_download_updates(state: &WizardState) -> bool {
@@ -871,13 +879,20 @@ fn render_latest_fallback_confirm(
             ui.label("Download latest instead for those mods only?");
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.scope(|ui| {
-                    apply_primary_button_visuals(ui, palette);
-                    if ui.button("Yes").clicked() {
-                        state.step2.update_selected_confirm_latest_fallback_open = false;
-                        *action = Some(Step2Action::AcceptLatestForExactVersionMisses);
-                    }
-                });
+                if redesign_btn(
+                    ui,
+                    palette,
+                    "Yes",
+                    BtnOpts {
+                        primary: true,
+                        ..Default::default()
+                    },
+                )
+                .clicked()
+                {
+                    state.step2.update_selected_confirm_latest_fallback_open = false;
+                    *action = Some(Step2Action::AcceptLatestForExactVersionMisses);
+                }
                 if ui.button("No").clicked() {
                     state.step2.update_selected_confirm_latest_fallback_open = false;
                 }

@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::app::controller::util::open_in_shell;
 use crate::app::state::WizardState;
-use crate::ui::orchestrator::widgets::apply_primary_button_visuals;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step1::action_step1::Step1Action;
 
@@ -57,13 +57,16 @@ pub fn render(
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 if !state.github_auth_verification_uri.trim().is_empty() {
-                    let mut open_github_clicked = false;
-                    ui.scope(|ui| {
-                        apply_primary_button_visuals(ui, palette);
-                        if ui.button("Open GitHub").clicked() {
-                            open_github_clicked = true;
-                        }
-                    });
+                    let open_github_clicked = redesign_btn(
+                        ui,
+                        palette,
+                        "Open GitHub",
+                        BtnOpts {
+                            primary: true,
+                            ..Default::default()
+                        },
+                    )
+                    .clicked();
                     if open_github_clicked
                         && let Err(err) = open_in_shell(&state.github_auth_verification_uri)
                     {

@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use bio::ui::orchestrator::widgets::apply_primary_button_visuals;
+use bio::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{ThemePalette, redesign_text_primary};
 use bio::ui::shared::redesign_visuals;
@@ -51,12 +51,17 @@ fn render_popup_demo(ctx: &egui::Context, palette: ThemePalette) {
             ui.add_space(8.0);
 
             ui.horizontal(|ui| {
-                ui.scope(|ui| {
-                    apply_primary_button_visuals(ui, palette);
-                    let _ = ui.button("Primary Button");
-                });
-                let _ = ui.button("Secondary");
-                let _ = ui.button("Close");
+                let _ = redesign_btn(
+                    ui,
+                    palette,
+                    "Primary Button",
+                    BtnOpts {
+                        primary: true,
+                        ..Default::default()
+                    },
+                );
+                let _ = redesign_btn(ui, palette, "Secondary", BtnOpts::default());
+                let _ = redesign_btn(ui, palette, "Close", BtnOpts::default());
             });
         });
 }
