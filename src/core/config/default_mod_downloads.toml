@@ -5443,6 +5443,25 @@ pkg_macos = "mac,rar,zip"
 name = "The Artisan's Kitpack"
 tp2 = "ArtisansKitpack"
 
+[[mods]]
+name = "Artisan-HLAs"
+tp2 = "Artisans_HLAs"
+
+  [[mods.sources]]
+  id = "theartisanbg"
+  label = "TheArtisanBG"
+  type = "github"
+  url = "https://github.com/TheArtisanBG/Artisan-HLAs"
+  repo = "TheArtisanBG/Artisan-HLAs"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
   [[mods.sources]]
   id = "theartisanbg"
   label = "TheArtisanBG"
