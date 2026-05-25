@@ -6,6 +6,10 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::install_runtime::archive_store;
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
+use crate::ui::orchestrator::nav_destination::NavDestination;
+use crate::ui::orchestrator::orchestrator_app::{
+    DestinationPrepFlow, PendingInstallDestinationPrep,
+};
 use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
@@ -576,6 +580,8 @@ pub(crate) fn arm_pipeline_once(
     use crate::install_runtime::destination_prep;
     use std::sync::mpsc::TryRecvError;
 
+    let flow = install_destination_prep_flow(orchestrator);
+
     if orchestrator.install_screen_state.pipeline_flags.armed()
         || orchestrator
             .install_screen_state
@@ -585,18 +591,52 @@ pub(crate) fn arm_pipeline_once(
         return;
     }
 
-    if let Some(rx) = orchestrator.install_destination_prep_rx.as_ref() {
-        match rx.try_recv() {
+    if let Some(pending) = orchestrator.install_destination_prep_rx.as_ref() {
+        if !pending.matches_context(
+            orchestrator.destination_prep_generation,
+            flow,
+            &inputs.destination,
+            inputs.game,
+            inputs.workflow,
+            &inputs.code,
+        ) {
+            orchestrator.abandon_install_destination_prep();
+            return;
+        }
+
+        match pending.worker.rx.try_recv() {
             Ok(Ok(report)) => {
-                orchestrator.install_destination_prep_rx = None;
+                let Some(pending) = orchestrator.install_destination_prep_rx.take() else {
+                    return;
+                };
+                if !pending.matches_context(
+                    orchestrator.destination_prep_generation,
+                    flow,
+                    &inputs.destination,
+                    inputs.game,
+                    inputs.workflow,
+                    &inputs.code,
+                ) {
+                    orchestrator.complete_destination_prep_worker(pending.worker);
+                    return;
+                }
                 tracing::info!(
                     target = "orchestrator",
                     "Install screen destination prep finished: {report:?}"
                 );
-                finish_pipeline_arm_after_destination_prep(orchestrator, inputs);
+                let pending_inputs = LivePipelineInputs {
+                    destination: pending.destination.clone(),
+                    game: pending.game,
+                    workflow: pending.workflow,
+                    code: pending.code.clone(),
+                };
+                orchestrator.complete_destination_prep_worker(pending.worker);
+                finish_pipeline_arm_after_destination_prep(orchestrator, &pending_inputs);
             }
             Ok(Err(msg)) => {
-                orchestrator.install_destination_prep_rx = None;
+                if let Some(pending) = orchestrator.install_destination_prep_rx.take() {
+                    orchestrator.complete_destination_prep_worker(pending.worker);
+                }
                 set_pipeline_arm_error(orchestrator, &msg);
             }
             Err(TryRecvError::Empty) => {
@@ -604,7 +644,9 @@ pub(crate) fn arm_pipeline_once(
                     "Auto Build: preparing target destination".to_string();
             }
             Err(TryRecvError::Disconnected) => {
-                orchestrator.install_destination_prep_rx = None;
+                if let Some(pending) = orchestrator.install_destination_prep_rx.take() {
+                    orchestrator.complete_destination_prep_worker(pending.worker);
+                }
                 set_pipeline_arm_error(
                     orchestrator,
                     "destination prep failed: worker disconnected",
@@ -615,13 +657,30 @@ pub(crate) fn arm_pipeline_once(
     }
 
     let dest_path = std::path::PathBuf::from(inputs.destination.trim());
-    orchestrator.install_destination_prep_rx =
-        Some(destination_prep::spawn_prepare_destination_worker(
+    let token = orchestrator.next_destination_prep_token(flow, &inputs.destination, None);
+    orchestrator.install_destination_prep_rx = Some(PendingInstallDestinationPrep {
+        token,
+        destination: inputs.destination.clone(),
+        game: inputs.game,
+        workflow: inputs.workflow,
+        code: inputs.code.clone(),
+        worker: destination_prep::spawn_prepare_destination_worker(
             dest_path,
             orchestrator.install_screen_state.destination_choice,
-        ));
+        ),
+    });
     orchestrator.wizard_state.step2.scan_status =
         "Auto Build: preparing target destination".to_string();
+}
+
+const fn install_destination_prep_flow(
+    orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+) -> DestinationPrepFlow {
+    if matches!(orchestrator.nav, NavDestination::Create) {
+        DestinationPrepFlow::CreateForkDownload
+    } else {
+        DestinationPrepFlow::InstallPipeline
+    }
 }
 
 fn finish_pipeline_arm_after_destination_prep(

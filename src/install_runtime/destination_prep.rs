@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
+use std::thread::{self, JoinHandle};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ui::install::state_install::DestChoice;
@@ -13,6 +14,28 @@ const BACKUP_PREFIX: &str = "_bio_backup";
 
 pub type DestinationPrepResult = Result<DestinationPrepReport, String>;
 pub type DestinationPrepReceiver = Receiver<DestinationPrepResult>;
+pub type DestinationPrepJoinHandle = JoinHandle<()>;
+
+pub struct DestinationPrepWorker {
+    pub rx: DestinationPrepReceiver,
+    handle: DestinationPrepJoinHandle,
+}
+
+impl DestinationPrepWorker {
+    #[must_use]
+    pub fn into_join_handle(self) -> DestinationPrepJoinHandle {
+        self.handle
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn from_parts_for_test(
+        rx: DestinationPrepReceiver,
+        handle: DestinationPrepJoinHandle,
+    ) -> Self {
+        Self { rx, handle }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DestinationPrepReport {
@@ -95,15 +118,15 @@ pub fn prepare_destination(
 pub fn spawn_prepare_destination_worker(
     dest: PathBuf,
     choice: Option<DestChoice>,
-) -> DestinationPrepReceiver {
+) -> DestinationPrepWorker {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
+    let handle = thread::spawn(move || {
         let display = dest.display().to_string();
         let result = prepare_destination(&dest, choice)
             .map_err(|err| format!("destination prep failed for {display}: {err}"));
         let _ = tx.send(result);
     });
-    rx
+    DestinationPrepWorker { rx, handle }
 }
 
 fn count_children(dir: &Path) -> io::Result<usize> {

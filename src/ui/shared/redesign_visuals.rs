@@ -20,8 +20,7 @@ pub fn build_for(palette: ThemePalette) -> egui::Visuals {
 
     let border_strong_stroke =
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-    let text_primary_stroke =
-        egui::Stroke::new(1.0, redesign_text_primary(palette));
+    let text_primary_stroke = egui::Stroke::new(1.0, redesign_text_primary(palette));
     let corner = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
     v.override_text_color = Some(redesign_text_primary(palette));
@@ -116,13 +115,19 @@ mod tests {
     #[test]
     fn dark_visuals_widgets_active_bg_fill_matches_dark_accent() {
         let v = build_for(ThemePalette::Dark);
-        assert_eq!(v.widgets.active.bg_fill, redesign_accent(ThemePalette::Dark));
+        assert_eq!(
+            v.widgets.active.bg_fill,
+            redesign_accent(ThemePalette::Dark)
+        );
     }
 
     #[test]
     fn light_visuals_widgets_active_bg_fill_matches_light_accent() {
         let v = build_for(ThemePalette::Light);
-        assert_eq!(v.widgets.active.bg_fill, redesign_accent(ThemePalette::Light));
+        assert_eq!(
+            v.widgets.active.bg_fill,
+            redesign_accent(ThemePalette::Light)
+        );
     }
 
     #[test]

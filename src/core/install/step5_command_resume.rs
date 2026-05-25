@@ -91,14 +91,44 @@ pub(crate) fn build_resume_invocation(
         args.push(log_file);
     }
     append_common_args(config, &mut args);
-    force_skip_installed_on(&mut args);
     (installer, args)
 }
 
-fn force_skip_installed_on(args: &mut [String]) {
-    if let Some(index) = args.iter().position(|arg| arg == "--skip-installed")
-        && let Some(value) = args.get_mut(index + 1)
-    {
-        *value = "true".to_string();
+#[cfg(test)]
+mod tests {
+    use crate::app::state::ResumeTargets;
+    use crate::install::step5_command_config::{InstallCommandConfig, SafetyOptions};
+
+    use super::build_resume_invocation;
+
+    fn arg_value<'a>(args: &'a [String], key: &str) -> &'a str {
+        let index = args
+            .iter()
+            .position(|arg| arg == key)
+            .expect("arg key exists");
+        args.get(index + 1).expect("arg value exists")
+    }
+
+    #[test]
+    fn resume_invocation_keeps_skip_installed_from_config() {
+        for skip_installed in [false, true] {
+            let config = InstallCommandConfig {
+                game_install: "BGEE".to_string(),
+                safety: SafetyOptions {
+                    skip_installed,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let (_program, args) = build_resume_invocation(&config, &ResumeTargets::default());
+            let expected = if skip_installed { "true" } else { "false" };
+
+            assert_eq!(
+                arg_value(&args, "--skip-installed"),
+                expected,
+                "Resume Install must not force --skip-installed away from the user setting"
+            );
+        }
     }
 }

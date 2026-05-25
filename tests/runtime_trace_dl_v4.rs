@@ -9,13 +9,12 @@ use std::sync::mpsc::Receiver;
 
 use bio::app::state::WizardState;
 use bio::install_runtime::archive_skip_async::ArchiveSkipEvent;
-use bio::install_runtime::destination_prep::DestinationPrepReceiver;
 use bio::install_runtime::extract_parallel::ExtractAssetEvent;
 use bio::install_runtime::stream_downloader::{StreamDownloadEvent, StreamDownloadResult};
 use bio::ui::install::stage_downloading::DownloadProgress;
 use bio::ui::install::state_install::{InstallScreenState, InstallStage};
 use bio::ui::orchestrator::orchestrator_app::{
-    InstallPipelineResetSet, reset_install_pipeline_state,
+    InstallPipelineResetSet, PendingInstallDestinationPrep, reset_install_pipeline_state,
 };
 
 fn trace_path(name: &str) -> PathBuf {
@@ -110,7 +109,8 @@ fn trace_step5_fix2_3_nav_away_after_complete_resets_install_screen() {
     let mut stream: Option<Receiver<StreamDownloadEvent>> = None;
     let mut skip: Option<Receiver<ArchiveSkipEvent>> = None;
     let mut extract: Option<Receiver<ExtractAssetEvent>> = None;
-    let mut dest_prep: Option<DestinationPrepReceiver> = None;
+    let mut dest_prep: Option<PendingInstallDestinationPrep> = None;
+    let mut background_destination_prep_workers = Vec::new();
 
     let s_before = iss.stage;
     let h_before = iss.download_progress.hash_progress;
@@ -125,6 +125,7 @@ fn trace_step5_fix2_3_nav_away_after_complete_resets_install_screen() {
         archive_skip_rx: &mut skip,
         extract_parallel_rx: &mut extract,
         install_destination_prep_rx: &mut dest_prep,
+        background_destination_prep_workers: &mut background_destination_prep_workers,
         wizard_state: &mut ws,
         install_screen_state: &mut iss,
         hash_progress: &hash,

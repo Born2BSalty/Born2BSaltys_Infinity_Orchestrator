@@ -69,7 +69,12 @@ pub fn render_github_popup_if_open(orchestrator: &mut OrchestratorApp, ctx: &egu
         return;
     }
     let mut action: Option<Step1Action> = None;
-    github_auth_popup_step1::render(ctx, &mut orchestrator.wizard_state, &mut action, orchestrator.theme_palette);
+    github_auth_popup_step1::render(
+        ctx,
+        &mut orchestrator.wizard_state,
+        &mut action,
+        orchestrator.theme_palette,
+    );
 
     if let Some(act) = action {
         match act {

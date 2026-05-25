@@ -25,7 +25,9 @@ use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::confirm_delete;
 use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::nav_destination::NavDestination;
-use crate::ui::orchestrator::orchestrator_app::{OrchestratorApp, PendingCreateStart};
+use crate::ui::orchestrator::orchestrator_app::{
+    DestinationPrepFlow, OrchestratorApp, PendingCreateStart,
+};
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
@@ -279,11 +281,17 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
 
     let choice = orchestrator.create_screen_state.destination_choice;
     if destination_choice_requires_worker(choice) {
+        let token = orchestrator.next_destination_prep_token(
+            DestinationPrepFlow::CreateScratch,
+            &dest,
+            None,
+        );
         orchestrator.create_destination_prep_rx = Some(PendingCreateStart {
+            token,
             name,
             destination: dest.clone(),
             game,
-            rx: destination_prep::spawn_prepare_destination_worker(PathBuf::from(dest), choice),
+            worker: destination_prep::spawn_prepare_destination_worker(PathBuf::from(dest), choice),
         });
         return;
     }
@@ -292,20 +300,31 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
 }
 
 fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
+    let is_current = orchestrator
+        .create_destination_prep_rx
+        .as_ref()
+        .is_some_and(|pending| pending_create_matches_current(orchestrator, pending));
+    if !is_current {
+        orchestrator.abandon_create_destination_prep();
+        return;
+    }
+
     let result = match orchestrator.create_destination_prep_rx.as_ref() {
-        Some(pending) => pending.rx.try_recv(),
+        Some(pending) => pending.worker.rx.try_recv(),
         None => return,
     };
 
     match result {
         Ok(Ok(_report)) => {
             if let Some(pending) = orchestrator.create_destination_prep_rx.take() {
-                finish_start_scratch(
-                    orchestrator,
-                    &pending.name,
-                    pending.game,
-                    &pending.destination,
-                );
+                let still_current = pending_create_matches_current(orchestrator, &pending);
+                let name = pending.name.clone();
+                let game = pending.game;
+                let destination = pending.destination.clone();
+                orchestrator.complete_destination_prep_worker(pending.worker);
+                if still_current {
+                    finish_start_scratch(orchestrator, &name, game, &destination);
+                }
             }
         }
         Ok(Err(err)) => {
@@ -317,6 +336,7 @@ fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
                     pending.destination,
                     pending.name
                 );
+                orchestrator.complete_destination_prep_worker(pending.worker);
             } else {
                 warn!(
                     target = "orchestrator",
@@ -332,6 +352,7 @@ fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
                     target = "orchestrator",
                     "Create: destination prep worker disconnected for {}", pending.destination
                 );
+                orchestrator.complete_destination_prep_worker(pending.worker);
             } else {
                 warn!(
                     target = "orchestrator",
@@ -340,6 +361,37 @@ fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
             }
         }
     }
+}
+
+fn pending_create_matches_current(
+    orchestrator: &OrchestratorApp,
+    pending: &PendingCreateStart,
+) -> bool {
+    if !matches!(orchestrator.nav, NavDestination::Create)
+        || orchestrator.create_screen_state.stage != CreateStage::Choose
+    {
+        return false;
+    }
+
+    let name = orchestrator.create_screen_state.modlist_name.trim();
+    if name != pending.name {
+        return false;
+    }
+    let destination = {
+        let d = orchestrator.create_screen_state.destination.trim();
+        if d.is_empty() {
+            default_destination(name)
+        } else {
+            d.to_string()
+        }
+    };
+
+    pending.token.matches_context(
+        orchestrator.destination_prep_generation,
+        DestinationPrepFlow::CreateScratch,
+        &destination,
+        None,
+    ) && pending.game == orchestrator.create_screen_state.game
 }
 
 fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Game, dest: &str) {
