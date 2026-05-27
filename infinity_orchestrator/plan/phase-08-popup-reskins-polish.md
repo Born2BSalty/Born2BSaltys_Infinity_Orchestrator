@@ -347,6 +347,215 @@ Two-PR split: Part A = T14.1 + T14.2 + T14.3 (foundation — in-memory + on-disk
 - **Per-frame palette propagation.** Phase 1 P1.T2's "no global theme value" rule means every render function on the carve-out path gains a `palette: ThemePalette` parameter. This is a wide-but-shallow signature change — many files, one new arg each. The orchestrator's frame entry (`OrchestratorApp::update`) reads `self.theme_palette` and threads it through `workspace_step_router::render(ui, self, palette)` → `page_stepN::render(ui, &mut state, dev_mode, exe_fingerprint, palette)` → all sub-renderers. The `palette: ThemePalette` add is the only signature change per BIO function; otherwise functions stay byte-identical.
 - **Carve-out #6 cliff edge.** A few sites read `ui.visuals().widgets.*` or `ui.visuals().text_color()` instead of a `theme_global::*` accessor (e.g., `tree_component_row_step2.rs::render_filter_row` lines 195-203 use `visuals.widgets.active.bg_fill` / `bg_stroke`). These are **already palette-driven** because Phase 1 P1.T2's per-frame palette application writes the redesign palette into `egui::Context::style_mut()` at the start of every frame. So they automatically pick up redesign colors without any source change. The carve-out #6 scope is strictly about explicit `theme_global::*()` accessor calls — anything reading egui's runtime style is already covered.
 
+## P8.T15 — Step 3 list-body wireframe fidelity (Item 2)
+
+### Background and constraint
+
+The Step-3 list body is currently rendered by BIO's `list_step3::render` → `list_rows_step3::render_rows`, called from the orchestrator's net-new chrome at `workspace_step3.rs:65`. The existing P8.T5 task (carve-out #6) addresses color-token swaps only. This task addresses the remaining visual gaps between the rendered list body and the wireframe `ComponentsPanel` (`screens.jsx:3057–3172`).
+
+**Hard constraint (no exceptions):** no modification to drag/reorder logic, undo/redo stack, block-selection rules, locked/collapsed block sets, the `Step3ItemState` struct (`src/core/app/state/state_step3.rs`), the per-modlist `workspace.json` schema, or any service function that mutates state. All changes are render-side only.
+
+### Q1 — Reusability audit of BIO services
+
+All four `pub(crate)` functions in `service_drag_ops_step3.rs` (re-exported via `service_step3::drag_ops`) are reachable from orchestrator-owned code under carve-out #3's `pub(crate)` reachability:
+
+| Function | Reachable? | Notes |
+|---|---|---|
+| `finalize_on_release` (`service_drag_ops_step3.rs:46`) | YES | Takes `DragFinalizeContext`, all fields `pub(crate)` |
+| `draw_insert_marker` (`service_drag_ops_step3.rs:93`) | YES | Takes `&egui::Ui` + plain slices |
+| `update_drag_target_from_pointer` (`service_drag_ops_step3.rs:125`) | YES | Takes `DragPointerContext`, all fields `pub(crate)` |
+| `apply_live_reorder` (`service_drag_ops_step3.rs:167`) | YES | Takes `LiveReorderContext`, all fields `pub(crate)` |
+| `block_selection_step3::single_child_main_parent_block_indices` (line 9) | YES | `pub(crate)` |
+| `block_selection_step3::selected_full_main_parent_block_indices` (line 25) | YES | `pub(crate)` |
+| `service_component_uncheck_step3::apply_component_unchecks` (line 6) | YES | `pub(crate)` |
+| `service_prompt_actions_step3::apply_prompt_actions` (line 9) | YES | `pub(crate)` |
+| `service_prompt_actions_step3::render` (line 13) | YES | `pub(crate)` |
+| `service_step3::apply_row_selection` (`service_step3.rs:7`) | YES | `pub fn` |
+
+No visibility flips are needed. All functions the sibling renderer requires to delegate behavior are already reachable.
+
+### Q2 — Inline render-side mutations in `list_rows_step3.rs`
+
+The following mutations happen inside `list_rows_step3.rs` without going through a service function, and a sibling must replicate them:
+
+| Location | Mutation | Egui response point | Drift risk / note |
+|---|---|---|---|
+| `update_locked_blocks` (`list_rows_step3.rs:165-173`) | Toggles `locked_blocks` vec | `.clicked()` on lock-icon small-button | Low: two-line vec mutate; trivial to replicate |
+| `render_parent_toggle` (`list_rows_step3.rs:175-198`) | Pushes/retains `collapsed_blocks` | `CollapsingState::show_toggle_button` toggle | Low: pure egui CollapsingState dance; pattern stable |
+| `handle_drag_start:update_drag_indices` (`list_rows_step3.rs:440-458`) | Writes `drag_from`, `drag_indices`, `selected`, clears them on locked | `.drag_started()` on `drag_response` | Medium: logic references `selected_full_main_parent_block_indices` + `single_child_main_parent_block_indices` + `blocks::block_indices` — all reachable; replicate exactly |
+| `handle_drag_start:update_drag_grab_geometry` (`list_rows_step3.rs:461-477`) | Writes `drag_grab_offset`, `drag_grab_pos_in_block`, `drag_row_h` | `.drag_started()` on `drag_response` | Low: pure geometric computation off `visible_rows` |
+| `handle_drag_start` (`list_rows_step3.rs:436-438`) | Sets `last_insert_at = None`, `drag_over = Some(idx + 1)` | `.drag_started()` | Low: two-line init |
+| `render_parent_context_menu` (`list_rows_step3.rs:327-338`) | Calls `step3_history::push_undo_snapshot` + `blocks::clone_parent_empty_block` | `.context_menu` > button `.clicked()` | Low: delegated to `pub(crate)` helpers; replicate the two-line call |
+| `handle_row_selection` (`list_rows_step3.rs:397-414`) | Delegates to `service_step3::apply_row_selection` | `.clicked()` on label or drag response | No inline mutation; already a service call |
+| `handle_jump_to_selected` (`list_rows_step3.rs:385-395`) | Calls `ui.scroll_to_rect` + clears `jump_to_selected_requested` | per-row, after push to `visible_rows` | Low: scroll helper; replicate two-line guard |
+
+No mutation requires a new carve-out or additive helper extraction. All are short-enough to replicate with zero drift risk given the hard constraint that their logic is not touched.
+
+### Q3 — Drag orchestration sequence (contract for the sibling)
+
+Per-frame sequence for a drag cycle, derived from `list_rows_step3.rs` + `list_step3.rs`:
+
+1. **Setup** (`list_step3.rs:94-140`): `state_step3::active_list_mut(state)` extracts all drag/selection state as mutable refs; `blocks::visible_indices` computes which rows are visible given `collapsed_blocks`.
+2. **Row render loop** (`list_rows_step3.rs:53-58`): for each visible index, call `render_row` — renders the label, detects drag-start, detects click-selection.
+   - **Inside each row** (`list_rows_step3.rs:98-112`): `render_row_label` (paint visual) → `ui.interact` on label rect with `Sense::click_and_drag()` → `render_row_context_menu` → push to `visible_rows` → `handle_jump_to_selected` → `handle_row_selection` → `handle_drag_start`.
+   - **handle_drag_start** (fires when `drag_response.drag_started()`): locks check → `push_undo_snapshot` → write `drag_from` → `update_drag_indices` → `update_drag_grab_geometry` → clear `last_insert_at` → set `drag_over = Some(idx + 1)`.
+3. **Post-loop drag pipeline** (`list_step3.rs:141-155`): after `render_rows` returns `row_outcome`:
+   - `update_drag_target_from_pointer(ui, &mut pointer_ctx)` — reads pointer position, recomputes `drag_over`.
+   - `draw_insert_marker(ui, items, drag_active, drag_over, visible_rows)` — paints the 2px teal drop-line.
+   - `apply_live_reorder(ui, &mut reorder_ctx)` — if pointer still down and `drag_over` changed, splices `items` in-place; updates `selected` and `drag_indices` to new positions.
+   - `finalize_on_release(ui, &mut finalize_ctx)` — on pointer-release: clears drag state, calls `repair_orphan_children` + `merge_adjacent_same_mod_blocks` + `prune_empty_parent_blocks`; rebuilds `selected` from key-stable IDs.
+4. **Outcome application** (`list_step3.rs:223-257`): compat/prompt popup open requests + uncheck requests + prompt action requests are flushed to state.
+
+The sibling must replicate steps 2-3 in its own row renderer; step 4 is identical (`apply_row_outcome` is a standalone function the sibling can call or inline).
+
+### Q4 — Visual fidelity gap (wireframe vs. current render)
+
+Gaps between `ComponentsPanel` (`screens.jsx:3057–3172`) and the current list render:
+
+| Element | Wireframe value (`screens.jsx`) | Current render | Gap |
+|---|---|---|---|
+| List-body box | `<Box style={{ padding: 10, ... }}>` (line 3057) | `ui.group(...)` in `list_step3.rs:20` | Box uses `ui.group` (BIO frame style); wireframe uses redesign Box chrome with `padding: 10` + `border: 1.5px solid border-strong` + 6px corner radius |
+| Mod-header row bg | `background: "var(--rail-bg)"` (line 3101) | `ui.selectable_label` default BIO theme | No `rail-bg` fill on parent rows |
+| Mod-header border | `border: "1px dashed #b9b09a"` (line 3102) | No border | Missing dashed border |
+| Mod-header font | `fontSize: 13, fontWeight: 500` (line 3104) | `typography_global::strong(title)` | Matches (strong = weight 500); size may differ |
+| Lock glyph | `🔒` emoji (line 3111) | `strong("🔒").color(theme::warning())` (list_rows_step3.rs:141-143) | Color swap done in P8.T5; glyph already present |
+| Chevron glyph | `🔗 ▾` / `🔗 ▸` (line 3116) | egui `CollapsingState` toggle button (default icon) | Missing `🔗` link glyph; wireframe uses `🔗` prefix before the expand/collapse chevron |
+| Mod-name + suffix | `g.modName + <faint>(copy)</faint>` (line 3117) | `parent_row_title` emits "(split target)" / "(split target 2)" for `parent_placeholder` rows (`list_rows_step3.rs:200-216`) | **No gap — sibling renders `parent_row_title`'s output verbatim. Wireframe's "(copy)" is mock text; "(split target)" is the canonical wording (USER 2026-05-27).** |
+| Component count + version | `({g.items.length}) v{g.version}` (line 3118-3119) | `({child_count})` only; no version (list_rows_step3.rs:208-213) | Version string missing from parent header |
+| Child-row indent | `paddingLeft: 18` (line 3142) | `ui.add_space(25.0)` (list_rows_step3.rs:231) | 25px vs 18px wireframe intent — tune empirically |
+| Child-row separator | `borderBottom: "1px dashed var(--border-dashed-light)"` (line 3146) | None | Missing per-row dashed bottom separator |
+| Drag handle `≡` | `≡` glyph, `color: text-faint`, `fontSize: 16` (line 3152) | None | Missing drag-handle glyph on child rows |
+| Order number | Right-aligned, faint, monospace, `fontSize: 11` (line 3153-3159) | None | Missing line-number column on child rows (Step 4 has it via `weidu_line.rs`; Step 3 does not) |
+| Inline compat/prompt pills | After WeiDU line (lines 3161-3163) | Present (`render_compat_marker_pill`, `render_prompt_pill`) | Already implemented; color-token gap closed by P8.T5 |
+| Drop-line indicator | `height: 2, background: accent, borderRadius: 1` (line 3009) | `draw_insert_marker` uses `ui.painter().line_segment` 1.5px (service_drag_ops_step3.rs:117-122) | Functionally equivalent; minor style difference (line vs. filled rect) |
+
+**Step 4 visual gaps (Q7 cross-reference):** `step4_review_list.rs` already renders a redesign Box with `border-strong` + corner radius + inner `ScrollArea`. Line numbers use `weidu_line::render_weidu_line` with FiraCode monospace right-aligned. Three-hue WeiDU coloring is in `weidu_line.rs`. This matches the wireframe `OrderPanel` (`screens.jsx:3199-3222`) closely. Gaps are minor (see Q7).
+
+### Q5 — Architectural options
+
+#### Option A — Net-new sibling renderer at `src/ui/workspace/step3/step3_list_body.rs`
+
+The sibling:
+- Reads state via `state_step3::active_list_mut` (already `pub`).
+- Calls `blocks::visible_indices` (already `pub(crate)` reachable).
+- Renders mod-header rows (`render_header_row`) with rail-bg fill, dashed border, `🔒` lock button, `🔗 ▾/▸` chevron, mod-name + copy-suffix + count + version.
+- Renders child rows (`render_child_row`) with 18px indent, `≡` drag handle, order-number column (reusing `weidu_line::lineno_column_width` pattern), WeiDU-styled text (delegating to `format_step3::format_step3_item` + `format_step3::weidu_colored_widget_text`), and compat/prompt pills (`render_compat_marker_pill` / `render_prompt_pill` shapes, calling `compat_colors` from `tree_compat_display_step2.rs` with `palette`).
+- Detects drag-start and fires inline mutations (Q2 table) exactly as `list_rows_step3.rs` does.
+- After the row loop, calls the four `service_drag_ops_step3` entry points in the same sequence as `list_step3.rs:run_drag_pipeline` (Q3).
+- Returns a `RowRenderOutcome`-equivalent (or reuses that struct) so `apply_row_outcome` can be called identically.
+- Called from `workspace_step3.rs` in place of `list_step3::render`; BIO's `list_step3::render` → `list_rows_step3::render_rows` remains untouched and continues to serve the legacy `BIO` binary.
+
+**File inventory:**
+- New: `src/ui/workspace/step3/step3_list_body.rs` (~300 lines: `render_header_row` + `render_child_row` + drag orchestration + pill rendering)
+- Modified (orchestrator-owned): `src/ui/workspace/step3/workspace_step3.rs` — replace `list_step3::render(...)` call (line 65) with `step3_list_body::render(...)`. One line change in an orchestrator-owned file; no carve-out needed.
+- `src/ui/workspace/step3/mod.rs` — additive `pub mod step3_list_body;` line.
+
+**Risk register:**
+1. **Drag-orchestration sequence drift** — the sibling's inline mutations (Q2 table) and service-call sequence (Q3) must mirror `list_rows_step3.rs` exactly. A missed step silently breaks drag behavior. Mitigation: the sequence is fully documented in Q3; the manual-test script (Q10) covers every drag scenario explicitly.
+2. **`blocks::` helper visibility** — `blocks::visible_indices`, `blocks::block_indices`, `blocks::count_children_in_block`, `blocks::clone_parent_empty_block`, `blocks::repair_orphan_children`, `blocks::merge_adjacent_same_mod_blocks`, `blocks::prune_empty_parent_blocks`, `blocks::step3_item_key` are all in `src/ui/step3/blocks.rs`. Verify each is `pub(crate)` before the implementation run; if any is `pub(super)` only, a narrow visibility-widening (carve-out #7 pattern) is required — escalate as `PLAN GAP` at that point.
+3. **`RowRenderOutcome` / `RowRenderContext` reuse** — the sibling may return its own equivalent struct or reuse `RowRenderOutcome` directly (it's `pub(crate)`). Either is fine; the implementation decides based on which shape fits the sibling's row loop.
+4. **Version-string availability** — the wireframe shows `v{g.version}` on the mod-header row. `Step3ItemState` (`src/core/app/state/state_step3.rs`) must have a `version` or equivalent field. Verify before implementation; if absent, omit the version string (the wireframe's version display may be a static mock) — do not add a field to `Step3ItemState` (hard constraint).
+
+**Constraint compliance:** the sibling is a new file in the orchestrator namespace. It calls BIO service functions read-only for behavior. The hard constraint (no reorder/undo/lock/state-struct changes) is enforced by the filesystem — the sibling cannot modify `list_rows_step3.rs` or any state struct.
+
+**Cross-binary impact:** none. BIO's `list_rows_step3.rs` is untouched; the legacy `BIO` binary continues to call `content_step3::render` (which calls `list_step3::render` → `list_rows_step3::render_rows`). The orchestrator binary's Step 3 body switches to the sibling.
+
+**Rollback cost:** edit one new file (`step3_list_body.rs`) + restore one line in `workspace_step3.rs`. Low.
+
+#### Option B — Carve-out #11 in-place rewrite of `list_rows_step3.rs`
+
+A new SPEC §1 carve-out #11 would authorize rewriting the render-function bodies in `list_rows_step3.rs` — specifically `render_parent_label` and `render_child_label` — while preserving all function signatures, all inline state mutations (Q2 table), and all service-call invocations unchanged.
+
+**File inventory:**
+- Modified (BIO source under carve-out #11): `src/ui/step3/list_rows_step3.rs` — bodies of `render_parent_label` (~37 lines) and `render_child_label` (~28 lines) rewritten; everything else (`handle_drag_start`, `handle_row_selection`, `update_drag_indices`, `update_drag_grab_geometry`, `update_locked_blocks`, `render_parent_toggle`, `render_parent_context_menu`, `render_child_context_menu`) verbatim.
+- No new files; no mod.rs additions.
+
+**Risk register:**
+1. **Enforcement mechanism** — the boundary between "render-function body" and "inline mutation" is enforced by agent vigilance and reviewer inspection only. There is no filesystem separation. A carve-out that says "rewrite lines A-B but not lines C-D in the same file" is inherently fragile under agent drift. The Q2 inline-mutation sites are interspersed in `render_row` (`list_rows_step3.rs:98-112`) with the render calls — the separation is by code intent, not file structure.
+2. **Cross-binary blast radius** — `list_rows_step3.rs` is shared. The legacy `BIO` binary's Step 3 view also changes visually. This may be desired (consistent look between BIO and orchestrator on this surface) or may violate the intent of the CRITICAL DIRECTIVE's "BIO behavior stays identical" rule. The CRITICAL DIRECTIVE states "no functionally modify" — a visual-only change inside a render function is arguable, but the safest interpretation is that the BIO binary should remain visually unaffected unless a carve-out explicitly authorizes cross-binary visual change on that file.
+3. **Future iteration cost** — if the wireframe target changes, the implementer edits `list_rows_step3.rs` (BIO source), which requires a carve-out authorization each time.
+
+**Constraint compliance:** the carve-out's authorized-edit-pattern section would enumerate the two function bodies; the inline mutations (Q2 table) are annotated as "verbatim — do not touch." Agent vigilance is the sole enforcement.
+
+**Cross-binary impact:** yes. Both `BIO` and `infinity_orchestrator` binaries show the new visual. Whether that is desired is a user decision not yet made.
+
+**Rollback cost:** re-edit `list_rows_step3.rs` to revert the two function bodies. Medium (touching BIO source triggers extra scrutiny).
+
+### Q6 — Recommendation
+
+**Recommend Option A** (net-new sibling at `src/ui/workspace/step3/step3_list_body.rs`).
+
+Rationale:
+1. **Constraint compliance is a filesystem property, not a vigilance property.** The hard constraint ("do not modify reordering logic") is unambiguous with Option A — the sibling file literally cannot mutate `list_rows_step3.rs`. With Option B the enforcement is by annotation and inspection in the same file.
+2. **The inline-mutation surface is well-understood and low-drift.** The Q2 table shows eight sites; all are short (<10 lines each) and delegate to reachable service helpers. The drift risk of faithfully reimplementing them is low, and the Q3 sequence documentation makes the contract explicit.
+3. **Cross-binary isolation.** The legacy `BIO` binary's Step 3 continues to render in its current form, unaffected. Option B changes it too — and that cross-binary visual change has not been authorized by the user.
+4. **The sibling's row-render surface (~300 lines) is not disproportionate.** The concern that "sibling re-implementation would carry serious drift risk" (from the decision order) applies when the reimplemented behavior is complex business logic. Here the sibling reimplements visual layout, not logic; logic is delegated to the same service functions via `pub(crate)` calls.
+
+The recommendation assumes the `blocks::*` helpers referenced in risk item 2 are `pub(crate)`. The implementation agent must verify this before writing code and escalate as `PLAN GAP` if any need a visibility-widening carve-out.
+
+### Decisions locked during planning review (USER 2026-05-27)
+
+1. **Recommend Option A — net-new sibling renderer.** Implementation proceeds against `src/ui/workspace/step3/step3_list_body.rs`.
+2. **Parent-row suffix wording: "(split target)" stays.** The Q4 table's "(copy)" vs "(split target)" entry is closed — sibling renders `parent_row_title`'s output verbatim, no override. **No SPEC §1 carve-out is implicated by this decision.** Carve-outs govern *modifications to BIO source*; orchestrator-side renderers can freely output whatever string they choose. A carve-out would only be required if the wording change were applied *inside `parent_row_title`* (a BIO function), so both binaries adopt it. Keeping the orchestrator's sibling output aligned to `parent_row_title` makes both binaries display the same text and avoids cross-binary divergence.
+
+### P8.T15 tasks
+
+#### P8.T15.1 — Version-field pre-check and `blocks::` visibility audit
+
+Before writing any render code, verify:
+- `Step3ItemState` has a field carrying a version string (field name TBD — check `src/core/app/state/state_step3.rs`). If absent, the sibling omits the `v<version>` string from the mod-header row — do not add a new field to `Step3ItemState`.
+- Every `blocks::*` function the sibling calls is `pub(crate)` (not `pub(super)`). List any that are not. If any require a visibility widening, escalate as `PLAN GAP` before proceeding.
+
+**Acceptance:** a short pre-check report (inline in the implementation agent's report) citing file:line for each `blocks::*` function's visibility and the `Step3ItemState` version field finding.
+
+#### P8.T15.2 — `step3_list_body.rs` sibling renderer
+
+Implement `src/ui/workspace/step3/step3_list_body.rs` with:
+- `pub(crate) fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, compat_markers: &HashMap<String, Step3CompatMarker>)` — the entry point called from `workspace_step3.rs`.
+- Inner helpers (all `fn`, not `pub`): `render_header_row`, `render_child_row`, `render_drag_handle`, `render_lineno`, `render_row_pills`, plus the drag-orchestration shims that mirror the Q3 sequence.
+- The scroll area, outer Box frame (redesign `border-strong` stroke + `shell-bg` fill + `REDESIGN_BORDER_RADIUS_U8` corner + `BOX_PADDING = 10.0`), and inner scroll (`ScrollArea::both`) match the wireframe.
+- Header row: `rail-bg` fill + `1px dashed border-dashed-light` border + `🔒` lock button + `🔗 ▾/▸` chevron (egui `CollapsingState` + `🔗` prefix label) + `parent_row_title` output verbatim (mod-name + faint suffix as emitted — today "(split target)" / "(split target 2)" for placeholder rows) + `(N)` count + `v<version>` (omit if field absent per T15.1).
+- Child row: 18px indent + `≡` drag handle (faint, 16px) + order-number column (`weidu_line::lineno_column_width` sizing, FiraCode, 11px, right-aligned, faint) + WeiDU-style text (via `format_step3::format_step3_item` + `weidu_colored_widget_text` with `palette`) + compat/prompt pills + `1px dashed border-dashed-light` bottom separator.
+- Drag orchestration: exact Q3 sequence using the four `service_drag_ops_step3` entry points.
+- Returns compat-popup / prompt-popup / uncheck / prompt-action requests for `apply_row_outcome`.
+
+**Acceptance:** see Q10 below.
+
+#### P8.T15.3 — Wire `workspace_step3.rs` to the sibling
+
+Replace the `list_step3::render(...)` call at `workspace_step3.rs:65` with `step3_list_body::render(...)`. Add `pub mod step3_list_body;` to `src/ui/workspace/step3/mod.rs` (additive). Remove the `list_step3` import from `workspace_step3.rs` if it becomes unused.
+
+**Acceptance:** `cargo build --bin infinity_orchestrator --release` no-op rebuild. `cargo build --bin BIO --release` unchanged.
+
+---
+
+## P8.T16 — Step 4 review list wireframe polish (Item 2)
+
+### Q7 — Step 4 wireframe fidelity gap
+
+Comparing wireframe `OrderPanel` (`screens.jsx:3176–3225`) against `workspace_step4.rs` + `step4_review_list.rs` + `step4_save_row.rs`:
+
+| Element | Wireframe | Current | Gap |
+|---|---|---|---|
+| Save button label (dual game) | `"Save weidu.log's"` (line 3183) | `"Save weidu.log's"` (`step4_save_row.rs:22`) | None |
+| Count line copy | `"{N} components ready to install on {tab} · across {M} mods"` (line 3185) | Same format (`step4_save_row.rs:50-53`) | None |
+| Tab strip (EET) | Game tabs row (line 3195-3197) | `render_game_tab_strip` (`workspace_step4.rs:77-83`) | None |
+| Box chrome | `<Box style={{ padding: 12, ... }}>` (line 3199) | `rect_filled` + `rect_stroke` with `BOX_PADDING = 12.0` (`step4_review_list.rs:27-35`, `step4_review_list.rs:14`) | None — already matches |
+| Line-number column | `minWidth: String(selected.length).length * 9 + 4, textAlign: right` (line 3205-3213) | `weidu_line::lineno_column_width` right-aligned FiraCode (`weidu_line.rs:17-20`, `step4_review_list.rs:53-54`) | None — already matches |
+| WeiDU line coloring | Three-hue: path (amber), numbers (blue), comment (green) (via `WeiduLine`) | `weidu_line::build_weidu_job` three-hue (`weidu_line.rs:68-96`) | None — already matches |
+| Line-number suffix | `{i + 1}` (no trailing `.`) (line 3216) | `n.to_string()` (no trailing `.`) (`weidu_line.rs:45`) | None |
+| Empty state | `"No components selected on {tab}."` (line 3202) | `format!("No components selected on {active_tab}.")` (`step4_review_list.rs:47`) | None |
+| `gap: 10` between items | `display: flex, alignItems: baseline, gap: 10` (line 3207) | `ui.spacing().item_spacing.x = 0.0` + explicit `add_space(LINENO_GAP_PX)` (`weidu_line.rs:32`, line 52) | `LINENO_GAP_PX = 10.0` already matches the `gap: 10`; alignment baseline vs. center is cosmetic |
+| `display: flex, alignItems: baseline` | Items aligned by text baseline | `ui.horizontal(...)` (egui centers vertically by default) | Cosmetic difference: egui horizontal aligns center, wireframe aligns baseline. Acceptable approximation — no gap to close. |
+
+**Conclusion: no meaningful visual gaps exist between the current Step 4 render and the wireframe.** The `step4_review_list.rs` implementation already matches the `OrderPanel` in every structural and visual dimension. The `weidu_line.rs` widget already handles line numbers, three-hue coloring, and faint FiraCode monospace. The `step4_save_row.rs` already has the correct button label and count-line copy.
+
+### Q8 — Step 4 task scope
+
+**No new task is needed for Step 4.** The existing implementation satisfies the wireframe. One minor polish point: `weidu_line.rs:68-70` uses hard-coded `Color32` literals for the path and numbers hues rather than `redesign_*` token calls. These are in the redesign-owned file (`src/ui/workspace/widgets/weidu_line.rs`), so they are in scope for future cleanup, but they are not a wireframe-fidelity gap — the colors match the wireframe's intent. If the palette-token sweep (P8.T1) defines `redesign_accent_path` and `redesign_accent_numbers`, the implementation agent for P8.T6 or P8.T1 should also update `weidu_line.rs` at that time. This is noted here so it is not overlooked — it is not a new P8.T16 task.
+
+---
+
 ## Deferred backlog — not yet task-scoped; do not implement here
 
 The entries below carry no `P8.T*` id yet. A future planning pass promotes each into a concrete task before any implementation.
