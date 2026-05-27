@@ -26,12 +26,12 @@ pub(crate) fn compute_phase(
         if waiting_for_input {
             return PhaseInfo {
                 label: "Waiting Input",
-                color: crate::ui::shared::redesign_tokens::redesign_accent_path(palette),
+                color: crate::ui::shared::redesign_tokens::redesign_pill_warn(palette),
             };
         }
         return PhaseInfo {
             label: "Running",
-            color: crate::ui::shared::redesign_tokens::redesign_success(palette),
+            color: crate::ui::shared::redesign_tokens::redesign_accent_numbers(palette),
         };
     }
     if state.step5.last_status_text.starts_with("Preflight")
@@ -46,7 +46,7 @@ pub(crate) fn compute_phase(
     if state.step5.has_run_once {
         return PhaseInfo {
             label: "Finished",
-            color: crate::ui::shared::redesign_tokens::redesign_text_muted(palette),
+            color: crate::ui::shared::redesign_tokens::redesign_success(palette),
         };
     }
     PhaseInfo {

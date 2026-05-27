@@ -5,8 +5,8 @@ use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_strong, redesign_shadow, redesign_shell_bg,
-    redesign_text_primary, redesign_with_alpha,
+    ThemePalette, redesign_accent, redesign_border_strong, redesign_pill_danger, redesign_shadow,
+    redesign_shell_bg, redesign_text_primary, redesign_with_alpha,
 };
 
 pub type BtnFlag = bool;
@@ -17,6 +17,8 @@ pub struct BtnOpts {
     pub small: BtnFlag,
     pub disabled: BtnFlag,
     pub block: BtnFlag,
+    /// Renders a destructive-action style: danger fill, dark text. Overrides `primary` when both are set.
+    pub danger: BtnFlag,
 }
 
 pub fn redesign_btn(
@@ -30,12 +32,14 @@ pub fn redesign_btn(
     } else {
         (16.0, 8.0, 14.0)
     };
-    let fill = if opts.primary {
+    let fill = if opts.danger {
+        redesign_pill_danger(palette)
+    } else if opts.primary {
         redesign_accent(palette)
     } else {
         redesign_shell_bg(palette)
     };
-    let text_color = if opts.primary {
+    let text_color = if opts.danger || opts.primary {
         egui::Color32::from_rgb(0x1a, 0x26, 0x38)
     } else {
         redesign_text_primary(palette)
@@ -72,7 +76,7 @@ pub fn redesign_btn(
 
         let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
-        if opts.primary {
+        if opts.primary || opts.danger {
             let shadow_rect = rect.translate(egui::vec2(
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
