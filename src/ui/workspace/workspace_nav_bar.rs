@@ -4,9 +4,10 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
+    redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
     redesign_shell_bg, redesign_text_faint, redesign_text_primary, redesign_with_alpha,
+    ThemePalette, REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX,
+    REDESIGN_SHADOW_OFFSET_BTN_PX,
 };
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 
@@ -68,29 +69,33 @@ pub fn render(
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 10.0;
-            let resp = glyph_btn(
-                ui,
-                palette,
-                GlyphSide::Trailing(ARROW_FWD),
-                "Next",
-                true,
-                is_last,
-            );
-            if !is_last && resp.clicked() {
-                outcome.next_clicked = true;
-            }
-
-            let hint = if is_last {
-                "final step".to_string()
+            if is_last {
+                ui.label(
+                    egui::RichText::new("final step")
+                        .size(14.0)
+                        .family(egui::FontFamily::Name("poppins_light".into()))
+                        .color(redesign_text_faint(palette)),
+                );
             } else {
-                format!("next: {}", current.next().map_or("", WorkspaceStep::label))
-            };
-            ui.label(
-                egui::RichText::new(hint)
-                    .size(14.0)
-                    .family(egui::FontFamily::Name("poppins_light".into()))
-                    .color(redesign_text_faint(palette)),
-            );
+                let resp = glyph_btn(
+                    ui,
+                    palette,
+                    GlyphSide::Trailing(ARROW_FWD),
+                    "Next",
+                    true,
+                    false,
+                );
+                if resp.clicked() {
+                    outcome.next_clicked = true;
+                }
+                let hint = format!("next: {}", current.next().map_or("", WorkspaceStep::label));
+                ui.label(
+                    egui::RichText::new(hint)
+                        .size(14.0)
+                        .family(egui::FontFamily::Name("poppins_light".into()))
+                        .color(redesign_text_faint(palette)),
+                );
+            }
         });
     });
 
@@ -362,7 +367,7 @@ fn button_alpha(c: egui::Color32, disabled: bool) -> egui::Color32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{GlyphButtonVisuals, pick_button_fonts};
+    use super::{pick_button_fonts, GlyphButtonVisuals};
     use crate::ui::shared::redesign_tokens::ThemePalette;
     use eframe::egui;
 

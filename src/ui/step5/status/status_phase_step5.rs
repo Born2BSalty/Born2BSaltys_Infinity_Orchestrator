@@ -31,7 +31,7 @@ pub(crate) fn compute_phase(
         }
         return PhaseInfo {
             label: "Running",
-            color: crate::ui::shared::redesign_tokens::redesign_status_running(palette),
+            color: crate::ui::shared::redesign_tokens::redesign_success(palette),
         };
     }
     if state.step5.last_status_text.starts_with("Preflight")

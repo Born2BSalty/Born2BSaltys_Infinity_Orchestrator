@@ -44,7 +44,7 @@ fn render_progress_label(ui: &mut egui::Ui, state: &WizardState, palette: ThemeP
     } else if state.step5.install_running {
         ui.label(
             crate::ui::shared::typography_global::strong("Install in progress...").color(
-                crate::ui::shared::redesign_tokens::redesign_accent_path(palette),
+                crate::ui::shared::redesign_tokens::redesign_accent(palette),
             ),
         );
         ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
