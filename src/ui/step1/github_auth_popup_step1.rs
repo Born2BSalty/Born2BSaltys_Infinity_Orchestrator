@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::app::controller::util::open_in_shell;
 use crate::app::state::WizardState;
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_window_title};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step1::action_step1::Step1Action;
 
@@ -20,7 +20,7 @@ pub fn render(
     }
 
     let mut open = state.github_auth_popup_open;
-    egui::Window::new("Connect GitHub")
+    egui::Window::new(redesign_window_title(palette, "Connect GitHub"))
         .open(&mut open)
         .collapsible(true)
         .resizable(false)

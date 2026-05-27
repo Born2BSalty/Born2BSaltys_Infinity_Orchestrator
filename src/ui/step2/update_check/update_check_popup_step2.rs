@@ -5,7 +5,9 @@ use eframe::egui;
 
 use crate::app::mod_downloads;
 use crate::app::state::{WizardState, exact_log_ready_to_install, update_selection_signature};
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_section_header};
+use crate::ui::orchestrator::widgets::{
+    BtnOpts, redesign_btn, redesign_section_header, redesign_window_title,
+};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_shell_bg,
@@ -130,7 +132,7 @@ fn render_main_popup(
     let screen = ctx.input(|i| i.screen_rect);
     let max_w = (screen.width() - 40.0).max(360.0);
     let max_h = (screen.height() - 80.0).max(220.0);
-    egui::Window::new(popup_title(modes))
+    egui::Window::new(redesign_window_title(palette, popup_title(modes)))
         .open(open)
         .collapsible(true)
         .resizable(true)
@@ -816,7 +818,7 @@ fn render_latest_fallback_confirm(
         return;
     }
     let mut confirm_open = true;
-    egui::Window::new("Download Latest Instead?")
+    egui::Window::new(redesign_window_title(palette, "Download Latest Instead?"))
         .open(&mut confirm_open)
         .collapsible(true)
         .resizable(false)
@@ -877,15 +879,25 @@ fn render_forks_popup(
         return;
     }
     let mut open = state.step2.mod_download_forks_popup_open;
-    egui::Window::new(state.step2.mod_download_forks_popup_title.clone())
-        .open(&mut open)
-        .collapsible(true)
-        .resizable(true)
-        .movable(true)
-        .default_size(egui::vec2(620.0, 420.0))
-        .show(ctx, |ui| {
-            render_forks_popup_body(ui, state, action, palette);
-        });
+    let screen = ctx.input(|i| i.screen_rect);
+    let max_w = (screen.width() - 40.0).max(360.0);
+    let max_h = (screen.height() - 80.0).max(220.0);
+    egui::Window::new(redesign_window_title(
+        palette,
+        &state.step2.mod_download_forks_popup_title,
+    ))
+    .open(&mut open)
+    .collapsible(true)
+    .resizable(true)
+    .movable(true)
+    .default_size(egui::vec2(620.0, 420.0))
+    .min_width(360.0)
+    .min_height(220.0)
+    .max_width(max_w)
+    .max_height(max_h)
+    .show(ctx, |ui| {
+        render_forks_popup_body(ui, state, action, palette);
+    });
     state.step2.mod_download_forks_popup_open = open;
 }
 
@@ -895,6 +907,7 @@ fn render_forks_popup_body(
     action: &mut Option<Step2Action>,
     palette: ThemePalette,
 ) {
+    ui.set_min_size(ui.available_size());
     let forks_count = state.step2.mod_download_forks.len();
     redesign_section_header(
         ui,
@@ -907,6 +920,8 @@ fn render_forks_popup_body(
         ui.label(err);
         ui.add_space(8.0);
     }
+    let content_height = (ui.available_height() - 48.0).max(80.0);
+    let content_width = ui.available_width();
     egui::Frame::group(ui.style())
         .fill(redesign_shell_bg(palette))
         .stroke(egui::Stroke::new(
@@ -917,12 +932,14 @@ fn render_forks_popup_body(
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
+                .auto_shrink([false, true])
+                .max_height(content_height)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(ui, |ui| {
+                    ui.set_min_width(content_width - 24.0);
                     render_forks_grid(ui, state, action, palette);
                 });
         });
-    ui.add_space(8.0);
 }
 
 fn render_forks_grid(

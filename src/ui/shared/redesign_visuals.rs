@@ -20,8 +20,7 @@ pub fn build_for(palette: ThemePalette) -> egui::Visuals {
 
     let border_strong_stroke =
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-    let text_primary_stroke =
-        egui::Stroke::new(1.0, redesign_text_primary(palette));
+    let text_primary_stroke = egui::Stroke::new(1.0, redesign_text_primary(palette));
     let corner = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
     v.override_text_color = Some(redesign_text_primary(palette));
@@ -30,6 +29,7 @@ pub fn build_for(palette: ThemePalette) -> egui::Visuals {
     v.window_stroke = border_strong_stroke;
     v.window_corner_radius = corner;
     v.window_shadow = egui::epaint::Shadow::NONE;
+    v.window_highlight_topmost = false;
     v.popup_shadow = egui::epaint::Shadow::NONE;
     v.faint_bg_color = redesign_rail_bg(palette);
     v.extreme_bg_color = redesign_input_bg(palette);
@@ -116,13 +116,19 @@ mod tests {
     #[test]
     fn dark_visuals_widgets_active_bg_fill_matches_dark_accent() {
         let v = build_for(ThemePalette::Dark);
-        assert_eq!(v.widgets.active.bg_fill, redesign_accent(ThemePalette::Dark));
+        assert_eq!(
+            v.widgets.active.bg_fill,
+            redesign_accent(ThemePalette::Dark)
+        );
     }
 
     #[test]
     fn light_visuals_widgets_active_bg_fill_matches_light_accent() {
         let v = build_for(ThemePalette::Light);
-        assert_eq!(v.widgets.active.bg_fill, redesign_accent(ThemePalette::Light));
+        assert_eq!(
+            v.widgets.active.bg_fill,
+            redesign_accent(ThemePalette::Light)
+        );
     }
 
     #[test]
@@ -153,5 +159,17 @@ mod tests {
     fn light_visuals_error_fg_color_matches_light_error() {
         let v = build_for(ThemePalette::Light);
         assert_eq!(v.error_fg_color, redesign_error(ThemePalette::Light));
+    }
+
+    #[test]
+    fn dark_visuals_window_highlight_topmost_disabled() {
+        let v = build_for(ThemePalette::Dark);
+        assert!(!v.window_highlight_topmost);
+    }
+
+    #[test]
+    fn light_visuals_window_highlight_topmost_disabled() {
+        let v = build_for(ThemePalette::Light);
+        assert!(!v.window_highlight_topmost);
     }
 }
