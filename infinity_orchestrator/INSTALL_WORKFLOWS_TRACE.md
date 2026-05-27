@@ -27,7 +27,7 @@ Read these first. Each row's "Where" links to the inline callouts below where th
 
 | # | Risk (one-line) | Severity | Where (sections) | Status |
 |---|---|---|---|---|
-| R1 | Fork install runs `prepare_destination` twice on Clear/Backup — wipes or double-archives the freshly-extracted Mods/ at Workspace Step-5 click | 🔴 Data loss | Shared/`destination_prep`, §3.1 code path, §3.2, §3.3 | Open |
+| R1 | Fork install runs `prepare_destination` twice on Clear/Backup — wipes or double-archives the freshly-extracted Mods/ at Workspace Step-5 click | 🔴 Data loss | Shared/`destination_prep`, §3.1 code path, §3.2, §3.3 | **Closed (PR #18, 2026-05-27)** |
 | R2 | `delete_modlist` orphans `%APPDATA%\bio\modlists\<id>\workspace.json` + the in-memory `workspace_state` / `workspace_stores` HashMaps | 🟠 Cleanup gap | §6 | Open |
 | R3 | Reinstall variant is computed as `Install` (not `Reinstall`) at install-start because `pending_reinstall_id` clears at `PreviewOutcome::Advance` before `register_and_write_install_start_artifacts` runs | 🟡 Fragility | §4 code path | Open — works today by coincidence |
 | R4 | Fork auto-build suppression depends on Run 4 + Run 5 patches clearing `modlist_auto_build_*` at the right moment to beat `advance_pending_saved_log_flow`'s race to `start_auto_build_install` | 🟡 Fragility | Shared/auto-build, §3 auto-build flag flow | Wired via Runs 4 and 5 |
@@ -41,7 +41,7 @@ Read these first. Each row's "Where" links to the inline callouts below where th
 | R12 | `reset_install_screen_to_paste` clears `install_screen_state.parsed_preview` at fork-route-to-workspace — works today only because the Workspace sources fork lineage from `registry.find(id).forked_from`; any future code that reads workspace lineage from `install_screen_state.parsed_preview` would silently get `None` | 🟡 Fragility | §3 code path, Open Q#5 | Open |
 | R13 | Fork install rewrites `modlist-import-code.txt` with `wizard_state`-packed code at install-start (and at clean-exit), NOT the originally-pasted parent code — easy to misread as a bug but intentional per the `forked_from` lineage append rule | 🟡 Fragility (read-misleading) | §3.1 code path | Open — by design |
 
-**Recommended next fix** (full ranking in "Recommended fix order" at end): **R1 (Data loss)** — either drop the `pending_destination_prep` persist in `mint_and_arm` or short-circuit `consume_pending_destination_prep` when `install_screen_state.pipeline_flags` show the choice was already consumed. The trace and code together show this destroys (Clear) or wastes (Backup) the fork-download every time a fork user picks Clear or Backup. Then R7 (Linux-only symlink data loss in delete), then R6 (Continue partial install). Those three are the only Data-loss-tier risks identified.
+**Recommended next fix** (full ranking in "Recommended fix order" at end): ~~**R1 (Data loss)**~~ closed by PR #18 — `mint_and_arm` now writes `pending_destination_prep: None` unconditionally; regression test pins the single-fire invariant. **R7 (Linux-only symlink data loss in delete)** is next, then **R6 (Continue partial install)**. R7 is now the only open Data-loss-tier risk.
 
 ---
 
@@ -101,7 +101,9 @@ The frame-loop drain functions (`drain_stream_download`, `drain_extract_parallel
 
 `Create → Scratch` also calls `prepare_destination` (directly, not via `arm_pipeline_once`) inside `prepare_scratch_mods_folder` *(`page_create.rs:328-343`)*, since the from-scratch path mints the modlist immediately and skips the Install screen.
 
-> ### ⚠️ R1 — Fork install runs `prepare_destination` twice on Clear/Backup 🔴
+> ### ✅ R1 — Fork install runs `prepare_destination` twice on Clear/Backup 🔴 — **CLOSED (PR #18, 2026-05-27)**
+>
+> **Status:** Closed. `fork_pipeline_arm::mint_and_arm` now writes `pending_destination_prep: None` regardless of the user's Clear/Backup choice *(`fork_pipeline_arm.rs:80-83`)* — the first fix-shape proposed below. The single-fire invariant is codified by the regression test `minted_workspace_never_persists_destination_prep_regardless_of_user_choice` *(`fork_pipeline_arm.rs:330-363`)*, which iterates every `DestChoice` variant and asserts the persisted field is `None`. The Workspace Step-5 consumer (`start_pending_destination_prep`) early-returns on `None` *(`page_workspace_step5.rs:183-185`)*, so consumer A2 is now a no-op on every fork install — the user's Clear/Backup intent is honored exactly once, at fork-download arm (consumer A1). The diagnosis below remains as forensic history.
 >
 > Fork mint persists the destination-prep choice into TWO state slots, and TWO different code sites later consume it:
 >
@@ -521,7 +523,7 @@ Workspace open *(`page_router.rs:60-131`)* loads the modlist:
 **At Step 5 Install click** (after user reviews on Workspace):
 - `consume_pending_destination_prep` *(`page_workspace_step5.rs:164-214`)* — for a fork, this is `Some(choice)` if user picked Clear/Backup on Create. It runs `destination_prep::prepare_destination(dest, Some(choice))` AGAIN at install-click time, then clears it.
 
-> See R1 callout above (Shared/`destination_prep` section). This is the SECOND consumption site (consumer A2). The Clear variant of this call wipes the fork-extracted contents; the Backup variant archives them into a second `_bio_backup_<name>_<ts>`. **Data loss / wasted download.**
+> See R1 callout above (Shared/`destination_prep` section). This is the SECOND consumption site (consumer A2). The Clear variant of this call wipes the fork-extracted contents; the Backup variant archives them into a second `_bio_backup_<name>_<ts>`. **Data loss / wasted download.** ✅ **Closed by PR #18** — `mint_and_arm` now persists `None`; this consumer early-returns and never runs the second prep.
 
 - `workflow = ShareCodeConsuming` because `!forked_from.is_empty()` *(`page_workspace_step5.rs:122-128`)*.
 - `start_hooks::on_install_start(modlist_id, variant, ShareCodeConsuming, ...)` — `apply_flags` clears -s/-c, forces download=true, calls `write_install_start_artifacts(modlist_id, variant, wizard_state, registry, store)` → `pack_meta` builds a fresh code from wizard_state with `allow_auto_install=false`.
@@ -565,13 +567,13 @@ The fork install lifecycle has FOUR distinct life-stages:
 
 ### 3.2 Existing folder → Clear
 
-> See R1 callout above (Shared/`destination_prep` section) — this variant produces the **Clear** branch of the double-prep: pipeline extracts into `<dest>/`, then Step-5 click runs `fs::remove_dir_all(<dest>)`, permanently destroying the extracted Mods/ folder, weidu_log_source/, and the install-start `modlist-import-code.txt`. Install then proceeds against an empty destination and must re-download.
+> See R1 callout above (Shared/`destination_prep` section) — this variant produces the **Clear** branch of the double-prep: pipeline extracts into `<dest>/`, then Step-5 click runs `fs::remove_dir_all(<dest>)`, permanently destroying the extracted Mods/ folder, weidu_log_source/, and the install-start `modlist-import-code.txt`. Install then proceeds against an empty destination and must re-download. ✅ **Closed by PR #18** — Step-5 consumer no longer fires; the user's Clear choice is honored once at fork-download arm.
 
 Same as 3.1 but `create_screen_state.destination_choice = Some(DestChoice::Clear)`. `prepare_destination` runs at fork arm *(`stage_downloading.rs:579-593`)*, wipes destination, then pipeline downloads + extracts into the empty destination. `workspace.json`'s `pending_destination_prep` is also set to `Some(Clear)`. At the eventual Workspace Step-5 Install click, `consume_pending_destination_prep` will fire `prepare_destination` again — wiping the freshly-extracted contents. The Mods folder is at `<dest>/mods/` per `per_install_dirs::resolve` *(`per_install_dirs.rs:74`)`; `fs::remove_dir_all(dest)` recursively wipes everything including `<dest>/mods/`.
 
 ### 3.3 Existing folder → Backup
 
-> See R1 callout above (Shared/`destination_prep` section) — this variant produces the **Backup** branch: pipeline extracts into `<dest>/`, then Step-5 click runs `fs::rename(<dest>, _bio_backup_<name>_<ts2>)`, archiving the fresh extract into a second backup snapshot (the first one, from fork-arm time, captured the user's pre-fork content if any). Install then proceeds against an empty destination — the fork download is wasted but recoverable from the backup.
+> See R1 callout above (Shared/`destination_prep` section) — this variant produces the **Backup** branch: pipeline extracts into `<dest>/`, then Step-5 click runs `fs::rename(<dest>, _bio_backup_<name>_<ts2>)`, archiving the fresh extract into a second backup snapshot (the first one, from fork-arm time, captured the user's pre-fork content if any). Install then proceeds against an empty destination — the fork download is wasted but recoverable from the backup. ✅ **Closed by PR #18** — Step-5 consumer no longer fires; the user's Backup choice is honored once at fork-download arm.
 
 Same risk on Backup — would back up the freshly-extracted Mods/ along with everything else; the second `_bio_backup_<name>_<ts>` would contain the extract output.
 
@@ -903,8 +905,8 @@ The sanitizer *(`settings_sanitizer.rs:7-37`)* scrubs **11 per-install string fi
 
 Ranking per agent's view, based on severity × likelihood × user-visible cost:
 
-1. **R1 🔴 — Fork double `prepare_destination` on Clear/Backup**. Highest priority. Every fork user who picks Clear or Backup (a common case — fork = "I want a copy of someone else's modlist") destroys (Clear) or wastes (Backup) their freshly-downloaded mods. Fix shape: smallest-diff option is to gate `consume_pending_destination_prep` on `!install_screen_state.pipeline_flags.armed()` so the workspace-step5 consumer becomes a no-op when the fork arm already ran. Alternative: drop the `pending_destination_prep: choice` write in `mint_and_arm` *(`fork_pipeline_arm.rs:56`)* entirely.
-2. **R7 🔴 — Symlink check missing in `is_safe_install_folder` (Linux)**. Niche (Linux + symlinked destination) but the impact is catastrophic — silent delete of arbitrary user files. One-line fix: `if path.symlink_metadata()?.file_type().is_symlink() { return false; }`.
+1. ~~**R1 🔴 — Fork double `prepare_destination` on Clear/Backup**~~ ✅ **Closed by PR #18 (2026-05-27).** Fix shape #2 from this entry was taken: `mint_and_arm` no longer persists the choice into `workspace.json::pending_destination_prep` *(`fork_pipeline_arm.rs:80-83`)*; the regression test `minted_workspace_never_persists_destination_prep_regardless_of_user_choice` pins the single-fire invariant *(`fork_pipeline_arm.rs:330-363`)*.
+2. **R7 🔴 — Symlink check missing in `is_safe_install_folder` (Linux)**. Now the highest-priority open data-loss risk. Niche (Linux + symlinked destination) but the impact is catastrophic — silent delete of arbitrary user files. One-line fix: `if path.symlink_metadata()?.file_type().is_symlink() { return false; }`.
 3. **R6 🟠 — Continue partial install is dead UI**. Either remove the button + the `DestChoice::Continue` variant + the `ContinuePartialInstall` flag set, OR finish the wiring per SPEC §4.1. Either resolves the trap.
 4. **R2 🟠 — `delete_modlist` orphans per-modlist files + HashMaps**. Adds a couple of in-memory `HashMap::remove` calls + an `fs::remove_dir_all` of `%APPDATA%\bio\modlists\<id>` (BIO-controlled path, no user guard needed). Privacy-relevant since forked-from lineage survives on disk after delete.
 5. **R3 🟡 — Reinstall variant naming**. No behavior change needed but the trace is misleading. Either rename `pending_reinstall_id`'s consumption to make the lifecycle explicit, or carry the variant through `wizard_state` so `register_and_write_install_start_artifacts` can read it.
