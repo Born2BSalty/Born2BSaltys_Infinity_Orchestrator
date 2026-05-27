@@ -3,7 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use bio::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_section_header};
+use bio::ui::orchestrator::widgets::{
+    BtnOpts, redesign_btn, redesign_section_header, redesign_window_title,
+};
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
@@ -39,68 +41,71 @@ fn render_popup_demo(ctx: &egui::Context, palette: ThemePalette) {
 
     egui::CentralPanel::default().show(ctx, |_ui| {});
 
-    egui::Window::new("Popup Demo \u{2014} no shadow")
-        .collapsible(true)
-        .resizable(false)
-        .default_pos(egui::pos2(40.0, 40.0))
-        .show(ctx, |ui| {
-            ui.label(
-                egui::RichText::new("Header strong (explicit color)")
-                    .strong()
-                    .color(redesign_text_primary(palette)),
-            );
-            ui.label(egui::RichText::new("Header strong (no explicit color)").strong());
-            ui.label("This is a plain label.");
-            ui.add_space(8.0);
+    egui::Window::new(redesign_window_title(
+        palette,
+        "Popup Demo \u{2014} no shadow",
+    ))
+    .collapsible(true)
+    .resizable(false)
+    .default_pos(egui::pos2(40.0, 40.0))
+    .show(ctx, |ui| {
+        ui.label(
+            egui::RichText::new("Header strong (explicit color)")
+                .strong()
+                .color(redesign_text_primary(palette)),
+        );
+        ui.label(egui::RichText::new("Header strong (no explicit color)").strong());
+        ui.label("This is a plain label.");
+        ui.add_space(8.0);
 
-            redesign_section_header(ui, palette, "Sample Section", Some(3));
-            ui.add_space(8.0);
-            egui::Frame::group(ui.style())
-                .fill(redesign_shell_bg(palette))
-                .stroke(egui::Stroke::new(
-                    REDESIGN_BORDER_WIDTH_PX,
-                    redesign_border_strong(palette),
-                ))
-                .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-                .inner_margin(egui::Margin::same(8))
-                .show(ui, |ui| {
-                    ui.label("Item one");
-                    ui.label("Item two");
-                    ui.label("Item three");
-                });
-            ui.add_space(8.0);
-
-            ui.horizontal(|ui| {
-                let _ = redesign_btn(
-                    ui,
-                    palette,
-                    "Primary Button",
-                    BtnOpts {
-                        primary: true,
-                        small: true,
-                        ..Default::default()
-                    },
-                );
-                let _ = redesign_btn(
-                    ui,
-                    palette,
-                    "Secondary",
-                    BtnOpts {
-                        small: true,
-                        ..Default::default()
-                    },
-                );
-                let _ = redesign_btn(
-                    ui,
-                    palette,
-                    "Close",
-                    BtnOpts {
-                        small: true,
-                        ..Default::default()
-                    },
-                );
+        redesign_section_header(ui, palette, "Sample Section", Some(3));
+        ui.add_space(8.0);
+        egui::Frame::group(ui.style())
+            .fill(redesign_shell_bg(palette))
+            .stroke(egui::Stroke::new(
+                REDESIGN_BORDER_WIDTH_PX,
+                redesign_border_strong(palette),
+            ))
+            .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                ui.label("Item one");
+                ui.label("Item two");
+                ui.label("Item three");
             });
+        ui.add_space(8.0);
+
+        ui.horizontal(|ui| {
+            let _ = redesign_btn(
+                ui,
+                palette,
+                "Primary Button",
+                BtnOpts {
+                    primary: true,
+                    small: true,
+                    ..Default::default()
+                },
+            );
+            let _ = redesign_btn(
+                ui,
+                palette,
+                "Secondary",
+                BtnOpts {
+                    small: true,
+                    ..Default::default()
+                },
+            );
+            let _ = redesign_btn(
+                ui,
+                palette,
+                "Close",
+                BtnOpts {
+                    small: true,
+                    ..Default::default()
+                },
+            );
         });
+    });
 }
 
 fn snap(out_dir: &Path, name: &str, render: impl Fn(&egui::Context) + 'static) -> PathBuf {

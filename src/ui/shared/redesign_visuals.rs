@@ -29,6 +29,7 @@ pub fn build_for(palette: ThemePalette) -> egui::Visuals {
     v.window_stroke = border_strong_stroke;
     v.window_corner_radius = corner;
     v.window_shadow = egui::epaint::Shadow::NONE;
+    v.window_highlight_topmost = false;
     v.popup_shadow = egui::epaint::Shadow::NONE;
     v.faint_bg_color = redesign_rail_bg(palette);
     v.extreme_bg_color = redesign_input_bg(palette);
@@ -158,5 +159,17 @@ mod tests {
     fn light_visuals_error_fg_color_matches_light_error() {
         let v = build_for(ThemePalette::Light);
         assert_eq!(v.error_fg_color, redesign_error(ThemePalette::Light));
+    }
+
+    #[test]
+    fn dark_visuals_window_highlight_topmost_disabled() {
+        let v = build_for(ThemePalette::Dark);
+        assert!(!v.window_highlight_topmost);
+    }
+
+    #[test]
+    fn light_visuals_window_highlight_topmost_disabled() {
+        let v = build_for(ThemePalette::Light);
+        assert!(!v.window_highlight_topmost);
     }
 }

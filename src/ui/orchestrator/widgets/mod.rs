@@ -11,6 +11,7 @@ pub mod pill;
 pub mod r_box;
 pub mod screen_title;
 pub mod section_header;
+pub mod window_title;
 
 pub use btn::{BtnOpts, redesign_btn};
 pub(crate) use icon_button::{ButtonIcon, render as render_icon_button};
@@ -21,3 +22,4 @@ pub use pill::{PillTone, render as render_pill};
 pub use r_box::redesign_box;
 pub use screen_title::render as render_screen_title;
 pub use section_header::redesign_section_header;
+pub use window_title::redesign_window_title;
