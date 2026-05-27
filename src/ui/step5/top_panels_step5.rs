@@ -5,12 +5,13 @@ use chrono::{DateTime, Local};
 use eframe::egui;
 
 use crate::app::state::WizardState;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::service_diagnostics_support_step5::source_log_infos;
 use crate::ui::step5::service_step5_command_step5::{
     build_command_preview_lines, build_install_command, wrap_display_line,
 };
 
-pub(crate) fn render(ui: &mut egui::Ui, state: &WizardState) {
+pub(crate) fn render(ui: &mut egui::Ui, state: &WizardState, _palette: ThemePalette) {
     let top_h = 190.0;
     if state.step5.hide_top_frames_after_install {
         return;

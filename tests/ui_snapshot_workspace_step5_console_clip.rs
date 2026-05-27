@@ -8,6 +8,7 @@ use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{
     REDESIGN_NAV_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX,
 };
+use bio::ui::step5::content_step5::Step5RenderCtx;
 use bio::ui::step5::page_step5;
 use bio::ui::step5::state_step5::Step5ConsoleViewState;
 
@@ -145,8 +146,11 @@ fn render_scaffold(ctx: &egui::Context) {
                             &mut console_view,
                             None,
                             Some(LONG_TERMINAL_ERROR),
-                            false,
-                            "",
+                            Step5RenderCtx {
+                                dev_mode: false,
+                                exe_fingerprint: "",
+                                palette: bio::ui::shared::redesign_tokens::ThemePalette::Dark,
+                            },
                         );
                     });
                 });

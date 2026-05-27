@@ -6,6 +6,7 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
 use crate::ui::step5::action_step5::Step5Action;
+use crate::ui::step5::content_step5::Step5RenderCtx;
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
 
 pub fn render(
@@ -14,16 +15,7 @@ pub fn render(
     console_view: &mut Step5ConsoleViewState,
     terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
-    dev_mode: bool,
-    exe_fingerprint: &str,
+    ctx: Step5RenderCtx<'_>,
 ) -> Option<Step5Action> {
-    crate::ui::step5::content_step5::render(
-        ui,
-        state,
-        console_view,
-        terminal,
-        terminal_error,
-        dev_mode,
-        exe_fingerprint,
-    )
+    crate::ui::step5::content_step5::render(ui, state, console_view, terminal, terminal_error, ctx)
 }

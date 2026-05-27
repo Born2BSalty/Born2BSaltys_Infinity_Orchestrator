@@ -5,6 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::state_step5::{ConsoleOutputFilter, Step5ConsoleViewState};
 
 fn is_component_id_token(token: &str) -> bool {
@@ -41,17 +42,17 @@ fn split_chunks_preserve_quotes(line: &str) -> Vec<String> {
     out
 }
 
-fn token_color(token: &str) -> egui::Color32 {
+fn token_color(token: &str, palette: ThemePalette) -> egui::Color32 {
     let t = token.trim();
     let n = normalized_token(t);
-    let default = crate::ui::shared::theme_global::terminal_default();
-    let red = crate::ui::shared::theme_global::terminal_error();
-    let debug_blue = crate::ui::shared::theme_global::terminal_debug();
-    let sent_blue = crate::ui::shared::theme_global::terminal_sent();
-    let info_green = crate::ui::shared::theme_global::terminal_info();
-    let amber = crate::ui::shared::theme_global::terminal_amber();
-    let sand = crate::ui::shared::theme_global::terminal_sand();
-    let dim = crate::ui::shared::theme_global::terminal_dim();
+    let default = crate::ui::shared::redesign_tokens::redesign_terminal_default(palette);
+    let red = crate::ui::shared::redesign_tokens::redesign_terminal_error(palette);
+    let debug_blue = crate::ui::shared::redesign_tokens::redesign_terminal_debug(palette);
+    let sent_blue = crate::ui::shared::redesign_tokens::redesign_terminal_sent(palette);
+    let info_green = crate::ui::shared::redesign_tokens::redesign_terminal_info(palette);
+    let amber = crate::ui::shared::redesign_tokens::redesign_terminal_amber(palette);
+    let sand = crate::ui::shared::redesign_tokens::redesign_terminal_sand(palette);
+    let dim = crate::ui::shared::redesign_tokens::redesign_terminal_dim(palette);
 
     if n == "ERROR" || n == "FATAL" {
         return red;
@@ -82,22 +83,27 @@ fn token_color(token: &str) -> egui::Color32 {
     default
 }
 
-fn render_styled_line(ui: &mut egui::Ui, line: &str, max_width: f32) {
-    let job = build_styled_line_job(ui, line, max_width);
+fn render_styled_line(ui: &mut egui::Ui, line: &str, max_width: f32, palette: ThemePalette) {
+    let job = build_styled_line_job(ui, line, max_width, palette);
     ui.add(egui::Label::new(egui::WidgetText::from(job)).wrap());
 }
 
-fn build_styled_line_job(ui: &egui::Ui, line: &str, max_width: f32) -> egui::text::LayoutJob {
+fn build_styled_line_job(
+    ui: &egui::Ui,
+    line: &str,
+    max_width: f32,
+    palette: ThemePalette,
+) -> egui::text::LayoutJob {
     let line_upper = line.to_ascii_uppercase();
     let success_line = line_upper.contains("SUCCESSFULLY INSTALLED");
-    let success_green = crate::ui::shared::theme_global::success();
+    let success_green = crate::ui::shared::redesign_tokens::redesign_success(palette);
     let font = egui::TextStyle::Monospace.resolve(ui.style());
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = max_width.max(32.0);
     job.wrap.break_anywhere = true;
 
     if line.is_empty() {
-        append_styled_text(&mut job, " ", &font, token_color(""));
+        append_styled_text(&mut job, " ", &font, token_color("", palette));
         return job;
     }
 
@@ -106,7 +112,7 @@ fn build_styled_line_job(ui: &egui::Ui, line: &str, max_width: f32) -> egui::tex
         let color = if success_line && (n == "SUCCESSFULLY" || n == "INSTALLED") {
             success_green
         } else {
-            token_color(&token)
+            token_color(&token, palette)
         };
         append_styled_text(&mut job, &token, &font, color);
     }
@@ -140,6 +146,7 @@ pub(crate) fn render_console_panel(
     console_view: &mut Step5ConsoleViewState,
     terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
+    palette: ThemePalette,
 ) {
     ui.group(|ui| {
         let panel_w = ui.available_width();
@@ -188,7 +195,7 @@ pub(crate) fn render_console_panel(
                         ui.set_max_width(console_w);
                         for line in selected_text.split('\n') {
                             let line_w = ui.available_width();
-                            render_styled_line(ui, line, line_w);
+                            render_styled_line(ui, line, line_w, palette);
                         }
                         if should_auto_scroll {
                             ui.add_space(0.0);

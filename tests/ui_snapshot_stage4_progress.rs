@@ -10,6 +10,7 @@ use bio::ui::shared::redesign_tokens::{
     REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_border_strong, redesign_shell_bg,
     redesign_text_primary,
 };
+use bio::ui::step5::content_step5::Step5RenderCtx;
 use bio::ui::step5::state_step5::Step5ConsoleViewState;
 use bio::ui::workspace::step5::post_install_actions;
 
@@ -179,8 +180,11 @@ fn render_progress_body(
                 console_view,
                 None,
                 None,
-                dev_mode,
-                exe_fingerprint,
+                Step5RenderCtx {
+                    dev_mode,
+                    exe_fingerprint,
+                    palette: ThemePalette::Dark,
+                },
             );
         });
 }

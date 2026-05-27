@@ -48,8 +48,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
             &mut orchestrator.step5_console_view,
             orchestrator.step5_terminal.as_mut(),
             orchestrator.step5_terminal_error.as_deref(),
-            orchestrator.dev_mode,
-            &exe_fingerprint,
+            crate::ui::step5::content_step5::Step5RenderCtx {
+                dev_mode: orchestrator.dev_mode,
+                exe_fingerprint: &exe_fingerprint,
+                palette,
+            },
         );
     });
 

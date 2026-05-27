@@ -6,7 +6,9 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::action_step5::Step5Action;
+use crate::ui::step5::content_step5::Step5RenderCtx;
 use crate::ui::step5::state_step5::{ConsoleOutputFilter, Step5ConsoleViewState};
 
 pub(crate) fn render_install_row(
@@ -15,34 +17,35 @@ pub(crate) fn render_install_row(
     console_view: &mut Step5ConsoleViewState,
     mut terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
-    dev_mode: bool,
-    exe_fingerprint: &str,
+    ctx: Step5RenderCtx<'_>,
 ) -> Option<Step5Action> {
     let mut action: Option<Step5Action> = None;
     ui.horizontal_wrapped(|ui| {
-        render_progress_label(ui, state);
-        action = render_install_control(ui, state, &mut terminal, terminal_error, dev_mode);
-        render_step5_menus(ui, state, &mut terminal, dev_mode, exe_fingerprint);
+        render_progress_label(ui, state, ctx.palette);
+        action = render_install_control(ui, state, &mut terminal, terminal_error, ctx.dev_mode);
+        render_step5_menus(ui, state, &mut terminal, ctx.dev_mode, ctx.exe_fingerprint);
         crate::ui::step5::prompt_answers_step5::render_button(ui, state);
         render_export_modlist_button(ui, state);
         render_console_filters(ui, console_view);
     });
-    crate::ui::step5::content_cancel_step5::render_cancel_confirm(ui, state, terminal);
-    render_modlist_share_popup(ui, state);
+    crate::ui::step5::content_cancel_step5::render_cancel_confirm(ui, state, terminal, ctx.palette);
+    render_modlist_share_popup(ui, state, ctx.palette);
     action
 }
 
-fn render_progress_label(ui: &mut egui::Ui, state: &WizardState) {
+fn render_progress_label(ui: &mut egui::Ui, state: &WizardState, palette: ThemePalette) {
     if state.step5.prep_running {
         ui.label(
-            crate::ui::shared::typography_global::strong("Preparing target dirs...")
-                .color(crate::ui::shared::theme_global::accent_path()),
+            crate::ui::shared::typography_global::strong("Preparing target dirs...").color(
+                crate::ui::shared::redesign_tokens::redesign_accent_path(palette),
+            ),
         );
         ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
     } else if state.step5.install_running {
         ui.label(
-            crate::ui::shared::typography_global::strong("Install in progress...")
-                .color(crate::ui::shared::theme_global::accent_path()),
+            crate::ui::shared::typography_global::strong("Install in progress...").color(
+                crate::ui::shared::redesign_tokens::redesign_accent_path(palette),
+            ),
         );
         ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
     }
@@ -220,7 +223,7 @@ fn render_console_filters(ui: &mut egui::Ui, console_view: &mut Step5ConsoleView
         .on_hover_text(crate::ui::shared::tooltip_global::STEP5_AUTO_SCROLL);
 }
 
-fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState) {
+fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState, palette: ThemePalette) {
     let mut open = state.step5.modlist_share_window_open;
     if !open {
         return;
@@ -233,7 +236,7 @@ fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState) {
             if !state.step5.modlist_share_error.trim().is_empty() {
                 ui.label(
                     crate::ui::shared::typography_global::plain(&state.step5.modlist_share_error)
-                        .color(crate::ui::shared::theme_global::error()),
+                        .color(crate::ui::shared::redesign_tokens::redesign_error(palette)),
                 );
             }
             ui.label(

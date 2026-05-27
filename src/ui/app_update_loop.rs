@@ -59,8 +59,11 @@ mod dispatch {
                     &mut app.step5_console_view,
                     app.step5_terminal.as_mut(),
                     app.step5_terminal_error.as_deref(),
-                    app.dev_mode,
-                    app.exe_fingerprint.as_str(),
+                    crate::ui::step5::content_step5::Step5RenderCtx {
+                        dev_mode: app.dev_mode,
+                        exe_fingerprint: app.exe_fingerprint.as_str(),
+                        palette: crate::ui::shared::redesign_tokens::ThemePalette::Dark,
+                    },
                 ) {
                     match action {
                         step5::action_step5::Step5Action::StartInstall => {
