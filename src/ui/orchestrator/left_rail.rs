@@ -11,7 +11,8 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_NAV_WIDTH_PX,
     REDESIGN_SHADOW_OFFSET_BTN_PX, ThemePalette, redesign_accent, redesign_border_strong,
     redesign_hover_overlay, redesign_rail_bg, redesign_shadow, redesign_shell_bg,
-    redesign_status_dot, redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    redesign_pill_text, redesign_status_dot, redesign_text_faint, redesign_text_muted,
+    redesign_text_primary,
 };
 
 pub fn render(
@@ -205,7 +206,11 @@ fn render_nav_item(
         );
     }
 
-    let text_color = redesign_text_primary(palette);
+    let text_color = if active {
+        redesign_pill_text(palette)
+    } else {
+        redesign_text_primary(palette)
+    };
 
     let icon_center = egui::pos2(rect.left() + 20.0, rect.center().y);
     paint_nav_icon(painter, dest, icon_center, text_color);
