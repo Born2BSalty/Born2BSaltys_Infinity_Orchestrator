@@ -7,6 +7,10 @@ use crate::app::prompt_eval_summary::evaluate_component_prompt_summary;
 use crate::app::prompt_popup_text::format_component_prompt_popup_text_with_body;
 use crate::app::state::{Step2ComponentState, Step2Selection};
 use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_disabled,
+    redesign_text_primary,
+};
 use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
     format_component_row_label_with_display,
@@ -14,6 +18,17 @@ use crate::ui::step2::format_step2::{
 use crate::ui::step2::tree_compat_display_step2::compat_colors_redesign as compat_colors;
 use crate::ui::step2::tree_component_types_step2::{ComponentRenderState, ComponentRowsContext};
 use crate::ui::step2::tree_selection_rules_step2::set_component_checked_state;
+
+/// Layout options forwarded from the dispatching context to a component row.
+#[derive(Clone, Copy)]
+pub(crate) struct ComponentRowOptions<'a> {
+    /// Optional display string to show in place of the label derived from the component.
+    pub(crate) display_override: Option<&'a str>,
+    /// Horizontal indent in logical pixels before the checkbox.
+    pub(crate) indent: f32,
+    /// When true the widget slot uses a radio-style paint rather than a checkbox.
+    pub(crate) is_radio_select: bool,
+}
 
 #[derive(Clone, Copy)]
 struct ComponentRowView<'a> {
@@ -28,15 +43,14 @@ pub(crate) fn render_component_row(
     ui_state: &mut ComponentRenderState<'_>,
     component_idx: usize,
     component: &mut Step2ComponentState,
-    display_override: Option<&str>,
-    indent: f32,
+    opts: ComponentRowOptions<'_>,
 ) {
     let effectively_disabled = component.disabled
         || matches!(
             component.compat_kind.as_deref(),
             Some("mismatch" | "included")
         );
-    let display_label = match display_override {
+    let display_label = match opts.display_override {
         Some(display) => format_component_row_label_with_display(
             component.raw_line.as_str(),
             component.component_id.as_str(),
@@ -51,7 +65,7 @@ pub(crate) fn render_component_row(
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
-        ui.add_space(indent);
+        ui.add_space(opts.indent);
         render_component_checkbox(
             ui,
             ctx,
@@ -59,6 +73,7 @@ pub(crate) fn render_component_row(
             component_idx,
             component,
             effectively_disabled,
+            opts.is_radio_select,
         );
         if effectively_disabled && component.checked {
             component.checked = false;
@@ -98,6 +113,7 @@ fn render_component_checkbox(
     component_idx: usize,
     component: &mut Step2ComponentState,
     effectively_disabled: bool,
+    is_radio_select: bool,
 ) {
     let was_checked = component.checked;
     ui.push_id(
@@ -109,9 +125,17 @@ fn render_component_checkbox(
             component_idx,
         ),
         |ui| {
-            ui.add_enabled_ui(!effectively_disabled, |ui| {
-                ui.checkbox(&mut component.checked, "");
-            });
+            if is_radio_select {
+                let clicked =
+                    paint_radio_glyph(ui, component.checked, effectively_disabled, ctx.palette);
+                if clicked && !effectively_disabled {
+                    component.checked = !component.checked;
+                }
+            } else {
+                ui.add_enabled_ui(!effectively_disabled, |ui| {
+                    ui.checkbox(&mut component.checked, "");
+                });
+            }
         },
     );
     if component.checked == was_checked {
@@ -123,6 +147,38 @@ fn render_component_checkbox(
         ui_state.enforce_collapsible_group_for.push(component_idx);
         ui_state.enforce_meta_for.push(component_idx);
     }
+}
+
+/// Paints a radio-style glyph at the checkbox position.
+/// Returns `true` if the glyph rect was clicked this frame.
+fn paint_radio_glyph(
+    ui: &mut egui::Ui,
+    checked: bool,
+    effectively_disabled: bool,
+    palette: crate::ui::shared::redesign_tokens::ThemePalette,
+) -> bool {
+    let icon_size = ui.spacing().icon_width;
+    let size = egui::vec2(icon_size, icon_size);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+    let (ring_color, fill_color) = if effectively_disabled {
+        let muted = redesign_text_disabled(palette);
+        (muted, muted)
+    } else {
+        (redesign_border_strong(palette), redesign_text_primary(palette))
+    };
+    let center = rect.center();
+    let ring_radius = (icon_size * 0.5).min(6.0);
+    let painter = ui.painter();
+    painter.circle_stroke(
+        center,
+        ring_radius,
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, ring_color),
+    );
+    if checked {
+        let fill_radius = (ring_radius - 3.0).max(1.5);
+        painter.circle_filled(center, fill_radius, fill_color);
+    }
+    response.clicked()
 }
 
 fn render_compat_dot(
@@ -312,5 +368,61 @@ fn render_prompt_pill(
             format!("{} #{}", ctx.tp_file, component.component_id),
             format_component_prompt_popup_text_with_body(component, &evaluated_prompt_summary),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::step2::tree_selection_rules_step2::set_component_checked_state;
+
+    fn blank_component(id: &str) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: id.to_string(),
+            label: id.to_string(),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    #[test]
+    fn radio_click_and_checkbox_click_produce_identical_checked_state() {
+        let mut order_radio = 1usize;
+        let mut comp_radio = blank_component("C1");
+        comp_radio.checked = !comp_radio.checked;
+        set_component_checked_state(&mut comp_radio, &mut order_radio);
+
+        let mut order_checkbox = 1usize;
+        let mut comp_checkbox = blank_component("C1");
+        comp_checkbox.checked = !comp_checkbox.checked;
+        set_component_checked_state(&mut comp_checkbox, &mut order_checkbox);
+
+        assert_eq!(
+            comp_radio.checked, comp_checkbox.checked,
+            "radio and checkbox branches must produce identical checked state after toggle",
+        );
+        assert_eq!(
+            comp_radio.selected_order, comp_checkbox.selected_order,
+            "radio and checkbox branches must produce identical selected_order after toggle",
+        );
+        assert_eq!(
+            order_radio, order_checkbox,
+            "radio and checkbox branches must advance next_selection_order identically",
+        );
     }
 }

@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::app::state::{Step2ComponentState, Step2ModState, Step2Selection};
-use crate::ui::step2::tree_component_row_step2::render_component_row;
+use crate::ui::step2::tree_component_row_step2::{ComponentRowOptions, render_component_row};
 use crate::ui::step2::tree_component_types_step2::{
     CompatPopupTarget, ComponentRenderState, ComponentRowsContext, ComponentRowsResult,
     PromptPopupTarget, reborrow_render_state,
@@ -80,6 +80,10 @@ struct ComponentGroupRender<'a> {
     end_idx: usize,
     group_matches: bool,
     indent: f32,
+    /// When true, every row in the group uses the radio-glyph widget.
+    /// When false, each row consults `collapsible_group_is_umbrella` on the
+    /// component itself to determine whether to use the radio glyph.
+    radio_all: bool,
 }
 
 pub(crate) fn render_component_rows(
@@ -129,6 +133,7 @@ fn render_weidu_group(
         end_idx: group_end,
         group_matches,
         indent: 0.0,
+        radio_all: false,
     };
     if !component_range_has_visible_row(ctx, mod_state, mod_name_match, &group) {
         return Some(group_end);
@@ -286,7 +291,21 @@ fn render_visible_component_rows(
             &mod_state.components[idx],
             ctx.filter,
         ) {
-            render_component_at(ui, ctx, mod_state, render_state, idx, group.indent);
+            let is_radio_select = if group.radio_all {
+                true
+            } else {
+                mod_state.components[idx].collapsible_group.is_some()
+                    && !mod_state.components[idx].collapsible_group_is_umbrella
+            };
+            render_component_at(
+                ui,
+                ctx,
+                mod_state,
+                render_state,
+                idx,
+                group.indent,
+                is_radio_select,
+            );
         }
     }
 }
@@ -324,6 +343,7 @@ fn render_component_at(
     render_state: &mut ComponentRenderState<'_>,
     component_idx: usize,
     indent: f32,
+    is_radio_select: bool,
 ) {
     let mut ui_state = reborrow_render_state(render_state);
     render_component_row(
@@ -332,8 +352,11 @@ fn render_component_at(
         &mut ui_state,
         component_idx,
         &mut mod_state.components[component_idx],
-        None,
-        indent,
+        ComponentRowOptions {
+            display_override: None,
+            indent,
+            is_radio_select,
+        },
     );
 }
 
@@ -369,6 +392,7 @@ fn render_collapsible_component_group(
             end_idx: group_end,
             group_matches,
             indent: 0.0,
+            radio_all: false,
         },
     );
     Some(group_end)
@@ -403,6 +427,7 @@ fn render_subcomponent_group(
             end_idx: group_end,
             group_matches,
             indent: 0.0,
+            radio_all: true,
         },
     );
     Some(group_end)
@@ -460,7 +485,7 @@ fn render_single_component(
         &mod_state.components[component_idx],
         ctx.filter,
     ) {
-        render_component_at(ui, ctx, mod_state, render_state, component_idx, 0.0);
+        render_component_at(ui, ctx, mod_state, render_state, component_idx, 0.0, false);
     }
 }
 
