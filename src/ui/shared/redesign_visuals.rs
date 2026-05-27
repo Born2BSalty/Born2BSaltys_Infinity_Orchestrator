@@ -6,8 +6,8 @@ use eframe::egui;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
     redesign_border_strong, redesign_chrome_bg, redesign_error, redesign_hover_overlay,
-    redesign_input_bg, redesign_pill_text, redesign_rail_bg, redesign_selection_highlight,
-    redesign_shell_bg, redesign_text_primary, redesign_warning,
+    redesign_input_bg, redesign_rail_bg, redesign_selection_highlight, redesign_shell_bg,
+    redesign_text_primary, redesign_warning,
 };
 
 /// Builds an `egui::Visuals` baseline calibrated for the given palette.
@@ -62,7 +62,7 @@ pub fn build_for(palette: ThemePalette) -> egui::Visuals {
 
     v.widgets.active.bg_fill = redesign_accent(palette);
     v.widgets.active.bg_stroke = border_strong_stroke;
-    v.widgets.active.fg_stroke = egui::Stroke::new(1.0, redesign_pill_text(palette));
+    v.widgets.active.fg_stroke = text_primary_stroke;
     v.widgets.active.corner_radius = corner;
     v.widgets.active.expansion = 0.0;
 
