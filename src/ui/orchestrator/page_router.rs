@@ -11,7 +11,10 @@ use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::page_home;
 use crate::ui::install::page_install;
 use crate::ui::orchestrator::nav_destination::NavDestination;
-use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::orchestrator_app::{
+    DestinationPrepFlow, OrchestratorApp, PendingInstallDestinationPrep,
+    PendingWorkspaceDestinationPrep,
+};
 use crate::ui::orchestrator::registry_error_panel;
 use crate::ui::orchestrator::stubs;
 use crate::ui::settings::page_settings;
@@ -36,6 +39,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     }
 
     flush_workspace_on_nav_away(orchestrator);
+    invalidate_destination_prep_on_route_change(orchestrator);
 
     reset_completed_install_route_on_nav_away(orchestrator);
     reset_completed_install_route_on_enter_install(orchestrator, &previous_nav);
@@ -69,6 +73,7 @@ fn render_workspace(
         render_missing_modlist(ui, palette, id);
         return;
     };
+    sync_share_provenance_from_entry(orchestrator, &entry);
 
     let install_in_progress: Option<String> = None;
     if let Some(running_id) = install_in_progress.as_ref()
@@ -233,6 +238,58 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
     }
 }
 
+fn invalidate_destination_prep_on_route_change(orchestrator: &mut OrchestratorApp) {
+    if orchestrator.create_destination_prep_rx.is_some()
+        && (!matches!(orchestrator.nav, NavDestination::Create)
+            || orchestrator.create_screen_state.stage != CreateStage::Choose)
+    {
+        orchestrator.abandon_create_destination_prep();
+    }
+
+    if orchestrator
+        .install_destination_prep_rx
+        .as_ref()
+        .is_some_and(|pending| !install_destination_prep_route_matches(orchestrator, pending))
+    {
+        orchestrator.abandon_install_destination_prep();
+    }
+
+    if orchestrator
+        .workspace_destination_prep_rx
+        .as_ref()
+        .is_some_and(|pending| !workspace_destination_prep_route_matches(orchestrator, pending))
+    {
+        orchestrator.abandon_workspace_destination_prep();
+        orchestrator.wizard_state.step5.prep_running = false;
+    }
+}
+
+fn install_destination_prep_route_matches(
+    orchestrator: &OrchestratorApp,
+    pending: &PendingInstallDestinationPrep,
+) -> bool {
+    match pending.token.flow {
+        DestinationPrepFlow::InstallPipeline => matches!(orchestrator.nav, NavDestination::Install),
+        DestinationPrepFlow::CreateForkDownload => {
+            matches!(orchestrator.nav, NavDestination::Create)
+                && orchestrator.create_screen_state.stage == CreateStage::ForkDownload
+        }
+        DestinationPrepFlow::CreateScratch | DestinationPrepFlow::WorkspaceStep5 => false,
+    }
+}
+
+fn workspace_destination_prep_route_matches(
+    orchestrator: &OrchestratorApp,
+    pending: &PendingWorkspaceDestinationPrep,
+) -> bool {
+    matches!(
+        &orchestrator.nav,
+        NavDestination::Workspace {
+            modlist_id: Some(id)
+        } if id == &pending.modlist_id
+    )
+}
+
 fn reset_completed_install_route_on_nav_away(orchestrator: &mut OrchestratorApp) {
     if !should_reset_completed_install_route_on_nav_away(
         &orchestrator.nav,
@@ -275,6 +332,8 @@ fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
         crate::ui::step5::state_step5::Step5ConsoleViewState::default();
     orchestrator.step5_prep_rx = None;
     orchestrator.step5_pending_start = None;
+    orchestrator.abandon_install_destination_prep();
+    orchestrator.abandon_workspace_destination_prep();
     orchestrator.install_running_since = None;
     orchestrator.pending_reinstall_id = None;
     orchestrator.active_install_modlist_id = None;
@@ -354,6 +413,14 @@ fn fork_meta_from_entry(entry: &ModlistEntry) -> Option<ForkMeta> {
         components: entry.component_count,
         forked_from: entry.forked_from.clone(),
     })
+}
+
+fn sync_share_provenance_from_entry(orchestrator: &mut OrchestratorApp, entry: &ModlistEntry) {
+    orchestrator.wizard_state.set_modlist_share_provenance(
+        Some(entry.name.clone()),
+        entry.author.clone(),
+        entry.forked_from.clone(),
+    );
 }
 
 fn render_missing_modlist(ui: &mut egui::Ui, palette: ThemePalette, id: &str) {

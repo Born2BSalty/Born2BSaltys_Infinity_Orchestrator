@@ -21,10 +21,13 @@ use crate::app::{
     app_step2_saved_log_flow, app_step2_scan, app_step2_update_check, app_step2_update_download,
     app_step2_update_extract, app_step5_flow,
 };
+use crate::install_runtime::destination_prep::{DestinationPrepJoinHandle, DestinationPrepWorker};
+use crate::install_runtime::flag_policies::InstallWorkflow;
 use crate::install_runtime::install_concurrency;
 use crate::install_runtime::rail_lock_reason::RailLockReason;
 use crate::install_runtime::registry_transition;
 use crate::registry::errors::RegistryError;
+use crate::registry::model::Game;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::persistence_cycle::RegistryPersistenceCycle;
 use crate::registry::store::RegistryStore;
@@ -97,6 +100,129 @@ impl PostInstallResetGate {
     pub const fn is_pending(self) -> bool {
         matches!(self, Self::Pending)
     }
+}
+
+pub(crate) struct PendingCreateStart {
+    pub(crate) token: DestinationPrepToken,
+    pub(crate) name: String,
+    pub(crate) destination: String,
+    pub(crate) game: Game,
+    pub(crate) worker: DestinationPrepWorker,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DestinationPrepFlow {
+    CreateScratch,
+    InstallPipeline,
+    CreateForkDownload,
+    WorkspaceStep5,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DestinationPrepToken {
+    pub(crate) generation: u64,
+    pub(crate) flow: DestinationPrepFlow,
+    destination_key: String,
+    pub(crate) modlist_id: Option<String>,
+}
+
+impl DestinationPrepToken {
+    #[must_use]
+    pub(crate) fn new(
+        generation: u64,
+        flow: DestinationPrepFlow,
+        destination: &str,
+        modlist_id: Option<String>,
+    ) -> Self {
+        Self {
+            generation,
+            flow,
+            destination_key: destination_prep_key(destination),
+            modlist_id,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn matches_context(
+        &self,
+        current_generation: u64,
+        flow: DestinationPrepFlow,
+        destination: &str,
+        modlist_id: Option<&str>,
+    ) -> bool {
+        self.generation == current_generation
+            && self.flow == flow
+            && self.destination_key == destination_prep_key(destination)
+            && self.modlist_id.as_deref() == modlist_id
+    }
+}
+
+#[must_use]
+pub(crate) fn destination_prep_key(destination: &str) -> String {
+    let mut key = destination.trim().replace('/', "\\");
+    while key.len() > 3 && key.ends_with('\\') {
+        key.pop();
+    }
+    if cfg!(windows) {
+        key.to_ascii_lowercase()
+    } else {
+        key
+    }
+}
+
+fn join_destination_prep_handle(handle: DestinationPrepJoinHandle) {
+    if handle.join().is_err() {
+        warn!(
+            target = "orchestrator",
+            "destination prep worker panicked before shutdown join completed"
+        );
+    }
+}
+
+fn hold_destination_prep_worker_for_shutdown(
+    workers: &mut Vec<DestinationPrepJoinHandle>,
+    worker: DestinationPrepWorker,
+) {
+    let handle = worker.into_join_handle();
+    if handle.is_finished() {
+        join_destination_prep_handle(handle);
+    } else {
+        workers.push(handle);
+    }
+}
+
+pub struct PendingInstallDestinationPrep {
+    pub(crate) token: DestinationPrepToken,
+    pub(crate) destination: String,
+    pub(crate) game: Game,
+    pub(crate) workflow: InstallWorkflow,
+    pub(crate) code: String,
+    pub(crate) worker: DestinationPrepWorker,
+}
+
+impl PendingInstallDestinationPrep {
+    #[must_use]
+    pub(crate) fn matches_context(
+        &self,
+        current_generation: u64,
+        flow: DestinationPrepFlow,
+        destination: &str,
+        game: Game,
+        workflow: InstallWorkflow,
+        code: &str,
+    ) -> bool {
+        self.token
+            .matches_context(current_generation, flow, destination, None)
+            && self.game == game
+            && self.workflow == workflow
+            && self.code == code.trim()
+    }
+}
+
+pub(crate) struct PendingWorkspaceDestinationPrep {
+    pub(crate) token: DestinationPrepToken,
+    pub(crate) modlist_id: String,
+    pub(crate) worker: DestinationPrepWorker,
 }
 
 pub struct OrchestratorApp {
@@ -176,6 +302,11 @@ pub struct OrchestratorApp {
 
     pub(crate) archive_skip_rx:
         Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
+    pub(crate) create_destination_prep_rx: Option<PendingCreateStart>,
+    pub(crate) install_destination_prep_rx: Option<PendingInstallDestinationPrep>,
+    pub(crate) workspace_destination_prep_rx: Option<PendingWorkspaceDestinationPrep>,
+    pub(crate) background_destination_prep_workers: Vec<DestinationPrepJoinHandle>,
+    pub(crate) destination_prep_generation: u64,
 
     pub(crate) hash_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
 }
@@ -329,6 +460,11 @@ impl OrchestratorApp {
             extract_progress: Arc::new(std::sync::Mutex::new(None)),
             extract_parallel_rx: None,
             archive_skip_rx: None,
+            create_destination_prep_rx: None,
+            install_destination_prep_rx: None,
+            workspace_destination_prep_rx: None,
+            background_destination_prep_workers: Vec::new(),
+            destination_prep_generation: 0,
             hash_progress: Arc::new(std::sync::Mutex::new(None)),
         };
 
@@ -344,11 +480,83 @@ impl OrchestratorApp {
         self.workspace_state_dirty = DirtyFlag(true);
     }
 
+    pub(crate) fn next_destination_prep_token(
+        &mut self,
+        flow: DestinationPrepFlow,
+        destination: &str,
+        modlist_id: Option<String>,
+    ) -> DestinationPrepToken {
+        self.destination_prep_generation = self.destination_prep_generation.wrapping_add(1);
+        if self.destination_prep_generation == 0 {
+            self.destination_prep_generation = 1;
+        }
+        DestinationPrepToken::new(
+            self.destination_prep_generation,
+            flow,
+            destination,
+            modlist_id,
+        )
+    }
+
+    pub(crate) fn complete_destination_prep_worker(&mut self, worker: DestinationPrepWorker) {
+        join_destination_prep_handle(worker.into_join_handle());
+        self.drain_finished_destination_prep_workers();
+    }
+
+    pub(crate) fn abandon_destination_prep_worker(&mut self, worker: DestinationPrepWorker) {
+        hold_destination_prep_worker_for_shutdown(
+            &mut self.background_destination_prep_workers,
+            worker,
+        );
+    }
+
+    pub(crate) fn abandon_create_destination_prep(&mut self) {
+        if let Some(pending) = self.create_destination_prep_rx.take() {
+            self.abandon_destination_prep_worker(pending.worker);
+        }
+    }
+
+    pub(crate) fn abandon_install_destination_prep(&mut self) {
+        if let Some(pending) = self.install_destination_prep_rx.take() {
+            self.abandon_destination_prep_worker(pending.worker);
+        }
+    }
+
+    pub(crate) fn abandon_workspace_destination_prep(&mut self) {
+        if let Some(pending) = self.workspace_destination_prep_rx.take() {
+            self.abandon_destination_prep_worker(pending.worker);
+        }
+    }
+
+    fn drain_finished_destination_prep_workers(&mut self) {
+        let workers = &mut self.background_destination_prep_workers;
+        let mut index = 0;
+        while index < workers.len() {
+            if workers[index].is_finished() {
+                let handle = workers.swap_remove(index);
+                join_destination_prep_handle(handle);
+            } else {
+                index += 1;
+            }
+        }
+    }
+
+    fn join_all_destination_prep_workers(&mut self) {
+        self.abandon_create_destination_prep();
+        self.abandon_install_destination_prep();
+        self.abandon_workspace_destination_prep();
+        for handle in self.background_destination_prep_workers.drain(..) {
+            join_destination_prep_handle(handle);
+        }
+    }
+
     pub(crate) fn reset_install_screen_to_paste(&mut self) {
         reset_install_pipeline_state(InstallPipelineResetSet {
             stream_download_rx: &mut self.stream_download_rx,
             archive_skip_rx: &mut self.archive_skip_rx,
             extract_parallel_rx: &mut self.extract_parallel_rx,
+            install_destination_prep_rx: &mut self.install_destination_prep_rx,
+            background_destination_prep_workers: &mut self.background_destination_prep_workers,
             wizard_state: &mut self.wizard_state,
             install_screen_state: &mut self.install_screen_state,
             hash_progress: &self.hash_progress,
@@ -908,6 +1116,7 @@ impl OrchestratorApp {
             .as_ref()
             .is_some_and(EmbeddedTerminal::has_new_data)
             || self.step5_prep_rx.is_some()
+            || self.workspace_destination_prep_rx.is_some()
             || self.wizard_state.step5.prep_running
             || self.wizard_state.step5.install_running
             || self.wizard_state.modlist_auto_build_active
@@ -921,6 +1130,8 @@ impl OrchestratorApp {
             || self.stream_download_rx.is_some()
             || self.extract_parallel_rx.is_some()
             || self.archive_skip_rx.is_some()
+            || self.create_destination_prep_rx.is_some()
+            || self.install_destination_prep_rx.is_some()
             || self.wizard_state.modlist_auto_build_active
             || !self.step2_progress_queue.is_empty()
     }
@@ -1108,6 +1319,8 @@ pub struct InstallPipelineResetSet<'a> {
         &'a mut Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
     pub extract_parallel_rx:
         &'a mut Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>>,
+    pub install_destination_prep_rx: &'a mut Option<PendingInstallDestinationPrep>,
+    pub background_destination_prep_workers: &'a mut Vec<DestinationPrepJoinHandle>,
     pub wizard_state: &'a mut WizardState,
     pub install_screen_state: &'a mut InstallScreenState,
     pub hash_progress: &'a Arc<std::sync::Mutex<Option<(usize, usize)>>>,
@@ -1121,6 +1334,8 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
         stream_download_rx,
         archive_skip_rx,
         extract_parallel_rx,
+        install_destination_prep_rx,
+        background_destination_prep_workers,
         wizard_state,
         install_screen_state,
         hash_progress,
@@ -1132,6 +1347,12 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     *stream_download_rx = None;
     *archive_skip_rx = None;
     *extract_parallel_rx = None;
+    if let Some(pending) = install_destination_prep_rx.take() {
+        hold_destination_prep_worker_for_shutdown(
+            background_destination_prep_workers,
+            pending.worker,
+        );
+    }
 
     wizard_state.modlist_auto_build_active = false;
     wizard_state.modlist_auto_build_waiting_for_install = false;
@@ -1254,6 +1475,7 @@ impl eframe::App for OrchestratorApp {
         }
 
         self.drain_size_worker_result();
+        self.drain_finished_destination_prep_workers();
 
         self.sync_active_workspace_if_dirty();
 
@@ -1261,12 +1483,14 @@ impl eframe::App for OrchestratorApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.join_all_destination_prep_workers();
         self.flush_all_now();
     }
 }
 
 impl Drop for OrchestratorApp {
     fn drop(&mut self) {
+        self.join_all_destination_prep_workers();
         self.flush_all_now();
     }
 }
@@ -1321,6 +1545,29 @@ mod tests {
         iss
     }
 
+    fn blocking_destination_prep_worker() -> (
+        crate::install_runtime::destination_prep::DestinationPrepWorker,
+        std::sync::mpsc::Sender<()>,
+    ) {
+        let (result_sender, result_receiver) = std::sync::mpsc::channel::<
+            crate::install_runtime::destination_prep::DestinationPrepResult,
+        >();
+        let (release_worker, worker_released) = std::sync::mpsc::channel::<()>();
+        let worker =
+            crate::install_runtime::destination_prep::DestinationPrepWorker::from_parts_for_test(
+                result_receiver,
+                std::thread::spawn(move || {
+                    let _ = worker_released.recv();
+                    let _ = result_sender.send(Ok(
+                        crate::install_runtime::destination_prep::DestinationPrepReport::Skipped {
+                            reason: crate::install_runtime::destination_prep::SkipReason::Continue,
+                        },
+                    ));
+                }),
+            );
+        (worker, release_worker)
+    }
+
     #[test]
     fn reset_install_pipeline_state_drops_all_receivers_and_clears_wizard_latches() {
         let (s_dl, r_dl) = std::sync::mpsc::channel::<
@@ -1332,9 +1579,24 @@ mod tests {
         let (s_ex, r_ex) = std::sync::mpsc::channel::<
             crate::install_runtime::extract_parallel::ExtractAssetEvent,
         >();
+        let (destination_prep_worker, release_worker) = blocking_destination_prep_worker();
         let mut stream = Some(r_dl);
         let mut skip = Some(r_sk);
         let mut extract = Some(r_ex);
+        let mut background_destination_prep_workers = Vec::new();
+        let mut dest_prep = Some(PendingInstallDestinationPrep {
+            token: DestinationPrepToken::new(
+                1,
+                DestinationPrepFlow::InstallPipeline,
+                r"D:\target",
+                None,
+            ),
+            destination: r"D:\target".to_string(),
+            game: Game::BGEE,
+            workflow: InstallWorkflow::PasteAndInstall,
+            code: "BIO-MODLIST-V1:test".to_string(),
+            worker: destination_prep_worker,
+        });
         let mut ws = dirty_ws();
         let mut iss = dirty_iss();
         let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
@@ -1346,6 +1608,8 @@ mod tests {
             stream_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
+            install_destination_prep_rx: &mut dest_prep,
+            background_destination_prep_workers: &mut background_destination_prep_workers,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,
@@ -1357,6 +1621,12 @@ mod tests {
         assert!(stream.is_none(), "stream_download_rx dropped");
         assert!(skip.is_none(), "archive_skip_rx dropped");
         assert!(extract.is_none(), "extract_parallel_rx dropped");
+        assert!(dest_prep.is_none(), "install_destination_prep_rx dropped");
+        assert_eq!(
+            background_destination_prep_workers.len(),
+            1,
+            "running destination prep worker retained for shutdown join"
+        );
 
         assert!(
             s_dl.send(
@@ -1386,6 +1656,12 @@ mod tests {
             .is_err()
         );
         drop((s_dl, s_sk, s_ex));
+        release_worker
+            .send(())
+            .expect("release destination prep worker");
+        for handle in background_destination_prep_workers {
+            join_destination_prep_handle(handle);
+        }
 
         assert!(!ws.modlist_auto_build_active);
         assert!(!ws.modlist_auto_build_waiting_for_install);
@@ -1410,6 +1686,8 @@ mod tests {
         let mut extract: Option<
             Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
         > = None;
+        let mut dest_prep: Option<PendingInstallDestinationPrep> = None;
+        let mut background_destination_prep_workers = Vec::new();
         let mut ws = dirty_ws();
         let mut iss = dirty_iss();
         let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
@@ -1421,6 +1699,8 @@ mod tests {
             stream_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
+            install_destination_prep_rx: &mut dest_prep,
+            background_destination_prep_workers: &mut background_destination_prep_workers,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,
@@ -1483,6 +1763,8 @@ mod tests {
         let mut stream = Some(r_dl);
         let mut skip = Some(r_sk);
         let mut extract = Some(r_ex);
+        let mut dest_prep: Option<PendingInstallDestinationPrep> = None;
+        let mut background_destination_prep_workers = Vec::new();
         let mut ws = WizardState::default();
         let mut iss = InstallScreenState::default();
         let hash = Arc::new(std::sync::Mutex::new(None));
@@ -1493,6 +1775,8 @@ mod tests {
             stream_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
+            install_destination_prep_rx: &mut dest_prep,
+            background_destination_prep_workers: &mut background_destination_prep_workers,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,

@@ -44,26 +44,17 @@ pub fn compute_flags(workflow: InstallWorkflow, settings: &Step1Settings) -> Vec
 
 #[must_use]
 pub const fn resolve(workflow: InstallWorkflow, settings: &Step1Settings) -> ResolvedFlags {
-    match workflow {
-        InstallWorkflow::FreshCreate => ResolvedFlags {
-            skip_installed: false,
-            check_last_installed: false,
-            download: settings.download,
-        },
-
+    let download = match workflow {
+        InstallWorkflow::FreshCreate => settings.download,
         InstallWorkflow::PasteAndInstall
         | InstallWorkflow::ForkAndModify
-        | InstallWorkflow::Reinstall => ResolvedFlags {
-            skip_installed: false,
-            check_last_installed: false,
-            download: true,
-        },
-
-        InstallWorkflow::ContinuePartialInstall => ResolvedFlags {
-            skip_installed: true,
-            check_last_installed: true,
-            download: true,
-        },
+        | InstallWorkflow::ContinuePartialInstall
+        | InstallWorkflow::Reinstall => true,
+    };
+    ResolvedFlags {
+        skip_installed: settings.skip_installed,
+        check_last_installed: settings.check_last_installed,
+        download,
     }
 }
 
@@ -82,58 +73,92 @@ pub const fn apply_flags(
 mod tests {
     use super::*;
 
-    fn settings_with_download(download: bool) -> Step1Settings {
+    fn settings_with_flags(
+        skip_installed: bool,
+        check_last_installed: bool,
+        download: bool,
+    ) -> Step1Settings {
         Step1Settings {
+            skip_installed,
             download,
+            check_last_installed,
             ..Default::default()
         }
     }
 
     #[test]
-    fn fresh_create_no_sc_download_follows_settings() {
-        let on = compute_flags(InstallWorkflow::FreshCreate, &settings_with_download(true));
-        assert_eq!(on, vec!["--download"], "Settings download ON ⇒ --download");
-        let off = compute_flags(InstallWorkflow::FreshCreate, &settings_with_download(false));
-        assert!(
-            off.is_empty(),
-            "Settings download OFF ⇒ no flags (fresh-create, no -s/-c)"
-        );
-    }
-
-    #[test]
-    fn paste_and_fork_force_download_no_sc() {
-        for workflow in [
-            InstallWorkflow::PasteAndInstall,
-            InstallWorkflow::ForkAndModify,
-        ] {
-            for settings_dl in [true, false] {
-                let on = compute_flags(workflow, &settings_with_download(settings_dl));
-                assert_eq!(
-                    on,
-                    vec!["--download"],
-                    "share-code workflow {workflow:?} forces --download (Settings={settings_dl})"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn continue_partial_forces_s_c_and_download() {
+    fn fresh_create_s_c_and_download_follow_settings() {
         let on = compute_flags(
-            InstallWorkflow::ContinuePartialInstall,
-            &settings_with_download(false),
+            InstallWorkflow::FreshCreate,
+            &settings_with_flags(true, true, true),
         );
         assert_eq!(
             on,
             vec!["-s", "-c", "--download"],
-            "Continue Partial Install ⇒ -s + -c + --download"
+            "Settings ON ⇒ -s, -c, --download"
+        );
+        let off = compute_flags(
+            InstallWorkflow::FreshCreate,
+            &settings_with_flags(false, false, false),
+        );
+        assert!(off.is_empty(), "Settings OFF ⇒ no flags for fresh-create");
+    }
+
+    #[test]
+    fn paste_and_fork_force_download_but_s_c_follow_settings() {
+        for workflow in [
+            InstallWorkflow::PasteAndInstall,
+            InstallWorkflow::ForkAndModify,
+        ] {
+            let no_sc = compute_flags(workflow, &settings_with_flags(false, false, false));
+            assert_eq!(
+                no_sc,
+                vec!["--download"],
+                "share-code workflow {workflow:?} forces only --download when -s/-c are OFF"
+            );
+            let with_sc = compute_flags(workflow, &settings_with_flags(true, true, false));
+            assert_eq!(
+                with_sc,
+                vec!["-s", "-c", "--download"],
+                "share-code workflow {workflow:?} keeps user -s/-c while forcing --download"
+            );
+        }
+    }
+
+    #[test]
+    fn continue_partial_forces_download_but_s_c_follow_settings() {
+        let off = compute_flags(
+            InstallWorkflow::ContinuePartialInstall,
+            &settings_with_flags(false, false, false),
+        );
+        assert_eq!(
+            off,
+            vec!["--download"],
+            "Continue Partial Install ⇒ --download, with -s/-c following Settings OFF"
+        );
+        let on = compute_flags(
+            InstallWorkflow::ContinuePartialInstall,
+            &settings_with_flags(true, true, false),
+        );
+        assert_eq!(
+            on,
+            vec!["-s", "-c", "--download"],
+            "Continue Partial Install ⇒ --download, with -s/-c following Settings ON"
         );
     }
 
     #[test]
-    fn reinstall_forces_download_no_sc() {
-        let on = compute_flags(InstallWorkflow::Reinstall, &settings_with_download(false));
-        assert_eq!(on, vec!["--download"]);
+    fn reinstall_forces_download_but_s_c_follow_settings() {
+        let off = compute_flags(
+            InstallWorkflow::Reinstall,
+            &settings_with_flags(false, false, false),
+        );
+        assert_eq!(off, vec!["--download"]);
+        let on = compute_flags(
+            InstallWorkflow::Reinstall,
+            &settings_with_flags(true, true, false),
+        );
+        assert_eq!(on, vec!["-s", "-c", "--download"]);
     }
 
     #[test]
@@ -147,19 +172,31 @@ mod tests {
         apply_flags(
             &mut step1,
             InstallWorkflow::FreshCreate,
-            &settings_with_download(true),
+            &settings_with_flags(false, false, true),
         );
-        assert!(!step1.skip_installed, "fresh-create clears -s");
-        assert!(!step1.check_last_installed, "fresh-create clears -c");
+        assert!(
+            !step1.skip_installed,
+            "fresh-create follows Settings -s OFF"
+        );
+        assert!(
+            !step1.check_last_installed,
+            "fresh-create follows Settings -c OFF"
+        );
         assert!(step1.download, "fresh-create download follows Settings ON");
 
         apply_flags(
             &mut step1,
             InstallWorkflow::ContinuePartialInstall,
-            &settings_with_download(false),
+            &settings_with_flags(true, false, false),
         );
-        assert!(step1.skip_installed, "Continue Partial sets -s");
-        assert!(step1.check_last_installed, "Continue Partial sets -c");
+        assert!(
+            step1.skip_installed,
+            "Continue Partial follows Settings -s ON"
+        );
+        assert!(
+            !step1.check_last_installed,
+            "Continue Partial follows Settings -c OFF"
+        );
         assert!(step1.download, "Continue Partial forces --download");
     }
 }

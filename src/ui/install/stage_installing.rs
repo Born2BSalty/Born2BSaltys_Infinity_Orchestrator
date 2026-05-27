@@ -77,6 +77,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         .iter()
         .find(|e| e.destination_folder.trim() == dest && !dest.is_empty())
         .cloned();
+    sync_share_provenance(orchestrator, entry.as_ref());
 
     let entry_for_row = entry.clone().unwrap_or_default();
 
@@ -107,9 +108,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
             tracing::debug!(
                 target = "orchestrator",
                 "stage_installing: ignoring Step5Action::StartInstall — \
-                 install already in flight (the Run-4a auto-build pipeline \
-                 already flipped start_install_requested; re-flipping would \
-                 double-start)"
+                 install already in flight"
             );
         } else {
             orchestrator.wizard_state.step5.start_install_requested = true;
@@ -135,6 +134,28 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
     }
 
     outcome
+}
+
+fn sync_share_provenance(
+    orchestrator: &mut OrchestratorApp,
+    entry: Option<&crate::registry::model::ModlistEntry>,
+) {
+    if let Some(entry) = entry {
+        orchestrator.wizard_state.set_modlist_share_provenance(
+            Some(entry.name.clone()),
+            entry.author.clone(),
+            entry.forked_from.clone(),
+        );
+        return;
+    }
+
+    if let Some(preview) = orchestrator.install_screen_state.parsed_preview.as_ref() {
+        orchestrator.wizard_state.set_modlist_share_provenance(
+            preview.name.clone(),
+            preview.author.clone(),
+            preview.forked_from.clone(),
+        );
+    }
 }
 
 fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {

@@ -230,8 +230,7 @@ fn apply_successful_update_check_outcome(
     let has_current_version = mod_has_current_version(state, &outcome.game_tab, &outcome.tp_file);
     let allow_log_missing_download =
         exact_log_missing_download_requested(state, &outcome.game_tab, &outcome.tp_file)
-            && (state.step1.installs_exactly_from_weidu_logs()
-                || state.step1.bootstraps_from_weidu_logs());
+            && log_missing_downloads_enabled(state);
     let uses_source_snapshot = matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot);
     let source_ref = outcome.source_ref.as_deref().unwrap_or(tag);
     if source_ref_matches(&outcome.tp_file, &outcome.source_id, source_ref) {
@@ -326,8 +325,7 @@ fn update_check_finished_status(
         )
     } else if state.step1.installs_exactly_from_weidu_logs() {
         format!("Check mod list finished: {missing} downloadable missing, {failed} failed")
-    } else if state.step1.bootstraps_from_weidu_logs()
-        && !state.step2.log_pending_downloads.is_empty()
+    } else if log_missing_downloads_enabled(state) && !state.step2.log_pending_downloads.is_empty()
     {
         format!("Check updates finished: {updates} updates, {missing} missing, {failed} failed")
     } else {
@@ -463,6 +461,13 @@ fn exact_log_missing_download_requested(
         pending.game_tab == game_tab
             && mod_downloads::normalize_mod_download_tp2(&pending.tp_file) == requested_tp2
     })
+}
+
+fn log_missing_downloads_enabled(state: &WizardState) -> bool {
+    state.step1.installs_exactly_from_weidu_logs()
+        || state.step1.bootstraps_from_weidu_logs()
+        || ((state.step2.review_edit_bgee_log_applied || state.step2.review_edit_bg2ee_log_applied)
+            && !state.step2.log_pending_downloads.is_empty())
 }
 
 fn push_update_check_failure(

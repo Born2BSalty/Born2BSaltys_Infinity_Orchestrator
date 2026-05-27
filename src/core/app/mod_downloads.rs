@@ -215,21 +215,18 @@ pub(crate) fn load_user_mod_download_source_block(
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
     let path = mod_downloads_user_path();
     let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
-    if let Some(block) = find_mod_block(&content, tp2)
-        && let Some(source_block) = find_source_block(&block, source_id)
-    {
-        return Ok(source_block);
-    }
-    if allow_source_id_change {
-        Ok(template_source_block(label, source_id))
-    } else {
-        Ok(load_mod_download_sources()
-            .resolve_source(tp2, Some(source_id))
-            .map_or_else(
-                || template_source_block(label, source_id),
-                |source| source_to_editor_block(&source),
-            ))
-    }
+    let existing_user_block =
+        find_mod_block(&content, tp2).and_then(|block| find_source_block(&block, source_id));
+    let merged_source = (!allow_source_id_change)
+        .then(|| load_mod_download_sources().resolve_source(tp2, Some(source_id)))
+        .flatten();
+    Ok(editor_block_for_source(
+        label,
+        source_id,
+        allow_source_id_change,
+        existing_user_block,
+        merged_source,
+    ))
 }
 
 pub(crate) fn save_user_mod_download_source_block(
@@ -692,10 +689,22 @@ fn normalize_source_block_indent(block: &str) -> String {
 
 fn normalize_source_block_for_editor(block: &str) -> String {
     normalize_source_block_indent(block)
-        .lines()
-        .map(str::trim)
-        .collect::<Vec<_>>()
-        .join("\n")
+}
+
+fn editor_block_for_source(
+    label: &str,
+    source_id: &str,
+    allow_source_id_change: bool,
+    existing_user_block: Option<String>,
+    merged_source: Option<ModDownloadSource>,
+) -> String {
+    if allow_source_id_change {
+        return existing_user_block.unwrap_or_else(|| template_source_block(label, source_id));
+    }
+    merged_source.map_or_else(
+        || existing_user_block.unwrap_or_else(|| template_source_block(label, source_id)),
+        |source| source_to_editor_block(&source),
+    )
 }
 
 const SOURCE_BLOCK_FIELD_ORDER: &[&str] = &[
@@ -705,10 +714,10 @@ const SOURCE_BLOCK_FIELD_ORDER: &[&str] = &[
     "url",
     "repo",
     "exact_github",
-    "channel",
-    "tag",
     "commit",
+    "tag",
     "branch",
+    "channel",
     "asset",
     "subdir_require",
     "aliases",
@@ -779,21 +788,26 @@ fn source_to_editor_block(source: &ModDownloadSource) -> String {
             escape_toml_string(exact_github)
         ));
     }
-    if let Some(channel) = source.channel.as_ref() {
-        lines.push(format!("channel = \"{}\"", escape_toml_string(channel)));
-    }
-    if let Some(tag) = source.tag.as_ref() {
-        lines.push(format!("tag = \"{}\"", escape_toml_string(tag)));
-    }
-    if let Some(commit) = source.commit.as_ref() {
-        lines.push(format!("commit = \"{}\"", escape_toml_string(commit)));
-    }
-    if let Some(branch) = source.branch.as_ref() {
-        lines.push(format!("branch = \"{}\"", escape_toml_string(branch)));
-    }
-    if let Some(asset) = source.asset.as_ref() {
-        lines.push(format!("asset = \"{}\"", escape_toml_string(asset)));
-    }
+    lines.push(format!(
+        "commit = \"{}\"",
+        escape_toml_string(source.commit.as_deref().unwrap_or_default())
+    ));
+    lines.push(format!(
+        "tag = \"{}\"",
+        escape_toml_string(source.tag.as_deref().unwrap_or_default())
+    ));
+    lines.push(format!(
+        "branch = \"{}\"",
+        escape_toml_string(source.branch.as_deref().unwrap_or_default())
+    ));
+    lines.push(format!(
+        "channel = \"{}\"",
+        escape_toml_string(source.channel.as_deref().unwrap_or_default())
+    ));
+    lines.push(format!(
+        "asset = \"{}\"",
+        escape_toml_string(source.asset.as_deref().unwrap_or_default())
+    ));
     if let Some(subdir_require) = source.subdir_require.as_ref() {
         lines.push(format!(
             "subdir_require = \"{}\"",
@@ -830,12 +844,12 @@ fn source_to_editor_block(source: &ModDownloadSource) -> String {
     if let Some(pkg_macos) = source.pkg_macos.as_ref() {
         lines.push(format!("pkg_macos = \"{}\"", escape_toml_string(pkg_macos)));
     }
-    lines.join("\n")
+    normalize_source_block_indent(&lines.join("\n"))
 }
 
 fn template_source_block(_label: &str, source_id: &str) -> String {
     format!(
-        "[[mods.sources]]\nid = \"{}\"\nlabel = \"GitHub\"\ntype = \"github\"\nurl = \"https://github.com/OWNER/REPO\"\nrepo = \"OWNER/REPO\"\ndefault = true",
+        "  [[mods.sources]]\n  id = \"{}\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/OWNER/REPO\"\n  repo = \"OWNER/REPO\"\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  channel = \"\"\n  asset = \"\"\n  default = true",
         escape_toml_string(source_id.trim())
     )
 }
@@ -1331,5 +1345,73 @@ fn merge_load_errors(left: Option<String>, right: Option<String>) -> Option<Stri
         (Some(left), None) => Some(left),
         (None, Some(right)) => Some(right),
         (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argent77_source() -> ModDownloadSource {
+        ModDownloadSource {
+            name: "Improved Archer".to_string(),
+            tp2: "a7-improvedarcher".to_string(),
+            source_id: "argent77".to_string(),
+            source_label: "Argent77".to_string(),
+            url: "https://github.com/Argent77/A7-ImprovedArcher".to_string(),
+            github: Some("Argent77/A7-ImprovedArcher".to_string()),
+            pkg_windows: Some("wzp,zip".to_string()),
+            pkg_linux: Some("lin,zip".to_string()),
+            pkg_macos: Some("mac,zip".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn source_editor_block_includes_empty_selector_fields_and_indented_shape() {
+        let block = source_to_editor_block(&argent77_source());
+
+        assert_eq!(
+            block,
+            "  [[mods.sources]]\n  id = \"argent77\"\n  label = \"Argent77\"\n  type = \"github\"\n  url = \"https://github.com/Argent77/A7-ImprovedArcher\"\n  repo = \"Argent77/A7-ImprovedArcher\"\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  channel = \"\"\n  asset = \"\"\n  pkg_windows = \"wzp,zip\"\n  pkg_linux = \"lin,zip\"\n  pkg_macos = \"mac,zip\""
+        );
+    }
+
+    #[test]
+    fn source_editor_prefers_merged_source_over_partial_user_override() {
+        let partial_user_block = Some(
+            "  [[mods.sources]]\n  id = \"argent77\"\n  pkg_windows = \"wzp,zip\"".to_string(),
+        );
+
+        let block = editor_block_for_source(
+            "Improved Archer",
+            "argent77",
+            false,
+            partial_user_block,
+            Some(argent77_source()),
+        );
+
+        assert!(
+            block.contains("repo = \"Argent77/A7-ImprovedArcher\""),
+            "the normal Edit Source popup should show the merged effective source"
+        );
+        assert!(
+            block.contains("commit = \"\""),
+            "empty selector fields stay visible/editable"
+        );
+    }
+
+    #[test]
+    fn source_id_change_editor_keeps_existing_user_block() {
+        let existing = "  [[mods.sources]]\n  id = \"fork\"\n  branch = \"main\"".to_string();
+        let block = editor_block_for_source(
+            "Fork",
+            "fork",
+            true,
+            Some(existing.clone()),
+            Some(argent77_source()),
+        );
+
+        assert_eq!(block, existing);
     }
 }

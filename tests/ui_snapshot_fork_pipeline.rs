@@ -56,7 +56,7 @@ fn render_choose_with_warning(out_dir: &Path, w: u16, h: u16) -> PathBuf {
     state.modlist_name = "My modlist".to_string();
     state.destination_choice = Some(DestChoice::Clear);
     let body = move |ui: &mut egui::Ui, palette: ThemePalette| {
-        let _ = stage_choose::render(ui, palette, &mut state);
+        let _ = stage_choose::render(ui, palette, &mut state, false);
         ui.add_space(8.0);
         let _ = destination_not_empty::render(ui, palette, Some(DestChoice::Clear), false);
     };

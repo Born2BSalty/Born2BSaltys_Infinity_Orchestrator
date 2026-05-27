@@ -6,6 +6,10 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::install_runtime::archive_store;
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
+use crate::ui::orchestrator::nav_destination::NavDestination;
+use crate::ui::orchestrator::orchestrator_app::{
+    DestinationPrepFlow, PendingInstallDestinationPrep,
+};
 use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
@@ -573,67 +577,174 @@ pub(crate) fn arm_pipeline_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     inputs: &LivePipelineInputs,
 ) {
-    use crate::install_runtime::auto_build_driver;
     use crate::install_runtime::destination_prep;
+    use std::sync::mpsc::TryRecvError;
 
-    if !orchestrator.install_screen_state.pipeline_flags.armed() {
-        orchestrator
+    let flow = install_destination_prep_flow(orchestrator);
+
+    if orchestrator.install_screen_state.pipeline_flags.armed()
+        || orchestrator
             .install_screen_state
-            .pipeline_flags
-            .set_armed(true);
+            .pipeline_arm_error
+            .is_some()
+    {
+        return;
+    }
 
-        let dest_path = std::path::PathBuf::from(inputs.destination.trim());
-        if let Err(err) = destination_prep::prepare_destination(
-            &dest_path,
-            orchestrator.install_screen_state.destination_choice,
-        ) {
-            let msg = format!("destination prep failed: {err}");
-            orchestrator.install_screen_state.pipeline_arm_error = Some(msg.clone());
-            orchestrator.wizard_state.step2.scan_status =
-                format!("Auto Build could not start: {msg}");
-            tracing::warn!(
-                target = "orchestrator",
-                "destination prep failed: {err} (Downloading stays navigable; \
-                 surfaced on-screen)"
-            );
-            return;
-        }
-
-        match auto_build_driver::prepare_install_dirs_and_maybe_import(
-            &mut orchestrator.wizard_state,
+    if let Some(pending) = orchestrator.install_destination_prep_rx.as_ref() {
+        if !pending.matches_context(
+            orchestrator.destination_prep_generation,
+            flow,
             &inputs.destination,
             inputs.game,
             inputs.workflow,
             &inputs.code,
         ) {
-            Ok(_) => {
-                let mods_archive_folder = orchestrator
-                    .settings_store
-                    .load()
-                    .map(|settings| {
-                        let from: crate::app::state::Step1State = settings.step1.into();
-                        from.mods_archive_folder
-                    })
-                    .unwrap_or_default();
-                auto_build_driver::arm_download_archive_policy(
-                    &mut orchestrator.wizard_state,
-                    &mods_archive_folder,
-                );
-                crate::install_runtime::install_modlist_registration::register_and_write_install_start_artifacts(
-                    orchestrator,
-                );
-            }
-            Err(err) => {
-                orchestrator.install_screen_state.pipeline_arm_error = Some(err.clone());
-                orchestrator.wizard_state.step2.scan_status =
-                    format!("Auto Build could not start: {err}");
-                tracing::warn!(
+            orchestrator.abandon_install_destination_prep();
+            return;
+        }
+
+        match pending.worker.rx.try_recv() {
+            Ok(Ok(report)) => {
+                let Some(pending) = orchestrator.install_destination_prep_rx.take() else {
+                    return;
+                };
+                if !pending.matches_context(
+                    orchestrator.destination_prep_generation,
+                    flow,
+                    &inputs.destination,
+                    inputs.game,
+                    inputs.workflow,
+                    &inputs.code,
+                ) {
+                    orchestrator.complete_destination_prep_worker(pending.worker);
+                    return;
+                }
+                tracing::info!(
                     target = "orchestrator",
-                    "pipeline arm failed: {err} (Downloading stays navigable; surfaced on-screen)"
+                    "Install screen destination prep finished: {report:?}"
+                );
+                let pending_inputs = LivePipelineInputs {
+                    destination: pending.destination.clone(),
+                    game: pending.game,
+                    workflow: pending.workflow,
+                    code: pending.code.clone(),
+                };
+                orchestrator.complete_destination_prep_worker(pending.worker);
+                finish_pipeline_arm_after_destination_prep(orchestrator, &pending_inputs);
+            }
+            Ok(Err(msg)) => {
+                if let Some(pending) = orchestrator.install_destination_prep_rx.take() {
+                    orchestrator.complete_destination_prep_worker(pending.worker);
+                }
+                set_pipeline_arm_error(orchestrator, &msg);
+            }
+            Err(TryRecvError::Empty) => {
+                orchestrator.wizard_state.step2.scan_status =
+                    "Auto Build: preparing target destination".to_string();
+            }
+            Err(TryRecvError::Disconnected) => {
+                if let Some(pending) = orchestrator.install_destination_prep_rx.take() {
+                    orchestrator.complete_destination_prep_worker(pending.worker);
+                }
+                set_pipeline_arm_error(
+                    orchestrator,
+                    "destination prep failed: worker disconnected",
                 );
             }
         }
+        return;
     }
+
+    let dest_path = std::path::PathBuf::from(inputs.destination.trim());
+    let token = orchestrator.next_destination_prep_token(flow, &inputs.destination, None);
+    orchestrator.install_destination_prep_rx = Some(PendingInstallDestinationPrep {
+        token,
+        destination: inputs.destination.clone(),
+        game: inputs.game,
+        workflow: inputs.workflow,
+        code: inputs.code.clone(),
+        worker: destination_prep::spawn_prepare_destination_worker(
+            dest_path,
+            orchestrator.install_screen_state.destination_choice,
+        ),
+    });
+    orchestrator.wizard_state.step2.scan_status =
+        "Auto Build: preparing target destination".to_string();
+}
+
+const fn install_destination_prep_flow(
+    orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+) -> DestinationPrepFlow {
+    if matches!(orchestrator.nav, NavDestination::Create) {
+        DestinationPrepFlow::CreateForkDownload
+    } else {
+        DestinationPrepFlow::InstallPipeline
+    }
+}
+
+fn finish_pipeline_arm_after_destination_prep(
+    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+    inputs: &LivePipelineInputs,
+) {
+    use crate::install_runtime::auto_build_driver;
+
+    orchestrator
+        .install_screen_state
+        .pipeline_flags
+        .set_armed(true);
+
+    match auto_build_driver::prepare_install_dirs_and_maybe_import(
+        &mut orchestrator.wizard_state,
+        &inputs.destination,
+        inputs.game,
+        inputs.workflow,
+        &inputs.code,
+    ) {
+        Ok(_) => {
+            let settings: crate::settings::model::Step1Settings =
+                orchestrator.wizard_state.step1.clone().into();
+            crate::install_runtime::flag_policies::apply_flags(
+                &mut orchestrator.wizard_state.step1,
+                inputs.workflow,
+                &settings,
+            );
+            let mods_archive_folder = orchestrator
+                .settings_store
+                .load()
+                .map(|settings| {
+                    let from: crate::app::state::Step1State = settings.step1.into();
+                    from.mods_archive_folder
+                })
+                .unwrap_or_default();
+            auto_build_driver::arm_download_archive_policy(
+                &mut orchestrator.wizard_state,
+                &mods_archive_folder,
+            );
+            crate::install_runtime::install_modlist_registration::register_and_write_install_start_artifacts(
+                orchestrator,
+            );
+        }
+        Err(err) => {
+            set_pipeline_arm_error(orchestrator, &err);
+            tracing::warn!(
+                target = "orchestrator",
+                "pipeline arm failed: {err} (Downloading stays navigable; surfaced on-screen)"
+            );
+        }
+    }
+}
+
+fn set_pipeline_arm_error(
+    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+    msg: &str,
+) {
+    orchestrator.install_screen_state.pipeline_arm_error = Some(msg.to_string());
+    orchestrator.wizard_state.step2.scan_status = format!("Auto Build could not start: {msg}");
+    tracing::warn!(
+        target = "orchestrator",
+        "{msg} (Downloading stays navigable; surfaced on-screen)"
+    );
 }
 
 pub(crate) fn stage_and_kick_archive_skip_once(

@@ -202,7 +202,7 @@ fn render_page(ui: &mut egui::Ui, palette: ThemePalette, state: &mut CreateScree
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE.inner_margin(CENTRAL_MARGIN))
         .show_inside(ui, |ui| {
-            let _ = stage_choose::render(ui, palette, state);
+            let _ = stage_choose::render(ui, palette, state, false);
         });
 }
 

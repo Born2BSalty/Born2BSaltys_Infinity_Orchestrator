@@ -81,6 +81,11 @@ pub const fn review_edit_any_log_applied(state: &WizardState) -> bool {
 }
 
 #[must_use]
+pub const fn applied_weidu_log_has_pending_downloads(state: &WizardState) -> bool {
+    review_edit_any_log_applied(state) && !state.step2.log_pending_downloads.is_empty()
+}
+
+#[must_use]
 pub fn non_scan_controls_locked(state: &WizardState) -> bool {
     state.step2.is_scanning || review_edit_waiting_for_first_scan(state)
 }

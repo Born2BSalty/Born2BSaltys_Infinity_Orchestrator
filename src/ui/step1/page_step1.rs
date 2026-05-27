@@ -11,9 +11,7 @@ use crate::ui::step1::service_step1::{
     split_path_check_lines, sync_install_mode, sync_weidu_log_mode,
 };
 use crate::ui::step1::state_step1::clear_path_check_if_step1_changed;
-use crate::ui::step5::service_diagnostics_support_step5::{
-    export_diagnostics, restart_app_with_diagnostics,
-};
+use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -36,21 +34,16 @@ pub fn render(
     ui.horizontal(|ui| {
         ui.heading("Step 1: Setup");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if dev_mode {
-                if ui.button("Export diagnostics").clicked() {
-                    match export_diagnostics(state, None, dev_mode, exe_fingerprint) {
-                        Ok(path) => {
-                            state.step5.last_status_text =
-                                format!("Diagnostics exported: {}", path.display());
-                        }
-                        Err(err) => {
-                            state.step5.last_status_text =
-                                format!("Diagnostics export failed: {err}");
-                        }
+            if dev_mode && ui.button("Export diagnostics").clicked() {
+                match export_diagnostics(state, None, dev_mode, exe_fingerprint) {
+                    Ok(path) => {
+                        state.step5.last_status_text =
+                            format!("Diagnostics exported: {}", path.display());
+                    }
+                    Err(err) => {
+                        state.step5.last_status_text = format!("Diagnostics export failed: {err}");
                     }
                 }
-            } else if ui.button("Restart App With Diagnostics").clicked() {
-                restart_app_with_diagnostics(state);
             }
         });
     });
@@ -337,8 +330,15 @@ fn empty_tab_fallback(value: &str, fallback: &str) -> String {
 fn format_modlist_import_preview(
     preview: &crate::app::modlist_share::ModlistSharePreview,
 ) -> String {
+    let modlist_name = preview
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Shared modlist");
     format!(
-        "Modlist\nBIO version: {}\nGame install: {}\nInstall mode: {}\n\nWeiDU Logs\nBGEE: {} entries\nBG2EE: {} entries\n\nIncluded Data\nSource overrides: {}\nInstalled refs / pins: {}\nMod config files: {}\n\nWhat Import Will Do\n- Set Step 1 game/install mode from this share code.\n- Write imported WeiDU logs to the Step 1 WeiDU log paths.\n- Import source overrides if included.\n- Import installed refs/pins if included.\n- Store pending mod config files if included.\n- Keep your local game, mods, archive, and backup paths unchanged.\n\nAfter Import\n- Click Next.\n- Review the imported WeiDU order.\n- Run Check Updates.\n- Download/extract missing mods.",
+        "Modlist: {}\nBIO version: {}\nGame install: {}\nInstall mode: {}\n\nWeiDU Logs\nBGEE: {} entries\nBG2EE: {} entries\n\nIncluded Data\nSource overrides: {}\nInstalled refs / pins: {}\nMod config files: {}\n\nWhat Import Will Do\n- Set Step 1 game/install mode from this share code.\n- Write imported WeiDU logs to the Step 1 WeiDU log paths.\n- Import source overrides if included.\n- Import installed refs/pins if included.\n- Store pending mod config files if included.\n- Keep your local game, mods, archive, and backup paths unchanged.\n\nAfter Import\n- Click Next.\n- Review the imported WeiDU order.\n- Run Check Updates.\n- Download/extract missing mods.",
+        modlist_name,
         preview.bio_version,
         preview.game_install,
         preview.install_mode,
@@ -356,4 +356,43 @@ fn format_modlist_import_preview(
         },
         preview.mod_config_count,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn import_preview_summary_shows_modlist_name_without_fork_details() {
+        let preview = crate::app::modlist_share::ModlistSharePreview {
+            bio_version: "0.1.0-test".to_string(),
+            game_install: "EET".to_string(),
+            install_mode: "build_from_scanned_mods".to_string(),
+            bgee_entries: 7,
+            bg2ee_entries: 11,
+            has_source_overrides: true,
+            has_installed_refs: true,
+            bgee_log_text: String::new(),
+            bg2ee_log_text: String::new(),
+            source_overrides_text: String::new(),
+            installed_refs_text: String::new(),
+            mod_config_count: 2,
+            mod_configs_text: String::new(),
+            allow_auto_install: true,
+            name: Some("Tactical EET 2026".to_string()),
+            author: Some("@hidden".to_string()),
+            forked_from: vec![crate::app::modlist_share::ForkAncestor {
+                name: "Root".to_string(),
+                author: "@root".to_string(),
+            }],
+        };
+
+        let text = format_modlist_import_preview(&preview);
+
+        assert!(text.contains("Modlist: Tactical EET 2026"));
+        assert!(text.contains("BGEE: 7 entries"));
+        assert!(text.contains("BG2EE: 11 entries"));
+        assert!(!text.contains("@hidden"));
+        assert!(!text.contains("Root"));
+    }
 }

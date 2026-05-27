@@ -13,7 +13,9 @@ use crate::ui::shared::redesign_tokens::{
     redesign_shell_bg,
 };
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::step2::state_step2::review_edit_any_log_applied;
+use crate::ui::step2::state_step2::{
+    applied_weidu_log_has_pending_downloads, review_edit_any_log_applied,
+};
 use crate::ui::step2::update_check_popup_lists_step2::{
     ListCtx, SourceChoiceRow, SourceEditRow, collect_source_choices, collect_source_edit_rows,
     pending_log_labels, render_list, render_source_choices, single_mod_popup_target,
@@ -72,10 +74,10 @@ pub fn render(
 
 fn popup_modes(state: &WizardState, has_single_mod_target: bool) -> PopupModes {
     let exact_log = state.step1.installs_exactly_from_weidu_logs();
-    let review_edit = state.step1.bootstraps_from_weidu_logs();
+    let pending_missing = applied_weidu_log_has_pending_downloads(state);
+    let review_edit = state.step1.bootstraps_from_weidu_logs() || pending_missing;
     let scanned_mods = !state.step1.uses_source_weidu_logs();
-    let pending_missing = review_edit && !state.step2.log_pending_downloads.is_empty();
-    let hybrid_missing = review_edit && pending_missing;
+    let hybrid_missing = pending_missing;
     let current_selection_signature =
         scanned_mods.then(|| update_selection_signature(&state.step2));
     let selection_stale = scanned_mods
@@ -255,10 +257,7 @@ const fn extract_status_label(state: &WizardState, modes: PopupModes) -> &'stati
 }
 
 fn render_summary(ui: &mut egui::Ui, state: &WizardState, modes: PopupModes) {
-    if modes.scanned_mods && !state.step2.update_selected_has_run && !update_pipeline_busy(state) {
-        ui.add_space(4.0);
-        ui.label("No update check run yet.");
-    } else if modes.good_to_go {
+    if modes.good_to_go {
         ui.add_space(4.0);
         ui.label("No missing mods found. Exact-log install is good to go.");
     } else if modes.exact_log {
@@ -267,6 +266,12 @@ fn render_summary(ui: &mut egui::Ui, state: &WizardState, modes: PopupModes) {
         render_hybrid_pending_summary(ui, state);
     } else if modes.hybrid_missing {
         render_hybrid_summary(ui, state);
+    } else if modes.scanned_mods
+        && !state.step2.update_selected_has_run
+        && !update_pipeline_busy(state)
+    {
+        ui.add_space(4.0);
+        ui.label("No update check run yet.");
     } else {
         render_update_summary(ui, state);
     }
@@ -695,7 +700,8 @@ fn render_copy_report_button(
     state: &WizardState,
     modes: PopupModes,
 ) {
-    let can_copy_report = !modes.scanned_mods || state.step2.update_selected_has_run;
+    let can_copy_report =
+        !modes.scanned_mods || modes.pending_missing || state.step2.update_selected_has_run;
     if redesign_btn(
         ui,
         palette,
