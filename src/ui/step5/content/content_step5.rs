@@ -66,7 +66,9 @@ pub fn render(
         terminal.as_deref_mut(),
         ctx.palette,
     );
-    prompt_answers::render_window(ui, state, terminal.as_deref());
+    if ctx.dev_mode {
+        prompt_answers::render_window(ui, state, terminal.as_deref());
+    }
 
     action
 }

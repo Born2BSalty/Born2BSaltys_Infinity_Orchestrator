@@ -31,8 +31,10 @@ pub(crate) fn render_install_row(
             ctx.dev_mode,
             ctx.palette,
         );
-        render_step5_menus(ui, state, &mut terminal, ctx.dev_mode, ctx.exe_fingerprint);
-        crate::ui::step5::prompt_answers_step5::render_button(ui, state);
+        render_step5_menus(ui, state, &mut terminal, ctx.dev_mode, ctx.exe_fingerprint, ctx.palette);
+        if ctx.dev_mode {
+            crate::ui::step5::prompt_answers_step5::render_button(ui, state, ctx.palette);
+        }
         render_export_modlist_button(ui, state);
         render_console_filters(ui, console_view);
     });
@@ -90,13 +92,30 @@ fn render_install_control(
         return None;
     }
 
-    let button_label = install_button_label(state);
+    // Clean success: decorative dead button, no action.
+    if state.step5.has_run_once
+        && !state.step5.resume_available
+        && state.step5.last_exit_code == Some(0)
+    {
+        redesign_btn(
+            ui,
+            palette,
+            "\u{2713} Installed",
+            BtnOpts {
+                disabled: true,
+                ..Default::default()
+            },
+        );
+        return None;
+    }
+
+    let (button_label, is_primary) = install_button_label(state);
     let install_resp = redesign_btn(
         ui,
         palette,
         button_label,
         BtnOpts {
-            primary: true,
+            primary: is_primary,
             disabled: !install_allowed,
             ..Default::default()
         },
@@ -153,13 +172,14 @@ fn render_cancel_button(
     }
 }
 
-const fn install_button_label(state: &WizardState) -> &'static str {
+/// Returns `(label, primary)` for the install button in non-success, non-running states.
+const fn install_button_label(state: &WizardState) -> (&'static str, bool) {
     if state.step5.resume_available {
-        "Resume Install"
+        ("Resume Install", true)
     } else if state.step5.has_run_once {
-        "Restart Install"
+        ("Restart Install", true)
     } else {
-        "Install"
+        ("Install", true)
     }
 }
 
@@ -184,14 +204,16 @@ fn render_step5_menus(
     terminal: &mut Option<&mut EmbeddedTerminal>,
     dev_mode: bool,
     exe_fingerprint: &str,
+    palette: ThemePalette,
 ) {
-    crate::ui::step5::menus_step5::render_actions_menu(ui, state, terminal.as_deref_mut());
+    crate::ui::step5::menus_step5::render_actions_menu(ui, state, terminal.as_deref_mut(), palette);
     crate::ui::step5::menus_step5::render_diagnostics_menu(
         ui,
         state,
         terminal.as_deref(),
         dev_mode,
         exe_fingerprint,
+        palette,
     );
 }
 
