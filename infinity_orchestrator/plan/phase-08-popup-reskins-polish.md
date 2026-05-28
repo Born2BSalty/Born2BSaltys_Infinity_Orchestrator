@@ -527,6 +527,26 @@ Replace the `list_step3::render(...)` call at `workspace_step3.rs:65` with `step
 
 **Acceptance:** `cargo build --bin infinity_orchestrator --release` no-op rebuild. `cargo build --bin BIO --release` unchanged.
 
+### P8.T15 — Delivered (with iterations and follow-on carve-outs, 2026-05-27 → 2026-05-28)
+
+Shipped on branch `feat/step3-list-body-sibling` across the original P8.T15 sibling renderer + ~7 iteration rounds of live-app feedback. Key deviations from the original plan, all preserving the original constraint set (no BIO source touched outside named carve-outs):
+
+- **Header-bar visual restructure (wireframe-fidelity).** The original plan rendered a dashed border around the entire group (header + children). As shipped, the dashed/dotted border + a `redesign_rail_bg(palette)` background fill wrap **only the header bar** (per wireframe `screens.jsx:3083–3120`). Children render below without an enclosing border. Per-row dotted separators between children, skipped for the last child of each group. Final border style is **dotted** (filled circles, 7 px step, 0.7 px radius) at 50 % alpha of `theme_global::accent_path()` — fainter than the prior dashed iteration.
+- **Header vertical centering** via asymmetric padding (`HEADER_BAR_VPAD_TOP = 6.0`, `HEADER_BAR_VPAD_BOT = 2.0`) to visually center the title text within the band.
+- **Mod version label** rendered after the count in `redesign_text_faint(palette)` (light grey). Version sourced at render time via `crate::parser::weidu_version::parse_version` on the first child's `raw_line`; no `Step3ItemState` field added.
+- **Lock glyph** uses bundled `FiraCodeNerdFont-Light.ttf` PUA glyphs (`U+F023` locked, `U+F09C` unlocked) via `FontFamily::Name("firacode_nerd".into())`. The earlier vector-paint approach (and an even earlier emoji approach that rendered as a smudge at 12 px) was dropped.
+- **Chain icon and `≡` drag handle dropped.** User decision: lock + chevron is sufficient header iconography; the whole label rect is already draggable.
+- **Floating overlay scrollbar** (`ScrollStyle::floating`) so the per-mod border can extend to the viewport edge without colliding with the bar.
+- **Drag-target `Grab` cursor reverted.** Winit's Windows mapping of `CursorIcon::Grab` is `IDC_SIZEALL` (4-arrow compass), not a hand. Windows has no native open-hand grab cursor; the cursor change was removed pending a future custom-cursor effort.
+- **Full-width drop-marker** on drag-over. Orchestrator-side `paint_insert_marker_full_width` replaces the `service_step3::drag_ops::draw_insert_marker` call; uses `ui.clip_rect()` minus `SCROLLBAR_RESERVE` so the line spans the full inner-container width regardless of which row is under the cursor. Sibling-implemented; no carve-out needed.
+
+Two SPEC §1 carve-outs were added during this work:
+
+- **#11 — Text-prompt jump-to-target Step-3 routing** (single-function body extension of `apply_text_prompt_jump` in `src/core/app/prompt_popup_nav.rs`). Fixed the bug where clicking a component in the Step-3 prompt-component popup didn't scroll the Step-3 list to that component.
+- **#12 — Non-uniform-pitch-aware drag target in Step 3** (single-function carve-out for `service_drag_ops_step3.rs::update_drag_target_from_pointer`). Replaced the uniform-pitch floor-division math with iteration over `visible_rows`, because the sibling renderer's per-group inter-row spacing violated the BIO drag pipeline's uniform-pitch assumption (dragged rows jumped down by `accumulated_extra_spacing / row_pitch` slots on drag start).
+
+Verification across all iterations: 590 lib tests passing, both binaries gate-fresh, crate-wide clippy pedantic + nursery zero warnings, BIO-source guard hits only the named carve-outs, DATA-LOSS sentinel byte-identical, render-gate PNGs (`target/render-gate/step3_polish_{dark,light}.png`) orchestrator-reviewed visually in both palettes, live-app user sign-off on the final state.
+
 ---
 
 ## P8.T16 — Step 4 review list wireframe polish (Item 2)
