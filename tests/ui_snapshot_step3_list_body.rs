@@ -18,13 +18,52 @@ use egui_kittest::Harness;
 
 const WIDTH: f32 = 1000.0;
 const HEIGHT: f32 = 640.0;
-const GATE_DASH_STEP_PX: f32 = 10.0;
-const GATE_DASH_LEN_PX: f32 = GATE_DASH_STEP_PX * 0.5;
-const GATE_HEADER_VPAD: f32 = 4.0;
+const GATE_HEADER_VPAD_TOP: f32 = 6.0;
+const GATE_HEADER_VPAD_BOT: f32 = 2.0;
 const GATE_GROUP_GAP: f32 = 6.0;
+const GATE_DOT_STEP_PX: f32 = 7.0;
+const GATE_DOT_RADIUS: f32 = 0.7;
 
 const PALETTES: [(&str, ThemePalette); 2] =
     [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)];
+
+/// Extracts the version token from a `WeiDU` raw install line comment, if present.
+///
+/// Mirrors the logic of `bio::parser::weidu_version::parse_version` without relying on
+/// a `pub(crate)` symbol.
+fn gate_parse_version(raw_line: &str) -> Option<String> {
+    let comment = raw_line.split_once("//")?.1.trim().to_ascii_lowercase();
+    let segment = comment.split(':').next_back()?;
+    segment.split_whitespace().rev().find_map(|tok| {
+        let tok = tok.trim_matches(|ch: char| {
+            matches!(
+                ch,
+                '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';'
+            )
+        });
+        let lower = tok;
+        let (stripped, had_v) = lower.strip_prefix("version").map_or_else(
+            || {
+                if lower.starts_with('v')
+                    && lower.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
+                {
+                    (&lower[1..], true)
+                } else {
+                    (lower, false)
+                }
+            },
+            |rest| (rest.trim_start_matches([' ', '-', '_', ':']), true),
+        );
+        let start = stripped.find(|c: char| c.is_ascii_digit())?;
+        let tail = &stripped[start..];
+        let end = tail
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '-'))
+            .unwrap_or(tail.len());
+        let candidate = &tail[..end];
+        (candidate.chars().any(|c| c.is_ascii_digit()) && (candidate.contains('.') || had_v))
+            .then(|| candidate.to_string())
+    })
+}
 
 fn evidence_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -457,24 +496,27 @@ fn render_polish_groups(
         first_group = false;
         let block_id = items[idx].block_id.clone();
 
-        // Header bar: viewport-clamped, bg fill, dashed border on header only.
+        // Header bar: viewport-clamped, bg fill, dotted border on header only.
         let viewport_w = ui.available_width().max(0.0);
         let top_cursor = ui.cursor().min;
 
         // Reserve a paint slot so the bg paints behind widgets.
         let bg_shape_id = ui.painter().add(egui::Shape::Noop);
 
-        // 4 px top padding.
-        ui.add_space(GATE_HEADER_VPAD);
-        render_polish_header_row(ui, items, idx, locked, collapsed, palette);
-        // 4 px bottom padding.
-        ui.add_space(GATE_HEADER_VPAD);
+        let scope_resp = ui.scope(|ui| {
+            ui.set_min_width(viewport_w);
+            ui.add_space(GATE_HEADER_VPAD_TOP);
+            ui.horizontal(|ui| {
+                ui.add_space(6.0);
+                render_polish_header_row(ui, items, idx, locked, collapsed, palette);
+            });
+            ui.add_space(GATE_HEADER_VPAD_BOT);
+        });
         pos += 1;
 
-        let bottom_cursor = ui.cursor().min.y;
-        let header_rect = egui::Rect::from_min_max(
+        let header_rect = egui::Rect::from_min_size(
             top_cursor,
-            egui::pos2(top_cursor.x + viewport_w, bottom_cursor),
+            egui::vec2(viewport_w, scope_resp.response.rect.height()),
         );
 
         ui.painter().set(
@@ -486,7 +528,14 @@ fn render_polish_groups(
             ),
         );
 
-        paint_gate_dashed_rect(ui, header_rect);
+        let dot_color = redesign_with_alpha(accent_path(), 1, 2);
+        paint_gate_dotted_rect(
+            ui,
+            header_rect,
+            dot_color,
+            GATE_DOT_STEP_PX,
+            GATE_DOT_RADIUS,
+        );
 
         let x_bounds = (header_rect.left(), header_rect.right());
 
@@ -515,7 +564,7 @@ fn render_polish_groups(
 }
 
 /// Renders the polished Step-3 list body scene with a locked group, an unlocked group,
-/// and a collapsed group — showing header-only dashed borders and dotted row separators.
+/// and a collapsed group — showing header-only dotted borders and dotted row separators.
 fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
     let (items, collapsed, locked, visible) = make_polish_scene();
 
@@ -553,6 +602,9 @@ fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
         });
 }
 
+/// Renders the header-row content — lock glyph, chevron, title label, and optional version.
+///
+/// Must be called from inside a `ui.horizontal` closure in the caller.
 fn render_polish_header_row(
     ui: &mut egui::Ui,
     items: &[Step3ItemState],
@@ -567,55 +619,60 @@ fn render_polish_header_row(
     let child_count = blocks::count_children_in_block(items, idx);
     let mod_name = &items[idx].mod_name;
 
-    ui.add_space(2.0);
-    ui.horizontal(|ui| {
-        ui.add_space(4.0);
+    let mod_version = items
+        .iter()
+        .filter(|i| !i.is_parent && &i.block_id == block_id)
+        .find_map(|i| gate_parse_version(&i.raw_line));
 
-        // Lock glyph from FiraCode Nerd Font PUA range.
-        let lock_color = if is_locked {
-            redesign_warning(palette)
-        } else {
-            redesign_text_disabled(palette)
-        };
-        let lock_glyph = if is_locked { "\u{F023}" } else { "\u{F09C}" };
-        let (lock_rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-        if ui.is_rect_visible(lock_rect) {
-            ui.painter().text(
-                lock_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                lock_glyph,
-                egui::FontId::new(12.0, egui::FontFamily::Name("firacode_nerd".into())),
-                lock_color,
-            );
-        }
-        ui.add_space(4.0);
-
-        // Chevron.
-        let chevron = if is_collapsed { "\u{25B8}" } else { "\u{25BE}" };
-        let (chev_rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-        if ui.is_rect_visible(chev_rect) {
-            ui.painter().text(
-                chev_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                chevron,
-                egui::FontId::new(12.0, egui::FontFamily::Monospace),
-                redesign_text_faint(palette),
-            );
-        }
-        ui.add_space(4.0);
-
-        let title = format!("{mod_name} ({child_count})");
-        let label = if is_locked {
-            format!("{title} [locked]")
-        } else {
-            title
-        };
-        ui.label(
-            egui::RichText::new(label)
-                .strong()
-                .color(redesign_text_faint(palette)),
+    // Lock glyph from FiraCode Nerd Font PUA range.
+    let lock_color = if is_locked {
+        redesign_warning(palette)
+    } else {
+        redesign_text_disabled(palette)
+    };
+    let lock_glyph = if is_locked { "\u{F023}" } else { "\u{F09C}" };
+    let (lock_rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+    if ui.is_rect_visible(lock_rect) {
+        ui.painter().text(
+            lock_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            lock_glyph,
+            egui::FontId::new(12.0, egui::FontFamily::Name("firacode_nerd".into())),
+            lock_color,
         );
-    });
+    }
+    ui.add_space(4.0);
+
+    // Chevron.
+    let chevron = if is_collapsed { "\u{25B8}" } else { "\u{25BE}" };
+    let (chev_rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+    if ui.is_rect_visible(chev_rect) {
+        ui.painter().text(
+            chev_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            chevron,
+            egui::FontId::new(12.0, egui::FontFamily::Monospace),
+            redesign_text_faint(palette),
+        );
+    }
+    ui.add_space(4.0);
+
+    let title = format!("{mod_name} ({child_count})");
+    let label = if is_locked {
+        format!("{title} [locked]")
+    } else {
+        title
+    };
+    ui.label(
+        egui::RichText::new(label)
+            .strong()
+            .color(redesign_text_faint(palette)),
+    );
+
+    if let Some(ref v) = mod_version {
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(format!("v{v}")).color(redesign_text_faint(palette)));
+    }
 }
 
 fn render_polish_child_row(
@@ -676,10 +733,16 @@ fn render_polish_child_row(
     ui.add_space(1.0);
 }
 
-/// Paints a dashed rectangle border in the warm-tan TP2 path color.
-fn paint_gate_dashed_rect(ui: &egui::Ui, rect: egui::Rect) {
-    let color = accent_path();
-    let stroke = egui::Stroke::new(1.0, color);
+/// Paints a dotted rectangle border, placing filled circles along each edge.
+///
+/// Corners are traversed in order; the dot cycle restarts at each corner.
+fn paint_gate_dotted_rect(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    color: egui::Color32,
+    step_px: f32,
+    radius: f32,
+) {
     let painter = ui.painter();
     let corners = [
         (rect.left_top(), rect.right_top()),
@@ -697,13 +760,11 @@ fn paint_gate_dashed_rect(ui: &egui::Ui, rect: egui::Rect) {
         let ux = dx / edge_len;
         let uy = dy / edge_len;
         for t in std::iter::successors(Some(0.0_f32), |&prev| {
-            let next = prev + GATE_DASH_STEP_PX;
-            if next < edge_len { Some(next) } else { None }
+            let next = prev + step_px;
+            if next <= edge_len { Some(next) } else { None }
         }) {
-            let t_end = (t + GATE_DASH_LEN_PX).min(edge_len);
-            let p0 = egui::pos2(ux.mul_add(t, from.x), uy.mul_add(t, from.y));
-            let p1 = egui::pos2(ux.mul_add(t_end, from.x), uy.mul_add(t_end, from.y));
-            painter.line_segment([p0, p1], stroke);
+            let pt = egui::pos2(ux.mul_add(t, from.x), uy.mul_add(t, from.y));
+            painter.circle_filled(pt, radius, color);
         }
     }
 }

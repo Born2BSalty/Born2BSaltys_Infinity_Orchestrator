@@ -37,16 +37,20 @@ const LINENO_PAD_PX: f32 = 4.0;
 const ROW_SEP_HEIGHT: f32 = 1.0;
 const DOT_STEP_PX: f32 = 7.0;
 const DOT_RADIUS: f32 = 0.5;
-const DASH_STEP_PX: f32 = 10.0;
-const DASH_LEN_PX: f32 = DASH_STEP_PX * 0.5;
 const GLYPH_ICON_PX: f32 = 14.0;
 const GLYPH_FONT_SIZE: f32 = 12.0;
 const GLYPH_GAP_PX: f32 = 4.0;
 const GROUP_GAP_PX: f32 = 6.0;
 /// Horizontal space reserved for the floating scrollbar on the right edge.
 const SCROLLBAR_RESERVE: f32 = 14.0;
-/// Vertical padding applied above and below the header-bar content (half per side).
-const HEADER_BAR_VPAD: f32 = 4.0;
+/// Vertical padding above the header-bar content.
+const HEADER_BAR_VPAD_TOP: f32 = 6.0;
+/// Vertical padding below the header-bar content — asymmetric to correct visual centering.
+const HEADER_BAR_VPAD_BOT: f32 = 2.0;
+/// Dot spacing for the header-bar dotted border.
+const HEADER_DOT_STEP_PX: f32 = 7.0;
+/// Dot radius for the header-bar dotted border.
+const HEADER_DOT_RADIUS: f32 = 0.7;
 
 /// Per-frame rendering context bundling mutable state refs and read-only view data.
 struct RenderCtx<'a> {
@@ -300,12 +304,12 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
 
         let scope_resp = ui.scope(|ui| {
             ui.set_min_width(viewport_w);
-            ui.add_space(HEADER_BAR_VPAD);
+            ui.add_space(HEADER_BAR_VPAD_TOP);
             ui.horizontal(|ui| {
                 ui.add_space(6.0);
                 render_header_row(ui, ctx, idx, &mut acc);
             });
-            ui.add_space(HEADER_BAR_VPAD);
+            ui.add_space(HEADER_BAR_VPAD_BOT);
         });
         pos += 1;
 
@@ -324,8 +328,15 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             ),
         );
 
-        // Dashed border on the header bar only.
-        paint_dashed_rect(ui, header_rect);
+        // Dotted border on the header bar only — fainter warm-tan at 50% alpha.
+        let dot_color = redesign_with_alpha(crate::ui::shared::theme_global::accent_path(), 1, 2);
+        paint_dotted_rect(
+            ui,
+            header_rect,
+            dot_color,
+            HEADER_DOT_STEP_PX,
+            HEADER_DOT_RADIUS,
+        );
 
         // Set group x-bounds to the header bar's extent for full-width child separators.
         ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
@@ -370,6 +381,12 @@ fn render_header_row(
     let collapsed = ctx.collapsed_blocks.contains(&block_id);
     let mut is_locked = ctx.locked_blocks.contains(&block_id);
 
+    let mod_version = ctx
+        .items
+        .iter()
+        .filter(|i| !i.is_parent && i.block_id == block_id)
+        .find_map(|i| crate::parser::weidu_version::parse_version(&i.raw_line));
+
     let label_response = ui
         .scope(|ui| {
             let mut row_resp: Option<egui::Response> = None;
@@ -404,6 +421,14 @@ fn render_header_row(
                 let title =
                     build_parent_title(&mod_name, parent_placeholder, child_count, is_locked);
                 row_resp = Some(ui.selectable_label(ctx.selected.contains(&idx), strong(title)));
+
+                if let Some(ref v) = mod_version {
+                    ui.add_space(GLYPH_GAP_PX);
+                    ui.label(
+                        egui::RichText::new(format!("v{v}"))
+                            .color(redesign_text_faint(ctx.palette)),
+                    );
+                }
             });
             row_resp.expect("row response required")
         })
@@ -571,19 +596,23 @@ fn paint_dashed_separator(
     }
 }
 
-/// Paints a dashed rectangle border around `rect`, walking each edge in dash-gap segments.
-fn paint_dashed_rect(ui: &egui::Ui, rect: egui::Rect) {
-    let color = crate::ui::shared::theme_global::accent_path();
-    let stroke = egui::Stroke::new(ROW_SEP_HEIGHT, color);
+/// Paints a dotted rectangle border around `rect`, placing filled circles along each edge.
+///
+/// Corners are traversed in order; the dot cycle restarts at each corner.
+fn paint_dotted_rect(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    color: egui::Color32,
+    step_px: f32,
+    radius: f32,
+) {
     let painter = ui.painter();
-
     let corners = [
         (rect.left_top(), rect.right_top()),
         (rect.right_top(), rect.right_bottom()),
         (rect.right_bottom(), rect.left_bottom()),
         (rect.left_bottom(), rect.left_top()),
     ];
-
     for (from, to) in corners {
         let dx = to.x - from.x;
         let dy = to.y - from.y;
@@ -593,15 +622,12 @@ fn paint_dashed_rect(ui: &egui::Ui, rect: egui::Rect) {
         }
         let ux = dx / edge_len;
         let uy = dy / edge_len;
-
         for t in std::iter::successors(Some(0.0_f32), |&prev| {
-            let next = prev + DASH_STEP_PX;
-            if next < edge_len { Some(next) } else { None }
+            let next = prev + step_px;
+            if next <= edge_len { Some(next) } else { None }
         }) {
-            let t_end = (t + DASH_LEN_PX).min(edge_len);
-            let p0 = egui::pos2(ux.mul_add(t, from.x), uy.mul_add(t, from.y));
-            let p1 = egui::pos2(ux.mul_add(t_end, from.x), uy.mul_add(t_end, from.y));
-            painter.line_segment([p0, p1], stroke);
+            let pt = egui::pos2(ux.mul_add(t, from.x), uy.mul_add(t, from.y));
+            painter.circle_filled(pt, radius, color);
         }
     }
 }
@@ -856,7 +882,7 @@ fn run_drag_pipeline(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(us
     };
     service_step3::drag_ops::update_drag_target_from_pointer(ui, &mut pointer_ctx);
 
-    service_step3::drag_ops::draw_insert_marker(
+    paint_insert_marker_full_width(
         ui,
         ctx.items,
         ctx.drag_from.is_some(),
@@ -916,6 +942,42 @@ fn flush_row_outcome(state: &mut WizardState, tab_id: &str, acc: &mut RowAccumul
     if !acc.prompt_requests.is_empty() {
         service_step3::prompt_actions::apply_prompt_actions(state, &acc.prompt_requests);
     }
+}
+
+/// Paints a full-viewport-width drag-insert marker line at the target insertion position.
+///
+/// The line spans the full clip-rect width minus a scrollbar reserve, so it is independent
+/// of how wide the row under the cursor happens to be.
+fn paint_insert_marker_full_width(
+    ui: &egui::Ui,
+    items: &[Step3ItemState],
+    drag_active: bool,
+    drag_over: Option<usize>,
+    visible_rows: &[(usize, egui::Rect)],
+) {
+    if !drag_active {
+        return;
+    }
+    let Some(insert_at) = drag_over else { return };
+    let row_rects: Vec<egui::Rect> = visible_rows.iter().map(|(_, r)| *r).collect();
+    if row_rects.is_empty() {
+        return;
+    }
+    let clip = ui.clip_rect();
+    let x0 = clip.left();
+    let x1 = (clip.right() - SCROLLBAR_RESERVE).max(x0);
+    let clamped = insert_at.min(items.len());
+    let y = if clamped == 0 {
+        row_rects[0].top() - 1.0
+    } else if clamped >= row_rects.len() {
+        row_rects[row_rects.len() - 1].bottom() + 1.0
+    } else {
+        row_rects[clamped].top() - 1.0
+    };
+    ui.painter().line_segment(
+        [egui::pos2(x0, y), egui::pos2(x1, y)],
+        egui::Stroke::new(1.5, ui.visuals().selection.stroke.color),
+    );
 }
 
 // ---------------------------------------------------------------------------
