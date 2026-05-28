@@ -17,7 +17,7 @@ use crate::ui::shared::layout_tokens_global::BORDER_THIN;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_shell_bg,
-    redesign_text_disabled, redesign_text_faint, redesign_warning,
+    redesign_text_disabled, redesign_text_faint, redesign_text_fainter, redesign_warning,
 };
 use crate::ui::shared::typography_global::{SIZE_PILL_TEXT, strong};
 use crate::ui::step3::block_selection_step3::{
@@ -37,6 +37,11 @@ const LINENO_PAD_PX: f32 = 4.0;
 const ROW_SEP_HEIGHT: f32 = 1.0;
 const DASH_STEP_PX: f32 = 6.0;
 const DASH_LEN_PX: f32 = DASH_STEP_PX * 0.5;
+const GLYPH_ICON_PX: f32 = 14.0;
+const GLYPH_FONT_SIZE: f32 = 12.0;
+const GLYPH_GAP_PX: f32 = 4.0;
+const GROUP_BORDER_PADDING: f32 = 4.0;
+const GROUP_GAP_PX: f32 = 12.0;
 
 /// Per-frame rendering context bundling mutable state refs and read-only view data.
 struct RenderCtx<'a> {
@@ -255,15 +260,72 @@ fn lineno_col_width(total_children: usize) -> f32 {
 fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> RowAccumulator {
     let mut acc = RowAccumulator::new(ctx.visible_indices.len());
     let mut child_counter = 0usize;
+    let mut first_group = true;
 
-    for pos in 0..ctx.visible_indices.len() {
+    let mut pos = 0;
+    while pos < ctx.visible_indices.len() {
         let idx = ctx.visible_indices[pos];
-        if ctx.items[idx].is_parent {
-            render_header_row(ui, ctx, idx, &mut acc);
-        } else {
+        if !ctx.items[idx].is_parent {
             child_counter += 1;
             render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w);
+            pos += 1;
+            continue;
         }
+
+        if !first_group {
+            ui.add_space(GROUP_GAP_PX);
+        }
+        first_group = false;
+
+        let block_id = ctx.items[idx].block_id.clone();
+        let palette = ctx.palette;
+
+        let group_rect = {
+            let top_cursor = ui.cursor().min;
+            let avail_w = ui.available_width();
+
+            let inner_rect = egui::Rect::from_min_size(
+                top_cursor + egui::vec2(GROUP_BORDER_PADDING, GROUP_BORDER_PADDING),
+                egui::vec2(GROUP_BORDER_PADDING.mul_add(-2.0, avail_w), 0.0),
+            );
+
+            let group_inner = ui.allocate_new_ui(
+                egui::UiBuilder::new()
+                    .max_rect(egui::Rect::from_min_size(
+                        inner_rect.min,
+                        egui::vec2(inner_rect.width(), f32::INFINITY),
+                    ))
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                |ui| {
+                    render_header_row(ui, ctx, idx, &mut acc);
+                    pos += 1;
+
+                    while pos < ctx.visible_indices.len() {
+                        let child_idx = ctx.visible_indices[pos];
+                        if ctx.items[child_idx].is_parent
+                            || ctx.items[child_idx].block_id != block_id
+                        {
+                            break;
+                        }
+                        child_counter += 1;
+                        render_child_row(ui, ctx, child_idx, &mut acc, child_counter, lineno_w);
+                        pos += 1;
+                    }
+                },
+            );
+
+            let inner_used = group_inner.response.rect;
+            egui::Rect::from_min_max(
+                top_cursor,
+                egui::pos2(
+                    top_cursor.x + avail_w,
+                    inner_used.bottom() + GROUP_BORDER_PADDING,
+                ),
+            )
+        };
+
+        paint_dashed_rect(ui, palette, group_rect);
+        ui.allocate_rect(group_rect, egui::Sense::hover());
     }
 
     acc
@@ -284,21 +346,40 @@ fn render_header_row(
         .scope(|ui| {
             let mut row_resp: Option<egui::Response> = None;
             ui.horizontal(|ui| {
-                let lock_icon = if is_locked {
-                    strong("🔒").color(redesign_warning(ctx.palette))
-                } else {
-                    strong("🔓").color(redesign_text_disabled(ctx.palette))
-                };
-                if ui
-                    .small_button(lock_icon)
-                    .on_hover_text(crate::ui::shared::tooltip_global::STEP3_LOCK_PARENT)
-                    .clicked()
+                if paint_glyph_button(
+                    ui,
+                    if is_locked { "🔒" } else { "🔓" },
+                    if is_locked {
+                        redesign_warning(ctx.palette)
+                    } else {
+                        redesign_text_disabled(ctx.palette)
+                    },
+                )
+                .on_hover_text(crate::ui::shared::tooltip_global::STEP3_LOCK_PARENT)
+                .clicked()
                 {
                     toggle_locked(ctx.locked_blocks, &block_id, &mut is_locked);
                 }
 
-                render_chevron_toggle(ui, ctx, &block_id, collapsed);
+                ui.add_space(GLYPH_GAP_PX);
+                paint_glyph_static(ui, "🔗", redesign_text_faint(ctx.palette));
 
+                ui.add_space(GLYPH_GAP_PX);
+                if paint_glyph_button(
+                    ui,
+                    if collapsed { "▸" } else { "▾" },
+                    redesign_text_faint(ctx.palette),
+                )
+                .clicked()
+                {
+                    if collapsed {
+                        ctx.collapsed_blocks.retain(|v| v != block_id.as_str());
+                    } else if !ctx.collapsed_blocks.contains(&block_id) {
+                        ctx.collapsed_blocks.push(block_id.clone());
+                    }
+                }
+
+                ui.add_space(GLYPH_GAP_PX);
                 let mod_name = ctx.items[idx].mod_name.clone();
                 let parent_placeholder = ctx.items[idx].parent_placeholder;
                 let title =
@@ -319,19 +400,34 @@ fn render_header_row(
     handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows);
 }
 
-fn render_chevron_toggle(
-    ui: &mut egui::Ui,
-    ctx: &mut RenderCtx<'_>,
-    block_id: &str,
-    collapsed: bool,
-) {
-    let chevron = if collapsed { "🔗 ▸" } else { "🔗 ▾" };
-    if ui.small_button(chevron).clicked() {
-        if collapsed {
-            ctx.collapsed_blocks.retain(|v| v != block_id);
-        } else if !ctx.collapsed_blocks.contains(&block_id.to_string()) {
-            ctx.collapsed_blocks.push(block_id.to_string());
-        }
+/// Allocates a small rect and paints a glyph at center with click semantics.
+fn paint_glyph_button(ui: &mut egui::Ui, glyph: &str, color: egui::Color32) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::click());
+    if ui.is_rect_visible(rect) {
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            glyph,
+            egui::FontId::new(GLYPH_FONT_SIZE, egui::FontFamily::Proportional),
+            color,
+        );
+    }
+    response
+}
+
+/// Paints a decorative glyph with no click semantics.
+fn paint_glyph_static(ui: &mut egui::Ui, glyph: &str, color: egui::Color32) {
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            glyph,
+            egui::FontId::new(GLYPH_FONT_SIZE, egui::FontFamily::Proportional),
+            color,
+        );
     }
 }
 
@@ -421,7 +517,7 @@ fn paint_dashed_separator(ui: &egui::Ui, palette: ThemePalette, row_rect: egui::
     let y = row_rect.bottom();
     let x0 = row_rect.left();
     let x1 = row_rect.right();
-    let color = redesign_text_faint(palette);
+    let color = redesign_text_fainter(palette);
     let painter = ui.painter();
     let stroke = egui::Stroke::new(ROW_SEP_HEIGHT, color);
     for x in std::iter::successors(Some(x0), |&prev| {
@@ -430,6 +526,41 @@ fn paint_dashed_separator(ui: &egui::Ui, palette: ThemePalette, row_rect: egui::
     }) {
         let end = (x + DASH_LEN_PX).min(x1);
         painter.line_segment([egui::pos2(x, y), egui::pos2(end, y)], stroke);
+    }
+}
+
+/// Paints a dashed rectangle border around `rect`, walking each edge in dash-gap segments.
+fn paint_dashed_rect(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect) {
+    let color = redesign_text_faint(palette);
+    let stroke = egui::Stroke::new(ROW_SEP_HEIGHT, color);
+    let painter = ui.painter();
+
+    let corners = [
+        (rect.left_top(), rect.right_top()),
+        (rect.right_top(), rect.right_bottom()),
+        (rect.right_bottom(), rect.left_bottom()),
+        (rect.left_bottom(), rect.left_top()),
+    ];
+
+    for (from, to) in corners {
+        let dx = to.x - from.x;
+        let dy = to.y - from.y;
+        let edge_len = dx.hypot(dy);
+        if edge_len < 1.0 {
+            continue;
+        }
+        let ux = dx / edge_len;
+        let uy = dy / edge_len;
+
+        for t in std::iter::successors(Some(0.0_f32), |&prev| {
+            let next = prev + DASH_STEP_PX;
+            if next < edge_len { Some(next) } else { None }
+        }) {
+            let t_end = (t + DASH_LEN_PX).min(edge_len);
+            let p0 = egui::pos2(ux.mul_add(t, from.x), uy.mul_add(t, from.y));
+            let p1 = egui::pos2(ux.mul_add(t_end, from.x), uy.mul_add(t_end, from.y));
+            painter.line_segment([p0, p1], stroke);
+        }
     }
 }
 

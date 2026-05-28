@@ -47,6 +47,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     let panes = Step2PaneRects::from_content(rects.content, details_open);
 
     clipped_pane(ui, panes.left, |ui| {
+        ui.add_space(8.0);
         crate::ui::step2::list_pane_step2::render_list_pane(
             ui,
             &mut orchestrator.wizard_state,
