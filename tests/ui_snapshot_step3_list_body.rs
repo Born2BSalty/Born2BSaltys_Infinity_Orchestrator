@@ -66,9 +66,10 @@ fn gate_parse_version(raw_line: &str) -> Option<String> {
 }
 
 fn evidence_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("infinity_orchestrator")
-        .join("phase8-evidence")
+    option_env!("CARGO_TARGET_TMPDIR")
+        .map_or_else(|| PathBuf::from("target/tmp"), PathBuf::from)
+        .join("render_gate")
+        .join("step3_list_body")
 }
 
 fn make_parent(mod_name: &str, placeholder: bool) -> Step3ItemState {

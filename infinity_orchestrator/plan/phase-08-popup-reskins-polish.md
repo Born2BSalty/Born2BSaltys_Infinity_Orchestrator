@@ -605,7 +605,7 @@ The entries below carry no `P8.T*` id yet. A future planning pass promotes each 
 
 ### Create-screen UI cleanup — deferred from Phase-6 verification (user, 2026-05-18)
 
-Screens: ![form](../phase8-evidence/create-form-2026-05-18.png) ![boxes](../phase8-evidence/create-boxes-2026-05-18.png) (paths relative to plan/). Rationale + the Fix-Run-5/6 history these refinements sit on top of: see [`revision-log.md`](revision-log.md) 2026-05-18 entries.
+Rationale + the Fix-Run-5/6 history these refinements sit on top of: see [`revision-log.md`](revision-log.md) 2026-05-18 entries.
 
 1. Too much gap between box title and input box (e.g. modlist name ↔ input). Wireframe is cleaner.
 2. Game input box still not the same height as modlist name.
