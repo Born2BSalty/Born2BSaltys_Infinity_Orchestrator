@@ -27,7 +27,10 @@ const PALETTES: [(&str, ThemePalette); 2] =
     [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)];
 
 fn evidence_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("infinity_orchestrator/phase8-evidence")
+    option_env!("CARGO_TARGET_TMPDIR")
+        .map_or_else(|| PathBuf::from("target/tmp"), PathBuf::from)
+        .join("render_gate")
+        .join("item3_step5")
 }
 
 const CENTRAL_MARGIN: egui::Margin = egui::Margin {

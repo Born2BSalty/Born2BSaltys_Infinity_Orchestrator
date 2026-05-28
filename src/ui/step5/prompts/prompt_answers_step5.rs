@@ -9,9 +9,17 @@ use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
 pub(crate) fn render_button(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
-    if redesign_btn(ui, palette, "Prompt Answers", BtnOpts::default())
-        .on_hover_text(crate::ui::shared::tooltip_global::STEP5_PROMPT_ANSWERS)
-        .clicked()
+    if redesign_btn(
+        ui,
+        palette,
+        "Prompt Answers",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .on_hover_text(crate::ui::shared::tooltip_global::STEP5_PROMPT_ANSWERS)
+    .clicked()
     {
         state.step5.prompt_answers_window_open = true;
     }

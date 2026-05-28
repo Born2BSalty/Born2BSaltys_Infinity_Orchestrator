@@ -17,7 +17,15 @@ pub(crate) fn render_actions_menu(
     mut terminal: Option<&mut EmbeddedTerminal>,
     palette: ThemePalette,
 ) {
-    let btn = redesign_btn(ui, palette, "Actions", BtnOpts::default());
+    let btn = redesign_btn(
+        ui,
+        palette,
+        "Actions",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    );
     let popup_id = ui.make_persistent_id("step5_actions_menu");
     if btn.clicked() {
         ui.memory_mut(|m| m.toggle_popup(popup_id));
@@ -28,6 +36,7 @@ pub(crate) fn render_actions_menu(
         &btn,
         egui::PopupCloseBehavior::CloseOnClickOutside,
         |ui| {
+            ui.set_min_width(180.0);
             if ui
                 .add_enabled(terminal.is_some(), egui::Button::new("Copy Console"))
                 .clicked()
@@ -95,7 +104,15 @@ pub(crate) fn render_diagnostics_menu(
     state.step1.bio_full_debug = true;
     state.step1.log_raw_output_dev = true;
 
-    let btn = redesign_btn(ui, palette, "Diagnostics", BtnOpts::default());
+    let btn = redesign_btn(
+        ui,
+        palette,
+        "Diagnostics",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    );
     let popup_id = ui.make_persistent_id("step5_diagnostics_menu");
     if btn.clicked() {
         ui.memory_mut(|m| m.toggle_popup(popup_id));
@@ -106,6 +123,7 @@ pub(crate) fn render_diagnostics_menu(
         &btn,
         egui::PopupCloseBehavior::CloseOnClickOutside,
         |ui| {
+            ui.set_min_width(220.0);
             ui.label("Applies on next install run (no app restart needed)");
             ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
             ui.horizontal(|ui| {
@@ -138,8 +156,7 @@ pub(crate) fn render_diagnostics_menu(
                             format!("Diagnostics exported: {}", path.display());
                     }
                     Err(err) => {
-                        state.step5.last_status_text =
-                            format!("Diagnostics export failed: {err}");
+                        state.step5.last_status_text = format!("Diagnostics export failed: {err}");
                     }
                 }
                 ui.memory_mut(egui::Memory::close_popup);

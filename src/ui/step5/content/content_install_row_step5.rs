@@ -31,7 +31,14 @@ pub(crate) fn render_install_row(
             ctx.dev_mode,
             ctx.palette,
         );
-        render_step5_menus(ui, state, &mut terminal, ctx.dev_mode, ctx.exe_fingerprint, ctx.palette);
+        render_step5_menus(
+            ui,
+            state,
+            &mut terminal,
+            ctx.dev_mode,
+            ctx.exe_fingerprint,
+            ctx.palette,
+        );
         if ctx.dev_mode {
             crate::ui::step5::prompt_answers_step5::render_button(ui, state, ctx.palette);
         }
@@ -52,10 +59,10 @@ fn render_progress_label(ui: &mut egui::Ui, state: &WizardState, palette: ThemeP
             BtnOpts {
                 primary: true,
                 disabled: true,
+                small: true,
                 ..Default::default()
             },
         );
-        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
     } else if state.step5.install_running {
         redesign_btn(
             ui,
@@ -64,10 +71,10 @@ fn render_progress_label(ui: &mut egui::Ui, state: &WizardState, palette: ThemeP
             BtnOpts {
                 primary: true,
                 disabled: true,
+                small: true,
                 ..Default::default()
             },
         );
-        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
     }
 }
 
@@ -103,6 +110,7 @@ fn render_install_control(
             "\u{2713} Installed",
             BtnOpts {
                 disabled: true,
+                small: true,
                 ..Default::default()
             },
         );
@@ -117,6 +125,7 @@ fn render_install_control(
         BtnOpts {
             primary: is_primary,
             disabled: !install_allowed,
+            small: true,
             ..Default::default()
         },
     );
@@ -161,6 +170,7 @@ fn render_cancel_button(
         BtnOpts {
             danger: true,
             disabled: !can_install,
+            small: true,
             ..Default::default()
         },
     )
