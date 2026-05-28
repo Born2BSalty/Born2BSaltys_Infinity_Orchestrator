@@ -41,10 +41,15 @@ pub(crate) fn collect_text_prompt_jump_ids(
 }
 
 pub(crate) fn apply_text_prompt_jump(state: &mut WizardState, title: &str, component_id: u32) {
-    let game_tab = state.step2.active_game_tab.clone();
     let mod_ref = prompt_popup_mod_ref(title);
-    step2_jump_to_target(state, &game_tab, &mod_ref, Some(component_id));
-    state.step2.jump_to_selected_requested = true;
+    if state.current_step == 2 {
+        let game_tab = state.step3.active_game_tab.clone();
+        let _ = step3_jump_to_target(state, &game_tab, &mod_ref, Some(component_id));
+    } else {
+        let game_tab = state.step2.active_game_tab.clone();
+        step2_jump_to_target(state, &game_tab, &mod_ref, Some(component_id));
+        state.step2.jump_to_selected_requested = true;
+    }
 }
 
 pub(crate) fn collect_active_prompt_toolbar_entries(
