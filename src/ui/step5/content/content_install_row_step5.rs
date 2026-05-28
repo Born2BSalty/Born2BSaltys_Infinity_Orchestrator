@@ -6,7 +6,10 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::action_step5::Step5Action;
+use crate::ui::step5::content_step5::Step5RenderCtx;
 use crate::ui::step5::state_step5::{ConsoleOutputFilter, Step5ConsoleViewState};
 
 pub(crate) fn render_install_row(
@@ -15,36 +18,63 @@ pub(crate) fn render_install_row(
     console_view: &mut Step5ConsoleViewState,
     mut terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
-    dev_mode: bool,
-    exe_fingerprint: &str,
+    ctx: Step5RenderCtx<'_>,
 ) -> Option<Step5Action> {
     let mut action: Option<Step5Action> = None;
     ui.horizontal_wrapped(|ui| {
-        render_progress_label(ui, state);
-        action = render_install_control(ui, state, &mut terminal, terminal_error, dev_mode);
-        render_step5_menus(ui, state, &mut terminal, dev_mode, exe_fingerprint);
-        crate::ui::step5::prompt_answers_step5::render_button(ui, state);
+        render_progress_label(ui, state, ctx.palette);
+        action = render_install_control(
+            ui,
+            state,
+            &mut terminal,
+            terminal_error,
+            ctx.dev_mode,
+            ctx.palette,
+        );
+        render_step5_menus(
+            ui,
+            state,
+            &mut terminal,
+            ctx.dev_mode,
+            ctx.exe_fingerprint,
+            ctx.palette,
+        );
+        if ctx.dev_mode {
+            crate::ui::step5::prompt_answers_step5::render_button(ui, state, ctx.palette);
+        }
         render_export_modlist_button(ui, state);
         render_console_filters(ui, console_view);
     });
-    crate::ui::step5::content_cancel_step5::render_cancel_confirm(ui, state, terminal);
-    render_modlist_share_popup(ui, state);
+    crate::ui::step5::content_cancel_step5::render_cancel_confirm(ui, state, terminal, ctx.palette);
+    render_modlist_share_popup(ui, state, ctx.palette);
     action
 }
 
-fn render_progress_label(ui: &mut egui::Ui, state: &WizardState) {
+fn render_progress_label(ui: &mut egui::Ui, state: &WizardState, palette: ThemePalette) {
     if state.step5.prep_running {
-        ui.label(
-            crate::ui::shared::typography_global::strong("Preparing target dirs...")
-                .color(crate::ui::shared::theme_global::accent_path()),
+        redesign_btn(
+            ui,
+            palette,
+            "Preparing target dirs...",
+            BtnOpts {
+                primary: true,
+                disabled: true,
+                small: true,
+                ..Default::default()
+            },
         );
-        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
     } else if state.step5.install_running {
-        ui.label(
-            crate::ui::shared::typography_global::strong("Install in progress...")
-                .color(crate::ui::shared::theme_global::accent_path()),
+        redesign_btn(
+            ui,
+            palette,
+            "Install in progress...",
+            BtnOpts {
+                primary: true,
+                disabled: true,
+                small: true,
+                ..Default::default()
+            },
         );
-        ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
     }
 }
 
@@ -54,6 +84,7 @@ fn render_install_control(
     terminal: &mut Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
     dev_mode: bool,
+    palette: ThemePalette,
 ) -> Option<Step5Action> {
     let can_install = terminal.is_some() && terminal_error.is_none();
     let diagnostics_ready = crate::ui::step5::menus_step5::diagnostics_ready_for_dev(state);
@@ -64,17 +95,39 @@ fn render_install_control(
         && (!dev_mode || diagnostics_ready);
 
     if state.step5.install_running {
-        render_cancel_button(ui, state, can_install);
+        render_cancel_button(ui, state, can_install, palette);
         return None;
     }
 
-    let button_label = install_button_label(state);
-    let install_resp = ui.add_enabled(
-        install_allowed,
-        egui::Button::new(button_label).min_size(egui::vec2(
-            crate::ui::shared::layout_tokens_global::STEP5_INSTALL_BTN_W,
-            crate::ui::shared::layout_tokens_global::STEP5_INSTALL_BTN_H,
-        )),
+    // Clean success: decorative dead button, no action.
+    if state.step5.has_run_once
+        && !state.step5.resume_available
+        && state.step5.last_exit_code == Some(0)
+    {
+        redesign_btn(
+            ui,
+            palette,
+            "\u{2713} Installed",
+            BtnOpts {
+                disabled: true,
+                small: true,
+                ..Default::default()
+            },
+        );
+        return None;
+    }
+
+    let (button_label, is_primary) = install_button_label(state);
+    let install_resp = redesign_btn(
+        ui,
+        palette,
+        button_label,
+        BtnOpts {
+            primary: is_primary,
+            disabled: !install_allowed,
+            small: true,
+            ..Default::default()
+        },
     );
     let install_resp = install_hover_response(
         install_resp,
@@ -104,30 +157,39 @@ fn render_install_control(
     action
 }
 
-fn render_cancel_button(ui: &mut egui::Ui, state: &mut WizardState, can_install: bool) {
-    if ui
-        .add_enabled(
-            can_install,
-            egui::Button::new("Cancel Install").min_size(egui::vec2(
-                crate::ui::shared::layout_tokens_global::STEP5_INSTALL_BTN_W,
-                crate::ui::shared::layout_tokens_global::STEP5_INSTALL_BTN_H,
-            )),
-        )
-        .on_hover_text(crate::ui::shared::tooltip_global::STEP5_CANCEL_INSTALL)
-        .clicked()
+fn render_cancel_button(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    can_install: bool,
+    palette: ThemePalette,
+) {
+    if redesign_btn(
+        ui,
+        palette,
+        "Cancel Install",
+        BtnOpts {
+            danger: true,
+            disabled: !can_install,
+            small: true,
+            ..Default::default()
+        },
+    )
+    .on_hover_text(crate::ui::shared::tooltip_global::STEP5_CANCEL_INSTALL)
+    .clicked()
     {
         state.step5.cancel_force_checked = false;
         state.step5.cancel_confirm_open = true;
     }
 }
 
-const fn install_button_label(state: &WizardState) -> &'static str {
+/// Returns `(label, primary)` for the install button in non-success, non-running states.
+const fn install_button_label(state: &WizardState) -> (&'static str, bool) {
     if state.step5.resume_available {
-        "Resume Install"
+        ("Resume Install", true)
     } else if state.step5.has_run_once {
-        "Restart Install"
+        ("Restart Install", true)
     } else {
-        "Install"
+        ("Install", true)
     }
 }
 
@@ -152,14 +214,16 @@ fn render_step5_menus(
     terminal: &mut Option<&mut EmbeddedTerminal>,
     dev_mode: bool,
     exe_fingerprint: &str,
+    palette: ThemePalette,
 ) {
-    crate::ui::step5::menus_step5::render_actions_menu(ui, state, terminal.as_deref_mut());
+    crate::ui::step5::menus_step5::render_actions_menu(ui, state, terminal.as_deref_mut(), palette);
     crate::ui::step5::menus_step5::render_diagnostics_menu(
         ui,
         state,
         terminal.as_deref(),
         dev_mode,
         exe_fingerprint,
+        palette,
     );
 }
 
@@ -220,7 +284,7 @@ fn render_console_filters(ui: &mut egui::Ui, console_view: &mut Step5ConsoleView
         .on_hover_text(crate::ui::shared::tooltip_global::STEP5_AUTO_SCROLL);
 }
 
-fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState) {
+fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState, palette: ThemePalette) {
     let mut open = state.step5.modlist_share_window_open;
     if !open {
         return;
@@ -233,7 +297,7 @@ fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState) {
             if !state.step5.modlist_share_error.trim().is_empty() {
                 ui.label(
                     crate::ui::shared::typography_global::plain(&state.step5.modlist_share_error)
-                        .color(crate::ui::shared::theme_global::error()),
+                        .color(crate::ui::shared::redesign_tokens::redesign_error(palette)),
                 );
             }
             ui.label(

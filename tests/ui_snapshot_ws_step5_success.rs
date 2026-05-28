@@ -8,6 +8,7 @@ use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{
     REDESIGN_NAV_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette,
 };
+use bio::ui::step5::content_step5::Step5RenderCtx;
 use bio::ui::step5::state_step5::Step5ConsoleViewState;
 use bio::ui::workspace::step5::{post_install_actions, success_banner};
 
@@ -143,8 +144,11 @@ fn render_frame(ctx: &egui::Context, frame: &mut u64) {
                     &mut console_view,
                     None,
                     None,
-                    dev_mode,
-                    &exe_fingerprint,
+                    Step5RenderCtx {
+                        dev_mode,
+                        exe_fingerprint: &exe_fingerprint,
+                        palette: ThemePalette::Dark,
+                    },
                 );
             });
     });

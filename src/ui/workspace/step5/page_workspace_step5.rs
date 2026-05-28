@@ -5,10 +5,11 @@ use eframe::egui;
 use std::sync::mpsc::TryRecvError;
 use tracing::warn;
 
+use crate::app::state::Step1State;
 use crate::install_runtime::flag_policies::InstallWorkflow;
 use crate::install_runtime::install_concurrency;
 use crate::install_runtime::start_hooks::{self, InstallButtonVariant};
-use crate::registry::operations;
+use crate::registry::model::Game;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::{
     DestinationPrepFlow, OrchestratorApp, PendingWorkspaceDestinationPrep,
@@ -48,8 +49,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
             &mut orchestrator.step5_console_view,
             orchestrator.step5_terminal.as_mut(),
             orchestrator.step5_terminal_error.as_deref(),
-            orchestrator.dev_mode,
-            &exe_fingerprint,
+            crate::ui::step5::content_step5::Step5RenderCtx {
+                dev_mode: orchestrator.dev_mode,
+                exe_fingerprint: &exe_fingerprint,
+                palette,
+            },
         );
     });
 
@@ -63,11 +67,12 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
             orchestrator.nav = NavDestination::Home;
         }
         Some(PostInstallAction::OpenInstallFolder) => {
-            if let Some(e) = entry.as_ref()
-                && let Err(msg) = operations::open_install_folder(e)
-            {
-                orchestrator.home_screen_state.toast =
-                    Some(crate::ui::home::state_home::ToastMessage::error(msg));
+            if let Some(e) = entry.as_ref() {
+                let result = open_game_subfolder(e, &orchestrator.wizard_state.step1);
+                if let Err(msg) = result {
+                    orchestrator.home_screen_state.toast =
+                        Some(crate::ui::home::state_home::ToastMessage::error(msg));
+                }
             }
         }
         None => {}
@@ -308,6 +313,67 @@ fn pending_workspace_prep_matches_current(
         entry.destination_folder.trim(),
         Some(&pending.modlist_id),
     )
+}
+
+/// Opens the game-specific subfolder inside the install destination, falling back
+/// to the destination root when the subfolder path is unset or absent on disk.
+fn open_game_subfolder(
+    entry: &crate::registry::model::ModlistEntry,
+    step1: &Step1State,
+) -> Result<(), String> {
+    let dest = entry.destination_folder.trim();
+    if dest.is_empty() {
+        return Err(format!("\"{}\" has no install folder set yet.", entry.name));
+    }
+    let game_folder_name = match entry.game {
+        Game::BGEE => step1.bgee_game_folder.trim(),
+        Game::BG2EE => step1.bg2ee_game_folder.trim(),
+        Game::IWDEE => step1.iwdee_game_folder.trim(),
+        Game::EET => step1.eet_bg2ee_game_folder.trim(),
+    };
+    let candidate = if game_folder_name.is_empty() {
+        std::path::PathBuf::from(dest)
+    } else {
+        std::path::PathBuf::from(dest).join(game_folder_name)
+    };
+    let target = if candidate.is_dir() {
+        candidate
+    } else {
+        std::path::PathBuf::from(dest)
+    };
+    if !target.is_dir() {
+        return Err(format!(
+            "Install folder for \"{}\" not found on disk: {}",
+            entry.name,
+            target.display()
+        ));
+    }
+    open_in_file_manager(&target)
+        .map_err(|e| format!("Couldn't open the folder for \"{}\": {e}", entry.name))
+}
+
+fn open_in_file_manager(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+    }
 }
 
 fn clear_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) {

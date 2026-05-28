@@ -185,6 +185,40 @@ These files contain no `theme_global::*()` color calls and no inline `egui::Colo
 - **Acceptance:** Start an install. Verify: console line tones (success / error / warning / debug / info / sent / sand / dim / default) all render redesign tokens; the install-state banner (Preparing / Installing) renders redesign tokens; the dev-mode RUST_LOG status line renders redesign tokens; the phase indicator (Idle / Preparing / Running / Waiting Input / Cancelling / Finished) renders redesign tokens; the cancel-confirm warning renders redesign tokens. Light theme also produces correct values.
 - **SPEC:** §8, §9, §9.2.
 
+#### P8.T6 — Delivered (with iterations and carve-out #9 widenings, 2026-05-27 → 2026-05-28)
+
+Shipped on branch `feat/step5-color-swaps-p8t6` across the original P8.T6 color-swap scope + several follow-on visual refinements driven by live-app feedback. All BIO edits within carve-out #6 or carve-out #9; no new carve-outs added (existing #9 widened twice via the same branch).
+
+Original P8.T6 scope (carve-out #6 color swaps), shipped as planned:
+- `status_console_step5.rs`, `content_install_row_step5.rs`, `content_cancel_step5.rs`, `content_dev_header_step5.rs`, `status_phase_step5.rs` — every `theme_global::*` accessor on the touched paths swaps for the matching `redesign_*(palette)` counterpart. Orchestration shims (`content_step5.rs`, `status_bar_step5.rs`, `top_panels_step5.rs`) gain a `palette: ThemePalette` arg threaded through. The `Step5RenderCtx<'a> { dev_mode, exe_fingerprint, palette }` struct (per the `ComponentRowOptions` precedent from P8.T4) avoids tripping clippy's `too_many_arguments` on `render`/`render_install_row`/`frame_step5::render`/`page_step5::render`.
+
+Follow-on tunes within carve-out #6 (color retunes after live testing):
+- "Install in progress..." swaps from `redesign_accent_path` (sand/peach) to `redesign_accent` (teal) so it reads as "foreground action" not "warm info". Prep-phase "Preparing target dirs..." stays on accent_path.
+- "Running" phase color swaps from `redesign_status_running` (yellow-green) to `redesign_accent_numbers` (blue) — blue reads more "actively progressing" than green; green is reserved for the terminal Finished state.
+- "Finished" phase swaps from `redesign_text_muted` (grey) to `redesign_success` (green) — clear post-run "good" signal.
+- "Waiting Input" phase swaps from `redesign_accent_path` to `redesign_pill_warn` (yellow) — reads as "needs your input" warning.
+- Rail active-item text swaps from `redesign_accent_deep` (low-contrast deep teal) → briefly to `redesign_text_primary` (white) → settled on `redesign_pill_text` (near-black navy) to match the wireframe's dark-on-teal active-rail look (same convention as redesign_btn primary buttons).
+
+Carve-out #9 widenings within the same branch (each user-authorized 2026-05-27):
+- `content_install_row_step5.rs` added to authorized files; install-row buttons promoted from `ui.button`/`ui.add(Button::new(...))` to `redesign_btn` with `BtnOpts.primary` (Install / Restart / Resume), `BtnOpts.danger` (Cancel Install), and `BtnOpts.disabled` (Preparing / Installing). `BtnOpts.danger` is a new flag on `redesign_btn` (orchestrator-owned widget) that pairs the danger fill with dark-text and shares the primary shadow.
+- `menus_step5.rs` added to authorized files; `ui.menu_button` calls for Actions + Diagnostics dropdowns rewired to `redesign_btn + egui::popup::popup_below_widget` pairs (new pattern (g) added to carve-out #9). Dropdown body content stays identical; close-on-click-outside semantics preserved via `PopupCloseBehavior::CloseOnClickOutside`.
+- `prompts/prompt_answers_step5.rs` added to authorized files; Prompt-Answers button promoted to `redesign_btn`; dev-mode gate restated so the body cannot drift open without the button.
+
+Additional wireframe-fidelity changes (orchestrator-owned, no carve-out):
+- A fourth install-button state — clean success — fires when `has_run_once && !resume_available && last_exit_code == Some(0)` and renders "✓ Installed" via `redesign_btn` with `disabled: true` and NO `primary` flag (outlined dim style). Click does nothing.
+- `workspace_nav_bar.rs` final-step branch renders the "final step" label on the right and removes the previously-disabled Next button on Step 5; Steps 2/3/4 unchanged.
+- `page_workspace_step5.rs` "Open install folder" handler now opens the game-specific playable-executable subfolder (e.g. `destination/bg2ee_game_folder` for BG2EE or EET) rather than the destination root; falls back to the destination root when the game-folder field is empty or the candidate doesn't exist on disk.
+- `widgets.open.bg_fill` set to `redesign_hover_overlay` (was `redesign_chrome_bg`) so opened `menu_button` / popup-below-widget anchors visually distinguish from inactive state.
+
+Final action-row polish (live-app feedback, 2026-05-28):
+- All action-row buttons (Install / Restart / Resume / ✓ Installed / Cancel Install / Actions / Diagnostics / Prompt Answers) use `BtnOpts { small: true, ... }` (pad 10/4, font 12). Matches the wireframe's tight Install + Actions + filters + Auto-scroll row.
+- `popup_below_widget` body for the Actions and Diagnostics dropdowns calls `ui.set_min_width(180)` / `set_min_width(220)` so items render on one line instead of wrapping to the narrow anchor-button width.
+- Removed both `ui.add_space(SPACE_MD)` calls after the "Preparing" / "Install in progress..." progress label so the parent `horizontal_wrapped`'s natural item_spacing controls the gap before Cancel Install.
+
+Render-gate test output paths under `target/` (cargo's gitignored default); no PNGs tracked in the repo. `tests/ui_snapshot_item3_step5.rs` redirected to `CARGO_TARGET_TMPDIR/render_gate/item3_step5/` to match the project-wide rule.
+
+Verification across all iterations: 590 lib tests passing, both binaries gate-fresh, crate-wide clippy pedantic + nursery zero warnings, BIO-source guard hits only carve-out-#6 or carve-out-#9 authorized files, DATA-LOSS sentinel byte-stable (any drift traced to legitimate user app activity), render-gate PNGs orchestrator-reviewed at `target/ui-snapshots/workspace_step5_*.png` for the pre-install and long-console states.
+
 ### P8.T7 — Verify anchor-on-collapse behavior
 
 - **What:** Per SPEC §10 ("If egui's native collapse already anchors the window's top-Y…"), test the egui default after the P8.T2 flips. If egui re-centers vertically when the height shrinks, route the affected popups through `widgets/popup_collapse_anchor.rs`, a thin wrapper that captures `Window::current_pos` at the collapse transition and pins the window there. The wrapper is a **new file** — it does not modify BIO source.
