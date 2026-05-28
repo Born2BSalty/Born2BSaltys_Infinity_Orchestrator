@@ -47,9 +47,6 @@ const GROUP_GAP_PX: f32 = 6.0;
 const SCROLLBAR_RESERVE: f32 = 14.0;
 /// Vertical padding applied above and below the header-bar content (half per side).
 const HEADER_BAR_VPAD: f32 = 4.0;
-/// Defensive upper bound on the header inner-content height. Guards against `f32::INFINITY`
-/// propagating from `max_rect` into the paint rect; well above any sensible widget combination.
-const HEADER_BAR_INNER_H_MAX: f32 = 64.0;
 
 /// Per-frame rendering context bundling mutable state refs and read-only view data.
 struct RenderCtx<'a> {
@@ -301,32 +298,21 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
         // Reserve a paint slot before rendering widgets so the bg paints behind them.
         let bg_shape_id = ui.painter().add(egui::Shape::Noop);
 
-        let inner_response = ui.allocate_new_ui(
-            egui::UiBuilder::new()
-                .max_rect(egui::Rect::from_min_size(
-                    top_cursor + egui::vec2(0.0, HEADER_BAR_VPAD),
-                    egui::vec2(viewport_w, f32::INFINITY),
-                ))
-                .layout(egui::Layout::left_to_right(egui::Align::Center)),
-            |ui| {
+        let scope_resp = ui.scope(|ui| {
+            ui.set_min_width(viewport_w);
+            ui.add_space(HEADER_BAR_VPAD);
+            ui.horizontal(|ui| {
                 ui.add_space(6.0);
                 render_header_row(ui, ctx, idx, &mut acc);
-            },
-        );
+            });
+            ui.add_space(HEADER_BAR_VPAD);
+        });
         pos += 1;
 
-        let inner_h = inner_response
-            .response
-            .rect
-            .height()
-            .clamp(0.0, HEADER_BAR_INNER_H_MAX);
         let header_rect = egui::Rect::from_min_size(
             top_cursor,
-            egui::vec2(viewport_w, HEADER_BAR_VPAD.mul_add(2.0, inner_h)),
+            egui::vec2(viewport_w, scope_resp.response.rect.height()),
         );
-
-        // Advance the cursor past the padded header bar.
-        ui.allocate_rect(header_rect, egui::Sense::hover());
 
         // Fill bg behind the header-bar widgets.
         ui.painter().set(
