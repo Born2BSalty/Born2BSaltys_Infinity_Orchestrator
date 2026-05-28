@@ -16,9 +16,9 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::layout_tokens_global::BORDER_THIN;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_shell_bg,
-    redesign_text_disabled, redesign_text_faint, redesign_text_fainter, redesign_warning,
-    redesign_with_alpha,
+    redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_rail_bg,
+    redesign_shell_bg, redesign_text_disabled, redesign_text_faint, redesign_text_fainter,
+    redesign_warning, redesign_with_alpha,
 };
 use crate::ui::shared::typography_global::{SIZE_PILL_TEXT, strong};
 use crate::ui::step3::block_selection_step3::{
@@ -37,13 +37,19 @@ const LINENO_PAD_PX: f32 = 4.0;
 const ROW_SEP_HEIGHT: f32 = 1.0;
 const DOT_STEP_PX: f32 = 7.0;
 const DOT_RADIUS: f32 = 0.5;
-const DASH_STEP_PX: f32 = 6.0;
+const DASH_STEP_PX: f32 = 10.0;
 const DASH_LEN_PX: f32 = DASH_STEP_PX * 0.5;
 const GLYPH_ICON_PX: f32 = 14.0;
 const GLYPH_FONT_SIZE: f32 = 12.0;
 const GLYPH_GAP_PX: f32 = 4.0;
-const GROUP_BORDER_PADDING: f32 = 4.0;
-const GROUP_GAP_PX: f32 = 12.0;
+const GROUP_GAP_PX: f32 = 6.0;
+/// Horizontal space reserved for the floating scrollbar on the right edge.
+const SCROLLBAR_RESERVE: f32 = 14.0;
+/// Vertical padding applied above and below the header-bar content (half per side).
+const HEADER_BAR_VPAD: f32 = 4.0;
+/// Defensive upper bound on the header inner-content height. Guards against `f32::INFINITY`
+/// propagating from `max_rect` into the paint rect; well above any sensible widget combination.
+const HEADER_BAR_INNER_H_MAX: f32 = 64.0;
 
 /// Per-frame rendering context bundling mutable state refs and read-only view data.
 struct RenderCtx<'a> {
@@ -273,7 +279,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
         let idx = ctx.visible_indices[pos];
         if !ctx.items[idx].is_parent {
             child_counter += 1;
-            render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w);
+            render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w, false);
             pos += 1;
             continue;
         }
@@ -285,56 +291,83 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
 
         let block_id = ctx.items[idx].block_id.clone();
 
-        let group_rect = {
-            let top_cursor = ui.cursor().min;
-            let avail_w = ui.available_width();
+        // Width clamped to the viewport (minus scrollbar reserve) and the parent's available
+        // width so the value is always finite even when one of the sources is unbounded.
+        let viewport_w = (ui.clip_rect().width() - SCROLLBAR_RESERVE)
+            .min(ui.available_width())
+            .max(0.0);
+        let top_cursor = ui.cursor().min;
 
-            let inner_rect = egui::Rect::from_min_size(
-                top_cursor + egui::vec2(GROUP_BORDER_PADDING, GROUP_BORDER_PADDING),
-                egui::vec2(GROUP_BORDER_PADDING.mul_add(-2.0, avail_w), 0.0),
+        // Reserve a paint slot before rendering widgets so the bg paints behind them.
+        let bg_shape_id = ui.painter().add(egui::Shape::Noop);
+
+        let inner_response = ui.allocate_new_ui(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    top_cursor + egui::vec2(0.0, HEADER_BAR_VPAD),
+                    egui::vec2(viewport_w, f32::INFINITY),
+                ))
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+            |ui| {
+                ui.add_space(6.0);
+                render_header_row(ui, ctx, idx, &mut acc);
+            },
+        );
+        pos += 1;
+
+        let inner_h = inner_response
+            .response
+            .rect
+            .height()
+            .clamp(0.0, HEADER_BAR_INNER_H_MAX);
+        let header_rect = egui::Rect::from_min_size(
+            top_cursor,
+            egui::vec2(viewport_w, HEADER_BAR_VPAD.mul_add(2.0, inner_h)),
+        );
+
+        // Advance the cursor past the padded header bar.
+        ui.allocate_rect(header_rect, egui::Sense::hover());
+
+        // Fill bg behind the header-bar widgets.
+        ui.painter().set(
+            bg_shape_id,
+            egui::Shape::rect_filled(
+                header_rect,
+                egui::CornerRadius::ZERO,
+                redesign_rail_bg(ctx.palette),
+            ),
+        );
+
+        // Dashed border on the header bar only.
+        paint_dashed_rect(ui, header_rect);
+
+        // Set group x-bounds to the header bar's extent for full-width child separators.
+        ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
+
+        // Render children below the header without any enclosing border.
+        while pos < ctx.visible_indices.len() {
+            let child_idx = ctx.visible_indices[pos];
+            if ctx.items[child_idx].is_parent || ctx.items[child_idx].block_id != block_id {
+                break;
+            }
+            child_counter += 1;
+            let next_pos = pos + 1;
+            let is_last_in_group = next_pos >= ctx.visible_indices.len()
+                || ctx.items[ctx.visible_indices[next_pos]].is_parent
+                || ctx.items[ctx.visible_indices[next_pos]].block_id != block_id;
+            render_child_row(
+                ui,
+                ctx,
+                child_idx,
+                &mut acc,
+                child_counter,
+                lineno_w,
+                is_last_in_group,
             );
+            pos += 1;
+        }
 
-            ctx.current_group_x_bounds = Some((inner_rect.left(), inner_rect.right()));
-
-            let group_inner = ui.allocate_new_ui(
-                egui::UiBuilder::new()
-                    .max_rect(egui::Rect::from_min_size(
-                        inner_rect.min,
-                        egui::vec2(inner_rect.width(), f32::INFINITY),
-                    ))
-                    .layout(egui::Layout::top_down(egui::Align::Min)),
-                |ui| {
-                    render_header_row(ui, ctx, idx, &mut acc);
-                    pos += 1;
-
-                    while pos < ctx.visible_indices.len() {
-                        let child_idx = ctx.visible_indices[pos];
-                        if ctx.items[child_idx].is_parent
-                            || ctx.items[child_idx].block_id != block_id
-                        {
-                            break;
-                        }
-                        child_counter += 1;
-                        render_child_row(ui, ctx, child_idx, &mut acc, child_counter, lineno_w);
-                        pos += 1;
-                    }
-                },
-            );
-
-            ctx.current_group_x_bounds = None;
-
-            let inner_used = group_inner.response.rect;
-            egui::Rect::from_min_max(
-                top_cursor,
-                egui::pos2(
-                    top_cursor.x + avail_w,
-                    inner_used.bottom() + GROUP_BORDER_PADDING,
-                ),
-            )
-        };
-
-        paint_dashed_rect(ui, group_rect);
-        ui.allocate_rect(group_rect, egui::Sense::hover());
+        ctx.current_group_x_bounds = None;
     }
 
     acc
@@ -484,6 +517,7 @@ fn render_child_row(
     acc: &mut RowAccumulator,
     child_counter: usize,
     lineno_w: f32,
+    is_last_in_group: bool,
 ) {
     let item = &ctx.items[idx];
     let prompt_summary =
@@ -519,8 +553,10 @@ fn render_child_row(
 
     render_child_context_menu(&drag_response, ctx, idx, acc);
 
-    let sep_x_bounds = ctx.current_group_x_bounds;
-    paint_dashed_separator(ui, ctx.palette, label_response.rect, sep_x_bounds);
+    if !is_last_in_group {
+        let sep_x_bounds = ctx.current_group_x_bounds;
+        paint_dashed_separator(ui, ctx.palette, label_response.rect, sep_x_bounds);
+    }
 
     ui.add_space(ROW_SEP_HEIGHT);
 

@@ -18,9 +18,10 @@ use egui_kittest::Harness;
 
 const WIDTH: f32 = 1000.0;
 const HEIGHT: f32 = 640.0;
-const GATE_GROUP_BORDER_PADDING: f32 = 4.0;
-const GATE_DASH_STEP_PX: f32 = 6.0;
+const GATE_DASH_STEP_PX: f32 = 10.0;
 const GATE_DASH_LEN_PX: f32 = GATE_DASH_STEP_PX * 0.5;
+const GATE_HEADER_VPAD: f32 = 4.0;
+const GATE_GROUP_GAP: f32 = 6.0;
 
 const PALETTES: [(&str, ThemePalette); 2] =
     [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)];
@@ -435,7 +436,6 @@ fn render_polish_groups(
     collapsed: &[String],
     locked: &[String],
     visible: &[usize],
-    fallback_x_bounds: (f32, f32),
     palette: ThemePalette,
 ) {
     ui.set_min_width(ui.available_width());
@@ -446,58 +446,76 @@ fn render_polish_groups(
         let idx = visible[pos];
         if !items[idx].is_parent {
             child_counter += 1;
-            render_polish_child_row(ui, items, idx, child_counter, fallback_x_bounds, palette);
+            let fallback_x = (ui.cursor().left(), ui.cursor().right());
+            render_polish_child_row(ui, items, idx, child_counter, fallback_x, false, palette);
             pos += 1;
             continue;
         }
         if !first_group {
-            ui.add_space(12.0);
+            ui.add_space(GATE_GROUP_GAP);
         }
         first_group = false;
         let block_id = items[idx].block_id.clone();
+
+        // Header bar: viewport-clamped, bg fill, dashed border on header only.
+        let viewport_w = ui.available_width().max(0.0);
         let top_cursor = ui.cursor().min;
-        let avail_w = ui.available_width();
-        let inner_min =
-            top_cursor + egui::vec2(GATE_GROUP_BORDER_PADDING, GATE_GROUP_BORDER_PADDING);
-        let inner_w = GATE_GROUP_BORDER_PADDING.mul_add(-2.0, avail_w);
-        let inner_rect = egui::Rect::from_min_size(inner_min, egui::vec2(inner_w, 0.0));
-        let x_bounds = (inner_rect.left(), inner_rect.right());
-        let group_inner = ui.allocate_new_ui(
-            egui::UiBuilder::new()
-                .max_rect(egui::Rect::from_min_size(
-                    inner_rect.min,
-                    egui::vec2(inner_rect.width(), f32::INFINITY),
-                ))
-                .layout(egui::Layout::top_down(egui::Align::Min)),
-            |ui| {
-                render_polish_header_row(ui, items, idx, locked, collapsed, palette);
-                pos += 1;
-                while pos < visible.len() {
-                    let child_idx = visible[pos];
-                    if items[child_idx].is_parent || items[child_idx].block_id != block_id {
-                        break;
-                    }
-                    child_counter += 1;
-                    render_polish_child_row(ui, items, child_idx, child_counter, x_bounds, palette);
-                    pos += 1;
-                }
-            },
-        );
-        let inner_used = group_inner.response.rect;
-        let group_rect = egui::Rect::from_min_max(
+
+        // Reserve a paint slot so the bg paints behind widgets.
+        let bg_shape_id = ui.painter().add(egui::Shape::Noop);
+
+        // 4 px top padding.
+        ui.add_space(GATE_HEADER_VPAD);
+        render_polish_header_row(ui, items, idx, locked, collapsed, palette);
+        // 4 px bottom padding.
+        ui.add_space(GATE_HEADER_VPAD);
+        pos += 1;
+
+        let bottom_cursor = ui.cursor().min.y;
+        let header_rect = egui::Rect::from_min_max(
             top_cursor,
-            egui::pos2(
-                top_cursor.x + avail_w,
-                inner_used.bottom() + GATE_GROUP_BORDER_PADDING,
+            egui::pos2(top_cursor.x + viewport_w, bottom_cursor),
+        );
+
+        ui.painter().set(
+            bg_shape_id,
+            egui::Shape::rect_filled(
+                header_rect,
+                egui::CornerRadius::ZERO,
+                redesign_rail_bg(palette),
             ),
         );
-        paint_gate_dashed_rect(ui, group_rect);
-        ui.allocate_rect(group_rect, egui::Sense::hover());
+
+        paint_gate_dashed_rect(ui, header_rect);
+
+        let x_bounds = (header_rect.left(), header_rect.right());
+
+        while pos < visible.len() {
+            let child_idx = visible[pos];
+            if items[child_idx].is_parent || items[child_idx].block_id != block_id {
+                break;
+            }
+            child_counter += 1;
+            let next_pos = pos + 1;
+            let is_last = next_pos >= visible.len()
+                || items[visible[next_pos]].is_parent
+                || items[visible[next_pos]].block_id != block_id;
+            render_polish_child_row(
+                ui,
+                items,
+                child_idx,
+                child_counter,
+                x_bounds,
+                is_last,
+                palette,
+            );
+            pos += 1;
+        }
     }
 }
 
 /// Renders the polished Step-3 list body scene with a locked group, an unlocked group,
-/// and a collapsed group — showing per-group dashed borders and dotted row separators.
+/// and a collapsed group — showing header-only dashed borders and dotted row separators.
 fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
     let (items, collapsed, locked, visible) = make_polish_scene();
 
@@ -526,14 +544,11 @@ fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
             );
             child.set_clip_rect(inner.intersect(ui.clip_rect()));
             child.add_space(3.0);
-            let fallback_x = (inner.left(), inner.right());
             egui::ScrollArea::both()
                 .id_salt("render_gate_polish")
                 .auto_shrink([false, false])
                 .show(&mut child, |ui| {
-                    render_polish_groups(
-                        ui, &items, &collapsed, &locked, &visible, fallback_x, palette,
-                    );
+                    render_polish_groups(ui, &items, &collapsed, &locked, &visible, palette);
                 });
         });
 }
@@ -609,6 +624,7 @@ fn render_polish_child_row(
     idx: usize,
     lineno: usize,
     (group_x0, group_x1): (f32, f32),
+    is_last_in_group: bool,
     palette: ThemePalette,
 ) {
     let item = &items[idx];
@@ -642,18 +658,20 @@ fn render_polish_child_row(
         );
     });
 
-    // Full-width dotted separator: wider spacing, smaller dots, very faint.
-    let sep_y = ui.cursor().min.y;
-    let base_color = redesign_text_fainter(palette);
-    let dot_color = redesign_with_alpha(base_color, 1, 8);
-    let dot_step = 7.0_f32;
-    let dot_radius = 0.5_f32;
-    for x in std::iter::successors(Some(group_x0), |&prev| {
-        let next = prev + dot_step;
-        if next <= group_x1 { Some(next) } else { None }
-    }) {
-        ui.painter()
-            .circle_filled(egui::pos2(x, sep_y), dot_radius, dot_color);
+    if !is_last_in_group {
+        // Full-width dotted separator: wider spacing, smaller dots, very faint.
+        let sep_y = ui.cursor().min.y;
+        let base_color = redesign_text_fainter(palette);
+        let dot_color = redesign_with_alpha(base_color, 1, 8);
+        let dot_step = 7.0_f32;
+        let dot_radius = 0.5_f32;
+        for x in std::iter::successors(Some(group_x0), |&prev| {
+            let next = prev + dot_step;
+            if next <= group_x1 { Some(next) } else { None }
+        }) {
+            ui.painter()
+                .circle_filled(egui::pos2(x, sep_y), dot_radius, dot_color);
+        }
     }
     ui.add_space(1.0);
 }
