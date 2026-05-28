@@ -6,8 +6,10 @@ use std::path::{Path, PathBuf};
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 use bio::ui::shared::redesign_tokens::{
     ThemePalette, redesign_border_strong, redesign_page_bg, redesign_rail_bg, redesign_shell_bg,
-    redesign_text_disabled, redesign_text_faint, redesign_warning,
+    redesign_text_disabled, redesign_text_faint, redesign_text_fainter, redesign_warning,
+    redesign_with_alpha,
 };
+use bio::ui::workspace::step3::step3_list_body::{paint_chain_icon, paint_lock_icon};
 
 use bio::app::state::Step3ItemState;
 use bio::ui::step3::state_blocks_step3 as blocks;
@@ -171,25 +173,49 @@ fn render_mock_header_row(
     ui.add_space(2.0);
 
     let bg = redesign_rail_bg(palette);
-    let header_height = 26.0;
     let avail_w = ui.available_width();
-    let (bg_rect, _) = ui.allocate_space(egui::vec2(avail_w, 0.0));
-    let _ = bg_rect;
 
     ui.horizontal(|ui| {
         ui.add_space(4.0);
 
+        // Vector-painted lock icon.
         let lock_color = if is_locked {
             redesign_warning(palette)
         } else {
             redesign_text_disabled(palette)
         };
-        let lock_glyph = if is_locked { "🔒" } else { "🔓" };
-        ui.colored_label(lock_color, lock_glyph);
+        let (lock_rect, _) =
+            ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+        if ui.is_rect_visible(lock_rect) {
+            paint_lock_icon(ui.painter(), lock_rect.center(), lock_color, is_locked);
+        }
         ui.add_space(4.0);
 
-        let chevron = if is_collapsed { "🔗 ▸" } else { "🔗 ▾" };
-        ui.colored_label(redesign_text_faint(palette), chevron);
+        // Vector-painted chain icon.
+        let (chain_rect, _) =
+            ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+        if ui.is_rect_visible(chain_rect) {
+            paint_chain_icon(
+                ui.painter(),
+                chain_rect.center(),
+                redesign_text_faint(palette),
+            );
+        }
+        ui.add_space(4.0);
+
+        // Chevron using FiraCode Nerd Font (Geometric Shapes block — font-covered).
+        let chevron = if is_collapsed { "▸" } else { "▾" };
+        let (chev_rect, _) =
+            ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+        if ui.is_rect_visible(chev_rect) {
+            ui.painter().text(
+                chev_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                chevron,
+                egui::FontId::new(12.0, egui::FontFamily::Monospace),
+                redesign_text_faint(palette),
+            );
+        }
         ui.add_space(4.0);
 
         let title = if parent_placeholder {
@@ -197,16 +223,12 @@ fn render_mock_header_row(
         } else {
             format!("{mod_name} ({child_count})")
         };
-
         let locked_label = if is_locked {
             format!("{title} [locked]")
         } else {
             title
         };
 
-        let _ = header_height;
-        let bg_rect2 = ui.cursor().with_min_y(ui.cursor().min.y - 2.0);
-        let _ = bg_rect2;
         if ui.is_rect_visible(ui.cursor()) {
             let row_rect =
                 egui::Rect::from_min_size(ui.cursor().min, egui::vec2(avail_w - 20.0, 22.0));
@@ -272,17 +294,19 @@ fn render_mock_child_row(
         );
     });
 
+    // Dotted separator: tiny filled circles at 50% alpha of text_fainter.
     let sep_y = ui.cursor().min.y;
     let x0 = ui.cursor().left();
     let x1 = ui.cursor().right();
-    let stroke = egui::Stroke::new(1.0, faint);
+    let base_color = redesign_text_fainter(palette);
+    let dot_color = redesign_with_alpha(base_color, 1, 2);
+    let dot_step = 3.5_f32;
+    let dot_radius = 0.9_f32;
     for x in std::iter::successors(Some(x0), |&prev| {
-        let next = prev + 6.0;
-        if next < x1 { Some(next) } else { None }
+        let next = prev + dot_step;
+        if next <= x1 { Some(next) } else { None }
     }) {
-        let end = (x + 3.0).min(x1);
-        ui.painter()
-            .line_segment([egui::pos2(x, sep_y), egui::pos2(end, sep_y)], stroke);
+        ui.painter().circle_filled(egui::pos2(x, sep_y), dot_radius, dot_color);
     }
     ui.add_space(1.0);
 }
@@ -324,6 +348,23 @@ fn render_step3_list_body_item2_impl() {
 
     for (label, palette) in PALETTES {
         let path = snap(&dir, &format!("item2-impl-step3-{label}"), move |ctx| {
+            render_list_body_preview(ctx, palette);
+        });
+        assert!(
+            path.exists() && path.metadata().is_ok_and(|m| m.len() > 0),
+            "render-gate PNG must be non-empty: {}",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn render_step3_list_body_fix2() {
+    let dir = evidence_dir();
+    std::fs::create_dir_all(&dir).expect("create evidence dir");
+
+    for (label, palette) in PALETTES {
+        let path = snap(&dir, &format!("item2-impl-fix2-{label}"), move |ctx| {
             render_list_body_preview(ctx, palette);
         });
         assert!(

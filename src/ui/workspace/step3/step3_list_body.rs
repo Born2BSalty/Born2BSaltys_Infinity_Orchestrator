@@ -18,6 +18,7 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_shell_bg,
     redesign_text_disabled, redesign_text_faint, redesign_text_fainter, redesign_warning,
+    redesign_with_alpha,
 };
 use crate::ui::shared::typography_global::{SIZE_PILL_TEXT, strong};
 use crate::ui::step3::block_selection_step3::{
@@ -35,6 +36,8 @@ const LINENO_FONT_SIZE: f32 = 11.0;
 const LINENO_DIGIT_PX: f32 = 7.0;
 const LINENO_PAD_PX: f32 = 4.0;
 const ROW_SEP_HEIGHT: f32 = 1.0;
+const DOT_STEP_PX: f32 = 3.5;
+const DOT_RADIUS: f32 = 0.9;
 const DASH_STEP_PX: f32 = 6.0;
 const DASH_LEN_PX: f32 = DASH_STEP_PX * 0.5;
 const GLYPH_ICON_PX: f32 = 14.0;
@@ -346,9 +349,9 @@ fn render_header_row(
         .scope(|ui| {
             let mut row_resp: Option<egui::Response> = None;
             ui.horizontal(|ui| {
-                if paint_glyph_button(
+                if paint_lock_button(
                     ui,
-                    if is_locked { "🔒" } else { "🔓" },
+                    is_locked,
                     if is_locked {
                         redesign_warning(ctx.palette)
                     } else {
@@ -362,12 +365,12 @@ fn render_header_row(
                 }
 
                 ui.add_space(GLYPH_GAP_PX);
-                paint_glyph_static(ui, "🔗", redesign_text_faint(ctx.palette));
+                paint_chain_static(ui, redesign_text_faint(ctx.palette));
 
                 ui.add_space(GLYPH_GAP_PX);
-                if paint_glyph_button(
+                if paint_chevron_button(
                     ui,
-                    if collapsed { "▸" } else { "▾" },
+                    collapsed,
                     redesign_text_faint(ctx.palette),
                 )
                 .clicked()
@@ -400,35 +403,107 @@ fn render_header_row(
     handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows);
 }
 
-/// Allocates a small rect and paints a glyph at center with click semantics.
-fn paint_glyph_button(ui: &mut egui::Ui, glyph: &str, color: egui::Color32) -> egui::Response {
+/// Allocates a click-target and vector-paints a lock icon.
+fn paint_lock_button(
+    ui: &mut egui::Ui,
+    is_locked: bool,
+    color: egui::Color32,
+) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::click());
     if ui.is_rect_visible(rect) {
+        paint_lock_icon(ui.painter(), rect.center(), color, is_locked);
+    }
+    response
+}
+
+/// Allocates a static slot and vector-paints a chain icon.
+fn paint_chain_static(ui: &mut egui::Ui, color: egui::Color32) {
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        paint_chain_icon(ui.painter(), rect.center(), color);
+    }
+}
+
+/// Allocates a click-target and paints a collapse/expand chevron.
+///
+/// Uses Geometric Shapes glyphs (▸ / ▾) via the `firacode_nerd` font family.
+fn paint_chevron_button(
+    ui: &mut egui::Ui,
+    collapsed: bool,
+    color: egui::Color32,
+) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::click());
+    if ui.is_rect_visible(rect) {
+        let glyph = if collapsed { "▸" } else { "▾" };
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
             glyph,
-            egui::FontId::new(GLYPH_FONT_SIZE, egui::FontFamily::Proportional),
+            egui::FontId::new(GLYPH_FONT_SIZE, egui::FontFamily::Monospace),
             color,
         );
     }
     response
 }
 
-/// Paints a decorative glyph with no click semantics.
-fn paint_glyph_static(ui: &mut egui::Ui, glyph: &str, color: egui::Color32) {
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::hover());
-    if ui.is_rect_visible(rect) {
-        ui.painter().text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            glyph,
-            egui::FontId::new(GLYPH_FONT_SIZE, egui::FontFamily::Proportional),
-            color,
-        );
-    }
+/// Vector-paints a padlock icon centered on `center`.
+///
+/// The body is a small filled rounded rectangle; the shackle is a U-shape above the body
+/// drawn with three line segments. When `is_locked` is false the shackle lifts open.
+pub fn paint_lock_icon(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    color: egui::Color32,
+    is_locked: bool,
+) {
+    let stroke = egui::Stroke::new(1.5, color);
+    // Body: 8 × 6 px filled rounded rect, lower half of the icon footprint.
+    let body_w = 8.0;
+    let body_h = 5.5;
+    let body_top = center.y + 1.0;
+    let body_rect = egui::Rect::from_min_size(
+        egui::pos2(center.x - body_w * 0.5, body_top),
+        egui::vec2(body_w, body_h),
+    );
+    painter.rect_filled(body_rect, egui::CornerRadius::same(2), color);
+
+    // Shackle: U-shape above the body.
+    // Left arm, right arm, top bar.
+    let shackle_inner_w = body_w * 0.35;
+    let arm_x_l = center.x - shackle_inner_w;
+    let arm_x_r = center.x + shackle_inner_w;
+    let arm_bottom = body_top + 1.0;
+    let shackle_lift = if is_locked { 0.0 } else { 3.5 };
+    let top_y = body_top - 4.5 - shackle_lift;
+    let arm_top = body_top - 2.5 - shackle_lift;
+
+    painter.line_segment([egui::pos2(arm_x_l, arm_bottom), egui::pos2(arm_x_l, arm_top)], stroke);
+    painter.line_segment([egui::pos2(arm_x_r, arm_bottom), egui::pos2(arm_x_r, arm_top)], stroke);
+    painter.line_segment([egui::pos2(arm_x_l, top_y), egui::pos2(arm_x_r, top_y)], stroke);
+}
+
+/// Vector-paints a chain-link icon (two interlocked rounded rectangles) centered on `center`.
+pub fn paint_chain_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
+    let stroke = egui::Stroke::new(1.4, color);
+    // Two elongated rounded rects, diagonally offset and crossing each other.
+    let half_w = 4.5;
+    let half_h = 2.0;
+    let offset = 1.8;
+
+    let link_a = egui::Rect::from_center_size(
+        egui::pos2(center.x - offset, center.y - offset * 0.5),
+        egui::vec2(half_w * 2.0, half_h * 2.0),
+    );
+    let link_b = egui::Rect::from_center_size(
+        egui::pos2(center.x + offset, center.y + offset * 0.5),
+        egui::vec2(half_w * 2.0, half_h * 2.0),
+    );
+
+    painter.rect_stroke(link_a, egui::CornerRadius::same(2), stroke, egui::StrokeKind::Middle);
+    painter.rect_stroke(link_b, egui::CornerRadius::same(2), stroke, egui::StrokeKind::Middle);
 }
 
 fn build_parent_title(
@@ -502,7 +577,7 @@ fn render_child_row(
 
     render_child_context_menu(&drag_response, ctx, idx, acc);
 
-    // Dashed bottom separator between child rows.
+    // Dotted bottom separator between child rows.
     paint_dashed_separator(ui, ctx.palette, label_response.rect);
 
     ui.add_space(ROW_SEP_HEIGHT);
@@ -517,15 +592,14 @@ fn paint_dashed_separator(ui: &egui::Ui, palette: ThemePalette, row_rect: egui::
     let y = row_rect.bottom();
     let x0 = row_rect.left();
     let x1 = row_rect.right();
-    let color = redesign_text_fainter(palette);
+    let base_color = redesign_text_fainter(palette);
+    let color = redesign_with_alpha(base_color, 1, 2);
     let painter = ui.painter();
-    let stroke = egui::Stroke::new(ROW_SEP_HEIGHT, color);
     for x in std::iter::successors(Some(x0), |&prev| {
-        let next = prev + DASH_STEP_PX;
-        if next < x1 { Some(next) } else { None }
+        let next = prev + DOT_STEP_PX;
+        if next <= x1 { Some(next) } else { None }
     }) {
-        let end = (x + DASH_LEN_PX).min(x1);
-        painter.line_segment([egui::pos2(x, y), egui::pos2(end, y)], stroke);
+        painter.circle_filled(egui::pos2(x, y), DOT_RADIUS, color);
     }
 }
 

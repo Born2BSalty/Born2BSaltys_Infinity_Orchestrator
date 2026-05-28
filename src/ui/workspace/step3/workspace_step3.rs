@@ -68,6 +68,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     );
 
     clipped_pane(ui, list_rect, |ui| {
+        ui.add_space(8.0);
         step3_list_body::render(ui, orchestrator, &active_markers);
     });
 
