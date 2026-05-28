@@ -31,7 +31,6 @@ use crate::ui::step3::state_step3;
 
 const BOX_PADDING: f32 = 10.0;
 const CHILD_INDENT: f32 = 18.0;
-const DRAG_HANDLE_SIZE: f32 = 16.0;
 const LINENO_FONT_SIZE: f32 = 11.0;
 const LINENO_DIGIT_PX: f32 = 7.0;
 const LINENO_PAD_PX: f32 = 4.0;
@@ -69,6 +68,8 @@ struct RenderCtx<'a> {
     locked_blocks: &'a mut Vec<String>,
     undo_stack: &'a mut Vec<Vec<Step3ItemState>>,
     redo_stack: &'a mut Vec<Vec<Step3ItemState>>,
+    /// Left and right x-bounds of the current group's inner rect, used for full-width separators.
+    current_group_x_bounds: Option<(f32, f32)>,
 }
 
 struct RowAccumulator {
@@ -127,6 +128,7 @@ pub(crate) fn render(
             .layout(egui::Layout::top_down(egui::Align::Min)),
     );
     child.set_clip_rect(inner.intersect(ui.clip_rect()));
+    child.add_space(3.0);
 
     render_scroll_body(&mut child, state, palette, compat_markers);
 
@@ -227,6 +229,7 @@ fn run_row_pipeline(
         locked_blocks,
         undo_stack,
         redo_stack,
+        current_group_x_bounds: None,
     };
 
     let lineno_w = lineno_col_width(total_child_count);
@@ -292,6 +295,8 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
                 egui::vec2(GROUP_BORDER_PADDING.mul_add(-2.0, avail_w), 0.0),
             );
 
+            ctx.current_group_x_bounds = Some((inner_rect.left(), inner_rect.right()));
+
             let group_inner = ui.allocate_new_ui(
                 egui::UiBuilder::new()
                     .max_rect(egui::Rect::from_min_size(
@@ -316,6 +321,8 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
                     }
                 },
             );
+
+            ctx.current_group_x_bounds = None;
 
             let inner_used = group_inner.response.rect;
             egui::Rect::from_min_max(
@@ -365,16 +372,7 @@ fn render_header_row(
                 }
 
                 ui.add_space(GLYPH_GAP_PX);
-                paint_chain_static(ui, redesign_text_faint(ctx.palette));
-
-                ui.add_space(GLYPH_GAP_PX);
-                if paint_chevron_button(
-                    ui,
-                    collapsed,
-                    redesign_text_faint(ctx.palette),
-                )
-                .clicked()
-                {
+                if paint_chevron_button(ui, collapsed, redesign_text_faint(ctx.palette)).clicked() {
                     if collapsed {
                         ctx.collapsed_blocks.retain(|v| v != block_id.as_str());
                     } else if !ctx.collapsed_blocks.contains(&block_id) {
@@ -394,7 +392,9 @@ fn render_header_row(
         .inner;
 
     let drag_id = ui.make_persistent_id(("step3b_drag_parent", ctx.tab_id, idx));
-    let drag_response = ui.interact(label_response.rect, drag_id, egui::Sense::click_and_drag());
+    let drag_response = ui
+        .interact(label_response.rect, drag_id, egui::Sense::click_and_drag())
+        .on_hover_cursor(egui::CursorIcon::Grab);
 
     render_parent_context_menu(&drag_response, ctx, idx);
     acc.visible_rows.push((idx, label_response.rect));
@@ -403,27 +403,28 @@ fn render_header_row(
     handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows);
 }
 
-/// Allocates a click-target and vector-paints a lock icon.
-fn paint_lock_button(
-    ui: &mut egui::Ui,
-    is_locked: bool,
-    color: egui::Color32,
-) -> egui::Response {
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::click());
+/// Allocates a click-target and paints a lock glyph from `FiraCode Nerd Font`.
+///
+/// Uses `U+F023` (lock-closed) or `U+F09C` (lock-open) from the `FontAwesome` PUA range.
+fn paint_lock_button(ui: &mut egui::Ui, is_locked: bool, color: egui::Color32) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX),
+        egui::Sense::click(),
+    );
     if ui.is_rect_visible(rect) {
-        paint_lock_icon(ui.painter(), rect.center(), color, is_locked);
+        let glyph = if is_locked { "\u{F023}" } else { "\u{F09C}" };
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            glyph,
+            egui::FontId::new(
+                GLYPH_FONT_SIZE,
+                egui::FontFamily::Name("firacode_nerd".into()),
+            ),
+            color,
+        );
     }
     response
-}
-
-/// Allocates a static slot and vector-paints a chain icon.
-fn paint_chain_static(ui: &mut egui::Ui, color: egui::Color32) {
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::hover());
-    if ui.is_rect_visible(rect) {
-        paint_chain_icon(ui.painter(), rect.center(), color);
-    }
 }
 
 /// Allocates a click-target and paints a collapse/expand chevron.
@@ -434,8 +435,10 @@ fn paint_chevron_button(
     collapsed: bool,
     color: egui::Color32,
 ) -> egui::Response {
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX),
+        egui::Sense::click(),
+    );
     if ui.is_rect_visible(rect) {
         let glyph = if collapsed { "▸" } else { "▾" };
         ui.painter().text(
@@ -447,63 +450,6 @@ fn paint_chevron_button(
         );
     }
     response
-}
-
-/// Vector-paints a padlock icon centered on `center`.
-///
-/// The body is a small filled rounded rectangle; the shackle is a U-shape above the body
-/// drawn with three line segments. When `is_locked` is false the shackle lifts open.
-pub fn paint_lock_icon(
-    painter: &egui::Painter,
-    center: egui::Pos2,
-    color: egui::Color32,
-    is_locked: bool,
-) {
-    let stroke = egui::Stroke::new(1.5, color);
-    // Body: 8 × 6 px filled rounded rect, lower half of the icon footprint.
-    let body_w = 8.0;
-    let body_h = 5.5;
-    let body_top = center.y + 1.0;
-    let body_rect = egui::Rect::from_min_size(
-        egui::pos2(center.x - body_w * 0.5, body_top),
-        egui::vec2(body_w, body_h),
-    );
-    painter.rect_filled(body_rect, egui::CornerRadius::same(2), color);
-
-    // Shackle: U-shape above the body.
-    // Left arm, right arm, top bar.
-    let shackle_inner_w = body_w * 0.35;
-    let arm_x_l = center.x - shackle_inner_w;
-    let arm_x_r = center.x + shackle_inner_w;
-    let arm_bottom = body_top + 1.0;
-    let shackle_lift = if is_locked { 0.0 } else { 3.5 };
-    let top_y = body_top - 4.5 - shackle_lift;
-    let arm_top = body_top - 2.5 - shackle_lift;
-
-    painter.line_segment([egui::pos2(arm_x_l, arm_bottom), egui::pos2(arm_x_l, arm_top)], stroke);
-    painter.line_segment([egui::pos2(arm_x_r, arm_bottom), egui::pos2(arm_x_r, arm_top)], stroke);
-    painter.line_segment([egui::pos2(arm_x_l, top_y), egui::pos2(arm_x_r, top_y)], stroke);
-}
-
-/// Vector-paints a chain-link icon (two interlocked rounded rectangles) centered on `center`.
-pub fn paint_chain_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.4, color);
-    // Two elongated rounded rects, diagonally offset and crossing each other.
-    let half_w = 4.5;
-    let half_h = 2.0;
-    let offset = 1.8;
-
-    let link_a = egui::Rect::from_center_size(
-        egui::pos2(center.x - offset, center.y - offset * 0.5),
-        egui::vec2(half_w * 2.0, half_h * 2.0),
-    );
-    let link_b = egui::Rect::from_center_size(
-        egui::pos2(center.x + offset, center.y + offset * 0.5),
-        egui::vec2(half_w * 2.0, half_h * 2.0),
-    );
-
-    painter.rect_stroke(link_a, egui::CornerRadius::same(2), stroke, egui::StrokeKind::Middle);
-    painter.rect_stroke(link_b, egui::CornerRadius::same(2), stroke, egui::StrokeKind::Middle);
 }
 
 fn build_parent_title(
@@ -553,7 +499,6 @@ fn render_child_row(
         .horizontal(|ui| {
             ui.add_space(CHILD_INDENT);
 
-            render_drag_handle(ui, ctx.palette);
             render_lineno(ui, ctx.palette, child_counter, lineno_w);
 
             let text = format_step3::format_step3_item(&ctx.items[idx]);
@@ -573,12 +518,14 @@ fn render_child_row(
         .on_hover_text(crate::ui::shared::tooltip_global::STEP3_DRAG_ROW);
 
     let drag_id = ui.make_persistent_id(("step3b_drag_child", ctx.tab_id, idx));
-    let drag_response = ui.interact(label_response.rect, drag_id, egui::Sense::click_and_drag());
+    let drag_response = ui
+        .interact(label_response.rect, drag_id, egui::Sense::click_and_drag())
+        .on_hover_cursor(egui::CursorIcon::Grab);
 
     render_child_context_menu(&drag_response, ctx, idx, acc);
 
-    // Dotted bottom separator between child rows.
-    paint_dashed_separator(ui, ctx.palette, label_response.rect);
+    let sep_x_bounds = ctx.current_group_x_bounds;
+    paint_dashed_separator(ui, ctx.palette, label_response.rect, sep_x_bounds);
 
     ui.add_space(ROW_SEP_HEIGHT);
 
@@ -588,12 +535,16 @@ fn render_child_row(
     handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows);
 }
 
-fn paint_dashed_separator(ui: &egui::Ui, palette: ThemePalette, row_rect: egui::Rect) {
+fn paint_dashed_separator(
+    ui: &egui::Ui,
+    palette: ThemePalette,
+    row_rect: egui::Rect,
+    group_x_bounds: Option<(f32, f32)>,
+) {
     let y = row_rect.bottom();
-    let x0 = row_rect.left();
-    let x1 = row_rect.right();
+    let (x0, x1) = group_x_bounds.unwrap_or_else(|| (row_rect.left(), row_rect.right()));
     let base_color = redesign_text_fainter(palette);
-    let color = redesign_with_alpha(base_color, 1, 2);
+    let color = redesign_with_alpha(base_color, 1, 3);
     let painter = ui.painter();
     for x in std::iter::successors(Some(x0), |&prev| {
         let next = prev + DOT_STEP_PX;
@@ -636,17 +587,6 @@ fn paint_dashed_rect(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect) {
             painter.line_segment([p0, p1], stroke);
         }
     }
-}
-
-fn render_drag_handle(ui: &mut egui::Ui, palette: ThemePalette) {
-    ui.add(
-        egui::Label::new(
-            egui::RichText::new("≡")
-                .size(DRAG_HANDLE_SIZE)
-                .color(redesign_text_faint(palette)),
-        )
-        .selectable(false),
-    );
 }
 
 fn render_lineno(ui: &mut egui::Ui, palette: ThemePalette, n: usize, col_w: f32) {
