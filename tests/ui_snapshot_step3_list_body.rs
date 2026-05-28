@@ -10,6 +10,7 @@ use bio::ui::shared::redesign_tokens::{
     redesign_text_disabled, redesign_text_faint, redesign_text_fainter, redesign_warning,
     redesign_with_alpha,
 };
+use bio::ui::shared::theme_global::accent_path;
 use bio::ui::step3::state_blocks_step3 as blocks;
 
 use eframe::egui;
@@ -17,6 +18,9 @@ use egui_kittest::Harness;
 
 const WIDTH: f32 = 1000.0;
 const HEIGHT: f32 = 640.0;
+const GATE_GROUP_BORDER_PADDING: f32 = 4.0;
+const GATE_DASH_STEP_PX: f32 = 6.0;
+const GATE_DASH_LEN_PX: f32 = GATE_DASH_STEP_PX * 0.5;
 
 const PALETTES: [(&str, ThemePalette); 2] =
     [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)];
@@ -377,13 +381,8 @@ fn render_gate_dir() -> PathBuf {
         .join("render-gate")
 }
 
-/// Renders the polished Step-3 list body scene with:
-/// - one parent with three children (LOCKED, `U+F023` lock-closed glyph)
-/// - one parent with two children (UNLOCKED, `U+F09C` lock-open glyph)
-/// - one collapsed parent (chevron ▸, no children shown)
-fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
+fn make_polish_scene() -> (Vec<Step3ItemState>, Vec<String>, Vec<String>, Vec<usize>) {
     let items = vec![
-        // Group A — LOCKED parent (3 children)
         make_parent("BG2FixPack", false),
         make_child(
             "BG2FixPack",
@@ -403,7 +402,6 @@ fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
             "NPC-Related Fixes",
             "~BG2FixPack\\setup-BG2FixPack.tp2~ #0 #3 // NPC-Related Fixes: v13.4",
         ),
-        // Group B — UNLOCKED parent (2 children)
         make_parent("SCS", false),
         make_child(
             "SCS",
@@ -417,7 +415,6 @@ fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
             "Better calls for help",
             "~stratagems\\setup-stratagems.tp2~ #0 #4020 // Better calls for help: v34.3",
         ),
-        // Group C — COLLAPSED parent (children hidden)
         make_parent("SoD", false),
         make_child(
             "SoD",
@@ -426,19 +423,90 @@ fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
             "~SoD\\setup-SoD.tp2~ #0 #100 // Hidden: v1.0",
         ),
     ];
-
     let collapsed = vec!["SoD::block0".to_string()];
     let locked = vec!["BG2FixPack::block0".to_string()];
     let visible = blocks::visible_indices(&items, &collapsed);
+    (items, collapsed, locked, visible)
+}
+
+fn render_polish_groups(
+    ui: &mut egui::Ui,
+    items: &[Step3ItemState],
+    collapsed: &[String],
+    locked: &[String],
+    visible: &[usize],
+    fallback_x_bounds: (f32, f32),
+    palette: ThemePalette,
+) {
+    ui.set_min_width(ui.available_width());
+    let mut child_counter = 0usize;
+    let mut first_group = true;
+    let mut pos = 0;
+    while pos < visible.len() {
+        let idx = visible[pos];
+        if !items[idx].is_parent {
+            child_counter += 1;
+            render_polish_child_row(ui, items, idx, child_counter, fallback_x_bounds, palette);
+            pos += 1;
+            continue;
+        }
+        if !first_group {
+            ui.add_space(12.0);
+        }
+        first_group = false;
+        let block_id = items[idx].block_id.clone();
+        let top_cursor = ui.cursor().min;
+        let avail_w = ui.available_width();
+        let inner_min =
+            top_cursor + egui::vec2(GATE_GROUP_BORDER_PADDING, GATE_GROUP_BORDER_PADDING);
+        let inner_w = GATE_GROUP_BORDER_PADDING.mul_add(-2.0, avail_w);
+        let inner_rect = egui::Rect::from_min_size(inner_min, egui::vec2(inner_w, 0.0));
+        let x_bounds = (inner_rect.left(), inner_rect.right());
+        let group_inner = ui.allocate_new_ui(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    inner_rect.min,
+                    egui::vec2(inner_rect.width(), f32::INFINITY),
+                ))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+            |ui| {
+                render_polish_header_row(ui, items, idx, locked, collapsed, palette);
+                pos += 1;
+                while pos < visible.len() {
+                    let child_idx = visible[pos];
+                    if items[child_idx].is_parent || items[child_idx].block_id != block_id {
+                        break;
+                    }
+                    child_counter += 1;
+                    render_polish_child_row(ui, items, child_idx, child_counter, x_bounds, palette);
+                    pos += 1;
+                }
+            },
+        );
+        let inner_used = group_inner.response.rect;
+        let group_rect = egui::Rect::from_min_max(
+            top_cursor,
+            egui::pos2(
+                top_cursor.x + avail_w,
+                inner_used.bottom() + GATE_GROUP_BORDER_PADDING,
+            ),
+        );
+        paint_gate_dashed_rect(ui, group_rect);
+        ui.allocate_rect(group_rect, egui::Sense::hover());
+    }
+}
+
+/// Renders the polished Step-3 list body scene with a locked group, an unlocked group,
+/// and a collapsed group — showing per-group dashed borders and dotted row separators.
+fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
+    let (items, collapsed, locked, visible) = make_polish_scene();
 
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE.fill(redesign_page_bg(palette)))
         .show(ctx, |ui| {
             ui.set_width(ui.available_width());
-
             let avail = ui.available_size();
             let (box_rect, _) = ui.allocate_exact_size(avail, egui::Sense::hover());
-
             if ui.is_rect_visible(box_rect) {
                 let painter = ui.painter();
                 let radius = egui::CornerRadius::same(3);
@@ -450,7 +518,6 @@ fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
                     egui::StrokeKind::Inside,
                 );
             }
-
             let inner = box_rect.shrink(10.0);
             let mut child = ui.new_child(
                 egui::UiBuilder::new()
@@ -459,28 +526,14 @@ fn render_polish_preview(ctx: &egui::Context, palette: ThemePalette) {
             );
             child.set_clip_rect(inner.intersect(ui.clip_rect()));
             child.add_space(3.0);
-
+            let fallback_x = (inner.left(), inner.right());
             egui::ScrollArea::both()
                 .id_salt("render_gate_polish")
                 .auto_shrink([false, false])
                 .show(&mut child, |ui| {
-                    let x_bounds = (inner.left(), inner.right());
-                    let mut child_counter = 0usize;
-                    for &idx in &visible {
-                        if items[idx].is_parent {
-                            render_polish_header_row(ui, &items, idx, &locked, &collapsed, palette);
-                        } else {
-                            child_counter += 1;
-                            render_polish_child_row(
-                                ui,
-                                &items,
-                                idx,
-                                child_counter,
-                                x_bounds,
-                                palette,
-                            );
-                        }
-                    }
+                    render_polish_groups(
+                        ui, &items, &collapsed, &locked, &visible, fallback_x, palette,
+                    );
                 });
         });
 }
@@ -589,12 +642,12 @@ fn render_polish_child_row(
         );
     });
 
-    // Full-width dotted separator at 1/3 alpha.
+    // Full-width dotted separator: wider spacing, smaller dots, very faint.
     let sep_y = ui.cursor().min.y;
     let base_color = redesign_text_fainter(palette);
-    let dot_color = redesign_with_alpha(base_color, 1, 3);
-    let dot_step = 3.5_f32;
-    let dot_radius = 0.9_f32;
+    let dot_color = redesign_with_alpha(base_color, 1, 8);
+    let dot_step = 7.0_f32;
+    let dot_radius = 0.5_f32;
     for x in std::iter::successors(Some(group_x0), |&prev| {
         let next = prev + dot_step;
         if next <= group_x1 { Some(next) } else { None }
@@ -603,6 +656,38 @@ fn render_polish_child_row(
             .circle_filled(egui::pos2(x, sep_y), dot_radius, dot_color);
     }
     ui.add_space(1.0);
+}
+
+/// Paints a dashed rectangle border in the warm-tan TP2 path color.
+fn paint_gate_dashed_rect(ui: &egui::Ui, rect: egui::Rect) {
+    let color = accent_path();
+    let stroke = egui::Stroke::new(1.0, color);
+    let painter = ui.painter();
+    let corners = [
+        (rect.left_top(), rect.right_top()),
+        (rect.right_top(), rect.right_bottom()),
+        (rect.right_bottom(), rect.left_bottom()),
+        (rect.left_bottom(), rect.left_top()),
+    ];
+    for (from, to) in corners {
+        let dx = to.x - from.x;
+        let dy = to.y - from.y;
+        let edge_len = dx.hypot(dy);
+        if edge_len < 1.0 {
+            continue;
+        }
+        let ux = dx / edge_len;
+        let uy = dy / edge_len;
+        for t in std::iter::successors(Some(0.0_f32), |&prev| {
+            let next = prev + GATE_DASH_STEP_PX;
+            if next < edge_len { Some(next) } else { None }
+        }) {
+            let t_end = (t + GATE_DASH_LEN_PX).min(edge_len);
+            let p0 = egui::pos2(ux.mul_add(t, from.x), uy.mul_add(t, from.y));
+            let p1 = egui::pos2(ux.mul_add(t_end, from.x), uy.mul_add(t_end, from.y));
+            painter.line_segment([p0, p1], stroke);
+        }
+    }
 }
 
 #[test]

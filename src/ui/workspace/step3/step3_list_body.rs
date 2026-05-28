@@ -35,8 +35,8 @@ const LINENO_FONT_SIZE: f32 = 11.0;
 const LINENO_DIGIT_PX: f32 = 7.0;
 const LINENO_PAD_PX: f32 = 4.0;
 const ROW_SEP_HEIGHT: f32 = 1.0;
-const DOT_STEP_PX: f32 = 3.5;
-const DOT_RADIUS: f32 = 0.9;
+const DOT_STEP_PX: f32 = 7.0;
+const DOT_RADIUS: f32 = 0.5;
 const DASH_STEP_PX: f32 = 6.0;
 const DASH_LEN_PX: f32 = DASH_STEP_PX * 0.5;
 const GLYPH_ICON_PX: f32 = 14.0;
@@ -250,7 +250,7 @@ fn run_row_pipeline(
 }
 
 fn configure_scroll_style(ui: &mut egui::Ui) {
-    let mut scroll = egui::style::ScrollStyle::solid();
+    let mut scroll = egui::style::ScrollStyle::floating();
     scroll.bar_width = 12.0;
     scroll.bar_inner_margin = 0.0;
     scroll.bar_outer_margin = 2.0;
@@ -284,7 +284,6 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
         first_group = false;
 
         let block_id = ctx.items[idx].block_id.clone();
-        let palette = ctx.palette;
 
         let group_rect = {
             let top_cursor = ui.cursor().min;
@@ -334,7 +333,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             )
         };
 
-        paint_dashed_rect(ui, palette, group_rect);
+        paint_dashed_rect(ui, group_rect);
         ui.allocate_rect(group_rect, egui::Sense::hover());
     }
 
@@ -392,9 +391,7 @@ fn render_header_row(
         .inner;
 
     let drag_id = ui.make_persistent_id(("step3b_drag_parent", ctx.tab_id, idx));
-    let drag_response = ui
-        .interact(label_response.rect, drag_id, egui::Sense::click_and_drag())
-        .on_hover_cursor(egui::CursorIcon::Grab);
+    let drag_response = ui.interact(label_response.rect, drag_id, egui::Sense::click_and_drag());
 
     render_parent_context_menu(&drag_response, ctx, idx);
     acc.visible_rows.push((idx, label_response.rect));
@@ -518,9 +515,7 @@ fn render_child_row(
         .on_hover_text(crate::ui::shared::tooltip_global::STEP3_DRAG_ROW);
 
     let drag_id = ui.make_persistent_id(("step3b_drag_child", ctx.tab_id, idx));
-    let drag_response = ui
-        .interact(label_response.rect, drag_id, egui::Sense::click_and_drag())
-        .on_hover_cursor(egui::CursorIcon::Grab);
+    let drag_response = ui.interact(label_response.rect, drag_id, egui::Sense::click_and_drag());
 
     render_child_context_menu(&drag_response, ctx, idx, acc);
 
@@ -544,7 +539,7 @@ fn paint_dashed_separator(
     let y = row_rect.bottom();
     let (x0, x1) = group_x_bounds.unwrap_or_else(|| (row_rect.left(), row_rect.right()));
     let base_color = redesign_text_fainter(palette);
-    let color = redesign_with_alpha(base_color, 1, 3);
+    let color = redesign_with_alpha(base_color, 1, 8);
     let painter = ui.painter();
     for x in std::iter::successors(Some(x0), |&prev| {
         let next = prev + DOT_STEP_PX;
@@ -555,8 +550,8 @@ fn paint_dashed_separator(
 }
 
 /// Paints a dashed rectangle border around `rect`, walking each edge in dash-gap segments.
-fn paint_dashed_rect(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect) {
-    let color = redesign_text_faint(palette);
+fn paint_dashed_rect(ui: &egui::Ui, rect: egui::Rect) {
+    let color = crate::ui::shared::theme_global::accent_path();
     let stroke = egui::Stroke::new(ROW_SEP_HEIGHT, color);
     let painter = ui.painter();
 
