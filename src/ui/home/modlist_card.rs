@@ -6,7 +6,9 @@ use std::fmt::Write as _;
 use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
-use crate::ui::orchestrator::widgets::{BtnOpts, KebabItem, redesign_btn, render_kebab};
+use crate::ui::orchestrator::widgets::{
+    BtnOpts, KebabItem, redesign_btn, redesign_btn_height, render_kebab,
+};
 use crate::ui::shared::format_relative::relative_time;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
@@ -126,7 +128,8 @@ fn render_action_cluster(
                 KebabItem::new("Rename", || {}),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
-            render_kebab(ui, palette, &entry.id, &mut items);
+            let kebab_h = redesign_btn_height(ui, true);
+            render_kebab(ui, palette, &entry.id, &mut items, kebab_h);
             drop(items);
 
             if redesign_btn(
@@ -156,7 +159,8 @@ fn render_action_cluster(
                 KebabItem::new("Reinstall", || picked.set(ModlistCardActions::Reinstall)),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
-            render_kebab(ui, palette, &entry.id, &mut items);
+            let kebab_h = redesign_btn_height(ui, true);
+            render_kebab(ui, palette, &entry.id, &mut items, kebab_h);
             drop(items);
 
             if redesign_btn(

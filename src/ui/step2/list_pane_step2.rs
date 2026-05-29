@@ -13,6 +13,11 @@ use crate::ui::step2::tree_render_step2::{
     ModTreeRenderContext, ModTreeRenderResult, render_mod_tree,
 };
 
+/// Horizontal space (px) reserved on the right so the floating scrollbar does not overlap row text.
+///
+/// Equals `bar_width` (12) + `bar_outer_margin` (2).
+const SCROLLBAR_RESERVE: f32 = 14.0;
+
 pub(crate) fn render_list_pane(
     ui: &mut egui::Ui,
     state: &mut WizardState,
@@ -26,13 +31,17 @@ pub(crate) fn render_list_pane(
         ui.set_clip_rect(left_rect);
         egui::Frame::group(ui.style())
             .inner_margin(egui::Margin {
-                left: 0,
-                right: 6,
-                top: 0,
+                left: 12,
+                right: 0,
+                top: 10,
                 bottom: 0,
             })
             .show(ui, |ui| {
-                ui.set_min_size(left_rect.size());
+                let border_w = ui.visuals().widgets.noninteractive.bg_stroke.width;
+                let borders = border_w * 2.0;
+                let content_w = (left_rect.width() - 12.0 - borders).max(0.0);
+                let content_h = (left_rect.height() - 10.0 - borders).max(0.0);
+                ui.set_min_size(egui::vec2(content_w, content_h));
                 ui.scope(|ui| {
                     configure_scroll_style(ui);
                     ui.add_enabled_ui(
@@ -54,7 +63,7 @@ pub(crate) fn render_list_pane(
 }
 
 fn configure_scroll_style(ui: &mut egui::Ui) {
-    let mut scroll = egui::style::ScrollStyle::solid();
+    let mut scroll = egui::style::ScrollStyle::floating();
     scroll.bar_width = 12.0;
     scroll.bar_inner_margin = 0.0;
     scroll.bar_outer_margin = 2.0;
@@ -82,6 +91,10 @@ fn render_mods_scroll_content(
     details_open: &mut bool,
     palette: ThemePalette,
 ) {
+    // Keep row content clear of the floating scrollbar on the right edge.
+    let reserved_w = (ui.available_width() - SCROLLBAR_RESERVE).max(0.0);
+    ui.set_max_width(reserved_w);
+
     let filter = state.step2.search_query.trim().to_lowercase();
     let active_tab = state.step2.active_game_tab.clone();
     let collapse_epoch = state.step2.collapse_epoch;

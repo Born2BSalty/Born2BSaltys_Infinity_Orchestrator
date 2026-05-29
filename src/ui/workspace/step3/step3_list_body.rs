@@ -133,7 +133,13 @@ pub(crate) fn render(
         );
     }
 
-    let inner = box_rect.shrink(BOX_PADDING);
+    // Inset left/top/bottom by BOX_PADDING; right side insets only by the border stroke width
+    // so the scroll region reaches the box's inner-right edge and the floating bar hugs it.
+    let border_w = REDESIGN_BORDER_WIDTH_PX;
+    let inner = egui::Rect::from_min_max(
+        egui::pos2(box_rect.left() + BOX_PADDING, box_rect.top() + BOX_PADDING),
+        egui::pos2(box_rect.right() - border_w, box_rect.bottom() - BOX_PADDING),
+    );
     let mut child = ui.new_child(
         egui::UiBuilder::new()
             .max_rect(inner)

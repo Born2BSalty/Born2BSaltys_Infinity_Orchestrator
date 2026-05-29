@@ -34,26 +34,29 @@ impl<'a> KebabItem<'a> {
 
 const DROPDOWN_MIN_WIDTH_PX: f32 = 180.0;
 
+/// Renders the `···` kebab trigger at the given `trigger_height` (so it can line
+/// up with sibling buttons of a known height) plus its click-to-open dropdown.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     id_salt: &str,
     items: &mut [KebabItem<'_>],
+    trigger_height: f32,
 ) -> egui::Response {
     let popup_id = ui.make_persistent_id(("orchestrator_kebab", id_salt));
 
-    let trigger = trigger_button(ui, palette);
+    let trigger = trigger_button(ui, palette, trigger_height);
     if trigger.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
     }
 
-    egui::popup::popup_below_widget(
+    popup_below_widget_right_aligned(
         ui,
         popup_id,
         &trigger,
         egui::popup::PopupCloseBehavior::CloseOnClickOutside,
         |ui| {
-            ui.set_min_width(DROPDOWN_MIN_WIDTH_PX);
+            ui.set_max_width(DROPDOWN_MIN_WIDTH_PX);
 
             let chassis = egui::Frame::default()
                 .fill(redesign_shell_bg(palette))
@@ -79,16 +82,58 @@ pub fn render(
     trigger
 }
 
-fn trigger_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response {
+/// Opens the dropdown so its right edge aligns with the trigger's right edge
+/// (extending leftward), keeping a right-anchored kebab's menu tied to its button
+/// and on-screen. Mirrors `egui::popup::popup_below_widget` but anchors the area's
+/// top-right corner to the trigger's bottom-right instead of its bottom-left.
+fn popup_below_widget_right_aligned<R>(
+    parent_ui: &egui::Ui,
+    popup_id: egui::Id,
+    widget_response: &egui::Response,
+    close_behavior: egui::popup::PopupCloseBehavior,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> Option<R> {
+    if !parent_ui.memory(|mem| mem.is_popup_open(popup_id)) {
+        return None;
+    }
+
+    let mut pos = widget_response.rect.right_bottom();
+    if let Some(to_global) = parent_ui
+        .ctx()
+        .layer_transform_to_global(parent_ui.layer_id())
+    {
+        pos = to_global * pos;
+    }
+
+    let frame = egui::Frame::popup(parent_ui.style());
+    let response = egui::Area::new(popup_id)
+        .order(egui::Order::Foreground)
+        .fixed_pos(pos)
+        .pivot(egui::Align2::RIGHT_TOP)
+        .show(parent_ui.ctx(), |ui| frame.show(ui, add_contents).inner);
+
+    let should_close = match close_behavior {
+        egui::popup::PopupCloseBehavior::CloseOnClick => widget_response.clicked_elsewhere(),
+        egui::popup::PopupCloseBehavior::CloseOnClickOutside => {
+            widget_response.clicked_elsewhere() && response.response.clicked_elsewhere()
+        }
+        egui::popup::PopupCloseBehavior::IgnoreClicks => false,
+    };
+    if parent_ui.input(|i| i.key_pressed(egui::Key::Escape)) || should_close {
+        parent_ui.memory_mut(egui::Memory::close_popup);
+    }
+    Some(response.inner)
+}
+
+fn trigger_button(ui: &mut egui::Ui, palette: ThemePalette, height: f32) -> egui::Response {
     let pad_x = 9.0;
-    let pad_y = 3.0;
     let label = "\u{00B7}\u{00B7}\u{00B7}";
     let text_color = redesign_text_primary(palette);
     let font = egui::FontId::new(15.0, egui::FontFamily::Name("poppins_medium".into()));
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let desired = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    let desired = egui::vec2(galley.size().x + pad_x * 2.0, height);
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
 
     if ui.is_rect_visible(rect) {
