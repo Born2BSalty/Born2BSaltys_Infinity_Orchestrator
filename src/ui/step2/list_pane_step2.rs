@@ -33,7 +33,7 @@ pub(crate) fn render_list_pane(
             .inner_margin(egui::Margin {
                 left: 12,
                 right: 0,
-                top: 8,
+                top: 10,
                 bottom: 0,
             })
             .show(ui, |ui| {
