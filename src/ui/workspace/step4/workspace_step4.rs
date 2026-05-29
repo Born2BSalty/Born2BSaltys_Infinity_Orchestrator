@@ -6,13 +6,12 @@ use eframe::egui;
 use crate::app::state::{Step3ItemState, WizardState};
 use crate::app::step4_action::Step4Action;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::shared::redesign_tokens::REDESIGN_BORDER_WIDTH_PX;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, ThemePalette, redesign_pill_danger, redesign_pill_text,
 };
 use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::workspace::step4::{step4_exact_log_viewer, step4_review_list, step4_save_row};
-use crate::ui::workspace::widgets::game_tab::{TAB_H, game_tab};
+use crate::ui::workspace::widgets::game_tab::game_tab;
 
 const TAB_GAP: f32 = 4.0;
 const TAB_TO_BODY_OVERLAP: f32 = 1.5;
@@ -48,32 +47,38 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     }
     ui.add_space(SAVE_ROW_GAP);
 
-    if is_dual_game(&orchestrator.wizard_state) {
-        let strip_top_y = ui.cursor().top();
-        let active_tab_rect = render_game_tab_strip(
+    let step4_active_tab_rect = if is_dual_game(&orchestrator.wizard_state) {
+        // Zero item_spacing.y so the horizontal tab row sits flush against
+        // the review box below it; add_space then applies the exact overlap.
+        ui.spacing_mut().item_spacing.y = 0.0;
+        let tab_rect = render_game_tab_strip(
             ui,
             palette,
             &mut orchestrator.wizard_state.step3.active_game_tab,
         );
         ui.add_space(-TAB_TO_BODY_OVERLAP);
-        if let Some(tab_rect) = active_tab_rect {
-            let panel_top_y = strip_top_y + TAB_H - REDESIGN_BORDER_WIDTH_PX;
-            paint_active_tab_seam_cover(ui.ctx(), palette, tab_rect, panel_top_y, "step4_game_tab");
-        }
-    }
+        tab_rect
+    } else {
+        None
+    };
 
     let exact_log_mode = orchestrator
         .wizard_state
         .step1
         .installs_exactly_from_weidu_logs();
 
-    if exact_log_mode {
+    let review_box_top = if exact_log_mode {
         if let Some(a) = step4_exact_log_viewer::render(ui, orchestrator, palette) {
             action = Some(a);
         }
+        0.0
     } else {
         let (active_tab, items) = active_tab_items(&orchestrator.wizard_state);
-        step4_review_list::render(ui, palette, items, active_tab);
+        step4_review_list::render(ui, palette, items, active_tab)
+    };
+
+    if let Some(tab_rect) = step4_active_tab_rect {
+        paint_active_tab_seam_cover(ui.painter(), palette, tab_rect, review_box_top);
     }
 
     surface_save_error(ui, palette, orchestrator);

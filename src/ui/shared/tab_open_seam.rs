@@ -11,43 +11,45 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_shell_bg,
 };
 
-/// Half-height of the cover rect on each side of the panel top edge, in
-/// addition to the border half-width. Provides AA margin to eliminate hairlines.
-const COVER_HALF_MARGIN: f32 = 0.5;
+/// Margin above the panel's top edge, catching both the tab border's inside-stroke
+/// height and its AA fringe. Must be at least `REDESIGN_BORDER_WIDTH_PX + AA_fringe`
+/// so the active tab's own bottom stroke is fully overwritten.
+const COVER_TOP_MARGIN: f32 = 2.5;
 
-/// Paints a fill-colored cover over the panel's top border where the active tab
-/// overlaps it, on `egui::Order::Foreground` so it composites above the panel
-/// regardless of paint order.
+/// Margin below the border's bottom edge so the cover's solid (non-AA) region
+/// fully brackets the inside-stroke border at every pixel density. Extending
+/// into the panel interior is invisible: the cover color equals the panel fill.
+const COVER_BOTTOM_MARGIN: f32 = 1.0;
+
+/// Paints a fill-colored cover over the panel border where the active tab overlaps it.
+///
+/// The caller must supply a `painter` from the panel's own `Ui` and call this
+/// after the panel border is stroked, so the cover appears later in the same
+/// paint list and reliably overwrites the border segment.
 ///
 /// `tab_rect` is the allocated rect of the active tab. `panel_top_y` is the y
-/// coordinate of the top edge of the content panel. `layer_id_salt` is a stable
-/// string that identifies this cover site (one per tab surface).
+/// coordinate of the top edge of the content panel.
 pub fn paint_active_tab_seam_cover(
-    ctx: &egui::Context,
+    painter: &egui::Painter,
     palette: ThemePalette,
     tab_rect: egui::Rect,
     panel_top_y: f32,
-    layer_id_salt: &str,
 ) {
-    let half = REDESIGN_BORDER_WIDTH_PX / 2.0 + COVER_HALF_MARGIN;
+    // Snap the cover edges to the device-pixel grid so they abut the active
+    // tab's side strokes crisply, instead of leaving a hairline of panel border
+    // on one edge or overrunning the stroke on the other when the tab lands on a
+    // fractional position.
+    let ppp = painter.ctx().pixels_per_point();
+    let snap = |v: f32| (v * ppp).round() / ppp;
     let cover = egui::Rect::from_min_max(
         egui::pos2(
-            tab_rect.left() + REDESIGN_BORDER_WIDTH_PX,
-            panel_top_y - half,
+            snap(tab_rect.left() + REDESIGN_BORDER_WIDTH_PX),
+            snap(panel_top_y - COVER_TOP_MARGIN),
         ),
         egui::pos2(
-            tab_rect.right() - REDESIGN_BORDER_WIDTH_PX,
-            panel_top_y + half,
+            snap(tab_rect.right() - REDESIGN_BORDER_WIDTH_PX),
+            snap(panel_top_y + REDESIGN_BORDER_WIDTH_PX + COVER_BOTTOM_MARGIN),
         ),
     );
-
-    let layer_id = egui::LayerId::new(
-        egui::Order::Foreground,
-        egui::Id::new(("tab_seam_cover", layer_id_salt)),
-    );
-    ctx.layer_painter(layer_id).rect_filled(
-        cover,
-        egui::CornerRadius::ZERO,
-        redesign_shell_bg(palette),
-    );
+    painter.rect_filled(cover, egui::CornerRadius::ZERO, redesign_shell_bg(palette));
 }

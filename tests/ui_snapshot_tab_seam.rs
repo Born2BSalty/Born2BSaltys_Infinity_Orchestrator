@@ -70,7 +70,13 @@ fn out_dir_before() -> PathBuf {
 fn out_dir_after() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("target")
-        .join("tab-seam-after")
+        .join("tab-seam-samelayer")
+}
+
+fn out_dir_corners() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join("tab-seam-corners")
 }
 
 fn temp_store_path(label: &str) -> PathBuf {
@@ -652,6 +658,78 @@ fn seam_after_install_preview() {
             setup_install_preview,
             |app, ctx, ui| page_install::render(ui, app, ctx),
             (228, 214, 420, 52),
+        );
+        assert_shot(&shot);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests — corners fix verification (square top, rounded bottom on content boxes).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn corners_settings() {
+    for (tag, palette) in PALETTES {
+        let shot = snap_surface(
+            &out_dir_corners(),
+            "settings",
+            tag,
+            palette,
+            |app| app.settings_screen_state.active_tab = SettingsTab::Paths,
+            |app, ctx, ui| page_settings::render(ui, app, ctx),
+            (228, 96, 520, 80),
+        );
+        assert_shot(&shot);
+    }
+}
+
+#[test]
+fn corners_step2() {
+    for (tag, palette) in PALETTES {
+        let shot = snap_surface(
+            &out_dir_corners(),
+            "step2",
+            tag,
+            palette,
+            setup_eet_step2,
+            |app, _ctx, ui| {
+                let _ = workspace_step2::render(ui, app);
+            },
+            (228, 126, 420, 64),
+        );
+        assert_shot(&shot);
+    }
+}
+
+#[test]
+fn corners_step3() {
+    for (tag, palette) in PALETTES {
+        let shot = snap_surface(
+            &out_dir_corners(),
+            "step3",
+            tag,
+            palette,
+            setup_eet_step3,
+            |app, _ctx, ui| workspace_step3::render(ui, app),
+            (228, 86, 420, 64),
+        );
+        assert_shot(&shot);
+    }
+}
+
+#[test]
+fn corners_step4() {
+    for (tag, palette) in PALETTES {
+        let shot = snap_surface(
+            &out_dir_corners(),
+            "step4",
+            tag,
+            palette,
+            setup_eet_step4,
+            |app, _ctx, ui| {
+                let _ = workspace_step4::render(ui, app);
+            },
+            (228, 104, 420, 64),
         );
         assert_shot(&shot);
     }

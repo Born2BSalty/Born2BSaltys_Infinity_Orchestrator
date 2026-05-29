@@ -5,12 +5,10 @@ use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::{BtnOpts, KebabItem, redesign_btn, render_kebab};
-use crate::ui::shared::redesign_tokens::REDESIGN_BORDER_WIDTH_PX;
 use crate::ui::shared::redesign_tokens::{
     ThemePalette, redesign_accent_deep, redesign_pill_danger, redesign_pill_text,
     redesign_pill_warn,
 };
-use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::prompt_popup_step2::collect_step2_prompt_toolbar_entries;
 use crate::ui::step2::state_step2::{
@@ -34,18 +32,23 @@ fn active_mods(state: &crate::app::state::WizardState) -> &[crate::app::state::S
     }
 }
 
+/// Renders the Step 2 tab row and returns `(action, active_tab_rect)`.
+///
+/// `active_tab_rect` is `Some` when a game tab is active and visible; the
+/// caller paints the seam cover after rendering the content pane.
 pub fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
     rect: egui::Rect,
-) -> Option<Step2Action> {
+) -> (Option<Step2Action>, Option<egui::Rect>) {
     let mut action: Option<Step2Action> = None;
     let row = Step2TabRowState::from_orchestrator(orchestrator);
+    let mut active_tab_rect: Option<egui::Rect> = None;
 
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         ui.horizontal(|ui| {
-            render_game_tabs(ui, orchestrator, palette, &row, rect);
+            active_tab_rect = render_game_tabs(ui, orchestrator, palette, &row);
             render_log_buttons(ui, orchestrator, palette, &row);
 
             if render_updates_button(ui, palette, &row).clicked() && row.updates.enabled {
@@ -70,7 +73,7 @@ pub fn render(
         });
     });
 
-    action
+    (action, active_tab_rect)
 }
 
 struct Step2TabRowState {
@@ -355,13 +358,15 @@ fn issue_target_filter(
     }
 }
 
+/// Renders the game tab buttons and returns the active tab rect.
+///
+/// The caller paints the seam cover after the content pane is rendered.
 fn render_game_tabs(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
     row: &Step2TabRowState,
-    rect: egui::Rect,
-) {
+) -> Option<egui::Rect> {
     ui.spacing_mut().item_spacing.x = TAB_GAP;
     let first = row.tabs.show_first_game.then(|| {
         game_tab(
@@ -379,13 +384,9 @@ fn render_game_tabs(
             &mut orchestrator.wizard_state.step2.active_game_tab,
         )
     });
-    let active_tab_rect = first.flatten().or_else(|| second.flatten());
-    if let Some(tab_rect) = active_tab_rect {
-        let panel_top_y = rect.bottom() - REDESIGN_BORDER_WIDTH_PX;
-        paint_active_tab_seam_cover(ui.ctx(), palette, tab_rect, panel_top_y, "step2_game_tab");
-    }
     ui.add_space(ACTION_LEFT_PAD - TAB_GAP);
     ui.spacing_mut().item_spacing.x = ITEM_GAP;
+    first.flatten().or_else(|| second.flatten())
 }
 
 fn render_log_buttons(

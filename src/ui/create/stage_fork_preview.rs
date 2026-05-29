@@ -97,9 +97,6 @@ fn render_tab_content(
     let item_gap = ui.spacing().item_spacing.y;
     ui.add_space(-item_gap);
     let panel_top_y = ui.cursor().top();
-    if let Some(tab_rect) = active_tab_rect {
-        preview_tabs::paint_preview_seam_cover(ui, palette, tab_rect, panel_top_y, "fork_preview");
-    }
 
     let content_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(80.0);
     let content_frame = egui::Frame::default()
@@ -121,6 +118,10 @@ fn render_tab_content(
             });
         },
     );
+
+    if let Some(tab_rect) = active_tab_rect {
+        preview_tabs::paint_preview_seam_cover(ui.painter(), palette, tab_rect, panel_top_y);
+    }
 }
 
 fn render_footer(ui: &mut egui::Ui, palette: ThemePalette) -> ForkPreviewOutcome {

@@ -8,7 +8,6 @@ use crate::ui::shared::redesign_tokens::{
     redesign_chrome_bg, redesign_hover_overlay, redesign_shell_bg, redesign_text_muted,
     redesign_text_primary,
 };
-use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 
 pub trait TabLabel: Copy + Eq {
     fn label(self) -> &'static str;
@@ -40,7 +39,7 @@ pub fn render<T: TabLabel>(
     let active_fill = redesign_shell_bg(palette);
     let idle_fill = redesign_chrome_bg(palette);
 
-    let mut active_x_range: Option<(f32, f32)> = None;
+    let mut active_rect: Option<egui::Rect> = None;
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
@@ -60,13 +59,14 @@ pub fn render<T: TabLabel>(
 
             let fill = if active { active_fill } else { idle_fill };
             painter.rect_filled(rect, tab_corner, fill);
-            if !active && response.hovered() {
-                painter.rect_filled(rect, tab_corner, redesign_hover_overlay(palette));
-            }
-            painter.rect_stroke(rect, tab_corner, border, egui::StrokeKind::Inside);
-
             if active {
-                active_x_range = Some((rect.left(), rect.right()));
+                // Outline is drawn last (after the body box) so it stays crisp.
+                active_rect = Some(rect);
+            } else {
+                if response.hovered() {
+                    painter.rect_filled(rect, tab_corner, redesign_hover_overlay(palette));
+                }
+                painter.rect_stroke(rect, tab_corner, border, egui::StrokeKind::Inside);
             }
 
             let text_color = if active {
@@ -97,18 +97,8 @@ pub fn render<T: TabLabel>(
     painter.rect_filled(body_rect, body_corner, active_fill);
     painter.rect_stroke(body_rect, body_corner, border, egui::StrokeKind::Inside);
 
-    if let Some((x0, x1)) = active_x_range {
-        let tab_rect = egui::Rect::from_min_max(
-            egui::pos2(x0, body_rect.top()),
-            egui::pos2(x1, body_rect.top()),
-        );
-        paint_active_tab_seam_cover(
-            ui.ctx(),
-            palette,
-            tab_rect,
-            body_rect.top(),
-            "settings_tab_strip",
-        );
+    if let Some(rect) = active_rect {
+        open_active_tab_into_body(ui, rect, body_rect, tab_corner, border, active_fill);
     }
 
     let inner_rect = body_rect.shrink(body_padding);
@@ -116,4 +106,60 @@ pub fn render<T: TabLabel>(
         ui.set_clip_rect(inner_rect);
         ui.vertical(|ui| body(ui));
     });
+}
+
+/// Opens the active tab into the content body: erases the body's top border
+/// directly under the tab, then re-strokes the tab (rounded top + sides) last,
+/// clipped above the seam so its bottom edge is never drawn. Stroking last keeps
+/// the side edges crisp and meeting the body border exactly at the tab's
+/// left/right, independent of sub-pixel position.
+fn open_active_tab_into_body(
+    ui: &egui::Ui,
+    tab_rect: egui::Rect,
+    body_rect: egui::Rect,
+    tab_corner: egui::CornerRadius,
+    border: egui::Stroke,
+    fill: egui::Color32,
+) {
+    let painter = ui.painter();
+    let seam_y = body_rect.top();
+
+    let cover = egui::Rect::from_min_max(
+        egui::pos2(tab_rect.left(), seam_y - REDESIGN_BORDER_WIDTH_PX),
+        egui::pos2(tab_rect.right(), seam_y + REDESIGN_BORDER_WIDTH_PX),
+    );
+    painter.rect_filled(cover, egui::CornerRadius::ZERO, fill);
+
+    let stroke_rect = egui::Rect::from_min_max(
+        tab_rect.min,
+        egui::pos2(
+            tab_rect.right(),
+            seam_y + f32::from(REDESIGN_BORDER_RADIUS_U8) + 2.0,
+        ),
+    );
+    let clip = egui::Rect::from_min_max(
+        egui::pos2(tab_rect.left() - 4.0, tab_rect.top() - 4.0),
+        egui::pos2(tab_rect.right() + 4.0, seam_y),
+    );
+    painter.with_clip_rect(clip).rect_stroke(
+        stroke_rect,
+        tab_corner,
+        border,
+        egui::StrokeKind::Inside,
+    );
+
+    // When the active tab is flush with the body's left edge, the full-width
+    // cover also erased the top of the body's left border. Restore that short
+    // segment so the left border stays continuous into the tab. Only the
+    // left-most tab meets this condition; mid-strip tabs are untouched.
+    if (tab_rect.left() - body_rect.left()).abs() < 1.0 {
+        let x = body_rect.left() + border.width * 0.5;
+        painter.line_segment(
+            [
+                egui::pos2(x, seam_y - REDESIGN_BORDER_WIDTH_PX),
+                egui::pos2(x, seam_y + REDESIGN_BORDER_WIDTH_PX),
+            ],
+            border,
+        );
+    }
 }
