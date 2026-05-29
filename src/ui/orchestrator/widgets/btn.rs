@@ -21,6 +21,18 @@ pub struct BtnOpts {
     pub danger: BtnFlag,
 }
 
+/// Height in points that [`redesign_btn`] allocates for the given size class.
+/// Lets a sibling widget (e.g. the kebab trigger) match the button height exactly.
+#[must_use]
+pub fn redesign_btn_height(ui: &egui::Ui, small: bool) -> f32 {
+    let (pad_y, font_size): (f32, f32) = if small { (4.0, 12.0) } else { (8.0, 14.0) };
+    let font = egui::FontId::new(font_size, egui::FontFamily::Name("poppins_medium".into()));
+    let galley = ui
+        .painter()
+        .layout_no_wrap("X".to_string(), font, egui::Color32::WHITE);
+    pad_y.mul_add(2.0, galley.size().y)
+}
+
 pub fn redesign_btn(
     ui: &mut egui::Ui,
     palette: ThemePalette,

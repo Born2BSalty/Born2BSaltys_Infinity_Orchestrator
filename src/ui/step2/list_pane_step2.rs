@@ -40,7 +40,7 @@ pub(crate) fn render_list_pane(
                 let border_w = ui.visuals().widgets.noninteractive.bg_stroke.width;
                 let borders = border_w * 2.0;
                 let content_w = (left_rect.width() - 12.0 - borders).max(0.0);
-                let content_h = (left_rect.height() - 8.0 - borders).max(0.0);
+                let content_h = (left_rect.height() - 10.0 - borders).max(0.0);
                 ui.set_min_size(egui::vec2(content_w, content_h));
                 ui.scope(|ui| {
                     configure_scroll_style(ui);

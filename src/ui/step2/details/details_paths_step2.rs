@@ -265,8 +265,11 @@ fn render_text_row(
     } else {
         crate::ui::shared::typography_global::plain(display)
     };
-    ui.add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
-        .on_hover_text(value);
+    ui.add_sized(
+        [layout.value_w, layout.row_h],
+        egui::Label::new(text).truncate(),
+    )
+    .on_hover_text(value);
     render_empty_action_cell(ui, layout);
     ui.end_row();
 }
@@ -290,7 +293,7 @@ fn render_open_only_row(
     let value_resp = ui
         .add_sized(
             [layout.value_w, layout.row_h],
-            egui::Label::new(crate::ui::shared::typography_global::monospace(display)),
+            egui::Label::new(crate::ui::shared::typography_global::monospace(display)).truncate(),
         )
         .on_hover_text(raw);
     let visible = row_action_visible(ui, label_resp.rect, value_resp.rect, layout.action_w);
@@ -320,7 +323,10 @@ fn render_path_row(
         ));
     }
     let value_resp = ui
-        .add_sized([layout.value_w, layout.row_h], egui::Label::new(text))
+        .add_sized(
+            [layout.value_w, layout.row_h],
+            egui::Label::new(text).truncate(),
+        )
         .on_hover_text(raw);
     if let Some(copy_value) = value {
         let visible = row_action_visible(ui, label_resp.rect, value_resp.rect, layout.action_w);

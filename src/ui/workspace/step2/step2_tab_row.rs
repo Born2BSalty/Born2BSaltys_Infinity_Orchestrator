@@ -553,7 +553,13 @@ fn render_prompt_pill(
     })
 }
 
-const KEBAB_TOP_PAD: f32 = 6.0;
+/// Bottom padding reserved under the kebab + count so they top-align with the
+/// rest of the row and leave a gap above the components-pane seam below.
+const RIGHT_ACTIONS_BOTTOM_PAD: f32 = 4.0;
+
+/// Kebab trigger height in the tab-row band — short enough to leave a gap above
+/// the components-pane seam beneath the right-side actions.
+const STEP2_KEBAB_HEIGHT: f32 = 22.0;
 
 fn render_right_actions(
     ui: &mut egui::Ui,
@@ -561,20 +567,21 @@ fn render_right_actions(
     palette: ThemePalette,
     row: &Step2TabRowState,
 ) {
-    // Nudge the right-side actions down so the kebab doesn't hug the top of the
-    // tab-row band. A vertical wrapper makes `add_space` move down; `set_width`
-    // keeps the inner row full-width so it still right-aligns. The game tabs in
-    // the outer horizontal are unaffected and stay flush-top.
     let avail_w = ui.available_width();
     ui.vertical(|ui| {
         ui.set_width(avail_w);
-        ui.add_space(KEBAB_TOP_PAD);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let details_open = orchestrator.workspace_view.step2.details_open;
             let picked: std::cell::Cell<Option<KebabIntent>> = std::cell::Cell::new(None);
             {
                 let mut items = kebab_items(details_open, &picked);
-                render_kebab(ui, palette, "step2_tab_row_kebab", &mut items);
+                render_kebab(
+                    ui,
+                    palette,
+                    "step2_tab_row_kebab",
+                    &mut items,
+                    STEP2_KEBAB_HEIGHT,
+                );
             }
             if let Some(intent) = picked.get() {
                 apply_kebab_intent(
@@ -596,6 +603,7 @@ fn render_right_actions(
                 .color(redesign_accent_deep(palette)),
             );
         });
+        ui.add_space(RIGHT_ACTIONS_BOTTOM_PAD);
     });
 }
 

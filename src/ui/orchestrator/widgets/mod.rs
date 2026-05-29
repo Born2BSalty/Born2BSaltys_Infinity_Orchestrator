@@ -13,7 +13,7 @@ pub mod screen_title;
 pub mod section_header;
 pub mod window_title;
 
-pub use btn::{BtnOpts, redesign_btn};
+pub use btn::{BtnOpts, redesign_btn, redesign_btn_height};
 pub(crate) use icon_button::{ButtonIcon, render as render_icon_button};
 pub use input::{InputOpts, redesign_text_input};
 pub use kebab::{KebabItem, render as render_kebab};
