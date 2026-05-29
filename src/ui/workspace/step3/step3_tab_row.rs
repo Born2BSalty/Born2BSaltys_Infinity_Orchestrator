@@ -6,9 +6,11 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::step3_toolbar::Step3ToolbarSummary;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::shared::redesign_tokens::REDESIGN_BORDER_WIDTH_PX;
 use crate::ui::shared::redesign_tokens::{
     ThemePalette, redesign_pill_danger, redesign_pill_text, redesign_pill_warn,
 };
+use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step2::prompt_popup_step2::open_toolbar_prompt_popup;
 use crate::ui::step3::toolbar_support_step3;
 use crate::ui::workspace::step4::workspace_step4;
@@ -31,7 +33,7 @@ pub(crate) fn render(
 
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         ui.horizontal(|ui| {
-            render_tabs(ui, state, palette, row.dual_game);
+            render_tabs(ui, state, palette, row.dual_game, rect);
             if render_conflict_pill(ui, state, palette, &row).is_some_and(|r| r.clicked()) {
                 pending = Some(Step3RowIntent::OpenConflict);
             }
@@ -103,11 +105,22 @@ impl Step3RowState {
     }
 }
 
-fn render_tabs(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette, dual_game: bool) {
+fn render_tabs(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    palette: ThemePalette,
+    dual_game: bool,
+    rect: egui::Rect,
+) {
     ui.spacing_mut().item_spacing.x = TAB_GAP;
     if dual_game {
-        game_tab(ui, palette, "BGEE", &mut state.step3.active_game_tab);
-        game_tab(ui, palette, "BG2EE", &mut state.step3.active_game_tab);
+        let first = game_tab(ui, palette, "BGEE", &mut state.step3.active_game_tab);
+        let second = game_tab(ui, palette, "BG2EE", &mut state.step3.active_game_tab);
+        let active_tab_rect = first.or(second);
+        if let Some(tab_rect) = active_tab_rect {
+            let panel_top_y = rect.bottom() - REDESIGN_BORDER_WIDTH_PX;
+            paint_active_tab_seam_cover(ui.ctx(), palette, tab_rect, panel_top_y, "step3_game_tab");
+        }
         ui.add_space(ACTION_LEFT_PAD - TAB_GAP);
     }
     ui.spacing_mut().item_spacing.x = ITEM_GAP;

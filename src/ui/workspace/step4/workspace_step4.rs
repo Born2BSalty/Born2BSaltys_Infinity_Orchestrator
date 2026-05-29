@@ -6,11 +6,13 @@ use eframe::egui;
 use crate::app::state::{Step3ItemState, WizardState};
 use crate::app::step4_action::Step4Action;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::shared::redesign_tokens::REDESIGN_BORDER_WIDTH_PX;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, ThemePalette, redesign_pill_danger, redesign_pill_text,
 };
+use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::workspace::step4::{step4_exact_log_viewer, step4_review_list, step4_save_row};
-use crate::ui::workspace::widgets::game_tab::game_tab;
+use crate::ui::workspace::widgets::game_tab::{TAB_H, game_tab};
 
 const TAB_GAP: f32 = 4.0;
 const TAB_TO_BODY_OVERLAP: f32 = 1.5;
@@ -47,12 +49,17 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     ui.add_space(SAVE_ROW_GAP);
 
     if is_dual_game(&orchestrator.wizard_state) {
-        render_game_tab_strip(
+        let strip_top_y = ui.cursor().top();
+        let active_tab_rect = render_game_tab_strip(
             ui,
             palette,
             &mut orchestrator.wizard_state.step3.active_game_tab,
         );
         ui.add_space(-TAB_TO_BODY_OVERLAP);
+        if let Some(tab_rect) = active_tab_rect {
+            let panel_top_y = strip_top_y + TAB_H - REDESIGN_BORDER_WIDTH_PX;
+            paint_active_tab_seam_cover(ui.ctx(), palette, tab_rect, panel_top_y, "step4_game_tab");
+        }
     }
 
     let exact_log_mode = orchestrator
@@ -74,12 +81,18 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     action
 }
 
-fn render_game_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active: &mut String) {
+fn render_game_tab_strip(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    active: &mut String,
+) -> Option<egui::Rect> {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = TAB_GAP;
-        game_tab(ui, palette, "BGEE", active);
-        game_tab(ui, palette, "BG2EE", active);
-    });
+        let first = game_tab(ui, palette, "BGEE", active);
+        let second = game_tab(ui, palette, "BG2EE", active);
+        first.or(second)
+    })
+    .inner
 }
 
 fn surface_save_error(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &OrchestratorApp) {

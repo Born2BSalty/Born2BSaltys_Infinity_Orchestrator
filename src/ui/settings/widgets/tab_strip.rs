@@ -8,6 +8,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_chrome_bg, redesign_hover_overlay, redesign_shell_bg, redesign_text_muted,
     redesign_text_primary,
 };
+use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 
 pub trait TabLabel: Copy + Eq {
     fn label(self) -> &'static str;
@@ -97,18 +98,17 @@ pub fn render<T: TabLabel>(
     painter.rect_stroke(body_rect, body_corner, border, egui::StrokeKind::Inside);
 
     if let Some((x0, x1)) = active_x_range {
-        let seam_y = body_rect.top();
-        let mask = egui::Rect::from_min_max(
-            egui::pos2(
-                x0 + REDESIGN_BORDER_WIDTH_PX,
-                seam_y - REDESIGN_BORDER_WIDTH_PX,
-            ),
-            egui::pos2(
-                x1 - REDESIGN_BORDER_WIDTH_PX,
-                seam_y + REDESIGN_BORDER_WIDTH_PX,
-            ),
+        let tab_rect = egui::Rect::from_min_max(
+            egui::pos2(x0, body_rect.top()),
+            egui::pos2(x1, body_rect.top()),
         );
-        painter.rect_filled(mask, 0.0, active_fill);
+        paint_active_tab_seam_cover(
+            ui.ctx(),
+            palette,
+            tab_rect,
+            body_rect.top(),
+            "settings_tab_strip",
+        );
     }
 
     let inner_rect = body_rect.shrink(body_padding);

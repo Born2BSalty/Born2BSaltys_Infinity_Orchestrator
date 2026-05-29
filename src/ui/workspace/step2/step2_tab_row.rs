@@ -5,10 +5,12 @@ use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::{BtnOpts, KebabItem, redesign_btn, render_kebab};
+use crate::ui::shared::redesign_tokens::REDESIGN_BORDER_WIDTH_PX;
 use crate::ui::shared::redesign_tokens::{
     ThemePalette, redesign_accent_deep, redesign_pill_danger, redesign_pill_text,
     redesign_pill_warn,
 };
+use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::prompt_popup_step2::collect_step2_prompt_toolbar_entries;
 use crate::ui::step2::state_step2::{
@@ -43,7 +45,7 @@ pub fn render(
 
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         ui.horizontal(|ui| {
-            render_game_tabs(ui, orchestrator, palette, &row);
+            render_game_tabs(ui, orchestrator, palette, &row, rect);
             render_log_buttons(ui, orchestrator, palette, &row);
 
             if render_updates_button(ui, palette, &row).clicked() && row.updates.enabled {
@@ -358,23 +360,29 @@ fn render_game_tabs(
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
     row: &Step2TabRowState,
+    rect: egui::Rect,
 ) {
     ui.spacing_mut().item_spacing.x = TAB_GAP;
-    if row.tabs.show_first_game {
+    let first = row.tabs.show_first_game.then(|| {
         game_tab(
             ui,
             palette,
             "BGEE",
             &mut orchestrator.wizard_state.step2.active_game_tab,
-        );
-    }
-    if row.tabs.show_second_game {
+        )
+    });
+    let second = row.tabs.show_second_game.then(|| {
         game_tab(
             ui,
             palette,
             "BG2EE",
             &mut orchestrator.wizard_state.step2.active_game_tab,
-        );
+        )
+    });
+    let active_tab_rect = first.flatten().or_else(|| second.flatten());
+    if let Some(tab_rect) = active_tab_rect {
+        let panel_top_y = rect.bottom() - REDESIGN_BORDER_WIDTH_PX;
+        paint_active_tab_seam_cover(ui.ctx(), palette, tab_rect, panel_top_y, "step2_game_tab");
     }
     ui.add_space(ACTION_LEFT_PAD - TAB_GAP);
     ui.spacing_mut().item_spacing.x = ITEM_GAP;

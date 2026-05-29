@@ -110,7 +110,20 @@ fn render_preview_body(
     overview_box(ui, palette, preview);
     ui.add_space(12.0);
 
-    preview_tabs::render_tab_strip(ui, palette, &mut state.active_preview_tab);
+    let active_tab_rect =
+        preview_tabs::render_tab_strip(ui, palette, &mut state.active_preview_tab);
+    let item_gap = ui.spacing().item_spacing.y;
+    ui.add_space(-item_gap);
+    let panel_top_y = ui.cursor().top();
+    if let Some(tab_rect) = active_tab_rect {
+        preview_tabs::paint_preview_seam_cover(
+            ui,
+            palette,
+            tab_rect,
+            panel_top_y,
+            "install_preview",
+        );
+    }
 
     let content_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(80.0);
     let content_frame = egui::Frame::default()
