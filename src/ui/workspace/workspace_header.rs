@@ -11,9 +11,9 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::fork_info_popup::{self, SelfNode};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_accent_deep, redesign_border_strong, redesign_input_bg,
-    redesign_shadow, redesign_shell_bg, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_accent_deep, redesign_border_strong, redesign_input_bg, redesign_shell_bg,
+    redesign_text_muted, redesign_text_primary,
 };
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 use crate::ui::workspace::workspace_state_loader;
@@ -452,14 +452,6 @@ fn fork_badge(ui: &mut egui::Ui, palette: ThemePalette) {
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
-        painter.rect_filled(
-            rect.translate(egui::vec2(
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-            )),
-            radius,
-            redesign_shadow(palette),
-        );
         painter.rect_filled(rect, radius, redesign_accent(palette));
         painter.rect_stroke(
             rect,

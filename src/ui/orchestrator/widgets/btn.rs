@@ -19,6 +19,8 @@ pub struct BtnOpts {
     pub block: BtnFlag,
     /// Renders a destructive-action style: danger fill, dark text. Overrides `primary` when both are set.
     pub danger: BtnFlag,
+    /// Suppresses the drop shadow that `primary` / `danger` buttons otherwise cast.
+    pub no_shadow: BtnFlag,
 }
 
 /// Height in points that [`redesign_btn`] allocates for the given size class.
@@ -88,7 +90,7 @@ pub fn redesign_btn(
 
         let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
-        if opts.primary || opts.danger {
+        if (opts.primary || opts.danger) && !opts.no_shadow {
             let shadow_rect = rect.translate(egui::vec2(
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
                 REDESIGN_SHADOW_OFFSET_BTN_PX,
