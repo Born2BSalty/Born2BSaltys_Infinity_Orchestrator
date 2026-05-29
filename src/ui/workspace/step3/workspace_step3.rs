@@ -5,6 +5,7 @@ use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::redesign_text_faint;
+use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step3::state_step3;
 use crate::ui::step3::toolbar_support_step3;
 use crate::ui::workspace::step3::step3_list_body;
@@ -59,7 +60,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         );
     });
 
-    step3_tab_row::render(
+    let active_tab_rect = step3_tab_row::render(
         ui,
         &mut orchestrator.wizard_state,
         palette,
@@ -70,6 +71,10 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     clipped_pane(ui, list_rect, |ui| {
         step3_list_body::render(ui, orchestrator, &active_markers);
     });
+
+    if let Some(tab_rect) = active_tab_rect {
+        paint_active_tab_seam_cover(ui.painter(), palette, tab_rect, list_rect.top());
+    }
 
     let state = &mut orchestrator.wizard_state;
     crate::ui::step2::content_step2::render_compat_popup(ui, state);

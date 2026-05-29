@@ -14,7 +14,18 @@ pub const TAB_GAP: f32 = 4.0;
 const TAB_PAD_X: f32 = 14.0;
 const TAB_FONT_SIZE: f32 = 13.0;
 
-pub fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: &mut String) {
+/// Renders a single game tab button and returns its allocated rect when active.
+///
+/// Returns `Some(rect)` when the tab is the active selection, `None` otherwise.
+/// Callers use the returned rect to apply the open-seam cover against the
+/// adjacent content panel.
+#[must_use]
+pub fn game_tab(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    label: &str,
+    current: &mut String,
+) -> Option<egui::Rect> {
     let active = current == label;
     let font = egui::FontId::new(
         TAB_FONT_SIZE,
@@ -42,30 +53,12 @@ pub fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: 
         } else {
             redesign_chrome_bg(palette)
         };
-
-        let box_rect = egui::Rect::from_min_max(
-            rect.min,
-            egui::pos2(rect.max.x, rect.max.y + REDESIGN_BORDER_WIDTH_PX),
-        );
-        painter.rect_filled(box_rect, corner, fill);
+        painter.rect_filled(rect, corner, fill);
         if !active && response.hovered() {
-            painter.rect_filled(box_rect, corner, redesign_hover_overlay(palette));
+            painter.rect_filled(rect, corner, redesign_hover_overlay(palette));
         }
-
         let stroke = egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-        let border_clip = egui::Rect::from_min_max(
-            egui::pos2(box_rect.min.x - 4.0, box_rect.min.y - 4.0),
-            egui::pos2(
-                box_rect.max.x + 4.0,
-                REDESIGN_BORDER_WIDTH_PX.mul_add(-1.5, box_rect.max.y),
-            ),
-        );
-        painter.with_clip_rect(border_clip).rect_stroke(
-            box_rect,
-            corner,
-            stroke,
-            egui::StrokeKind::Inside,
-        );
+        painter.rect_stroke(rect, corner, stroke, egui::StrokeKind::Inside);
 
         let text_color = if active {
             redesign_text_primary(palette)
@@ -84,4 +77,6 @@ pub fn game_tab(ui: &mut egui::Ui, palette: ThemePalette, label: &str, current: 
     if response.clicked() {
         *current = label.to_string();
     }
+
+    active.then_some(rect)
 }

@@ -7,8 +7,9 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_SHELL_BORDER_WIDTH_PX, WORKSPACE_CONTENT_TEXT_INSET,
-    redesign_border_strong, redesign_text_primary,
+    redesign_border_strong, redesign_shell_bg, redesign_text_primary,
 };
+use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::step2::{step2_log_confirm, step2_search, step2_tab_row};
 
@@ -39,14 +40,27 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
         action = Some(a);
     }
 
-    if let Some(a) = step2_tab_row::render(ui, orchestrator, palette, rects.tab_row) {
+    let (tab_action, active_tab_rect) =
+        step2_tab_row::render(ui, orchestrator, palette, rects.tab_row);
+    if let Some(a) = tab_action {
         action = Some(a);
     }
 
     let details_open = orchestrator.workspace_view.step2.details_open;
     let panes = Step2PaneRects::from_content(rects.content, details_open);
 
+    // Paint shell_bg behind the left pane before the BIO component tree renders
+    // into it. The group frame used by list_pane_step2 has transparent fill, so
+    // without this the page background would show through and mismatch the active
+    // tab color.
+    ui.painter().rect_filled(
+        panes.left,
+        egui::CornerRadius::ZERO,
+        redesign_shell_bg(palette),
+    );
+
     clipped_pane(ui, panes.left, |ui| {
+        ui.visuals_mut().widgets.noninteractive.corner_radius = egui::CornerRadius::ZERO;
         ui.add_space(8.0);
         crate::ui::step2::list_pane_step2::render_list_pane(
             ui,
@@ -57,6 +71,10 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
             palette,
         );
     });
+
+    if let Some(tab_rect) = active_tab_rect {
+        paint_active_tab_seam_cover(ui.painter(), palette, tab_rect, rects.content.top());
+    }
 
     if let Some(right_rect) = panes.right {
         clipped_pane(ui, right_rect, |ui| {

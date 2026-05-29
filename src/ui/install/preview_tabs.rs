@@ -9,11 +9,20 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong, redesign_chrome_bg,
     redesign_shell_bg, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
+use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 
-pub(crate) fn render_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active: &mut PreviewTab) {
-    let strip_left = ui.cursor().left();
-    let strip_width = ui.available_width();
-
+/// Renders the preview tab strip and returns the active tab's rect when it is
+/// on the bottom row of the strip (adjacent to the content panel).
+///
+/// The caller should subtract `item_spacing.y` after this call, record
+/// `ui.cursor().top()` as `panel_top_y`, render the content frame, and then
+/// call `paint_preview_seam_cover` with the returned rect and a painter from
+/// the same `Ui`.
+pub(crate) fn render_tab_strip(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    active: &mut PreviewTab,
+) -> Option<egui::Rect> {
     let mut active_tab_rect: Option<egui::Rect> = None;
 
     ui.horizontal_wrapped(|ui| {
@@ -31,25 +40,28 @@ pub(crate) fn render_tab_strip(ui: &mut egui::Ui, palette: ThemePalette, active:
         }
     });
 
-    let baseline_y = ui.cursor().top() - 1.0;
-    let painter = ui.painter();
-    painter.line_segment(
-        [
-            egui::pos2(strip_left, baseline_y),
-            egui::pos2(strip_left + strip_width, baseline_y),
-        ],
-        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-    );
+    // Only report the active tab when it is on the bottom row (adjacent to the
+    // panel). If the strip wraps and the active tab is on an upper row, no cover
+    // is needed because it does not abut the content frame.
+    let strip_bottom = ui.cursor().top();
+    active_tab_rect.filter(|r| {
+        let item_gap = ui.spacing().item_spacing.y;
+        r.bottom() + item_gap >= strip_bottom - 2.0
+    })
+}
 
-    if let Some(r) = active_tab_rect {
-        painter.line_segment(
-            [
-                egui::pos2(r.left() + REDESIGN_BORDER_WIDTH_PX, baseline_y),
-                egui::pos2(r.right() - REDESIGN_BORDER_WIDTH_PX, baseline_y),
-            ],
-            egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX + 0.5, redesign_shell_bg(palette)),
-        );
-    }
+/// Applies the open-seam cover for a preview tab surface.
+///
+/// Call this after the content frame is rendered, using a painter from the
+/// same `Ui` so the cover appears later in the same paint list and overwrites
+/// the frame border.
+pub(crate) fn paint_preview_seam_cover(
+    painter: &egui::Painter,
+    palette: ThemePalette,
+    active_tab_rect: egui::Rect,
+    panel_top_y: f32,
+) {
+    paint_active_tab_seam_cover(painter, palette, active_tab_rect, panel_top_y);
 }
 
 fn render_one_tab(

@@ -32,18 +32,23 @@ fn active_mods(state: &crate::app::state::WizardState) -> &[crate::app::state::S
     }
 }
 
+/// Renders the Step 2 tab row and returns `(action, active_tab_rect)`.
+///
+/// `active_tab_rect` is `Some` when a game tab is active and visible; the
+/// caller paints the seam cover after rendering the content pane.
 pub fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
     rect: egui::Rect,
-) -> Option<Step2Action> {
+) -> (Option<Step2Action>, Option<egui::Rect>) {
     let mut action: Option<Step2Action> = None;
     let row = Step2TabRowState::from_orchestrator(orchestrator);
+    let mut active_tab_rect: Option<egui::Rect> = None;
 
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         ui.horizontal(|ui| {
-            render_game_tabs(ui, orchestrator, palette, &row);
+            active_tab_rect = render_game_tabs(ui, orchestrator, palette, &row);
             render_log_buttons(ui, orchestrator, palette, &row);
 
             if render_updates_button(ui, palette, &row).clicked() && row.updates.enabled {
@@ -68,7 +73,7 @@ pub fn render(
         });
     });
 
-    action
+    (action, active_tab_rect)
 }
 
 struct Step2TabRowState {
@@ -353,31 +358,35 @@ fn issue_target_filter(
     }
 }
 
+/// Renders the game tab buttons and returns the active tab rect.
+///
+/// The caller paints the seam cover after the content pane is rendered.
 fn render_game_tabs(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
     row: &Step2TabRowState,
-) {
+) -> Option<egui::Rect> {
     ui.spacing_mut().item_spacing.x = TAB_GAP;
-    if row.tabs.show_first_game {
+    let first = row.tabs.show_first_game.then(|| {
         game_tab(
             ui,
             palette,
             "BGEE",
             &mut orchestrator.wizard_state.step2.active_game_tab,
-        );
-    }
-    if row.tabs.show_second_game {
+        )
+    });
+    let second = row.tabs.show_second_game.then(|| {
         game_tab(
             ui,
             palette,
             "BG2EE",
             &mut orchestrator.wizard_state.step2.active_game_tab,
-        );
-    }
+        )
+    });
     ui.add_space(ACTION_LEFT_PAD - TAB_GAP);
     ui.spacing_mut().item_spacing.x = ITEM_GAP;
+    first.flatten().or_else(|| second.flatten())
 }
 
 fn render_log_buttons(

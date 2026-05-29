@@ -118,7 +118,12 @@ pub(crate) fn render(
 
     if ui.is_rect_visible(box_rect) {
         let painter = ui.painter();
-        let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
+        let radius = egui::CornerRadius {
+            nw: 0,
+            ne: 0,
+            sw: REDESIGN_BORDER_RADIUS_U8,
+            se: REDESIGN_BORDER_RADIUS_U8,
+        };
         painter.rect_filled(box_rect, radius, redesign_shell_bg(palette));
         painter.rect_stroke(
             box_rect,

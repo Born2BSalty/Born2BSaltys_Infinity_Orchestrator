@@ -41,8 +41,21 @@ pub(crate) fn render(
         );
     };
 
-    let mut outcome = ForkPreviewOutcome::Stay;
+    render_header(ui, palette, state, &preview);
+    overview_box(ui, palette, &preview);
+    ui.add_space(12.0);
+    render_tab_content(ui, palette, state, &preview);
+    let outcome = render_footer(ui, palette);
+    render_fork_popup(ctx, palette, state, &preview);
+    outcome
+}
 
+fn render_header(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut CreateScreenState,
+    preview: &ModlistSharePreview,
+) {
     let title = preview
         .name
         .as_deref()
@@ -71,11 +84,19 @@ pub(crate) fn render(
             });
         }
     });
+}
 
-    overview_box(ui, palette, &preview);
-    ui.add_space(12.0);
-
-    preview_tabs::render_tab_strip(ui, palette, &mut state.fork_active_preview_tab);
+fn render_tab_content(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut CreateScreenState,
+    preview: &ModlistSharePreview,
+) {
+    let active_tab_rect =
+        preview_tabs::render_tab_strip(ui, palette, &mut state.fork_active_preview_tab);
+    let item_gap = ui.spacing().item_spacing.y;
+    ui.add_space(-item_gap);
+    let panel_top_y = ui.cursor().top();
 
     let content_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(80.0);
     let content_frame = egui::Frame::default()
@@ -93,11 +114,17 @@ pub(crate) fn render(
             content_frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.set_min_height(content_h - 28.0);
-                preview_tabs::render_tab_body(ui, palette, state.fork_active_preview_tab, &preview);
+                preview_tabs::render_tab_body(ui, palette, state.fork_active_preview_tab, preview);
             });
         },
     );
 
+    if let Some(tab_rect) = active_tab_rect {
+        preview_tabs::paint_preview_seam_cover(ui.painter(), palette, tab_rect, panel_top_y);
+    }
+}
+
+fn render_footer(ui: &mut egui::Ui, palette: ThemePalette) -> ForkPreviewOutcome {
     let footer = sub_flow_footer::render(
         ui,
         palette,
@@ -111,35 +138,43 @@ pub(crate) fn render(
     );
 
     if footer.back_clicked {
-        outcome = ForkPreviewOutcome::Back;
+        ForkPreviewOutcome::Back
     } else if footer.primary_clicked {
-        outcome = ForkPreviewOutcome::BeginImport;
+        ForkPreviewOutcome::BeginImport
+    } else {
+        ForkPreviewOutcome::Stay
     }
+}
 
-    if state.fork_info_open {
-        let self_author = preview.author.as_deref().unwrap_or("").trim();
-        let self_name = preview
-            .name
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .unwrap_or(FALLBACK_TITLE);
-        let result = fork_info_popup::render(
-            ctx,
-            palette,
-            "create_fork_preview",
-            &preview.forked_from,
-            &SelfNode {
-                name: self_name,
-                author: self_author,
-            },
-        );
-        if result == fork_info_popup::ForkInfoOutcome::Closed {
-            state.fork_info_open = false;
-        }
+fn render_fork_popup(
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    state: &mut CreateScreenState,
+    preview: &ModlistSharePreview,
+) {
+    if !state.fork_info_open {
+        return;
     }
-
-    outcome
+    let self_author = preview.author.as_deref().unwrap_or("").trim();
+    let self_name = preview
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(FALLBACK_TITLE);
+    let result = fork_info_popup::render(
+        ctx,
+        palette,
+        "create_fork_preview",
+        &preview.forked_from,
+        &SelfNode {
+            name: self_name,
+            author: self_author,
+        },
+    );
+    if result == fork_info_popup::ForkInfoOutcome::Closed {
+        state.fork_info_open = false;
+    }
 }
 
 fn build_subline(author: Option<&str>) -> String {

@@ -12,19 +12,28 @@ use crate::ui::workspace::widgets::weidu_line;
 
 const BOX_PADDING: f32 = 12.0;
 
+/// Renders the review list box and returns the top y-coordinate of its border rect.
+///
+/// Callers use the returned y value to anchor the tab open-seam cover to the
+/// exact edge of the painted border, independent of cursor position at call time.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     items: &[Step3ItemState],
     active_tab: &str,
-) {
+) -> f32 {
     let leaves: Vec<&Step3ItemState> = items.iter().filter(|i| !i.is_parent).collect();
 
     let avail = ui.available_size();
     let (box_rect, _) = ui.allocate_exact_size(avail, egui::Sense::hover());
     if ui.is_rect_visible(box_rect) {
         let painter = ui.painter();
-        let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
+        let radius = egui::CornerRadius {
+            nw: 0,
+            ne: 0,
+            sw: REDESIGN_BORDER_RADIUS_U8,
+            se: REDESIGN_BORDER_RADIUS_U8,
+        };
         painter.rect_filled(box_rect, radius, redesign_shell_bg(palette));
         painter.rect_stroke(
             box_rect,
@@ -64,6 +73,7 @@ pub fn render(
     }
 
     ui.allocate_rect(box_rect, egui::Sense::hover());
+    box_rect.top()
 }
 
 #[cfg(test)]

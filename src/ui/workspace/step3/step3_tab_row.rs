@@ -19,19 +19,23 @@ const ITEM_GAP: f32 = 8.0;
 const ACTION_LEFT_PAD: f32 = 12.0;
 const BTN_GAP: f32 = 6.0;
 
+/// Renders the Step 3 tab row and returns the active tab rect.
+///
+/// The caller paints the seam cover after the content pane is rendered.
 pub(crate) fn render(
     ui: &mut egui::Ui,
     state: &mut WizardState,
     palette: ThemePalette,
     summary: &Step3ToolbarSummary,
     rect: egui::Rect,
-) {
+) -> Option<egui::Rect> {
     let row = Step3RowState::from_state(state, summary);
     let mut pending: Option<Step3RowIntent> = None;
+    let mut active_tab_rect: Option<egui::Rect> = None;
 
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         ui.horizontal(|ui| {
-            render_tabs(ui, state, palette, row.dual_game);
+            active_tab_rect = render_tabs(ui, state, palette, row.dual_game);
             if render_conflict_pill(ui, state, palette, &row).is_some_and(|r| r.clicked()) {
                 pending = Some(Step3RowIntent::OpenConflict);
             }
@@ -61,6 +65,8 @@ pub(crate) fn render(
             Step3RowIntent::ExpandAll => toolbar_support_step3::expand_all_active(state),
         }
     }
+
+    active_tab_rect
 }
 
 struct Step3RowState {
@@ -103,14 +109,26 @@ impl Step3RowState {
     }
 }
 
-fn render_tabs(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette, dual_game: bool) {
+/// Renders the game tab buttons and returns the active tab rect.
+///
+/// The caller paints the seam cover after the content pane is rendered.
+fn render_tabs(
+    ui: &mut egui::Ui,
+    state: &mut WizardState,
+    palette: ThemePalette,
+    dual_game: bool,
+) -> Option<egui::Rect> {
     ui.spacing_mut().item_spacing.x = TAB_GAP;
-    if dual_game {
-        game_tab(ui, palette, "BGEE", &mut state.step3.active_game_tab);
-        game_tab(ui, palette, "BG2EE", &mut state.step3.active_game_tab);
+    let active_tab_rect = if dual_game {
+        let first = game_tab(ui, palette, "BGEE", &mut state.step3.active_game_tab);
+        let second = game_tab(ui, palette, "BG2EE", &mut state.step3.active_game_tab);
         ui.add_space(ACTION_LEFT_PAD - TAB_GAP);
-    }
+        first.or(second)
+    } else {
+        None
+    };
     ui.spacing_mut().item_spacing.x = ITEM_GAP;
+    active_tab_rect
 }
 
 fn render_conflict_pill(

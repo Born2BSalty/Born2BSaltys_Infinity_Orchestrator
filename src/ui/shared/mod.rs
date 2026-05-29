@@ -12,3 +12,4 @@ pub mod redesign_dot_background;
 pub mod redesign_fonts;
 pub mod redesign_tokens;
 pub mod redesign_visuals;
+pub mod tab_open_seam;
