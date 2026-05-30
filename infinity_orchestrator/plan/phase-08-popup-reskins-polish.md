@@ -258,6 +258,10 @@ Design settled 2026-05-29 (research + user decisions). This is a real notificati
 - **Acceptance:** one notification API used app-wide; severity tones from redesign tokens (light + dark); errors persist + recoverable via history; bottom-right hover-pause stack with manual dismiss. Dispatch as ONE scoped plan-implementer run (new dep + module + rewire) with the full gate set.
 - **SPEC:** §10.8.
 
+#### P8.T10 — Delivered (2026-05-30)
+
+Shipped: `egui-toast = "=0.17.0"` added to `Cargo.toml`; net-new `src/ui/orchestrator/widgets/notification.rs` (`NotificationManager` with `success`/`info`/`warn`/`error` add-sites, `show(ctx, palette)` per-frame flush, capped last-5 history `VecDeque`, `render_history_popup`); re-exported via `widgets/mod.rs`. Custom toast body owns severity icon (✓ glyph for success, vector-painted filled-circle+bar for info, triangle+stem for warning, filled-circle+exclamation for error), 3 px left accent stripe, Poppins 12 px message, ✕ close affordance. Error severity has infinite TTL; success/info/warning auto-dismiss with hover-pause. `NotificationManager` field added to `OrchestratorApp`; `show()` + `render_history_popup()` called once per frame after the shell closure. Bell icon (`U+F0A2` Nerd Font) in statusbar right toggles the history popup. The 7 existing push sites (5 in `page_home.rs`, 1 in `stage_installing.rs`, 1 in `page_workspace_step5.rs`) migrated to `notification_manager`; `src/ui/home/toast.rs` deleted; `ToastMessage`/`ToastTone` removed from `state_home.rs`; `home_screen_state.toast` field removed. SPEC §10.8 rewritten to the settled design. Render-gate test `tests/ui_snapshot_p8_t10_notifications.rs` renders 4 severities stacked bottom-right in dark + light — 2 PNGs at `target/render_gate/p8_t10_notifications/`. 596 lib tests passing; both binaries gate-fresh; clippy pedantic+nursery zero warnings; BIO-source guard clean.
+
 ### P8.T11 — Hover affordances polish
 
 - **What:** Audit hover behavior across all redesign widgets per SPEC §12.3:

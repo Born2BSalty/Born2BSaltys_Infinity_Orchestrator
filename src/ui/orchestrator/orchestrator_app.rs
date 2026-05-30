@@ -47,6 +47,7 @@ use crate::ui::orchestrator::nav_status::{
 };
 use crate::ui::orchestrator::page_router;
 use crate::ui::orchestrator::stubs::home_stub::HomeStubState;
+use crate::ui::orchestrator::widgets::NotificationManager;
 use crate::ui::settings::oauth_glue;
 use crate::ui::settings::state_settings::SettingsScreenState;
 use crate::ui::settings::validate_debounce;
@@ -246,6 +247,7 @@ pub struct OrchestratorApp {
     pub home_stub_state: HomeStubState,
 
     pub home_screen_state: HomeScreenState,
+    pub notification_manager: NotificationManager,
     pub install_screen_state: InstallScreenState,
     pub create_screen_state: CreateScreenState,
 
@@ -420,6 +422,7 @@ impl OrchestratorApp {
             workspace_stores: HashMap::new(),
             home_stub_state: HomeStubState::default(),
             home_screen_state: HomeScreenState::default(),
+            notification_manager: NotificationManager::new(),
             install_screen_state: InstallScreenState::default(),
             create_screen_state: CreateScreenState::new(),
 
@@ -1432,34 +1435,45 @@ impl eframe::App for OrchestratorApp {
             }
         });
 
-        shell_chrome::render_shell(ctx, palette, modlist_count, running_status.as_ref(), |ui| {
-            egui::SidePanel::left("orchestrator_left_rail")
-                .exact_width(REDESIGN_NAV_WIDTH_PX)
-                .resizable(false)
-                .show_separator_line(false)
-                .frame(egui::Frame::NONE)
-                .show_inside(ui, |ui| {
-                    left_rail::render(
-                        ui,
-                        palette,
-                        &mut self.nav,
-                        self.dev_mode,
-                        &self.path_validation,
-                        rail_lock.as_ref(),
-                    );
-                });
+        let history_has_items = self.notification_manager.has_history();
+        let history_open = self.notification_manager.history_open;
+        let history_clicked = shell_chrome::render_shell(
+            ctx,
+            palette,
+            modlist_count,
+            running_status.as_ref(),
+            history_has_items,
+            history_open,
+            |ui| {
+                egui::SidePanel::left("orchestrator_left_rail")
+                    .exact_width(REDESIGN_NAV_WIDTH_PX)
+                    .resizable(false)
+                    .show_separator_line(false)
+                    .frame(egui::Frame::NONE)
+                    .show_inside(ui, |ui| {
+                        left_rail::render(
+                            ui,
+                            palette,
+                            &mut self.nav,
+                            self.dev_mode,
+                            &self.path_validation,
+                            rail_lock.as_ref(),
+                        );
+                    });
 
-            egui::CentralPanel::default()
-                .frame(egui::Frame::NONE.inner_margin(egui::Margin {
-                    left: 28,
-                    right: 28,
-                    top: 24,
-                    bottom: 24,
-                }))
-                .show_inside(ui, |ui| {
-                    page_router::render(ui, self, ctx);
-                });
-        });
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+                        left: 28,
+                        right: 28,
+                        top: 24,
+                        bottom: 24,
+                    }))
+                    .show_inside(ui, |ui| {
+                        page_router::render(ui, self, ctx);
+                    });
+            },
+        );
+        self.drive_notifications(ctx, palette, history_clicked);
 
         oauth_glue::render_github_popup_if_open(self, ctx);
 
@@ -1468,11 +1482,12 @@ impl eframe::App for OrchestratorApp {
         if !install_was_running && self.wizard_state.step5.install_running {
             self.step5_console_view.request_input_focus = true;
         }
-        if step5_requested_repaint || self.step5_needs_repaint() {
-            ctx.request_repaint_after(Duration::from_millis(16));
-        } else if self.install_size_worker_rx.is_some() {
-            ctx.request_repaint_after(Duration::from_millis(250));
-        }
+        schedule_repaint_if_needed(
+            ctx,
+            step5_requested_repaint,
+            self.step5_needs_repaint(),
+            self.install_size_worker_rx.is_some(),
+        );
 
         self.drain_size_worker_result();
         self.drain_finished_destination_prep_workers();
@@ -1492,6 +1507,34 @@ impl Drop for OrchestratorApp {
     fn drop(&mut self) {
         self.join_all_destination_prep_workers();
         self.flush_all_now();
+    }
+}
+
+impl OrchestratorApp {
+    fn drive_notifications(
+        &mut self,
+        ctx: &egui::Context,
+        palette: ThemePalette,
+        history_clicked: bool,
+    ) {
+        if history_clicked {
+            self.notification_manager.history_open = !self.notification_manager.history_open;
+        }
+        self.notification_manager.show(ctx, palette);
+        self.notification_manager.render_history_popup(ctx, palette);
+    }
+}
+
+fn schedule_repaint_if_needed(
+    ctx: &egui::Context,
+    step5_repaint: bool,
+    step5_needs: bool,
+    size_worker_active: bool,
+) {
+    if step5_repaint || step5_needs {
+        ctx.request_repaint_after(Duration::from_millis(16));
+    } else if size_worker_active {
+        ctx.request_repaint_after(Duration::from_millis(250));
     }
 }
 

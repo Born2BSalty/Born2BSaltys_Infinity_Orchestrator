@@ -5,8 +5,11 @@ use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, ThemePalette, redesign_border_strong,
-    redesign_chrome_bg, redesign_status_dot, redesign_text_muted,
+    redesign_chrome_bg, redesign_hover_overlay, redesign_status_dot, redesign_text_muted,
+    redesign_text_primary,
 };
+
+const HISTORY_BTN_W: f32 = 26.0;
 
 #[derive(Debug, Clone)]
 pub struct RunningInstallStatus {
@@ -27,13 +30,35 @@ pub fn format_elapsed(d: std::time::Duration) -> String {
     }
 }
 
+/// Renders the statusbar.
+///
+/// Returns `true` if the notification-history toggle button was clicked this frame.
+#[must_use]
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     modlist_count: usize,
     running_install: Option<&RunningInstallStatus>,
-) {
+    history_has_items: bool,
+    history_open: bool,
+) -> bool {
     let rect = ui.max_rect();
+    let text_color = redesign_text_muted(palette);
+    let font = egui::FontId::new(10.0, egui::FontFamily::Proportional);
+
+    // History button — allocate interactivity before the painter borrow
+    let btn_right = rect.right() - 12.0;
+    let btn_center_x = btn_right - HISTORY_BTN_W / 2.0;
+    let btn_height = rect.height() * 0.75;
+    let btn_rect = egui::Rect::from_center_size(
+        egui::pos2(btn_center_x, rect.center().y),
+        egui::vec2(HISTORY_BTN_W, btn_height),
+    );
+    let btn_resp = ui.allocate_rect(btn_rect, egui::Sense::click());
+    let btn_hovered = btn_resp.hovered();
+    let btn_clicked = btn_resp.clicked();
+
+    // All painter work after interaction allocation
     let painter = ui.painter();
 
     painter.rect_filled(rect, 0.0, redesign_chrome_bg(palette));
@@ -46,9 +71,6 @@ pub fn render(
         ],
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
     );
-
-    let text_color = redesign_text_muted(palette);
-    let font = egui::FontId::new(10.0, egui::FontFamily::Proportional);
 
     let dot_x = rect.left() + 12.0 + 4.0;
     let dot_center = egui::pos2(dot_x, rect.center().y);
@@ -83,12 +105,35 @@ pub fn render(
     }
 
     let version_text = format!("v{}", env!("CARGO_PKG_VERSION"));
-    let galley = painter.layout_no_wrap(version_text, font, text_color);
-    let pos = egui::pos2(
-        rect.right() - 12.0 - galley.size().x,
-        galley.size().y.mul_add(-0.5, rect.center().y),
+    let version_galley = painter.layout_no_wrap(version_text, font, text_color);
+    let version_x = rect.right() - 12.0 - version_galley.size().x - HISTORY_BTN_W - 4.0;
+    let version_pos = egui::pos2(
+        version_x,
+        version_galley.size().y.mul_add(-0.5, rect.center().y),
     );
-    painter.galley(pos, galley, text_color);
+    painter.galley(version_pos, version_galley, text_color);
+
+    if btn_hovered || history_open {
+        painter.rect_filled(
+            btn_rect,
+            egui::CornerRadius::same(3),
+            redesign_hover_overlay(palette),
+        );
+    }
+    let bell_color = if history_has_items {
+        redesign_text_primary(palette)
+    } else {
+        text_color
+    };
+    painter.text(
+        btn_rect.center(),
+        egui::Align2::CENTER_CENTER,
+        "\u{F0A2}",
+        egui::FontId::new(11.0, egui::FontFamily::Name("firacode_nerd".into())),
+        bell_color,
+    );
+
+    btn_clicked
 }
 
 pub const HEIGHT_PX: f32 = REDESIGN_STATUSBAR_HEIGHT_PX;

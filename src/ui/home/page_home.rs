@@ -9,8 +9,8 @@ use crate::ui::home::add_a_modlist::{self, AddAModlistAction};
 use crate::ui::home::confirm_delete;
 use crate::ui::home::modlist_card::ModlistCardActions;
 use crate::ui::home::reinstall_route_wire;
-use crate::ui::home::state_home::{HomeFilter, ToastMessage, empty_filter_message};
-use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card, toast};
+use crate::ui::home::state_home::{HomeFilter, empty_filter_message};
+use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
@@ -138,7 +138,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 
     render_delete_confirm(orchestrator, ctx);
     render_reinstall_confirm(orchestrator, ctx);
-    drive_toast(orchestrator, ctx);
 }
 
 fn apply_nav_request(orchestrator: &mut OrchestratorApp, req: NavRequest) {
@@ -177,14 +176,14 @@ fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, in
             if let Some(code) = operations::share_code_for(&id, &orchestrator.registry) {
                 ctx.copy_text(code);
                 let name = modlist_name(orchestrator, &id);
-                orchestrator.home_screen_state.toast = Some(ToastMessage::success(format!(
-                    "Copied import code for \"{name}\""
-                )));
+                orchestrator
+                    .notification_manager
+                    .success(format!("Copied import code for \"{name}\""));
             } else {
                 let name = modlist_name(orchestrator, &id);
-                orchestrator.home_screen_state.toast = Some(ToastMessage::error(format!(
-                    "No import code yet for \"{name}\""
-                )));
+                orchestrator
+                    .notification_manager
+                    .error(format!("No import code yet for \"{name}\""));
             }
         }
         CardIntent::OpenInstallFolder(id) => open_install_folder_for(orchestrator, &id),
@@ -202,7 +201,7 @@ fn open_install_folder_for(orchestrator: &mut OrchestratorApp, id: &str) {
         return;
     };
     if let Err(msg) = operations::open_install_folder(&entry) {
-        orchestrator.home_screen_state.toast = Some(ToastMessage::error(msg));
+        orchestrator.notification_manager.error(msg);
     }
 }
 
@@ -238,13 +237,14 @@ fn render_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context
                 Ok(_) => {
                     orchestrator.persistence_cycle.last_saved_registry =
                         orchestrator.registry.clone();
-                    orchestrator.home_screen_state.toast =
-                        Some(ToastMessage::success(format!("Deleted \"{name}\"")));
+                    orchestrator
+                        .notification_manager
+                        .success(format!("Deleted \"{name}\""));
                 }
                 Err(err) => {
-                    orchestrator.home_screen_state.toast = Some(ToastMessage::error(format!(
-                        "Couldn't delete \"{name}\": {err}"
-                    )));
+                    orchestrator
+                        .notification_manager
+                        .error(format!("Couldn't delete \"{name}\": {err}"));
                 }
             }
         }
@@ -277,25 +277,6 @@ fn render_reinstall_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Cont
             orchestrator.home_screen_state.reinstall_target = None;
         }
         ConfirmOutcome::Pending => {}
-    }
-}
-
-fn drive_toast(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
-    let live = toast::render(
-        ctx,
-        orchestrator.theme_palette,
-        orchestrator.home_screen_state.toast.as_ref(),
-    );
-    if !live {
-        return;
-    }
-    if let Some(t) = orchestrator.home_screen_state.toast.as_ref() {
-        if t.is_expired() {
-            orchestrator.home_screen_state.toast = None;
-        } else {
-            let remaining = toast::TOAST_TTL.saturating_sub(t.shown_at.elapsed());
-            ctx.request_repaint_after(remaining);
-        }
     }
 }
 

@@ -10,4 +10,3 @@ pub mod modlist_card;
 pub mod page_home;
 pub mod reinstall_route_wire;
 pub mod state_home;
-pub mod toast;

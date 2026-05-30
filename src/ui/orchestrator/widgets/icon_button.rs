@@ -66,7 +66,7 @@ pub(crate) fn render(
     }
 }
 
-fn paint_close_icon(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
+pub(crate) fn paint_close_icon(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
     let stroke = egui::Stroke::new(1.5, color);
     let center = rect.center();
     painter.line_segment(

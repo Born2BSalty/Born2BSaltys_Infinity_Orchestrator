@@ -129,8 +129,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
                 ..Default::default()
             });
             if let Err(msg) = operations::open_install_folder(&target) {
-                orchestrator.home_screen_state.toast =
-                    Some(crate::ui::home::state_home::ToastMessage::error(msg));
+                orchestrator.notification_manager.error(msg);
             }
         }
         None => {}

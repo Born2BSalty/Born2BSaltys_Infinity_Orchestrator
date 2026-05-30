@@ -688,6 +688,7 @@ dependencies = [
  "chrono",
  "clap",
  "eframe",
+ "egui-toast",
  "egui_kittest",
  "egui_term",
  "flate2",
@@ -1440,6 +1441,15 @@ dependencies = [
  "log",
  "nohash-hasher",
  "profiling",
+]
+
+[[package]]
+name = "egui-toast"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "366a31eb8c905835c85a36baff26d7a003a9fd6631a04b1f15f42d9cb20d11ad"
+dependencies = [
+ "egui",
 ]
 
 [[package]]

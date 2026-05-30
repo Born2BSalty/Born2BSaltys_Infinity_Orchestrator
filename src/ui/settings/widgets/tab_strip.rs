@@ -153,7 +153,7 @@ fn open_active_tab_into_body(
     // segment so the left border stays continuous into the tab. Only the
     // left-most tab meets this condition; mid-strip tabs are untouched.
     if (tab_rect.left() - body_rect.left()).abs() < 1.0 {
-        let x = body_rect.left() + border.width * 0.5;
+        let x = border.width.mul_add(0.5, body_rect.left());
         painter.line_segment(
             [
                 egui::pos2(x, seam_y - REDESIGN_BORDER_WIDTH_PX),
