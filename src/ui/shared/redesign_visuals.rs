@@ -10,6 +10,25 @@ use crate::ui::shared::redesign_tokens::{
     redesign_warning,
 };
 
+/// Soft, dark-teal drop shadow for floating overlays.
+///
+/// Used for windows, popups, dropdowns, and the toast so they lift off the app.
+/// Single tuning point: feeds `window_shadow` + `popup_shadow` plus the
+/// custom-frame dialogs and the toast frame.
+#[must_use]
+pub fn redesign_overlay_shadow(palette: ThemePalette) -> egui::epaint::Shadow {
+    let color = match palette {
+        ThemePalette::Dark => egui::Color32::from_rgba_unmultiplied(4, 12, 16, 150),
+        ThemePalette::Light => egui::Color32::from_rgba_unmultiplied(26, 38, 56, 80),
+    };
+    egui::epaint::Shadow {
+        offset: [0, 6],
+        blur: 18,
+        spread: 0,
+        color,
+    }
+}
+
 /// Builds an `egui::Visuals` baseline calibrated for the given palette.
 ///
 /// Call once per frame from `eframe::App::update` and pass the result to
@@ -28,9 +47,9 @@ pub fn build_for(palette: ThemePalette) -> egui::Visuals {
     v.window_fill = redesign_shell_bg(palette);
     v.window_stroke = border_strong_stroke;
     v.window_corner_radius = corner;
-    v.window_shadow = egui::epaint::Shadow::NONE;
+    v.window_shadow = redesign_overlay_shadow(palette);
     v.window_highlight_topmost = false;
-    v.popup_shadow = egui::epaint::Shadow::NONE;
+    v.popup_shadow = redesign_overlay_shadow(palette);
     v.faint_bg_color = redesign_rail_bg(palette);
     v.extreme_bg_color = redesign_input_bg(palette);
     v.code_bg_color = redesign_input_bg(palette);
@@ -171,5 +190,19 @@ mod tests {
     fn light_visuals_window_highlight_topmost_disabled() {
         let v = build_for(ThemePalette::Light);
         assert!(!v.window_highlight_topmost);
+    }
+
+    #[test]
+    fn dark_visuals_overlay_shadows_enabled() {
+        let v = build_for(ThemePalette::Dark);
+        assert_ne!(v.window_shadow, egui::epaint::Shadow::NONE);
+        assert_ne!(v.popup_shadow, egui::epaint::Shadow::NONE);
+    }
+
+    #[test]
+    fn light_visuals_overlay_shadows_enabled() {
+        let v = build_for(ThemePalette::Light);
+        assert_ne!(v.window_shadow, egui::epaint::Shadow::NONE);
+        assert_ne!(v.popup_shadow, egui::epaint::Shadow::NONE);
     }
 }

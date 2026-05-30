@@ -10,6 +10,7 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_pill_danger, redesign_shell_bg, redesign_success,
 };
+use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
 pub const TOAST_TTL: Duration = Duration::from_millis(1800);
 
@@ -51,6 +52,7 @@ pub fn render(ctx: &egui::Context, palette: ThemePalette, toast: Option<&ToastMe
                     redesign_border_strong(palette),
                 ))
                 .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+                .shadow(redesign_overlay_shadow(palette))
                 .inner_margin(egui::Margin {
                     left: 16,
                     right: 16,
