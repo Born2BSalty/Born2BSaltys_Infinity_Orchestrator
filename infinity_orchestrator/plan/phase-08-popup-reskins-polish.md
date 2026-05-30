@@ -246,11 +246,16 @@ Verification across all iterations: 590 lib tests passing, both binaries gate-fr
 - **Acceptance:** The page background shows the subtle dot pattern at 20px spacing, matching the wireframe.
 - **SPEC:** §12.3.
 
-### P8.T10 — Toast notification rollout
+### P8.T10 — App-wide toast / notification framework
 
-- **What:** Move Phase 5's Home toast helper to `src/ui/orchestrator/widgets/toast.rs`. Wire toasts for: clipboard copies (already in Home), Settings → "Validation complete" (optional), workspace → "✓ saved!" inline button flash (already in Phase 6), share dialog `✓ copied to clipboard` inline (already in Phase 7). Audit every "this happened" feedback site to ensure consistency.
-- **Where:** Move Phase-5 `home/toast.rs` → `orchestrator/widgets/toast.rs`; update consumer imports.
-- **Acceptance:** All toasts auto-dismiss at ~1.8s. Visual style identical across sites.
+Design settled 2026-05-29 (research + user decisions). This is a real notification framework, not the earlier "relocate the toast helper" framing.
+
+- **Engine:** `egui-toast = "=0.17.0"` — compat-verified: unifies on the app's egui 0.31.1 (a single `egui v0.31.1` in the dep tree). Do **NOT** use 0.20.x — it needs egui 0.34 and links a second, non-interoperable egui. Pinned exact; bump only in lockstep with an egui upgrade. Verify 0.17's exact API at impl start (research verified the ~0.20 line; the load-bearing features — `Align2`+offset anchor, stack `Direction`, per-toast duration + progress, `ToastKind` Info/Warning/Error/Success + `Custom(u32)` + `custom_contents`, and native hover-to-pause — are long-standing in the crate).
+- **Wrapper — net-new `src/ui/orchestrator/widgets/notification.rs` (`NotificationManager`):** one long-lived manager; a single `notify.success(msg)`/`.info`/`.warn`/`.error` add-site + one `show(ctx)` per frame (egui-toast keeps queue state in egui context memory, so frame-safe). The wrapper — not the crate — owns: (a) severity → `redesign_*` token color **+ filled icon** (success/info/warning/error + a `Custom` "progress" tone for installs; never color alone); (b) the persistence policy; (c) inline-vs-toast-vs-banner routing; (d) push every message into a capped **last-5 read-only history** buffer.
+- **Decisions (user, 2026-05-29):** **bottom-right** anchor (`Align2::RIGHT_BOTTOM` + offset), stack upward. **No action buttons** in any toast (display-only). **Errors persist** (manual ✕ only); success/info/warning auto-dismiss with hover-pause. **Scope B** — a toast queue (≤1–2 concurrent expected) + a **read-only last-5 history surface** (no filtering / no click-to-reopen / no full notification-center).
+- **Routing (consolidate today's ad-hoc feedback):** keep genuine in-context results inline (save/rename ✓, Details copy icons, path-validation in Settings/rail); route momentary events to toasts (kebab "copy import code" — its menu closes; share-code generated/imported; install started); keep install **progress** in the existing Step-5 surface (not a transient toast); failed install / hard errors → persistent error toast (banner for standing conditions like invalid path).
+- **Replaces:** the current `src/ui/home/toast.rs` (single bottom-center, success/error, 1.8s fixed) — migrate it into the manager. **Accessibility basis:** the last-5 history is the WCAG 2.2.1 alternative-access path that lets transient toasts auto-dismiss conformantly; persisting errors covers the high-stakes case.
+- **Acceptance:** one notification API used app-wide; severity tones from redesign tokens (light + dark); errors persist + recoverable via history; bottom-right hover-pause stack with manual dismiss. Dispatch as ONE scoped plan-implementer run (new dep + module + rewire) with the full gate set.
 - **SPEC:** §10.8.
 
 ### P8.T11 — Hover affordances polish
