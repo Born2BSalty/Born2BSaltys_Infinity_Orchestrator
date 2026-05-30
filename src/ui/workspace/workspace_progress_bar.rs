@@ -4,10 +4,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_strong, redesign_chrome_bg, redesign_shadow,
-    redesign_shell_bg, redesign_success, redesign_text_faint, redesign_text_muted,
-    redesign_text_primary, redesign_with_alpha,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_strong, redesign_chrome_bg, redesign_shell_bg, redesign_success,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary, redesign_with_alpha,
 };
 use crate::ui::workspace::state_workspace::{WorkspaceStep, WorkspaceViewState};
 
@@ -52,12 +51,6 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, state: &WorkspaceViewSta
 
     let painter = ui.painter();
     let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
-
-    let shadow_rect = bar_rect.translate(egui::vec2(
-        REDESIGN_SHADOW_OFFSET_BTN_PX + 1.0,
-        REDESIGN_SHADOW_OFFSET_BTN_PX + 1.0,
-    ));
-    painter.rect_filled(shadow_rect, radius, redesign_shadow(palette));
 
     let n = u16::try_from(n).unwrap_or(1);
     let seg_w = full_w / f32::from(n);

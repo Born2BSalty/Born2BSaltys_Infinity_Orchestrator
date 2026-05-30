@@ -1197,7 +1197,7 @@ Cards listing connected services. Each card is a single horizontal row inside a 
 [36×36 avatar] [Service Name] [optional "as @user" when connected]   …push right…   [pill] [Btn]
 ```
 
-- **Avatar** — shell-bg fill, sketchy 1.5px border, 2×2 drop shadow, initials in `poppins_bold`. (Neutral notebook-card treatment — not an accent-filled tile, which would visually conflict with the active rail item.)
+- **Avatar** — shell-bg fill, sketchy 1.5px border, initials in `poppins_bold`, no drop shadow. (Neutral notebook-card treatment — not an accent-filled tile, which would visually conflict with the active rail item.)
 - **"as @user" label** — faint hand-style text, only rendered when the service is connected. Sits between the service name and the right-anchored cluster. The widget always prepends `@` to the supplied user label and strips any duplicate leading `@`, so callers can pass either `Xgatt` or `@Xgatt` and the rendered string is always `as @Xgatt`.
 - **Pill** — small chip, no border, just the tone-matched fill with rounded ends (matches wireframe `Pill` line 745: 10px font, ~7px radius, `pill_text` dark slate on tinted fill). Connected: `connected` in info tone. Not connected: `not connected` in neutral tone. The pill states the connection — the user identity lives in the separate `"as @user"` label.
 - **Btn** — primary fill (accent + drop shadow) when the action is the call to action — i.e. when NOT connected (`connect`). Non-primary (shell-bg) when connected (`disconnect`). Small variant.
@@ -1299,7 +1299,9 @@ All pills use dark text (`#1a2638`) regardless of tone.
 - Selection highlight: `rgba(20,184,166,0.18)` (teal at 18% alpha); hover-on-selected: 22% alpha.
 - Hover overlay (general): `--hover-overlay`, very subtle (~4–5% alpha overlay).
 - Sketchy border: 1.5px solid `--border-strong`, 3px radius.
-- Drop shadow: hard offset `6px 6px 0 var(--shadow)` for the main shell, `2px 2px 0` for primary buttons.
+- Drop shadow — two styles:
+  - **Solid (hard offset)** `var(--shadow)` for the main shell (`6px 6px`) and primary/danger buttons (`2px 2px`). The Home "paste import code" and "resume" buttons opt out via `BtnOpts.no_shadow`. The workspace step progress bar, the workspace-header fork pill, and the Settings account avatar carry no drop shadow.
+  - **Soft (blurred, dark-teal)** for anything that floats on top of the app — windows, popups, dropdown menus, combo boxes, the kebab menu, and toasts — applied globally through `window_shadow` + `popup_shadow` and the shared `redesign_overlay_shadow(palette)` helper (offset `[0, 6]`, blur 18, dark-teal-tinted per palette). Windows that set a custom `.frame()` take the same helper on their frame.
 
 ### 12.4 EmbeddedTerminal cell colors (out of v1 alpha scope)
 

@@ -139,6 +139,7 @@ fn render_action_cluster(
                 BtnOpts {
                     small: true,
                     primary: true,
+                    no_shadow: true,
                     ..Default::default()
                 },
             )

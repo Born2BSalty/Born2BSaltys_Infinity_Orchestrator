@@ -6,10 +6,9 @@ use eframe::egui;
 use crate::ui::orchestrator::widgets::r_box::redesign_box;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_border_strong, redesign_pill_info, redesign_pill_neutral,
-    redesign_pill_text, redesign_shadow, redesign_shell_bg, redesign_text_faint,
-    redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_pill_info, redesign_pill_neutral, redesign_pill_text, redesign_shell_bg,
+    redesign_text_faint, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -46,11 +45,6 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, card: AccountCard<'_>) -
                 ui.allocate_exact_size(egui::vec2(avatar_size, avatar_size), egui::Sense::hover());
             let painter = ui.painter();
             let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
-            let shadow_rect = avatar_rect.translate(egui::vec2(
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-            ));
-            painter.rect_filled(shadow_rect, radius, redesign_shadow(palette));
             painter.rect_filled(avatar_rect, radius, redesign_shell_bg(palette));
             painter.rect_stroke(
                 avatar_rect,
