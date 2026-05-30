@@ -1521,7 +1521,8 @@ impl OrchestratorApp {
             self.notification_manager.history_open = !self.notification_manager.history_open;
         }
         self.notification_manager.show(ctx, palette);
-        self.notification_manager.render_history_popup(ctx, palette);
+        self.notification_manager
+            .render_history_popup(ctx, palette, !history_clicked);
     }
 }
 

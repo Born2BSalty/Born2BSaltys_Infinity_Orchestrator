@@ -52,7 +52,9 @@ fn snap(out_dir: &Path, name: &str, palette: ThemePalette) -> PathBuf {
                 );
             });
             if frame == ENQUEUE_FRAME {
-                mgr.success("Success — copied import code");
+                mgr.success(
+                    "Success — installation complete: all selected mods were applied without errors",
+                );
                 mgr.info("Info — scan completed");
                 mgr.warn("Warning — mods need attention");
                 mgr.error("Error — failed to open folder");
@@ -62,8 +64,11 @@ fn snap(out_dir: &Path, name: &str, palette: ThemePalette) -> PathBuf {
             }
             frame += 1;
         });
+    // show_progress(true) on timed toasts triggers a repaint request every frame,
+    // which exhausts Harness::run's max_steps guard. Drive each frame exactly
+    // once with step() instead.
     for _ in 0..=CAPTURE_FRAME {
-        harness.run();
+        harness.step();
     }
     let img = harness
         .render()

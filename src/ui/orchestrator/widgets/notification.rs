@@ -152,8 +152,15 @@ impl NotificationManager {
 
     /// Renders the read-only history popup anchored above the statusbar right edge.
     ///
-    /// Opened via `history_open`; dismissed by clicking ✕ or clicking outside.
-    pub fn render_history_popup(&mut self, ctx: &egui::Context, palette: ThemePalette) {
+    /// `allow_outside_close` must be `false` on the same frame the bell was
+    /// clicked (so the click-outside check doesn't self-close the popup
+    /// before it renders).  Pass `true` on all subsequent frames.
+    pub fn render_history_popup(
+        &mut self,
+        ctx: &egui::Context,
+        palette: ThemePalette,
+        allow_outside_close: bool,
+    ) {
         if !self.history_open {
             return;
         }
@@ -195,7 +202,7 @@ impl NotificationManager {
             })
             .response;
 
-        if response.clicked_elsewhere() {
+        if allow_outside_close && response.clicked_elsewhere() {
             self.history_open = false;
         }
     }
@@ -245,14 +252,18 @@ fn render_history_popup_body(
 }
 
 fn toast_options_for(kind: ToastKind) -> ToastOptions {
-    let base = ToastOptions::default()
-        .show_progress(false)
-        .show_icon(false);
+    let base = ToastOptions::default().show_icon(false);
     match kind {
-        ToastKind::Success => base.duration_in_seconds(TTL_SUCCESS),
-        ToastKind::Info => base.duration_in_seconds(TTL_INFO),
-        ToastKind::Warning => base.duration_in_seconds(TTL_WARNING),
-        ToastKind::Error | ToastKind::Custom(_) => base.duration(None::<Duration>),
+        // show_progress drives per-frame repaints so hover-pause is sampled
+        // every frame rather than only on the scheduled ttl tick.
+        ToastKind::Success => base.show_progress(true).duration_in_seconds(TTL_SUCCESS),
+        ToastKind::Info => base.show_progress(true).duration_in_seconds(TTL_INFO),
+        ToastKind::Warning => base.show_progress(true).duration_in_seconds(TTL_WARNING),
+        // Persistent toasts have no TTL; show_progress(false) avoids an
+        // infinite repaint loop.
+        ToastKind::Error | ToastKind::Custom(_) => {
+            base.show_progress(false).duration(None::<Duration>)
+        }
     }
 }
 
@@ -300,28 +311,37 @@ fn render_custom_toast(
     let outer = frame
         .show(ui, |ui| {
             ui.set_width(TOAST_BODY_WIDTH);
-            ui.horizontal(|ui| {
+            ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 render_toast_icon(ui, toast.kind, accent);
-                ui.label(
-                    egui::RichText::new(toast.text.text())
-                        .size(12.0)
-                        .family(egui::FontFamily::Name("poppins_medium".into()))
-                        .color(text_color),
+                // Reserve a fixed close-button column on the right, then give the
+                // label the remaining width so it wraps instead of painting under
+                // the ✕ or stretching the card.
+                let gap = ui.spacing().item_spacing.x;
+                let label_w = (ui.available_width() - CLOSE_BTN_SIZE.x - gap - gap).max(0.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(label_w, CLOSE_BTN_SIZE.y),
+                    egui::Layout::top_down(egui::Align::LEFT),
+                    |ui| {
+                        ui.label(
+                            egui::RichText::new(toast.text.text())
+                                .size(12.0)
+                                .family(egui::FontFamily::Name("poppins_medium".into()))
+                                .color(text_color),
+                        );
+                    },
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let (close_rect, close_resp) =
-                        ui.allocate_exact_size(CLOSE_BTN_SIZE, egui::Sense::click());
-                    if close_resp.clicked() {
-                        toast.close();
-                    }
-                    let close_color = if close_resp.hovered() {
-                        redesign_text_primary(palette)
-                    } else {
-                        redesign_text_muted(palette)
-                    };
-                    paint_close_icon(ui.painter(), close_rect, close_color);
-                });
+                let (close_rect, close_resp) =
+                    ui.allocate_exact_size(CLOSE_BTN_SIZE, egui::Sense::click());
+                if close_resp.clicked() {
+                    toast.close();
+                }
+                let close_color = if close_resp.hovered() {
+                    redesign_text_primary(palette)
+                } else {
+                    redesign_text_muted(palette)
+                };
+                paint_close_icon(ui.painter(), close_rect, close_color);
             });
         })
         .response;
