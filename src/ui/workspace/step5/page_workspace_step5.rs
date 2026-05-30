@@ -70,8 +70,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
             if let Some(e) = entry.as_ref() {
                 let result = open_game_subfolder(e, &orchestrator.wizard_state.step1);
                 if let Err(msg) = result {
-                    orchestrator.home_screen_state.toast =
-                        Some(crate::ui::home::state_home::ToastMessage::error(msg));
+                    orchestrator.notification_manager.error(msg);
                 }
             }
         }

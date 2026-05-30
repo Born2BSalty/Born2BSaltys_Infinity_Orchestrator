@@ -206,7 +206,7 @@ When the current chip's filtered list is empty, the body shows a single faint li
 - `In progress`: "No in-progress builds. Start a new modlist from \"create your own\"."
 - `All`: "No modlists yet."
 
-A toast notification can appear bottom-center: `✓ Copied import code for "<modlist>"` — auto-dismisses after ~1.8s.
+A success toast appears bottom-right: `Copied import code for "<modlist>"` — auto-dismisses after 3 s with hover-pause (§10.8).
 
 ### 3.2 Cards (shared shape)
 
@@ -1070,9 +1070,21 @@ Generic confirm/cancel modal:
 - Footer: `Cancel` + primary `Confirm` (red-tinted when `danger`).
 - Used for destructive actions like `Select via WeiDU Log`.
 
-### 10.8 Toast
+### 10.8 Toast / Notification
 
-Bottom-center transient notification (no dismiss button). Used for clipboard copies and any other "this happened" feedback. Auto-dismisses ~1.8s.
+App-wide notification stack anchored **bottom-right**, stacking upward. Backed by `egui-toast` (version 0.17.0) wrapped by `NotificationManager` on `OrchestratorApp`.
+
+**Severities and dismissal:**
+- **Success** — teal ✓ icon, 3 s auto-dismiss with hover-pause.
+- **Info** — filled-circle+bar "i" icon, 3 s auto-dismiss with hover-pause.
+- **Warning** — triangle+stem icon, 4 s auto-dismiss with hover-pause.
+- **Error** — filled-circle+exclamation icon, **persists** until the user clicks ✕.
+
+Each toast body: neutral overlay-background frame (`redesign_shell_bg` + `redesign_overlay_shadow`), 3 px left accent stripe in the severity color, severity icon, message in Poppins 12 px at the severity text color, and a ✕ close affordance.
+
+**History:** a capped last-5 read-only notification history is stored in the manager. A bell icon (`U+F0A2`) in the statusbar right edge toggles the history popup. The popup lists the last ≤5 entries (severity icon + message + relative time), newest first. Read-only — no filtering, no click-to-reopen.
+
+**Push sites:** momentary results that leave no persistent in-context indicator (copy import code success/error, open-folder error, delete success/error). Genuine in-context results (save/rename ✓, path-validation status, inline "copied" confirmations in dialogs) remain inline and are not routed through this system.
 
 ### 10.9 ForkInfoPopup
 

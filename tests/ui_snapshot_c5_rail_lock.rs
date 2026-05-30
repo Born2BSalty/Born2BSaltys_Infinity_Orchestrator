@@ -154,7 +154,7 @@ fn render_statusbar(
         .show_separator_line(false)
         .frame(egui::Frame::NONE)
         .show(ctx, |ui| {
-            shell_statusbar::render(ui, palette, 2, Some(running_status));
+            let _ = shell_statusbar::render(ui, palette, 2, Some(running_status), false, false);
         });
 }
 

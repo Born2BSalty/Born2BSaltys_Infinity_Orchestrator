@@ -10,13 +10,20 @@ use crate::ui::shared::redesign_tokens::{
 use crate::ui::shell::shell_statusbar::{self, RunningInstallStatus};
 use crate::ui::shell::shell_titlebar;
 
+/// Renders the full shell chrome and body.
+///
+/// Returns `true` if the notification-history toggle button in the statusbar
+/// was clicked this frame.
+#[must_use]
 pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
     ctx: &egui::Context,
     palette: ThemePalette,
     modlist_count: usize,
     running_install: Option<&RunningInstallStatus>,
+    history_has_items: bool,
+    history_open: bool,
     body: F,
-) {
+) -> bool {
     let bg_painter = ctx.layer_painter(egui::LayerId::background());
     paint_dot_background(&bg_painter, ctx.screen_rect(), palette);
 
@@ -28,12 +35,22 @@ pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
             shell_titlebar::render(ui, palette);
         });
 
+    let mut history_clicked = false;
     egui::TopBottomPanel::bottom("redesign_statusbar")
         .exact_height(REDESIGN_STATUSBAR_HEIGHT_PX)
         .show_separator_line(false)
         .frame(egui::Frame::NONE)
         .show(ctx, |ui| {
-            shell_statusbar::render(ui, palette, modlist_count, running_install);
+            if shell_statusbar::render(
+                ui,
+                palette,
+                modlist_count,
+                running_install,
+                history_has_items,
+                history_open,
+            ) {
+                history_clicked = true;
+            }
         });
 
     egui::CentralPanel::default()
@@ -43,6 +60,7 @@ pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
         });
 
     paint_resize_handles(ctx);
+    history_clicked
 }
 
 fn paint_resize_handles(ctx: &egui::Context) {

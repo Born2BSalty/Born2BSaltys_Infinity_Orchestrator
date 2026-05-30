@@ -42,39 +42,6 @@ pub struct HomeScreenState {
 
     pub delete_target: Option<String>,
     pub reinstall_target: Option<String>,
-    pub toast: Option<ToastMessage>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ToastTone {
-    #[default]
-    Success,
-    Error,
-}
-
-#[derive(Debug, Clone)]
-pub struct ToastMessage {
-    pub text: String,
-    pub shown_at: std::time::Instant,
-    pub tone: ToastTone,
-}
-
-impl ToastMessage {
-    pub fn success(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            shown_at: std::time::Instant::now(),
-            tone: ToastTone::Success,
-        }
-    }
-
-    pub fn error(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            shown_at: std::time::Instant::now(),
-            tone: ToastTone::Error,
-        }
-    }
 }
 
 impl HomeScreenState {
