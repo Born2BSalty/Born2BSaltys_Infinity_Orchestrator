@@ -314,15 +314,16 @@ fn render_custom_toast(
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 render_toast_icon(ui, toast.kind, accent);
-                // Reserve a fixed close-button column on the right, then give the
-                // label the remaining width so it wraps instead of painting under
-                // the ✕ or stretching the card.
+                // Reserve the close column and force the label to fill the rest so
+                // the ✕ pins to the far-right edge instead of trailing the text;
+                // the label wraps within its column.
                 let gap = ui.spacing().item_spacing.x;
                 let label_w = (ui.available_width() - CLOSE_BTN_SIZE.x - gap - gap).max(0.0);
                 ui.allocate_ui_with_layout(
                     egui::vec2(label_w, CLOSE_BTN_SIZE.y),
                     egui::Layout::top_down(egui::Align::LEFT),
                     |ui| {
+                        ui.set_min_width(label_w);
                         ui.label(
                             egui::RichText::new(toast.text.text())
                                 .size(12.0)
