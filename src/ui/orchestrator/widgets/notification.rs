@@ -9,9 +9,10 @@ use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 
 use crate::ui::orchestrator::widgets::icon_button::paint_close_icon;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_error, redesign_error_emphasis, redesign_info, redesign_shell_bg, redesign_success,
-    redesign_text_muted, redesign_text_primary, redesign_warning,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX,
+    ThemePalette, redesign_border_strong, redesign_error, redesign_error_emphasis, redesign_info,
+    redesign_shell_bg, redesign_success, redesign_text_muted, redesign_text_primary,
+    redesign_warning,
 };
 use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
@@ -165,15 +166,14 @@ impl NotificationManager {
             return;
         }
 
-        let screen = ctx.screen_rect();
         let popup_w = 340.0_f32;
-        let popup_x = screen.right() - popup_w - TOAST_OFFSET_RIGHT;
-        let popup_y = screen.bottom() - 32.0 - 10.0 - 200.0;
-
         let popup_id = egui::Id::new("notification_history_popup");
         let response = egui::Area::new(popup_id)
             .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(popup_x, popup_y))
+            .anchor(
+                egui::Align2::RIGHT_BOTTOM,
+                egui::vec2(-TOAST_OFFSET_RIGHT, -(REDESIGN_STATUSBAR_HEIGHT_PX + 8.0)),
+            )
             .show(ctx, |ui| {
                 egui::Frame::default()
                     .fill(redesign_shell_bg(palette))
@@ -190,7 +190,7 @@ impl NotificationManager {
                         bottom: 10,
                     })
                     .show(ui, |ui| {
-                        ui.set_min_width(popup_w - 24.0);
+                        ui.set_width(popup_w - 24.0);
                         render_history_popup_body(
                             ui,
                             palette,
@@ -399,22 +399,38 @@ fn render_history_row(ui: &mut egui::Ui, record: &NotificationRecord, palette: T
         now,
     );
 
-    ui.horizontal(|ui| {
+    ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         render_history_icon(ui, record.kind, accent);
-        ui.label(
-            egui::RichText::new(&record.text)
-                .size(11.0)
-                .family(egui::FontFamily::Name("poppins_medium".into()))
-                .color(redesign_text_primary(palette)),
+        // Reserve a fixed timestamp column on the right; the message fills the
+        // rest and wraps instead of running under the timestamp.
+        let gap = ui.spacing().item_spacing.x;
+        let ts_w = 52.0_f32;
+        let msg_w = (ui.available_width() - ts_w - gap - gap).max(0.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(msg_w, ICON_SIZE),
+            egui::Layout::top_down(egui::Align::LEFT),
+            |ui| {
+                ui.set_min_width(msg_w);
+                ui.label(
+                    egui::RichText::new(&record.text)
+                        .size(11.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(redesign_text_primary(palette)),
+                );
+            },
         );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(
-                egui::RichText::new(&ts)
-                    .size(10.0)
-                    .color(redesign_text_muted(palette)),
-            );
-        });
+        ui.allocate_ui_with_layout(
+            egui::vec2(ts_w, ICON_SIZE),
+            egui::Layout::top_down(egui::Align::RIGHT),
+            |ui| {
+                ui.label(
+                    egui::RichText::new(&ts)
+                        .size(10.0)
+                        .color(redesign_text_muted(palette)),
+                );
+            },
+        );
     });
 }
 
