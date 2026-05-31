@@ -5,7 +5,8 @@ use eframe::egui;
 
 use crate::ui::shared::redesign_dot_background::paint_dot_background;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_page_bg,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX, REDESIGN_TITLEBAR_HEIGHT_PX,
+    ThemePalette, redesign_border_strong, redesign_page_bg,
 };
 use crate::ui::shell::shell_statusbar::{self, RunningInstallStatus};
 use crate::ui::shell::shell_titlebar;
@@ -60,7 +61,25 @@ pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
         });
 
     paint_resize_handles(ctx);
+    paint_window_border(ctx, palette);
     history_clicked
+}
+
+fn paint_window_border(ctx: &egui::Context, palette: ThemePalette) {
+    let screen = ctx.screen_rect();
+    egui::Area::new(egui::Id::new("redesign_window_border"))
+        .order(egui::Order::Foreground)
+        .interactable(false)
+        .fixed_pos(screen.min)
+        .show(ctx, |ui| {
+            ui.set_clip_rect(screen);
+            ui.painter().rect_stroke(
+                screen,
+                egui::CornerRadius::ZERO,
+                egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
+                egui::StrokeKind::Inside,
+            );
+        });
 }
 
 fn paint_resize_handles(ctx: &egui::Context) {

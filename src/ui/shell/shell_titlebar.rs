@@ -68,7 +68,7 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette) {
     ui.painter().text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
-        "Born2BSalty's Infinity Orchestrator",
+        "Infinity Orchestrator",
         egui::FontId::new(10.0, egui::FontFamily::Name("poppins_medium".into())),
         redesign_text_primary(palette),
     );

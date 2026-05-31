@@ -116,16 +116,44 @@ const fn is_active(current: &NavDestination, dest: &NavDestination) -> bool {
     )
 }
 
-fn brand_mark_texture(ui: &egui::Ui) -> egui::TextureHandle {
-    let cache_id = egui::Id::new("bio_brand_mark_texture");
+const fn brand_mark_source(size_px: u32) -> &'static [u8] {
+    if size_px <= 64 {
+        include_bytes!("../../../assets/64.png")
+    } else if size_px <= 128 {
+        include_bytes!("../../../assets/128.png")
+    } else {
+        include_bytes!("../../../assets/256.png")
+    }
+}
+
+const fn brand_mark_pixels(target: f32) -> u32 {
+    if target <= 50.0 {
+        50
+    } else if target <= 75.0 {
+        75
+    } else if target <= 100.0 {
+        100
+    } else if target <= 150.0 {
+        150
+    } else {
+        200
+    }
+}
+
+fn brand_mark_texture(ui: &egui::Ui, size_px: u32) -> egui::TextureHandle {
+    let cache_id = egui::Id::new(("bio_brand_mark_texture", size_px));
     let cached: Option<egui::TextureHandle> = ui.ctx().memory(|m| m.data.get_temp(cache_id));
     if let Some(tex) = cached {
         return tex;
     }
-    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
-        .expect("assets/icon.png must be a valid PNG");
-    let size = [icon.width as usize, icon.height as usize];
-    let img = egui::ColorImage::from_rgba_unmultiplied(size, &icon.rgba);
+    let decoded =
+        image::load_from_memory(brand_mark_source(size_px)).expect("brand-mark PNG must be valid");
+    let scaled = decoded.resize_exact(size_px, size_px, image::imageops::FilterType::Lanczos3);
+    let rgba = scaled.to_rgba8();
+    let img = egui::ColorImage::from_rgba_unmultiplied(
+        [size_px as usize, size_px as usize],
+        rgba.as_raw(),
+    );
     let tex = ui
         .ctx()
         .load_texture("bio_brand_mark", img, egui::TextureOptions::LINEAR);
@@ -136,7 +164,7 @@ fn brand_mark_texture(ui: &egui::Ui) -> egui::TextureHandle {
 
 fn render_brand_row(ui: &mut egui::Ui, palette: ThemePalette) {
     let painter = ui.painter().clone();
-    let brand_mark_size = 36.0;
+    let brand_mark_size = 50.0;
     let (mark_rect, _) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), brand_mark_size),
         egui::Sense::hover(),
@@ -145,14 +173,10 @@ fn render_brand_row(ui: &mut egui::Ui, palette: ThemePalette) {
         egui::Rect::from_min_size(mark_rect.min, egui::vec2(brand_mark_size, brand_mark_size));
 
     let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
-    let shadow_rect = mark_square.translate(egui::vec2(
-        REDESIGN_SHADOW_OFFSET_BTN_PX,
-        REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ));
-    painter.rect_filled(shadow_rect, radius, redesign_shadow(palette));
     painter.rect_filled(mark_square, radius, redesign_accent(palette));
 
-    let tex = brand_mark_texture(ui);
+    let target_px = brand_mark_size * ui.ctx().pixels_per_point();
+    let tex = brand_mark_texture(ui, brand_mark_pixels(target_px));
     egui::Image::new(egui::load::SizedTexture::new(tex.id(), tex.size_vec2()))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
         .paint_at(ui, mark_square);
@@ -165,28 +189,28 @@ fn render_brand_row(ui: &mut egui::Ui, palette: ThemePalette) {
     );
 
     let text_left = mark_square.right() + 10.0;
-    let text_top = mark_square.top() + 1.0;
+    let text_top = mark_square.top() + 2.0;
 
     painter.text(
         egui::pos2(text_left, text_top),
         egui::Align2::LEFT_TOP,
-        "BORN2BSALTY'S",
-        egui::FontId::new(8.0, egui::FontFamily::Name("poppins_medium".into())),
-        redesign_text_faint(palette),
+        "Born2BSalty's",
+        egui::FontId::new(9.0, egui::FontFamily::Name("poppins_medium".into())),
+        redesign_text_muted(palette),
     );
     painter.text(
-        egui::pos2(text_left, text_top + 11.0),
+        egui::pos2(text_left, text_top + 13.0),
         egui::Align2::LEFT_TOP,
         "INFINITY",
-        egui::FontId::new(10.0, egui::FontFamily::Name("poppins_medium".into())),
+        egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into())),
         redesign_text_primary(palette),
     );
     painter.text(
-        egui::pos2(text_left, text_top + 24.0),
+        egui::pos2(text_left, text_top + 28.0),
         egui::Align2::LEFT_TOP,
         "ORCHESTRATOR",
-        egui::FontId::new(9.0, egui::FontFamily::Proportional),
-        redesign_text_faint(palette),
+        egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into())),
+        redesign_text_primary(palette),
     );
 }
 
