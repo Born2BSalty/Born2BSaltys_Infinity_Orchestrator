@@ -10,8 +10,8 @@ use crate::ui::orchestrator::nav_status::{PathValidationKind, PathValidationSumm
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_NAV_WIDTH_PX,
     REDESIGN_SHADOW_OFFSET_BTN_PX, ThemePalette, redesign_accent, redesign_border_strong,
-    redesign_hover_overlay, redesign_rail_bg, redesign_shadow, redesign_shell_bg,
-    redesign_pill_text, redesign_status_dot, redesign_text_faint, redesign_text_muted,
+    redesign_hover_overlay, redesign_pill_text, redesign_rail_bg, redesign_shadow,
+    redesign_shell_bg, redesign_status_dot, redesign_text_faint, redesign_text_muted,
     redesign_text_primary,
 };
 
@@ -116,37 +116,76 @@ const fn is_active(current: &NavDestination, dest: &NavDestination) -> bool {
     )
 }
 
+const fn brand_mark_source(size_px: u32) -> &'static [u8] {
+    if size_px <= 64 {
+        include_bytes!("../../../assets/64.png")
+    } else if size_px <= 128 {
+        include_bytes!("../../../assets/128.png")
+    } else {
+        include_bytes!("../../../assets/256.png")
+    }
+}
+
+const fn brand_mark_pixels(target: f32) -> u32 {
+    if target <= 50.0 {
+        50
+    } else if target <= 75.0 {
+        75
+    } else if target <= 100.0 {
+        100
+    } else if target <= 150.0 {
+        150
+    } else {
+        200
+    }
+}
+
+fn brand_mark_texture(ui: &egui::Ui, size_px: u32) -> egui::TextureHandle {
+    let cache_id = egui::Id::new(("bio_brand_mark_texture", size_px));
+    let cached: Option<egui::TextureHandle> = ui.ctx().memory(|m| m.data.get_temp(cache_id));
+    if let Some(tex) = cached {
+        return tex;
+    }
+    let decoded =
+        image::load_from_memory(brand_mark_source(size_px)).expect("brand-mark PNG must be valid");
+    let scaled = decoded.resize_exact(size_px, size_px, image::imageops::FilterType::Lanczos3);
+    let rgba = scaled.to_rgba8();
+    let img = egui::ColorImage::from_rgba_unmultiplied(
+        [size_px as usize, size_px as usize],
+        rgba.as_raw(),
+    );
+    let tex = ui
+        .ctx()
+        .load_texture("bio_brand_mark", img, egui::TextureOptions::LINEAR);
+    ui.ctx()
+        .memory_mut(|m| m.data.insert_temp(cache_id, tex.clone()));
+    tex
+}
+
 fn render_brand_row(ui: &mut egui::Ui, palette: ThemePalette) {
     let painter = ui.painter().clone();
-    let brand_mark_size = 36.0;
+    let brand_mark_size = 50.0;
     let (mark_rect, _) = ui.allocate_exact_size(
-        egui::vec2(brand_mark_size + 8.0 + 100.0, brand_mark_size),
+        egui::vec2(ui.available_width(), brand_mark_size),
         egui::Sense::hover(),
     );
     let mark_square =
         egui::Rect::from_min_size(mark_rect.min, egui::vec2(brand_mark_size, brand_mark_size));
 
     let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
-    let shadow_rect = mark_square.translate(egui::vec2(
-        REDESIGN_SHADOW_OFFSET_BTN_PX,
-        REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ));
-    painter.rect_filled(shadow_rect, radius, redesign_shadow(palette));
-
     painter.rect_filled(mark_square, radius, redesign_accent(palette));
+
+    let target_px = brand_mark_size * ui.ctx().pixels_per_point();
+    let tex = brand_mark_texture(ui, brand_mark_pixels(target_px));
+    egui::Image::new(egui::load::SizedTexture::new(tex.id(), tex.size_vec2()))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .paint_at(ui, mark_square);
+
     painter.rect_stroke(
         mark_square,
         radius,
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
         egui::StrokeKind::Inside,
-    );
-
-    painter.text(
-        mark_square.center(),
-        egui::Align2::CENTER_CENTER,
-        "\u{221E}",
-        egui::FontId::new(22.0, egui::FontFamily::Name("firacode_nerd".into())),
-        egui::Color32::from_rgb(0x1a, 0x26, 0x38),
     );
 
     let text_left = mark_square.right() + 10.0;
@@ -155,16 +194,23 @@ fn render_brand_row(ui: &mut egui::Ui, palette: ThemePalette) {
     painter.text(
         egui::pos2(text_left, text_top),
         egui::Align2::LEFT_TOP,
-        "I N F I N I T Y",
-        egui::FontId::new(10.0, egui::FontFamily::Name("poppins_medium".into())),
+        "Born2BSalty's",
+        egui::FontId::new(9.0, egui::FontFamily::Name("poppins_medium".into())),
+        redesign_text_muted(palette),
+    );
+    painter.text(
+        egui::pos2(text_left, text_top + 13.0),
+        egui::Align2::LEFT_TOP,
+        "INFINITY",
+        egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into())),
         redesign_text_primary(palette),
     );
     painter.text(
-        egui::pos2(text_left, text_top + 14.0),
+        egui::pos2(text_left, text_top + 28.0),
         egui::Align2::LEFT_TOP,
-        "O R C H E S T R A T O R",
-        egui::FontId::new(9.0, egui::FontFamily::Proportional),
-        redesign_text_faint(palette),
+        "ORCHESTRATOR",
+        egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into())),
+        redesign_text_primary(palette),
     );
 }
 
