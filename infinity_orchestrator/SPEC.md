@@ -98,8 +98,8 @@ The redesign reframes BIO from a single-modlist linear wizard into a **multi-mod
 
 ### 1.2 Brand & visual language
 
-- App name: **Infinity Orchestrator** (BIO is the binary, project, and shorthand).
-- Brand mark: `∞` glyph on a teal-accent square.
+- App name: **Born2BSalty's Infinity Orchestrator** — the full name shown in the titlebar and rail wordmark. *Infinity Orchestrator* is the shorthand; *BIO* is the binary, project, and acronym.
+- Brand mark: the **BIO logo** (gear-infinity mark with a central sword) on a teal-accent (`#14B8A6`) rounded square — replaces the prior `∞` glyph.
 - Typography: **Poppins** for UI text, **FiraCode Nerd** for monospace/code/icon-glyphs. Both fonts are inlined into the build so the desktop app ships self-contained.
 - Themes: **Light** (pale blueprint paper, navy ink) and **Dark** (teal-on-deep-slate). Dark is the default. See [§12 Theming](#12-theming).
 - Sketchy/notebook aesthetic: 1.5px solid borders, 6×6px hard drop shadow, dotted radial background, rounded 3–6px corners.
@@ -120,7 +120,7 @@ The redesign reframes BIO from a single-modlist linear wizard into a **multi-mod
 | 4 | Settings | `⚙` | Global app settings (5 sub-tabs) |
 
 The left rail also shows:
-- Brand mark (`∞` square) + "INFINITY / ORCHESTRATOR" wordmark above the nav items.
+- Brand mark (BIO logo square) + **"Born2BSalty's Infinity Orchestrator"** wordmark (three lines: "BORN2BSALTY'S" faint 8px above "INFINITY" primary 10px above "ORCHESTRATOR" faint 9px) above the nav items. *(Intentional deviation: the canonical wireframe shows the `∞` mark and "INFINITY / ORCHESTRATOR" shorthand; the app intentionally shows the BIO logo and the full product name.)*
 - A status dot at the bottom: "weidu v249 · all paths ok" (green) when configured correctly, or red+error count when paths are missing/broken.
 - The rail renders in **labels** mode by default (icons + text). Icons-only is a wireframe-iteration variant only — not user-configurable in production (see [§14.2](#142-tweaks-panel)).
 - **Active item inside a Workspace = `Create`.** When the user is in a Workspace (reached via Home `resume`/`open` or Create), the rail highlights **Create**, matching the canonical wireframe (`app.jsx`: `resumeBuild` does `setActive("create")` and the Workspace renders inside the Create screen). The orchestrator routes the Workspace via `nav = Workspace { id }` rather than a Create-local stage, so the active-item resolver maps `Workspace` → the `Create` highlight to preserve that wireframe behavior.
