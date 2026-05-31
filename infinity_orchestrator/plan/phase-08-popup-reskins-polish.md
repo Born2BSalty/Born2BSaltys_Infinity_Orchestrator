@@ -10,7 +10,7 @@ This phase also wires the **residual** SPEC §13.12 flag policies — **#6 + #7 
 
 ## What ships after this phase
 
-- `cargo build --bin infinity_orchestrator --release` succeeds; the binary is feature-complete for v1 alpha.
+- `cargo build --bin BIO --release` succeeds; the binary is feature-complete for v1 alpha.
 - **Every workspace surface visually matches the wireframe.** Specifically:
   - **Step 2 tree** — component rows, parent rows, mod headers, header markers, compat pills, PROMPT pill, and the `compat_colors` / `parent_compat_summary` color palette all read from `redesign_*(palette)` accessors. Dark theme renders dark teal-on-slate; Light theme renders pale blueprint.
   - **Step 2 Details panel** — pane title, exact-log status banner, selection grid (Checked / State / Reason), paths grid (missing-amber on absent paths), package grid all read from redesign tokens.
@@ -360,8 +360,8 @@ Two-PR split: Part A = T14.1 + T14.2 + T14.3 (foundation — in-memory + on-disk
 
 #### Verification (cross-subtask)
 
-1. `cargo build --bin infinity_orchestrator --release` no-op rebuild at end of each subtask + at the umbrella close.
-2. `cargo build --bin BIO --release` continues to succeed; the legacy binary's behavior is unchanged.
+1. `cargo build --bin BIO --release` no-op rebuild at end of each subtask + at the umbrella close.
+2. `cargo build --bin BIO_legacy --release` continues to succeed; the legacy binary's behavior is unchanged.
 3. `cargo test --lib` count holds + each subtask's new tests land green.
 4. `git grep` for each retired identifier returns empty in orchestrator-owned files (the seven reset functions; `InstallScreenState`; `post_install_reset_gate`; `settings_sanitizer`; `bio::app::modlist_share::import_modlist_share_code` on orchestrator paths).
 5. **Widened DATA-LOSS sentinel** — `modlists.json` + every modlist's `workspace.json` + every modlist's three per-modlist TOMLs are byte-stable across the test suite, across a full modlist-A install, and across a fork-import targeting a fresh modlist-D.
@@ -568,7 +568,7 @@ Implement `src/ui/workspace/step3/step3_list_body.rs` with:
 
 Replace the `list_step3::render(...)` call at `workspace_step3.rs:65` with `step3_list_body::render(...)`. Add `pub mod step3_list_body;` to `src/ui/workspace/step3/mod.rs` (additive). Remove the `list_step3` import from `workspace_step3.rs` if it becomes unused.
 
-**Acceptance:** `cargo build --bin infinity_orchestrator --release` no-op rebuild. `cargo build --bin BIO --release` unchanged.
+**Acceptance:** `cargo build --bin BIO --release` no-op rebuild. `cargo build --bin BIO_legacy --release` unchanged.
 
 ### P8.T15 — Delivered (with iterations and follow-on carve-outs, 2026-05-27 → 2026-05-28)
 
@@ -633,8 +633,8 @@ The entries below carry no `P8.T*` id yet. A future planning pass promotes each 
 
 ## Verification
 
-1. `cargo build --bin infinity_orchestrator --release` succeeds.
-2. `cargo build --bin BIO --release` continues to succeed; the legacy wizard is unaffected. (`update_app.rs` / `app_nav_ui.rs` / other legacy-only files unchanged; their `theme_global::*()` accessors still resolve to BIO's original palette values.)
+1. `cargo build --bin BIO --release` succeeds.
+2. `cargo build --bin BIO_legacy --release` continues to succeed; the legacy wizard is unaffected. (`update_app.rs` / `app_nav_ui.rs` / other legacy-only files unchanged; their `theme_global::*()` accessors still resolve to BIO's original palette values.)
 3. Run the full Phase 5 / 6 / 7 verification checklists; everything still passes.
 4. Visit each popup in the orchestrator (Compat, Prompt, Update Check, OAuth) — each one renders with redesign tokens. The title-bar collapse chevron works; collapsing leaves the title bar pinned. Light theme also produces correct values.
 5. Open Step 2 in the workspace. Click components with compat issues. Verify: every compat pill (conflict, included, mismatch, order, warning) renders in `redesign_*(palette)` tones. The Details pane reads redesign tokens. The disabled-component dim text uses `redesign_text_disabled(palette)`.

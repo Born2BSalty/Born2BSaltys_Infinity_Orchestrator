@@ -6,7 +6,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 
 ## What ships after this phase
 
-- `cargo build --bin infinity_orchestrator --release` succeeds.
+- `cargo build --bin BIO --release` succeeds.
 - Clicking Home in the left rail opens the real Home screen:
   - Title "Welcome back, adventurer" + sub line "<N> modlists installed · <P> in progress · last played <game> <relative>".
   - 2-col grid: left = filter chips Box + cards; right = `add a modlist` Box + `game installs detected` block.
@@ -186,7 +186,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 
   **Generation is NOT in this run.** Run 4 is consume-only — the orchestrator never *writes* these fields here. The `pack_meta` generator (SPEC §13.3 Generation mechanism), the registry `ModlistEntry.author` / `forked_from`, and the fork-lineage append land in Phase 6 (Save Draft / fork) + Phase 7 (install-start, `flip_to_installed`). Until then every code lacks the trio, so the preview renders the fallback path in practice — but the display is forward-compatible and lights up automatically when generation ships (same additive model as `allow_auto_install`).
 - **Where:** `src/ui/install/stage_preview.rs` + new `src/ui/orchestrator/widgets/dialogs/fork_info_popup.rs` (`ForkInfoPopup`, reused by Phase 6's workspace header + fork-preview). `InstallScreenState` gains `fork_info_open: bool`; provenance + `allow_auto_install` are read off `parsed_preview` (the `ModlistSharePreview`). The cross-screen Create handoff is Phase 6.
-- **Acceptance:** A code carrying `name`/`author` shows them as title/subline; absent ⇒ `Shared modlist` / no author segment (no fabrication). A code with non-empty `forked_from` shows `⑂ fork info`; clicking opens `ForkInfoPopup` with the chain oldest→newest + the current node emphasized. `allow_auto_install = false` ⇒ banner + disabled Import + enabled `Open in Create →`; `true` / absent ⇒ normal enabled Import. `cargo build --bin BIO --release` still succeeds (the carve-out is behavior-neutral).
+- **Acceptance:** A code carrying `name`/`author` shows them as title/subline; absent ⇒ `Shared modlist` / no author segment (no fabrication). A code with non-empty `forked_from` shows `⑂ fork info`; clicking opens `ForkInfoPopup` with the chain oldest→newest + the current node emphasized. `allow_auto_install = false` ⇒ banner + disabled Import + enabled `Open in Create →`; `true` / absent ⇒ normal enabled Import. `cargo build --bin BIO_legacy --release` still succeeds (the carve-out is behavior-neutral).
 - **SPEC:** §4.2, §13.3 (Provenance + Generation mechanism), §10.9, §1 (carve-out #5 "Modlist-share provenance application").
 
 ### P5.T11 — Preview tabs
@@ -201,7 +201,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 - **What:** Ship the SPEC §4.3 `ImportDownloadScreen` as a forward-compatible **chassis**: `Box label="overall progress"` ("N / T mods · P%" + bar) + a 4-column grid (mod / source / status / progress) with per-row status vocabulary `queued` / `downloading <p>%` / `extracting...` / `✓ staged` (tones: faint=queued, normal=active, success-green=done) + footer `Cancel` (← back) and auto-advance to stage 4 when `DownloadProgress` reports all-staged. The grid renders from `InstallScreenState.download_progress`, which is **empty in Phase 5** (navigable, honest empty-state).
 - **Why live data is NOT in Phase 5 (corrected — this is not "BIO can't" and not "Install lacks paths"):** the per-mod download list only materializes as a byproduct of BIO's `import_modlist_share_code` → saved-log/auto-build pipeline (scan → apply weidu.log → update-check resolves each mod from the imported source config into an asset → download → extract → **install**). That pipeline *terminates in the install runtime* and depends on the per-install directory architecture + content-addressed archive staging — all of which is **Phase 7** (SPEC §13.12a, plan P7.T17). The global paths it needs are already in Settings → Paths (§11.2) and reach the orchestrator's `WizardState` via the established settings-sync — the Install screen does not collect them. Phase 5 has no install runtime, so the chassis is the correct Phase-5 deliverable; it lights up automatically when P7.T17 binds live progress (same additive model Phase 5 used for provenance generation).
 - **Where:** `src/ui/install/stage_downloading.rs` (chassis; reusable — Phase 6 fork-download reuses it via `DownloadScreenCopy`). Phase 7 P7.T17 edits this same file to bind live `Step2UpdateDownloadEvent`/`Step2UpdateExtractEvent` progress.
-- **Acceptance (Run 5 = chassis):** From Preview, `Import Modlist →` (enabled code) → Downloading renders the overall-progress Box + 4-col grid (empty/"no mods queued") + Cancel → Preview; auto-advance path to the stage-4 stub exists. `cargo build --bin BIO --release` clean (zero BIO source touched this run). Live per-mod progress + content-addressed archives = P7.T17 acceptance.
+- **Acceptance (Run 5 = chassis):** From Preview, `Import Modlist →` (enabled code) → Downloading renders the overall-progress Box + 4-col grid (empty/"no mods queued") + Cancel → Preview; auto-advance path to the stage-4 stub exists. `cargo build --bin BIO_legacy --release` clean (zero BIO source touched this run). Live per-mod progress + content-addressed archives = P7.T17 acceptance.
 - **SPEC:** §4.3 (Phasing note), §13.12a (directory architecture + pipeline-reuse contract); live wiring → plan P7.T17.
 
 ### P5.T13 — `Install` stage 4 stub
@@ -255,7 +255,7 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 
 ## Verification
 
-1. `cargo build --bin infinity_orchestrator --release` succeeds.
+1. `cargo build --bin BIO --release` succeeds.
 2. Launch with empty registry: Home shows the first-launch setup CTA.
 3. Click `Open Settings` → lands on Settings → Paths.
 4. Use the Phase-3 dev `Seed test modlist (dev)` button to create one in-progress + one installed entry. Return to Home: filter chips show `(1)` and `(1)`, cards render with correct meta lines.
@@ -264,4 +264,4 @@ Build the Home screen (filter chips, modlist cards, Add-a-modlist Box, game-inst
 7. Click `paste import code` → Install opens. Paste a known good share code, click `Preview →`. Preview shows tabs with parsed content. Click `Import Modlist →` → the Downloading **chassis** renders (overall-progress Box + 4-col grid, empty in Phase 5) and `Cancel` returns to Preview; the stage-4 stub is reachable via the auto-advance path. (Live per-mod download data + content-addressed archives = Phase 7 P7.T17 / SPEC §13.12a — not exercised in Phase 5.)
 8. Provenance: a pre-redesign / third-party code (no packed fields) shows title `Shared modlist`, no `by @…` segment, no `⑂ fork info` button — and `cargo test --lib` confirms the serde-default round-trip is behavior-neutral. (Codes that *carry* the trio only exist once Phase 6/7 generation ships; the display path is verified here, populated later.)
 9. Navigate freely between Home / Install / Settings; no state loss.
-10. `cargo build --bin BIO --release` continues to succeed; the legacy wizard is unaffected (carve-out #5 is schema-additive + behavior-neutral).
+10. `cargo build --bin BIO_legacy --release` continues to succeed; the legacy wizard is unaffected (carve-out #5 is schema-additive + behavior-neutral).

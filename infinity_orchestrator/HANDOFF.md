@@ -93,8 +93,8 @@ After phases 5–8 land, the binary is feature-complete per the SPEC (modulo the
 ## What ships today
 
 - Two binaries coexist:
-  - `BIO` — the legacy linear-wizard app, untouched in behavior, still launches from `cargo run --bin BIO`.
-  - `infinity_orchestrator` — the new redesigned app, launches from `cargo run --bin infinity_orchestrator`.
+  - `BIO_legacy` — the legacy linear-wizard app, untouched in behavior, still launches from `cargo run --bin BIO_legacy`.
+  - `BIO` — the new redesigned app, launches from `cargo run --bin BIO`.
 - Builds natively on Windows, Linux (Ubuntu CI), and macOS. Cross-compilation has known toolchain issues — see *Windows builds* below for the historical detail.
 - 515/515 lib tests pass.
 - Cargo version `0.1.0-Alpha.1`.
@@ -126,8 +126,8 @@ Required toolchains (Windows / Linux / macOS — all native, no cross-compile):
 Build / test commands:
 
 ```bash
+cargo build --bin BIO_legacy --release
 cargo build --bin BIO --release
-cargo build --bin infinity_orchestrator --release
 cargo test --lib
 ```
 
@@ -136,14 +136,14 @@ Both binaries land in `target/release/`.
 Run the orchestrator:
 
 ```bash
-./target/release/infinity_orchestrator        # production mode
-./target/release/infinity_orchestrator -d     # dev mode (diagnostics export + extra logging)
+./target/release/BIO        # production mode
+./target/release/BIO -d     # dev mode (diagnostics export + extra logging)
 ```
 
 Logging level is controlled via `--log-level {trace|debug|info|warn|error}` (default `info`). Note that `RUST_LOG` is not read by this codebase — use the CLI flag. On Windows, capture logs via PowerShell:
 
 ```powershell
-& .\target\release\infinity_orchestrator.exe -d 2>&1 | Tee-Object -FilePath log.txt
+& .\target\release\BIO.exe -d 2>&1 | Tee-Object -FilePath log.txt
 ```
 
 ---
@@ -243,8 +243,8 @@ assets/
 └── icon.png                            # cross-platform
 
 target/release/
-├── BIO                                 # existing binary, ~26 MB
-└── infinity_orchestrator               # new binary, ~11 MB after Phase 4
+├── BIO_legacy                          # legacy wizard binary, ~26 MB
+└── BIO                                 # new redesigned binary, ~11 MB after Phase 4
 
 vendor/
 └── lapdu-parser-rust-master/           # vendored TP2 parser (needs Java for ANTLR codegen)
@@ -411,9 +411,9 @@ For each remaining phase (5–8), the recommended flow is:
 3. Read the matching wireframe components in `wireframe-preview/screens.jsx` directly — don't paraphrase through the spec for visual values.
 4. Read the specific BIO files the phase doc cites; explore `src/core/app/` and `src/ui/` directly for codebase orientation.
 5. Implement the phase's tasks in order. Strictly additive new files except where the phase explicitly authorizes a carve-out.
-6. After each task, `cargo build --bin infinity_orchestrator --release` and visually verify against the wireframe.
+6. After each task, `cargo build --bin BIO --release` and visually verify against the wireframe.
 7. Run `cargo test --lib` regularly — 116/116 should pass plus whatever new tests the phase adds.
-8. End each phase with `cargo build --bin BIO --release` to confirm the legacy binary is still unaffected.
+8. End each phase with `cargo build --bin BIO_legacy --release` to confirm the legacy binary is still unaffected.
 
 ### Sample implementation-agent prompt template
 
@@ -447,8 +447,8 @@ your final report — don't invent fixes; flag them.
 After each task / at end of phase:
 
   export PATH="/opt/homebrew/opt/openjdk/bin:$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"
+  cargo build --bin BIO_legacy --release
   cargo build --bin BIO --release
-  cargo build --bin infinity_orchestrator --release
   cargo test --lib
 
 Both binaries must build clean. Tests must pass.
@@ -458,7 +458,7 @@ Both binaries must build clean. Tests must pass.
 1. Tasks completed (P_N.T# with file paths).
 2. Discrepancies surfaced.
 3. Build result.
-4. Run result (`./target/release/infinity_orchestrator` stays alive past
+4. Run result (`./target/release/BIO` stays alive past
    window-open with no panic).
 5. Files created / modified.
 
@@ -485,7 +485,7 @@ These tripped us up in earlier phases; flagging so future phases can avoid them.
 
 ## Windows builds
 
-Native Windows is the primary development platform — `cargo build --bin infinity_orchestrator --release` runs without issue on any real Windows machine. Linux (Ubuntu CI) and macOS native builds also work.
+Native Windows is the primary development platform — `cargo build --bin BIO --release` runs without issue on any real Windows machine. Linux (Ubuntu CI) and macOS native builds also work.
 
 **Cross-compilation is the only known issue.** The `unrar-sys` crate has heavy Windows-native C++ build assumptions; targeting Windows from macOS / Linux fails under MinGW (missing Win32 symbols, pthread static-vs-dynamic conflicts), `cross` (Docker MinGW header-case sensitivity on `PowrProf.h`), and `cargo-xwin` (SSSE3 intrinsics in `unrar-sys` need `-mssse3`, not propagatable via env vars). Use the native toolchain on each platform — or GitHub Actions on `windows-latest` / `ubuntu-latest` / `macos-latest` for release artifacts. The repo's CI already runs the Ubuntu native build (`cargo test --all-targets --locked`).
 

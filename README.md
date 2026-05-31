@@ -35,7 +35,7 @@ BIO scans TP2 components, lets you select and reorder installs, validates compat
 1. Download the BIO release zip and extract it.
 2. Download weidu installer at https://github.com/WeiDUorg/weidu
 3. Download Mod installer at https://github.com/dark0dave/mod_installer
-4. Launch BIO.exe.
+4. Launch BIO_legacy.exe.
 5. In Step 1, set:
 - your game mode (BGEE, BG2EE, or EET)
 - path to your Mods Folder (location of your extracted downloads)
@@ -48,8 +48,8 @@ BIO scans TP2 components, lets you select and reorder installs, validates compat
 7. Go to Step 5, run install.
 
 If you run BIO for the first time and want to help fix things faster, run BIO in dev mode:
-- Windows cmd: BIO.exe -d gui | or have "-d gui" added to the BIO shortcut of the exe! example  Target: <E:\downloads\BIO.exe -d gui>
-- Linux/macOS: ./BIO -d gui
+- Windows cmd: BIO_legacy.exe -d gui | or have "-d gui" added to the BIO_legacy shortcut of the exe! example  Target: <E:\downloads\BIO_legacy.exe -d gui>
+- Linux/macOS: ./BIO_legacy -d gui
 
 
 ## Wizard Overview
@@ -142,13 +142,13 @@ Build:
 cargo build --release
 
 Run GUI:
-./target/release/BIO.exe
+./target/release/BIO_legacy.exe
 
 Linux/macOS binary:
-./target/release/BIO
+./target/release/BIO_legacy
 
 Dev mode:
-./target/release/BIO.exe -d gui
+./target/release/BIO_legacy.exe -d gui
 
 
 ## @wlb-inputs Prompt Auto-Input
@@ -248,11 +248,11 @@ Supported subcommands:
 
 Examples:
 
-BIO.exe scan components --game-directory "D:\Games\BG2EE" --mod-directories "D:\Modding\Mods Folder"
-BIO scan components --game-directory "/games/BG2EE" --mod-directories "/mods"
-BIO.exe scan languages --mod-directories "D:\Modding\Mods Folder"
-BIO.exe normal --log-file "D:\Logs\BG2\weidu.log" --game-directory "D:\Games\BG2EE"
-BIO.exe eet --bg1-game-directory "D:\Games\BGEE" --bg1-log-file "D:\Logs\BG1\weidu.log" --bg2-game-directory "D:
+BIO_legacy.exe scan components --game-directory "D:\Games\BG2EE" --mod-directories "D:\Modding\Mods Folder"
+BIO_legacy scan components --game-directory "/games/BG2EE" --mod-directories "/mods"
+BIO_legacy.exe scan languages --mod-directories "D:\Modding\Mods Folder"
+BIO_legacy.exe normal --log-file "D:\Logs\BG2\weidu.log" --game-directory "D:\Games\BG2EE"
+BIO_legacy.exe eet --bg1-game-directory "D:\Games\BGEE" --bg1-log-file "D:\Logs\BG1\weidu.log" --bg2-game-directory "D:
 \Games\BG2EE" --bg2-log-file "D:\Logs\BG2\weidu.log"
 
 

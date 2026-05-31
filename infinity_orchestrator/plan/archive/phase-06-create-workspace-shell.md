@@ -10,7 +10,7 @@ The previous plan's "orchestrator bridge" (which translated between a per-modlis
 
 ## What ships after this phase
 
-- `cargo build --bin infinity_orchestrator --release` succeeds.
+- `cargo build --bin BIO --release` succeeds.
 - Clicking Create in the left rail opens the real Create screen:
   - Title row with `Create / edit modlist` + `load draft` button.
   - Setup Box: modlist-name input + game ComboBox (default EET) + destination FolderInput + `DestinationNotEmptyWarning` when applicable.
@@ -446,7 +446,7 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
 
 ## Verification
 
-1. `cargo build --bin infinity_orchestrator --release` succeeds.
+1. `cargo build --bin BIO --release` succeeds.
 2. From Home (empty registry), click `create your own` → Create opens.
 3. Fill name "Test EET", game = EET (default), pick a destination, click `start →`. Workspace opens with `Editing Test EET` in header + 4-step progress bar showing Step 2 active. Confirm `wizard_state.step1.game_install == EET` is in-memory only — `bio_settings.json` on disk has not been written to with this value.
 4. In Step 2: scan mods, toggle a checkbox; verify the change persists by clicking save draft (`✓ saved!` flash) and inspecting `modlists/<id>/workspace.json`.
@@ -457,4 +457,4 @@ The `src/ui/workspace/step2_log_glue.rs` sibling owns the `rfd::FileDialog` + se
 9. Click `load draft` from Create: dialog lists the in-progress build. Click `resume`: workspace opens at Step 2.
 10. Rename via ✎ icon: header label updates; registry file shows new name; install folder on disk is unchanged.
 11. Create a second modlist with game = BGEE. Open it: only one game tab shows in Step 2 / Step 4 (not two). Switch to the first modlist: two tabs return. Confirm `bio_settings.json` is unchanged.
-12. `cargo build --bin BIO --release` continues to succeed; the legacy wizard is unaffected. Confirm: launching `BIO` and navigating to Step 4 renders BIO's existing `page_step4` (not the orchestrator's wrapper) — the two binaries' Step 4 renderings differ visually, and that's the intended split.
+12. `cargo build --bin BIO_legacy --release` continues to succeed; the legacy wizard is unaffected. Confirm: launching `BIO_legacy` and navigating to Step 4 renders BIO's existing `page_step4` (not the orchestrator's wrapper) — the two binaries' Step 4 renderings differ visually, and that's the intended split.

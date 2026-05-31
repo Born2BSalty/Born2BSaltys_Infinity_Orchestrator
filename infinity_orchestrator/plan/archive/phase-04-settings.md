@@ -6,7 +6,7 @@ Build the new top-level Settings screen with five file-folder tabs (General, Pat
 
 ## What ships after this phase
 
-- `cargo build --bin infinity_orchestrator --release` succeeds.
+- `cargo build --bin BIO --release` succeeds.
 - Clicking Settings in the left rail opens the redesigned Settings screen.
 - Five file-folder tabs at the top, the active tab visually merged with a single Box below.
 - **General** sub-tab: NameRow + 2-col grid of Theme (segmented light/dark), Language (ComboBox), Validate-all-paths-on-startup (Toggle), Diagnostic mode (Toggle). Theme toggle writes `OrchestratorApp::theme_palette = ThemePalette::Light/Dark` and persists the choice into `RedesignSettings`; the next frame's `OrchestratorApp::update` applies it.
@@ -196,7 +196,7 @@ If the GitHub OAuth popup renderer or flow-runner functions turn out to be `pub(
 
 ## Verification
 
-1. `cargo build --bin infinity_orchestrator --release` succeeds.
+1. `cargo build --bin BIO --release` succeeds.
 2. Launch the app, click Settings: the screen renders with five tabs.
 3. Switch tabs: each renders without panics.
 4. Theme tab: toggle light/dark, observe the entire app re-color.
@@ -204,4 +204,4 @@ If the GitHub OAuth popup renderer or flow-runner functions turn out to be `pub(
 6. Paths tab: click `Validate now`, observe the row's hint update + the left-rail status line update.
 7. Accounts tab: click GitHub `connect`, the OAuth popup opens. Completing the flow flips the card to `connected as <name>`.
 8. Restart the app: the user name (NameRow), theme, language, and all path values persist.
-9. `cargo build --bin BIO --release` continues to succeed; the legacy wizard is unaffected.
+9. `cargo build --bin BIO_legacy --release` continues to succeed; the legacy wizard is unaffected.

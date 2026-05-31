@@ -8,13 +8,13 @@ Phase 2 wires the shell chrome (titlebar + statusbar from Phase 1) around `Orche
 
 ## What ships after this phase
 
-- `cargo build --bin infinity_orchestrator --release` succeeds; the binary launches.
+- `cargo build --bin BIO --release` succeeds; the binary launches.
 - The app opens with the new outer shell: titlebar, left rail (200px wide, labels mode), main pane, statusbar.
 - Left rail shows the brand mark (`∞` glyph in a teal-accent rounded square), wordmark "INFINITY / ORCHESTRATOR", four nav items (Home / Install / Create / Settings), and a bottom status dot reading `weidu v<detected> · all paths ok` (green) or `× paths missing` (red).
 - Clicking each of the four nav items navigates between four stub pages. Each stub shows a `ScreenTitle` ("Home", "Install Modlist", "Create / edit modlist", "Settings") plus a faint line "Coming in Phase N — see SPEC §<ref>". Settings stub mentions Phase 4; Home stub Phase 5; Install Phase 5; Create Phase 6.
 - A fifth destination `Workspace` exists but is only reachable from a dev-mode button on the Home stub (`Open workspace stub (dev)`) — it renders "Workspace — Phase 6" as a placeholder. **It does not host `WizardApp`.** In Phase 6 the orchestrator's Workspace destination calls BIO's per-step page renderers directly with the orchestrator's own `WizardState`.
 - Navigating between destinations does not crash. Returning to a destination restores its scroll position (within reason — full state restoration is a Phase 6 concern).
-- `cargo build --bin BIO --release` continues to compile and launch the existing wizard unchanged (the Phase 1 carve-out #3 shim already ensures this).
+- `cargo build --bin BIO_legacy --release` continues to compile and launch the existing wizard unchanged (the Phase 1 carve-out #3 shim already ensures this).
 
 ## What's still missing
 
@@ -175,7 +175,7 @@ The previous plan's `main.rs` dispatch-flip is removed; no CRITICAL DIRECTIVE ca
   ```
   The `OrchestratorApp::new(dev_mode)` constructor lives in Phase 2's `orchestrator_app.rs`. Fonts are installed before typography (H7 ordering).
 - **Where:** Edit `src/bin/infinity_orchestrator.rs` (a Phase 1 new file — editable in subsequent phases).
-- **Acceptance:** `cargo run --bin infinity_orchestrator` launches the orchestrator shell. Titlebar + rail + body + statusbar all visible.
+- **Acceptance:** `cargo run --bin BIO` launches the orchestrator shell. Titlebar + rail + body + statusbar all visible.
 - **SPEC:** §2.1, overview "Architecture" section.
 
 ### P2.T8 — Status line on left rail
@@ -194,8 +194,8 @@ The previous plan's `main.rs` dispatch-flip is removed; no CRITICAL DIRECTIVE ca
 
 ## Verification
 
-1. `cargo build --bin infinity_orchestrator --release` succeeds.
-2. `cargo build --bin BIO --release` continues to succeed.
+1. `cargo build --bin BIO --release` succeeds.
+2. `cargo build --bin BIO_legacy --release` continues to succeed.
 3. Launch the orchestrator: titlebar + left rail + main panel + statusbar render.
 4. Click each of the four nav items: each stub page renders with its `ScreenTitle`.
 5. From the Home stub's `Open workspace stub (dev)` button (dev mode only), navigate to Workspace: the workspace stub renders. Click Home again: Home stub re-renders.

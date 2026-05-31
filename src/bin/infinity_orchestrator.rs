@@ -18,7 +18,7 @@ const WINDOW_MIN_WIDTH: f32 = 1024.0;
 const WINDOW_MIN_HEIGHT: f32 = 700.0;
 
 #[derive(Parser, Debug)]
-#[command(name = "infinity_orchestrator")]
+#[command(name = "BIO")]
 #[command(version)]
 #[command(about = "Infinity Orchestrator — the redesigned BIO frontend (alpha)")]
 struct OrchestratorCli {

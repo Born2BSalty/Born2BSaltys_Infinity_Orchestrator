@@ -12,11 +12,11 @@ name = "bio"
 path = "src/lib.rs"
 
 [[bin]]
-name = "BIO"
+name = "BIO_legacy"
 path = "src/main.rs"
 
 [[bin]]
-name = "infinity_orchestrator"
+name = "BIO"
 path = "src/bin/infinity_orchestrator.rs"
 
 [dependencies]
