@@ -1,7 +1,7 @@
 # Born2BSalty's Infinity Orchestrator (BIO)    (Work in progress!!)
 ## Beginner's Guide (No Coding Needed)
 
-This guide is for people who only use the released app (BIO.exe / app build), not source code.
+This guide is for people who only use the released app (BIO_legacy.exe / app build), not source code.
 
 ## What BIO Does
 
@@ -17,17 +17,17 @@ BIO helps you:
 Before troubleshooting, run BIO in dev mode so diagnostics can be exported and shared.
 
 - Windows (cmd)
-1. Open the folder where BIO.exe is.
+1. Open the folder where BIO_legacy.exe is.
 2. Click the address bar, type cmd, then press Enter.
 3. In the black window, run:
-    BIO.exe -d gui
+    BIO_legacy.exe -d gui
 
 - Linux/macOS
 1. Open Terminal.
 2. Go to the BIO folder:
     cd "/path/to/BIO/folder"
 3. Run:
-    ./BIO -d gui
+    ./BIO_legacy -d gui
 
 ## First-Time Setup (Quick Start)
 
@@ -46,7 +46,7 @@ You do **not** need source folders to use BIO.
 ## OS Notes
 
 ## Windows
-- Run BIO.exe.
+- Run BIO_legacy.exe.
 - Use full paths like D:\Modding\....
 - Typical binaries: weidu.exe and your installer exe.
 
@@ -150,7 +150,7 @@ If you want help, do this exactly:
 3. Command Prompt opens already in the BIO folder.
 4. Run:
 
-- BIO.exe -d gui
+- BIO_legacy.exe -d gui
 
 - Set RUST_LOG=DEBUG (or TRACE if requested)
 

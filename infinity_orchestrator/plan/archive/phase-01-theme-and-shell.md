@@ -13,8 +13,8 @@ The legacy `BIO` binary continues to dispatch through `bio::ui::run` → `Wizard
 
 ## What ships after this phase
 
-- `cargo build --bin BIO --release` succeeds — produces the existing `BIO` binary, behaviorally unchanged. (`src/main.rs` is now a thin shim but its runtime behavior is identical.)
-- `cargo build --bin infinity_orchestrator --release` succeeds — produces a new binary that launches an empty placeholder eframe window with the title "Infinity Orchestrator (Phase 1 stub)" centered in 13px Poppins on the redesign's dark-palette `page_bg` color.
+- `cargo build --bin BIO_legacy --release` succeeds — produces the existing `BIO_legacy` binary, behaviorally unchanged. (`src/main.rs` is now a thin shim but its runtime behavior is identical.)
+- `cargo build --bin BIO --release` succeeds — produces a new binary that launches an empty placeholder eframe window with the title "Infinity Orchestrator (Phase 1 stub)" centered in 13px Poppins on the redesign's dark-palette `page_bg` color.
 - `cargo build` (no target flag) builds both binaries.
 - Both binaries coexist in `target/release/`.
 - Dark theme is the default; Light theme tokens are present in the palette enum but not yet user-switchable.
@@ -146,9 +146,9 @@ Both binaries link the `bio` library. The `bio` crate name matches today's `[pac
   3. **Edit `Cargo.toml`** to add the `[lib]` block and the new `[[bin]]` block per the section above.
 - **Where:** `src/lib.rs` (new), `src/main.rs` (slim down), `Cargo.toml` (add `[lib]` + `[[bin]]`).
 - **Acceptance:**
-  - `cargo build --bin BIO --release` succeeds with no behavior change. Launching `target/release/BIO` produces the existing wizard UI.
+  - `cargo build --bin BIO_legacy --release` succeeds with no behavior change. Launching `target/release/BIO_legacy` produces the existing wizard UI.
   - `cargo build --lib --release` succeeds (the library compiles standalone).
-  - `cargo build --bin infinity_orchestrator --release` produces an empty binary (P1.T8 fills in the placeholder app).
+  - `cargo build --bin BIO --release` produces an empty binary (P1.T8 fills in the placeholder app).
   - `git diff src/main.rs` shows only: the `mod` block deleted, three `use` lines rewritten `crate::` → `bio::`, two dispatch call sites rewritten `crate::` → `bio::`. No other change.
 - **SPEC:** §1 CRITICAL DIRECTIVE carve-out #3, overview "Architecture" section.
 
@@ -246,12 +246,12 @@ The previous Phase 1 plan had a separate task to add `[[bin]] name = "infinity_o
 
   **Dev-mode resolution (per M12):** Phase 1's placeholder uses just the CLI flag for `dev_mode`. From Phase 4 onward, `OrchestratorApp::dev_mode = cli_flag || redesign_settings.diagnostic_mode` — the CLI flag `-d` and the Settings → General Diagnostic mode toggle both enable dev mode; either one is sufficient. On app launch, the toggle's persisted value is OR'd with the CLI flag. Phase 4's P4.T2 wires the runtime toggle.
 - **Where:** Create `src/bin/infinity_orchestrator.rs`. The directory `src/bin/` is new; verify it before creation with `ls src/` (the registered shell tool).
-- **Acceptance:** `cargo run --bin infinity_orchestrator` opens an eframe window with the dark `page_bg` and the centered placeholder label. The label renders in Poppins. The window closes cleanly. `cargo build --bin BIO` still works.
+- **Acceptance:** `cargo run --bin BIO` opens an eframe window with the dark `page_bg` and the centered placeholder label. The label renders in Poppins. The window closes cleanly. `cargo build --bin BIO_legacy` still works.
 - **SPEC:** §1 (CRITICAL DIRECTIVE), overview "Architecture" section.
 
 ### P1.T9 — Acceptance smoke test
 
-- **What:** Run `cargo build --bin BIO --release` and `cargo build --bin infinity_orchestrator --release` and `cargo build --lib --release`. Launch each binary. Confirm `BIO` still renders the wizard Step 1 normally (the carve-out #3 shim preserves behavior). Confirm `infinity_orchestrator` renders the placeholder. Run `cargo test --lib` for the new font-registration test from P1.T1.
+- **What:** Run `cargo build --bin BIO_legacy --release` and `cargo build --bin BIO --release` and `cargo build --lib --release`. Launch each binary. Confirm `BIO_legacy` still renders the wizard Step 1 normally (the carve-out #3 shim preserves behavior). Confirm `BIO` renders the placeholder. Run `cargo test --lib` for the new font-registration test from P1.T1.
 - **Where:** Manual verification.
 - **Acceptance:** All three builds succeed, neither binary panics on launch, the font-registration test passes. `git diff src/main.rs` shows only the mechanical mod-block deletion and the `crate::` → `bio::` path rewrite.
 
@@ -265,10 +265,10 @@ The previous Phase 1 plan had a separate task to add `[[bin]] name = "infinity_o
 
 ## Verification
 
-1. `cargo build --bin BIO --release` succeeds with no new warnings. Run `target/release/BIO`: existing wizard renders unchanged.
-2. `cargo build --bin infinity_orchestrator --release` succeeds. Run `target/release/infinity_orchestrator`: placeholder window renders with the dark palette and Poppins label.
+1. `cargo build --bin BIO_legacy --release` succeeds with no new warnings. Run `target/release/BIO_legacy`: existing wizard renders unchanged.
+2. `cargo build --bin BIO --release` succeeds. Run `target/release/BIO`: placeholder window renders with the dark palette and Poppins label.
 3. `cargo build --lib --release` succeeds (library compiles standalone).
 4. `cargo test --lib` — the new font registration test passes.
 5. `git diff src/main.rs`: shows only the carve-out #3 mechanical changes (mod block deletion + path rewrites). No logic edits.
-6. `git diff Cargo.toml`: shows the new `[lib]` block + the new `[[bin]] name = "infinity_orchestrator"` block. The existing `[[bin]] name = "BIO"` block stays.
-7. `grep -r "Poppins\|FiraCode" target/release/infinity_orchestrator` confirms the fonts are bundled into the new binary.
+6. `git diff Cargo.toml`: shows the new `[lib]` block + the new `[[bin]] name = "BIO"` block. The existing `[[bin]] name = "BIO_legacy"` block stays.
+7. `grep -r "Poppins\|FiraCode" target/release/BIO` confirms the fonts are bundled into the new binary.

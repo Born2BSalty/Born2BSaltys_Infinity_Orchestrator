@@ -8,12 +8,12 @@ Add the data layer for the multi-modlist redesign: a `modlists.json` registry in
 
 **Framing note (per L4).** Phase 3 is a foundational phase. The binary compiles and runs but Phase 3 alone does not produce user-facing value — that arrives in Phase 5 (Home reads the registry; cards render real entries). Phase 3's exit criteria is "registry plumbing works end-to-end via the dev seed button." The phasing philosophy at the top of `overview.md` continues to apply (each phase must leave the binary in an alpha-shippable state — Phase 3 ships a binary that compiles, launches, and exercises the registry path via dev-only UI; it just doesn't yet expose the registry through production-facing screens).
 
-- `cargo build --bin infinity_orchestrator --release` succeeds.
+- `cargo build --bin BIO --release` succeeds.
 - App launches; on first run, no `modlists.json` exists yet — the app continues normally (registry treated as empty).
 - A dev-mode-only Home stub action `Seed test modlist (dev)` button is added that creates a fake registry entry + workspace file, demonstrating round-trip persistence. After restart, the file is still on disk.
 - Manually corrupting `modlists.json` (e.g., writing `{ not json` to the file via terminal) results in a terminal error screen on next launch: a full-pane error panel reading `modlist registry is corrupt or unreadable` + the path + the parse failure + a non-actionable `Restore from backup or delete the file to continue` line. No silent recovery.
 - The orchestrator's persistence cycle writes registry + per-modlist files at a debounce cadence comparable to BIO's existing Step 1 settings cycle (~1s debounce, flush on exit via `eframe::App::on_exit` + `Drop` fallback).
-- `cargo build --bin BIO --release` is unaffected.
+- `cargo build --bin BIO_legacy --release` is unaffected.
 
 ## What's still missing
 
@@ -164,11 +164,11 @@ The previous plan's "Phase 3 extends the existing persist cycle" wording is remo
 
 ## Verification
 
-1. `cargo build --bin infinity_orchestrator --release` succeeds.
+1. `cargo build --bin BIO --release` succeeds.
 2. `cargo test --lib registry` passes (unit tests for round-trip, error variants, atomic rename).
 3. Launch the app; statusbar shows `0 modlists`.
 4. In dev mode, click `Seed test modlist (dev)` from Home stub: statusbar bumps to `1 modlists`. Inspect `<config_dir>/modlists.json` and `<config_dir>/modlists/<id>/workspace.json` — both exist and are valid JSON.
 5. Kill the app via the window close button (`on_exit` path); pending writes flush. Relaunch: seeded entry is still present.
 6. Kill the app, corrupt `modlists.json` by writing `{ bad`, relaunch: the terminal error panel renders.
 7. Restore the file (delete or fix manually), relaunch: app comes up normally.
-8. `cargo build --bin BIO --release` continues to succeed and the legacy wizard launches unchanged.
+8. `cargo build --bin BIO_legacy --release` continues to succeed and the legacy wizard launches unchanged.

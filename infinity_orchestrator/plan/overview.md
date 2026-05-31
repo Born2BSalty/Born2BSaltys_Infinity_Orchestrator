@@ -179,20 +179,20 @@ name = "bio"
 path = "src/lib.rs"
 
 [[bin]]
-name = "infinity_orchestrator"
+name = "BIO"
 path = "src/bin/infinity_orchestrator.rs"
 ```
 
-The existing `[[bin]] name = "BIO" path = "src/main.rs"` block stays in place. The new binary's `main` constructs and runs `OrchestratorApp` via `eframe::run_native`. Development command: `cargo run --bin infinity_orchestrator`. Release artifact: `target/release/infinity_orchestrator` (or `.exe` on Windows).
+The existing `[[bin]] name = "BIO_legacy" path = "src/main.rs"` block stays in place. The new binary's `main` constructs and runs `OrchestratorApp` via `eframe::run_native`. Development command: `cargo run --bin BIO`. Release artifact: `target/release/BIO` (or `.exe` on Windows).
 
 ## Phasing philosophy
 
 Every phase in this plan must leave the **new binary** in an **alpha-shippable** state. After merging phase N:
 
-- `cargo build --bin infinity_orchestrator --release` succeeds.
-- `target/release/infinity_orchestrator` (or `.exe`) launches and runs without panics in the codepaths exposed at that phase.
+- `cargo build --bin BIO --release` succeeds.
+- `target/release/BIO` (or `.exe`) launches and runs without panics in the codepaths exposed at that phase.
 - The user can navigate around the surfaces this phase introduces. Features that depend on later phases may be stubbed (button visible, click is a no-op with a clear "Coming in phase X" hint, or button disabled) but the app must not crash.
-- The legacy `BIO` binary continues to compile and run as today. After Phase 1's structural split, `src/main.rs` is a thin shim that calls `bio::ui::run` (legacy path) — behavior is bit-for-bit identical to today.
+- The legacy `BIO_legacy` binary continues to compile and run as today. After Phase 1's structural split, `src/main.rs` is a thin shim that calls `bio::ui::run` (legacy path) — behavior is bit-for-bit identical to today.
 
 Phases progress **foundation → shell → data → screens → runtime → polish**. No phase introduces a backwards-incompatible change to a data file or public API touched by a previous phase. When a phase needs to extend a struct from a prior phase, it does so additively (new fields default to existing behavior).
 
@@ -245,7 +245,7 @@ Each phase doc has the following sections — read them in order:
    - *BIO files needing allowed mild refactor* — the rare exceptions, each with a one-line justification for which CRITICAL DIRECTIVE carve-out applies (#1 theme-token extraction, #2 `.collapsible()` window-chrome flip, #3 structural split, #4 WizardApp → WizardState refactor). If a task is not justified by one of those four carve-outs, it does not belong here — extract the behavior to a net-new component instead.
 6. **Implementation tasks** — numbered list of `P<phase>.T<task>` units. Each task names a file, a location (line range, function name, or "create new file"), an acceptance criterion, and the SPEC §number it traces to.
 7. **Open questions / risks** — escalate before implementing.
-8. **Verification** — `cargo build --bin infinity_orchestrator` plus manual smoke checks.
+8. **Verification** — `cargo build --bin BIO` plus manual smoke checks.
 
 ### Acceptance criteria
 
