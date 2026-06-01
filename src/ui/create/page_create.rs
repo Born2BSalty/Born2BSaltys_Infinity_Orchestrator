@@ -424,6 +424,10 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
         }
     };
 
+    orchestrator
+        .notification_manager
+        .success(format!("Created \"{}\"", entry.name));
+
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
     let workspace_state = ModlistWorkspaceState {
         scratch_mods_folder: Some(scratch_mods_folder),
@@ -515,6 +519,14 @@ fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
 }
 
 fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, id: String) {
+    let name = orchestrator
+        .registry
+        .find(&id)
+        .map_or_else(|| "modlist".to_string(), |e| e.name.clone());
+    orchestrator
+        .notification_manager
+        .success(format!("Imported \"{name}\" \u{2014} ready to edit"));
+
     orchestrator.reset_install_screen_to_paste();
     orchestrator.create_screen_state.fork_code.clear();
     orchestrator.create_screen_state.clear_fork_preview();
@@ -532,7 +544,26 @@ fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, 
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
+    use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
+    use crate::registry::store::RegistryStore;
+    use egui_toast::ToastKind;
+
+    static CREATETEST_TMP: AtomicU64 = AtomicU64::new(0);
+
+    fn orch_for_create_test() -> OrchestratorApp {
+        let mut app = OrchestratorApp::new(false);
+        let tmp = std::env::temp_dir().join(format!(
+            "bio_createtest_{}_{}.json",
+            std::process::id(),
+            CREATETEST_TMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        app.registry_store = RegistryStore::new_with_path(tmp);
+        app.registry = ModlistRegistry::default();
+        app
+    }
 
     #[test]
     fn destination_choices_that_touch_disk_run_on_worker() {
@@ -542,5 +573,33 @@ mod tests {
             DestChoice::Continue
         )));
         assert!(!destination_choice_requires_worker(None));
+    }
+
+    #[test]
+    fn fork_import_complete_pushes_success_toast() {
+        let mut app = orch_for_create_test();
+        app.registry.entries.push(ModlistEntry {
+            id: "FORKTEST00000".to_string(),
+            name: "Imported Fork".to_string(),
+            game: Game::EET,
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+
+        fork_extract_complete_route_to_workspace(&mut app, "FORKTEST00000".to_string());
+
+        let history = app.notification_manager.history();
+        assert_eq!(history.len(), 1, "exactly one notification must be enqueued");
+        let record = history.back().unwrap();
+        assert_eq!(
+            record.kind,
+            ToastKind::Success,
+            "fork import complete must be a success toast"
+        );
+        assert_eq!(
+            record.text,
+            "Imported \"Imported Fork\" \u{2014} ready to edit",
+            "toast text must include the imported modlist name"
+        );
     }
 }

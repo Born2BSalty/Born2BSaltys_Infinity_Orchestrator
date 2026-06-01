@@ -183,6 +183,9 @@ fn commit_rename(orchestrator: &mut OrchestratorApp) {
         }
         Err(err) => {
             warn!(target = "orchestrator", "rename_modlist failed: {err}");
+            orchestrator
+                .notification_manager
+                .error(format!("Couldn't rename to \"{new_name}\": {err}"));
         }
     }
     orchestrator.workspace_view.rename_temp.clear();
@@ -608,6 +611,7 @@ mod tests {
     use super::*;
     use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
     use crate::registry::store::RegistryStore;
+    use egui_toast::ToastKind;
 
     static HDRTEST_TMP: AtomicU64 = AtomicU64::new(0);
 
@@ -663,5 +667,35 @@ mod tests {
         assert!(!app.workspace_view.renaming);
         assert_eq!(app.workspace_view.modlist_name, "Keep Me");
         assert_eq!(app.registry.find("HDRTEST00000").unwrap().name, "Keep Me");
+    }
+
+    #[test]
+    fn rename_failure_pushes_error_toast() {
+        let mut app = orch_with_entry("Original");
+        // Point workspace_view at a non-existent id so rename_modlist returns Err.
+        app.workspace_view.modlist_id = "DOES_NOT_EXIST".to_string();
+        app.workspace_view.renaming = true;
+        app.workspace_view.rename_temp = "New Name".to_string();
+
+        commit_rename(&mut app);
+
+        let history = app.notification_manager.history();
+        assert_eq!(history.len(), 1, "exactly one notification must be enqueued");
+        let record = history.back().unwrap();
+        assert_eq!(
+            record.kind,
+            ToastKind::Error,
+            "rename failure must be an error toast"
+        );
+        assert!(
+            record.text.contains("Couldn't rename to"),
+            "toast must mention the failure: {}",
+            record.text
+        );
+        assert!(
+            record.text.contains("\"New Name\""),
+            "toast must include the attempted name: {}",
+            record.text
+        );
     }
 }
