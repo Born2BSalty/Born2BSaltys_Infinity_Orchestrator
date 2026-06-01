@@ -1,6 +1,6 @@
 # Infinity Orchestrator — Handoff (remaining work)
 
-Redesign of the `bio` Rust crate into a multi-modlist workspace app (`eframe`/`egui`), alongside the preserved legacy `BIO_legacy` binary. **This file is the work-left-to-do snapshot — nothing else.** Durable reference lives elsewhere: the CRITICAL DIRECTIVE + carve-outs in `SPEC.md §1`; architecture, build/verify commands, and design rationale in `SPEC.md`; the dated decision history in `plan/revision-log.md`; per-task status in `plan/phase-08-popup-reskins-polish.md`; per-run/session state in `.claude/reference/orchestrator-handoff.md`.
+Redesign of the `bio` Rust crate into a multi-modlist workspace app (`eframe`/`egui`), alongside the preserved legacy `BIO_legacy` binary. **This file is the work-left-to-do snapshot — nothing else.** Durable reference lives elsewhere: the CRITICAL DIRECTIVE + carve-outs in `SPEC.md §1`; architecture, build/verify commands, and design rationale in `SPEC.md`; the dated decision history in `plan/decision-log.md`; per-task status in `plan/phase-08-popup-reskins-polish.md`; per-run/session state in `.claude/reference/orchestrator-handoff.md`.
 
 **Phases 1–7: shipped and merged. Phase 8 is the only open phase.**
 
