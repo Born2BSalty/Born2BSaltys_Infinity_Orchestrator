@@ -124,7 +124,7 @@ The orchestrator's `Workspace` destination calls BIO's **existing per-step rende
 match step {
     WorkspaceStep::Step2 => bio::ui::step2::page_step2::render(ui, &mut self.wizard_state, self.dev_mode, &self.exe_fingerprint),
     WorkspaceStep::Step3 => bio::ui::step3::page_step3::render(ui, &mut self.wizard_state, self.dev_mode, &self.exe_fingerprint),
-    WorkspaceStep::Step4 => workspace_step4::render(ui, self), // Phase 6's new chrome — C4 is defined in revision-log.md
+    WorkspaceStep::Step4 => workspace_step4::render(ui, self), // Phase 6's new chrome — C4 is defined in decision-log.md
     WorkspaceStep::Step5 => bio::ui::workspace::step5::render(ui, &mut self.wizard_state, ...), // Phase 7 wraps with new chrome
 }
 ```
@@ -132,13 +132,13 @@ match step {
 Each `page_stepN::render` has a step-specific signature (verified in source):
 
 - **Step 2:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint) -> Option<Step2Action>` (`src/ui/step2/page_step2.rs:10`).
-- **Step 3:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint)` returning `()` — no action enum; the page mutates `WizardState` directly (`src/ui/step3/page_step3.rs:7`; H2 is defined in [`revision-log.md`](revision-log.md)).
+- **Step 3:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint)` returning `()` — no action enum; the page mutates `WizardState` directly (`src/ui/step3/page_step3.rs:7`; H2 is defined in [`decision-log.md`](decision-log.md)).
 - **Step 4:** `pub fn render(ui, &mut WizardState, dev_mode, exe_fingerprint) -> Option<Step4Action>` (`src/ui/step4/page_step4.rs:8`). **Note:** per Phase 6 P6.T2b (C4), the orchestrator's workspace step router replaces this body with an orchestrator-side renderer; the orchestrator does **not** call `page_step4::render`. The signature is documented here only for the legacy `BIO` binary's path.
 - **Step 5:** `pub fn render(ui, &mut WizardState, &mut Step5ConsoleViewState, Option<&mut EmbeddedTerminal>, Option<&str>, dev_mode, exe_fingerprint) -> Option<Step5Action>` — verified in source at `src/ui/step5/page_step5.rs`.
 
 The returned `StepNAction` (where present) is dispatched to the same `bio::app::app_step*_*` orchestration functions BIO's `WizardApp` dispatches to.
 
-The orchestrator handles each step page's returned action by calling the same dispatch functions BIO already exposes (e.g., `bio::app::app_step2_router::handle_step2_action`, which is `pub(crate)` per `src/core/app/app_step2_router.rs:6` — reachable from same-crate orchestrator code). The orchestrator does not call `WizardApp::handle_stepN_action` directly — those are `pub(super)` methods on `WizardApp` defined in `src/ui/app_methods.rs`. Instead, it calls the underlying `bio::app::app_step*_*` functions that those handlers wrap. The dispatch surface is BIO's `bio::app::*` API plus the `pub(crate)` step-action handlers — identical to what `bio::ui::app::update_loop::run` uses (the BIO update loop's real path; H3 is defined in [`revision-log.md`](revision-log.md)).
+The orchestrator handles each step page's returned action by calling the same dispatch functions BIO already exposes (e.g., `bio::app::app_step2_router::handle_step2_action`, which is `pub(crate)` per `src/core/app/app_step2_router.rs:6` — reachable from same-crate orchestrator code). The orchestrator does not call `WizardApp::handle_stepN_action` directly — those are `pub(super)` methods on `WizardApp` defined in `src/ui/app_methods.rs`. Instead, it calls the underlying `bio::app::app_step*_*` functions that those handlers wrap. The dispatch surface is BIO's `bio::app::*` API plus the `pub(crate)` step-action handlers — identical to what `bio::ui::app::update_loop::run` uses (the BIO update loop's real path; H3 is defined in [`decision-log.md`](decision-log.md)).
 
 ### Workspace state loader (replaces the "orchestrator bridge")
 
@@ -282,4 +282,4 @@ Visual reference is `infinity_orchestrator/wireframe-preview/build.html` (previe
 The `tweaks-panel.jsx` file is wireframe-iteration-only — its contents do not ship (SPEC §14.2).
 
 
-## Revision log → see [`revision-log.md`](revision-log.md).
+## Decision log → see [`decision-log.md`](decision-log.md).
