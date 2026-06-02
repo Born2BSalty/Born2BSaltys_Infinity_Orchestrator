@@ -26,7 +26,7 @@ use crate::ui::home::confirm_delete;
 use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::{
-    DestinationPrepFlow, OrchestratorApp, PendingCreateStart,
+    DestinationPrepFlow, OrchestratorApp, PendingCreateStart, PendingFolderDelete,
 };
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::ThemePalette;
@@ -224,20 +224,37 @@ fn render_load_draft_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &eg
     match outcome {
         ConfirmOutcome::Confirmed => {
             orchestrator.create_screen_state.load_draft_delete_target = None;
-            match operations::delete_modlist(
+            let name = entry.name;
+            match operations::remove_entry_and_save(
                 &id,
                 &orchestrator.registry_store,
                 &mut orchestrator.registry,
             ) {
-                Ok(_) => {
+                Ok(Some(target)) => {
                     orchestrator.persistence_cycle.last_saved_registry =
                         orchestrator.registry.clone();
+                    orchestrator
+                        .notification_manager
+                        .info(format!("Deleting \"{}\"\u{2026}", target.name));
+                    let rx = operations::spawn_delete_folder_worker(target.dest);
+                    orchestrator
+                        .pending_folder_deletes
+                        .push(PendingFolderDelete {
+                            modlist_name: target.name,
+                            rx,
+                        });
+                }
+                Ok(None) => {
+                    orchestrator.persistence_cycle.last_saved_registry =
+                        orchestrator.registry.clone();
+                    orchestrator
+                        .notification_manager
+                        .success(format!("Deleted \"{name}\""));
                 }
                 Err(err) => {
-                    warn!(
-                        target = "orchestrator",
-                        "Create Load Draft: delete_modlist failed for {id}: {err}"
-                    );
+                    orchestrator
+                        .notification_manager
+                        .error(format!("Couldn't delete \"{name}\": {err}"));
                 }
             }
         }
