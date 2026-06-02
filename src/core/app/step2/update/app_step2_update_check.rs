@@ -219,6 +219,16 @@ fn apply_update_check_outcome(
     }
 }
 
+/// True when the redesign's auto-build must reproduce the exact pinned set: the
+/// installed-ref update-comparison is bypassed so every resolved asset enters the
+/// pipeline, and the hash-based checksum-then-skip layer dedups already-present
+/// archives. False for the legacy import auto-build (`reproduce_exact` stays false)
+/// and for every normal update-check (`modlist_auto_build_active` false), which keep
+/// the standard skip-if-installed behavior.
+fn reproduce_exact_gate(state: &WizardState) -> bool {
+    state.modlist_auto_build_active && state.reproduce_exact
+}
+
 fn apply_successful_update_check_outcome(
     state: &mut WizardState,
     outcome: &Step2UpdateCheckOutcome,
@@ -234,6 +244,13 @@ fn apply_successful_update_check_outcome(
     let uses_source_snapshot = matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot);
     let source_ref = outcome.source_ref.as_deref().unwrap_or(tag);
     if source_ref_matches(&outcome.tp_file, &outcome.source_id, source_ref) {
+        if reproduce_exact_gate(state) {
+            push_update_asset_if_available(state, outcome, tag, source_ref, uses_source_snapshot);
+            state
+                .step2
+                .update_selected_update_sources
+                .push(format!("{} ({tag})", outcome.label));
+        }
         return;
     }
     if uses_source_snapshot && let Some(err) = sources.error.as_ref() {
@@ -516,4 +533,44 @@ fn push_exact_version_retry_request(state: &mut WizardState, game_tab: &str, tp_
         .step2
         .update_selected_exact_version_retry_requests
         .push(request);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reproduce_exact_gate_fires_only_in_reproduce_mode() {
+        let reproduce = WizardState::<bool> {
+            modlist_auto_build_active: true,
+            reproduce_exact: true,
+            ..Default::default()
+        };
+        assert!(
+            reproduce_exact_gate(&reproduce),
+            "both flags set: gate active, reproduce-exact path pushes the asset"
+        );
+
+        let legacy = WizardState::<bool> {
+            modlist_auto_build_active: true,
+            reproduce_exact: false,
+            ..Default::default()
+        };
+        assert!(
+            !reproduce_exact_gate(&legacy),
+            "legacy import (reproduce_exact false): gate inactive, drop behavior unchanged"
+        );
+
+        let normal = WizardState::<bool> {
+            modlist_auto_build_active: false,
+            reproduce_exact: true,
+            ..Default::default()
+        };
+        assert!(
+            !reproduce_exact_gate(&normal),
+            "no auto-build (modlist_auto_build_active false): gate inactive, behavior unchanged"
+        );
+
+        assert!(!reproduce_exact_gate(&WizardState::<bool>::default()));
+    }
 }

@@ -32,6 +32,7 @@ pub struct WizardState<Flag = bool> {
     pub(crate) modlist_share_forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
     pub modlist_auto_build_active: Flag,
     pub modlist_auto_build_waiting_for_install: Flag,
+    pub reproduce_exact: Flag,
     pub last_step2_sync_signature: Option<String>,
     pub step1_clean_confirm_open: Flag,
     pub step4_save_error_open: Flag,

@@ -87,6 +87,7 @@ pub fn arm_download_archive_policy(state: &mut WizardState, mods_archive_folder:
 fn arm_auto_build(state: &mut WizardState) {
     state.modlist_auto_build_active = true;
     state.modlist_auto_build_waiting_for_install = false;
+    state.reproduce_exact = true;
     state.current_step = 1;
     state.step2.active_game_tab = if state.step1.game_install == "BGEE" {
         "BGEE".to_string()
@@ -200,6 +201,10 @@ mod tests {
         arm_auto_build(&mut st);
         assert!(st.modlist_auto_build_active);
         assert!(!st.modlist_auto_build_waiting_for_install);
+        assert!(
+            st.reproduce_exact,
+            "arm_auto_build (redesign path) must set reproduce_exact = true"
+        );
         assert_eq!(st.current_step, 1);
         assert_eq!(
             st.step2.active_game_tab,

@@ -279,6 +279,7 @@ fn render_modlist_import_tabs(ui: &mut egui::Ui, state: &mut WizardState) {
 fn start_modlist_auto_build(state: &mut WizardState) {
     state.modlist_auto_build_active = true;
     state.modlist_auto_build_waiting_for_install = false;
+    state.reproduce_exact = false;
     state.current_step = 1;
     state.step2.active_game_tab = if state.step1.game_install == "BGEE" {
         "BGEE".to_string()
@@ -394,5 +395,22 @@ mod tests {
         assert!(text.contains("BG2EE: 11 entries"));
         assert!(!text.contains("@hidden"));
         assert!(!text.contains("Root"));
+    }
+
+    #[test]
+    fn start_modlist_auto_build_sets_reproduce_exact_false() {
+        let mut state = WizardState::<bool> {
+            reproduce_exact: true,
+            ..Default::default()
+        };
+        start_modlist_auto_build(&mut state);
+        assert!(
+            !state.reproduce_exact,
+            "legacy start_modlist_auto_build must set reproduce_exact = false"
+        );
+        assert!(
+            state.modlist_auto_build_active,
+            "legacy start_modlist_auto_build must still set modlist_auto_build_active = true"
+        );
     }
 }
