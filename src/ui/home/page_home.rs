@@ -238,6 +238,9 @@ fn render_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context
                 Ok(Some(target)) => {
                     orchestrator.persistence_cycle.last_saved_registry =
                         orchestrator.registry.clone();
+                    orchestrator
+                        .notification_manager
+                        .info(format!("Deleting \"{}\"\u{2026}", target.name));
                     let rx = spawn_delete_folder_worker(target.dest);
                     orchestrator
                         .pending_folder_deletes
