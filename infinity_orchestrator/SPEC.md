@@ -1084,7 +1084,7 @@ Each toast body: neutral overlay-background frame (`redesign_shell_bg` + `redesi
 
 **History:** a capped last-5 read-only notification history is stored in the manager. A bell icon (`U+F0A2`) in the statusbar right edge toggles the history popup. The popup lists the last ≤5 entries (severity icon + message + relative time), newest first. Read-only — no filtering, no click-to-reopen.
 
-**Push sites:** momentary results that leave no persistent in-context indicator: copy import code (success/error), open-folder (error), delete (success/error), rename failure (error), modlist created (success), fork import completed (success). Genuine in-context results — save/rename ✓, path-validation status, inline "copied" confirmations in dialogs, and an in-progress screen already on display (install start/finish, reinstall) — remain inline and are not routed through this system.
+**Push sites:** momentary results that leave no persistent in-context indicator: copy import code (success/error), open-folder (error), delete (info on start, success/error on completion), rename failure (error), modlist created (success), fork import completed (success). Genuine in-context results — save/rename ✓, path-validation status, inline "copied" confirmations in dialogs, and an in-progress screen already on display (install start/finish, reinstall) — remain inline and are not routed through this system.
 
 ### 10.9 ForkInfoPopup
 

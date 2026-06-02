@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver};
 
 use crate::registry::errors::RegistryError;
 use crate::registry::model::{ModlistEntry, ModlistRegistry};
@@ -14,6 +15,66 @@ pub enum DeleteOutcome {
     EntryRemovedFolderSkipped,
 
     EntryRemovedFolderError(String),
+}
+
+/// Returned by `remove_entry_and_save` when a background folder removal is needed.
+#[derive(Debug)]
+pub struct DeleteTarget {
+    /// Display name of the removed modlist (for the toast message).
+    pub name: String,
+    /// Absolute path of the install folder to remove asynchronously.
+    pub dest: PathBuf,
+}
+
+/// Result type sent by the background folder-delete worker.
+pub type FolderDeleteResult = Result<(), String>;
+
+/// Receiver for the background folder-delete worker.
+pub type FolderDeleteReceiver = Receiver<FolderDeleteResult>;
+
+/// Removes the registry entry and persists the updated registry synchronously.
+///
+/// Returns `Some(DeleteTarget)` when an on-disk folder removal is needed (the
+/// destination passed the safety guard), or `None` when the folder is absent,
+/// empty, or relative (no async work to do in those cases).
+pub fn remove_entry_and_save(
+    id: &str,
+    store: &RegistryStore,
+    registry: &mut ModlistRegistry,
+) -> Result<Option<DeleteTarget>, RegistryError> {
+    let Some(pos) = registry.entries.iter().position(|e| e.id == id) else {
+        return Ok(None);
+    };
+
+    let name = registry.entries[pos].name.clone();
+    let dest = registry.entries[pos].destination_folder.clone();
+
+    registry.entries.remove(pos);
+    store.save(registry)?;
+
+    if is_safe_install_folder(&dest) {
+        Ok(Some(DeleteTarget {
+            name,
+            dest: PathBuf::from(dest.trim()),
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Spawns a background thread that runs `fs::remove_dir_all` on `dest`.
+///
+/// The caller receives a channel that yields exactly one `FolderDeleteResult`
+/// when the operation completes.
+#[must_use]
+pub fn spawn_delete_folder_worker(dest: PathBuf) -> FolderDeleteReceiver {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = std::fs::remove_dir_all(&dest)
+            .map_err(|e| format!("remove_dir_all({}): {e}", dest.display()));
+        let _ = tx.send(result);
+    });
+    rx
 }
 
 fn is_safe_install_folder(dest: &str) -> bool {
@@ -311,5 +372,134 @@ mod tests {
             queue_reinstall_stub("X", &reg),
             "Reinstall queued \u{2014} install runtime arrives in Phase 7"
         );
+    }
+
+    // --- remove_entry_and_save / spawn_delete_folder_worker tests ---
+
+    #[test]
+    fn remove_entry_and_save_returns_none_for_empty_dest() {
+        let path = tmp_registry_path("reas_empty");
+        let store = RegistryStore::new_with_path(&path);
+        let mut reg = ModlistRegistry::default();
+        reg.entries.push(entry("AAA111000000", ""));
+        reg.entries.push(entry("BBB111000000", ""));
+
+        let target = remove_entry_and_save("AAA111000000", &store, &mut reg).expect("ok");
+        assert!(target.is_none(), "empty dest should yield None (no folder work)");
+        assert_eq!(reg.entries.len(), 1);
+        assert_eq!(reg.entries[0].id, "BBB111000000");
+
+        let reloaded = store.load().expect("reload");
+        assert_eq!(reloaded.entries.len(), 1);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn remove_entry_and_save_returns_none_for_relative_dest() {
+        let path = tmp_registry_path("reas_rel");
+        let store = RegistryStore::new_with_path(&path);
+        let mut reg = ModlistRegistry::default();
+        reg.entries.push(entry("CCC111000000", "relative/path"));
+
+        let target = remove_entry_and_save("CCC111000000", &store, &mut reg).expect("ok");
+        assert!(target.is_none(), "relative dest should yield None");
+        assert!(reg.entries.is_empty());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn remove_entry_and_save_returns_some_for_existing_absolute_dir() {
+        let path = tmp_registry_path("reas_existing");
+        let store = RegistryStore::new_with_path(&path);
+
+        let install_dir = std::env::temp_dir().join(format!(
+            "bio_reas_dir_{}_{}",
+            std::process::id(),
+            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&install_dir).unwrap();
+
+        let mut reg = ModlistRegistry::default();
+        reg.entries
+            .push(entry("DDD111000000", install_dir.to_str().unwrap()));
+
+        let target = remove_entry_and_save("DDD111000000", &store, &mut reg).expect("ok");
+        let t = target.expect("existing abs dir should yield Some(DeleteTarget)");
+        assert_eq!(t.name, "modlist-DDD111000000");
+        assert_eq!(t.dest, install_dir);
+        assert!(reg.entries.is_empty(), "entry removed from in-memory registry");
+
+        let reloaded = store.load().expect("reload");
+        assert!(reloaded.entries.is_empty(), "entry persisted as removed");
+
+        let _ = std::fs::remove_dir_all(&install_dir);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn remove_entry_and_save_returns_none_for_unknown_id() {
+        let path = tmp_registry_path("reas_unknown");
+        let store = RegistryStore::new_with_path(&path);
+        let mut reg = ModlistRegistry::default();
+        reg.entries.push(entry("EEE111000000", ""));
+
+        let target = remove_entry_and_save("ZZZ999999999", &store, &mut reg).expect("ok");
+        assert!(target.is_none(), "unknown id yields None (entry not found)");
+        assert_eq!(reg.entries.len(), 1, "registry unchanged for unknown id");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn spawn_delete_folder_worker_removes_dir_and_signals_ok() {
+        let dir = std::env::temp_dir().join(format!(
+            "bio_spawn_del_{}_{}",
+            std::process::id(),
+            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("sub").join("file.txt"), b"x").unwrap();
+        assert!(dir.is_dir());
+
+        let rx = spawn_delete_folder_worker(dir.clone());
+        let result = rx.recv().expect("worker sends exactly one result");
+        assert!(result.is_ok(), "worker removal should succeed: {result:?}");
+        assert!(!dir.exists(), "directory removed by worker");
+    }
+
+    #[test]
+    fn spawn_delete_folder_worker_signals_error_for_nonexistent_path() {
+        let missing = std::env::temp_dir().join(format!(
+            "bio_spawn_del_miss_{}_{}",
+            std::process::id(),
+            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        assert!(!missing.exists());
+
+        let rx = spawn_delete_folder_worker(missing);
+        let result = rx.recv().expect("worker sends exactly one result");
+        assert!(result.is_err(), "nonexistent path should produce an error");
+    }
+
+    #[test]
+    fn multiple_concurrent_delete_workers_each_signal_independently() {
+        let jobs: Vec<_> = (0..3)
+            .map(|i| {
+                let d = std::env::temp_dir().join(format!(
+                    "bio_spawn_concurrent_{}_{}_{i}",
+                    std::process::id(),
+                    TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+                ));
+                std::fs::create_dir_all(&d).unwrap();
+                std::fs::write(d.join("f.txt"), b"y").unwrap();
+                let rx = spawn_delete_folder_worker(d.clone());
+                (rx, d)
+            })
+            .collect();
+
+        for (rx, dir) in jobs {
+            let result = rx.recv().expect("each worker signals");
+            assert!(result.is_ok(), "concurrent delete succeeded: {result:?}");
+            assert!(!dir.exists(), "dir removed: {}", dir.display());
+        }
     }
 }

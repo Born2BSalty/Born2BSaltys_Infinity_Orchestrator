@@ -103,6 +103,15 @@ impl PostInstallResetGate {
     }
 }
 
+/// An in-flight background folder-delete job registered after the synchronous
+/// registry-entry removal.  One entry per concurrent delete; drained every frame.
+pub(crate) struct PendingFolderDelete {
+    /// Display name of the modlist whose folder is being removed.
+    pub(crate) modlist_name: String,
+    /// Receives exactly one result when the worker thread finishes.
+    pub(crate) rx: crate::registry::operations::FolderDeleteReceiver,
+}
+
 pub(crate) struct PendingCreateStart {
     pub(crate) token: DestinationPrepToken,
     pub(crate) name: String,
@@ -311,6 +320,8 @@ pub struct OrchestratorApp {
     pub(crate) destination_prep_generation: u64,
 
     pub(crate) hash_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+
+    pub(crate) pending_folder_deletes: Vec<PendingFolderDelete>,
 }
 
 fn load_registry(registry_store: &RegistryStore) -> RegistryLoad {
@@ -469,6 +480,7 @@ impl OrchestratorApp {
             background_destination_prep_workers: Vec::new(),
             destination_prep_generation: 0,
             hash_progress: Arc::new(std::sync::Mutex::new(None)),
+            pending_folder_deletes: Vec::new(),
         };
 
         if app.redesign_settings.validate_paths_on_startup {
@@ -638,6 +650,62 @@ impl OrchestratorApp {
         // wipe the success state the user just landed on.
         if !from_workspace {
             self.post_install_reset_gate = PostInstallResetGate::Pending;
+        }
+    }
+
+    /// Starts the Step-5 install after render if requested, and sets the console
+    /// input focus on the install-started edge.  Returns whether a repaint was requested.
+    fn start_step5_and_check_focus(&mut self) -> bool {
+        let was_running = self.wizard_state.step5.install_running;
+        let requested = self.start_step5_after_render();
+        if !was_running && self.wizard_state.step5.install_running {
+            self.step5_console_view.request_input_focus = true;
+        }
+        requested
+    }
+
+    /// Returns `true` when any slow background worker is active and needs
+    /// periodic polling at the 250 ms cadence.
+    const fn slow_workers_active(&self) -> bool {
+        self.install_size_worker_rx.is_some() || !self.pending_folder_deletes.is_empty()
+    }
+
+    /// Drains all background workers that report results each frame.
+    fn drain_background_workers(&mut self) {
+        self.drain_size_worker_result();
+        self.drain_folder_deletes();
+        self.drain_finished_destination_prep_workers();
+    }
+
+    /// Polls all in-flight background folder-delete workers and pushes a toast
+    /// on each completion.  Called every frame so the toast fires regardless of
+    /// which screen is active and survives navigation away from Home.
+    pub(crate) fn drain_folder_deletes(&mut self) {
+        use std::sync::mpsc::TryRecvError;
+
+        let mut i = 0;
+        while i < self.pending_folder_deletes.len() {
+            match self.pending_folder_deletes[i].rx.try_recv() {
+                Ok(Ok(())) => {
+                    let name = self.pending_folder_deletes.swap_remove(i).modlist_name;
+                    self.notification_manager.success(format!("Deleted \"{name}\""));
+                }
+                Ok(Err(err)) => {
+                    let name = self.pending_folder_deletes.swap_remove(i).modlist_name;
+                    self.notification_manager.error(format!(
+                        "Couldn't remove install folder for \"{name}\": {err}"
+                    ));
+                }
+                Err(TryRecvError::Disconnected) => {
+                    let name = self.pending_folder_deletes.swap_remove(i).modlist_name;
+                    self.notification_manager.error(format!(
+                        "Couldn't remove install folder for \"{name}\": worker disconnected"
+                    ));
+                }
+                Err(TryRecvError::Empty) => {
+                    i += 1;
+                }
+            }
         }
     }
 
@@ -1477,20 +1545,15 @@ impl eframe::App for OrchestratorApp {
 
         oauth_glue::render_github_popup_if_open(self, ctx);
 
-        let install_was_running = self.wizard_state.step5.install_running;
-        step5_requested_repaint |= self.start_step5_after_render();
-        if !install_was_running && self.wizard_state.step5.install_running {
-            self.step5_console_view.request_input_focus = true;
-        }
+        step5_requested_repaint |= self.start_step5_and_check_focus();
         schedule_repaint_if_needed(
             ctx,
             step5_requested_repaint,
             self.step5_needs_repaint(),
-            self.install_size_worker_rx.is_some(),
+            self.slow_workers_active(),
         );
 
-        self.drain_size_worker_result();
-        self.drain_finished_destination_prep_workers();
+        self.drain_background_workers();
 
         self.sync_active_workspace_if_dirty();
 
@@ -1530,11 +1593,11 @@ fn schedule_repaint_if_needed(
     ctx: &egui::Context,
     step5_repaint: bool,
     step5_needs: bool,
-    size_worker_active: bool,
+    slow_worker_active: bool,
 ) {
     if step5_repaint || step5_needs {
         ctx.request_repaint_after(Duration::from_millis(16));
-    } else if size_worker_active {
+    } else if slow_worker_active {
         ctx.request_repaint_after(Duration::from_millis(250));
     }
 }
