@@ -4,7 +4,8 @@
 use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
-use crate::registry::operations;
+use crate::registry::operations::{self, remove_entry_and_save, spawn_delete_folder_worker};
+use crate::ui::orchestrator::orchestrator_app::PendingFolderDelete;
 use crate::ui::home::add_a_modlist::{self, AddAModlistAction};
 use crate::ui::home::confirm_delete;
 use crate::ui::home::modlist_card::ModlistCardActions;
@@ -229,12 +230,23 @@ fn render_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &egui::Context
         ConfirmOutcome::Confirmed => {
             orchestrator.home_screen_state.delete_target = None;
             let name = entry.name;
-            match operations::delete_modlist(
+            match remove_entry_and_save(
                 &id,
                 &orchestrator.registry_store,
                 &mut orchestrator.registry,
             ) {
-                Ok(_) => {
+                Ok(Some(target)) => {
+                    orchestrator.persistence_cycle.last_saved_registry =
+                        orchestrator.registry.clone();
+                    let rx = spawn_delete_folder_worker(target.dest);
+                    orchestrator
+                        .pending_folder_deletes
+                        .push(PendingFolderDelete {
+                            modlist_name: target.name,
+                            rx,
+                        });
+                }
+                Ok(None) => {
                     orchestrator.persistence_cycle.last_saved_registry =
                         orchestrator.registry.clone();
                     orchestrator
