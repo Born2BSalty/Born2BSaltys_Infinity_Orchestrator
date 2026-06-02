@@ -8,15 +8,6 @@ use crate::registry::errors::RegistryError;
 use crate::registry::model::{ModlistEntry, ModlistRegistry};
 use crate::registry::store::RegistryStore;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DeleteOutcome {
-    EntryAndFolderRemoved,
-
-    EntryRemovedFolderSkipped,
-
-    EntryRemovedFolderError(String),
-}
-
 /// Returned by `remove_entry_and_save` when a background folder removal is needed.
 #[derive(Debug)]
 pub struct DeleteTarget {
@@ -95,33 +86,6 @@ fn is_safe_install_folder(dest: &str) -> bool {
     }
 
     path.is_dir()
-}
-
-pub fn delete_modlist(
-    id: &str,
-    store: &RegistryStore,
-    registry: &mut ModlistRegistry,
-) -> Result<Option<DeleteOutcome>, RegistryError> {
-    let Some(pos) = registry.entries.iter().position(|e| e.id == id) else {
-        return Ok(None);
-    };
-
-    let dest = registry.entries[pos].destination_folder.clone();
-
-    registry.entries.remove(pos);
-
-    let outcome = if is_safe_install_folder(&dest) {
-        match std::fs::remove_dir_all(dest.trim()) {
-            Ok(()) => DeleteOutcome::EntryAndFolderRemoved,
-            Err(err) => DeleteOutcome::EntryRemovedFolderError(err.to_string()),
-        }
-    } else {
-        DeleteOutcome::EntryRemovedFolderSkipped
-    };
-
-    store.save(registry)?;
-
-    Ok(Some(outcome))
 }
 
 #[must_use]
@@ -254,74 +218,6 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         assert!(is_safe_install_folder(dir.to_str().unwrap()));
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn delete_empty_dest_removes_entry_no_fs_op() {
-        let path = tmp_registry_path("empty_dest");
-        let store = RegistryStore::new_with_path(&path);
-        let mut reg = ModlistRegistry::default();
-        reg.entries.push(entry("AAA000000000", ""));
-        reg.entries.push(entry("BBB000000000", ""));
-
-        let out = delete_modlist("AAA000000000", &store, &mut reg).expect("delete ok");
-        assert_eq!(out, Some(DeleteOutcome::EntryRemovedFolderSkipped));
-        assert_eq!(reg.entries.len(), 1);
-        assert_eq!(reg.entries[0].id, "BBB000000000");
-
-        let reloaded = store.load().expect("reload");
-        assert_eq!(reloaded.entries.len(), 1);
-        assert_eq!(reloaded.entries[0].id, "BBB000000000");
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn delete_unknown_id_is_noop() {
-        let path = tmp_registry_path("unknown");
-        let store = RegistryStore::new_with_path(&path);
-        let mut reg = ModlistRegistry::default();
-        reg.entries.push(entry("AAA000000000", ""));
-        let out = delete_modlist("ZZZ999999999", &store, &mut reg).expect("delete ok");
-        assert_eq!(out, None);
-        assert_eq!(reg.entries.len(), 1);
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn delete_real_folder_removes_entry_and_folder() {
-        let path = tmp_registry_path("real_folder");
-        let store = RegistryStore::new_with_path(&path);
-
-        let install_dir = std::env::temp_dir().join(format!(
-            "bio_ops_install_{}_{}",
-            std::process::id(),
-            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(install_dir.join("nested")).unwrap();
-        std::fs::write(install_dir.join("nested").join("f.txt"), b"x").unwrap();
-        assert!(install_dir.is_dir());
-
-        let mut reg = ModlistRegistry::default();
-        reg.entries
-            .push(entry("CCC000000000", install_dir.to_str().unwrap()));
-
-        let out = delete_modlist("CCC000000000", &store, &mut reg).expect("delete ok");
-        assert_eq!(out, Some(DeleteOutcome::EntryAndFolderRemoved));
-        assert!(reg.entries.is_empty());
-        assert!(!install_dir.exists(), "install folder recursively removed");
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn delete_relative_dest_skips_fs_op() {
-        let path = tmp_registry_path("rel_dest");
-        let store = RegistryStore::new_with_path(&path);
-        let mut reg = ModlistRegistry::default();
-        reg.entries.push(entry("DDD000000000", "some/relative/dir"));
-        let out = delete_modlist("DDD000000000", &store, &mut reg).expect("delete ok");
-        assert_eq!(out, Some(DeleteOutcome::EntryRemovedFolderSkipped));
-        assert!(reg.entries.is_empty());
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
