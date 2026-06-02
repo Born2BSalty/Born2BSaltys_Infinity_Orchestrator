@@ -6,13 +6,17 @@ Redesign of the `bio` Rust crate into a multi-modlist workspace app (`eframe`/`e
 
 ## Phase 8 — remaining (verified 2026-06-01)
 
-1. **Toast event migration (`T10.f`)** — *next chunk.* The notification framework (`P8.T10`) shipped, but only 7 success/error sites are wired and `info`/`warn` severities have **zero** call sites. Wire info + warn, plus the install-started / share-code-copied / rename-saved confirmations.
-2. **`P8.T3`** — residual light-theme token swaps in the WeiDU-line / prompt-popup renderers (`format_step2`, `format_step3`, `prompt_popup_step2`). Cosmetic.
-3. **`P8.T12`** — unified `clipboard.rs` copy helper. Copy works today via inline `copy_text` paths; this centralizes it and adds the SPEC-specified inline confirmations.
-4. **`P8.T13`** — final smoke pass: every screen, both palettes, no regressions; legacy `BIO_legacy` still builds and runs.
-5. **`P8.T14`** — per-modlist data-ownership refactor (SPEC §13.12b), subtasks T14.1–T14.5. **Not started — the biggest remaining chunk.** Two-PR landing strategy is in the phase-08 plan doc.
+1. **`P8.T3`** — residual light-theme token swaps in the WeiDU-line / prompt-popup renderers (`format_step2`, `format_step3`, `prompt_popup_step2`). Cosmetic.
+2. **`P8.T12`** — unified `clipboard.rs` copy helper. Copy works today via inline `copy_text` paths; this centralizes it and adds the SPEC-specified inline confirmations.
+3. **`P8.T13`** — final smoke pass: every screen, both palettes, no regressions; legacy `BIO_legacy` still builds and runs.
+4. **`P8.T14`** — per-modlist data-ownership refactor (SPEC §13.12b), subtasks T14.1–T14.5. **Not started — the biggest remaining chunk.** Two-PR landing strategy is in the phase-08 plan doc.
 
-All other Phase-8 tasks (T1/T2/T4/T5/T6/T7/T8/T9/T10/T11/T15/T16) are delivered or no-work-needed — see the phase-08 plan doc for per-task status.
+All other Phase-8 tasks (T1/T2/T4–T11/T15/T16, plus the `T10.f` toast event migration — Group A shipped via PR #34; Groups B/C intentionally not migrated per §10.8) are delivered or no-work-needed — see the phase-08 plan doc for per-task status.
+
+## Queued tasks (not started)
+
+- **Home delete → background worker.** `operations::delete_modlist` (from `page_home::render_delete_confirm`) runs synchronously on the UI thread; its `fs::remove_dir_all(<destination>)` of a large install folder blocks the frame for seconds. Two symptoms: the app freezes during delete, and the `Deleted "<name>"` success toast ages out — its wall-clock dismiss timer elapses during the freeze, so it flashes and vanishes. Fix: remove the registry entry immediately (the card disappears at once), then run the on-disk folder deletion + registry save on a background worker, mirroring the create/install destination-prep worker (`destination_choice_requires_worker` + the install-runtime cleanup path); push the success toast on worker completion. Redesign-owned (`page_home`, `src/registry/operations`), no carve-out. Closes the delete-toast-aging artifact found during the Group-A toast testing.
+- **Re-import of a copied code stalls at 0/0 downloads.** Deterministic repro: legacy code → Create → "import and modify" (fork import) → install → Home Kebab → Copy import code → Create → "import and modify" again with that copied code → the download stage sticks at **0/0**. The copied post-install code carries `allow_auto_install=true` + baked `archive_meta {size,hash}`, and the prior install already content-addressed the archives — so candidate causes are the checksum-then-skip pass classifying every asset as already-present (0 to fetch) while the pipeline never advances, or the fork re-import arm path failing to arm against an already-staged set. **Not root-caused** — needs a flow trace (`/root-cause-from-flow`) from the re-import entry through `arm_pipeline_once` / `archive_skip` / `fork_pipeline_arm` before any fix.
 
 ## Open risks / bugs
 
