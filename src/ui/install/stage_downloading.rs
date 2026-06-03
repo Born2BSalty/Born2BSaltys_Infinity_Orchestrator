@@ -514,10 +514,12 @@ pub fn render_live(
     let inputs = LivePipelineInputs::from(orchestrator);
 
     arm_pipeline_once(orchestrator, &inputs);
+    kick_explicit_resolve_once(orchestrator);
     stage_and_kick_archive_skip_once(orchestrator, &inputs);
     kick_streaming_downloader_once(orchestrator);
     verify_downloaded_archives_once(orchestrator, &inputs.destination);
     ingest_downloaded_archives_once(orchestrator, &inputs.destination);
+    install_empty_asset_clean_finish(orchestrator);
 
     let progress = build_and_hold_progress(orchestrator);
     let arm_error = orchestrator.install_screen_state.pipeline_arm_error.clone();
@@ -745,6 +747,120 @@ fn set_pipeline_arm_error(
         target = "orchestrator",
         "{msg} (Downloading stays navigable; surfaced on-screen)"
     );
+}
+
+/// Fires the URL-resolve step exactly once per armed pipeline, after arming
+/// and before the archive-skip/download sequence.  Guards on the pipeline being
+/// armed, the auto-build being active (excludes `FreshCreate`), no arm error,
+/// and the resolve not yet having fired for this pipeline activation.
+pub(crate) fn kick_explicit_resolve_once(
+    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+) {
+    let flags = orchestrator.install_screen_state.pipeline_flags;
+    if !flags.armed()
+        || !orchestrator.wizard_state.modlist_auto_build_active
+        || orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_some()
+        || flags.explicit_resolve_started()
+    {
+        return;
+    }
+    orchestrator
+        .install_screen_state
+        .pipeline_flags
+        .set_explicit_resolve_started(true);
+    crate::install_runtime::auto_build_driver::drive_explicit_resolve(
+        &mut orchestrator.wizard_state,
+        &mut orchestrator.step2_update_check_rx,
+    );
+    tracing::info!(
+        target = "orchestrator",
+        "explicit resolve fired — update-check worker started"
+    );
+}
+
+/// Handles the install path's empty-asset clean-finish: when the explicit
+/// resolve completes with zero assets (everything skipped or no downloads
+/// needed), routes to Step 5.
+///
+/// Mirrors the fork path's `fork_extract_complete` empty-asset branch.
+fn install_empty_asset_clean_finish(
+    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+) {
+    let flags = orchestrator.install_screen_state.pipeline_flags;
+    if !flags.armed()
+        || orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_some()
+        || !orchestrator.wizard_state.modlist_auto_build_active
+        || !flags.explicit_resolve_started()
+        || orchestrator
+            .wizard_state
+            .step2
+            .update_selected_check_running
+        || !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_update_assets
+            .is_empty()
+    {
+        return;
+    }
+    let skip_count = orchestrator.install_screen_state.skip_indices.len();
+    let extracted_count = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_extracted_sources
+        .len();
+    let archives_observed = extracted_count + skip_count;
+    let failed_sources = &orchestrator
+        .wizard_state
+        .step2
+        .update_selected_failed_sources;
+    if !failed_sources.is_empty() {
+        let reason = format!(
+            "failed source check: {}",
+            failed_sources.first().map_or("(unknown)", String::as_str)
+        );
+        orchestrator.install_screen_state.pipeline_arm_error = Some(reason.clone());
+        orchestrator.wizard_state.modlist_auto_build_active = false;
+        orchestrator
+            .wizard_state
+            .modlist_auto_build_waiting_for_install = false;
+        tracing::warn!(target = "orchestrator", "{reason}");
+        return;
+    }
+    // Route when either the skip pass confirmed everything absent (0 to fetch
+    // and 0 observed), or when assets were empty before the skip pass ran at
+    // all (no assets from resolve) — matching the fork path's completion gate.
+    let assets_still_empty = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_update_assets
+        .is_empty();
+    if assets_still_empty && (archives_observed > 0 || !flags.archives_staged()) {
+        tracing::info!(
+            target = "orchestrator",
+            "install path: zero assets after resolve — routing to Step 5"
+        );
+        route_install_to_step5(&mut orchestrator.wizard_state);
+    }
+}
+
+/// Routes the auto-build pipeline to Step 5, signalling that the install
+/// is ready to proceed.  Mirrors `finish_auto_build_at_step5` semantics.
+fn route_install_to_step5(state: &mut crate::app::state::WizardState) {
+    state.modlist_auto_build_active = false;
+    state.modlist_auto_build_waiting_for_install = false;
+    state.step2.update_selected_popup_open = false;
+    state.step2.update_selected_confirm_latest_fallback_open = false;
+    state.step2.mod_download_forks_popup_open = false;
+    state.current_step = 4;
+    state.step5.start_install_requested = false;
+    state.step5.last_status_text = "Auto Build: ready to install".to_string();
 }
 
 pub(crate) fn stage_and_kick_archive_skip_once(
@@ -1137,34 +1253,40 @@ fn render_overall_progress(
         phase_bar_row(
             ui,
             palette,
-            "hash",
-            h_n,
-            h_total,
-            h_pct,
-            f64::from(h_pct) / 100.0,
-            phase == InstallPhase::Hashing,
+            PhaseBarParams {
+                verb: "hash",
+                n: h_n,
+                total: h_total,
+                pct: h_pct,
+                frac: f64::from(h_pct) / 100.0,
+                active: phase == InstallPhase::Hashing,
+            },
         );
         ui.add_space(8.0);
         phase_bar_row(
             ui,
             palette,
-            "download",
-            dl_n,
-            dl_total,
-            dl_pct,
-            f64::from(dl_pct) / 100.0,
-            phase == InstallPhase::Downloading,
+            PhaseBarParams {
+                verb: "download",
+                n: dl_n,
+                total: dl_total,
+                pct: dl_pct,
+                frac: f64::from(dl_pct) / 100.0,
+                active: phase == InstallPhase::Downloading,
+            },
         );
         ui.add_space(8.0);
         phase_bar_row(
             ui,
             palette,
-            "extract",
-            ex_n,
-            ex_total,
-            ex_pct,
-            f64::from(ex_pct) / 100.0,
-            phase == InstallPhase::Extracting && !preparing,
+            PhaseBarParams {
+                verb: "extract",
+                n: ex_n,
+                total: ex_total,
+                pct: ex_pct,
+                frac: f64::from(ex_pct) / 100.0,
+                active: phase == InstallPhase::Extracting && !preparing,
+            },
         );
 
         if let Some(h) = hint {
@@ -1179,21 +1301,22 @@ fn render_overall_progress(
     });
 }
 
-#[allow(clippy::too_many_arguments)]
-fn phase_bar_row(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    verb: &str,
+/// Visual parameters for a single phase bar row.
+#[derive(Clone, Copy)]
+struct PhaseBarParams<'a> {
+    verb: &'a str,
     n: usize,
     total: usize,
     pct: u32,
     frac: f64,
     active: bool,
-) {
+}
+
+fn phase_bar_row(ui: &mut egui::Ui, palette: ThemePalette, p: PhaseBarParams<'_>) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
         let (label_rect, _) = ui.allocate_exact_size(egui::vec2(180.0, 18.0), egui::Sense::hover());
-        let cap_color = if active {
+        let cap_color = if p.active {
             redesign_text_primary(palette)
         } else {
             redesign_text_faint(palette)
@@ -1201,14 +1324,14 @@ fn phase_bar_row(
         ui.painter().text(
             egui::pos2(label_rect.left(), label_rect.center().y),
             egui::Align2::LEFT_CENTER,
-            format!("{verb} {n} / {total} \u{00B7} {pct}%"),
+            format!("{} {} / {} \u{00B7} {}%", p.verb, p.n, p.total, p.pct),
             egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into())),
             cap_color,
         );
 
         let bar_w = ui.available_width();
         let (track, _) = ui.allocate_exact_size(egui::vec2(bar_w, 14.0), egui::Sense::hover());
-        paint_phase_bar(ui, palette, track, frac, active);
+        paint_phase_bar(ui, palette, track, p.frac, p.active);
     });
 }
 
