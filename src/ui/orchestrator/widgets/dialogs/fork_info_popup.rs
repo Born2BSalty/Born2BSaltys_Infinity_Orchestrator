@@ -10,6 +10,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_border_strong, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
     redesign_text_primary,
 };
+use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
 const MAX_WIDTH_PX: f32 = 480.0;
 
@@ -47,6 +48,7 @@ pub(crate) fn render(
             redesign_border_strong(palette),
         ))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .shadow(redesign_overlay_shadow(palette))
         .inner_margin(egui::Margin::same(18));
 
     egui::Window::new("orchestrator_fork_info_popup")
