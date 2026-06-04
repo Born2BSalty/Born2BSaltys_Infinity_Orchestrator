@@ -88,6 +88,7 @@ fn snapshot_from_order(order: &[ComponentRef]) -> Vec<RescanSelection> {
             tp2_upper: c.tp2.to_ascii_uppercase(),
             component_id: c.id.to_string(),
             selected_order: Some(i + 1),
+            wlb_inputs: c.wlb_inputs.clone(),
         })
         .collect()
 }
@@ -103,11 +104,13 @@ mod tests {
                 tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                 id: 0,
                 language: 0,
+                wlb_inputs: None,
             },
             ComponentRef {
                 tp2: "EeFixPack/EeFixPack.TP2".to_string(),
                 id: 2,
                 language: 0,
+                wlb_inputs: None,
             },
         ];
         let snap = snapshot_from_order(&order);
@@ -227,6 +230,35 @@ mod tests {
     }
 
     #[test]
+    fn wlb_persist2_snapshot_from_order_carries_wlb_inputs() {
+        let order = vec![
+            ComponentRef {
+                tp2: "MOD/MOD.TP2".to_string(),
+                id: 5,
+                language: 0,
+                wlb_inputs: Some(r"y,D:\test1".to_string()),
+            },
+            ComponentRef {
+                tp2: "OTHER/OTHER.TP2".to_string(),
+                id: 0,
+                language: 0,
+                wlb_inputs: None,
+            },
+        ];
+        let snap = snapshot_from_order(&order);
+        assert_eq!(snap.len(), 2);
+        assert_eq!(
+            snap[0].wlb_inputs.as_deref(),
+            Some(r"y,D:\test1"),
+            "snapshot_from_order must carry wlb_inputs from ComponentRef"
+        );
+        assert_eq!(
+            snap[1].wlb_inputs, None,
+            "snapshot_from_order must preserve None when wlb_inputs is absent"
+        );
+    }
+
+    #[test]
     fn cold_resume_restores_step2_and_step3_after_scan_lands() {
         let mut ws = WizardState::default();
         let workspace = ModlistWorkspaceState {
@@ -235,11 +267,13 @@ mod tests {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 11,
                     language: 0,
+                    wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 0,
                     language: 0,
+                    wlb_inputs: None,
                 },
             ],
             dev_scanned_mods_folder: Some("/some/scanned/mods".to_string()),

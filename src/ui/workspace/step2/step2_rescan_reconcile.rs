@@ -5,6 +5,7 @@ use crate::app::controller::step3_sync;
 use crate::app::state::Step2ModState;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
+use crate::ui::workspace::workspace_state_loader::{extract_wlb_inputs, reattach_wlb_inputs};
 
 pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
     let snapshot = RescanSnapshot {
@@ -31,6 +32,7 @@ fn capture_tab(mods: &[Step2ModState]) -> Vec<RescanSelection> {
                     tp2_upper: tp2_upper.clone(),
                     component_id: component.component_id.clone(),
                     selected_order: component.selected_order,
+                    wlb_inputs: extract_wlb_inputs(&component.raw_line),
                 });
             }
         }
@@ -111,6 +113,9 @@ fn reapply_snapshot<'a>(
                 if component.component_id == entry.component_id {
                     component.checked = true;
                     component.selected_order = entry.selected_order;
+                    if let Some(inputs) = entry.wlb_inputs.as_deref() {
+                        reattach_wlb_inputs(component, inputs);
+                    }
                     matched = true;
                 }
             }
@@ -212,11 +217,13 @@ mod tests {
                 tp2_upper: "EEFIXPACK.TP2".to_string(),
                 component_id: "0".to_string(),
                 selected_order: Some(2),
+                wlb_inputs: None,
             },
             RescanSelection {
                 tp2_upper: "GONEMOD.TP2".to_string(),
                 component_id: "1".to_string(),
                 selected_order: Some(1),
+                wlb_inputs: None,
             },
         ];
         let mut mods = vec![mod_state(
@@ -267,11 +274,13 @@ mod tests {
                     tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                     component_id: "11".to_string(),
                     selected_order: Some(1),
+                    wlb_inputs: None,
                 },
                 RescanSelection {
                     tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                     component_id: "0".to_string(),
                     selected_order: Some(2),
+                    wlb_inputs: None,
                 },
             ],
             bg2ee: Vec::new(),
@@ -355,6 +364,91 @@ mod tests {
         assert!(
             !completion_edge_fires(false, true),
             "scan just started: not yet"
+        );
+    }
+
+    #[test]
+    fn wlb_persist2_capture_reapply_step3_round_trip() {
+        use crate::app::state::Step2ComponentState;
+
+        let raw = r"~MOD/MOD.TP2~ #0 #5 // Label // @wlb-inputs: y,D:\test1";
+
+        let mods_with_marker = vec![mod_state(
+            "MOD/MOD.TP2",
+            vec![Step2ComponentState {
+                component_id: "5".to_string(),
+                label: "Label".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                raw_line: raw.to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: true,
+                selected_order: Some(1),
+            }],
+        )];
+
+        let captured = capture_tab(&mods_with_marker);
+        assert_eq!(captured.len(), 1);
+        assert_eq!(
+            captured[0].wlb_inputs.as_deref(),
+            Some(r"y,D:\test1"),
+            "capture_tab must extract the wlb_inputs marker"
+        );
+
+        let mut fresh_mods = vec![mod_state(
+            "MOD/MOD.TP2",
+            vec![Step2ComponentState {
+                component_id: "5".to_string(),
+                label: "Label".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                raw_line: "~MOD/MOD.TP2~ #0 #5 // Label".to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: false,
+                selected_order: None,
+            }],
+        )];
+
+        let dropped = reapply_snapshot(&captured, &mut fresh_mods);
+        assert!(dropped.is_empty(), "component must be found, not dropped");
+        assert!(
+            fresh_mods[0].components[0]
+                .raw_line
+                .contains(r"@wlb-inputs: y,D:\test1"),
+            "reapply_snapshot must re-attach the wlb_inputs marker; got: {}",
+            fresh_mods[0].components[0].raw_line
+        );
+
+        let step3 = step3_sync::build_step3_items(&fresh_mods);
+        let leaves: Vec<&crate::app::state::Step3ItemState> =
+            step3.iter().filter(|i| !i.is_parent).collect();
+        assert_eq!(leaves.len(), 1);
+        assert!(
+            leaves[0].raw_line.contains(r"@wlb-inputs: y,D:\test1"),
+            "build_step3_items must carry the wlb_inputs marker into Step 3; got: {}",
+            leaves[0].raw_line
         );
     }
 }

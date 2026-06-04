@@ -446,6 +446,7 @@ mod tests {
                 tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                 component_id: "0".to_string(),
                 selected_order: Some(1),
+                wlb_inputs: None,
             }],
             bg2ee: Vec::new(),
         }

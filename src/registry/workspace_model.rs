@@ -15,6 +15,9 @@ pub struct ComponentRef {
     pub id: i64,
 
     pub language: u8,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wlb_inputs: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +91,7 @@ mod tests {
             tp2: "EET/EET.TP2".to_string(),
             id: 0,
             language: 0,
+            wlb_inputs: None,
         });
         w.expand_state.insert("bgee:EET/EET.TP2".to_string(), true);
         w.last_share_code = Some("ABC-123".to_string());
@@ -183,5 +187,45 @@ mod tests {
             Some(r"D:\BIO\my-list\mods")
         );
         assert_eq!(w, w2);
+    }
+
+    #[test]
+    fn none_wlb_inputs_is_omitted_on_serialize() {
+        let r = ComponentRef {
+            tp2: "MOD/MOD.TP2".to_string(),
+            id: 0,
+            language: 0,
+            wlb_inputs: None,
+        };
+        let s = serde_json::to_string(&r).expect("serialize");
+        assert!(
+            !s.contains("wlb_inputs"),
+            "wlb_inputs must be omitted when None so the emitted JSON is \
+             byte-identical to a pre-field order entry; got: {s}"
+        );
+    }
+
+    #[test]
+    fn some_wlb_inputs_round_trips() {
+        let r = ComponentRef {
+            tp2: "MOD/MOD.TP2".to_string(),
+            id: 5,
+            language: 0,
+            wlb_inputs: Some(r"y,D:\test1".to_string()),
+        };
+        let s = serde_json::to_string(&r).expect("serialize");
+        let r2: ComponentRef = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(r2.wlb_inputs.as_deref(), Some(r"y,D:\test1"));
+        assert_eq!(r, r2);
+    }
+
+    #[test]
+    fn legacy_order_entry_without_wlb_inputs_parses_to_none() {
+        let raw = r#"{"tp2":"MOD/MOD.TP2","id":3,"language":0}"#;
+        let r: ComponentRef = serde_json::from_str(raw).expect("parse legacy");
+        assert_eq!(
+            r.wlb_inputs, None,
+            "legacy entry without the field must parse to None"
+        );
     }
 }
