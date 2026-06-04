@@ -532,14 +532,6 @@ pub fn render_live(
         return DownloadingOutcome::Advance;
     }
     auto_build_driver::log_if_pipeline_stopped(&orchestrator.wizard_state);
-    if orchestrator
-        .install_screen_state
-        .pipeline_arm_error
-        .is_none()
-    {
-        ui.ctx()
-            .request_repaint_after(std::time::Duration::from_millis(16));
-    }
     DownloadingOutcome::Stay
 }
 

@@ -99,6 +99,10 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
                 orchestrator.nav = dest;
             }
         }
+        // A stage/nav transition swaps the rendered screen mid-frame; request the
+        // follow-up frame so the new screen draws (and the install auto-starts)
+        // without waiting for a pointer event to wake the egui loop.
+        ctx.request_repaint();
     }
 }
 
