@@ -2,7 +2,9 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::controller::step3_sync;
-use crate::app::state::{Step1State, Step2ModState, Step3ItemState, WizardState};
+use crate::app::state::{
+    Step1State, Step2ComponentState, Step2ModState, Step3ItemState, WizardState,
+};
 use crate::registry::model::{Game, ModlistEntry};
 use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState};
 use crate::settings::store::SettingsStore;
@@ -94,10 +96,47 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
                 if component.component_id == want_id {
                     component.checked = true;
                     component.selected_order = Some(position + 1);
+                    if let Some(inputs) = item.wlb_inputs.as_deref() {
+                        reattach_wlb_inputs(component, inputs);
+                    }
                 }
             }
         }
     }
+}
+
+/// Stamps `// @wlb-inputs: {inputs}` onto a component's raw line, replacing any
+/// prior marker. Trims the inputs string; does nothing when it is empty.
+fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &str) {
+    let inputs = inputs.trim();
+    if inputs.is_empty() {
+        return;
+    }
+    let base = strip_wlb_marker(&component.raw_line);
+    component.raw_line = format!("{base} // @wlb-inputs: {inputs}");
+}
+
+/// Strips any existing `@wlb-inputs:` marker from a raw `WeiDU` line, returning
+/// the trimmed base without the marker or its surrounding comment syntax.
+fn strip_wlb_marker(raw_line: &str) -> String {
+    let marker = "@wlb-inputs:";
+    let lower = raw_line.to_ascii_lowercase();
+    lower.find(marker).map_or_else(
+        || raw_line.trim().to_string(),
+        |start| {
+            let mut head = raw_line[..start].to_string();
+            while head.ends_with(' ') || head.ends_with('\t') {
+                head.pop();
+            }
+            if head.ends_with("//") {
+                head.truncate(head.len().saturating_sub(2));
+                while head.ends_with(' ') || head.ends_with('\t') {
+                    head.pop();
+                }
+            }
+            head
+        },
+    )
 }
 
 fn recompute_mod_checked(mods: &mut [Step2ModState]) {
@@ -195,10 +234,14 @@ fn order_from_items(items: &[Step3ItemState]) -> Vec<ComponentRef> {
         .filter(|item| !item.is_parent && item.component_id != PARENT_PLACEHOLDER_ID)
         .filter_map(|item| {
             let id = item.component_id.trim().parse::<i64>().ok()?;
+            let wlb_inputs = crate::mods::component::Component::parse_weidu_line(&item.raw_line)
+                .ok()
+                .and_then(|c| c.wlb_inputs);
             Some(ComponentRef {
                 tp2: item.tp_file.clone(),
                 id,
                 language: 0,
+                wlb_inputs,
             })
         })
         .collect()
@@ -346,11 +389,13 @@ mod tests {
                     tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                     id: 0,
                     language: 0,
+                    wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
                     language: 0,
+                    wlb_inputs: None,
                 },
             ],
             ..Default::default()
@@ -423,11 +468,13 @@ mod tests {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 0,
                     language: 0,
+                    wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
                     language: 0,
+                    wlb_inputs: None,
                 },
             ],
             ..Default::default()
@@ -518,6 +565,7 @@ mod tests {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
                 language: 0,
+                wlb_inputs: None,
             }],
             ..Default::default()
         };
@@ -607,6 +655,7 @@ mod tests {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 2,
                 language: 0,
+                wlb_inputs: None,
             }],
             "Bug A: the Step-2 toggle must reach the persisted order"
         );
@@ -658,6 +707,7 @@ mod tests {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
                 language: 0,
+                wlb_inputs: None,
             }],
             ..Default::default()
         };
@@ -725,11 +775,13 @@ mod tests {
                     tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                     id: 0,
                     language: 0,
+                    wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
                     language: 0,
+                    wlb_inputs: None,
                 },
             ],
             ..Default::default()
@@ -762,6 +814,7 @@ mod tests {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
                 language: 0,
+                wlb_inputs: None,
             }],
             ..Default::default()
         };
@@ -856,5 +909,107 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn wlb_inputs_extract_captures_marker() {
+        use crate::app::state::Step3ItemState;
+
+        let raw = r"~MOD/MOD.TP2~ #0 #5 // Label // @wlb-inputs: y,D:\test1";
+
+        let mut ws: WizardState = WizardState::default();
+        ws.step3.bgee_items = vec![
+            Step3ItemState {
+                tp_file: "MOD/MOD.TP2".to_string(),
+                component_id: "__PARENT__".to_string(),
+                mod_name: "MOD".to_string(),
+                component_label: "MOD".to_string(),
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                selected_order: 1,
+                block_id: "MOD/MOD.TP2::MOD::segment1".to_string(),
+                is_parent: true,
+                parent_placeholder: false,
+            },
+            Step3ItemState {
+                tp_file: "MOD/MOD.TP2".to_string(),
+                component_id: "5".to_string(),
+                mod_name: "MOD".to_string(),
+                component_label: "Label".to_string(),
+                raw_line: raw.to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                selected_order: 1,
+                block_id: "MOD/MOD.TP2::MOD::segment1".to_string(),
+                is_parent: false,
+                parent_placeholder: false,
+            },
+        ];
+
+        let extracted = extract_workspace_state_from_wizard(&ws, &ModlistWorkspaceState::default());
+
+        assert_eq!(extracted.order_bgee.len(), 1, "one leaf in the order");
+        assert_eq!(
+            extracted.order_bgee[0].wlb_inputs.as_deref(),
+            Some(r"y,D:\test1"),
+            "wlb_inputs must be captured during extract"
+        );
+    }
+
+    #[test]
+    fn wlb_inputs_restore_reattaches_marker_to_step3() {
+        use crate::app::state::Step3ItemState;
+
+        let order = vec![ComponentRef {
+            tp2: "MOD/MOD.TP2".to_string(),
+            id: 5,
+            language: 0,
+            wlb_inputs: Some(r"y,D:\test1".to_string()),
+        }];
+
+        let mut ws: WizardState = WizardState::default();
+        ws.step2.bgee_mods = vec![mod_state(
+            "MOD",
+            "MOD/MOD.TP2",
+            vec![Step2ComponentState {
+                component_id: "5".to_string(),
+                label: "Label".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                raw_line: "~MOD/MOD.TP2~ #0 #5 // Label".to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: false,
+                selected_order: None,
+            }],
+        )];
+        apply_order_to_mods(&order, &mut ws.step2.bgee_mods);
+        recompute_mod_checked(&mut ws.step2.bgee_mods);
+        ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
+
+        let leaves: Vec<&Step3ItemState> = ws
+            .step3
+            .bgee_items
+            .iter()
+            .filter(|i| !i.is_parent)
+            .collect();
+        assert_eq!(leaves.len(), 1, "restored component present in step3");
+        assert!(
+            leaves[0].raw_line.contains(r"@wlb-inputs: y,D:\test1"),
+            "restored step3 item raw_line must carry the wlb_inputs marker; \
+             got: {}",
+            leaves[0].raw_line
+        );
     }
 }

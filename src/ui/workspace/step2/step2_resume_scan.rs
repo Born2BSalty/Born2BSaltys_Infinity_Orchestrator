@@ -103,11 +103,13 @@ mod tests {
                 tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                 id: 0,
                 language: 0,
+                wlb_inputs: None,
             },
             ComponentRef {
                 tp2: "EeFixPack/EeFixPack.TP2".to_string(),
                 id: 2,
                 language: 0,
+                wlb_inputs: None,
             },
         ];
         let snap = snapshot_from_order(&order);
@@ -235,11 +237,13 @@ mod tests {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 11,
                     language: 0,
+                    wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 0,
                     language: 0,
+                    wlb_inputs: None,
                 },
             ],
             dev_scanned_mods_folder: Some("/some/scanned/mods".to_string()),
