@@ -23,6 +23,8 @@ pub struct RescanSelection {
     pub tp2_upper: String,
     pub component_id: String,
     pub selected_order: Option<usize>,
+    /// Persisted `@wlb-inputs` marker value, if any, carried through rescan.
+    pub wlb_inputs: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

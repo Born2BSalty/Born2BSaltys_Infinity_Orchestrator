@@ -105,9 +105,17 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
     }
 }
 
+/// Extracts the `@wlb-inputs` value from a raw `WeiDU` line by parsing it with
+/// the canonical component parser, returning `None` when the marker is absent.
+pub(crate) fn extract_wlb_inputs(raw_line: &str) -> Option<String> {
+    crate::mods::component::Component::parse_weidu_line(raw_line)
+        .ok()
+        .and_then(|c| c.wlb_inputs)
+}
+
 /// Stamps `// @wlb-inputs: {inputs}` onto a component's raw line, replacing any
 /// prior marker. Trims the inputs string; does nothing when it is empty.
-fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &str) {
+pub(crate) fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &str) {
     let inputs = inputs.trim();
     if inputs.is_empty() {
         return;
@@ -118,7 +126,7 @@ fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &str) {
 
 /// Strips any existing `@wlb-inputs:` marker from a raw `WeiDU` line, returning
 /// the trimmed base without the marker or its surrounding comment syntax.
-fn strip_wlb_marker(raw_line: &str) -> String {
+pub(crate) fn strip_wlb_marker(raw_line: &str) -> String {
     let marker = "@wlb-inputs:";
     let lower = raw_line.to_ascii_lowercase();
     lower.find(marker).map_or_else(
@@ -234,9 +242,7 @@ fn order_from_items(items: &[Step3ItemState]) -> Vec<ComponentRef> {
         .filter(|item| !item.is_parent && item.component_id != PARENT_PLACEHOLDER_ID)
         .filter_map(|item| {
             let id = item.component_id.trim().parse::<i64>().ok()?;
-            let wlb_inputs = crate::mods::component::Component::parse_weidu_line(&item.raw_line)
-                .ok()
-                .and_then(|c| c.wlb_inputs);
+            let wlb_inputs = extract_wlb_inputs(&item.raw_line);
             Some(ComponentRef {
                 tp2: item.tp_file.clone(),
                 id,
