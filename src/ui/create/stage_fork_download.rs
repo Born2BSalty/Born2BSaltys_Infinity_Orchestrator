@@ -7,8 +7,8 @@ use tracing::warn;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::ui::install::stage_downloading::{
     self, DownloadProgress, DownloadScreenCopy, build_and_hold_progress,
-    ingest_downloaded_archives_once, kick_streaming_downloader_once, render_chrome,
-    stage_and_kick_archive_skip_once, verify_downloaded_archives_once,
+    ingest_downloaded_archives_once, kick_explicit_resolve_once, kick_streaming_downloader_once,
+    render_chrome, stage_and_kick_archive_skip_once, verify_downloaded_archives_once,
 };
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::ThemePalette;
@@ -52,18 +52,16 @@ pub fn render_live(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> For
     );
 
     stage_downloading::arm_pipeline_once(orchestrator, &inputs);
+    kick_explicit_resolve_once(orchestrator);
     stage_and_kick_archive_skip_once(orchestrator, &inputs);
     kick_streaming_downloader_once(orchestrator);
     verify_downloaded_archives_once(orchestrator, &inputs.destination);
     ingest_downloaded_archives_once(orchestrator, &inputs.destination);
 
-    // Once extract finishes, suppress the auto-build Step 5 handoff.
-    // `arm_auto_build` (called during fork-arm) leaves
-    // `modlist_auto_build_active` + `modlist_auto_build_waiting_for_install`
-    // true; the legacy `advance_pending_saved_log_flow` would otherwise fire
-    // the post-extract handoff once the apply settles and route to Step 5.
-    // That is wrong for the fork path, where the user should land on
-    // Workspace for review. Idempotent: subsequent frames re-clear-no-op.
+    // Once extract finishes, clear the auto-build flags so that
+    // `advance_pending_saved_log_flow` does not fire the Step-5 handoff.
+    // The fork path lands on Workspace for review, not on the install step.
+    // Idempotent: subsequent frames re-clear with no effect.
     if orchestrator.install_screen_state.pipeline_flags.armed()
         && orchestrator
             .install_screen_state

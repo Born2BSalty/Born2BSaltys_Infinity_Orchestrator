@@ -117,12 +117,13 @@ pub struct InstallPipelineFlags {
 }
 
 impl InstallPipelineFlags {
-    const ARMED: u8 = 0b00_0001;
-    const ARCHIVES_STAGED: u8 = 0b00_0010;
-    const ARCHIVES_INGESTED: u8 = 0b00_0100;
-    const ARCHIVES_VERIFIED: u8 = 0b00_1000;
-    const DOWNLOAD_PHASE_STARTED: u8 = 0b01_0000;
-    const ARCHIVE_SKIP_COMPLETED: u8 = 0b10_0000;
+    const ARMED: u8 = 0b0000_0001;
+    const ARCHIVES_STAGED: u8 = 0b0000_0010;
+    const ARCHIVES_INGESTED: u8 = 0b0000_0100;
+    const ARCHIVES_VERIFIED: u8 = 0b0000_1000;
+    const DOWNLOAD_PHASE_STARTED: u8 = 0b0001_0000;
+    const ARCHIVE_SKIP_COMPLETED: u8 = 0b0010_0000;
+    const EXPLICIT_RESOLVE_STARTED: u8 = 0b0100_0000;
 
     #[must_use]
     pub const fn armed(self) -> bool {
@@ -178,6 +179,15 @@ impl InstallPipelineFlags {
         self.set_bit(Self::ARCHIVE_SKIP_COMPLETED, value);
     }
 
+    #[must_use]
+    pub const fn explicit_resolve_started(self) -> bool {
+        self.bits & Self::EXPLICIT_RESOLVE_STARTED != 0
+    }
+
+    pub const fn set_explicit_resolve_started(&mut self, value: bool) {
+        self.set_bit(Self::EXPLICIT_RESOLVE_STARTED, value);
+    }
+
     pub const fn reset(&mut self) {
         self.bits = 0;
     }
@@ -229,6 +239,7 @@ impl InstallScreenState {
             || self.pipeline_flags.archives_verified()
             || self.pipeline_flags.download_phase_started()
             || self.pipeline_flags.archive_skip_completed()
+            || self.pipeline_flags.explicit_resolve_started()
             || self.pipeline_arm_error.is_some()
             || !self.expected_archive_meta.is_empty()
             || !self.pre_skip_assets.is_empty()
@@ -350,6 +361,7 @@ mod tests {
         st.pipeline_flags.set_archives_ingested(true);
         st.pipeline_flags.set_download_phase_started(true);
         st.pipeline_flags.set_archive_skip_completed(true);
+        st.pipeline_flags.set_explicit_resolve_started(true);
         st.hashed_indices.insert(0);
         st.hashed_indices.insert(7);
         st.clear_preview();
@@ -370,6 +382,10 @@ mod tests {
         assert!(
             !st.pipeline_flags.archive_skip_completed(),
             "a re-entry must re-run the async skip pass"
+        );
+        assert!(
+            !st.pipeline_flags.explicit_resolve_started(),
+            "a re-entry must re-run the explicit resolve"
         );
         assert!(
             st.hashed_indices.is_empty(),
