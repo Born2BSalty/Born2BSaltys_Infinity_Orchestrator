@@ -13,10 +13,6 @@ Redesign of the `bio` Rust crate into a multi-modlist workspace app (`eframe`/`e
 
 All other Phase-8 tasks (T1/T2/T4–T11/T15/T16, plus the `T10.f` toast event migration — Group A shipped via PR #34; Groups B/C intentionally not migrated per §10.8) are delivered or no-work-needed — see the phase-08 plan doc for per-task status.
 
-## Queued tasks (not started)
-
-- **Re-import of a copied code stalls at 0/0 downloads.** Deterministic repro: legacy code → Create → "import and modify" (fork import) → install → Home Kebab → Copy import code → Create → "import and modify" again with that copied code → the download stage sticks at **0/0**. The copied post-install code carries `allow_auto_install=true` + baked `archive_meta {size,hash}`, and the prior install already content-addressed the archives — so candidate causes are the checksum-then-skip pass classifying every asset as already-present (0 to fetch) while the pipeline never advances, or the fork re-import arm path failing to arm against an already-staged set. **Not root-caused** — needs a flow trace (`/root-cause-from-flow`) from the re-import entry through `arm_pipeline_once` / `archive_skip` / `fork_pipeline_arm` before any fix.
-
 ## Open risks / bugs
 
 - **🔴 R7** — `delete_modlist` follows symlinks on Linux (`fs::remove_dir_all`); a symlinked install path destroys the real target. Linux-only; Windows unaffected.
