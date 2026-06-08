@@ -1,6 +1,221 @@
-# Phase 8 — Per-Modlist Download-Source Ownership (PR-1: correctness core)
+# Phase 8 — Per-Modlist Download-Source & Installed-Refs Ownership (PR-1: correctness core)
 
 **Status:** PLANNED — not started.
+
+---
+
+## Plain-language overview (read this first)
+
+> This overview explains the feature in human terms — data, files, and user actions — then, under **Under the hood**, how it's built and the precautions that keep it from disturbing the rest of the app. The detailed, code-level plan (review history, tasks `PMD.T1–T10`, the carve-out edit table, the test plan) follows below under **Implementation reference**. When the two disagree, this overview is the canonical *what & why*.
+
+### The problem, as a scenario
+
+You're building two modlists at once:
+- **Modlist A** needs CDTweaks **v16**
+- **Modlist B** needs CDTweaks **v19**
+
+Today every modlist shares **one** file that remembers your mod versions. Whichever you set last wins — globally. So when you finish Modlist A and export a share code for friends, the code carries **v19** (the wrong version). Their game may break. You never notice, because your machine already had v16 downloaded.
+
+```
+                TODAY  (the bleed)
+
+     Modlist A                     Modlist B
+     wants v16                     wants v19
+          \                           /
+           \                         /
+            v                       v
+        +-------------------------------+
+        |   ONE shared global file      |   <- last write wins
+        |   "CDTweaks = v19"            |
+        +-------------------------------+
+                     |
+            export Modlist A
+                     v
+            Share code = v19   X  WRONG
+```
+
+The root cause: **your version choices are stored globally, not per-modlist.** They leak between modlists.
+
+### The fix, in one line
+
+Give each modlist its **own** version choices, in its **own** folder, and look them up in a clear order of preference.
+
+```
+                AFTER  (fixed)
+
+   Modlist A's folder            Modlist B's folder
+   "CDTweaks = v16"              "CDTweaks = v19"
+          |                              |
+     export A                       export B
+          v                              v
+   Share code = v16  OK          Share code = v19  OK
+```
+
+### Two kinds of version data we track
+
+For every mod, two separate facts:
+
+1. **The pin** — *which source + which exact version this mod should be* (e.g. CDTweaks, from GitHub, tag v16)
+2. **The installed record** — *which version actually got downloaded & installed*
+
+Both used to live only in shared global files. Now each modlist also keeps its own.
+
+### How a version gets chosen — 3 layers of preference (the pin)
+
+When the app asks "what version of mod X?", it checks most-specific first and falls through:
+
+```
+  +- 1. THIS modlist's own pin -----------------+   highest  (NEW)
+  |     "For Modlist A: CDTweaks = v16"          |
+  +----------------------------------------------+
+                |  not pinned here? fall through
+                v
+  +- 2. Your personal default ------------------+
+  |     "My usual CDTweaks"                       |
+  +----------------------------------------------+
+                |  no personal default? fall through
+                v
+  +- 3. The app's built-in catalog -------------+   lowest
+  |     "CDTweaks ships from <url>"              |
+  +----------------------------------------------+
+```
+
+A modlist's file only holds the mods you **deliberately pinned for it**; everything else falls through. So the per-modlist files stay tiny.
+
+### Where the files live
+
+```
+%APPDATA%\bio\
+|
++-- mod_downloads_user.toml      <- YOUR personal default pins (shared)
++-- mod_installed_refs.toml      <- global installed record (legacy/fallback)
+|
++-- modlists\
+    +-- Modlist-A\
+    |   +-- workspace.json            (already exists: A's mod selection)
+    |   +-- mod_downloads_user.toml   <- NEW: A's own pins
+    |   +-- mod_installed_refs.toml   <- NEW: what A actually installed
+    |
+    +-- Modlist-B\
+        +-- workspace.json
+        +-- mod_downloads_user.toml   <- NEW: B's own pins
+        +-- mod_installed_refs.toml   <- NEW: what B installed
+```
+
+### The one thing you'll see change
+
+In the Updates popup, the per-mod **"Edit Source"** button becomes a small **dropdown** with two destinations:
+
+| You choose…          | Your version edit is saved to…                       |
+|----------------------|------------------------------------------------------|
+| **My default**       | your personal global file *(exactly like today)*     |
+| **For this modlist** | this modlist's own file *(new)*                       |
+
+Everything else is invisible — the correct version just follows each modlist around.
+
+### What happens on each action
+
+| When you…                              | The app…                                                                                  |
+|----------------------------------------|-------------------------------------------------------------------------------------------|
+| **Pin a version "For this modlist"**   | saves it to that modlist's own file; your global default is untouched                      |
+| **Pin a version "My default"**         | saves your global file; no modlist file is touched (and the editor shows your *global* value, not a modlist's pin) |
+| **Work on / install a modlist**        | resolves every mod through the 3-layer preference for the *active* modlist                 |
+| **Export a share code**                | bakes in exactly what *this* modlist resolves to — never whatever happens to be global     |
+| **Import someone's code**              | drops their pins + installed-record into the *new* modlist's folder; your global defaults stay intact |
+
+### Why the two files behave a little differently
+
+- **Pins** are **layered** (the 3 tiers above, merged field-by-field) — because there's an app-default catalog underneath them.
+- **Installed record** is a **full swap** — each modlist simply owns its own; there's nothing to merge with. A new modlist's record is empty until it installs something.
+
+### How the app knows "which modlist is active"
+
+The app already tracks the modlist you're working on. We feed that to the version lookup so it reads the right folder. With **no** active modlist (the standalone legacy wizard), everything uses the global files exactly as today.
+
+One subtlety we handle carefully: during an install, the real download/extract runs on **background worker threads**, and the "active modlist" signal can flip as the screen redraws. So for installs we **lock in the target modlist's folder the moment the install begins** and hand that to the workers — a long install can never drift and write to the wrong modlist's record.
+
+### Safety & edges
+
+- **Legacy standalone wizard:** byte-for-byte unchanged (no active modlist -> global files, as today).
+- **Your personal defaults:** never clobbered by importing someone's code (a second bug this quietly fixes).
+- **Modlists made before this feature:** start with an empty installed-record and rebuild it on their next install — harmless, because version-correctness rides on the pins.
+
+---
+
+## Under the hood — how it's achieved & how we keep everything else safe
+
+For the curious: how the behavior above is actually produced, and the precautions that stop this change from rippling into the rest of the app.
+
+### The core trick: one switch, one lookup point
+
+The app asks "what version of this mod?" from **many** places — checking for updates, downloading, installing, exporting, diagnostics. Instead of hunting down and editing every one (and risking a miss), we change the **single central lookup** they all already call.
+
+```
+   update-check --+
+   download ------+
+   install -------+--->  +--------------------------+
+   export --------+      |  ONE central version     |
+   diagnostics ---+      |  lookup                  |
+                         |  "is a modlist active?"  |
+                         +-----------+--------------+
+                            no |         | yes
+                               v         v
+                        global files   this modlist's folder
+                        (as today)     (then fall through)
+```
+
+One change flips the behavior for every caller at once — and there's nothing to forget. The installed-record file works the same way: every read and write funnels through one path function, so making that one function modlist-aware moves the whole file per-modlist.
+
+### The safety principle: "off by default, identical when off"
+
+There's effectively a single **"which modlist is active" switch**. The app turns it on when you open or install a modlist, off when you go Home or run the legacy wizard. Every edit to the original code is built so that **when the switch is OFF, the code does exactly what it does today — byte for byte.**
+
+```
+   Switch OFF (no active modlist)        Switch ON (Modlist A active)
+   -----------------------------        ----------------------------
+   - legacy standalone wizard            - workspace / install for A
+   - reads/writes the GLOBAL files       - reads/writes A's OWN files
+   - export = today's behavior           - export = A's resolved versions
+   - IDENTICAL to current app            - the new per-modlist behavior
+```
+
+The legacy wizard **never turns the switch on**, so it's structurally incapable of behaving differently. Same for any mod with no per-modlist pin — it just falls through to the value it would have used anyway.
+
+### Touching the protected core, carefully
+
+Much of the app is "protected" original code that a strict project rule forbids rewriting. This feature must reach into some of it (the version lookup, the share-code reader/writer, the install recorder all live there). The project allows that only as a **named, documented exception** (a "carve-out"): every single edit is listed in advance with its file, its purpose, and a one-line proof that it does nothing when the switch is off. A reviewer checks the list against what actually changed — anything not on the list is a stop-and-investigate.
+
+### Specific correctness precautions (and the bug each one prevents)
+
+Every precaution below maps to a real bug the reviews caught *before any code was written*:
+
+| Precaution | The bug it prevents |
+|---|---|
+| **Lock in the install's target folder before extraction starts** (don't trust the live switch on background threads) | A long install runs on worker threads while the screen redraws and flips the switch off — versions would get recorded into the *wrong* (global) file. |
+| **Create the new modlist's identity *before* importing a pasted code** | The paste-and-install flow created the modlist *after* writing the imported data — so the data landed in your global file instead of the new modlist's. |
+| **"My default" editor shows your *global* value, not the active modlist's pin** | Opening "My default" while a modlist was active pre-filled that modlist's pinned version, so saving would silently promote the pin up into your global defaults. |
+| **Export *constructs* the version list from this modlist's data** (instead of copying a whole file) | A verbatim copy re-introduced the exact bleed — and mis-encoded multi-version entries, producing a corrupt share code. |
+| **The installed-record never falls back to the global file** | A fall-through would let one modlist read another's installed versions — the bleed again. |
+| **Roll back a half-created modlist if its import fails** | Creating the modlist early (above) could otherwise leave an orphan entry on your Home screen if the import then errored. |
+
+### Protecting the *surrounding* features
+
+The same "additive, inert-when-off" discipline shields everything adjacent:
+
+- **Manual "check for updates"** keeps working — it rides the same central lookup, which simply returns the active modlist's value (or the global one, exactly as before).
+- **The diagnostics bundle, saved-log apply, and other internal readers** all ride that one lookup; none needed bespoke edits, so none can drift.
+- **The share-code format is unchanged** — older codes still import correctly; we changed only *which version values* get baked in, not the code's structure.
+- **Your real data is fenced off from the tests.** Automated tests may never touch your real config folder; because the "active modlist" switch is a shared global, every test that flips it must reset it afterward (even if it crashes) and run one-at-a-time, so tests can't corrupt each other or your files. As a final backstop, the test run snapshots your real modlist + version files before and after and proves they're byte-for-byte unchanged.
+
+### How we gained confidence
+
+The plan went through **four rounds of adversarial review and revision** — each reading the real code, trying to break the design, and required to look for side-effects on *other* parts of the app. Those rounds caught (and the plan now fixes) the import-isolation bug, the pin-leak-into-global bug, a share-code corruption bug, and the background-thread race above. Only after a clean pass was the plan considered done.
+
+---
+
+# Implementation reference
+
+> Everything below is the detailed, code-level plan — the four review rounds, the task breakdown (`PMD.T1–T10`), the carve-out #16 edit table, and the test plan. It assumes familiarity with the codebase; the **Plain-language overview** above is the human-readable companion and the canonical *what & why*.
 
 ---
 
