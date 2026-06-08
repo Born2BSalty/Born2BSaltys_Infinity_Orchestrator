@@ -47,6 +47,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     clear_pending_reinstall_on_nav_away_from_install(orchestrator);
 
     let rendered_nav = orchestrator.nav.clone();
+    // Sync the ambient active-modlist dir to the nav destination every frame.
+    sync_ambient_to_nav(&rendered_nav);
     match rendered_nav.clone() {
         NavDestination::Home => page_home::render(ui, orchestrator, ctx),
         NavDestination::Install => page_install::render(ui, orchestrator, ctx),
@@ -59,6 +61,18 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     }
 
     orchestrator.last_rendered_nav = rendered_nav;
+}
+
+/// Syncs the process-global ambient active-modlist dir to the current nav destination.
+/// Sets on Workspace{Some(id)}, clears on everything else.
+fn sync_ambient_to_nav(nav: &NavDestination) {
+    use crate::install_runtime::active_modlist_source_path;
+    match nav {
+        NavDestination::Workspace {
+            modlist_id: Some(id),
+        } => active_modlist_source_path::set_ambient_for_modlist(id),
+        _ => active_modlist_source_path::clear_ambient(),
+    }
 }
 
 fn render_workspace(

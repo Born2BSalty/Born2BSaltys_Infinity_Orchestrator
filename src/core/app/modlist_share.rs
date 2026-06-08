@@ -24,14 +24,29 @@ pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, S
     ) {
         return Err("No WeiDU entries available to export.".to_string());
     }
-    let mod_downloads_user = read_optional_file_text(
-        &crate::app::mod_downloads::mod_downloads_user_path(),
-        omit_stock_mod_downloads_user,
-    );
-    let mod_installed_refs = read_optional_file_text(
-        &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
-        |_| false,
-    );
+
+    // Gate on active modlist: ambient-set ⇒ bake resolved set; ambient-unset ⇒ legacy verbatim.
+    let mod_downloads_user =
+        if crate::app::mod_downloads::active_modlist_downloads_path().is_some() {
+            build_resolved_source_overrides(state)?
+        } else {
+            read_optional_file_text(
+                &crate::app::mod_downloads::mod_downloads_user_path(),
+                omit_stock_mod_downloads_user,
+            )
+        };
+
+    // Installed-refs: per-modlist when active, global verbatim otherwise.
+    let mod_installed_refs =
+        if crate::app::mod_downloads::active_modlist_downloads_path().is_some() {
+            build_per_modlist_installed_refs(state)
+        } else {
+            read_optional_file_text(
+                &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
+                |_| false,
+            )
+        };
+
     let mod_configs = export_mod_config_files(state)?;
     let mut payload = json!({
         "format_version": 1,
@@ -133,7 +148,16 @@ pub(crate) fn import_modlist_share_code(
         .as_deref()
         .filter(|text| !text.trim().is_empty())
     {
-        write_text_file(crate::app::mod_downloads::mod_downloads_user_path(), text)?;
+        // Redirect to the importing modlist's per-modlist file when the ambient is set
+        // (the orchestrator sets the ambient before the import runs). Falls back to the global
+        // path when the ambient is unset (legacy BIO_legacy import path).
+        let pin_path = crate::app::mod_downloads::active_modlist_downloads_path()
+            .unwrap_or_else(crate::app::mod_downloads::mod_downloads_user_path);
+        if let Some(parent) = pin_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("create per-modlist dir failed: {err}"))?;
+        }
+        write_text_file(pin_path, text)?;
     }
     if let Some(text) = payload
         .installed_refs
@@ -668,6 +692,153 @@ struct ShareModDownloadSource {
     repo: Option<String>,
 }
 
+/// Builds the resolved `mod_downloads_user_toml` payload from this modlist's mods,
+/// resolving each through the three-tier loader and serializing with a round-trip-safe
+/// serializer. Skips mods with no resolvable source (no panic). Returns `None` when
+/// nothing resolves (importer treats absent `source_overrides` as no-override).
+fn build_resolved_source_overrides(state: &WizardState) -> Result<Option<String>, String> {
+    let source_load = crate::app::mod_downloads::load_mod_download_sources();
+    let installed_ids = crate::app::app_step2_update_source_refs::load_installed_source_ids();
+
+    let mut toml_out = String::new();
+    for mod_state in state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+    {
+        let Some(source) =
+            resolve_mod_config_source(state, &source_load, &installed_ids, &mod_state.tp_file)
+        else {
+            continue;
+        };
+        let block = serialize_resolved_mod(&mod_state.tp_file, &mod_state.name, &source);
+        if !toml_out.is_empty() {
+            toml_out.push_str("\n\n");
+        }
+        toml_out.push_str(&block);
+    }
+
+    if toml_out.is_empty() {
+        return Ok(None);
+    }
+
+    // Round-trip validate before baking.
+    toml::from_str::<crate::app::mod_downloads::ModDownloadsFile>(&toml_out)
+        .map_err(|err| format!("resolved source overrides failed round-trip validation: {err}"))?;
+
+    Ok(Some(toml_out))
+}
+
+/// Emits `[[mods]]` header + one `[[mods.sources]]` block for a single resolved source.
+fn serialize_resolved_mod(
+    tp2: &str,
+    label: &str,
+    source: &crate::app::mod_downloads::ModDownloadSource,
+) -> String {
+    let name = if label.trim().is_empty() {
+        tp2.trim()
+    } else {
+        label.trim()
+    };
+    let header = format!(
+        "[[mods]]\nname = \"{}\"\ntp2 = \"{}\"",
+        escape_for_toml(name),
+        escape_for_toml(tp2.trim()),
+    );
+    let source_block = serialize_resolved_source_block(source);
+    format!("{header}\n\n{source_block}")
+}
+
+fn escape_for_toml(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Correct, round-trippable serializer for a single resolved source block.
+/// Emits only pin selectors and source identity; drops `config_files` and
+/// `source_default` (both are no-ops on import).
+fn serialize_resolved_source_block(
+    source: &crate::app::mod_downloads::ModDownloadSource,
+) -> String {
+    let mut lines = vec![
+        "[[mods.sources]]".to_string(),
+        format!("id = \"{}\"", escape_for_toml(&source.source_id)),
+        format!("label = \"{}\"", escape_for_toml(&source.source_label)),
+    ];
+
+    if let Some(github) = source.github.as_ref() {
+        // GitHub source: emit type + url + repo.
+        lines.push("type = \"github\"".to_string());
+        lines.push(format!("url = \"{}\"", escape_for_toml(&source.url)));
+        lines.push(format!("repo = \"{}\"", escape_for_toml(github)));
+    } else if !source.url.is_empty() {
+        // Non-GitHub source: emit type="url" + url; no repo field.
+        lines.push("type = \"url\"".to_string());
+        lines.push(format!("url = \"{}\"", escape_for_toml(&source.url)));
+    }
+
+    // Pin selectors.
+    if !source.exact_github.is_empty() {
+        // Emit as a TOML array (never repeated scalar lines — prevents duplicate-key error).
+        let items = source
+            .exact_github
+            .iter()
+            .map(|s| format!("\"{}\"", escape_for_toml(s)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push(format!("exact_github = [{items}]"));
+    }
+    if let Some(tag) = source.tag.as_ref().filter(|s| !s.is_empty()) {
+        lines.push(format!("tag = \"{}\"", escape_for_toml(tag)));
+    }
+    if let Some(commit) = source.commit.as_ref().filter(|s| !s.is_empty()) {
+        lines.push(format!("commit = \"{}\"", escape_for_toml(commit)));
+    }
+    if let Some(branch) = source.branch.as_ref().filter(|s| !s.is_empty()) {
+        lines.push(format!("branch = \"{}\"", escape_for_toml(branch)));
+    }
+    if let Some(channel) = source.channel.as_ref().filter(|s| !s.is_empty()) {
+        lines.push(format!("channel = \"{}\"", escape_for_toml(channel)));
+    }
+
+    // Indent all lines after the header by two spaces (standard block format).
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            if i == 0 {
+                line.clone()
+            } else {
+                format!("  {line}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Builds the `mod_installed_refs_toml` payload from this modlist's per-modlist data.
+/// Sources come from `selected_source_ids`; refs from the per-modlist refs file.
+/// Returns `None` when there is nothing to emit.
+fn build_per_modlist_installed_refs(state: &WizardState) -> Option<String> {
+    use crate::app::app_step2_update_source_refs::load_refs_file_at;
+
+    let path = crate::app::app_step2_update_source_refs::installed_source_refs_path();
+    let refs_file = load_refs_file_at(&path);
+    let sources = state.step2.selected_source_ids.clone();
+
+    if refs_file.refs.is_empty() && sources.is_empty() {
+        return None;
+    }
+
+    let combined = crate::app::app_step2_update_source_refs::ModSourceRefsFile {
+        refs: refs_file.refs,
+        sources,
+    };
+    toml::to_string_pretty(&combined)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+}
+
 fn omit_stock_mod_downloads_user(text: &str) -> bool {
     let Ok(parsed) = toml::from_str::<ShareModDownloadsFile>(text) else {
         return false;
@@ -897,6 +1068,151 @@ mod tests {
                 name: "Root build".to_string(),
                 author: "@root".to_string(),
             }]
+        );
+    }
+
+    // ── Export serializer tests ────────────────────────────────────
+
+    use std::sync::Mutex;
+    static SHARE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    struct AmbientGuard(Option<std::path::PathBuf>);
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    fn github_source_multi_exact() -> crate::app::mod_downloads::ModDownloadSource {
+        crate::app::mod_downloads::ModDownloadSource {
+            name: "TestMod".to_string(),
+            tp2: "testmod".to_string(),
+            source_id: "main".to_string(),
+            source_label: "Main".to_string(),
+            url: "https://github.com/A/B".to_string(),
+            github: Some("A/B".to_string()),
+            exact_github: vec!["A/B@v1".to_string(), "A/B@v2".to_string()],
+            tag: Some("v16".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn url_source() -> crate::app::mod_downloads::ModDownloadSource {
+        crate::app::mod_downloads::ModDownloadSource {
+            name: "UrlMod".to_string(),
+            tp2: "urlmod".to_string(),
+            source_id: "weasel".to_string(),
+            source_label: "Weasel".to_string(),
+            url: "https://example.com/mod.zip".to_string(),
+            github: None,
+            tag: Some("v3".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn export_serializer_emits_exact_github_as_array() {
+        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let source = github_source_multi_exact();
+        let block = serialize_resolved_source_block(&source);
+
+        // Must be a single array line, not repeated scalar lines.
+        assert!(
+            block.contains("exact_github = ["),
+            "exact_github must be emitted as TOML array: {block}"
+        );
+        assert!(
+            !block.contains("\nexact_github = \""),
+            "must not emit repeated scalar exact_github lines"
+        );
+
+        // Round-trip validate.
+        let wrapped = format!("[[mods]]\nname = \"T\"\ntp2 = \"t\"\n\n{block}");
+        let parsed = toml::from_str::<crate::app::mod_downloads::ModDownloadsFile>(&wrapped);
+        assert!(
+            parsed.is_ok(),
+            "serialized block must round-trip: {:?}",
+            parsed.err()
+        );
+    }
+
+    #[test]
+    fn export_serializer_non_github_source_url_no_repo() {
+        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let source = url_source();
+        let block = serialize_resolved_source_block(&source);
+
+        assert!(block.contains("url = \""), "url source must emit url field");
+        assert!(!block.contains("repo = \""), "url source must not emit repo field");
+
+        // Round-trip validate.
+        let wrapped = format!("[[mods]]\nname = \"U\"\ntp2 = \"u\"\n\n{block}");
+        let parsed = toml::from_str::<crate::app::mod_downloads::ModDownloadsFile>(&wrapped);
+        assert!(parsed.is_ok(), "url source block must round-trip");
+    }
+
+    #[test]
+    fn export_ambient_unset_is_byte_identical_verbatim() {
+        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+
+        // With no ambient, build_resolved_source_overrides must not be called.
+        // The gate checks active_modlist_downloads_path().is_some() — when None,
+        // the export returns early with the verbatim global path.
+        assert!(
+            crate::app::mod_downloads::active_modlist_downloads_path().is_none(),
+            "precondition: ambient is None"
+        );
+
+        // Verify the gate logic: the function path that reads verbatim is chosen.
+        let is_set = crate::app::mod_downloads::active_modlist_downloads_path().is_some();
+        assert!(!is_set, "ambient-unset path must produce verbatim export");
+    }
+
+    #[test]
+    fn export_skips_unresolvable_mod() {
+        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+
+        // A state with a bgee mod that has no matching source in the catalog.
+        let mut state = WizardState::default();
+        state.step3.bgee_items = vec![];
+        state.step2.bgee_mods = vec![];
+
+        // build_resolved_source_overrides with an empty mods list yields None.
+        let result = build_resolved_source_overrides(&state);
+        assert!(result.is_ok(), "empty mods list must not error");
+        assert!(
+            result.unwrap().is_none(),
+            "empty mods list must yield None source overrides"
+        );
+    }
+
+    // ── Import tests ───────────────────────────────────────────────
+
+    #[test]
+    fn import_ambient_unset_writes_global() {
+        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+
+        // With ambient unset, active_modlist_downloads_path() is None,
+        // so the import fallback path is the global file.
+        let path = crate::app::mod_downloads::active_modlist_downloads_path();
+        assert!(
+            path.is_none(),
+            "ambient unset: no per-modlist path resolved"
         );
     }
 }

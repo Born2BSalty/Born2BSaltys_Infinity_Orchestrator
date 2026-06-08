@@ -81,6 +81,78 @@ fn existing_entry_id_for_destination(
         .map(|e| e.id.clone())
 }
 
+/// Mints or reuses a modlist registry entry before `prepare_install_dirs_and_maybe_import`.
+///
+/// Setting the ambient before the import write ensures per-modlist isolation for
+/// paste-and-install before the import runs. Returns `(id, freshly_minted)` where `freshly_minted`
+/// is `true` for a brand-new entry and `false` for a reused one. Callers must roll
+/// back a freshly-minted entry if the subsequent import fails.
+pub fn early_mint_modlist_id(
+    orchestrator: &mut OrchestratorApp,
+    destination: &str,
+) -> Option<(String, bool)> {
+    // Reinstall and destination-dedup reuse: not freshly minted.
+    if let Some(id) = orchestrator
+        .pending_reinstall_id
+        .as_ref()
+        .filter(|id| orchestrator.registry.find(id).is_some())
+        .cloned()
+    {
+        return Some((id, false));
+    }
+    if let Some(id) = existing_entry_id_for_destination(&orchestrator.registry, destination) {
+        return Some((id, false));
+    }
+
+    // Fresh mint.
+    let Some(preview) = orchestrator.install_screen_state.parsed_preview.clone() else {
+        warn!(
+            target = "orchestrator",
+            "early_mint_modlist_id: no parsed preview — cannot create early entry"
+        );
+        return None;
+    };
+    let entry =
+        match register_install_modlist_paste(&preview, destination, &mut orchestrator.registry) {
+            Ok(e) => e,
+            Err(err) => {
+                warn!(
+                    target = "orchestrator",
+                    "early_mint_modlist_id: register_install_modlist_paste failed: {err}"
+                );
+                return None;
+            }
+        };
+    persist_new_install_workspace(orchestrator, &entry);
+    info!(
+        target = "orchestrator",
+        "early_mint_modlist_id: minted net-new entry {} before import", entry.id
+    );
+    Some((entry.id, true))
+}
+
+/// Rolls back a freshly-minted entry created by `early_mint_modlist_id` when the
+/// subsequent import fails. Has no effect on reused (destination-deduped) entries.
+pub fn rollback_early_minted_entry(orchestrator: &mut OrchestratorApp, id: &str) {
+    let before = orchestrator.registry.entries.len();
+    orchestrator.registry.entries.retain(|e| e.id != id);
+    if orchestrator.registry.entries.len() < before {
+        info!(
+            target = "orchestrator",
+            "rollback_early_minted_entry: removed {id}"
+        );
+        if let Err(err) = orchestrator.registry_store.save(&orchestrator.registry) {
+            warn!(
+                target = "orchestrator",
+                "rollback_early_minted_entry: registry persist failed: {err}"
+            );
+        }
+        orchestrator
+            .persistence_cycle
+            .mark_registry_dirty(std::time::Instant::now());
+    }
+}
+
 pub fn register_and_write_install_start_artifacts(orchestrator: &mut OrchestratorApp) -> bool {
     let destination = orchestrator
         .install_screen_state

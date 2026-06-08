@@ -671,6 +671,7 @@ fn render_add_source_button(
             label,
             source_id: "new-source".to_string(),
             allow_source_id_change: true,
+            destination: crate::app::step2_action::ModSourceEditDestination::GlobalDefault,
         });
     }
 }

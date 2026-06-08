@@ -4,6 +4,7 @@
 use eframe::egui;
 
 use crate::app::mod_downloads;
+use crate::app::step2_action::ModSourceEditDestination;
 use crate::app::state::WizardState;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_section_header};
 use crate::ui::shared::redesign_tokens::{
@@ -70,6 +71,62 @@ pub(super) fn render_source_choices(
     layout
 }
 
+/// Renders the destination dropdown + "Edit Source" button in one horizontal cell.
+/// Returns the `OpenModDownloadSourceEditor` action if the button was clicked.
+fn render_edit_source_cell(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    choice: &SourceChoiceRow,
+    popup_busy: bool,
+) -> Option<Step2Action> {
+    let mut result = None;
+    let edit_enabled = !popup_busy;
+    let has_active_modlist = mod_downloads::active_modlist_downloads_path().is_some();
+
+    ui.horizontal(|ui| {
+        let mut destination = ModSourceEditDestination::GlobalDefault;
+        if has_active_modlist {
+            egui::ComboBox::from_id_salt(format!("step2-dest-{}", choice.tp2_key))
+                .selected_text(destination_label(destination))
+                .width(110.0)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut destination,
+                        ModSourceEditDestination::GlobalDefault,
+                        destination_label(ModSourceEditDestination::GlobalDefault),
+                    );
+                    ui.selectable_value(
+                        &mut destination,
+                        ModSourceEditDestination::ThisModlist,
+                        destination_label(ModSourceEditDestination::ThisModlist),
+                    );
+                });
+        }
+        if redesign_btn(
+            ui,
+            palette,
+            "Edit Source",
+            BtnOpts {
+                small: true,
+                disabled: !edit_enabled,
+                ..Default::default()
+            },
+        )
+        .clicked()
+            && edit_enabled
+        {
+            result = Some(Step2Action::OpenModDownloadSourceEditor {
+                tp2: choice.tp2_key.clone(),
+                label: choice.label.clone(),
+                source_id: choice.selected_source_id.clone(),
+                allow_source_id_change: false,
+                destination,
+            });
+        }
+    });
+    result
+}
+
 fn render_source_choice_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -94,27 +151,10 @@ fn render_source_choice_row(
                 }
             });
     });
-    let edit_enabled = !popup_busy;
-    if redesign_btn(
-        ui,
-        palette,
-        "Edit Source",
-        BtnOpts {
-            small: true,
-            disabled: !edit_enabled,
-            ..Default::default()
-        },
-    )
-    .clicked()
-        && edit_enabled
+    if let Some(act) = render_edit_source_cell(ui, palette, choice, popup_busy)
         && action.is_none()
     {
-        *action = Some(Step2Action::OpenModDownloadSourceEditor {
-            tp2: choice.tp2_key.clone(),
-            label: choice.label.clone(),
-            source_id: choice.selected_source_id.clone(),
-            allow_source_id_change: false,
-        });
+        *action = Some(act);
     }
     let open_enabled = !popup_busy && choice.selected_source_url.is_some();
     if redesign_btn(
@@ -163,6 +203,13 @@ fn render_source_choice_row(
             tp2: choice.tp2_key.clone(),
             source_id: selected_source_id,
         });
+    }
+}
+
+const fn destination_label(dest: ModSourceEditDestination) -> &'static str {
+    match dest {
+        ModSourceEditDestination::GlobalDefault => "My default",
+        ModSourceEditDestination::ThisModlist => "For this modlist",
     }
 }
 
@@ -287,6 +334,9 @@ fn render_list_grid(
                             label: row.label.clone(),
                             source_id: row.source_id.clone(),
                             allow_source_id_change: add_mod,
+                            // "Add Mod" and list-grid "Edit Source" are always global-only
+                            // (no per-modlist scoping for the add-a-new-source path).
+                            destination: ModSourceEditDestination::GlobalDefault,
                         });
                     }
                 } else {

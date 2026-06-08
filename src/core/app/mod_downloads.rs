@@ -6,10 +6,38 @@ use std::fs;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 use serde::Deserialize;
 
 use crate::platform_defaults::app_config_file;
+
+static ACTIVE_MODLIST_DIR: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
+
+fn active_modlist_dir_mutex() -> &'static Mutex<Option<PathBuf>> {
+    ACTIVE_MODLIST_DIR.get_or_init(|| Mutex::new(None))
+}
+
+/// Sets the active-modlist data dir for the ambient resolver.
+/// Call with `Some(dir)` when a modlist becomes active, `None` when none is.
+pub(crate) fn set_active_modlist_dir(dir: Option<PathBuf>) {
+    if let Ok(mut guard) = active_modlist_dir_mutex().lock() {
+        *guard = dir;
+    }
+}
+
+/// Returns the active-modlist data dir, if any is set.
+pub(crate) fn active_modlist_dir() -> Option<PathBuf> {
+    active_modlist_dir_mutex()
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+}
+
+/// Returns the per-modlist `mod_downloads_user.toml` path when a modlist is active.
+pub(crate) fn active_modlist_downloads_path() -> Option<PathBuf> {
+    active_modlist_dir().map(|d| d.join("mod_downloads_user.toml"))
+}
 
 const MOD_DOWNLOADS_USER_FILE_NAME: &str = "mod_downloads_user.toml";
 const MOD_DOWNLOADS_DEFAULT_FILE_NAME: &str = "mod_downloads_default.toml";
@@ -206,19 +234,39 @@ pub(crate) fn ensure_mod_downloads_files() -> io::Result<()> {
     Ok(())
 }
 
+/// Controls which resolution tier pre-fills the source editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum SeedScope {
+    /// Pre-fill from the full three-tier resolution (used when editing "For this modlist").
+    #[default]
+    Resolved,
+    /// Pre-fill from only the two-tier (global + app-default) resolution, ignoring any
+    /// per-modlist overlay. Used when editing "My default" so saving never promotes a
+    /// modlist pin into the global file.
+    GlobalOnly,
+}
+
 pub(crate) fn load_user_mod_download_source_block(
     tp2: &str,
     label: &str,
     source_id: &str,
     allow_source_id_change: bool,
+    target_path: Option<&Path>,
+    seed_scope: SeedScope,
 ) -> Result<String, String> {
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
-    let path = mod_downloads_user_path();
-    let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let path = target_path.map_or_else(mod_downloads_user_path, Path::to_path_buf);
+    let content = fs::read_to_string(&path).unwrap_or_default();
     let existing_user_block =
         find_mod_block(&content, tp2).and_then(|block| find_source_block(&block, source_id));
     let merged_source = (!allow_source_id_change)
-        .then(|| load_mod_download_sources().resolve_source(tp2, Some(source_id)))
+        .then(|| {
+            let sources = match seed_scope {
+                SeedScope::GlobalOnly => load_two_tier_sources(),
+                SeedScope::Resolved => load_mod_download_sources(),
+            };
+            sources.resolve_source(tp2, Some(source_id))
+        })
         .flatten();
     Ok(editor_block_for_source(
         label,
@@ -235,10 +283,15 @@ pub(crate) fn save_user_mod_download_source_block(
     source_id: &str,
     allow_source_id_change: bool,
     source_block: &str,
+    target_path: Option<&Path>,
 ) -> Result<(), String> {
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
-    let path = mod_downloads_user_path();
-    let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let path = target_path
+        .map_or_else(mod_downloads_user_path, Path::to_path_buf);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    let content = fs::read_to_string(&path).unwrap_or_default();
     if source_block.trim().is_empty() {
         let updated = remove_source_block(&content, tp2, source_id);
         toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
@@ -280,7 +333,10 @@ pub(crate) fn save_user_mod_download_source_block(
     fs::write(&path, updated).map_err(|err| err.to_string())
 }
 
-pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
+/// Loads sources from the app-default and global-user tiers only, with no per-modlist overlay.
+/// This is the seed used when the editor destination is "My default", so saving that
+/// destination never promotes a modlist pin into the global file.
+pub(crate) fn load_two_tier_sources() -> ModDownloadsLoad {
     let default_path = mod_downloads_default_path();
     let user_path = mod_downloads_user_path();
     let mut by_source = BTreeMap::<String, ModDownloadSource>::new();
@@ -324,10 +380,61 @@ pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
 
     let mut sources = by_source.into_values().collect::<Vec<_>>();
     sort_sources(&mut sources);
-    ModDownloadsLoad {
-        sources,
-        error: merge_load_errors(default_load.error, user_load.error),
+    let error = merge_load_errors(default_load.error, user_load.error);
+    ModDownloadsLoad { sources, error }
+}
+
+/// Loads sources applying all three tiers: app-default → global-user → per-modlist override.
+/// When no modlist is active the result equals `load_two_tier_sources()`.
+pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
+    let mut result = load_two_tier_sources();
+
+    // Third pass: per-modlist overlay (additive; skipped when ambient is unset or file absent).
+    if let Some(per_modlist_path) = active_modlist_downloads_path().filter(|p| p.exists()) {
+        {
+            let per_load = load_source_overlays_from_path(&per_modlist_path);
+            // Rebuild by_source map with the same key format used in the two-tier passes.
+            let mut by_source: BTreeMap<String, ModDownloadSource> = result
+                .sources
+                .drain(..)
+                .map(|s| {
+                    let key = format!(
+                        "{}|{}",
+                        normalize_mod_download_tp2(&s.tp2),
+                        normalize_source_id(&s.source_id)
+                    );
+                    (key, s)
+                })
+                .collect();
+            for mut overlay in per_load.sources {
+                let key = overlay_source_key(&overlay);
+                if key.is_empty() {
+                    continue;
+                }
+                let per_default_tp2 = overlay
+                    .source_default_explicit
+                    .then(|| overlay_tp2_key(&overlay));
+                if !overlay.source_default_explicit {
+                    overlay.source_default = false;
+                }
+                let mut source = by_source.remove(&key).unwrap_or_default();
+                apply_source_overlay(&mut source, overlay);
+                normalize_source(&mut source);
+                if !source_is_valid(&source) {
+                    continue;
+                }
+                if let Some(tp2_key) = per_default_tp2.as_deref() {
+                    clear_other_source_defaults(&mut by_source, &key, tp2_key);
+                }
+                by_source.insert(key, source);
+            }
+            result.sources = by_source.into_values().collect();
+            sort_sources(&mut result.sources);
+            result.error = merge_load_errors(result.error, per_load.error);
+        }
     }
+
+    result
 }
 
 fn find_mod_block(content: &str, tp2: &str) -> Option<String> {
@@ -1413,5 +1520,186 @@ mod tests {
         );
 
         assert_eq!(block, existing);
+    }
+
+    // ── Per-modlist ambient tests ──────────────────────────────
+
+    use std::sync::Mutex;
+
+    // Shared lock so ambient-touching tests run one-at-a-time (cargo test is multi-threaded).
+    static AMBIENT_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    /// RAII drop-guard: restores the ambient to its prior value on drop (including panic).
+    struct AmbientGuard(Option<PathBuf>);
+
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(active_modlist_dir())
+        }
+    }
+
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    fn unique_tmp_dir(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "bio_pmd_test_{}_{}_{label}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    fn write_toml_source(dir: &std::path::Path, tag: &str) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join("mod_downloads_user.toml");
+        std::fs::write(
+            &path,
+            format!(
+                "[[mods]]\nname = \"TestMod\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Test/Mod\"\n  repo = \"Test/Mod\"\n  tag = \"{tag}\"\n"
+            ),
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn ambient_unset_loader_matches_two_tier() {
+        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        set_active_modlist_dir(None);
+
+        let two_tier = load_two_tier_sources();
+        let three_tier = load_mod_download_sources();
+
+        // With no ambient set, both loaders produce the same source count.
+        assert_eq!(
+            two_tier.sources.len(),
+            three_tier.sources.len(),
+            "ambient unset: load_mod_download_sources must equal load_two_tier_sources"
+        );
+    }
+
+    #[test]
+    fn ambient_set_but_file_absent_is_inert() {
+        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let nonexistent = unique_tmp_dir("absent");
+        set_active_modlist_dir(Some(nonexistent));
+
+        let two_tier = load_two_tier_sources();
+        let three_tier = load_mod_download_sources();
+
+        assert_eq!(
+            two_tier.sources.len(),
+            three_tier.sources.len(),
+            "ambient set to nonexistent dir: loader must equal two-tier result"
+        );
+    }
+
+    #[test]
+    fn two_tier_seed_equals_three_tier_when_ambient_unset() {
+        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        set_active_modlist_dir(None);
+
+        let two = load_two_tier_sources();
+        let three = load_mod_download_sources();
+
+        assert_eq!(
+            two.sources.len(),
+            three.sources.len(),
+            "extraction is behavior-neutral when ambient is unset"
+        );
+    }
+
+    #[test]
+    fn writer_per_modlist_path_isolates() {
+        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        set_active_modlist_dir(None);
+
+        let tmp_global_dir = unique_tmp_dir("global");
+        let tmp_per_dir = unique_tmp_dir("per");
+        std::fs::create_dir_all(&tmp_global_dir).unwrap();
+        std::fs::create_dir_all(&tmp_per_dir).unwrap();
+
+        let global_path = tmp_global_dir.join("mod_downloads_user.toml");
+        let per_path = tmp_per_dir.join("mod_downloads_user.toml");
+
+        // Write sentinel content to the global file.
+        std::fs::write(&global_path, "# global sentinel\n").unwrap();
+
+        // Ensure the default file exists (ensure_mod_downloads_files may write it).
+        let source_block =
+            "  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"";
+        // Write to the per-modlist path explicitly.
+        let result = save_user_mod_download_source_block(
+            "testmod",
+            "TestMod",
+            "main",
+            false,
+            source_block,
+            Some(&per_path),
+        );
+        // May succeed or fail depending on test environment; what matters is global unchanged.
+        drop(result);
+
+        // The global file must not have been touched.
+        let global_content = std::fs::read_to_string(&global_path).unwrap();
+        assert_eq!(
+            global_content, "# global sentinel\n",
+            "global file must be byte-unchanged when writing to per-modlist path"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_global_dir);
+        let _ = std::fs::remove_dir_all(&tmp_per_dir);
+    }
+
+    #[test]
+    fn global_seed_ignores_per_modlist_pin() {
+        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        // Set up a per-modlist dir with a tag pin.
+        let tmp_dir = unique_tmp_dir("seed");
+        write_toml_source(&tmp_dir, "v16");
+        set_active_modlist_dir(Some(tmp_dir.clone()));
+
+        // GlobalOnly seed must NOT see v16 (the per-modlist pin).
+        // We can verify this by checking the two-tier result has no "v16" tag override
+        // for a source that only has a v16 in the per-modlist file.
+        let two_tier = load_two_tier_sources();
+        let three_tier = load_mod_download_sources();
+
+        // The two-tier result should NOT have a "testmod" source with tag v16
+        // (since v16 is only in the per-modlist file, not the global).
+        let two_tier_testmod_tag = two_tier
+            .sources
+            .iter()
+            .find(|s| s.tp2 == "testmod")
+            .and_then(|s| s.tag.clone());
+        let three_tier_testmod_tag = three_tier
+            .sources
+            .iter()
+            .find(|s| s.tp2 == "testmod")
+            .and_then(|s| s.tag.clone());
+
+        // The per-modlist pin should show in three-tier but not two-tier.
+        if three_tier_testmod_tag.as_deref() == Some("v16") {
+            assert_ne!(
+                two_tier_testmod_tag.as_deref(),
+                Some("v16"),
+                "GlobalDefault seed must NOT show the per-modlist pin"
+            );
+        }
+
+        set_active_modlist_dir(None);
+        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 }

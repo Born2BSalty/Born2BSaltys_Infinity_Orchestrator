@@ -22,11 +22,21 @@ pub(crate) struct Step2UpdateExtractJob {
     pub(crate) backup_version_tag: String,
     pub(crate) installed_source_ref: Option<String>,
     pub(crate) installed_source_id: Option<String>,
+    /// Path captured at job-build time (main thread) for off-thread installed-refs writes.
+    /// Sourced from the install-context when available, otherwise from the ambient resolver.
+    pub(crate) installed_refs_path: PathBuf,
 }
 
+/// Builds extract jobs.
+///
+/// `install_ctx_installed_refs_path` is `Some` when called from the install pipeline
+/// (paste/fork paths) and carries the per-modlist path derived from
+/// `active_install_modlist_id` before extract begins. When `None` (manual
+/// workspace update-check or legacy), the ambient-aware resolver is used instead.
 pub(crate) fn build_extract_jobs(
     state: &mut WizardState,
     archive_dir: &Path,
+    install_ctx_installed_refs_path: Option<&Path>,
 ) -> Vec<Step2UpdateExtractJob> {
     let mut jobs = Vec::new();
     let mods_root = PathBuf::from(state.step1.mods_folder.trim());
@@ -44,6 +54,14 @@ pub(crate) fn build_extract_jobs(
             .update_selected_extract_failed_sources
             .push(err.clone());
     }
+
+    // Determine the installed-refs path once for all jobs in this batch.
+    // Install-context path takes priority over the ambient resolver.
+    let refs_path = install_ctx_installed_refs_path.map_or_else(
+        crate::app::app_step2_update_source_refs::installed_source_refs_path,
+        Path::to_path_buf,
+    );
+
     for asset in &state.step2.update_selected_update_assets {
         let archive_path = archive_dir.join(app_step2_update_download::archive_file_name(asset));
         if !archive_path.exists() {
@@ -71,6 +89,7 @@ pub(crate) fn build_extract_jobs(
             backup_version_tag: asset.tag.clone(),
             installed_source_ref: extract_source_ref(asset, source.as_ref()),
             installed_source_id,
+            installed_refs_path: refs_path.clone(),
         });
     }
     jobs

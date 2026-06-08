@@ -39,7 +39,8 @@ pub(crate) fn start_step2_update_extract(
         return;
     }
 
-    let jobs = plan::build_extract_jobs(state, &archive_dir);
+    // Legacy serial extract path: no install context, ambient resolver is used.
+    let jobs = plan::build_extract_jobs(state, &archive_dir, None);
     if jobs.is_empty() {
         let failed = state.step2.update_selected_extract_failed_sources.len();
         if failed > 0 {
