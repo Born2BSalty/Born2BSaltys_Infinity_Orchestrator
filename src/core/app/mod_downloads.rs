@@ -418,6 +418,9 @@ pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
                     overlay.source_default = false;
                 }
                 let mut source = by_source.remove(&key).unwrap_or_default();
+                if overlay_has_version_selector(&overlay) {
+                    clear_source_version_selectors(&mut source);
+                }
                 apply_source_overlay(&mut source, overlay);
                 normalize_source(&mut source);
                 if !source_is_valid(&source) {
@@ -1107,6 +1110,24 @@ fn overlay_source_key(source: &ModDownloadSourceOverlay) -> String {
     format!("{tp2}|{source_id}")
 }
 
+/// Returns true when the overlay specifies at least one version selector field.
+fn overlay_has_version_selector(overlay: &ModDownloadSourceOverlay) -> bool {
+    overlay.commit.is_some()
+        || overlay.tag.is_some()
+        || overlay.branch.is_some()
+        || overlay.channel.is_some()
+        || overlay.asset.is_some()
+}
+
+/// Clears all version selector fields on a source so a per-modlist overlay can replace them.
+fn clear_source_version_selectors(source: &mut ModDownloadSource) {
+    source.commit = None;
+    source.tag = None;
+    source.branch = None;
+    source.channel = None;
+    source.asset = None;
+}
+
 fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSourceOverlay) {
     if let Some(name) = overlay.name {
         target.name = name;
@@ -1700,6 +1721,192 @@ mod tests {
         }
 
         set_active_modlist_dir(None);
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    // ── Version-selector replacement tests (per-modlist overrides a different selector) ──
+
+    fn base_source_with_tag(tag: &str) -> ModDownloadSource {
+        ModDownloadSource {
+            name: "TestMod".to_string(),
+            tp2: "testmod".to_string(),
+            source_id: "main".to_string(),
+            source_label: "Main".to_string(),
+            url: "https://github.com/Test/Mod".to_string(),
+            github: Some("Test/Mod".to_string()),
+            tag: Some(tag.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn base_source_with_commit(commit: &str) -> ModDownloadSource {
+        ModDownloadSource {
+            name: "TestMod".to_string(),
+            tp2: "testmod".to_string(),
+            source_id: "main".to_string(),
+            source_label: "Main".to_string(),
+            url: "https://github.com/Test/Mod".to_string(),
+            github: Some("Test/Mod".to_string()),
+            commit: Some(commit.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn overlay_with_branch(branch: &str) -> ModDownloadSourceOverlay {
+        ModDownloadSourceOverlay {
+            tp2: Some("testmod".to_string()),
+            source_id: Some("main".to_string()),
+            branch: Some(branch.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn overlay_with_tag(tag: &str) -> ModDownloadSourceOverlay {
+        ModDownloadSourceOverlay {
+            tp2: Some("testmod".to_string()),
+            source_id: Some("main".to_string()),
+            tag: Some(tag.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn overlay_with_no_selector() -> ModDownloadSourceOverlay {
+        ModDownloadSourceOverlay {
+            tp2: Some("testmod".to_string()),
+            source_id: Some("main".to_string()),
+            url: Some("https://github.com/Test/Fork".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn per_modlist_branch_replaces_global_tag() {
+        // Base: global resolves to tag=v18. Per-modlist says branch=master.
+        // Expected: branch=master wins; tag is gone.
+        let mut source = base_source_with_tag("v18");
+        let overlay = overlay_with_branch("master");
+
+        if overlay_has_version_selector(&overlay) {
+            clear_source_version_selectors(&mut source);
+        }
+        apply_source_overlay(&mut source, overlay);
+        normalize_source(&mut source);
+
+        assert_eq!(
+            source.branch.as_deref(),
+            Some("master"),
+            "per-modlist branch=master must win"
+        );
+        assert!(source.tag.is_none(), "global tag=v18 must be cleared");
+        assert!(source.commit.is_none(), "commit must remain clear");
+    }
+
+    #[test]
+    fn per_modlist_tag_replaces_global_commit() {
+        // Base: global resolves to commit=abc123. Per-modlist says tag=v1.0.0.
+        // Expected: tag=v1.0.0 wins; commit is gone.
+        let mut source = base_source_with_commit("abc123def456abc123def456abc123def456abc1");
+        let overlay = overlay_with_tag("v1.0.0");
+
+        if overlay_has_version_selector(&overlay) {
+            clear_source_version_selectors(&mut source);
+        }
+        apply_source_overlay(&mut source, overlay);
+        normalize_source(&mut source);
+
+        assert_eq!(
+            source.tag.as_deref(),
+            Some("v1.0.0"),
+            "per-modlist tag=v1.0.0 must win"
+        );
+        assert!(source.commit.is_none(), "global commit must be cleared");
+        assert!(source.branch.is_none(), "branch must remain clear");
+    }
+
+    #[test]
+    fn per_modlist_overlay_without_selector_inherits_global_selector() {
+        // Base: global resolves to tag=v18. Per-modlist overlay has no selector (only url).
+        // Expected: tag=v18 is preserved (additive overlay).
+        let mut source = base_source_with_tag("v18");
+        let overlay = overlay_with_no_selector();
+
+        if overlay_has_version_selector(&overlay) {
+            clear_source_version_selectors(&mut source);
+        }
+        apply_source_overlay(&mut source, overlay);
+        normalize_source(&mut source);
+
+        assert_eq!(
+            source.tag.as_deref(),
+            Some("v18"),
+            "global tag=v18 must be preserved when per-modlist has no selector"
+        );
+        assert_eq!(
+            source.url, "https://github.com/Test/Fork",
+            "non-selector field from per-modlist overlay must be applied"
+        );
+    }
+
+    fn write_toml_source_branch(dir: &std::path::Path, branch: &str) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join("mod_downloads_user.toml");
+        std::fs::write(
+            &path,
+            format!(
+                "[[mods]]\nname = \"TestMod\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Test/Mod\"\n  repo = \"Test/Mod\"\n  branch = \"{branch}\"\n"
+            ),
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn ambient_unset_resolution_unchanged_by_selector_fix() {
+        // Confirms the fix is inert when no ambient modlist is set.
+        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        set_active_modlist_dir(None);
+
+        let two_tier = load_two_tier_sources();
+        let three_tier = load_mod_download_sources();
+
+        assert_eq!(
+            two_tier.sources.len(),
+            three_tier.sources.len(),
+            "ambient unset: three-tier result must equal two-tier result"
+        );
+    }
+
+    #[test]
+    fn per_modlist_branch_pin_applied_via_ambient() {
+        // End-to-end: per-modlist file pins an otherwise-absent source to branch=next.
+        // Verifies the full ambient path produces branch=next (not the default selector).
+        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_tmp_dir("branch_pin");
+        write_toml_source_branch(&tmp_dir, "next");
+        set_active_modlist_dir(Some(tmp_dir.clone()));
+
+        let three_tier = load_mod_download_sources();
+        let resolved = three_tier.sources.iter().find(|s| s.tp2 == "testmod");
+
+        if let Some(source) = resolved {
+            assert_eq!(
+                source.branch.as_deref(),
+                Some("next"),
+                "per-modlist branch=next must be the resolved selector"
+            );
+            assert!(
+                source.tag.is_none(),
+                "no tag must remain when per-modlist pins branch=next"
+            );
+            assert!(
+                source.commit.is_none(),
+                "no commit must remain when per-modlist pins branch=next"
+            );
+        }
+
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 }
