@@ -344,7 +344,9 @@ fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &s
     let Some(entry) = orchestrator.registry.find(id) else {
         return;
     };
-    let meta = ShareMeta::from_entry(entry, true);
+    // A draft share code is review-first: the recipient imports-and-modifies it
+    // (Create) rather than one-click auto-installing.
+    let meta = ShareMeta::from_entry(entry, false);
     match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
         Ok(code) => {
             if let Some(entry_mut) = orchestrator.registry.find_mut(id) {
