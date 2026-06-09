@@ -47,8 +47,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     clear_pending_reinstall_on_nav_away_from_install(orchestrator);
 
     let rendered_nav = orchestrator.nav.clone();
-    // Sync the ambient active-modlist dir to the nav destination every frame.
-    sync_ambient_to_nav(&rendered_nav);
+    sync_ambient_to_nav(orchestrator);
     match rendered_nav.clone() {
         NavDestination::Home => page_home::render(ui, orchestrator, ctx),
         NavDestination::Install => page_install::render(ui, orchestrator, ctx),
@@ -63,15 +62,26 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     orchestrator.last_rendered_nav = rendered_nav;
 }
 
-/// Syncs the process-global ambient active-modlist dir to the current nav destination.
-/// Sets on Workspace{Some(id)}, clears on everything else.
-fn sync_ambient_to_nav(nav: &NavDestination) {
+/// Syncs the process-global ambient active-modlist dir every frame.
+///
+/// Priority: an open workspace always wins. When no workspace is open but a
+/// pipeline is running (`active_install_modlist_id` is `Some`), the ambient
+/// stays pinned to that modlist so main-thread ambient-dependent writes during
+/// the pipeline target the correct per-modlist file. Only when neither condition
+/// holds is the ambient cleared.
+fn sync_ambient_to_nav(orchestrator: &OrchestratorApp) {
     use crate::install_runtime::active_modlist_source_path;
-    match nav {
+    match &orchestrator.nav {
         NavDestination::Workspace {
             modlist_id: Some(id),
         } => active_modlist_source_path::set_ambient_for_modlist(id),
-        _ => active_modlist_source_path::clear_ambient(),
+        _ => {
+            if let Some(pipeline_id) = orchestrator.active_install_modlist_id.as_deref() {
+                active_modlist_source_path::set_ambient_for_modlist(pipeline_id);
+            } else {
+                active_modlist_source_path::clear_ambient();
+            }
+        }
     }
 }
 
@@ -680,5 +690,115 @@ mod tests {
             &wizard,
             false
         ));
+    }
+
+    // --- ambient-sync tests ---
+
+    use std::sync::Mutex;
+
+    static AMBIENT_SYNC_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    struct AmbientGuard(Option<std::path::PathBuf>);
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    #[test]
+    fn sync_ambient_workspace_nav_sets_ambient_to_workspace_id() {
+        let _lock = AMBIENT_SYNC_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let mut app = OrchestratorApp::new(false);
+        app.nav = NavDestination::Workspace {
+            modlist_id: Some("WS-AMBIENT-A".to_string()),
+        };
+
+        sync_ambient_to_nav(&app);
+
+        let dir = crate::app::mod_downloads::active_modlist_dir();
+        assert!(dir.is_some(), "ambient must be set for workspace nav");
+        assert!(
+            dir.unwrap()
+                .to_string_lossy()
+                .contains("WS-AMBIENT-A"),
+            "ambient must point at the workspace modlist"
+        );
+    }
+
+    #[test]
+    fn sync_ambient_non_workspace_no_pipeline_clears_ambient() {
+        let _lock = AMBIENT_SYNC_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let mut app = OrchestratorApp::new(false);
+        app.nav = NavDestination::Create;
+        app.active_install_modlist_id = None;
+
+        sync_ambient_to_nav(&app);
+
+        assert!(
+            crate::app::mod_downloads::active_modlist_dir().is_none(),
+            "ambient must be cleared when no workspace and no active pipeline"
+        );
+    }
+
+    #[test]
+    fn sync_ambient_non_workspace_with_pipeline_pins_to_pipeline_modlist() {
+        let _lock = AMBIENT_SYNC_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let mut app = OrchestratorApp::new(false);
+        app.nav = NavDestination::Create;
+        app.active_install_modlist_id = Some("FORK-PIPELINE-ID".to_string());
+
+        sync_ambient_to_nav(&app);
+
+        let dir = crate::app::mod_downloads::active_modlist_dir();
+        assert!(
+            dir.is_some(),
+            "ambient must remain set while a pipeline is active on non-workspace nav"
+        );
+        assert!(
+            dir.unwrap()
+                .to_string_lossy()
+                .contains("FORK-PIPELINE-ID"),
+            "ambient must point at the active pipeline modlist, not global"
+        );
+    }
+
+    #[test]
+    fn sync_ambient_workspace_wins_over_pipeline() {
+        let _lock = AMBIENT_SYNC_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let mut app = OrchestratorApp::new(false);
+        app.nav = NavDestination::Workspace {
+            modlist_id: Some("OPEN-WS".to_string()),
+        };
+        app.active_install_modlist_id = Some("OTHER-PIPELINE".to_string());
+
+        sync_ambient_to_nav(&app);
+
+        let dir = crate::app::mod_downloads::active_modlist_dir()
+            .expect("ambient must be set");
+        assert!(
+            dir.to_string_lossy().contains("OPEN-WS"),
+            "workspace nav takes priority over the active pipeline id"
+        );
     }
 }

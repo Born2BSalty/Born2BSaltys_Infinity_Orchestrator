@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::registry::operations_rename;
+use crate::registry::share_export::{self, ShareMeta};
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::fork_info_popup::{self, SelfNode};
@@ -325,9 +326,40 @@ fn save_draft(orchestrator: &mut OrchestratorApp) {
                 .insert(id.clone(), extracted);
             orchestrator.workspace_view.save_draft_flash_until =
                 Some(Instant::now() + Duration::from_millis(SAVE_FLASH_MS));
+            rebake_share_code_after_save_draft(orchestrator, &id);
         }
         Err(err) => {
             warn!(target = "orchestrator", "save draft for {id} failed: {err}");
+        }
+    }
+}
+
+/// Re-bakes the modlist's share code from the current wizard state and persists
+/// the registry so that a subsequent "Copy import code" on Home reflects any
+/// per-modlist source-set changes made since install-start.
+///
+/// Leaves the existing `latest_share_code` unchanged when the export returns an
+/// error (e.g. no `WeiDU` entries available yet for a not-yet-scanned modlist).
+fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &str) {
+    let Some(entry) = orchestrator.registry.find(id) else {
+        return;
+    };
+    let meta = ShareMeta::from_entry(entry, true);
+    match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
+        Ok(code) => {
+            if let Some(entry_mut) = orchestrator.registry.find_mut(id) {
+                entry_mut.latest_share_code = Some(code);
+            }
+            orchestrator
+                .persistence_cycle
+                .mark_registry_dirty(Instant::now());
+        }
+        Err(err) => {
+            tracing::debug!(
+                target = "orchestrator",
+                "save draft: share code re-bake for {id} skipped ({err}); \
+                 existing code retained"
+            );
         }
     }
 }
@@ -636,6 +668,15 @@ mod tests {
         app
     }
 
+    fn orch_with_entry_and_code(name: &str, code: &str) -> OrchestratorApp {
+        let mut app = orch_with_entry(name);
+        app.registry
+            .find_mut("HDRTEST00000")
+            .unwrap()
+            .latest_share_code = Some(code.to_string());
+        app
+    }
+
     #[test]
     fn commit_rename_updates_registry_and_header_only() {
         let mut app = orch_with_entry("Old Name");
@@ -696,6 +737,42 @@ mod tests {
             record.text.contains("\"New Name\""),
             "toast must include the attempted name: {}",
             record.text
+        );
+    }
+
+    #[test]
+    fn rebake_leaves_code_unchanged_when_no_weidu_entries() {
+        let sentinel = "BIO-MODLIST-V1:SENTINEL-UNCHANGED";
+        let mut app = orch_with_entry_and_code("My Modlist", sentinel);
+
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+
+        assert_eq!(
+            app.registry
+                .find("HDRTEST00000")
+                .unwrap()
+                .latest_share_code
+                .as_deref(),
+            Some(sentinel),
+            "a not-yet-scanned modlist (no WeiDU entries) must not have its \
+             share code overwritten by save draft"
+        );
+    }
+
+    #[test]
+    fn rebake_is_noop_for_missing_entry() {
+        let mut app = orch_with_entry_and_code("X", "BIO-MODLIST-V1:NOTOUCH");
+
+        rebake_share_code_after_save_draft(&mut app, "DOES-NOT-EXIST");
+
+        assert_eq!(
+            app.registry
+                .find("HDRTEST00000")
+                .unwrap()
+                .latest_share_code
+                .as_deref(),
+            Some("BIO-MODLIST-V1:NOTOUCH"),
+            "a rebake for a missing id must not affect other entries"
         );
     }
 }
