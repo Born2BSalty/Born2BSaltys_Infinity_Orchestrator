@@ -79,52 +79,74 @@ fn render_edit_source_cell(
     choice: &SourceChoiceRow,
     popup_busy: bool,
 ) -> Option<Step2Action> {
-    let mut result = None;
     let edit_enabled = !popup_busy;
-    let has_active_modlist = mod_downloads::active_modlist_downloads_path().is_some();
+    let make_action = |destination| Step2Action::OpenModDownloadSourceEditor {
+        tp2: choice.tp2_key.clone(),
+        label: choice.label.clone(),
+        source_id: choice.selected_source_id.clone(),
+        allow_source_id_change: false,
+        destination,
+    };
 
-    ui.horizontal(|ui| {
-        let mut destination = ModSourceEditDestination::GlobalDefault;
-        if has_active_modlist {
-            egui::ComboBox::from_id_salt(format!("step2-dest-{}", choice.tp2_key))
-                .selected_text(destination_label(destination))
-                .width(110.0)
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut destination,
-                        ModSourceEditDestination::GlobalDefault,
-                        destination_label(ModSourceEditDestination::GlobalDefault),
-                    );
-                    ui.selectable_value(
-                        &mut destination,
-                        ModSourceEditDestination::ThisModlist,
-                        destination_label(ModSourceEditDestination::ThisModlist),
-                    );
-                });
+    let btn = redesign_btn(
+        ui,
+        palette,
+        "Set Source",
+        BtnOpts {
+            small: true,
+            disabled: !edit_enabled,
+            ..Default::default()
+        },
+    );
+    if !edit_enabled {
+        return None;
+    }
+
+    // With an active modlist the button opens a popup offering both destinations
+    // (choosing one opens the editor against that file); without one (legacy), it
+    // opens the editor against the global file directly.
+    if mod_downloads::active_modlist_downloads_path().is_some() {
+        let popup_id = ui.make_persistent_id(format!("step2-set-source-{}", choice.tp2_key));
+        if btn.clicked() {
+            ui.memory_mut(|m| m.toggle_popup(popup_id));
         }
-        if redesign_btn(
+        egui::popup::popup_below_widget(
             ui,
-            palette,
-            "Edit Source",
-            BtnOpts {
-                small: true,
-                disabled: !edit_enabled,
-                ..Default::default()
+            popup_id,
+            &btn,
+            egui::PopupCloseBehavior::CloseOnClickOutside,
+            |ui| {
+                ui.set_min_width(150.0);
+                let mut chosen = None;
+                if ui
+                    .selectable_label(
+                        false,
+                        destination_label(ModSourceEditDestination::GlobalDefault),
+                    )
+                    .clicked()
+                {
+                    chosen = Some(make_action(ModSourceEditDestination::GlobalDefault));
+                    ui.memory_mut(egui::Memory::close_popup);
+                }
+                if ui
+                    .selectable_label(
+                        false,
+                        destination_label(ModSourceEditDestination::ThisModlist),
+                    )
+                    .clicked()
+                {
+                    chosen = Some(make_action(ModSourceEditDestination::ThisModlist));
+                    ui.memory_mut(egui::Memory::close_popup);
+                }
+                chosen
             },
         )
-        .clicked()
-            && edit_enabled
-        {
-            result = Some(Step2Action::OpenModDownloadSourceEditor {
-                tp2: choice.tp2_key.clone(),
-                label: choice.label.clone(),
-                source_id: choice.selected_source_id.clone(),
-                allow_source_id_change: false,
-                destination,
-            });
-        }
-    });
-    result
+        .flatten()
+    } else if btn.clicked() {
+        Some(make_action(ModSourceEditDestination::GlobalDefault))
+    } else {
+        None
+    }
 }
 
 fn render_source_choice_row(
