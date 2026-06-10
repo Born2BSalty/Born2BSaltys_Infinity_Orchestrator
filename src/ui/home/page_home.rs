@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::registry::model::{ModlistEntry, ModlistState};
 use crate::registry::operations::{self, remove_entry_and_save, spawn_delete_folder_worker};
-use crate::ui::orchestrator::orchestrator_app::PendingFolderDelete;
+use crate::registry::operations_rename;
 use crate::ui::home::add_a_modlist::{self, AddAModlistAction};
 use crate::ui::home::confirm_delete;
 use crate::ui::home::modlist_card::ModlistCardActions;
@@ -14,6 +14,7 @@ use crate::ui::home::state_home::{HomeFilter, empty_filter_message};
 use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::orchestrator_app::PendingFolderDelete;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::settings::state_settings::SettingsTab;
@@ -35,6 +36,9 @@ enum CardIntent {
     OpenInstallFolder(String),
     RequestDelete(String),
     RequestReinstall(String),
+    RequestRename(String),
+    SaveRename(String),
+    CancelRename,
 }
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
@@ -92,6 +96,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
                             effective_filter,
                             &installed,
                             &in_progress,
+                            orchestrator.home_screen_state.rename_target.as_ref(),
+                            &mut orchestrator.home_screen_state.rename_temp,
                         );
                         if let Some(act) = nav {
                             nav_request = Some(act);
@@ -193,6 +199,43 @@ fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, in
         }
         CardIntent::RequestReinstall(id) => {
             orchestrator.home_screen_state.reinstall_target = Some(id);
+        }
+        CardIntent::RequestRename(id) => {
+            let name = modlist_name(orchestrator, &id);
+            orchestrator.home_screen_state.rename_temp = name;
+            orchestrator.home_screen_state.rename_target = Some(id.clone());
+            let focus_marker = egui::Id::new(("home_card_rename_edit",))
+                .with(&id)
+                .with("focused_once");
+            ctx.memory_mut(|m| m.data.remove::<bool>(focus_marker));
+        }
+        CardIntent::SaveRename(id) => {
+            let new_name = orchestrator
+                .home_screen_state
+                .rename_temp
+                .trim()
+                .to_string();
+            orchestrator.home_screen_state.rename_target = None;
+            orchestrator.home_screen_state.rename_temp.clear();
+            if new_name.is_empty() {
+                return;
+            }
+            match operations_rename::rename_modlist(&id, &new_name, &mut orchestrator.registry) {
+                Ok(()) => {
+                    orchestrator
+                        .persistence_cycle
+                        .mark_registry_dirty(std::time::Instant::now());
+                }
+                Err(err) => {
+                    orchestrator
+                        .notification_manager
+                        .error(format!("Couldn't rename to \"{new_name}\": {err}"));
+                }
+            }
+        }
+        CardIntent::CancelRename => {
+            orchestrator.home_screen_state.rename_target = None;
+            orchestrator.home_screen_state.rename_temp.clear();
         }
     }
 }
@@ -381,6 +424,8 @@ fn render_card_list(
     filter: HomeFilter,
     installed: &[ModlistEntry],
     in_progress: &[ModlistEntry],
+    rename_target: Option<&String>,
+    rename_temp: &mut String,
 ) -> (Option<NavRequest>, Option<CardIntent>) {
     let visible: Vec<&ModlistEntry> = match filter {
         HomeFilter::Installed => installed.iter().collect(),
@@ -403,7 +448,13 @@ fn render_card_list(
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 10.0;
         for entry in visible {
-            match modlist_card::render(ui, palette, entry) {
+            let is_renaming = rename_target.is_some_and(|id| id.as_str() == entry.id.as_str());
+            let buf = if is_renaming {
+                Some(rename_temp as &mut String)
+            } else {
+                None
+            };
+            match modlist_card::render(ui, palette, entry, buf) {
                 ModlistCardActions::Resume => {
                     nav = Some(NavRequest::Workspace {
                         modlist_id: entry.id.clone(),
@@ -420,6 +471,15 @@ fn render_card_list(
                 }
                 ModlistCardActions::Delete => {
                     intent = Some(CardIntent::RequestDelete(entry.id.clone()));
+                }
+                ModlistCardActions::Rename => {
+                    intent = Some(CardIntent::RequestRename(entry.id.clone()));
+                }
+                ModlistCardActions::SaveRename => {
+                    intent = Some(CardIntent::SaveRename(entry.id.clone()));
+                }
+                ModlistCardActions::CancelRename => {
+                    intent = Some(CardIntent::CancelRename);
                 }
                 ModlistCardActions::None => {}
             }
