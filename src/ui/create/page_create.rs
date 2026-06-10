@@ -28,6 +28,7 @@ use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::{
     DestinationPrepFlow, OrchestratorApp, PendingCreateStart, PendingFolderDelete,
 };
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
@@ -503,7 +504,7 @@ fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id:
         .find(id)
         .map_or_else(|| "modlist".to_string(), |e| e.name.clone());
     if let Some(code) = operations::share_code_for(id, &orchestrator.registry) {
-        ctx.copy_text(code);
+        clipboard::copy(ctx, code);
         orchestrator.create_screen_state.load_draft_copied_name = Some(name);
     } else {
         orchestrator.create_screen_state.load_draft_copied_name = Some(format!(
@@ -606,7 +607,11 @@ mod tests {
         fork_extract_complete_route_to_workspace(&mut app, "FORKTEST00000".to_string());
 
         let history = app.notification_manager.history();
-        assert_eq!(history.len(), 1, "exactly one notification must be enqueued");
+        assert_eq!(
+            history.len(),
+            1,
+            "exactly one notification must be enqueued"
+        );
         let record = history.back().unwrap();
         assert_eq!(
             record.kind,
@@ -614,8 +619,7 @@ mod tests {
             "fork import complete must be a success toast"
         );
         assert_eq!(
-            record.text,
-            "Imported \"Imported Fork\" \u{2014} ready to edit",
+            record.text, "Imported \"Imported Fork\" \u{2014} ready to edit",
             "toast text must include the imported modlist name"
         );
     }

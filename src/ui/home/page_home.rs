@@ -15,6 +15,7 @@ use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::orchestrator_app::PendingFolderDelete;
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::settings::state_settings::SettingsTab;
@@ -181,7 +182,7 @@ fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, in
     match intent {
         CardIntent::CopyImportCode(id) => {
             if let Some(code) = operations::share_code_for(&id, &orchestrator.registry) {
-                ctx.copy_text(code);
+                clipboard::copy(ctx, code);
                 let name = modlist_name(orchestrator, &id);
                 orchestrator
                     .notification_manager

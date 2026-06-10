@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod btn;
+pub mod clipboard;
 pub mod dialogs;
 pub mod icon_button;
 pub mod input;
