@@ -6,10 +6,12 @@ use eframe::egui;
 use crate::ui::install::destination_not_empty;
 use crate::ui::install::state_install::{InstallScreenState, InstallStage};
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
-use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
+use crate::ui::orchestrator::widgets::{
+    InputOpts, redesign_box, redesign_text_input, render_screen_title,
+};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep,
-    redesign_border_strong, redesign_input_bg, redesign_text_faint, redesign_text_muted,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
+    redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
     redesign_text_primary,
 };
 
@@ -22,7 +24,14 @@ pub enum PasteOutcome {
 
 const CODE_PLACEHOLDER: &str =
     "BIO-MODLIST-V1:eJyrVkrLz1eyUkpKLFKqBQA...\n\nPaste the full code here.";
-const BROWSE_W_PX: f32 = 90.0;
+const BROWSE_W_PX: f32 = 96.0;
+
+const FORM_INPUT_MARGIN: egui::Margin = egui::Margin {
+    left: 12,
+    right: 12,
+    top: 8,
+    bottom: 8,
+};
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -144,6 +153,14 @@ fn folder_input(
     );
     ui.add_space(4.0);
 
+    let box_h = ui.fonts(|f| {
+        f.row_height(&egui::FontId::new(
+            14.0,
+            egui::FontFamily::Name("poppins_light".into()),
+        ))
+    }) + f32::from(FORM_INPUT_MARGIN.top)
+        + f32::from(FORM_INPUT_MARGIN.bottom);
+
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
 
@@ -151,27 +168,28 @@ fn folder_input(
         let edit_width = (ui.available_width() - reserved).max(120.0);
 
         let pre = value.clone();
-        let response = ui.add_sized(
-            egui::vec2(edit_width, 26.0),
-            egui::TextEdit::singleline(value)
-                .font(egui::FontId::new(
-                    12.0,
-                    egui::FontFamily::Name("firacode_nerd".into()),
-                ))
-                .hint_text(
-                    egui::RichText::new(placeholder)
-                        .family(egui::FontFamily::Name("firacode_nerd".into()))
-                        .color(redesign_text_faint(palette)),
-                )
-                .text_color(redesign_text_primary(palette))
-                .background_color(redesign_input_bg(palette))
-                .margin(egui::Margin::symmetric(8, 5)),
-        );
-        ui.painter().rect_stroke(
-            response.rect,
-            egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
-            egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-            egui::StrokeKind::Outside,
+        let response = redesign_text_input(
+            ui,
+            palette,
+            InputOpts {
+                edit: egui::TextEdit::singleline(value)
+                    .font(egui::FontId::new(
+                        12.0,
+                        egui::FontFamily::Name("firacode_nerd".into()),
+                    ))
+                    .hint_text(
+                        egui::RichText::new(placeholder)
+                            .family(egui::FontFamily::Name("firacode_nerd".into()))
+                            .color(redesign_text_faint(palette)),
+                    )
+                    .text_color(redesign_text_primary(palette))
+                    .background_color(redesign_input_bg(palette))
+                    .vertical_align(egui::Align::Center)
+                    .margin(FORM_INPUT_MARGIN),
+                margin: FORM_INPUT_MARGIN,
+                size: egui::vec2(edit_width, box_h),
+                border: None,
+            },
         );
         if response.changed() || *value != pre {
             changed = true;
@@ -179,14 +197,14 @@ fn folder_input(
 
         if ui
             .add_sized(
-                egui::vec2(BROWSE_W_PX, 26.0),
+                egui::vec2(BROWSE_W_PX, box_h),
                 egui::Button::new(
                     egui::RichText::new("browse\u{2026}")
                         .size(12.0)
                         .family(egui::FontFamily::Name("poppins_medium".into()))
-                        .color(redesign_accent_deep(palette)),
+                        .color(redesign_text_primary(palette)),
                 )
-                .fill(egui::Color32::TRANSPARENT)
+                .fill(redesign_shell_bg(palette))
                 .stroke(egui::Stroke::new(
                     REDESIGN_BORDER_WIDTH_PX,
                     redesign_border_strong(palette),
