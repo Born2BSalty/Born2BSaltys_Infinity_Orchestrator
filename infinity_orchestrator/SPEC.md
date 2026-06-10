@@ -237,7 +237,7 @@ Both in-progress builds and installed modlists use the same card chassis: a Box 
 | Item | Action |
 |------|--------|
 | Copy import code | Writes the build's current BIO-MODLIST-V1 code to the clipboard, shows the toast. (Same code that gets auto-written to the destination at install start — see [§13.13](#1313-import-code-auto-generated-on-install-start).) |
-| Rename | Renames the modlist registry entry. Same effect as the workspace's inline ✎ rename ([§2.2](#22-the-workspace-steps-25)) — implementation can either open a small rename dialog or push the user back into the workspace with the title in edit mode. |
+| Rename | Renames the modlist registry entry. Same effect as the workspace's inline ✎ rename ([§2.2](#22-the-workspace-steps-25)): the card's title row becomes an inline text editor (field + `save` / `cancel` buttons); Enter saves, Escape cancels; empty/whitespace-only is a no-op cancel; the new name is trimmed. The right action cluster (kebab + resume) is suppressed while the editor is open. Registry write is debounced via the persistence cycle ([§13.14](#1314-persistence-timing)). |
 | Delete | Removes the in-progress build (after confirmation; the destination folder on disk is untouched). |
 
 The **`resume`** button opens the workspace at **Step 2 (Scan and Select)**, pre-populated with the build's order, selections, and any pending settings. The workspace header reads **"Editing _\<build name\>_"** ([§2.2](#22-the-workspace-steps-25)), the per-game-install tabs reflect the build's stored game choice, and the user can immediately navigate to whatever step they want via the workspace progress bar. (The wireframe demo always lands on Step 2; a future refinement could remember the last-active step per build.)
@@ -254,7 +254,7 @@ The **`resume`** button opens the workspace at **Step 2 (Scan and Select)**, pre
 |------|--------|
 | Copy import code | Writes the modlist's BIO-MODLIST-V1 code to the clipboard, shows the toast. |
 | Open install folder | Opens the modlist's destination folder in the OS file manager. If the folder no longer exists on disk (deleted externally), surface an error message in the standard status / error message area near the bottom of the screen — do not attempt to open or recreate the folder. |
-| Rename | Renames the modlist registry entry. Same effect as the workspace's inline ✎ rename ([§2.2](#22-the-workspace-steps-25)). |
+| Rename | Renames the modlist registry entry. Inline editor on the card row, same interaction as the workspace's ✎ rename ([§2.2](#22-the-workspace-steps-25)) — see in-progress Rename above. |
 | Delete | Removes the modlist record (after confirmation; does not touch the install on disk). |
 
 ### 3.3 "Add a modlist" section

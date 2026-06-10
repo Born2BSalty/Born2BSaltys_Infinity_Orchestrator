@@ -12,7 +12,7 @@ use crate::ui::orchestrator::widgets::{
 use crate::ui::shared::format_relative::relative_time;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
+    redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -25,12 +25,24 @@ pub enum ModlistCardActions {
     OpenInstallFolder,
     Reinstall,
     Delete,
+    /// Signals that the kebab "Rename" item was picked; the caller opens the editor.
+    Rename,
+    /// Signals that the inline rename editor should commit the buffered name.
+    SaveRename,
+    /// Signals that the inline rename editor was dismissed without saving.
+    CancelRename,
 }
 
+/// Renders a single modlist card.
+///
+/// Pass `rename_buf` as `Some(&mut buf)` when this card is the active rename
+/// target; the card's title row becomes an inline editor bound to `buf`.
+/// Pass `None` for normal rendering.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     entry: &ModlistEntry,
+    rename_buf: Option<&mut String>,
 ) -> ModlistCardActions {
     let mut action = ModlistCardActions::None;
 
@@ -50,34 +62,130 @@ pub fn render(
 
     chassis.show(ui, |ui| {
         ui.horizontal(|ui| {
-            let full_w = ui.available_width();
-            ui.allocate_ui_with_layout(
-                egui::vec2(full_w, 40.0),
-                egui::Layout::top_down(egui::Align::LEFT),
-                |ui| {
-                    ui.spacing_mut().item_spacing.y = 2.0;
-                    ui.label(
-                        egui::RichText::new(&entry.name)
-                            .size(13.0)
-                            .family(egui::FontFamily::Name("poppins_medium".into()))
-                            .color(redesign_text_primary(palette)),
-                    );
-                    ui.label(
-                        egui::RichText::new(meta_line(entry))
-                            .size(14.0)
-                            .family(egui::FontFamily::Name("poppins_light".into()))
-                            .color(redesign_text_faint(palette)),
-                    );
-                },
-            );
+            if let Some(buf) = rename_buf {
+                render_rename_row(ui, palette, entry, buf, &mut action);
+            } else {
+                let full_w = ui.available_width();
+                ui.allocate_ui_with_layout(
+                    egui::vec2(full_w, 40.0),
+                    egui::Layout::top_down(egui::Align::LEFT),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        ui.label(
+                            egui::RichText::new(&entry.name)
+                                .size(13.0)
+                                .family(egui::FontFamily::Name("poppins_medium".into()))
+                                .color(redesign_text_primary(palette)),
+                        );
+                        ui.label(
+                            egui::RichText::new(meta_line(entry))
+                                .size(14.0)
+                                .family(egui::FontFamily::Name("poppins_light".into()))
+                                .color(redesign_text_faint(palette)),
+                        );
+                    },
+                );
 
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                action = render_action_cluster(ui, palette, entry);
-            });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    action = render_action_cluster(ui, palette, entry);
+                });
+            }
         });
     });
 
     action
+}
+
+/// Renders the title row in inline-rename editing mode.
+///
+/// When in rename mode the right action cluster (kebab + resume/open) is
+/// suppressed to avoid crowding the row.
+fn render_rename_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    entry: &ModlistEntry,
+    buf: &mut String,
+    action: &mut ModlistCardActions,
+) {
+    let item_spacing = 6.0_f32;
+    let btn_pad_x = 10.0_f32;
+    let btn_font = egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into()));
+
+    let save_text_w = ui
+        .painter()
+        .layout_no_wrap("save".to_string(), btn_font.clone(), egui::Color32::WHITE)
+        .size()
+        .x;
+    let cancel_text_w = ui
+        .painter()
+        .layout_no_wrap("cancel".to_string(), btn_font, egui::Color32::WHITE)
+        .size()
+        .x;
+
+    let save_btn_w = btn_pad_x.mul_add(2.0, save_text_w);
+    let cancel_btn_w = btn_pad_x.mul_add(2.0, cancel_text_w);
+
+    let available_w = ui.available_width();
+    let reserved = item_spacing.mul_add(2.0, save_btn_w + cancel_btn_w);
+    let field_w = (available_w - reserved).max(0.0);
+
+    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.spacing_mut().item_spacing.x = item_spacing;
+
+        let edit_id = egui::Id::new(("home_card_rename_edit",)).with(&entry.id);
+        let response = ui.add(
+            egui::TextEdit::singleline(buf)
+                .id(edit_id)
+                .desired_width(field_w)
+                .font(egui::FontId::new(
+                    13.0,
+                    egui::FontFamily::Name("poppins_medium".into()),
+                ))
+                .text_color(redesign_text_primary(palette))
+                .background_color(redesign_input_bg(palette))
+                .margin(egui::Margin::symmetric(8, 4)),
+        );
+
+        let focus_marker = edit_id.with("focused_once");
+        let already_focused = ui
+            .memory(|m| m.data.get_temp::<bool>(focus_marker))
+            .unwrap_or(false);
+        if !already_focused {
+            response.request_focus();
+            ui.memory_mut(|m| m.data.insert_temp(focus_marker, true));
+        }
+
+        let enter_pressed = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let escape_pressed = ui.input(|i| i.key_pressed(egui::Key::Escape));
+
+        let save_clicked = redesign_btn(
+            ui,
+            palette,
+            "save",
+            BtnOpts {
+                primary: true,
+                small: true,
+                ..Default::default()
+            },
+        )
+        .clicked();
+        let cancel_clicked = redesign_btn(
+            ui,
+            palette,
+            "cancel",
+            BtnOpts {
+                small: true,
+                ..Default::default()
+            },
+        )
+        .clicked();
+
+        if save_clicked || enter_pressed {
+            *action = ModlistCardActions::SaveRename;
+        } else if cancel_clicked || escape_pressed {
+            *action = ModlistCardActions::CancelRename;
+        }
+    });
 }
 
 pub fn meta_line(entry: &ModlistEntry) -> String {
@@ -125,7 +233,9 @@ fn render_action_cluster(
                 KebabItem::new("Copy import code", || {
                     picked.set(ModlistCardActions::CopyImportCode);
                 }),
-                KebabItem::new("Rename", || {}),
+                KebabItem::new("Rename", || {
+                    picked.set(ModlistCardActions::Rename);
+                }),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
             let kebab_h = redesign_btn_height(ui, true);
@@ -156,7 +266,9 @@ fn render_action_cluster(
                 KebabItem::new("Open install folder", || {
                     picked.set(ModlistCardActions::OpenInstallFolder);
                 }),
-                KebabItem::new("Rename", || {}),
+                KebabItem::new("Rename", || {
+                    picked.set(ModlistCardActions::Rename);
+                }),
                 KebabItem::new("Reinstall", || picked.set(ModlistCardActions::Reinstall)),
                 KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
             ];
