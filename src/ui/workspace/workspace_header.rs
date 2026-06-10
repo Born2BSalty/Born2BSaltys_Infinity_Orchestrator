@@ -107,12 +107,6 @@ fn render_rename_editor(
             .background_color(redesign_input_bg(palette))
             .margin(egui::Margin::symmetric(8, 4)),
     );
-    ui.painter().rect_stroke(
-        response.rect,
-        egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
-        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-        egui::StrokeKind::Outside,
-    );
 
     let focus_marker = edit_id.with("focused_once");
     let already_focused = ui
@@ -723,7 +717,11 @@ mod tests {
         commit_rename(&mut app);
 
         let history = app.notification_manager.history();
-        assert_eq!(history.len(), 1, "exactly one notification must be enqueued");
+        assert_eq!(
+            history.len(),
+            1,
+            "exactly one notification must be enqueued"
+        );
         let record = history.back().unwrap();
         assert_eq!(
             record.kind,

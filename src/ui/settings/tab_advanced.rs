@@ -5,9 +5,9 @@ use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_PANEL_RADIUS_U8, ThemePalette,
-    redesign_accent, redesign_border_strong, redesign_chrome_bg, redesign_input_bg,
-    redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_WIDTH_PX, REDESIGN_PANEL_RADIUS_U8, ThemePalette, redesign_accent,
+    redesign_border_strong, redesign_chrome_bg, redesign_input_bg, redesign_text_faint,
+    redesign_text_muted, redesign_text_primary,
 };
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
@@ -253,12 +253,6 @@ fn paint_input(
                 .color(redesign_text_faint(palette)),
         );
     let response = ui.add_sized(egui::vec2(110.0, 22.0), edit);
-    ui.painter().rect_stroke(
-        response.rect,
-        egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
-        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-        egui::StrokeKind::Outside,
-    );
     response.changed() || *buf != pre
 }
 

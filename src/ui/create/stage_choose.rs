@@ -38,8 +38,6 @@ const FORM_INPUT_MARGIN: egui::Margin = egui::Margin {
     bottom: 8,
 };
 
-const GAME_FRAME_PAD_Y: i8 = 4;
-
 const FORM_ROW_GAP_PX: f32 = 8.0;
 const SCRATCH_TITLE: &str = "New modlist from downloaded mods";
 const SCRATCH_DESC: &str = "Scan your local mods folder, pick components, reorder, then install. Starts from an empty selection.";
@@ -137,59 +135,70 @@ fn render_setup_box(ui: &mut egui::Ui, palette: ThemePalette, state: &mut Create
     redesign_box(ui, palette, None, |ui| {
         ui.spacing_mut().item_spacing.y = 14.0;
 
-        ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = FORM_ROW_GAP_PX;
+        let input_box_h = ui
+            .horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = FORM_ROW_GAP_PX;
 
-            let name_w = (ui.available_width() - RIGHT_COL_W_PX - FORM_ROW_GAP_PX).max(160.0);
+                let name_w = (ui.available_width() - RIGHT_COL_W_PX - FORM_ROW_GAP_PX).max(160.0);
 
-            ui.allocate_ui_with_layout(
-                egui::vec2(name_w, 0.0),
-                egui::Layout::top_down(egui::Align::LEFT),
-                |ui| {
-                    field_label(ui, palette, "modlist name");
-                    ui.add_space(4.0);
-                    let _resp = redesign_text_input(
-                        ui,
-                        palette,
-                        InputOpts {
-                            edit: egui::TextEdit::singleline(&mut state.modlist_name)
-                                .font(egui::FontId::new(
-                                    14.0,
-                                    egui::FontFamily::Name("poppins_light".into()),
-                                ))
-                                .hint_text(
-                                    egui::RichText::new("e.g. Tactical EET 2026")
-                                        .family(egui::FontFamily::Name("poppins_light".into()))
-                                        .color(redesign_text_faint(palette)),
-                                )
-                                .text_color(redesign_text_primary(palette))
-                                .background_color(redesign_input_bg(palette))
-                                .margin(FORM_INPUT_MARGIN),
-                            margin: FORM_INPUT_MARGIN,
-                            size: egui::vec2(ui.available_width(), FORM_ROW_H_PX),
-                            border: None,
+                let input_box_h = ui
+                    .allocate_ui_with_layout(
+                        egui::vec2(name_w, 0.0),
+                        egui::Layout::top_down(egui::Align::LEFT),
+                        |ui| {
+                            field_label(ui, palette, "modlist name");
+                            ui.add_space(4.0);
+                            let resp = redesign_text_input(
+                                ui,
+                                palette,
+                                InputOpts {
+                                    edit: egui::TextEdit::singleline(&mut state.modlist_name)
+                                        .font(egui::FontId::new(
+                                            14.0,
+                                            egui::FontFamily::Name("poppins_light".into()),
+                                        ))
+                                        .hint_text(
+                                            egui::RichText::new("e.g. Tactical EET 2026")
+                                                .family(egui::FontFamily::Name(
+                                                    "poppins_light".into(),
+                                                ))
+                                                .color(redesign_text_faint(palette)),
+                                        )
+                                        .text_color(redesign_text_primary(palette))
+                                        .background_color(redesign_input_bg(palette))
+                                        .margin(FORM_INPUT_MARGIN),
+                                    margin: FORM_INPUT_MARGIN,
+                                    size: egui::vec2(ui.available_width(), FORM_ROW_H_PX),
+                                    border: None,
+                                },
+                            );
+                            resp.rect.height()
+                                + f32::from(FORM_INPUT_MARGIN.top)
+                                + f32::from(FORM_INPUT_MARGIN.bottom)
                         },
-                    );
-                },
-            );
+                    )
+                    .inner;
 
-            ui.allocate_ui_with_layout(
-                egui::vec2(RIGHT_COL_W_PX, 0.0),
-                egui::Layout::top_down(egui::Align::LEFT),
-                |ui| {
-                    field_label(ui, palette, "game");
-                    ui.add_space(4.0);
-                    match state.starting_point {
-                        StartingPoint::Scratch => {
-                            game_combo(ui, palette, &mut state.game);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(RIGHT_COL_W_PX, 0.0),
+                    egui::Layout::top_down(egui::Align::LEFT),
+                    |ui| {
+                        field_label(ui, palette, "game");
+                        ui.add_space(4.0);
+                        match state.starting_point {
+                            StartingPoint::Scratch => {
+                                game_combo(ui, palette, &mut state.game, input_box_h);
+                            }
+                            StartingPoint::Import => {
+                                game_from_code_note(ui, palette, input_box_h);
+                            }
                         }
-                        StartingPoint::Import => {
-                            game_from_code_note(ui, palette);
-                        }
-                    }
-                },
-            );
-        });
+                    },
+                );
+
+                input_box_h
+            })
+            .inner;
 
         let dest_changed = folder_input(
             ui,
@@ -197,6 +206,7 @@ fn render_setup_box(ui: &mut egui::Ui, palette: ThemePalette, state: &mut Create
             "destination folder",
             "D:\\BG2EE_install_test",
             &mut state.destination,
+            input_box_h,
         );
         if dest_changed {
             state.destination_choice = None;
@@ -229,13 +239,32 @@ fn render_starting_point_boxes(
     let avail_w = ui.available_width();
     let gap = 14.0;
     let card_w = ((avail_w - gap) / 2.0).max(160.0);
-    let box_h = selectable_box_natural_height(ui, card_w, SCRATCH_TITLE, SCRATCH_DESC).max(
+    let measured = selectable_box_natural_height(ui, card_w, SCRATCH_TITLE, SCRATCH_DESC).max(
         selectable_box_natural_height(ui, card_w, IMPORT_TITLE, IMPORT_DESC),
     );
+    // The wrapped-text pre-measure under-estimates the rendered card height, so
+    // the taller card would overflow the shorter. Carry the real rendered
+    // max-height forward a frame and force both cards to it (the card renders at
+    // exactly `min_h` once `min_h` covers its content, so this converges in one
+    // extra frame); reset when the column width changes so it re-settles.
+    let cards_key = ui.id().with("create_cards_equal_h");
+    let (prev_w, carry) = ui
+        .ctx()
+        .memory(|m| m.data.get_temp::<(f32, f32)>(cards_key))
+        .unwrap_or((0.0, 0.0));
+    let carry = if (prev_w - card_w).abs() > 0.5 {
+        0.0
+    } else {
+        carry
+    };
+    let box_h = measured.max(carry);
+
+    let mut h_scratch = 0.0_f32;
+    let mut h_import = 0.0_f32;
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
 
-        if selectable_box(
+        let (clicked, h) = selectable_box(
             ui,
             palette,
             SelectableBoxSpec {
@@ -246,11 +275,13 @@ fn render_starting_point_boxes(
                 selected: state.starting_point == StartingPoint::Scratch,
                 id_salt: "create_box_scratch",
             },
-        ) {
+        );
+        if clicked {
             state.starting_point = StartingPoint::Scratch;
         }
+        h_scratch = h;
 
-        if selectable_box(
+        let (clicked, h) = selectable_box(
             ui,
             palette,
             SelectableBoxSpec {
@@ -261,10 +292,19 @@ fn render_starting_point_boxes(
                 selected: state.starting_point == StartingPoint::Import,
                 id_salt: "create_box_import",
             },
-        ) {
+        );
+        if clicked {
             state.starting_point = StartingPoint::Import;
         }
+        h_import = h;
     });
+
+    let diff = (h_scratch - h_import).abs();
+    if diff > 0.5 {
+        ui.ctx()
+            .memory_mut(|m| m.data.insert_temp(cards_key, (card_w, box_h + diff)));
+        ui.ctx().request_repaint();
+    }
 }
 
 fn field_label(ui: &mut egui::Ui, palette: ThemePalette, text: &str) {
@@ -276,81 +316,74 @@ fn field_label(ui: &mut egui::Ui, palette: ThemePalette, text: &str) {
     );
 }
 
-fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game) {
+fn game_combo(ui: &mut egui::Ui, palette: ThemePalette, game: &mut Game, box_h: f32) {
     let mut selected = *game;
 
-    let frame = egui::Frame::default()
-        .fill(redesign_input_bg(palette))
-        .stroke(egui::Stroke::new(
-            REDESIGN_BORDER_WIDTH_PX,
-            redesign_border_strong(palette),
-        ))
-        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-        .inner_margin(egui::Margin::symmetric(10, GAME_FRAME_PAD_Y));
+    let combo_w = ui.available_width();
+    let combo_font = egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into()));
+    let content_h = ui
+        .fonts(|f| f.row_height(&combo_font))
+        .max(ui.spacing().icon_width);
+    let pad_y = ((box_h - content_h) / 2.0).max(0.0);
 
-    frame.show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.set_min_height(2.0f32.mul_add(-f32::from(GAME_FRAME_PAD_Y), FORM_ROW_H_PX));
-        let combo_w = ui.available_width();
-        let v = ui.visuals_mut();
-        v.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.hovered.bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.hovered.weak_bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.active.bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.active.weak_bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.open.bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-        v.widgets.hovered.bg_stroke = egui::Stroke::NONE;
-        v.widgets.active.bg_stroke = egui::Stroke::NONE;
-        v.widgets.open.bg_stroke = egui::Stroke::NONE;
+    let fill = redesign_input_bg(palette);
+    let v = ui.visuals_mut();
+    for w in [
+        &mut v.widgets.inactive,
+        &mut v.widgets.hovered,
+        &mut v.widgets.active,
+        &mut v.widgets.open,
+    ] {
+        w.bg_fill = fill;
+        w.weak_bg_fill = fill;
+    }
+    ui.spacing_mut().button_padding = egui::vec2(10.0, pad_y);
 
-        egui::ComboBox::from_id_salt("create_game_combo")
-            .width(combo_w)
-            .selected_text(
-                egui::RichText::new(game_label(selected))
-                    .size(12.0)
-                    .family(egui::FontFamily::Name("poppins_medium".into()))
-                    .color(redesign_text_primary(palette)),
-            )
-            .show_ui(ui, |ui| {
-                for option in GAME_OPTIONS {
-                    ui.selectable_value(
-                        &mut selected,
-                        option,
-                        egui::RichText::new(game_label(option))
-                            .size(12.0)
-                            .family(egui::FontFamily::Name("poppins_medium".into()))
-                            .color(redesign_text_primary(palette)),
-                    );
-                }
-            });
-    });
+    egui::ComboBox::from_id_salt("create_game_combo")
+        .width(combo_w)
+        .selected_text(
+            egui::RichText::new(game_label(selected))
+                .size(12.0)
+                .family(egui::FontFamily::Name("poppins_medium".into()))
+                .color(redesign_text_primary(palette)),
+        )
+        .show_ui(ui, |ui| {
+            for option in GAME_OPTIONS {
+                ui.selectable_value(
+                    &mut selected,
+                    option,
+                    egui::RichText::new(game_label(option))
+                        .size(12.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(redesign_text_primary(palette)),
+                );
+            }
+        });
 
     if selected != *game {
         *game = selected;
     }
 }
 
-fn game_from_code_note(ui: &mut egui::Ui, palette: ThemePalette) {
-    let frame = egui::Frame::default()
-        .fill(redesign_shell_bg(palette))
-        .stroke(egui::Stroke::new(
-            REDESIGN_BORDER_WIDTH_PX,
-            redesign_border_strong(palette),
-        ))
-        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-        .inner_margin(egui::Margin::symmetric(10, GAME_FRAME_PAD_Y));
-    frame.show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.set_min_height(2.0f32.mul_add(-f32::from(GAME_FRAME_PAD_Y), FORM_ROW_H_PX));
-        ui.label(
-            egui::RichText::new("imported")
-                .size(12.0)
-                .family(egui::FontFamily::Name("poppins_light".into()))
-                .color(redesign_text_faint(palette)),
-        );
-    });
+fn game_from_code_note(ui: &mut egui::Ui, palette: ThemePalette, box_h: f32) {
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), box_h),
+        egui::Sense::hover(),
+    );
+    ui.painter().rect(
+        rect,
+        egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
+        redesign_shell_bg(palette),
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
+        egui::StrokeKind::Inside,
+    );
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        "imported",
+        egui::FontId::new(12.0, egui::FontFamily::Name("poppins_light".into())),
+        redesign_text_faint(palette),
+    );
 }
 
 const fn game_label(game: Game) -> &'static str {
@@ -371,6 +404,7 @@ fn folder_input(
     label: &str,
     placeholder: &str,
     value: &mut String,
+    box_h: f32,
 ) -> bool {
     let mut changed = false;
 
@@ -405,9 +439,10 @@ fn folder_input(
                     )
                     .text_color(redesign_text_primary(palette))
                     .background_color(redesign_input_bg(palette))
+                    .vertical_align(egui::Align::Center)
                     .margin(FORM_INPUT_MARGIN),
                 margin: FORM_INPUT_MARGIN,
-                size: egui::vec2(edit_width, FORM_ROW_H_PX),
+                size: egui::vec2(edit_width, box_h),
                 border: None,
             },
         );
@@ -417,7 +452,7 @@ fn folder_input(
 
         if ui
             .add_sized(
-                egui::vec2(RIGHT_COL_W_PX, FORM_ROW_H_PX),
+                egui::vec2(RIGHT_COL_W_PX, box_h),
                 egui::Button::new(
                     egui::RichText::new("browse\u{2026}")
                         .size(12.0)
@@ -454,7 +489,11 @@ struct SelectableBoxSpec<'a> {
     id_salt: &'a str,
 }
 
-fn selectable_box(ui: &mut egui::Ui, palette: ThemePalette, spec: SelectableBoxSpec<'_>) -> bool {
+fn selectable_box(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    spec: SelectableBoxSpec<'_>,
+) -> (bool, f32) {
     let SelectableBoxSpec {
         width,
         min_h,
@@ -492,6 +531,7 @@ fn selectable_box(ui: &mut egui::Ui, palette: ThemePalette, spec: SelectableBoxS
             chassis.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.set_min_height(2.0f32.mul_add(-f32::from(SBOX_PAD_Y), min_h));
+                ui.spacing_mut().item_spacing.y = 0.0;
                 ui.label(
                     egui::RichText::new(title)
                         .size(SBOX_TITLE_SIZE)
@@ -509,6 +549,7 @@ fn selectable_box(ui: &mut egui::Ui, palette: ThemePalette, spec: SelectableBoxS
         },
     );
 
+    let card_h = inner.response.rect.height();
     let resp = ui.interact(
         inner.response.rect,
         ui.make_persistent_id(("create_selectable_box", id_salt)),
@@ -517,7 +558,7 @@ fn selectable_box(ui: &mut egui::Ui, palette: ThemePalette, spec: SelectableBoxS
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
-    resp.clicked()
+    (resp.clicked(), card_h)
 }
 
 const SELECTED_TINT_NUMERATOR: u16 = 14;
@@ -628,13 +669,6 @@ mod tests {
         assert_eq!(FORM_INPUT_MARGIN.right, 12);
         assert_eq!(FORM_INPUT_MARGIN.top, 8);
         assert_eq!(FORM_INPUT_MARGIN.bottom, 8);
-        assert_f32_close(
-            2.0f32.mul_add(
-                f32::from(GAME_FRAME_PAD_Y),
-                2.0f32.mul_add(-f32::from(GAME_FRAME_PAD_Y), FORM_ROW_H_PX),
-            ),
-            FORM_ROW_H_PX,
-        );
     }
 
     #[test]
