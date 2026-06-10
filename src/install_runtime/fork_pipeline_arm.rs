@@ -118,6 +118,8 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
     orchestrator.create_screen_state.destination_choice = None;
     orchestrator.pending_reinstall_id = None;
     orchestrator.active_install_modlist_id = Some(modlist_id.clone());
+    // Set the ambient so the fork's import write targets the new modlist's file.
+    crate::install_runtime::active_modlist_source_path::set_ambient_for_modlist(&modlist_id);
 
     Ok(ForkMintReport { modlist_id })
 }

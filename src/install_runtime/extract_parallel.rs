@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -35,9 +35,15 @@ struct AssetExtractResult {
     outcome: Result<String, String>,
 }
 
+/// Starts the parallel extract pool.
+///
+/// `install_ctx_installed_refs_path` must be `Some` when invoked from the install
+/// pipeline (where the ambient is cleared mid-install by `page_router`) and `None`
+/// for manual workspace update-checks (where the ambient stays set on Workspace nav).
 pub fn start_parallel_extract(
     state: &mut WizardState,
     extract_progress: &Arc<Mutex<Option<(usize, usize)>>>,
+    install_ctx_installed_refs_path: Option<&Path>,
 ) -> Option<Receiver<ExtractAssetEvent>> {
     if state.step2.update_selected_extract_running {
         tracing::info!(
@@ -54,7 +60,7 @@ pub fn start_parallel_extract(
         );
         return None;
     }
-    let jobs = build_extract_jobs(state, &archive_dir);
+    let jobs = build_extract_jobs(state, &archive_dir, install_ctx_installed_refs_path);
     if jobs.is_empty() {
         let failed = state.step2.update_selected_extract_failed_sources.len();
         if failed > 0 {
@@ -275,7 +281,7 @@ mod tests {
     fn empty_archive_dir_early_returns_none() {
         let mut state = WizardState::default();
         let handle = Arc::new(Mutex::new(None));
-        let r = start_parallel_extract(&mut state, &handle);
+        let r = start_parallel_extract(&mut state, &handle, None);
         assert!(r.is_none(), "empty archive_dir ⇒ early-return None");
         assert!(
             !state.step2.update_selected_extract_running,
@@ -294,7 +300,7 @@ mod tests {
         state.step2.update_selected_extract_running = true;
         let handle = Arc::new(Mutex::new(None));
         assert!(
-            start_parallel_extract(&mut state, &handle).is_none(),
+            start_parallel_extract(&mut state, &handle, None).is_none(),
             "a second start while running is a no-op (BIO serial parity)"
         );
     }
@@ -304,7 +310,7 @@ mod tests {
         let mut state = WizardState::default();
         state.step1.mods_archive_folder = td().to_string_lossy().into_owned();
         let handle = Arc::new(Mutex::new(None));
-        let r = start_parallel_extract(&mut state, &handle);
+        let r = start_parallel_extract(&mut state, &handle, None);
         assert!(r.is_none(), "no assets ⇒ no jobs ⇒ None");
         assert!(
             !state.step2.update_selected_extract_running,
@@ -401,7 +407,7 @@ mod tests {
         state.step2.update_selected_update_assets = assets;
 
         let handle = Arc::new(Mutex::new(None));
-        let rx = start_parallel_extract(&mut state, &handle);
+        let rx = start_parallel_extract(&mut state, &handle, None);
         assert!(
             rx.is_some(),
             "two on-disk archives ⇒ at least one job ⇒ Some(rx)"

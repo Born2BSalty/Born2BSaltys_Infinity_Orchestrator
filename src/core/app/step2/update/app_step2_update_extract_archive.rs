@@ -80,10 +80,15 @@ pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf
             &job.aliases,
             &target_root,
         )?;
+        // Use the path captured at job-build time (main thread) rather than reading
+        // the process-global ambient off a worker thread — the ambient may have been
+        // cleared by page_router before or during extraction.
+        let refs_target = &job.installed_refs_path;
         if let Some(source_ref) = &job.installed_source_ref {
             super::super::app_step2_update_source_refs::save_installed_source_ref(
                 &job.tp_file,
                 source_ref,
+                refs_target,
             )
             .map_err(|err| err.to_string())?;
         }
@@ -91,6 +96,7 @@ pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf
             super::super::app_step2_update_source_refs::save_installed_source_id(
                 &job.tp_file,
                 source_id,
+                refs_target,
             )
             .map_err(|err| err.to_string())?;
         }

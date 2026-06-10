@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+/// Where the source-editor saves its result: the user's global default file or
+/// the active modlist's per-modlist file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModSourceEditDestination {
+    /// Saves to the global `mod_downloads_user.toml` (existing behavior).
+    #[default]
+    GlobalDefault,
+    /// Saves to the active modlist's `mod_downloads_user.toml`.
+    ThisModlist,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step2Action {
     StartScan,
@@ -25,6 +36,7 @@ pub enum Step2Action {
         label: String,
         source_id: String,
         allow_source_id_change: bool,
+        destination: ModSourceEditDestination,
     },
     DiscoverModDownloadForks {
         tp2: String,

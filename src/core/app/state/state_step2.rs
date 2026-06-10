@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::app::step2_action::ModSourceEditDestination;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptPopupMode {
     Text,
@@ -66,6 +68,7 @@ pub struct Step2State<Flag = bool> {
     pub mod_download_source_editor_allow_source_id_change: Flag,
     pub mod_download_source_editor_text: String,
     pub mod_download_source_editor_error: Option<String>,
+    pub mod_download_source_editor_destination: ModSourceEditDestination,
     pub mod_download_forks_popup_open: Flag,
     pub mod_download_forks_popup_title: String,
     pub mod_download_forks_popup_tp2: String,
@@ -146,6 +149,7 @@ impl Default for Step2State {
             mod_download_source_editor_allow_source_id_change: false,
             mod_download_source_editor_text: String::new(),
             mod_download_source_editor_error: None,
+            mod_download_source_editor_destination: ModSourceEditDestination::GlobalDefault,
             mod_download_forks_popup_open: false,
             mod_download_forks_popup_title: String::new(),
             mod_download_forks_popup_tp2: String::new(),

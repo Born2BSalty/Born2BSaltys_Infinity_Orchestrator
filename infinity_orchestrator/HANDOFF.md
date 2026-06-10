@@ -33,4 +33,5 @@ All other Phase-8 tasks (T1/T2/T4–T11/T15/T16, plus the `T10.f` toast event mi
 
 ## Doc-sync owed
 
-- Carve-outs **#11–#14** (Step-2 / Step-3 chrome reskins, shipped via PRs #24 / #27) are not yet formalized in `SPEC.md §1`, which enumerates through #9. Formalize in a docs PR.
+- `SPEC.md §1` now enumerates carve-outs through **#16** — the per-modlist download-source & installed-refs carve-out (formalized 2026-06-08; implemented on `feat/per-modlist-versions`; the detailed spec + plan are archived for posterity outside the tracked repo).
+- Still owed: the reskin carve-outs **#11–#14** (Step-2 / Step-3 chrome, shipped via PRs #24 / #27) remain unformalized in `SPEC.md §1`; and `SPEC.md §13.12b`'s "no new carve-out required" line for the download-source/installed-refs overlay is superseded by #16 (the per-modlist slice now lands via carve-out #16 + an ambient resolver, not the old orchestrator-interception design). Reconcile both in a docs pass.

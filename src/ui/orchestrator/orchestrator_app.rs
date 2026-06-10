@@ -688,7 +688,8 @@ impl OrchestratorApp {
             match self.pending_folder_deletes[i].rx.try_recv() {
                 Ok(Ok(())) => {
                     let name = self.pending_folder_deletes.swap_remove(i).modlist_name;
-                    self.notification_manager.success(format!("Deleted \"{name}\""));
+                    self.notification_manager
+                        .success(format!("Deleted \"{name}\""));
                 }
                 Ok(Err(err)) => {
                     let name = self.pending_folder_deletes.swap_remove(i).modlist_name;
@@ -777,12 +778,16 @@ impl OrchestratorApp {
             &mut self.install_screen_state,
             &self.hash_progress,
         );
+        let install_ctx_refs_path = self.active_install_modlist_id.as_deref().map(|id| {
+            crate::registry::store_workspace::modlist_data_dir(id).join("mod_installed_refs.toml")
+        });
         Self::drain_stream_download(
             &mut self.wizard_state,
             &mut self.stream_download_rx,
             &mut self.extract_parallel_rx,
             &mut self.install_screen_state.download_progress,
             &self.extract_progress,
+            install_ctx_refs_path.as_deref(),
         );
         Self::drain_extract_parallel(
             &mut self.wizard_state,
@@ -813,6 +818,7 @@ impl OrchestratorApp {
         >,
         progress: &mut crate::ui::install::stage_downloading::DownloadProgress,
         extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
+        install_ctx_installed_refs_path: Option<&std::path::Path>,
     ) {
         use crate::install_runtime::extract_parallel::start_parallel_extract;
         use crate::install_runtime::stream_downloader::{
@@ -870,7 +876,11 @@ impl OrchestratorApp {
                     );
                     *stream_download_rx = None;
                     apply_result_state(wizard_state, result);
-                    if let Some(rx) = start_parallel_extract(wizard_state, extract_progress) {
+                    if let Some(rx) = start_parallel_extract(
+                        wizard_state,
+                        extract_progress,
+                        install_ctx_installed_refs_path,
+                    ) {
                         *extract_parallel_rx = Some(rx);
                         tracing::info!(
                             target = "orchestrator",

@@ -62,6 +62,9 @@ pub fn write_install_start_artifacts(
     registry: &mut ModlistRegistry,
     store: &RegistryStore,
 ) -> Result<(), String> {
+    // Set the ambient to the installing modlist before pack_meta runs export.
+    crate::install_runtime::active_modlist_source_path::set_ambient_for_modlist(modlist_id);
+
     let entry = registry
         .find(modlist_id)
         .ok_or_else(|| format!("modlist {modlist_id} not in registry at install start"))?;

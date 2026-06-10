@@ -94,7 +94,15 @@ pub(crate) fn handle_step2_action(
             label,
             source_id,
             allow_source_id_change,
-        } => open_mod_download_source_editor(state, tp2, label, source_id, allow_source_id_change),
+            destination,
+        } => open_mod_download_source_editor(
+            state,
+            tp2,
+            label,
+            source_id,
+            allow_source_id_change,
+            destination,
+        ),
         Step2Action::SaveModDownloadSourceEditor => {
             save_mod_download_source_editor(state, step2_update_check_rx);
         }
@@ -259,12 +267,26 @@ fn open_mod_download_source_editor(
     label: String,
     source_id: String,
     allow_source_id_change: bool,
+    destination: crate::app::step2_action::ModSourceEditDestination,
 ) {
+    use crate::app::mod_downloads::SeedScope;
+    use crate::app::step2_action::ModSourceEditDestination;
+
+    let (target_path, seed_scope) = match destination {
+        ModSourceEditDestination::GlobalDefault => (None, SeedScope::GlobalOnly),
+        ModSourceEditDestination::ThisModlist => (
+            mod_downloads::active_modlist_downloads_path(),
+            SeedScope::Resolved,
+        ),
+    };
+
     match mod_downloads::load_user_mod_download_source_block(
         &tp2,
         &label,
         &source_id,
         allow_source_id_change,
+        target_path.as_deref(),
+        seed_scope,
     ) {
         Ok(text) => {
             state.step2.mod_download_source_editor_open = true;
@@ -276,6 +298,7 @@ fn open_mod_download_source_editor(
                 .mod_download_source_editor_allow_source_id_change = allow_source_id_change;
             state.step2.mod_download_source_editor_text = text;
             state.step2.mod_download_source_editor_error = None;
+            state.step2.mod_download_source_editor_destination = destination;
         }
         Err(err) => {
             state.step2.scan_status = format!("Open source editor failed: {err}");
@@ -289,6 +312,8 @@ fn save_mod_download_source_editor(
         Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
     >,
 ) {
+    use crate::app::step2_action::ModSourceEditDestination;
+
     let tp2 = state.step2.mod_download_source_editor_tp2.clone();
     let label = state.step2.mod_download_source_editor_label.clone();
     let source_id = state.step2.mod_download_source_editor_source_id.clone();
@@ -296,12 +321,23 @@ fn save_mod_download_source_editor(
         .step2
         .mod_download_source_editor_allow_source_id_change;
     let text = state.step2.mod_download_source_editor_text.clone();
+    let destination = state.step2.mod_download_source_editor_destination;
+
+    let target_path = match destination {
+        ModSourceEditDestination::GlobalDefault => None,
+        ModSourceEditDestination::ThisModlist => {
+            // Fall back to global when no modlist is active (legacy safety).
+            mod_downloads::active_modlist_downloads_path()
+        }
+    };
+
     match mod_downloads::save_user_mod_download_source_block(
         &tp2,
         &label,
         &source_id,
         allow_source_id_change,
         &text,
+        target_path.as_deref(),
     ) {
         Ok(()) => finish_saving_mod_download_source_editor(state, step2_update_check_rx, &tp2),
         Err(err) => {

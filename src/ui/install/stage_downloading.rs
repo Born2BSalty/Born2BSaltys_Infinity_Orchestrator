@@ -689,12 +689,27 @@ fn finish_pipeline_arm_after_destination_prep(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     inputs: &LivePipelineInputs,
 ) {
+    use crate::install_runtime::active_modlist_source_path;
     use crate::install_runtime::auto_build_driver;
+    use crate::install_runtime::install_modlist_registration;
 
     orchestrator
         .install_screen_state
         .pipeline_flags
         .set_armed(true);
+
+    // For share-code-consuming workflows, mint (or reuse) the modlist id
+    // and set the ambient BEFORE prepare_install_dirs_and_maybe_import runs the import,
+    // so the import write targets the new modlist's per-modlist file rather than global.
+    let early_mint_result = if auto_build_driver::is_share_code_consuming(inputs.workflow) {
+        install_modlist_registration::early_mint_modlist_id(orchestrator, &inputs.destination)
+    } else {
+        None
+    };
+
+    if let Some((ref id, _)) = early_mint_result {
+        active_modlist_source_path::set_ambient_for_modlist(id);
+    }
 
     match auto_build_driver::prepare_install_dirs_and_maybe_import(
         &mut orchestrator.wizard_state,
@@ -723,11 +738,13 @@ fn finish_pipeline_arm_after_destination_prep(
                 &mut orchestrator.wizard_state,
                 &mods_archive_folder,
             );
-            crate::install_runtime::install_modlist_registration::register_and_write_install_start_artifacts(
-                orchestrator,
-            );
+            install_modlist_registration::register_and_write_install_start_artifacts(orchestrator);
         }
         Err(err) => {
+            // Roll back a freshly-minted entry on import failure.
+            if let Some((ref id, true)) = early_mint_result {
+                install_modlist_registration::rollback_early_minted_entry(orchestrator, id);
+            }
             set_pipeline_arm_error(orchestrator, &err);
             tracing::warn!(
                 target = "orchestrator",
