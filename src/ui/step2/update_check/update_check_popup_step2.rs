@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::app::mod_downloads;
 use crate::app::state::{WizardState, exact_log_ready_to_install, update_selection_signature};
 use crate::ui::orchestrator::widgets::{
-    BtnOpts, redesign_btn, redesign_section_header, redesign_window_title,
+    BtnOpts, clipboard, redesign_btn, redesign_section_header, redesign_window_title,
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
@@ -716,8 +716,10 @@ fn render_copy_report_button(
     .clicked()
         && can_copy_report
     {
-        ui.ctx()
-            .copy_text(build_popup_report(state, modes.exact_log, modes.good_to_go));
+        clipboard::copy(
+            ui.ctx(),
+            build_popup_report(state, modes.exact_log, modes.good_to_go),
+        );
     }
 }
 

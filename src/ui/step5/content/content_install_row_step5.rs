@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, clipboard, redesign_btn};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::action_step5::Step5Action;
 use crate::ui::step5::content_step5::Step5RenderCtx;
@@ -323,7 +323,7 @@ fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState, palette: T
                     )
                     .clicked()
                 {
-                    ui.ctx().copy_text(state.step5.modlist_share_code.clone());
+                    clipboard::copy(ui.ctx(), state.step5.modlist_share_code.clone());
                     state.step5.last_status_text = "Modlist share code copied".to_string();
                 }
                 if ui.button("Close").clicked() {

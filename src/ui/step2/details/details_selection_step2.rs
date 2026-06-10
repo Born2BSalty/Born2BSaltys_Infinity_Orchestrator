@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
+use crate::ui::orchestrator::widgets::{ButtonIcon, clipboard, render_icon_button};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::Step2Details;
@@ -338,7 +338,7 @@ fn render_action_cell(
                 )
                 .clicked()
             {
-                ui.ctx().copy_text(value.to_string());
+                clipboard::copy(ui.ctx(), value.to_string());
             }
         },
     );

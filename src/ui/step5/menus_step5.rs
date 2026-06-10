@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, clipboard, redesign_btn};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::service_diagnostics_support_step5::{
     export_diagnostics, open_console_logs_folder, open_last_log_file, save_console_log,
@@ -42,7 +42,7 @@ pub(crate) fn render_actions_menu(
                 .clicked()
             {
                 if let Some(term) = terminal.as_ref() {
-                    ui.ctx().copy_text(term.console_text());
+                    clipboard::copy(ui.ctx(), term.console_text());
                 }
                 ui.memory_mut(egui::Memory::close_popup);
             }

@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
+use crate::ui::orchestrator::widgets::{ButtonIcon, clipboard, render_icon_button};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_input_bg, redesign_text_primary,
@@ -387,7 +387,7 @@ fn render_code_section(
             )
             .clicked()
             {
-                ui.ctx().copy_text(value.to_string());
+                clipboard::copy(ui.ctx(), value.to_string());
             }
         })
         .body_unindented(|ui| {
@@ -466,7 +466,7 @@ fn render_action_cell(
                 )
                 .clicked()
             {
-                ui.ctx().copy_text(value.to_string());
+                clipboard::copy(ui.ctx(), value.to_string());
             }
         },
     );
