@@ -5,6 +5,7 @@ use chrono::{DateTime, Local};
 use eframe::egui;
 
 use crate::app::state::WizardState;
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::service_diagnostics_support_step5::source_log_infos;
 use crate::ui::step5::service_step5_command_step5::{
@@ -34,7 +35,7 @@ fn render_command_panel(ui: &mut egui::Ui, state: &WizardState, top_h: f32) {
                 "Command",
             ));
             if ui.button("Copy Command").clicked() {
-                ui.ctx().copy_text(build_install_command(&state.step1));
+                clipboard::copy(ui.ctx(), build_install_command(&state.step1));
             }
         });
         ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_SM);

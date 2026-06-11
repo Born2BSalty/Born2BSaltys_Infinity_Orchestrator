@@ -15,6 +15,7 @@ use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::orchestrator_app::PendingFolderDelete;
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::settings::state_settings::SettingsTab;
@@ -180,14 +181,14 @@ fn split_home_entries(entries: &[ModlistEntry]) -> (Vec<ModlistEntry>, Vec<Modli
 fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, intent: CardIntent) {
     match intent {
         CardIntent::CopyImportCode(id) => {
+            let name = modlist_name(orchestrator, &id);
             if let Some(code) = operations::share_code_for(&id, &orchestrator.registry) {
-                ctx.copy_text(code);
-                let name = modlist_name(orchestrator, &id);
-                orchestrator
-                    .notification_manager
-                    .success(format!("Copied import code for \"{name}\""));
+                clipboard::copy_with_message(
+                    ctx,
+                    code,
+                    format!("Copied import code for \"{name}\""),
+                );
             } else {
-                let name = modlist_name(orchestrator, &id);
                 orchestrator
                     .notification_manager
                     .error(format!("No import code yet for \"{name}\""));

@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::registry::model::ModlistEntry;
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
@@ -217,7 +218,7 @@ fn apply_dialog_outcome(
     close_clicked: bool,
 ) {
     if copy_clicked && let Some(c) = code {
-        ctx.copy_text(c.to_string());
+        clipboard::copy_silent(ctx, c);
         state.copied_flash_until = Some(Instant::now() + COPIED_FLASH);
     }
     if close_clicked {

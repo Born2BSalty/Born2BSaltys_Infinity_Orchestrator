@@ -9,6 +9,7 @@ use crate::ui::layout::{
     BROWSE_BUTTON_WIDTH, PATH_FIELD_MIN_WIDTH, PATH_INPUT_HEIGHT, PATH_LABEL_WIDTH,
     PATH_ROW_INNER_GAP,
 };
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::shared::tooltip_global as tt;
 use crate::ui::shared::typography_global as typo;
 use crate::ui::step1::action_step1::Step1Action;
@@ -172,7 +173,7 @@ fn render_prompt_tag_button(ui: &mut egui::Ui) {
         ui.label(PROMPT_HELP);
     });
     if copy_resp.clicked() {
-        ui.ctx().copy_text("// @wlb-inputs:".to_string());
+        clipboard::copy(ui.ctx(), "// @wlb-inputs:");
     }
 }
 
