@@ -222,7 +222,7 @@ When the current chip's filtered list is empty, the body shows a single faint li
 - `In progress`: "No in-progress builds. Start a new modlist from \"create your own\"."
 - `All`: "No modlists yet."
 
-A success toast appears bottom-right: `Copied import code for "<modlist>"` — auto-dismisses after 3 s with hover-pause (§10.8).
+A success toast appears bottom-right: `Copied import code for "<modlist>"` — auto-dismisses after 3 s with hover-pause (§10.8). All clipboard writes in the app go through the shared `clipboard::copy` chokepoint, which enqueues a toast; the orchestrator drains the queue each frame into `NotificationManager`. Sites that render their own inline copy confirmation (Create page draft copy, Share import-code dialog) call `clipboard::copy_silent` instead and show no toast.
 
 ### 3.2 Cards (shared shape)
 

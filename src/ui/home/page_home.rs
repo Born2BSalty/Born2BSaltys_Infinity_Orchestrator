@@ -181,14 +181,14 @@ fn split_home_entries(entries: &[ModlistEntry]) -> (Vec<ModlistEntry>, Vec<Modli
 fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, intent: CardIntent) {
     match intent {
         CardIntent::CopyImportCode(id) => {
+            let name = modlist_name(orchestrator, &id);
             if let Some(code) = operations::share_code_for(&id, &orchestrator.registry) {
-                clipboard::copy(ctx, code);
-                let name = modlist_name(orchestrator, &id);
-                orchestrator
-                    .notification_manager
-                    .success(format!("Copied import code for \"{name}\""));
+                clipboard::copy_with_message(
+                    ctx,
+                    code,
+                    format!("Copied import code for \"{name}\""),
+                );
             } else {
-                let name = modlist_name(orchestrator, &id);
                 orchestrator
                     .notification_manager
                     .error(format!("No import code yet for \"{name}\""));

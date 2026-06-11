@@ -48,6 +48,7 @@ use crate::ui::orchestrator::nav_status::{
 use crate::ui::orchestrator::page_router;
 use crate::ui::orchestrator::stubs::home_stub::HomeStubState;
 use crate::ui::orchestrator::widgets::NotificationManager;
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::settings::oauth_glue;
 use crate::ui::settings::state_settings::SettingsScreenState;
 use crate::ui::settings::validate_debounce;
@@ -1590,6 +1591,9 @@ impl OrchestratorApp {
         palette: ThemePalette,
         history_clicked: bool,
     ) {
+        for msg in clipboard::take_pending_toasts(ctx) {
+            self.notification_manager.success(msg);
+        }
         if history_clicked {
             self.notification_manager.history_open = !self.notification_manager.history_open;
         }

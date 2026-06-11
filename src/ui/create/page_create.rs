@@ -504,7 +504,7 @@ fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id:
         .find(id)
         .map_or_else(|| "modlist".to_string(), |e| e.name.clone());
     if let Some(code) = operations::share_code_for(id, &orchestrator.registry) {
-        clipboard::copy(ctx, code);
+        clipboard::copy_silent(ctx, code);
         orchestrator.create_screen_state.load_draft_copied_name = Some(name);
     } else {
         orchestrator.create_screen_state.load_draft_copied_name = Some(format!(

@@ -218,7 +218,7 @@ fn apply_dialog_outcome(
     close_clicked: bool,
 ) {
     if copy_clicked && let Some(c) = code {
-        clipboard::copy(ctx, c);
+        clipboard::copy_silent(ctx, c);
         state.copied_flash_until = Some(Instant::now() + COPIED_FLASH);
     }
     if close_clicked {
