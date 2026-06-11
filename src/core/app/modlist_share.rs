@@ -701,6 +701,7 @@ fn build_resolved_source_overrides(state: &WizardState) -> Result<Option<String>
     let installed_ids = crate::app::app_step2_update_source_refs::load_installed_source_ids();
 
     let mut toml_out = String::new();
+    let mut seen = std::collections::BTreeSet::new();
     for mod_state in state
         .step2
         .bgee_mods
@@ -712,6 +713,13 @@ fn build_resolved_source_overrides(state: &WizardState) -> Result<Option<String>
         else {
             continue;
         };
+        let key = (
+            crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file),
+            source.source_id.trim().to_ascii_lowercase(),
+        );
+        if !seen.insert(key) {
+            continue;
+        }
         let block = serialize_resolved_mod(&mod_state.tp_file, &mod_state.name, &source);
         if !toml_out.is_empty() {
             toml_out.push_str("\n\n");
@@ -1073,9 +1081,6 @@ mod tests {
 
     // ── Export serializer tests ────────────────────────────────────
 
-    use std::sync::Mutex;
-    static SHARE_TEST_LOCK: Mutex<()> = Mutex::new(());
-
     struct AmbientGuard(Option<std::path::PathBuf>);
     impl AmbientGuard {
         fn acquire() -> Self {
@@ -1117,7 +1122,9 @@ mod tests {
 
     #[test]
     fn export_serializer_emits_exact_github_as_array() {
-        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         let source = github_source_multi_exact();
@@ -1145,14 +1152,19 @@ mod tests {
 
     #[test]
     fn export_serializer_non_github_source_url_no_repo() {
-        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         let source = url_source();
         let block = serialize_resolved_source_block(&source);
 
         assert!(block.contains("url = \""), "url source must emit url field");
-        assert!(!block.contains("repo = \""), "url source must not emit repo field");
+        assert!(
+            !block.contains("repo = \""),
+            "url source must not emit repo field"
+        );
 
         // Round-trip validate.
         let wrapped = format!("[[mods]]\nname = \"U\"\ntp2 = \"u\"\n\n{block}");
@@ -1162,7 +1174,9 @@ mod tests {
 
     #[test]
     fn export_ambient_unset_is_byte_identical_verbatim() {
-        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
@@ -1181,7 +1195,9 @@ mod tests {
 
     #[test]
     fn export_skips_unresolvable_mod() {
-        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
@@ -1199,11 +1215,157 @@ mod tests {
         );
     }
 
+    // ── Export dedup tests (fix for EET double-emit) ────────────────
+
+    /// Counts `[[mods]]` blocks in `toml_out` whose `tp2 = "..."` value normalizes to `tp2`.
+    /// Parses by walking block boundaries detected by `[[mods]]` header lines.
+    fn count_mods_blocks_for_tp2(toml_out: &str, tp2: &str) -> usize {
+        let target = crate::app::mod_downloads::normalize_mod_download_tp2(tp2);
+        let mut count = 0usize;
+        let mut in_block = false;
+        let mut block_matched = false;
+        for line in toml_out.lines() {
+            let trimmed = line.trim();
+            if trimmed == "[[mods]]" {
+                if in_block && block_matched {
+                    count += 1;
+                }
+                in_block = true;
+                block_matched = false;
+            } else if in_block
+                && trimmed.starts_with("tp2")
+                && let Some(val) = trimmed
+                    .strip_prefix("tp2")
+                    .and_then(|r| r.trim_start().strip_prefix('='))
+            {
+                let val = val.trim().trim_matches('"');
+                if crate::app::mod_downloads::normalize_mod_download_tp2(val) == target {
+                    block_matched = true;
+                }
+            }
+        }
+        if in_block && block_matched {
+            count += 1;
+        }
+        count
+    }
+
+    fn make_step2_mod(tp_file: &str, name: &str) -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: name.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: format!("{tp_file}/{tp_file}.tp2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    fn write_per_modlist_source(dir: &std::path::Path, tp2: &str) -> std::path::PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join("mod_downloads_user.toml");
+        std::fs::write(
+            &path,
+            format!(
+                "[[mods]]\nname = \"{tp2}\"\ntp2 = \"{tp2}\"\n\n  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/T/M\"\n  repo = \"T/M\"\n  tag = \"v1\"\n  default = true\n"
+            ),
+        )
+        .unwrap();
+        path
+    }
+
+    fn unique_share_tmp_dir(label: &str) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "bio_share_test_{}_{}_{label}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    #[test]
+    fn export_dedup_eet_both_tabs_emit_each_mod_once() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_share_tmp_dir("eet_dedup");
+        write_per_modlist_source(&tmp_dir, "cdtweaks");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(tmp_dir.clone()));
+
+        // Simulate an EET modlist: same mod in both bgee_mods and bg2ee_mods.
+        let mut state = WizardState::default();
+        let mod_entry = make_step2_mod("cdtweaks", "cdtweaks");
+        state.step2.bgee_mods = vec![mod_entry.clone()];
+        state.step2.bg2ee_mods = vec![mod_entry];
+
+        let result = build_resolved_source_overrides(&state);
+        assert!(result.is_ok(), "build must not error: {:?}", result.err());
+
+        let toml_out = result
+            .unwrap()
+            .expect("resolved overrides must produce Some output");
+
+        // Count [[mods]] blocks for cdtweaks in the output.
+        // Count [[mods]] headers that carry the target tp2 by scanning line pairs.
+        let block_count = count_mods_blocks_for_tp2(&toml_out, "cdtweaks");
+        assert_eq!(
+            block_count, 1,
+            "EET dual-tab mod must appear exactly once in export; got {block_count}:\n{toml_out}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn export_dedup_single_game_tab_is_noop() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_share_tmp_dir("single_tab");
+        write_per_modlist_source(&tmp_dir, "testmod");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(tmp_dir.clone()));
+
+        // Single-game: mod only in bgee_mods; bg2ee_mods empty.
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![make_step2_mod("testmod", "TestMod")];
+        state.step2.bg2ee_mods = vec![];
+
+        let result = build_resolved_source_overrides(&state);
+        assert!(result.is_ok(), "build must not error: {:?}", result.err());
+
+        let toml_out = result
+            .unwrap()
+            .expect("single-game must produce Some output");
+
+        let block_count = count_mods_blocks_for_tp2(&toml_out, "testmod");
+        assert_eq!(
+            block_count, 1,
+            "single-game mod must appear exactly once; got {block_count}:\n{toml_out}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
     // ── Import tests ───────────────────────────────────────────────
 
     #[test]
     fn import_ambient_unset_writes_global() {
-        let _lock = SHARE_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
