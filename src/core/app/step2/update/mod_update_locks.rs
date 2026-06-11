@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
-use crate::app::mod_downloads::normalize_mod_download_tp2;
+use crate::app::mod_downloads::{active_modlist_dir, normalize_mod_download_tp2};
 use crate::app::state::Step2ModState;
 use crate::platform_defaults::app_config_file;
 
@@ -21,8 +21,13 @@ struct ModUpdateLocksFile {
     locked_tp2: Vec<String>,
 }
 
+/// Returns the update-lock file path for the active modlist when one is set,
+/// or the global config-dir path otherwise.
 pub(crate) fn mod_update_locks_path() -> PathBuf {
-    app_config_file(MOD_UPDATE_LOCKS_FILE_NAME, "config")
+    active_modlist_dir().map_or_else(
+        || app_config_file(MOD_UPDATE_LOCKS_FILE_NAME, "config"),
+        |d| d.join(MOD_UPDATE_LOCKS_FILE_NAME),
+    )
 }
 
 pub(crate) fn apply_mod_update_locks(mods: &mut [Step2ModState]) {
@@ -121,5 +126,120 @@ fn last_load_error() -> &'static Mutex<Option<String>> {
 fn set_last_load_error(error: Option<String>) {
     if let Ok(mut guard) = last_load_error().lock() {
         *guard = error;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+
+    // Shared test-lock: ensures ambient-touching tests never interleave.
+    static LOCKS_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    /// RAII drop-guard: restores the ambient active-modlist dir on drop (including panic).
+    struct AmbientGuard(Option<PathBuf>);
+
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    fn unique_tmp_dir(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "bio_locks_test_{}_{}_{label}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    #[test]
+    fn update_locks_ambient_unset_targets_global() {
+        let _lock = LOCKS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+
+        let global_path = mod_update_locks_path();
+        // With ambient unset the resolver must return a path in the real config dir —
+        // not a temp dir. We only assert the path value; we do NOT write to it.
+        assert!(
+            !global_path.to_string_lossy().contains("bio_locks_test_"),
+            "global path must not be a temp path"
+        );
+    }
+
+    #[test]
+    fn update_locks_ambient_set_targets_per_modlist() {
+        let _lock = LOCKS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let per_dir = unique_tmp_dir("per");
+        std::fs::create_dir_all(&per_dir).unwrap();
+        let per_path = per_dir.join(MOD_UPDATE_LOCKS_FILE_NAME);
+
+        crate::app::mod_downloads::set_active_modlist_dir(Some(per_dir.clone()));
+
+        let resolved = mod_update_locks_path();
+        assert_eq!(
+            resolved, per_path,
+            "resolver returns per-modlist path when ambient is set"
+        );
+
+        // Write a lock via the full API and confirm it lands in the per-modlist file.
+        set_mod_update_lock("testmod/testmod.tp2", true).unwrap();
+
+        assert!(per_path.exists(), "per-modlist lock file was created");
+        let content = std::fs::read_to_string(&per_path).unwrap();
+        assert!(
+            content.contains("testmod"),
+            "tp2 written to per-modlist lock file"
+        );
+
+        let _ = std::fs::remove_dir_all(&per_dir);
+    }
+
+    #[test]
+    fn update_locks_global_file_untouched_when_per_modlist_is_active() {
+        let _lock = LOCKS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let per_dir = unique_tmp_dir("nofall");
+        let sentinel_dir = unique_tmp_dir("sentinel");
+        std::fs::create_dir_all(&per_dir).unwrap();
+        std::fs::create_dir_all(&sentinel_dir).unwrap();
+
+        // Write a sentinel file that must remain unchanged.
+        let sentinel_path = sentinel_dir.join(MOD_UPDATE_LOCKS_FILE_NAME);
+        std::fs::write(&sentinel_path, "# sentinel\n").unwrap();
+
+        crate::app::mod_downloads::set_active_modlist_dir(Some(per_dir.clone()));
+
+        set_mod_update_lock("amod/amod.tp2", true).unwrap();
+
+        // Sentinel must be byte-identical — no fallback write occurred.
+        let sentinel_content = std::fs::read_to_string(&sentinel_path).unwrap();
+        assert_eq!(
+            sentinel_content, "# sentinel\n",
+            "global sentinel must be untouched"
+        );
+
+        let _ = std::fs::remove_dir_all(&per_dir);
+        let _ = std::fs::remove_dir_all(&sentinel_dir);
     }
 }

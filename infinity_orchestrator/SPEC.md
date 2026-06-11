@@ -1365,6 +1365,7 @@ What stays vs what's new at the file level:
 | `modlists/<id>/mod_downloads_user.toml` | **new** | Per-modlist Set Source overrides + manual mod sources per [§13.12b](#1312b-per-modlist-data-ownership). |
 | `modlists/<id>/step2_compat_rules_user.toml` | **new** | Per-modlist user compat additions / overrides per [§13.12b](#1312b-per-modlist-data-ownership). |
 | `modlists/<id>/installed_source_refs.toml` | **new** | Per-modlist post-install pinned tp2 → source/commit record per [§13.12b](#1312b-per-modlist-data-ownership). |
+| `modlists/<id>/mod_update_locks.toml` | **new** | Per-modlist update-lock record (locked tp2 list). Global-only for the legacy `BIO_legacy` binary; orchestrator reads/writes only the per-modlist file per [§13.12b](#1312b-per-modlist-data-ownership) (carve-out #18). |
 | `app_bootstrap.rs` / `app_lifecycle.rs` / `app_update_cycle.rs` persistence machinery | **existing, extended** | Debounce/throttle + drop-time flush logic is reused; new code adds `modlists.json`, per-modlist workspace files, and per-modlist overlay TOMLs to the same write paths. |
 
 Behavior the new `modlists.json` registry must support:
@@ -1587,9 +1588,9 @@ The global `prompt_answers.json` file ([§13.6](#136-auto-answer-prompt-memory))
 
 **No migration.** Existing global files stay on disk; orchestrator-created modlists start with empty overlays (consistent with [§13.1](#131-modlist-persistence)).
 
-**Delete.** On Delete ([§3.2](#cards-in-the-filtered-list)), the entire per-modlist storage folder (`modlists/<id>/` and everything inside it — `workspace.json` plus the three per-modlist overlay TOMLs) is removed alongside the registry entry and install folder. There is no orphan-overlay state.
+**Delete.** On Delete ([§3.2](#cards-in-the-filtered-list)), the entire per-modlist storage folder (`modlists/<id>/` and everything inside it — `workspace.json` plus the four per-modlist overlay TOMLs) is removed alongside the registry entry and install folder. There is no orphan-overlay state.
 
-**Compliance.** No new [§1](#1-critical-directive--do-not-modify-existing-bio-components) carve-out required — every change is net-new orchestrator code; the single BIO-source touch is the schema-additive compat-overlay field under existing carve-out #5.
+**Compliance.** The mod-source, compat-rule, and installed-refs overlays require no new carve-out — every change is net-new orchestrator code; the single BIO-source touch is the schema-additive compat-overlay field under existing carve-out #5. The update-lock overlay (`mod_update_locks.toml`) is authorized by carve-out #18, which makes `mod_update_locks_path()` ambient-aware in BIO source.
 
 ### 13.13 Import code auto-generated on install start
 
@@ -1613,7 +1614,7 @@ Effects:
 
 ### 13.14 Persistence timing
 
-Inherits today's BIO persistence model (`src/ui/app_bootstrap.rs`, `src/ui/app_lifecycle.rs`, `app_update_cycle::persist_step1_if_needed`). Applies to **app settings** (`bio_settings.json`) **and** the new **modlist registry** (`modlists.json`) **and** the new **per-modlist workspace state files** (`modlists/<id>/workspace.json` under the platform config dir) **and** the new **per-modlist user-overlay data files** (`modlists/<id>/{mod_downloads_user,step2_compat_rules_user,installed_source_refs}.toml`) per [§13.12b](#1312b-per-modlist-data-ownership).
+Inherits today's BIO persistence model (`src/ui/app_bootstrap.rs`, `src/ui/app_lifecycle.rs`, `app_update_cycle::persist_step1_if_needed`). Applies to **app settings** (`bio_settings.json`) **and** the new **modlist registry** (`modlists.json`) **and** the new **per-modlist workspace state files** (`modlists/<id>/workspace.json` under the platform config dir) **and** the new **per-modlist user-overlay data files** (`modlists/<id>/{mod_downloads_user,step2_compat_rules_user,installed_source_refs,mod_update_locks}.toml`) per [§13.12b](#1312b-per-modlist-data-ownership).
 
 Writes happen at three moments:
 
