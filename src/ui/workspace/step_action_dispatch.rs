@@ -6,6 +6,7 @@ use crate::app::app_step4_flow;
 use crate::app::step4_action::Step4Action;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::step2::action_step2::Step2Action;
+use crate::ui::workspace::step2::step2_rescan_reconcile;
 use crate::ui::workspace::step2_log_glue;
 
 pub fn dispatch_step2(action: Step2Action, orchestrator: &mut OrchestratorApp) {
@@ -16,6 +17,12 @@ pub fn dispatch_step2(action: Step2Action, orchestrator: &mut OrchestratorApp) {
         }
         Step2Action::SelectBg2eeViaLog => {
             step2_log_glue::apply_weidu_log_selection_for_orchestrator(orchestrator, false);
+            orchestrator.mark_workspace_dirty();
+        }
+
+        Step2Action::DownloadUpdates => {
+            step2_rescan_reconcile::arm_post_download_snapshot(orchestrator);
+            handle_step2_via_bio(Step2Action::DownloadUpdates, orchestrator);
             orchestrator.mark_workspace_dirty();
         }
 
