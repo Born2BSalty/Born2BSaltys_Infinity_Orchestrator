@@ -153,7 +153,7 @@ const fn popup_title(modes: PopupModes) -> &'static str {
     if modes.exact_log {
         "Check Mod List"
     } else {
-        "Check Updates"
+        "Compare Versions"
     }
 }
 
@@ -240,7 +240,7 @@ const fn download_status_label(state: &WizardState, modes: PopupModes) -> &'stat
     } else if modes.hybrid_missing {
         "Downloading missing mod archives..."
     } else {
-        "Downloading update archives..."
+        "Downloading version archives..."
     }
 }
 
@@ -252,7 +252,7 @@ const fn extract_status_label(state: &WizardState, modes: PopupModes) -> &'stati
     } else if modes.hybrid_missing {
         "Extracting downloaded missing mods..."
     } else {
-        "Extracting downloaded updates..."
+        "Extracting downloaded versions..."
     }
 }
 
@@ -271,7 +271,7 @@ fn render_summary(ui: &mut egui::Ui, state: &WizardState, modes: PopupModes) {
         && !update_pipeline_busy(state)
     {
         ui.add_space(4.0);
-        ui.label("No update check run yet.");
+        ui.label("No version comparison run yet.");
     } else {
         render_update_summary(ui, state);
     }
@@ -317,7 +317,7 @@ fn render_hybrid_pending_summary(ui: &mut egui::Ui, state: &WizardState) {
 
 fn render_hybrid_summary(ui: &mut egui::Ui, state: &WizardState) {
     ui.label(format!(
-        "Updates found: {}",
+        "Version changes found: {}",
         state.step2.update_selected_update_sources.len()
     ));
     ui.label(format!(
@@ -351,7 +351,7 @@ fn render_hybrid_summary(ui: &mut egui::Ui, state: &WizardState) {
 
 fn render_update_summary(ui: &mut egui::Ui, state: &WizardState) {
     ui.label(format!(
-        "Updates found: {}",
+        "Version changes found: {}",
         state.step2.update_selected_update_sources.len()
     ));
     ui.label(format!(
@@ -371,7 +371,7 @@ fn render_update_summary(ui: &mut egui::Ui, state: &WizardState) {
 fn render_selection_stale_message(ui: &mut egui::Ui, modes: PopupModes) {
     if modes.selection_stale && !modes.busy {
         ui.add_space(4.0);
-        ui.label("Current selection differs from the last check. Run Check Updates again.");
+        ui.label("Current selection differs from the last check. Run Compare Versions again.");
     }
 }
 
@@ -421,7 +421,10 @@ fn primary_list_values<'a>(
             &state.step2.update_selected_missing_sources,
         )
     } else {
-        ("Updates", &state.step2.update_selected_update_sources)
+        (
+            "Version changes",
+            &state.step2.update_selected_update_sources,
+        )
     }
 }
 
@@ -464,7 +467,7 @@ fn render_exact_log_lists(ui: &mut egui::Ui, state: &WizardState, ctx: &mut List
 fn render_hybrid_lists(ui: &mut egui::Ui, state: &WizardState, ctx: &mut ListCtx<'_>) {
     render_non_empty_spaced_list(
         ui,
-        "Updates",
+        "Version changes",
         &state.step2.update_selected_update_sources,
         ctx,
     );
@@ -764,7 +767,7 @@ const fn download_button_label(state: &WizardState, modes: PopupModes) -> &'stat
     } else if modes.hybrid_missing && !state.step2.update_selected_missing_sources.is_empty() {
         "Download Missing Mods"
     } else {
-        "Download Updates"
+        "Fetch Versions"
     }
 }
 

@@ -300,7 +300,7 @@ fn full_update_preview_status(
         )
     } else {
         format!(
-            "Check updates: {known_count} auto, {manual_count} manual, {unknown_count} missing, {locked_count} locked"
+            "Compare versions: {known_count} auto, {manual_count} manual, {unknown_count} missing, {locked_count} locked"
         )
     }
 }
@@ -320,7 +320,7 @@ fn start_full_update_preview_check(
         state.step2.scan_status = if exact_log_mode {
             format!("Checking missing mod sources: {}", update_requests.len())
         } else {
-            format!("Checking update sources: {}", update_requests.len())
+            format!("Checking version sources: {}", update_requests.len())
         };
         super::app_step2_update_check::start_step2_update_check(
             state,
@@ -517,7 +517,7 @@ fn start_target_update_preview_check(
         state.step2.update_selected_check_running = false;
         *step2_update_check_rx = None;
     } else {
-        state.step2.scan_status = "Checking update source: 1".to_string();
+        state.step2.scan_status = "Checking version source: 1".to_string();
         super::app_step2_update_check::start_step2_update_check(
             state,
             step2_update_check_rx,

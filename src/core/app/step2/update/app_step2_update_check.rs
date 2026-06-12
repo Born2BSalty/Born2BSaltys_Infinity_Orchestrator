@@ -117,7 +117,7 @@ fn next_update_check_event(
             state.step2.update_selected_check_running = false;
             state.step2.update_selected_merge_latest_fallback = false;
             state.step2.update_selected_check_requests.clear();
-            state.step2.scan_status = "Check updates failed: worker disconnected".to_string();
+            state.step2.scan_status = "Compare Versions failed: worker disconnected".to_string();
             *step2_update_check_rx = None;
             None
         }
@@ -138,7 +138,7 @@ fn update_check_progress(
         )
     } else {
         format!(
-            "Checking updates: {}/{}",
+            "Checking versions: {}/{}",
             progress.completed, progress.total
         )
     };
@@ -344,9 +344,11 @@ fn update_check_finished_status(
         format!("Check mod list finished: {missing} downloadable missing, {failed} failed")
     } else if log_missing_downloads_enabled(state) && !state.step2.log_pending_downloads.is_empty()
     {
-        format!("Check updates finished: {updates} updates, {missing} missing, {failed} failed")
+        format!(
+            "Compare Versions finished: {updates} version changes, {missing} missing, {failed} failed"
+        )
     } else {
-        format!("Check updates finished: {updates} updates, {failed} failed")
+        format!("Compare Versions finished: {updates} version changes, {failed} failed")
     }
 }
 

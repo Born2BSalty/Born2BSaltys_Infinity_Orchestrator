@@ -88,7 +88,7 @@ fn append_running_lines(lines: &mut Vec<String>, state: &WizardState, modes: Pop
         } else if modes.hybrid_missing {
             "Downloading missing mod archives...".to_string()
         } else {
-            "Downloading update archives...".to_string()
+            "Downloading version archives...".to_string()
         });
     }
     if state.step2.update_selected_extract_running {
@@ -99,7 +99,7 @@ fn append_running_lines(lines: &mut Vec<String>, state: &WizardState, modes: Pop
         } else if modes.hybrid_missing {
             "Extracting downloaded missing mods...".to_string()
         } else {
-            "Extracting downloaded updates...".to_string()
+            "Extracting downloaded versions...".to_string()
         });
     }
 }
@@ -147,7 +147,7 @@ fn append_summary_lines(lines: &mut Vec<String>, state: &WizardState, modes: Pop
         lines.push("No source check run yet.".to_string());
     } else if modes.hybrid_missing {
         lines.push(format!(
-            "Updates found: {}",
+            "Version changes found: {}",
             state.step2.update_selected_update_sources.len()
         ));
         lines.push(format!(
@@ -179,7 +179,7 @@ fn append_summary_lines(lines: &mut Vec<String>, state: &WizardState, modes: Pop
         ));
     } else {
         lines.push(format!(
-            "Updates found: {}",
+            "Version changes found: {}",
             state.step2.update_selected_update_sources.len()
         ));
         lines.push(format!(
@@ -210,7 +210,10 @@ fn primary_report_section<'a>(
             &state.step2.update_selected_missing_sources,
         )
     } else {
-        ("Updates", &state.step2.update_selected_update_sources)
+        (
+            "Version changes",
+            &state.step2.update_selected_update_sources,
+        )
     }
 }
 
@@ -235,7 +238,7 @@ fn append_mode_sections(lines: &mut Vec<String>, state: &WizardState, modes: Pop
         if !state.step2.update_selected_update_sources.is_empty() {
             append_spaced_report_section(
                 lines,
-                "Updates",
+                "Version changes",
                 &state.step2.update_selected_update_sources,
             );
         }

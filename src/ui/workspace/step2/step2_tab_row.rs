@@ -257,7 +257,7 @@ const fn updates_state(input: &UpdatesInput) -> UpdatesState {
     let log_update_context = input.scan.reviewed || input.scan.has_pending_log_downloads;
     if input.mode.build_from_scanned {
         UpdatesState {
-            label: "Updates...",
+            label: "Versions...",
             enabled: (input.scan.completed || input.scan.has_pending_log_downloads)
                 && input.activity.allows_updates(),
         }
@@ -268,7 +268,7 @@ const fn updates_state(input: &UpdatesInput) -> UpdatesState {
         }
     } else {
         UpdatesState {
-            label: "Updates...",
+            label: "Versions...",
             enabled: log_update_context && input.activity.allows_updates(),
         }
     }
@@ -312,7 +312,7 @@ mod tests {
     fn review_edit_pending_log_downloads_enable_updates() {
         let state = updates_state(&review_edit_input(false, true));
 
-        assert_eq!(state.label, "Updates...");
+        assert_eq!(state.label, "Versions...");
         assert!(state.enabled);
     }
 
@@ -337,7 +337,7 @@ mod tests {
     fn scanned_mode_pending_log_downloads_enable_updates() {
         let state = updates_state(&scanned_input(false, true));
 
-        assert_eq!(state.label, "Updates...");
+        assert_eq!(state.label, "Versions...");
         assert!(state.enabled);
     }
 }
@@ -470,7 +470,7 @@ fn render_updates_button(
             ..Default::default()
         },
     )
-    .on_hover_text("Open the updates popup.")
+    .on_hover_text("Compare or fetch mod versions.")
 }
 
 fn render_issue_pill(
