@@ -471,29 +471,64 @@ fn replace_or_append_source_block(
 ) -> String {
     let target = normalize_mod_download_tp2(tp2);
     let source_block = source_block.trim();
-    for (start, end) in mod_block_ranges(content) {
-        let block = &content[start..end];
-        if block_tp2_matches(block, &target) {
-            let updated_block =
-                replace_or_append_source_in_mod_block(block, source_id, source_block);
-            let mut updated = String::new();
-            updated.push_str(content[..start].trim_end());
+    let ranges = mod_block_ranges(content);
+
+    // Identify the first matching block, if any.
+    let first_match = ranges
+        .iter()
+        .find(|(start, end)| block_tp2_matches(&content[*start..*end], &target))
+        .copied();
+
+    let Some(first) = first_match else {
+        // No existing block: append a new one, preserving the whole file as-is.
+        let mut updated = content.trim_end().to_string();
+        if !updated.is_empty() {
             updated.push_str("\n\n");
-            updated.push_str(updated_block.trim());
-            updated.push_str("\n\n");
-            updated.push_str(content[end..].trim_start());
-            return updated.trim_end().to_string() + "\n";
         }
-    }
-    let mut updated = content.trim_end().to_string();
-    if !updated.is_empty() {
+        updated.push_str(&template_mod_header(tp2, label));
         updated.push_str("\n\n");
+        updated.push_str(&normalize_source_block_indent(source_block));
+        updated.push('\n');
+        return updated;
+    };
+
+    // Compute the edited replacement for the first matching block.
+    let first_block = &content[first.0..first.1];
+    let updated_first = replace_or_append_source_in_mod_block(first_block, source_id, source_block);
+
+    // Preserve any file preamble (text before the first [[mods]] block).
+    let preamble = if ranges.is_empty() {
+        ""
+    } else {
+        &content[..ranges[0].0]
+    };
+
+    // Walk all block ranges: emit non-matching blocks as-is, the first matching block as
+    // its edited version, and silently drop every subsequent matching block (dedup).
+    let mut out = preamble.trim_end().to_string();
+    let mut first_written = false;
+    for &(start, end) in &ranges {
+        let block = &content[start..end];
+        let text = if !block_tp2_matches(block, &target) {
+            // Non-matching: keep byte-for-byte.
+            block.trim().to_string()
+        } else if !first_written {
+            // First match: emit the edited version.
+            first_written = true;
+            updated_first.trim().to_string()
+        } else {
+            // Subsequent match: drop (dedup).
+            continue;
+        };
+        if !out.is_empty() {
+            let t = out.trim_end_matches('\n').len();
+            out.truncate(t);
+            out.push_str("\n\n");
+        }
+        out.push_str(&text);
     }
-    updated.push_str(&template_mod_header(tp2, label));
-    updated.push_str("\n\n");
-    updated.push_str(&normalize_source_block_indent(source_block));
-    updated.push('\n');
-    updated
+
+    out.trim_end().to_string() + "\n"
 }
 
 fn append_mod_block(content: &str, mod_block: &str) -> String {
@@ -586,28 +621,39 @@ fn new_source_parent_error() -> String {
 
 fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
     let target = normalize_mod_download_tp2(tp2);
-    for (start, end) in mod_block_ranges(content) {
-        let block = &content[start..end];
-        if block_tp2_matches(block, &target) {
-            let mut updated = String::new();
-            updated.push_str(content[..start].trim_end());
-            if let Some(updated_block) = remove_source_from_mod_block(block, source_id) {
-                if !updated.is_empty() {
-                    updated.push_str("\n\n");
-                }
-                updated.push_str(updated_block.trim());
+    let ranges = mod_block_ranges(content);
+
+    // Preserve any file preamble (text before the first [[mods]] block).
+    let preamble = if ranges.is_empty() {
+        ""
+    } else {
+        &content[..ranges[0].0]
+    };
+
+    // Process all blocks. For every block matching the target tp2, remove the target source
+    // from it (drop the whole [[mods]] block when no sources remain). Non-matching blocks are
+    // kept byte-for-byte. Handles pre-doubled files: all duplicate blocks for the same tp2 are
+    // processed and the target source removed from each, so none shadow a re-pin.
+    let mut out = preamble.trim_end().to_string();
+    for (start, end) in &ranges {
+        let block = &content[*start..*end];
+        let maybe_text = if block_tp2_matches(block, &target) {
+            // Remove the target source; yield None when the block becomes empty (drop it).
+            remove_source_from_mod_block(block, source_id).map(|b| b.trim().to_string())
+        } else {
+            Some(block.trim().to_string())
+        };
+        if let Some(text) = maybe_text {
+            if !out.is_empty() {
+                let t = out.trim_end_matches('\n').len();
+                out.truncate(t);
+                out.push_str("\n\n");
             }
-            let tail = content[end..].trim_start();
-            if !tail.is_empty() {
-                if !updated.is_empty() {
-                    updated.push_str("\n\n");
-                }
-                updated.push_str(tail);
-            }
-            return updated.trim_end().to_string() + "\n";
+            out.push_str(&text);
         }
     }
-    content.trim_end().to_string() + "\n"
+
+    out.trim_end().to_string() + "\n"
 }
 
 fn remove_source_from_mod_block(mod_block: &str, source_id: &str) -> Option<String> {
@@ -1032,6 +1078,10 @@ fn write_if_changed(path: &Path, content: &str) -> io::Result<()> {
     }
 }
 
+/// Shared mutex serializing all ambient-touching tests across modules. Gated to test builds only.
+#[cfg(test)]
+pub(crate) static AMBIENT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 const fn default_mod_downloads_content() -> &'static str {
     include_str!("../config/default_mod_downloads.toml")
 }
@@ -1111,7 +1161,7 @@ fn overlay_source_key(source: &ModDownloadSourceOverlay) -> String {
 }
 
 /// Returns true when the overlay specifies at least one version selector field.
-fn overlay_has_version_selector(overlay: &ModDownloadSourceOverlay) -> bool {
+const fn overlay_has_version_selector(overlay: &ModDownloadSourceOverlay) -> bool {
     overlay.commit.is_some()
         || overlay.tag.is_some()
         || overlay.branch.is_some()
@@ -1545,11 +1595,6 @@ mod tests {
 
     // ── Per-modlist ambient tests ──────────────────────────────
 
-    use std::sync::Mutex;
-
-    // Shared lock so ambient-touching tests run one-at-a-time (cargo test is multi-threaded).
-    static AMBIENT_TEST_LOCK: Mutex<()> = Mutex::new(());
-
     /// RAII drop-guard: restores the ambient to its prior value on drop (including panic).
     struct AmbientGuard(Option<PathBuf>);
 
@@ -1590,7 +1635,9 @@ mod tests {
 
     #[test]
     fn ambient_unset_loader_matches_two_tier() {
-        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         set_active_modlist_dir(None);
 
@@ -1607,7 +1654,9 @@ mod tests {
 
     #[test]
     fn ambient_set_but_file_absent_is_inert() {
-        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         let nonexistent = unique_tmp_dir("absent");
@@ -1625,7 +1674,9 @@ mod tests {
 
     #[test]
     fn two_tier_seed_equals_three_tier_when_ambient_unset() {
-        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         set_active_modlist_dir(None);
 
@@ -1641,7 +1692,9 @@ mod tests {
 
     #[test]
     fn writer_per_modlist_path_isolates() {
-        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         set_active_modlist_dir(None);
 
@@ -1657,8 +1710,7 @@ mod tests {
         std::fs::write(&global_path, "# global sentinel\n").unwrap();
 
         // Ensure the default file exists (ensure_mod_downloads_files may write it).
-        let source_block =
-            "  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"";
+        let source_block = "  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"";
         // Write to the per-modlist path explicitly.
         let result = save_user_mod_download_source_block(
             "testmod",
@@ -1684,7 +1736,9 @@ mod tests {
 
     #[test]
     fn global_seed_ignores_per_modlist_pin() {
-        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         // Set up a per-modlist dir with a tag pin.
@@ -1863,7 +1917,9 @@ mod tests {
     #[test]
     fn ambient_unset_resolution_unchanged_by_selector_fix() {
         // Confirms the fix is inert when no ambient modlist is set.
-        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         set_active_modlist_dir(None);
 
@@ -1881,7 +1937,9 @@ mod tests {
     fn per_modlist_branch_pin_applied_via_ambient() {
         // End-to-end: per-modlist file pins an otherwise-absent source to branch=next.
         // Verifies the full ambient path produces branch=next (not the default selector).
-        let _lock = AMBIENT_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         let tmp_dir = unique_tmp_dir("branch_pin");
@@ -1906,6 +1964,236 @@ mod tests {
                 "no commit must remain when per-modlist pins branch=next"
             );
         }
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    // ── Save-dedup tests (fix for pre-doubled per-modlist files) ────────────
+
+    /// Builds a doubled TOML string: the same tp2 appears in two [[mods]] blocks,
+    /// the first with commit=abc, the second with branch=master.
+    fn doubled_toml() -> String {
+        concat!(
+            "[[mods]]\nname = \"cdtweaks\"\ntp2 = \"cdtweaks\"\n\n",
+            "  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n",
+            "  type = \"github\"\n  url = \"https://github.com/Gibberlings3/cdtweaks\"\n",
+            "  repo = \"Gibberlings3/cdtweaks\"\n  commit = \"abc123\"\n\n",
+            "[[mods]]\nname = \"cdtweaks\"\ntp2 = \"cdtweaks\"\n\n",
+            "  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n",
+            "  type = \"github\"\n  url = \"https://github.com/Gibberlings3/cdtweaks\"\n",
+            "  repo = \"Gibberlings3/cdtweaks\"\n  branch = \"master\"\n",
+        )
+        .to_string()
+    }
+
+    fn count_mod_blocks_for_tp2(content: &str, tp2: &str) -> usize {
+        let target = normalize_mod_download_tp2(tp2);
+        mod_block_ranges(content)
+            .iter()
+            .filter(|(start, end)| block_tp2_matches(&content[*start..*end], &target))
+            .count()
+    }
+
+    #[test]
+    fn save_dedup_replace_heals_doubled_file() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_tmp_dir("save_dedup_replace");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        let tmp_path = tmp_dir.join("mod_downloads_user.toml");
+        std::fs::write(&tmp_path, doubled_toml()).unwrap();
+
+        // Pin to a new commit via the save path.
+        let new_source = "  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/Gibberlings3/cdtweaks\"\n  repo = \"Gibberlings3/cdtweaks\"\n  commit = \"newcommit999\"";
+        let result = save_user_mod_download_source_block(
+            "cdtweaks",
+            "cdtweaks",
+            "github",
+            false,
+            new_source,
+            Some(&tmp_path),
+        );
+        assert!(result.is_ok(), "save must succeed: {:?}", result.err());
+
+        let saved = std::fs::read_to_string(&tmp_path).unwrap();
+
+        // After save, exactly one [[mods]] block for cdtweaks.
+        assert_eq!(
+            count_mod_blocks_for_tp2(&saved, "cdtweaks"),
+            1,
+            "save must collapse duplicate blocks into one; got:\n{saved}"
+        );
+        // The surviving block must carry the new pin, not the stale branch=master.
+        assert!(
+            saved.contains("newcommit999"),
+            "new commit pin must be present; got:\n{saved}"
+        );
+        assert!(
+            !saved.contains("branch = \"master\""),
+            "stale branch=master duplicate must be gone; got:\n{saved}"
+        );
+        assert!(
+            !saved.contains("commit = \"abc123\""),
+            "old commit pin must be gone; got:\n{saved}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn save_dedup_remove_heals_doubled_file() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_tmp_dir("save_dedup_remove");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        let tmp_path = tmp_dir.join("mod_downloads_user.toml");
+        std::fs::write(&tmp_path, doubled_toml()).unwrap();
+
+        // Removal path: empty source_block removes the source from all matching blocks.
+        let result = save_user_mod_download_source_block(
+            "cdtweaks",
+            "cdtweaks",
+            "github",
+            false,
+            "",
+            Some(&tmp_path),
+        );
+        assert!(result.is_ok(), "removal must succeed: {:?}", result.err());
+
+        let saved = std::fs::read_to_string(&tmp_path).unwrap();
+
+        // All matching cdtweaks blocks must be gone (no sources left in either).
+        assert_eq!(
+            count_mod_blocks_for_tp2(&saved, "cdtweaks"),
+            0,
+            "removal must excise all duplicate blocks; got:\n{saved}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn save_dedup_other_mods_untouched() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_tmp_dir("save_dedup_others");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        let tmp_path = tmp_dir.join("mod_downloads_user.toml");
+
+        // File has a doubled cdtweaks block AND a separate unrelated mod.
+        let content = concat!(
+            "[[mods]]\nname = \"othermod\"\ntp2 = \"othermod\"\n\n",
+            "  [[mods.sources]]\n  id = \"other\"\n  label = \"Other\"\n",
+            "  type = \"github\"\n  url = \"https://github.com/X/Other\"\n",
+            "  repo = \"X/Other\"\n  tag = \"v5\"\n\n",
+            "[[mods]]\nname = \"cdtweaks\"\ntp2 = \"cdtweaks\"\n\n",
+            "  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n",
+            "  type = \"github\"\n  url = \"https://github.com/Gibberlings3/cdtweaks\"\n",
+            "  repo = \"Gibberlings3/cdtweaks\"\n  commit = \"abc123\"\n\n",
+            "[[mods]]\nname = \"cdtweaks\"\ntp2 = \"cdtweaks\"\n\n",
+            "  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n",
+            "  type = \"github\"\n  url = \"https://github.com/Gibberlings3/cdtweaks\"\n",
+            "  repo = \"Gibberlings3/cdtweaks\"\n  branch = \"master\"\n",
+        );
+        std::fs::write(&tmp_path, content).unwrap();
+
+        let new_source = "  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/Gibberlings3/cdtweaks\"\n  repo = \"Gibberlings3/cdtweaks\"\n  tag = \"v18\"";
+        let result = save_user_mod_download_source_block(
+            "cdtweaks",
+            "cdtweaks",
+            "github",
+            false,
+            new_source,
+            Some(&tmp_path),
+        );
+        assert!(result.is_ok(), "save must succeed: {:?}", result.err());
+
+        let saved = std::fs::read_to_string(&tmp_path).unwrap();
+
+        // cdtweaks: exactly one block with the new pin.
+        assert_eq!(
+            count_mod_blocks_for_tp2(&saved, "cdtweaks"),
+            1,
+            "cdtweaks must have exactly one block after dedup; got:\n{saved}"
+        );
+        assert!(
+            saved.contains("tag = \"v18\""),
+            "new tag pin must be present; got:\n{saved}"
+        );
+
+        // othermod must be present and untouched.
+        assert_eq!(
+            count_mod_blocks_for_tp2(&saved, "othermod"),
+            1,
+            "othermod block must be preserved; got:\n{saved}"
+        );
+        assert!(
+            saved.contains("tag = \"v5\""),
+            "othermod v5 tag must be intact; got:\n{saved}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn save_dedup_clean_file_unchanged_behavior() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_tmp_dir("save_dedup_clean");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        let tmp_path = tmp_dir.join("mod_downloads_user.toml");
+
+        // Single (clean, non-doubled) block.
+        let single = concat!(
+            "[[mods]]\nname = \"testmod\"\ntp2 = \"testmod\"\n\n",
+            "  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n",
+            "  type = \"github\"\n  url = \"https://github.com/T/M\"\n",
+            "  repo = \"T/M\"\n  tag = \"v1\"\n",
+        );
+        std::fs::write(&tmp_path, single).unwrap();
+
+        let new_source = "  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/T/M\"\n  repo = \"T/M\"\n  tag = \"v2\"";
+        let result = save_user_mod_download_source_block(
+            "testmod",
+            "testmod",
+            "main",
+            false,
+            new_source,
+            Some(&tmp_path),
+        );
+        assert!(
+            result.is_ok(),
+            "clean-file save must succeed: {:?}",
+            result.err()
+        );
+
+        let saved = std::fs::read_to_string(&tmp_path).unwrap();
+
+        assert_eq!(
+            count_mod_blocks_for_tp2(&saved, "testmod"),
+            1,
+            "clean file must still have exactly one block; got:\n{saved}"
+        );
+        assert!(
+            saved.contains("tag = \"v2\""),
+            "new tag v2 must be present; got:\n{saved}"
+        );
+        assert!(
+            !saved.contains("tag = \"v1\""),
+            "old tag v1 must be replaced; got:\n{saved}"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }

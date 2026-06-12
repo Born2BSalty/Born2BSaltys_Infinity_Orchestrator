@@ -131,12 +131,8 @@ fn set_last_load_error(error: Option<String>) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
     use super::*;
-
-    // Shared test-lock: ensures ambient-touching tests never interleave.
-    static LOCKS_TEST_LOCK: Mutex<()> = Mutex::new(());
+    use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
 
     /// RAII drop-guard: restores the ambient active-modlist dir on drop (including panic).
     struct AmbientGuard(Option<PathBuf>);
@@ -165,7 +161,7 @@ mod tests {
 
     #[test]
     fn update_locks_ambient_unset_targets_global() {
-        let _lock = LOCKS_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -182,7 +178,7 @@ mod tests {
 
     #[test]
     fn update_locks_ambient_set_targets_per_modlist() {
-        let _lock = LOCKS_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -214,7 +210,7 @@ mod tests {
 
     #[test]
     fn update_locks_global_file_untouched_when_per_modlist_is_active() {
-        let _lock = LOCKS_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();

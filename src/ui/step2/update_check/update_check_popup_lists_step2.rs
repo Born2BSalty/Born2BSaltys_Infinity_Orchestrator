@@ -4,13 +4,14 @@
 use eframe::egui;
 
 use crate::app::mod_downloads;
-use crate::app::step2_action::ModSourceEditDestination;
 use crate::app::state::WizardState;
+use crate::app::step2_action::ModSourceEditDestination;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_section_header};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_shell_bg,
 };
+use crate::ui::shared::{theme_global, typography_global};
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::step2::state_step2::applied_weidu_log_has_pending_downloads;
 
@@ -58,7 +59,7 @@ pub(super) fn render_source_choices(
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
             egui::Grid::new("step2-update-source-choices")
-                .num_columns(5)
+                .num_columns(6)
                 .spacing([UPDATE_CHECK_GRID_SPACING_X, 4.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -216,6 +217,27 @@ fn render_source_choice_row(
             tp2: choice.tp2_key.clone(),
             label: choice.label.clone(),
             repo: repo.clone(),
+        });
+    }
+    let lock_icon = if choice.update_locked {
+        typography_global::strong("🔒").color(theme_global::warning())
+    } else {
+        typography_global::strong("🔓").color(theme_global::text_disabled())
+    };
+    let hover_text = if choice.update_locked {
+        "Unlock updates"
+    } else {
+        "Lock updates"
+    };
+    if ui
+        .small_button(lock_icon)
+        .on_hover_text(hover_text)
+        .clicked()
+        && action.is_none()
+    {
+        *action = Some(Step2Action::SetModUpdateLocked {
+            tp2: choice.tp2_key.clone(),
+            locked: !choice.update_locked,
         });
     }
     ui.end_row();
@@ -456,6 +478,8 @@ pub(super) struct SourceChoiceRow {
     selected_source_url: Option<String>,
     selected_source_repo: Option<String>,
     options: Vec<SourceChoiceOption>,
+    /// Whether the mod's update-lock is active, as read from the scanned mod state.
+    update_locked: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -537,6 +561,13 @@ pub(super) fn collect_source_choices(
             .unwrap_or_else(|| sources[0].clone());
         let selected_source_url = source_open_url(&selected_source);
         let selected_source_repo = selected_source.github.clone();
+        let update_locked = state
+            .step2
+            .bgee_mods
+            .iter()
+            .chain(state.step2.bg2ee_mods.iter())
+            .find(|m| mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key)
+            .is_some_and(|m| m.update_locked);
         rows.push(SourceChoiceRow {
             tp2_key,
             label,
@@ -551,6 +582,7 @@ pub(super) fn collect_source_choices(
                     label: source.source_label,
                 })
                 .collect(),
+            update_locked,
         });
     }
     rows.sort_by_key(|row| row.label.to_ascii_lowercase());

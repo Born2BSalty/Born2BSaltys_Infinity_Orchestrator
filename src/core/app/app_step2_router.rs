@@ -65,6 +65,9 @@ pub(crate) fn handle_step2_action(
         Step2Action::SetSelectedModUpdateLocked(locked) => {
             set_selected_mod_update_locked(state, locked);
         }
+        Step2Action::SetModUpdateLocked { tp2, locked } => {
+            set_mod_update_locked(state, &tp2, locked);
+        }
         Step2Action::OpenSelectedReadme(path)
         | Step2Action::OpenSelectedTp2Folder(path)
         | Step2Action::OpenSelectedTp2(path)
@@ -391,24 +394,110 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
     let Some(Step2Selection::Mod { game_tab, tp_file }) = state.step2.selected.clone() else {
         return;
     };
-    let mod_name;
-    let update_entry;
     let had_cached_update_entry = !locked && popup_has_cached_update_entry(state, &tp_file);
+
+    // Extract display data and write the lock file using the selected tab's instance.
+    // Returning from within the block ends the mutable borrow of that vec, allowing
+    // the sync loop below to borrow both bgee_mods and bg2ee_mods mutably.
+    let mod_name: String;
+    let update_entry: Option<String>;
     {
-        let mods = if game_tab == "BGEE" {
+        let selected_mods = if game_tab == "BGEE" {
             &mut state.step2.bgee_mods
         } else {
             &mut state.step2.bg2ee_mods
         };
-        let Some(mod_state) = mods
-            .iter_mut()
-            .find(|mod_state| mod_state.tp_file == tp_file)
-        else {
+        let Some(selected_mod) = selected_mods.iter_mut().find(|m| m.tp_file == tp_file) else {
             return;
         };
-        if let Err(err) = super::mod_update_locks::set_mod_update_lock(&mod_state.tp_file, locked) {
+        if let Err(err) =
+            super::mod_update_locks::set_mod_update_lock(&selected_mod.tp_file, locked)
+        {
             state.step2.scan_status = format!("Update lock failed: {err}");
             return;
+        }
+        mod_name = selected_mod.name.clone();
+        update_entry = mod_update_entry_text(selected_mod);
+    }
+
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(&tp_file);
+    sync_update_locked_by_tp2(state, &tp2_key, locked, had_cached_update_entry);
+    sync_cached_popup_update_lock(state, &game_tab, &tp_file, update_entry.as_deref(), locked);
+    let verb = if locked { "Locked" } else { "Unlocked" };
+    state.step2.scan_status = format!("{verb} updates for {mod_name}");
+}
+
+/// Handles the `SetModUpdateLocked` action from the Updates popup lock-toggle icon.
+fn set_mod_update_locked(state: &mut WizardState, tp2: &str, locked: bool) {
+    if let Err(err) = super::mod_update_locks::set_mod_update_lock(tp2, locked) {
+        state.step2.scan_status = format!("Update lock failed: {err}");
+        return;
+    }
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(tp2);
+    let had_cached = !locked
+        && state
+            .step2
+            .bgee_mods
+            .iter()
+            .chain(state.step2.bg2ee_mods.iter())
+            .any(|m| {
+                mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key
+                    && popup_has_cached_update_entry(state, &m.tp_file)
+            });
+    // Collect the canonical tp_file and mod name for status/sync before mutating.
+    let (canonical_tp_file, mod_name) = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .find(|m| mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key)
+        .map_or_else(
+            || (tp2.to_string(), tp2.to_string()),
+            |m| (m.tp_file.clone(), m.name.clone()),
+        );
+    sync_update_locked_by_tp2(state, &tp2_key, locked, had_cached);
+    // Sync the cached popup entries using the canonical tp_file and the BGEE tab as
+    // a sentinel (move_cached_assets_to_locked matches by tp_file only, tab unused).
+    let update_entry = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .find(|m| mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key)
+        .and_then(mod_update_entry_text);
+    sync_cached_popup_update_lock(
+        state,
+        "BGEE",
+        &canonical_tp_file,
+        update_entry.as_deref(),
+        locked,
+    );
+    let verb = if locked { "Locked" } else { "Unlocked" };
+    let label = if mod_name.trim().is_empty() {
+        &canonical_tp_file
+    } else {
+        &mod_name
+    };
+    state.step2.scan_status = format!("{verb} updates for {label}");
+}
+
+/// Syncs `update_locked` and `package_marker` for every instance of `tp2_key` across
+/// both `bgee_mods` and `bg2ee_mods`, so an EET modlist never has a tab instance left
+/// stale relative to the lock file that was just written.
+fn sync_update_locked_by_tp2(
+    state: &mut WizardState,
+    tp2_key: &str,
+    locked: bool,
+    had_cached_update_entry: bool,
+) {
+    for mod_state in state
+        .step2
+        .bgee_mods
+        .iter_mut()
+        .chain(state.step2.bg2ee_mods.iter_mut())
+    {
+        if mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) != tp2_key {
+            continue;
         }
         mod_state.update_locked = locked;
         if locked {
@@ -416,12 +505,7 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
         } else if had_cached_update_entry {
             mod_state.package_marker = Some('+');
         }
-        mod_name = mod_state.name.clone();
-        update_entry = mod_update_entry_text(mod_state);
     }
-    sync_cached_popup_update_lock(state, &game_tab, &tp_file, update_entry.as_deref(), locked);
-    let verb = if locked { "Locked" } else { "Unlocked" };
-    state.step2.scan_status = format!("{verb} updates for {mod_name}");
 }
 
 fn set_mod_download_source(
@@ -664,4 +748,103 @@ fn mod_update_entry_text(mod_state: &crate::app::state::Step2ModState) -> Option
         mod_state.name.trim()
     };
     Some(format!("{label} ({latest})"))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
+    use crate::app::state::{Step2ModState, Step2Selection, WizardState};
+
+    /// RAII drop-guard: restores the ambient active-modlist dir on drop (including panic).
+    struct AmbientGuard(Option<PathBuf>);
+
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    fn unique_tmp_dir(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "bio_router_test_{}_{}_{label}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    fn make_mod_state(tp_file: &str) -> Step2ModState {
+        Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: format!("{tp_file}.tp2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    /// Verifies that locking/unlocking a mod in one EET tab keeps both tab instances
+    /// in sync with the lock file — no stale-locked instance left behind.
+    #[test]
+    fn eet_dual_tab_lock_sync() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_tmp_dir("eet_lock");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        crate::app::mod_downloads::set_active_modlist_dir(Some(tmp_dir.clone()));
+
+        let tp_file = "cdtweaks/cdtweaks.tp2";
+        let mut state = WizardState::default();
+        state.step2.bgee_mods.push(make_mod_state(tp_file));
+        state.step2.bg2ee_mods.push(make_mod_state(tp_file));
+        state.step2.selected = Some(Step2Selection::Mod {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+        });
+
+        // Lock via the BGEE tab — both instances must become locked.
+        super::set_selected_mod_update_locked(&mut state, true);
+        assert!(
+            state.step2.bgee_mods[0].update_locked,
+            "bgee instance must be locked"
+        );
+        assert!(
+            state.step2.bg2ee_mods[0].update_locked,
+            "bg2ee instance must be locked after locking via bgee tab"
+        );
+
+        // Unlock via the BGEE tab — both instances must become unlocked.
+        super::set_selected_mod_update_locked(&mut state, false);
+        assert!(
+            !state.step2.bgee_mods[0].update_locked,
+            "bgee instance must be unlocked"
+        );
+        assert!(
+            !state.step2.bg2ee_mods[0].update_locked,
+            "bg2ee instance must be unlocked after unlocking via bgee tab"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
 }
