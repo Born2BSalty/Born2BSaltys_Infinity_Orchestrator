@@ -1,9 +1,0 @@
-# Phase 4 — Settings screen (5 sub-tabs) + per-edit debounced path validation
-
-**Status:** SHIPPED — full audit record: [`archive/phase-04-settings.md`](archive/phase-04-settings.md).
-
-**Commit anchors:** `0b3359c` "Phase 4: Tools + Accounts tabs + path validation polish", `f0a2b3d` "Settings: 50/50 Advanced grid + Tools tab trim + correct -x binding", `59015e3` "Phase 4: real IWDEE binding, persisted validate-on-startup, strict workspace.json load", `2d2cad6` "Settings → General: copy fixes", `346134b` "Settings → General: NameRow uses the SettingsRow chassis (H6) + save/placeholder (H8)", `2dc0c8f` "Settings → Paths: wireframe-terse labels + uppercase section headers (H10/H11)", `d04a5d4` "Orchestrator: mask game_install out of bio_settings.json writes (H9)", `f018aa2` "Redesign settings: backup-and-default on corrupt file (H12 + A3)".
-
-**What shipped:** the new top-level Settings screen with five file-folder tabs (General, Paths, Tools, Accounts, Advanced), each reading from and writing to the existing `bio_settings.json` via `bio::settings::SettingsStore` (the same instance `OrchestratorApp` already constructed in Phase 2 via `app_bootstrap_init::initialize`). Settings persist immediately (no Save/Cancel buttons). Per-edit debounced path validation runs on every keystroke (~200ms idle, P4.T11b / H11) and on app start, producing events that update the left-rail status line + the Home `game installs detected` block. GitHub OAuth invoked from Accounts → connect by calling BIO's existing public OAuth orchestration functions and rendering BIO's existing public popup — no BIO modification. Corrupt `bio_redesign_settings.json` backs up and falls back to defaults rather than blocking startup (SPEC §13.14).
-
-**Task IDs (full detail in archive):** P4.T1, P4.T2, P4.T3, P4.T4, P4.T5, P4.T6, P4.T7, P4.T8, P4.T9, P4.T10, P4.T11, P4.T11b.
