@@ -18,6 +18,20 @@ pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
     step2.was_scanning = armed_was_scanning_for_inflight_scan();
 }
 
+/// Captures the current selection into a deferred holder so it survives the
+/// entire download→extract window and is only transferred to `rescan_snapshot`
+/// when the post-extract rescan actually starts.
+pub fn arm_post_download_snapshot(orchestrator: &mut OrchestratorApp) {
+    let snapshot = RescanSnapshot {
+        bgee: capture_tab(&orchestrator.wizard_state.step2.bgee_mods),
+        bg2ee: capture_tab(&orchestrator.wizard_state.step2.bg2ee_mods),
+    };
+    orchestrator
+        .workspace_view
+        .step2
+        .pending_update_download_snapshot = Some(snapshot);
+}
+
 pub(crate) const fn armed_was_scanning_for_inflight_scan() -> bool {
     true
 }
@@ -44,6 +58,8 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     let scanning_now = orchestrator.wizard_state.step2.is_scanning;
     let was_scanning = orchestrator.workspace_view.step2.was_scanning;
     orchestrator.workspace_view.step2.was_scanning = scanning_now;
+
+    advance_pending_download_snapshot(orchestrator, was_scanning, scanning_now);
 
     if !completion_edge_fires(was_scanning, scanning_now) {
         return;
@@ -92,6 +108,57 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     orchestrator.workspace_view.step2.rescan_drop_warning = Some(format!(
         "{dropped_components} component(s) dropped \u{2014} {missing_mods} mod(s) no longer present"
     ));
+}
+
+/// Advances the deferred post-download snapshot through its lifecycle each frame.
+///
+/// When a scan starts (`!was_scanning && scanning_now`), the snapshot is
+/// transferred to `rescan_snapshot` so the existing completion-edge logic
+/// restores it when the scan finishes.  When the pipeline goes idle without
+/// ever starting a scan (download or extract failed / cancelled), the snapshot
+/// is cleared to release the autosave block.
+fn advance_pending_download_snapshot(
+    orchestrator: &mut OrchestratorApp,
+    was_scanning: bool,
+    scanning_now: bool,
+) {
+    let pipeline_running = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_download_running
+        || orchestrator
+            .wizard_state
+            .step2
+            .update_selected_extract_running;
+    advance_pending_download_snapshot_state(
+        &mut orchestrator.workspace_view.step2,
+        was_scanning,
+        scanning_now,
+        pipeline_running,
+    );
+}
+
+fn advance_pending_download_snapshot_state(
+    step2_view: &mut crate::ui::workspace::state_workspace::WorkspaceStep2State,
+    was_scanning: bool,
+    scanning_now: bool,
+    pipeline_running: bool,
+) {
+    if step2_view.pending_update_download_snapshot.is_none() {
+        return;
+    }
+
+    if !was_scanning && scanning_now {
+        let snapshot = step2_view.pending_update_download_snapshot.take();
+        step2_view.rescan_snapshot = snapshot;
+        step2_view.rescan_drop_warning = None;
+        step2_view.was_scanning = true;
+        return;
+    }
+
+    if !scanning_now && !pipeline_running {
+        step2_view.pending_update_download_snapshot = None;
+    }
 }
 
 const fn completion_edge_fires(was_scanning: bool, scanning_now: bool) -> bool {
@@ -450,5 +517,126 @@ mod tests {
             "build_step3_items must carry the wlb_inputs marker into Step 3; got: {}",
             leaves[0].raw_line
         );
+    }
+
+    use crate::ui::workspace::state_workspace::WorkspaceStep2State;
+
+    fn view_with_pending(bgee_tp2: &str, component_id: &str) -> WorkspaceStep2State {
+        WorkspaceStep2State {
+            pending_update_download_snapshot: Some(RescanSnapshot {
+                bgee: vec![RescanSelection {
+                    tp2_upper: bgee_tp2.to_ascii_uppercase(),
+                    component_id: component_id.to_string(),
+                    selected_order: Some(1),
+                    wlb_inputs: None,
+                }],
+                bg2ee: Vec::new(),
+            }),
+            ..WorkspaceStep2State::default()
+        }
+    }
+
+    #[test]
+    fn pending_snapshot_transfers_on_scan_start_edge() {
+        let mut view = view_with_pending("MOD/MOD.TP2", "0");
+        assert!(view.rescan_snapshot.is_none(), "not yet transferred");
+        assert!(!view.was_scanning, "initially false");
+
+        advance_pending_download_snapshot_state(&mut view, false, true, false);
+
+        assert!(
+            view.pending_update_download_snapshot.is_none(),
+            "consumed from pending"
+        );
+        assert!(
+            view.rescan_snapshot.is_some(),
+            "transferred to rescan_snapshot"
+        );
+        assert!(view.was_scanning, "armed so completion edge will fire");
+    }
+
+    #[test]
+    fn pending_snapshot_not_consumed_while_pipeline_running() {
+        let mut view = view_with_pending("MOD/MOD.TP2", "0");
+
+        advance_pending_download_snapshot_state(&mut view, false, false, true);
+        assert!(
+            view.pending_update_download_snapshot.is_some(),
+            "still held while pipeline active"
+        );
+    }
+
+    #[test]
+    fn pending_snapshot_cleared_when_pipeline_goes_idle_without_scan() {
+        let mut view = view_with_pending("MOD/MOD.TP2", "0");
+
+        advance_pending_download_snapshot_state(&mut view, false, false, false);
+
+        assert!(
+            view.pending_update_download_snapshot.is_none(),
+            "cleared on idle pipeline (failure/cancel path)"
+        );
+        assert!(
+            view.rescan_snapshot.is_none(),
+            "not incorrectly transferred"
+        );
+    }
+
+    #[test]
+    fn pending_snapshot_not_premature_when_already_scanning() {
+        let mut view = view_with_pending("MOD/MOD.TP2", "0");
+
+        advance_pending_download_snapshot_state(&mut view, true, true, false);
+        assert!(
+            view.pending_update_download_snapshot.is_some(),
+            "held while already scanning (not a new scan-start edge)"
+        );
+
+        advance_pending_download_snapshot_state(&mut view, true, false, false);
+        assert!(
+            view.pending_update_download_snapshot.is_none(),
+            "idle after scan finished without transfer — cleared"
+        );
+        assert!(
+            view.rescan_snapshot.is_none(),
+            "not armed after scan-already-running path"
+        );
+    }
+
+    #[test]
+    fn pending_snapshot_eet_dual_tab_round_trip() {
+        let mut view = WorkspaceStep2State {
+            pending_update_download_snapshot: Some(RescanSnapshot {
+                bgee: vec![RescanSelection {
+                    tp2_upper: "BGEE_MOD.TP2".to_string(),
+                    component_id: "1".to_string(),
+                    selected_order: Some(1),
+                    wlb_inputs: None,
+                }],
+                bg2ee: vec![RescanSelection {
+                    tp2_upper: "BG2EE_MOD.TP2".to_string(),
+                    component_id: "2".to_string(),
+                    selected_order: Some(2),
+                    wlb_inputs: None,
+                }],
+            }),
+            ..WorkspaceStep2State::default()
+        };
+
+        advance_pending_download_snapshot_state(&mut view, false, true, false);
+
+        let snap = view.rescan_snapshot.expect("transferred");
+        assert_eq!(snap.bgee.len(), 1, "bgee tab preserved");
+        assert_eq!(snap.bg2ee.len(), 1, "bg2ee tab preserved");
+        assert_eq!(snap.bgee[0].component_id, "1");
+        assert_eq!(snap.bg2ee[0].component_id, "2");
+    }
+
+    #[test]
+    fn no_op_when_no_pending_snapshot() {
+        let mut view = WorkspaceStep2State::default();
+        advance_pending_download_snapshot_state(&mut view, false, true, false);
+        assert!(view.rescan_snapshot.is_none());
+        assert!(!view.was_scanning);
     }
 }

@@ -16,6 +16,9 @@ pub struct WorkspaceStep2State {
     pub rescan_drop_warning: Option<String>,
     pub resume_pending: bool,
     pub pending_weidu_log_confirm: Option<bool>,
+    /// Selection snapshot captured at Download-Updates dispatch, transferred
+    /// to `rescan_snapshot` only when the post-extract rescan actually starts.
+    pub pending_update_download_snapshot: Option<RescanSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
