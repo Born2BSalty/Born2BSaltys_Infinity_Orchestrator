@@ -8,8 +8,7 @@ use crate::app::prompt_popup_text::format_component_prompt_popup_text_with_body;
 use crate::app::state::{Step2ComponentState, Step2Selection};
 use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_disabled,
-    redesign_text_primary,
+    REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_disabled, redesign_text_primary,
 };
 use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
@@ -164,7 +163,10 @@ fn paint_radio_glyph(
         let muted = redesign_text_disabled(palette);
         (muted, muted)
     } else {
-        (redesign_border_strong(palette), redesign_text_primary(palette))
+        (
+            redesign_border_strong(palette),
+            redesign_text_primary(palette),
+        )
     };
     let center = rect.center();
     let ring_radius = (icon_size * 0.5).min(6.0);

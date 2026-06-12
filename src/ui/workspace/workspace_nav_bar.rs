@@ -4,10 +4,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
+    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
     redesign_shell_bg, redesign_text_faint, redesign_text_primary, redesign_with_alpha,
-    ThemePalette, REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX,
-    REDESIGN_SHADOW_OFFSET_BTN_PX,
 };
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 
@@ -367,7 +366,7 @@ fn button_alpha(c: egui::Color32, disabled: bool) -> egui::Color32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{pick_button_fonts, GlyphButtonVisuals};
+    use super::{GlyphButtonVisuals, pick_button_fonts};
     use crate::ui::shared::redesign_tokens::ThemePalette;
     use eframe::egui;
 

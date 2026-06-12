@@ -36,10 +36,7 @@ fn render_home_card_normal_and_rename() {
     let out_dir = snapshot_out_dir();
     std::fs::create_dir_all(&out_dir).expect("create target/ui-snapshots dir");
 
-    let mut written = Vec::new();
-
-    written.push(render_normal(&out_dir));
-    written.push(render_renaming(&out_dir));
+    let written = vec![render_normal(&out_dir), render_renaming(&out_dir)];
 
     for path in &written {
         let meta = std::fs::metadata(path)

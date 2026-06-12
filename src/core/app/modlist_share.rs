@@ -26,26 +26,26 @@ pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, S
     }
 
     // Gate on active modlist: ambient-set ⇒ bake resolved set; ambient-unset ⇒ verbatim file.
-    let mod_downloads_user =
-        if crate::app::mod_downloads::active_modlist_downloads_path().is_some() {
-            build_resolved_source_overrides(state)?
-        } else {
-            read_optional_file_text(
-                &crate::app::mod_downloads::mod_downloads_user_path(),
-                omit_stock_mod_downloads_user,
-            )
-        };
+    let mod_downloads_user = if crate::app::mod_downloads::active_modlist_downloads_path().is_some()
+    {
+        build_resolved_source_overrides(state)?
+    } else {
+        read_optional_file_text(
+            &crate::app::mod_downloads::mod_downloads_user_path(),
+            omit_stock_mod_downloads_user,
+        )
+    };
 
     // Installed-refs: per-modlist when active, global verbatim otherwise.
-    let mod_installed_refs =
-        if crate::app::mod_downloads::active_modlist_downloads_path().is_some() {
-            build_per_modlist_installed_refs(state)
-        } else {
-            read_optional_file_text(
-                &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
-                |_| false,
-            )
-        };
+    let mod_installed_refs = if crate::app::mod_downloads::active_modlist_downloads_path().is_some()
+    {
+        build_per_modlist_installed_refs(state)
+    } else {
+        read_optional_file_text(
+            &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
+            |_| false,
+        )
+    };
 
     let mod_configs = export_mod_config_files(state)?;
     let mut payload = json!({

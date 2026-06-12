@@ -721,9 +721,7 @@ mod tests {
         let dir = crate::app::mod_downloads::active_modlist_dir();
         assert!(dir.is_some(), "ambient must be set for workspace nav");
         assert!(
-            dir.unwrap()
-                .to_string_lossy()
-                .contains("WS-AMBIENT-A"),
+            dir.unwrap().to_string_lossy().contains("WS-AMBIENT-A"),
             "ambient must point at the workspace modlist"
         );
     }
@@ -766,9 +764,7 @@ mod tests {
             "ambient must remain set while a pipeline is active on non-workspace nav"
         );
         assert!(
-            dir.unwrap()
-                .to_string_lossy()
-                .contains("FORK-PIPELINE-ID"),
+            dir.unwrap().to_string_lossy().contains("FORK-PIPELINE-ID"),
             "ambient must point at the active pipeline modlist, not global"
         );
     }
@@ -788,8 +784,7 @@ mod tests {
 
         sync_ambient_to_nav(&app);
 
-        let dir = crate::app::mod_downloads::active_modlist_dir()
-            .expect("ambient must be set");
+        let dir = crate::app::mod_downloads::active_modlist_dir().expect("ambient must be set");
         assert!(
             dir.to_string_lossy().contains("OPEN-WS"),
             "workspace nav takes priority over the active pipeline id"

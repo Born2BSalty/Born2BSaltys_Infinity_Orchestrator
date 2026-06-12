@@ -286,8 +286,7 @@ pub(crate) fn save_user_mod_download_source_block(
     target_path: Option<&Path>,
 ) -> Result<(), String> {
     ensure_mod_downloads_files().map_err(|err| err.to_string())?;
-    let path = target_path
-        .map_or_else(mod_downloads_user_path, Path::to_path_buf);
+    let path = target_path.map_or_else(mod_downloads_user_path, Path::to_path_buf);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
