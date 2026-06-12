@@ -329,7 +329,7 @@ fn save_mod_download_source_editor(
     let target_path = match destination {
         ModSourceEditDestination::GlobalDefault => None,
         ModSourceEditDestination::ThisModlist => {
-            // Fall back to global when no modlist is active (legacy safety).
+            // Falls back to global when no modlist is active.
             mod_downloads::active_modlist_downloads_path()
         }
     };
@@ -397,8 +397,8 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
     let had_cached_update_entry = !locked && popup_has_cached_update_entry(state, &tp_file);
 
     // Extract display data and write the lock file using the selected tab's instance.
-    // Returning from within the block ends the mutable borrow of that vec, allowing
-    // the sync loop below to borrow both bgee_mods and bg2ee_mods mutably.
+    // The inner block ends the mutable borrow of that vec, letting the sync loop
+    // below borrow both bgee_mods and bg2ee_mods mutably.
     let mod_name: String;
     let update_entry: Option<String>;
     {

@@ -12,9 +12,8 @@ use crate::ui::shared::redesign_tokens::{
 
 /// Soft, dark-teal drop shadow for floating overlays.
 ///
-/// Used for windows, popups, dropdowns, and the toast so they lift off the app.
-/// Single tuning point: feeds `window_shadow` + `popup_shadow` plus the
-/// custom-frame dialogs and the toast frame.
+/// Single tuning point feeding `window_shadow` and `popup_shadow` as well as the
+/// custom-frame dialogs and toast frame, so they lift off the app.
 #[must_use]
 pub fn redesign_overlay_shadow(palette: ThemePalette) -> egui::epaint::Shadow {
     let color = match palette {

@@ -243,10 +243,8 @@ fn render_starting_point_boxes(
         selectable_box_natural_height(ui, card_w, IMPORT_TITLE, IMPORT_DESC),
     );
     // The wrapped-text pre-measure under-estimates the rendered card height, so
-    // the taller card would overflow the shorter. Carry the real rendered
-    // max-height forward a frame and force both cards to it (the card renders at
-    // exactly `min_h` once `min_h` covers its content, so this converges in one
-    // extra frame); reset when the column width changes so it re-settles.
+    // carry the real rendered max-height forward a frame and force both cards to
+    // it; reset when the column width changes so it re-settles.
     let cards_key = ui.id().with("create_cards_equal_h");
     let (prev_w, carry) = ui
         .ctx()

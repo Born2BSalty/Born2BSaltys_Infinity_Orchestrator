@@ -32,10 +32,9 @@ const TTL_SUCCESS: f64 = 3.0;
 const TTL_INFO: f64 = 3.0;
 const TTL_WARNING: f64 = 4.0;
 
-/// Custom toast kind for install-progress feedback (defined but not yet
-/// wired to any push site).
+/// Custom toast kind for install-progress feedback.
 pub const KIND_PROGRESS: u32 = 0;
-/// Custom toast kind reserved for future use.
+/// Custom toast kind.
 pub const KIND_CUSTOM: u32 = 1;
 
 /// A single entry in the read-only notification history.

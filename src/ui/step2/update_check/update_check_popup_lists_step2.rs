@@ -29,7 +29,7 @@ impl SourceChoiceLayout {
     }
 }
 
-/// Context bundle for list rendering helpers to stay within argument-count limits.
+/// Context bundle shared by the list-rendering helpers.
 pub(super) struct ListCtx<'a> {
     pub(super) palette: ThemePalette,
     pub(super) source_edit_rows: &'a [SourceEditRow],

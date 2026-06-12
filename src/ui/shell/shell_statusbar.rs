@@ -46,7 +46,7 @@ pub fn render(
     let text_color = redesign_text_muted(palette);
     let font = egui::FontId::new(10.0, egui::FontFamily::Proportional);
 
-    // History button — allocate interactivity before the painter borrow
+    // Allocate the history button's interactivity before borrowing the painter.
     let btn_right = rect.right() - 12.0;
     let btn_center_x = btn_right - HISTORY_BTN_W / 2.0;
     let btn_height = rect.height() * 0.75;
@@ -58,7 +58,6 @@ pub fn render(
     let btn_hovered = btn_resp.hovered();
     let btn_clicked = btn_resp.clicked();
 
-    // All painter work after interaction allocation
     let painter = ui.painter();
 
     painter.rect_filled(rect, 0.0, redesign_chrome_bg(palette));

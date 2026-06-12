@@ -25,7 +25,7 @@ pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, S
         return Err("No WeiDU entries available to export.".to_string());
     }
 
-    // Gate on active modlist: ambient-set ⇒ bake resolved set; ambient-unset ⇒ legacy verbatim.
+    // Gate on active modlist: ambient-set ⇒ bake resolved set; ambient-unset ⇒ verbatim file.
     let mod_downloads_user =
         if crate::app::mod_downloads::active_modlist_downloads_path().is_some() {
             build_resolved_source_overrides(state)?
@@ -148,9 +148,8 @@ pub(crate) fn import_modlist_share_code(
         .as_deref()
         .filter(|text| !text.trim().is_empty())
     {
-        // Redirect to the importing modlist's per-modlist file when the ambient is set
-        // (the orchestrator sets the ambient before the import runs). Falls back to the global
-        // path when the ambient is unset (legacy BIO_legacy import path).
+        // Redirect to the importing modlist's per-modlist file when the ambient is set;
+        // fall back to the global path when the ambient is unset.
         let pin_path = crate::app::mod_downloads::active_modlist_downloads_path()
             .unwrap_or_else(crate::app::mod_downloads::mod_downloads_user_path);
         if let Some(parent) = pin_path.parent() {
@@ -1180,15 +1179,13 @@ mod tests {
         let _guard = AmbientGuard::acquire();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
-        // With no ambient, build_resolved_source_overrides must not be called.
-        // The gate checks active_modlist_downloads_path().is_some() — when None,
-        // the export returns early with the verbatim global path.
+        // With no ambient, the gate checks active_modlist_downloads_path().is_some() —
+        // when None, the export reads the verbatim global path.
         assert!(
             crate::app::mod_downloads::active_modlist_downloads_path().is_none(),
             "precondition: ambient is None"
         );
 
-        // Verify the gate logic: the function path that reads verbatim is chosen.
         let is_set = crate::app::mod_downloads::active_modlist_downloads_path().is_some();
         assert!(!is_set, "ambient-unset path must produce verbatim export");
     }
@@ -1201,12 +1198,11 @@ mod tests {
         let _guard = AmbientGuard::acquire();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
-        // A state with a bgee mod that has no matching source in the catalog.
         let mut state = WizardState::default();
         state.step3.bgee_items = vec![];
         state.step2.bgee_mods = vec![];
 
-        // build_resolved_source_overrides with an empty mods list yields None.
+        // An empty mods list yields None.
         let result = build_resolved_source_overrides(&state);
         assert!(result.is_ok(), "empty mods list must not error");
         assert!(
@@ -1215,7 +1211,7 @@ mod tests {
         );
     }
 
-    // ── Export dedup tests (fix for EET double-emit) ────────────────
+    // ── Export dedup tests ────────────────
 
     /// Counts `[[mods]]` blocks in `toml_out` whose `tp2 = "..."` value normalizes to `tp2`.
     /// Parses by walking block boundaries detected by `[[mods]]` header lines.
@@ -1316,8 +1312,6 @@ mod tests {
             .unwrap()
             .expect("resolved overrides must produce Some output");
 
-        // Count [[mods]] blocks for cdtweaks in the output.
-        // Count [[mods]] headers that carry the target tp2 by scanning line pairs.
         let block_count = count_mods_blocks_for_tp2(&toml_out, "cdtweaks");
         assert_eq!(
             block_count, 1,
@@ -1369,8 +1363,7 @@ mod tests {
         let _guard = AmbientGuard::acquire();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
-        // With ambient unset, active_modlist_downloads_path() is None,
-        // so the import fallback path is the global file.
+        // With ambient unset, the import fallback path is the global file.
         let path = crate::app::mod_downloads::active_modlist_downloads_path();
         assert!(
             path.is_none(),

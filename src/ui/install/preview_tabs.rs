@@ -14,10 +14,8 @@ use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 /// Renders the preview tab strip and returns the active tab's rect when it is
 /// on the bottom row of the strip (adjacent to the content panel).
 ///
-/// The caller should subtract `item_spacing.y` after this call, record
-/// `ui.cursor().top()` as `panel_top_y`, render the content frame, and then
-/// call `paint_preview_seam_cover` with the returned rect and a painter from
-/// the same `Ui`.
+/// The caller renders the content frame, then calls `paint_preview_seam_cover`
+/// with the returned rect to cover the seam where the active tab abuts it.
 pub(crate) fn render_tab_strip(
     ui: &mut egui::Ui,
     palette: ThemePalette,
