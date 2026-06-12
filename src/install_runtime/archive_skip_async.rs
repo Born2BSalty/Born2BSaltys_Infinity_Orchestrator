@@ -71,10 +71,8 @@ pub struct AsyncSkipInput {
     pub assets: Vec<Step2UpdateAsset>,
 }
 
-// Local cache types. We deliberately do NOT touch the sync
-// `archive_skip::HashCache` (its entry type + hash-lookup are private);
-// the on-disk JSON format IS the public contract so we load/save it
-// directly.
+// Local cache types: the sync `archive_skip::HashCache` keeps its entry type +
+// hash-lookup private, so we load/save the on-disk JSON format directly.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct AsyncCacheEntry {
     size: u64,
@@ -466,9 +464,9 @@ fn hash_candidates_worker(
     }
 }
 
-/// Phase 2: per-asset skip decisions in parallel. Each worker hashes is
-/// already done; here we just consult `present_by_hash` and emit the
-/// per-asset events as decisions are made.
+/// Phase 2: per-asset skip decisions in parallel. Hashing is already done;
+/// each worker consults `present_by_hash` and emits per-asset events as
+/// decisions are made.
 fn decide_per_asset_parallel(
     assets: Vec<Step2UpdateAsset>,
     by_name: HashMap<String, ArchiveMeta>,
@@ -747,9 +745,8 @@ mod tests {
 
     #[test]
     fn async_summary_matches_sync_summary_for_same_input() {
-        // The async pass and the sync pass should produce
-        // equivalent `SkipSummary` for the same input (their job is
-        // the same; only the timing differs).
+        // The async and sync passes produce equivalent `SkipSummary` for the
+        // same input; only the timing differs.
         use crate::app::state::WizardState;
         use crate::install_runtime::archive_skip::skip_present_archives;
 

@@ -553,11 +553,11 @@ fn render_prompt_pill(
     })
 }
 
-/// Bottom padding reserved under the kebab + count so they top-align with the
-/// rest of the row and leave a gap above the components-pane seam below.
+/// Bottom padding under the kebab + count so they top-align with the rest of
+/// the row and leave a gap above the components-pane seam below.
 const RIGHT_ACTIONS_BOTTOM_PAD: f32 = 4.0;
 
-/// Kebab trigger height in the tab-row band — short enough to leave a gap above
+/// Kebab trigger height in the tab-row band, short enough to leave a gap above
 /// the components-pane seam beneath the right-side actions.
 const STEP2_KEBAB_HEIGHT: f32 = 22.0;
 

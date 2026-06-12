@@ -5,7 +5,7 @@
 /// the active modlist's per-modlist file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModSourceEditDestination {
-    /// Saves to the global `mod_downloads_user.toml` (existing behavior).
+    /// Saves to the global `mod_downloads_user.toml`.
     #[default]
     GlobalDefault,
     /// Saves to the active modlist's `mod_downloads_user.toml`.

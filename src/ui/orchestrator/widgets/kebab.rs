@@ -82,10 +82,9 @@ pub fn render(
     trigger
 }
 
-/// Opens the dropdown so its right edge aligns with the trigger's right edge
-/// (extending leftward), keeping a right-anchored kebab's menu tied to its button
-/// and on-screen. Mirrors `egui::popup::popup_below_widget` but anchors the area's
-/// top-right corner to the trigger's bottom-right instead of its bottom-left.
+/// Opens the dropdown with its top-right corner anchored to the trigger's
+/// bottom-right, so the menu extends leftward and stays tied to a right-anchored
+/// kebab button. Like `egui::popup::popup_below_widget` but right-aligned.
 fn popup_below_widget_right_aligned<R>(
     parent_ui: &egui::Ui,
     popup_id: egui::Id,

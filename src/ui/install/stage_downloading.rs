@@ -698,9 +698,9 @@ fn finish_pipeline_arm_after_destination_prep(
         .pipeline_flags
         .set_armed(true);
 
-    // For share-code-consuming workflows, mint (or reuse) the modlist id
-    // and set the ambient BEFORE prepare_install_dirs_and_maybe_import runs the import,
-    // so the import write targets the new modlist's per-modlist file rather than global.
+    // For share-code-consuming workflows, mint (or reuse) the modlist id and set
+    // the ambient before the import runs, so the import write targets the new
+    // modlist's per-modlist file rather than global.
     let early_mint_result = if auto_build_driver::is_share_code_consuming(inputs.workflow) {
         install_modlist_registration::early_mint_modlist_id(orchestrator, &inputs.destination)
     } else {
@@ -801,8 +801,6 @@ pub(crate) fn kick_explicit_resolve_once(
 /// Handles the install path's empty-asset clean-finish: when the explicit
 /// resolve completes with zero assets (everything skipped or no downloads
 /// needed), routes to Step 5.
-///
-/// Mirrors the fork path's `fork_extract_complete` empty-asset branch.
 fn install_empty_asset_clean_finish(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) {
@@ -852,7 +850,7 @@ fn install_empty_asset_clean_finish(
     }
     // Route when either the skip pass confirmed everything absent (0 to fetch
     // and 0 observed), or when assets were empty before the skip pass ran at
-    // all (no assets from resolve) — matching the fork path's completion gate.
+    // all (no assets from resolve).
     let assets_still_empty = orchestrator
         .wizard_state
         .step2
@@ -868,7 +866,7 @@ fn install_empty_asset_clean_finish(
 }
 
 /// Routes the auto-build pipeline to Step 5, signalling that the install
-/// is ready to proceed.  Mirrors `finish_auto_build_at_step5` semantics.
+/// is ready to proceed.
 fn route_install_to_step5(state: &mut crate::app::state::WizardState) {
     state.modlist_auto_build_active = false;
     state.modlist_auto_build_waiting_for_install = false;

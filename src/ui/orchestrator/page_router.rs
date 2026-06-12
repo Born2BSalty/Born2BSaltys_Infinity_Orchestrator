@@ -64,11 +64,10 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 
 /// Syncs the process-global ambient active-modlist dir every frame.
 ///
-/// Priority: an open workspace always wins. When no workspace is open but a
-/// pipeline is running (`active_install_modlist_id` is `Some`), the ambient
-/// stays pinned to that modlist so main-thread ambient-dependent writes during
-/// the pipeline target the correct per-modlist file. Only when neither condition
-/// holds is the ambient cleared.
+/// An open workspace always wins. With no workspace open but a pipeline running
+/// (`active_install_modlist_id` is `Some`), the ambient stays pinned to that
+/// modlist so ambient-dependent writes target the correct per-modlist file.
+/// Only when neither holds is the ambient cleared.
 fn sync_ambient_to_nav(orchestrator: &OrchestratorApp) {
     use crate::install_runtime::active_modlist_source_path;
     match &orchestrator.nav {
@@ -363,12 +362,9 @@ fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
     orchestrator.active_install_modlist_id = None;
     orchestrator.install_screen_state.reset_to_paste();
     orchestrator.wizard_state.reset_workflow_keep_step1();
-    // Restore `step1`'s per-install fields to the global Settings →
-    // Paths values so a polluted `step1` from the install that just
-    // completed does not linger in memory for the next install or any
-    // UI read of step1 (the Settings tab binds to step1 directly for
-    // its global path fields and would otherwise show the per-install
-    // values until the next settings edit re-feeds step1).
+    // Restore `step1`'s per-install fields to the global Settings → Paths values
+    // so a polluted `step1` does not linger for the next install or any UI read
+    // (the Settings tab binds to step1 directly for its global path fields).
     crate::install_runtime::settings_sanitizer::sanitize_step1_for_settings_persistence(
         &mut orchestrator.wizard_state.step1,
         &orchestrator.bio_settings_last_saved.step1,
@@ -672,11 +668,9 @@ mod tests {
 
     #[test]
     fn fork_then_modify_does_not_falsely_reset() {
-        // The bug Run 3 closes: a fork-then-modify workspace has legitimate
-        // `destination` + `import_code` in install_screen_state and may
-        // carry `last_exit_code = Some(0)` from a prior install — the old
-        // proxy predicate fired the reset and wiped Step 2. The flag-based
-        // predicate stays false because no install completed for this fork.
+        // A fork-then-modify workspace may carry `last_exit_code = Some(0)` from a
+        // prior install, but the flag-based predicate stays false because no
+        // install completed for this fork, so the reset must not fire.
         let mut wizard = crate::app::state::WizardState::default();
         wizard.step5.last_exit_code = Some(0); // carried over from elsewhere
         wizard.step5.last_install_failed = false;

@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-//! Numeric cast helpers that don't trigger `clippy::pedantic`'s `as`-cast
-//! lints.
-//!
-//! The `format!`/`parse` path is the underlying-issue fix for
-//! `cast_possible_truncation` / `cast_precision_loss` / `cast_sign_loss`
-//! on call sites where the value is provably in range but the lint can't
-//! prove it.
+//! Numeric cast helpers that convert via `format!`/`parse` instead of `as`,
+//! avoiding lossy `as`-casts at call sites where the value is provably in range.
 
 #[must_use]
 pub fn f64_from_u64(value: u64) -> f64 {

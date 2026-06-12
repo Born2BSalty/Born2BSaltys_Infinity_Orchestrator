@@ -389,7 +389,7 @@ pub(crate) fn load_two_tier_sources() -> ModDownloadsLoad {
 pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
     let mut result = load_two_tier_sources();
 
-    // Third pass: per-modlist overlay (additive; skipped when ambient is unset or file absent).
+    // Per-modlist overlay (additive; skipped when ambient is unset or file absent).
     if let Some(per_modlist_path) = active_modlist_downloads_path().filter(|p| p.exists()) {
         {
             let per_load = load_source_overlays_from_path(&per_modlist_path);
@@ -473,7 +473,6 @@ fn replace_or_append_source_block(
     let source_block = source_block.trim();
     let ranges = mod_block_ranges(content);
 
-    // Identify the first matching block, if any.
     let first_match = ranges
         .iter()
         .find(|(start, end)| block_tp2_matches(&content[*start..*end], &target))
@@ -492,7 +491,6 @@ fn replace_or_append_source_block(
         return updated;
     };
 
-    // Compute the edited replacement for the first matching block.
     let first_block = &content[first.0..first.1];
     let updated_first = replace_or_append_source_in_mod_block(first_block, source_id, source_block);
 
@@ -510,14 +508,11 @@ fn replace_or_append_source_block(
     for &(start, end) in &ranges {
         let block = &content[start..end];
         let text = if !block_tp2_matches(block, &target) {
-            // Non-matching: keep byte-for-byte.
             block.trim().to_string()
         } else if !first_written {
-            // First match: emit the edited version.
             first_written = true;
             updated_first.trim().to_string()
         } else {
-            // Subsequent match: drop (dedup).
             continue;
         };
         if !out.is_empty() {
@@ -630,10 +625,9 @@ fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
         &content[..ranges[0].0]
     };
 
-    // Process all blocks. For every block matching the target tp2, remove the target source
-    // from it (drop the whole [[mods]] block when no sources remain). Non-matching blocks are
-    // kept byte-for-byte. Handles pre-doubled files: all duplicate blocks for the same tp2 are
-    // processed and the target source removed from each, so none shadow a re-pin.
+    // For every block matching the target tp2, remove the target source from it (drop the
+    // whole [[mods]] block when no sources remain); non-matching blocks are kept byte-for-byte.
+    // Duplicate blocks for the same tp2 are all processed, so none shadow a re-pin.
     let mut out = preamble.trim_end().to_string();
     for (start, end) in &ranges {
         let block = &content[*start..*end];
@@ -1078,7 +1072,7 @@ fn write_if_changed(path: &Path, content: &str) -> io::Result<()> {
     }
 }
 
-/// Shared mutex serializing all ambient-touching tests across modules. Gated to test builds only.
+/// Shared mutex serializing all ambient-touching tests across modules.
 #[cfg(test)]
 pub(crate) static AMBIENT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -1916,7 +1910,7 @@ mod tests {
 
     #[test]
     fn ambient_unset_resolution_unchanged_by_selector_fix() {
-        // Confirms the fix is inert when no ambient modlist is set.
+        // Resolution is inert when no ambient modlist is set.
         let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1968,7 +1962,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
-    // ── Save-dedup tests (fix for pre-doubled per-modlist files) ────────────
+    // ── Save-dedup tests ────────────
 
     /// Builds a doubled TOML string: the same tp2 appears in two [[mods]] blocks,
     /// the first with commit=abc, the second with branch=master.

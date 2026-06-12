@@ -29,10 +29,9 @@ pub(crate) struct Step2UpdateExtractJob {
 
 /// Builds extract jobs.
 ///
-/// `install_ctx_installed_refs_path` is `Some` when called from the install pipeline
-/// (paste/fork paths) and carries the per-modlist path derived from
-/// `active_install_modlist_id` before extract begins. When `None` (manual
-/// workspace update-check or legacy), the ambient-aware resolver is used instead.
+/// `install_ctx_installed_refs_path` is `Some` when called from the install pipeline,
+/// carrying the per-modlist installed-refs path; when `None`, the ambient-aware
+/// resolver is used instead.
 pub(crate) fn build_extract_jobs(
     state: &mut WizardState,
     archive_dir: &Path,

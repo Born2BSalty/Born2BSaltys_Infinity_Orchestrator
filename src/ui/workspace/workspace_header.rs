@@ -329,8 +329,7 @@ fn save_draft(orchestrator: &mut OrchestratorApp) {
 }
 
 /// Re-bakes the modlist's share code from the current wizard state and persists
-/// the registry so that a subsequent "Copy import code" on Home reflects any
-/// per-modlist source-set changes made since install-start.
+/// the registry so a later "Copy import code" reflects per-modlist source changes.
 ///
 /// Leaves the existing `latest_share_code` unchanged when the export returns an
 /// error (e.g. no `WeiDU` entries available yet for a not-yet-scanned modlist).

@@ -87,9 +87,8 @@ impl std::ops::Not for DirtyFlag {
 
 /// Arms the post-install runtime reset.
 ///
-/// Set by `maybe_flip_to_installed_on_clean_exit` after `flip_to_installed`
-/// succeeds; cleared inside `reset_completed_install_runtime` on the next
-/// nav-away or enter-Install edge.
+/// Set after a clean install exit flips the modlist to Installed; cleared when
+/// the runtime is reset on the next nav-away or enter-Install edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PostInstallResetGate {
     #[default]
@@ -642,13 +641,10 @@ impl OrchestratorApp {
             self.active_install_modlist_id = None;
         }
 
-        // Arms the post-install reset gate only for the Install-Modlist
-        // paste / Reinstall route — those install on the Install screen
-        // and the reset clears the lingering paste UI when the user
-        // navigates away. Workspace installs render their post-install
-        // chrome (success banner + Step-5 console + post-install actions)
-        // inside the workspace itself, and clearing that mid-screen would
-        // wipe the success state the user just landed on.
+        // Arm the reset gate only for the Install-Modlist paste / Reinstall route,
+        // where the reset clears the lingering paste UI on nav-away. Workspace
+        // installs render their post-install chrome inside the workspace itself,
+        // so clearing it mid-screen would wipe the success state.
         if !from_workspace {
             self.post_install_reset_gate = PostInstallResetGate::Pending;
         }

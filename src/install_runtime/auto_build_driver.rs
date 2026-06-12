@@ -55,10 +55,9 @@ pub const fn is_share_code_consuming(workflow: InstallWorkflow) -> bool {
     }
 }
 
-/// Arms the shared auto-build state for an explicit download-first reproduce
-/// run, without queueing the scan-first saved-log flow.  The resolve step
-/// (`drive_explicit_resolve`) is latched separately after arm, once per
-/// pipeline activation.
+/// Arms the auto-build state for an explicit download-first reproduce run,
+/// without queueing the scan-first saved-log flow. The resolve step
+/// (`drive_explicit_resolve`) is latched separately after arming.
 fn arm_explicit_reproduce(state: &mut WizardState) {
     state.modlist_auto_build_active = true;
     state.modlist_auto_build_waiting_for_install = false;
