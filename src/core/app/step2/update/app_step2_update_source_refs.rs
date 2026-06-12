@@ -179,7 +179,9 @@ mod tests {
 
     #[test]
     fn installed_refs_ambient_unset_targets_global() {
-        let _lock = REFS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = REFS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
@@ -200,7 +202,9 @@ mod tests {
 
     #[test]
     fn installed_refs_ambient_set_targets_per_modlist() {
-        let _lock = REFS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = REFS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         let per_dir = unique_tmp_dir("per");
@@ -216,12 +220,18 @@ mod tests {
 
         // With ambient set, the resolver should return the per-modlist path.
         let resolved = installed_source_refs_path();
-        assert_eq!(resolved, per_path, "resolver returns per-modlist path when ambient is set");
+        assert_eq!(
+            resolved, per_path,
+            "resolver returns per-modlist path when ambient is set"
+        );
 
         save_installed_source_ref("testmod", "v42", &resolved).unwrap();
 
         let per_content = std::fs::read_to_string(&per_path).unwrap();
-        assert!(per_content.contains("v42"), "ref written to per-modlist file");
+        assert!(
+            per_content.contains("v42"),
+            "ref written to per-modlist file"
+        );
 
         let global_content = std::fs::read_to_string(&global_path).unwrap();
         assert_eq!(global_content, "# sentinel\n", "global file unchanged");
@@ -232,7 +242,9 @@ mod tests {
 
     #[test]
     fn installed_refs_captured_path_write_is_thread_safe() {
-        let _lock = REFS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = REFS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         let per_dir = unique_tmp_dir("capture");
@@ -256,7 +268,9 @@ mod tests {
 
     #[test]
     fn installed_refs_paste_install_captures_per_modlist_not_global() {
-        let _lock = REFS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = REFS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
         // Simulate: active_install_modlist_id is set → derive the per-modlist path.
@@ -272,8 +286,7 @@ mod tests {
         // With ambient None, resolved path is global — but install_ctx overrides it.
         let ambient_path = installed_source_refs_path();
         assert_ne!(
-            ambient_path,
-            install_ctx_path,
+            ambient_path, install_ctx_path,
             "install_ctx path must differ from global when ambient is None"
         );
 

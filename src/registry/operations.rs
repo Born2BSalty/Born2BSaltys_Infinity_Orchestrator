@@ -281,7 +281,10 @@ mod tests {
         reg.entries.push(entry("BBB111000000", ""));
 
         let target = remove_entry_and_save("AAA111000000", &store, &mut reg).expect("ok");
-        assert!(target.is_none(), "empty dest should yield None (no folder work)");
+        assert!(
+            target.is_none(),
+            "empty dest should yield None (no folder work)"
+        );
         assert_eq!(reg.entries.len(), 1);
         assert_eq!(reg.entries[0].id, "BBB111000000");
 
@@ -323,7 +326,10 @@ mod tests {
         let t = target.expect("existing abs dir should yield Some(DeleteTarget)");
         assert_eq!(t.name, "modlist-DDD111000000");
         assert_eq!(t.dest, install_dir);
-        assert!(reg.entries.is_empty(), "entry removed from in-memory registry");
+        assert!(
+            reg.entries.is_empty(),
+            "entry removed from in-memory registry"
+        );
 
         let reloaded = store.load().expect("reload");
         assert!(reloaded.entries.is_empty(), "entry persisted as removed");
