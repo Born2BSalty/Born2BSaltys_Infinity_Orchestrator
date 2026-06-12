@@ -269,6 +269,8 @@ fn clear_full_update_preview_results(state: &mut WizardState) {
     state.step2.update_selected_missing_sources.clear();
     state.step2.update_selected_downloaded_sources.clear();
     state.step2.update_selected_download_failed_sources.clear();
+    state.step2.update_selected_extracted_sources.clear();
+    state.step2.update_selected_extract_failed_sources.clear();
     state
         .step2
         .update_selected_exact_version_failed_sources
@@ -685,4 +687,31 @@ fn resolve_selected_source(
 ) -> Option<ModDownloadSource> {
     let tp2_key = mod_downloads::normalize_mod_download_tp2(tp2);
     sources.resolve_source(tp2, selected_source_ids.get(&tp2_key).map(String::as_str))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clear_full_update_preview_results_clears_extracted_and_failed_lists() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_extracted_sources = vec!["EET -> C:/m/EET".to_string()];
+        state.step2.update_selected_extract_failed_sources =
+            vec!["BadMod: unpack failed".to_string()];
+
+        clear_full_update_preview_results(&mut state);
+
+        assert!(
+            state.step2.update_selected_extracted_sources.is_empty(),
+            "the post-extract Extracted list must clear on a fresh full update check"
+        );
+        assert!(
+            state
+                .step2
+                .update_selected_extract_failed_sources
+                .is_empty(),
+            "the extract-failed list must clear alongside it"
+        );
+    }
 }
