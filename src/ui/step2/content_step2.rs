@@ -390,12 +390,12 @@ fn render_updates_button(
     let label = if scan.exact_log_mode {
         "Mod List..."
     } else {
-        "Updates..."
+        "Versions..."
     };
     let hover = if scan.exact_log_mode {
         "Open the exact-log mod list popup."
     } else {
-        "Open the updates popup."
+        "Compare or fetch mod versions."
     };
     if ui
         .add_enabled(
