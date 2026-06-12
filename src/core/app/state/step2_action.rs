@@ -56,6 +56,13 @@ pub enum Step2Action {
         source_id: String,
     },
     SetSelectedModUpdateLocked(bool),
+    /// Toggles the update lock for a specific mod identified by tp2 path.
+    SetModUpdateLocked {
+        /// Normalized or raw tp2 path of the mod to lock or unlock.
+        tp2: String,
+        /// `true` to lock, `false` to unlock.
+        locked: bool,
+    },
     OpenCompatForComponent {
         game_tab: String,
         tp_file: String,

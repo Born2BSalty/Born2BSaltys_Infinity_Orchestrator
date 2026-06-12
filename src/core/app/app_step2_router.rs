@@ -65,6 +65,9 @@ pub(crate) fn handle_step2_action(
         Step2Action::SetSelectedModUpdateLocked(locked) => {
             set_selected_mod_update_locked(state, locked);
         }
+        Step2Action::SetModUpdateLocked { tp2, locked } => {
+            set_mod_update_locked(state, &tp2, locked);
+        }
         Step2Action::OpenSelectedReadme(path)
         | Step2Action::OpenSelectedTp2Folder(path)
         | Step2Action::OpenSelectedTp2(path)
@@ -417,10 +420,76 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
         update_entry = mod_update_entry_text(selected_mod);
     }
 
-    // Sync update_locked and package_marker for every instance of this mod across both
-    // game tabs, so an EET modlist (mod present in both bgee_mods and bg2ee_mods) never
-    // has a tab left stale relative to the lock file that was just written.
     let tp2_key = mod_downloads::normalize_mod_download_tp2(&tp_file);
+    sync_update_locked_by_tp2(state, &tp2_key, locked, had_cached_update_entry);
+    sync_cached_popup_update_lock(state, &game_tab, &tp_file, update_entry.as_deref(), locked);
+    let verb = if locked { "Locked" } else { "Unlocked" };
+    state.step2.scan_status = format!("{verb} updates for {mod_name}");
+}
+
+/// Handles the `SetModUpdateLocked` action from the Updates popup lock-toggle icon.
+fn set_mod_update_locked(state: &mut WizardState, tp2: &str, locked: bool) {
+    if let Err(err) = super::mod_update_locks::set_mod_update_lock(tp2, locked) {
+        state.step2.scan_status = format!("Update lock failed: {err}");
+        return;
+    }
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(tp2);
+    let had_cached = !locked
+        && state
+            .step2
+            .bgee_mods
+            .iter()
+            .chain(state.step2.bg2ee_mods.iter())
+            .any(|m| {
+                mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key
+                    && popup_has_cached_update_entry(state, &m.tp_file)
+            });
+    // Collect the canonical tp_file and mod name for status/sync before mutating.
+    let (canonical_tp_file, mod_name) = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .find(|m| mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key)
+        .map_or_else(
+            || (tp2.to_string(), tp2.to_string()),
+            |m| (m.tp_file.clone(), m.name.clone()),
+        );
+    sync_update_locked_by_tp2(state, &tp2_key, locked, had_cached);
+    // Sync the cached popup entries using the canonical tp_file and the BGEE tab as
+    // a sentinel (move_cached_assets_to_locked matches by tp_file only, tab unused).
+    let update_entry = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .find(|m| mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key)
+        .and_then(mod_update_entry_text);
+    sync_cached_popup_update_lock(
+        state,
+        "BGEE",
+        &canonical_tp_file,
+        update_entry.as_deref(),
+        locked,
+    );
+    let verb = if locked { "Locked" } else { "Unlocked" };
+    let label = if mod_name.trim().is_empty() {
+        &canonical_tp_file
+    } else {
+        &mod_name
+    };
+    state.step2.scan_status = format!("{verb} updates for {label}");
+}
+
+/// Syncs `update_locked` and `package_marker` for every instance of `tp2_key` across
+/// both `bgee_mods` and `bg2ee_mods`, so an EET modlist never has a tab instance left
+/// stale relative to the lock file that was just written.
+fn sync_update_locked_by_tp2(
+    state: &mut WizardState,
+    tp2_key: &str,
+    locked: bool,
+    had_cached_update_entry: bool,
+) {
     for mod_state in state
         .step2
         .bgee_mods
@@ -437,10 +506,6 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
             mod_state.package_marker = Some('+');
         }
     }
-
-    sync_cached_popup_update_lock(state, &game_tab, &tp_file, update_entry.as_deref(), locked);
-    let verb = if locked { "Locked" } else { "Unlocked" };
-    state.step2.scan_status = format!("{verb} updates for {mod_name}");
 }
 
 fn set_mod_download_source(
