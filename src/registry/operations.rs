@@ -8,26 +8,16 @@ use crate::registry::errors::RegistryError;
 use crate::registry::model::{ModlistEntry, ModlistRegistry};
 use crate::registry::store::RegistryStore;
 
-/// Returned by `remove_entry_and_save` when a background folder removal is needed.
 #[derive(Debug)]
 pub struct DeleteTarget {
-    /// Display name of the removed modlist (for the toast message).
     pub name: String,
-    /// Absolute path of the install folder to remove asynchronously.
     pub dest: PathBuf,
 }
 
-/// Result type sent by the background folder-delete worker.
 pub type FolderDeleteResult = Result<(), String>;
 
-/// Receiver for the background folder-delete worker.
 pub type FolderDeleteReceiver = Receiver<FolderDeleteResult>;
 
-/// Removes the registry entry and persists the updated registry synchronously.
-///
-/// Returns `Some(DeleteTarget)` when an on-disk folder removal is needed (the
-/// destination passed the safety guard), or `None` when the folder is absent,
-/// empty, or relative (no async work to do in those cases).
 pub fn remove_entry_and_save(
     id: &str,
     store: &RegistryStore,
@@ -53,10 +43,6 @@ pub fn remove_entry_and_save(
     }
 }
 
-/// Spawns a background thread that runs `fs::remove_dir_all` on `dest`.
-///
-/// The caller receives a channel that yields exactly one `FolderDeleteResult`
-/// when the operation completes.
 #[must_use]
 pub fn spawn_delete_folder_worker(dest: PathBuf) -> FolderDeleteReceiver {
     let (tx, rx) = mpsc::channel();
@@ -269,8 +255,6 @@ mod tests {
             "Reinstall queued \u{2014} install runtime arrives in Phase 7"
         );
     }
-
-    // --- remove_entry_and_save / spawn_delete_folder_worker tests ---
 
     #[test]
     fn remove_entry_and_save_returns_none_for_empty_dest() {

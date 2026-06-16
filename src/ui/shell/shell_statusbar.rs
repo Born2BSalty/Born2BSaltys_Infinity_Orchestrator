@@ -30,9 +30,6 @@ pub fn format_elapsed(d: std::time::Duration) -> String {
     }
 }
 
-/// Renders the statusbar.
-///
-/// Returns `true` if the notification-history toggle button was clicked this frame.
 #[must_use]
 pub fn render(
     ui: &mut egui::Ui,
@@ -46,7 +43,6 @@ pub fn render(
     let text_color = redesign_text_muted(palette);
     let font = egui::FontId::new(10.0, egui::FontFamily::Proportional);
 
-    // Allocate the history button's interactivity before borrowing the painter.
     let btn_right = rect.right() - 12.0;
     let btn_center_x = btn_right - HISTORY_BTN_W / 2.0;
     let btn_height = rect.height() * 0.75;

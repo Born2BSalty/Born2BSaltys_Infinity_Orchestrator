@@ -14,11 +14,6 @@ pub const TAB_GAP: f32 = 4.0;
 const TAB_PAD_X: f32 = 14.0;
 const TAB_FONT_SIZE: f32 = 13.0;
 
-/// Renders a single game tab button and returns its allocated rect when active.
-///
-/// Returns `Some(rect)` when the tab is the active selection, `None` otherwise.
-/// Callers use the returned rect to apply the open-seam cover against the
-/// adjacent content panel.
 #[must_use]
 pub fn game_tab(
     ui: &mut egui::Ui,

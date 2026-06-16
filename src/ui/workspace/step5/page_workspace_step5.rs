@@ -314,8 +314,6 @@ fn pending_workspace_prep_matches_current(
     )
 }
 
-/// Opens the game-specific subfolder inside the install destination, falling back
-/// to the destination root when the subfolder path is unset or absent on disk.
 fn open_game_subfolder(
     entry: &crate::registry::model::ModlistEntry,
     step1: &Step1State,

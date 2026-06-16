@@ -105,16 +105,12 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
     }
 }
 
-/// Extracts the `@wlb-inputs` value from a raw `WeiDU` line by parsing it with
-/// the canonical component parser, returning `None` when the marker is absent.
 pub(crate) fn extract_wlb_inputs(raw_line: &str) -> Option<String> {
     crate::mods::component::Component::parse_weidu_line(raw_line)
         .ok()
         .and_then(|c| c.wlb_inputs)
 }
 
-/// Stamps `// @wlb-inputs: {inputs}` onto a component's raw line, replacing any
-/// prior marker. Trims the inputs string; does nothing when it is empty.
 pub(crate) fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &str) {
     let inputs = inputs.trim();
     if inputs.is_empty() {
@@ -124,8 +120,6 @@ pub(crate) fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &
     component.raw_line = format!("{base} // @wlb-inputs: {inputs}");
 }
 
-/// Strips any existing `@wlb-inputs:` marker from a raw `WeiDU` line, returning
-/// the trimmed base without the marker or its surrounding comment syntax.
 pub(crate) fn strip_wlb_marker(raw_line: &str) -> String {
     let marker = "@wlb-inputs:";
     let lower = raw_line.to_ascii_lowercase();

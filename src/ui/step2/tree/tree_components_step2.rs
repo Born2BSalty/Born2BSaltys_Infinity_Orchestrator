@@ -80,9 +80,6 @@ struct ComponentGroupRender<'a> {
     end_idx: usize,
     group_matches: bool,
     indent: f32,
-    /// When true, every row in the group uses the radio-glyph widget.
-    /// When false, each row consults `collapsible_group_is_umbrella` on the
-    /// component itself to determine whether to use the radio glyph.
     radio_all: bool,
 }
 

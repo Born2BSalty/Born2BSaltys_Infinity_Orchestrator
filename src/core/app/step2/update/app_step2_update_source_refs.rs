@@ -13,7 +13,6 @@ use crate::platform_defaults::app_config_file;
 
 const MOD_SOURCE_REFS_FILE_NAME: &str = "mod_installed_refs.toml";
 
-/// Serializable record of installed source-ids and refs, owned per-modlist.
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub(crate) struct ModSourceRefsFile {
     #[serde(default)]
@@ -22,9 +21,6 @@ pub(crate) struct ModSourceRefsFile {
     pub(crate) sources: BTreeMap<String, String>,
 }
 
-/// Returns the installed-refs path for the active modlist when one is set,
-/// or the global config-dir path otherwise. All installed-refs I/O routes
-/// through this resolver so making it ambient-aware flips every call site at once.
 pub(crate) fn installed_source_refs_path() -> std::path::PathBuf {
     crate::app::mod_downloads::active_modlist_dir().map_or_else(
         || app_config_file(MOD_SOURCE_REFS_FILE_NAME, "config"),
@@ -32,7 +28,6 @@ pub(crate) fn installed_source_refs_path() -> std::path::PathBuf {
     )
 }
 
-/// Loads a refs file from an explicit path.
 pub(crate) fn load_refs_file_at(path: &Path) -> ModSourceRefsFile {
     fs::read_to_string(path).map_or_else(
         |_| ModSourceRefsFile::default(),
@@ -50,9 +45,6 @@ pub(super) fn load_installed_source_id_and_ref(tp2: &str) -> Option<(String, Str
     ))
 }
 
-/// Saves an installed source ref to the given `target` path.
-/// Off-thread workers receive the path captured at job-build time (main thread),
-/// preventing races with `page_router` ambient clears mid-install.
 pub(super) fn save_installed_source_ref(
     tp2: &str,
     source_ref: &str,
@@ -92,8 +84,6 @@ pub(crate) fn load_installed_source_ids() -> BTreeMap<String, String> {
         .collect()
 }
 
-/// Saves an installed source id to the given `target` path.
-/// Off-thread workers receive the path captured at job-build time (main thread).
 pub(super) fn save_installed_source_id(
     tp2: &str,
     source_id: &str,
@@ -149,10 +139,8 @@ mod tests {
 
     use super::*;
 
-    // Shared test-lock: ensures ambient-touching tests never interleave.
     static REFS_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    /// RAII drop-guard: restores the ambient active-modlist dir on drop (including panic).
     struct AmbientGuard(Option<PathBuf>);
 
     impl AmbientGuard {
@@ -189,7 +177,6 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
         let global_path = tmp.join("mod_installed_refs.toml");
 
-        // Write via explicit target path (ambient is None so resolver returns global).
         save_installed_source_ref("testmod", "abc123", &global_path).unwrap();
         save_installed_source_id("testmod", "main", &global_path).unwrap();
 
@@ -218,7 +205,6 @@ mod tests {
 
         crate::app::mod_downloads::set_active_modlist_dir(Some(per_dir.clone()));
 
-        // With ambient set, the resolver should return the per-modlist path.
         let resolved = installed_source_refs_path();
         assert_eq!(
             resolved, per_path,
@@ -251,12 +237,10 @@ mod tests {
         std::fs::create_dir_all(&per_dir).unwrap();
         let captured = per_dir.join("mod_installed_refs.toml");
 
-        // Capture the path on the main thread, then clear the ambient (simulating page_router).
         crate::app::mod_downloads::set_active_modlist_dir(Some(per_dir.clone()));
         let captured_path = installed_source_refs_path();
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
-        // The write must still target the captured (per-modlist) path, not the global.
         save_installed_source_id("mod", "source-id", &captured_path).unwrap();
 
         assert!(captured.exists(), "captured per-modlist file was written");
@@ -273,25 +257,19 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        // Simulate: active_install_modlist_id is set → derive the per-modlist path.
         let per_dir = unique_tmp_dir("r3crit");
         let per_refs = per_dir.join("mod_installed_refs.toml");
 
-        // Ambient is None (page_router cleared it).
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
-        // The install-context path is derived from active_install_modlist_id (simulated here).
         let install_ctx_path = per_refs.clone();
 
-        // With ambient None, resolved path is global — but install_ctx overrides it.
         let ambient_path = installed_source_refs_path();
         assert_ne!(
             ambient_path, install_ctx_path,
             "install_ctx path must differ from global when ambient is None"
         );
 
-        // The captured path (from install_ctx) must not be global.
-        // (In production, build_extract_jobs uses the install_ctx, not the ambient.)
         assert_eq!(
             install_ctx_path, per_refs,
             "install context path is the per-modlist file"

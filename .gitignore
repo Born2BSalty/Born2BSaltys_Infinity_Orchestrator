@@ -5,6 +5,7 @@
 /control/
 /project.json
 /vendor/lapdu-parser-rust-master/tests/
+/tests/
 
 .vscode/
 .idea/
@@ -15,14 +16,5 @@ Thumbs.db
 *.tmp
 *.bak
 *~
-/log.txt
 
 Push\ Github.bat
-
-# Infinity Orchestrator redesign — generated / regenerable / archive artifacts
-infinity_orchestrator/wireframe-preview/node_modules/
-/Infinity Orchestrator Wireframe*.html
-/infinity_orchestrator.zip
-
-.claude/
-CLAUDE.md

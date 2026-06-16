@@ -43,9 +43,7 @@ pub struct HomeScreenState {
     pub delete_target: Option<String>,
     pub reinstall_target: Option<String>,
 
-    /// Id of the card currently in inline-rename mode, if any.
     pub rename_target: Option<String>,
-    /// Live buffer for the rename text field while `rename_target` is `Some`.
     pub rename_temp: String,
 }
 

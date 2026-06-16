@@ -12,10 +12,6 @@ use crate::ui::workspace::widgets::weidu_line;
 
 const BOX_PADDING: f32 = 12.0;
 
-/// Renders the review list box and returns the top y-coordinate of its border rect.
-///
-/// Callers use the returned y value to anchor the tab open-seam cover to the
-/// exact edge of the painted border, independent of cursor position at call time.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,

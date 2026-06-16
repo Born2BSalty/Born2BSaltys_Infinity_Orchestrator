@@ -21,8 +21,6 @@ struct ModUpdateLocksFile {
     locked_tp2: Vec<String>,
 }
 
-/// Returns the update-lock file path for the active modlist when one is set,
-/// or the global config-dir path otherwise.
 pub(crate) fn mod_update_locks_path() -> PathBuf {
     active_modlist_dir().map_or_else(
         || app_config_file(MOD_UPDATE_LOCKS_FILE_NAME, "config"),
@@ -134,7 +132,6 @@ mod tests {
     use super::*;
     use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
 
-    /// RAII drop-guard: restores the ambient active-modlist dir on drop (including panic).
     struct AmbientGuard(Option<PathBuf>);
 
     impl AmbientGuard {
@@ -168,8 +165,6 @@ mod tests {
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
         let global_path = mod_update_locks_path();
-        // With ambient unset the resolver must return a path in the real config dir —
-        // not a temp dir. We only assert the path value; we do NOT write to it.
         assert!(
             !global_path.to_string_lossy().contains("bio_locks_test_"),
             "global path must not be a temp path"
@@ -195,7 +190,6 @@ mod tests {
             "resolver returns per-modlist path when ambient is set"
         );
 
-        // Write a lock via the full API and confirm it lands in the per-modlist file.
         set_mod_update_lock("testmod/testmod.tp2", true).unwrap();
 
         assert!(per_path.exists(), "per-modlist lock file was created");
@@ -220,7 +214,6 @@ mod tests {
         std::fs::create_dir_all(&per_dir).unwrap();
         std::fs::create_dir_all(&sentinel_dir).unwrap();
 
-        // Write a sentinel file that must remain unchanged.
         let sentinel_path = sentinel_dir.join(MOD_UPDATE_LOCKS_FILE_NAME);
         std::fs::write(&sentinel_path, "# sentinel\n").unwrap();
 
@@ -228,7 +221,6 @@ mod tests {
 
         set_mod_update_lock("amod/amod.tp2", true).unwrap();
 
-        // Sentinel must be byte-identical — no fallback write occurred.
         let sentinel_content = std::fs::read_to_string(&sentinel_path).unwrap();
         assert_eq!(
             sentinel_content, "# sentinel\n",

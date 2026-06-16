@@ -4,12 +4,10 @@
 use crate::app::mod_downloads::set_active_modlist_dir;
 use crate::registry::store_workspace::modlist_data_dir;
 
-/// Sets the ambient active-modlist data dir to the given modlist id's data dir.
 pub fn set_ambient_for_modlist(modlist_id: &str) {
     set_active_modlist_dir(Some(modlist_data_dir(modlist_id)));
 }
 
-/// Clears the ambient active-modlist data dir (no modlist active).
 pub fn clear_ambient() {
     set_active_modlist_dir(None);
 }
@@ -105,7 +103,6 @@ mod tests {
             ModSourceEditDestination::GlobalDefault,
             "default destination is GlobalDefault"
         );
-        // Verify Clone, Copy, PartialEq, Eq all work.
         let d = ModSourceEditDestination::ThisModlist;
         let d2 = d;
         assert_eq!(d, d2);

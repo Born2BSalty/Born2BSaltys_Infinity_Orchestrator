@@ -328,10 +328,7 @@ fn save_mod_download_source_editor(
 
     let target_path = match destination {
         ModSourceEditDestination::GlobalDefault => None,
-        ModSourceEditDestination::ThisModlist => {
-            // Falls back to global when no modlist is active.
-            mod_downloads::active_modlist_downloads_path()
-        }
+        ModSourceEditDestination::ThisModlist => mod_downloads::active_modlist_downloads_path(),
     };
 
     match mod_downloads::save_user_mod_download_source_block(
@@ -396,9 +393,6 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
     };
     let had_cached_update_entry = !locked && popup_has_cached_update_entry(state, &tp_file);
 
-    // Extract display data and write the lock file using the selected tab's instance.
-    // The inner block ends the mutable borrow of that vec, letting the sync loop
-    // below borrow both bgee_mods and bg2ee_mods mutably.
     let mod_name: String;
     let update_entry: Option<String>;
     {
@@ -427,7 +421,6 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
     state.step2.scan_status = format!("{verb} updates for {mod_name}");
 }
 
-/// Handles the `SetModUpdateLocked` action from the Updates popup lock-toggle icon.
 fn set_mod_update_locked(state: &mut WizardState, tp2: &str, locked: bool) {
     if let Err(err) = super::mod_update_locks::set_mod_update_lock(tp2, locked) {
         state.step2.scan_status = format!("Update lock failed: {err}");
@@ -444,7 +437,6 @@ fn set_mod_update_locked(state: &mut WizardState, tp2: &str, locked: bool) {
                 mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key
                     && popup_has_cached_update_entry(state, &m.tp_file)
             });
-    // Collect the canonical tp_file and mod name for status/sync before mutating.
     let (canonical_tp_file, mod_name) = state
         .step2
         .bgee_mods
@@ -456,8 +448,6 @@ fn set_mod_update_locked(state: &mut WizardState, tp2: &str, locked: bool) {
             |m| (m.tp_file.clone(), m.name.clone()),
         );
     sync_update_locked_by_tp2(state, &tp2_key, locked, had_cached);
-    // Sync the cached popup entries using the canonical tp_file and the BGEE tab as
-    // a sentinel (move_cached_assets_to_locked matches by tp_file only, tab unused).
     let update_entry = state
         .step2
         .bgee_mods
@@ -481,9 +471,6 @@ fn set_mod_update_locked(state: &mut WizardState, tp2: &str, locked: bool) {
     state.step2.scan_status = format!("{verb} updates for {label}");
 }
 
-/// Syncs `update_locked` and `package_marker` for every instance of `tp2_key` across
-/// both `bgee_mods` and `bg2ee_mods`, so an EET modlist never has a tab instance left
-/// stale relative to the lock file that was just written.
 fn sync_update_locked_by_tp2(
     state: &mut WizardState,
     tp2_key: &str,
@@ -757,7 +744,6 @@ mod tests {
     use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
     use crate::app::state::{Step2ModState, Step2Selection, WizardState};
 
-    /// RAII drop-guard: restores the ambient active-modlist dir on drop (including panic).
     struct AmbientGuard(Option<PathBuf>);
 
     impl AmbientGuard {
@@ -801,8 +787,6 @@ mod tests {
         }
     }
 
-    /// Verifies that locking/unlocking a mod in one EET tab keeps both tab instances
-    /// in sync with the lock file — no stale-locked instance left behind.
     #[test]
     fn eet_dual_tab_lock_sync() {
         let _lock = AMBIENT_TEST_LOCK
@@ -823,7 +807,6 @@ mod tests {
             tp_file: tp_file.to_string(),
         });
 
-        // Lock via the BGEE tab — both instances must become locked.
         super::set_selected_mod_update_locked(&mut state, true);
         assert!(
             state.step2.bgee_mods[0].update_locked,
@@ -834,7 +817,6 @@ mod tests {
             "bg2ee instance must be locked after locking via bgee tab"
         );
 
-        // Unlock via the BGEE tab — both instances must become unlocked.
         super::set_selected_mod_update_locked(&mut state, false);
         assert!(
             !state.step2.bgee_mods[0].update_locked,

@@ -698,9 +698,6 @@ fn finish_pipeline_arm_after_destination_prep(
         .pipeline_flags
         .set_armed(true);
 
-    // For share-code-consuming workflows, mint (or reuse) the modlist id and set
-    // the ambient before the import runs, so the import write targets the new
-    // modlist's per-modlist file rather than global.
     let early_mint_result = if auto_build_driver::is_share_code_consuming(inputs.workflow) {
         install_modlist_registration::early_mint_modlist_id(orchestrator, &inputs.destination)
     } else {
@@ -741,7 +738,6 @@ fn finish_pipeline_arm_after_destination_prep(
             install_modlist_registration::register_and_write_install_start_artifacts(orchestrator);
         }
         Err(err) => {
-            // Roll back a freshly-minted entry on import failure.
             if let Some((ref id, true)) = early_mint_result {
                 install_modlist_registration::rollback_early_minted_entry(orchestrator, id);
             }
@@ -766,10 +762,6 @@ fn set_pipeline_arm_error(
     );
 }
 
-/// Fires the URL-resolve step exactly once per armed pipeline, after arming
-/// and before the archive-skip/download sequence.  Guards on the pipeline being
-/// armed, the auto-build being active (excludes `FreshCreate`), no arm error,
-/// and the resolve not yet having fired for this pipeline activation.
 pub(crate) fn kick_explicit_resolve_once(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) {
@@ -798,9 +790,6 @@ pub(crate) fn kick_explicit_resolve_once(
     );
 }
 
-/// Handles the install path's empty-asset clean-finish: when the explicit
-/// resolve completes with zero assets (everything skipped or no downloads
-/// needed), routes to Step 5.
 fn install_empty_asset_clean_finish(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) {
@@ -848,9 +837,6 @@ fn install_empty_asset_clean_finish(
         tracing::warn!(target = "orchestrator", "{reason}");
         return;
     }
-    // Route when either the skip pass confirmed everything absent (0 to fetch
-    // and 0 observed), or when assets were empty before the skip pass ran at
-    // all (no assets from resolve).
     let assets_still_empty = orchestrator
         .wizard_state
         .step2
@@ -865,8 +851,6 @@ fn install_empty_asset_clean_finish(
     }
 }
 
-/// Routes the auto-build pipeline to Step 5, signalling that the install
-/// is ready to proceed.
 fn route_install_to_step5(state: &mut crate::app::state::WizardState) {
     state.modlist_auto_build_active = false;
     state.modlist_auto_build_waiting_for_install = false;
@@ -1316,7 +1300,6 @@ fn render_overall_progress(
     });
 }
 
-/// Visual parameters for a single phase bar row.
 #[derive(Clone, Copy)]
 struct PhaseBarParams<'a> {
     verb: &'a str,
@@ -2128,7 +2111,7 @@ mod tests {
                     },
                     Some((9999, None)),
                     None,
-                ), // indeterminate (no size) ⇒ any-lacks-known-size ⇒ pure count
+                ),
             ],
             ..Default::default()
         };

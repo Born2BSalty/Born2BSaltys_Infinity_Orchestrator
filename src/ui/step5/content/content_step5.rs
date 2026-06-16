@@ -16,7 +16,6 @@ use crate::ui::step5::state_step5::{Step5ConsoleViewState, install_in_progress};
 use crate::ui::step5::status_bar_step5 as status_bar;
 use crate::ui::step5::top_panels_step5 as top_panels;
 
-/// Render-time configuration threaded from the caller into the Step 5 sub-renderers.
 #[derive(Clone, Copy)]
 pub struct Step5RenderCtx<'a> {
     pub dev_mode: bool,

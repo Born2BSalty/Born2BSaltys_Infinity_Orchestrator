@@ -22,7 +22,6 @@ const LIST_MIN_H: f32 = 160.0;
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
 
-    // Pre-compute layout rects from the ui before any content is painted.
     let root = ui.available_rect_before_wrap();
     let x = root.left();
     let w = root.width();
@@ -34,7 +33,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let list_h = (root.bottom() - y).max(LIST_MIN_H);
     let list_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, list_h));
 
-    // Compute toolbar summary and active markers; these are owned values.
     let (toolbar_summary, active_markers) = {
         let state = &mut orchestrator.wizard_state;
         state_step3::normalize_active_tab(state);

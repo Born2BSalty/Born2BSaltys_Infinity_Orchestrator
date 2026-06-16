@@ -25,19 +25,11 @@ pub enum ModlistCardActions {
     OpenInstallFolder,
     Reinstall,
     Delete,
-    /// Signals that the kebab "Rename" item was picked; the caller opens the editor.
     Rename,
-    /// Signals that the inline rename editor should commit the buffered name.
     SaveRename,
-    /// Signals that the inline rename editor was dismissed without saving.
     CancelRename,
 }
 
-/// Renders a single modlist card.
-///
-/// Pass `rename_buf` as `Some(&mut buf)` when this card is the active rename
-/// target; the card's title row becomes an inline editor bound to `buf`.
-/// Pass `None` for normal rendering.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -96,10 +88,6 @@ pub fn render(
     action
 }
 
-/// Renders the title row in inline-rename editing mode.
-///
-/// When in rename mode the right action cluster (kebab + resume/open) is
-/// suppressed to avoid crowding the row.
 fn render_rename_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,

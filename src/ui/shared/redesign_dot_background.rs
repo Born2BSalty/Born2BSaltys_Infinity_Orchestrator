@@ -5,9 +5,6 @@ use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{REDESIGN_DOT_BG_SPACING_PX, ThemePalette, redesign_dot};
 
-/// Paints the dotted radial background across `rect` using 1px-radius circles
-/// at a 20px grid, matching the wireframe's `body { background-image: radial-gradient(...) }`
-/// pattern.
 pub fn paint_dot_background(painter: &egui::Painter, rect: egui::Rect, palette: ThemePalette) {
     let color = redesign_dot(palette);
     let spacing = REDESIGN_DOT_BG_SPACING_PX;

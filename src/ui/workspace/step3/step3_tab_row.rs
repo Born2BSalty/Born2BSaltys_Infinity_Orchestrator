@@ -19,9 +19,6 @@ const ITEM_GAP: f32 = 8.0;
 const ACTION_LEFT_PAD: f32 = 12.0;
 const BTN_GAP: f32 = 6.0;
 
-/// Renders the Step 3 tab row and returns the active tab rect.
-///
-/// The caller paints the seam cover after the content pane is rendered.
 pub(crate) fn render(
     ui: &mut egui::Ui,
     state: &mut WizardState,
@@ -109,9 +106,6 @@ impl Step3RowState {
     }
 }
 
-/// Renders the game tab buttons and returns the active tab rect.
-///
-/// The caller paints the seam cover after the content pane is rendered.
 fn render_tabs(
     ui: &mut egui::Ui,
     state: &mut WizardState,

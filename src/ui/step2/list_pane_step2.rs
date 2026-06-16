@@ -13,9 +13,6 @@ use crate::ui::step2::tree_render_step2::{
     ModTreeRenderContext, ModTreeRenderResult, render_mod_tree,
 };
 
-/// Horizontal space (px) reserved on the right so the floating scrollbar does not overlap row text.
-///
-/// Equals `bar_width` (12) + `bar_outer_margin` (2).
 const SCROLLBAR_RESERVE: f32 = 14.0;
 
 pub(crate) fn render_list_pane(
@@ -91,7 +88,6 @@ fn render_mods_scroll_content(
     details_open: &mut bool,
     palette: ThemePalette,
 ) {
-    // Keep row content clear of the floating scrollbar on the right edge.
     let reserved_w = (ui.available_width() - SCROLLBAR_RESERVE).max(0.0);
     ui.set_max_width(reserved_w);
 

@@ -328,17 +328,10 @@ fn save_draft(orchestrator: &mut OrchestratorApp) {
     }
 }
 
-/// Re-bakes the modlist's share code from the current wizard state and persists
-/// the registry so a later "Copy import code" reflects per-modlist source changes.
-///
-/// Leaves the existing `latest_share_code` unchanged when the export returns an
-/// error (e.g. no `WeiDU` entries available yet for a not-yet-scanned modlist).
 fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &str) {
     let Some(entry) = orchestrator.registry.find(id) else {
         return;
     };
-    // A draft share code is review-first: the recipient imports-and-modifies it
-    // (Create) rather than one-click auto-installing.
     let meta = ShareMeta::from_entry(entry, false);
     match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
         Ok(code) => {
@@ -708,7 +701,6 @@ mod tests {
     #[test]
     fn rename_failure_pushes_error_toast() {
         let mut app = orch_with_entry("Original");
-        // Point workspace_view at a non-existent id so rename_modlist returns Err.
         app.workspace_view.modlist_id = "DOES_NOT_EXIST".to_string();
         app.workspace_view.renaming = true;
         app.workspace_view.rename_temp = "New Name".to_string();

@@ -49,9 +49,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     let details_open = orchestrator.workspace_view.step2.details_open;
     let panes = Step2PaneRects::from_content(rects.content, details_open);
 
-    // Paint shell_bg behind the left pane: the group frame used by
-    // list_pane_step2 has transparent fill, so without this the page background
-    // would show through and mismatch the active tab color.
     ui.painter().rect_filled(
         panes.left,
         egui::CornerRadius::ZERO,

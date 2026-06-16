@@ -29,7 +29,6 @@ impl SourceChoiceLayout {
     }
 }
 
-/// Context bundle shared by the list-rendering helpers.
 pub(super) struct ListCtx<'a> {
     pub(super) palette: ThemePalette,
     pub(super) source_edit_rows: &'a [SourceEditRow],
@@ -72,8 +71,6 @@ pub(super) fn render_source_choices(
     layout
 }
 
-/// Renders the destination dropdown + "Edit Source" button in one horizontal cell.
-/// Returns the `OpenModDownloadSourceEditor` action if the button was clicked.
 fn render_edit_source_cell(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -103,9 +100,6 @@ fn render_edit_source_cell(
         return None;
     }
 
-    // With an active modlist the button opens a popup offering both destinations
-    // (choosing one opens the editor against that file); without one (legacy), it
-    // opens the editor against the global file directly.
     if mod_downloads::active_modlist_downloads_path().is_some() {
         let popup_id = ui.make_persistent_id(format!("step2-set-source-{}", choice.tp2_key));
         if btn.clicked() {
@@ -378,8 +372,6 @@ fn render_list_grid(
                             label: row.label.clone(),
                             source_id: row.source_id.clone(),
                             allow_source_id_change: add_mod,
-                            // "Add Mod" and list-grid "Edit Source" are always global-only
-                            // (no per-modlist scoping for the add-a-new-source path).
                             destination: ModSourceEditDestination::GlobalDefault,
                         });
                     }
@@ -478,7 +470,6 @@ pub(super) struct SourceChoiceRow {
     selected_source_url: Option<String>,
     selected_source_repo: Option<String>,
     options: Vec<SourceChoiceOption>,
-    /// Whether the mod's update-lock is active, as read from the scanned mod state.
     update_locked: bool,
 }
 

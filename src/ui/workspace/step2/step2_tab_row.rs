@@ -32,10 +32,6 @@ fn active_mods(state: &crate::app::state::WizardState) -> &[crate::app::state::S
     }
 }
 
-/// Renders the Step 2 tab row and returns `(action, active_tab_rect)`.
-///
-/// `active_tab_rect` is `Some` when a game tab is active and visible; the
-/// caller paints the seam cover after rendering the content pane.
 pub fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
@@ -358,9 +354,6 @@ fn issue_target_filter(
     }
 }
 
-/// Renders the game tab buttons and returns the active tab rect.
-///
-/// The caller paints the seam cover after the content pane is rendered.
 fn render_game_tabs(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
@@ -553,12 +546,8 @@ fn render_prompt_pill(
     })
 }
 
-/// Bottom padding under the kebab + count so they top-align with the rest of
-/// the row and leave a gap above the components-pane seam below.
 const RIGHT_ACTIONS_BOTTOM_PAD: f32 = 4.0;
 
-/// Kebab trigger height in the tab-row band, short enough to leave a gap above
-/// the components-pane seam beneath the right-side actions.
 const STEP2_KEBAB_HEIGHT: f32 = 22.0;
 
 fn render_right_actions(

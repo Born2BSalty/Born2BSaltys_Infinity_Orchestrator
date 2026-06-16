@@ -48,8 +48,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
     ui.add_space(SAVE_ROW_GAP);
 
     let step4_active_tab_rect = if is_dual_game(&orchestrator.wizard_state) {
-        // Zero item_spacing.y so the horizontal tab row sits flush against
-        // the review box below it; add_space then applies the exact overlap.
         ui.spacing_mut().item_spacing.y = 0.0;
         let tab_rect = render_game_tab_strip(
             ui,

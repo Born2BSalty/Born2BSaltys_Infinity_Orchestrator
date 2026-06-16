@@ -55,9 +55,6 @@ pub const fn is_share_code_consuming(workflow: InstallWorkflow) -> bool {
     }
 }
 
-/// Arms the auto-build state for an explicit download-first reproduce run,
-/// without queueing the scan-first saved-log flow. The resolve step
-/// (`drive_explicit_resolve`) is latched separately after arming.
 fn arm_explicit_reproduce(state: &mut WizardState) {
     state.modlist_auto_build_active = true;
     state.modlist_auto_build_waiting_for_install = false;
@@ -73,13 +70,6 @@ fn arm_explicit_reproduce(state: &mut WizardState) {
     state.step5.last_status_text = "Auto Build: preparing imported modlist".to_string();
 }
 
-/// Runs the URL-resolution step for the explicit download-first reproduce path.
-///
-/// Calls `apply_saved_weidu_log_selection` to derive the pending download set
-/// from the imported `weidu.log`, then fires `preview_update_selected` to
-/// start the update-check worker that resolves each asset's download URL.
-/// Does not set `pending_saved_log_apply` or `pending_saved_log_update_preview`,
-/// keeping `advance_pending_saved_log_flow` inert for the pre-download phase.
 pub(crate) fn drive_explicit_resolve(
     state: &mut WizardState,
     step2_update_check_rx: &mut Option<

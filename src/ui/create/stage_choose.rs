@@ -242,9 +242,6 @@ fn render_starting_point_boxes(
     let measured = selectable_box_natural_height(ui, card_w, SCRATCH_TITLE, SCRATCH_DESC).max(
         selectable_box_natural_height(ui, card_w, IMPORT_TITLE, IMPORT_DESC),
     );
-    // The wrapped-text pre-measure under-estimates the rendered card height, so
-    // carry the real rendered max-height forward a frame and force both cards to
-    // it; reset when the column width changes so it re-settles.
     let cards_key = ui.id().with("create_cards_equal_h");
     let (prev_w, carry) = ui
         .ctx()

@@ -16,8 +16,6 @@ pub struct WorkspaceStep2State {
     pub rescan_drop_warning: Option<String>,
     pub resume_pending: bool,
     pub pending_weidu_log_confirm: Option<bool>,
-    /// Selection snapshot captured at Download-Updates dispatch, transferred
-    /// to `rescan_snapshot` only when the post-extract rescan actually starts.
     pub pending_update_download_snapshot: Option<RescanSnapshot>,
 }
 
@@ -26,7 +24,6 @@ pub struct RescanSelection {
     pub tp2_upper: String,
     pub component_id: String,
     pub selected_order: Option<usize>,
-    /// Persisted `@wlb-inputs` marker value, if any, carried through rescan.
     pub wlb_inputs: Option<String>,
 }
 

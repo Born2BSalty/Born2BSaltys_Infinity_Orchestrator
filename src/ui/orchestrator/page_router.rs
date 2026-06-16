@@ -62,12 +62,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     orchestrator.last_rendered_nav = rendered_nav;
 }
 
-/// Syncs the process-global ambient active-modlist dir every frame.
-///
-/// An open workspace always wins. With no workspace open but a pipeline running
-/// (`active_install_modlist_id` is `Some`), the ambient stays pinned to that
-/// modlist so ambient-dependent writes target the correct per-modlist file.
-/// Only when neither holds is the ambient cleared.
 fn sync_ambient_to_nav(orchestrator: &OrchestratorApp) {
     use crate::install_runtime::active_modlist_source_path;
     match &orchestrator.nav {
@@ -228,10 +222,6 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
     if matches!(orchestrator.nav, NavDestination::Install) {
         return;
     }
-    // The Create-fork download pipeline parks the user on the Create
-    // screen while it runs; the route from extract-complete to
-    // Workspace reads `active_install_modlist_id`, so clearing it here
-    // would break the route and trap the user on `Downloading fork`.
     if matches!(orchestrator.nav, NavDestination::Create)
         && orchestrator.create_screen_state.stage == CreateStage::ForkDownload
     {
@@ -362,9 +352,6 @@ fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
     orchestrator.active_install_modlist_id = None;
     orchestrator.install_screen_state.reset_to_paste();
     orchestrator.wizard_state.reset_workflow_keep_step1();
-    // Restore `step1`'s per-install fields to the global Settings → Paths values
-    // so a polluted `step1` does not linger for the next install or any UI read
-    // (the Settings tab binds to step1 directly for its global path fields).
     crate::install_runtime::settings_sanitizer::sanitize_step1_for_settings_persistence(
         &mut orchestrator.wizard_state.step1,
         &orchestrator.bio_settings_last_saved.step1,
@@ -530,7 +517,6 @@ mod tests {
     fn completed_install_route_resets_only_after_nav_away() {
         let wizard = crate::app::state::WizardState::default();
 
-        // Flag is set ⇒ nav-away resets, but staying on Install does not.
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Install,
             true,
@@ -544,7 +530,6 @@ mod tests {
             false
         ));
 
-        // Flag is not set ⇒ no reset even on nav-away.
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
             false,
@@ -555,8 +540,6 @@ mod tests {
 
     #[test]
     fn failed_install_route_does_not_reset_on_nav_away() {
-        // A failed install never reaches `maybe_flip_to_installed_on_clean_exit`'s
-        // setter, so `pending_post_install_reset` stays false.
         let wizard = crate::app::state::WizardState::default();
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
@@ -568,7 +551,6 @@ mod tests {
 
     #[test]
     fn unfinished_or_running_install_route_does_not_reset_on_nav_away() {
-        // Before any install completes, the flag is false ⇒ no reset.
         let mut wizard = crate::app::state::WizardState::default();
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
@@ -577,8 +559,6 @@ mod tests {
             false
         ));
 
-        // An in-flight install: even if a stale flag is set, the
-        // step5_attempt_in_progress guard blocks the reset.
         wizard.step5.install_running = true;
         assert!(!should_reset_completed_install_route_on_nav_away(
             &NavDestination::Home,
@@ -668,11 +648,8 @@ mod tests {
 
     #[test]
     fn fork_then_modify_does_not_falsely_reset() {
-        // A fork-then-modify workspace may carry `last_exit_code = Some(0)` from a
-        // prior install, but the flag-based predicate stays false because no
-        // install completed for this fork, so the reset must not fire.
         let mut wizard = crate::app::state::WizardState::default();
-        wizard.step5.last_exit_code = Some(0); // carried over from elsewhere
+        wizard.step5.last_exit_code = Some(0);
         wizard.step5.last_install_failed = false;
         wizard.step5.install_running = false;
 
@@ -680,13 +657,11 @@ mod tests {
             &NavDestination::Workspace {
                 modlist_id: Some("forked-id".to_string())
             },
-            false, // flag NOT set because no install actually completed here
+            false,
             &wizard,
             false
         ));
     }
-
-    // --- ambient-sync tests ---
 
     use std::sync::Mutex;
 

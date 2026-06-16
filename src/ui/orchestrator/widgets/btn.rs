@@ -17,14 +17,10 @@ pub struct BtnOpts {
     pub small: BtnFlag,
     pub disabled: BtnFlag,
     pub block: BtnFlag,
-    /// Renders a destructive-action style: danger fill, dark text. Overrides `primary` when both are set.
     pub danger: BtnFlag,
-    /// Suppresses the drop shadow that `primary` / `danger` buttons otherwise cast.
     pub no_shadow: BtnFlag,
 }
 
-/// Height in points that [`redesign_btn`] allocates for the given size class.
-/// Lets a sibling widget (e.g. the kebab trigger) match the button height exactly.
 #[must_use]
 pub fn redesign_btn_height(ui: &egui::Ui, small: bool) -> f32 {
     let (pad_y, font_size): (f32, f32) = if small { (4.0, 12.0) } else { (8.0, 14.0) };

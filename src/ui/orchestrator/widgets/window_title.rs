@@ -5,10 +5,6 @@ use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_primary};
 
-/// Returns styled `WidgetText` suitable for use as an `egui::Window` title.
-///
-/// Renders the title in Poppins Medium at 18 px with the theme's primary text
-/// color. Pass the result directly to `Window::new(...)`.
 #[must_use]
 pub fn redesign_window_title(palette: ThemePalette, title: &str) -> egui::WidgetText {
     egui::RichText::new(title)

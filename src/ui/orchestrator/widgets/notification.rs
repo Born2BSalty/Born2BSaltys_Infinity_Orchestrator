@@ -32,58 +32,41 @@ const TTL_SUCCESS: f64 = 3.0;
 const TTL_INFO: f64 = 3.0;
 const TTL_WARNING: f64 = 4.0;
 
-/// Custom toast kind for install-progress feedback.
 pub const KIND_PROGRESS: u32 = 0;
-/// Custom toast kind.
 pub const KIND_CUSTOM: u32 = 1;
 
-/// A single entry in the read-only notification history.
 #[derive(Clone)]
 pub struct NotificationRecord {
-    /// Severity of the original notification.
     pub kind: ToastKind,
-    /// Message text.
     pub text: String,
-    /// Wall-clock time the notification was added.
     pub added_at: Instant,
 }
 
-/// App-wide notification manager.
-///
-/// One long-lived instance lives on `OrchestratorApp`.  Call the add-site
-/// methods (`success`, `info`, `warn`, `error`) to enqueue a toast, then call
-/// `show` once per frame to flush the queue into the egui-toast queue.
 #[derive(Default)]
 pub struct NotificationManager {
     pending: Vec<(ToastKind, String)>,
     history: VecDeque<NotificationRecord>,
-    /// Whether the history popup is open.
     pub history_open: bool,
 }
 
 impl NotificationManager {
-    /// Creates an empty manager.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Enqueues a success notification.
     pub fn success(&mut self, text: impl Into<String>) {
         self.push(ToastKind::Success, text.into());
     }
 
-    /// Enqueues an informational notification.
     pub fn info(&mut self, text: impl Into<String>) {
         self.push(ToastKind::Info, text.into());
     }
 
-    /// Enqueues a warning notification.
     pub fn warn(&mut self, text: impl Into<String>) {
         self.push(ToastKind::Warning, text.into());
     }
 
-    /// Enqueues an error notification (persists until manually dismissed).
     pub fn error(&mut self, text: impl Into<String>) {
         self.push(ToastKind::Error, text.into());
     }
@@ -100,16 +83,11 @@ impl NotificationManager {
         });
     }
 
-    /// Returns the capped last-5 notification history (oldest-first).
     #[must_use]
     pub const fn history(&self) -> &VecDeque<NotificationRecord> {
         &self.history
     }
 
-    /// Flushes pending toasts into egui-toast and renders the live queue.
-    ///
-    /// Call exactly once per frame, after the shell render closure, so toasts
-    /// overlay every screen.
     pub fn show(&mut self, ctx: &egui::Context, palette: ThemePalette) {
         let mut toasts = Toasts::new()
             .anchor(
@@ -144,17 +122,11 @@ impl NotificationManager {
         toasts.show(ctx);
     }
 
-    /// Returns whether there are any entries in the history.
     #[must_use]
     pub fn has_history(&self) -> bool {
         !self.history.is_empty()
     }
 
-    /// Renders the read-only history popup anchored above the statusbar right edge.
-    ///
-    /// `allow_outside_close` must be `false` on the same frame the bell was
-    /// clicked (so the click-outside check doesn't self-close the popup
-    /// before it renders).  Pass `true` on all subsequent frames.
     pub fn render_history_popup(
         &mut self,
         ctx: &egui::Context,
@@ -253,13 +225,9 @@ fn render_history_popup_body(
 fn toast_options_for(kind: ToastKind) -> ToastOptions {
     let base = ToastOptions::default().show_icon(false);
     match kind {
-        // show_progress drives per-frame repaints so hover-pause is sampled
-        // every frame rather than only on the scheduled ttl tick.
         ToastKind::Success => base.show_progress(true).duration_in_seconds(TTL_SUCCESS),
         ToastKind::Info => base.show_progress(true).duration_in_seconds(TTL_INFO),
         ToastKind::Warning => base.show_progress(true).duration_in_seconds(TTL_WARNING),
-        // Persistent toasts have no TTL; show_progress(false) avoids an
-        // infinite repaint loop.
         ToastKind::Error | ToastKind::Custom(_) => {
             base.show_progress(false).duration(None::<Duration>)
         }
@@ -313,9 +281,6 @@ fn render_custom_toast(
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 render_toast_icon(ui, toast.kind, accent);
-                // Reserve the close column and force the label to fill the rest so
-                // the ✕ pins to the far-right edge instead of trailing the text;
-                // the label wraps within its column.
                 let gap = ui.spacing().item_spacing.x;
                 let label_w = (ui.available_width() - CLOSE_BTN_SIZE.x - gap - gap).max(0.0);
                 ui.allocate_ui_with_layout(
@@ -401,8 +366,6 @@ fn render_history_row(ui: &mut egui::Ui, record: &NotificationRecord, palette: T
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         render_history_icon(ui, record.kind, accent);
-        // Reserve a fixed timestamp column on the right; the message fills the
-        // rest and wraps instead of running under the timestamp.
         let gap = ui.spacing().item_spacing.x;
         let ts_w = 52.0_f32;
         let msg_w = (ui.available_width() - ts_w - gap - gap).max(0.0);
@@ -458,7 +421,6 @@ fn render_history_icon(ui: &mut egui::Ui, kind: ToastKind, accent: egui::Color32
     }
 }
 
-/// Vector-paint a warning triangle (outline + stem dot) in the given color.
 fn paint_warning_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
     let stroke = egui::Stroke::new(1.5, color);
     let hw = 5.0_f32;
@@ -482,7 +444,6 @@ fn paint_warning_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::
     painter.circle_filled(egui::pos2(center.x, center.y + 2.5), 0.8, color);
 }
 
-/// Vector-paint a filled-circle + vertical bar info icon.
 fn paint_info_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
     painter.circle_filled(center, 5.5, color);
     let ink = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 210);
@@ -497,7 +458,6 @@ fn paint_info_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Col
     );
 }
 
-/// Vector-paint a filled-circle + exclamation-bar error icon.
 fn paint_error_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
     painter.circle_filled(center, 5.5, color);
     let ink = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 210);

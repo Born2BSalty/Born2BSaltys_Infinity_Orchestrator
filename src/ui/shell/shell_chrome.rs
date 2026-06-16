@@ -11,10 +11,6 @@ use crate::ui::shared::redesign_tokens::{
 use crate::ui::shell::shell_statusbar::{self, RunningInstallStatus};
 use crate::ui::shell::shell_titlebar;
 
-/// Renders the full shell chrome and body.
-///
-/// Returns `true` if the notification-history toggle button in the statusbar
-/// was clicked this frame.
 #[must_use]
 pub fn render_shell<F: FnOnce(&mut egui::Ui)>(
     ctx: &egui::Context,

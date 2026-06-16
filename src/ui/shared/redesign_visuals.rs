@@ -10,10 +10,6 @@ use crate::ui::shared::redesign_tokens::{
     redesign_warning,
 };
 
-/// Soft, dark-teal drop shadow for floating overlays.
-///
-/// Single tuning point feeding `window_shadow` and `popup_shadow` as well as the
-/// custom-frame dialogs and toast frame, so they lift off the app.
 #[must_use]
 pub fn redesign_overlay_shadow(palette: ThemePalette) -> egui::epaint::Shadow {
     let color = match palette {
@@ -28,10 +24,6 @@ pub fn redesign_overlay_shadow(palette: ThemePalette) -> egui::epaint::Shadow {
     }
 }
 
-/// Builds an `egui::Visuals` baseline calibrated for the given palette.
-///
-/// Call once per frame from `eframe::App::update` and pass the result to
-/// `ctx.set_visuals(...)` before any UI renders.
 #[must_use]
 pub fn build_for(palette: ThemePalette) -> egui::Visuals {
     let mut v = egui::Visuals::dark();

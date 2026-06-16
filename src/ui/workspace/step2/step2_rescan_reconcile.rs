@@ -18,9 +18,6 @@ pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
     step2.was_scanning = armed_was_scanning_for_inflight_scan();
 }
 
-/// Captures the current selection into a deferred holder so it survives the
-/// entire download→extract window and is only transferred to `rescan_snapshot`
-/// when the post-extract rescan actually starts.
 pub fn arm_post_download_snapshot(orchestrator: &mut OrchestratorApp) {
     let snapshot = RescanSnapshot {
         bgee: capture_tab(&orchestrator.wizard_state.step2.bgee_mods),
@@ -110,13 +107,6 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     ));
 }
 
-/// Advances the deferred post-download snapshot through its lifecycle each frame.
-///
-/// When a scan starts (`!was_scanning && scanning_now`), the snapshot is
-/// transferred to `rescan_snapshot` so the existing completion-edge logic
-/// restores it when the scan finishes.  When the pipeline goes idle without
-/// ever starting a scan (download or extract failed / cancelled), the snapshot
-/// is cleared to release the autosave block.
 fn advance_pending_download_snapshot(
     orchestrator: &mut OrchestratorApp,
     was_scanning: bool,

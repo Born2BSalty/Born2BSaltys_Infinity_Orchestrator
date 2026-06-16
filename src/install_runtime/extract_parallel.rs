@@ -35,11 +35,6 @@ struct AssetExtractResult {
     outcome: Result<String, String>,
 }
 
-/// Starts the parallel extract pool.
-///
-/// `install_ctx_installed_refs_path` must be `Some` when invoked from the install
-/// pipeline (where the ambient is cleared mid-install by `page_router`) and `None`
-/// for manual workspace update-checks (where the ambient stays set on Workspace nav).
 pub fn start_parallel_extract(
     state: &mut WizardState,
     extract_progress: &Arc<Mutex<Option<(usize, usize)>>>,

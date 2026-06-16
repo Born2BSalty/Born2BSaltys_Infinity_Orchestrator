@@ -85,10 +85,6 @@ impl std::ops::Not for DirtyFlag {
     }
 }
 
-/// Arms the post-install runtime reset.
-///
-/// Set after a clean install exit flips the modlist to Installed; cleared when
-/// the runtime is reset on the next nav-away or enter-Install edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PostInstallResetGate {
     #[default]
@@ -103,12 +99,8 @@ impl PostInstallResetGate {
     }
 }
 
-/// An in-flight background folder-delete job registered after the synchronous
-/// registry-entry removal.  One entry per concurrent delete; drained every frame.
 pub(crate) struct PendingFolderDelete {
-    /// Display name of the modlist whose folder is being removed.
     pub(crate) modlist_name: String,
-    /// Receives exactly one result when the worker thread finishes.
     pub(crate) rx: crate::registry::operations::FolderDeleteReceiver,
 }
 
@@ -641,17 +633,11 @@ impl OrchestratorApp {
             self.active_install_modlist_id = None;
         }
 
-        // Arm the reset gate only for the Install-Modlist paste / Reinstall route,
-        // where the reset clears the lingering paste UI on nav-away. Workspace
-        // installs render their post-install chrome inside the workspace itself,
-        // so clearing it mid-screen would wipe the success state.
         if !from_workspace {
             self.post_install_reset_gate = PostInstallResetGate::Pending;
         }
     }
 
-    /// Starts the Step-5 install after render if requested, and sets the console
-    /// input focus on the install-started edge.  Returns whether a repaint was requested.
     fn start_step5_and_check_focus(&mut self) -> bool {
         let was_running = self.wizard_state.step5.install_running;
         let requested = self.start_step5_after_render();
@@ -661,22 +647,16 @@ impl OrchestratorApp {
         requested
     }
 
-    /// Returns `true` when any slow background worker is active and needs
-    /// periodic polling at the 250 ms cadence.
     const fn slow_workers_active(&self) -> bool {
         self.install_size_worker_rx.is_some() || !self.pending_folder_deletes.is_empty()
     }
 
-    /// Drains all background workers that report results each frame.
     fn drain_background_workers(&mut self) {
         self.drain_size_worker_result();
         self.drain_folder_deletes();
         self.drain_finished_destination_prep_workers();
     }
 
-    /// Polls all in-flight background folder-delete workers and pushes a toast
-    /// on each completion.  Called every frame so the toast fires regardless of
-    /// which screen is active and survives navigation away from Home.
     pub(crate) fn drain_folder_deletes(&mut self) {
         use std::sync::mpsc::TryRecvError;
 

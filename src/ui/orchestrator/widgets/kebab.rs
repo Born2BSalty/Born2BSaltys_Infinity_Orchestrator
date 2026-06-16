@@ -34,8 +34,6 @@ impl<'a> KebabItem<'a> {
 
 const DROPDOWN_MIN_WIDTH_PX: f32 = 180.0;
 
-/// Renders the `···` kebab trigger at the given `trigger_height` (so it can line
-/// up with sibling buttons of a known height) plus its click-to-open dropdown.
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -82,9 +80,6 @@ pub fn render(
     trigger
 }
 
-/// Opens the dropdown with its top-right corner anchored to the trigger's
-/// bottom-right, so the menu extends leftward and stays tied to a right-anchored
-/// kebab button. Like `egui::popup::popup_below_widget` but right-aligned.
 fn popup_below_widget_right_aligned<R>(
     parent_ui: &egui::Ui,
     popup_id: egui::Id,

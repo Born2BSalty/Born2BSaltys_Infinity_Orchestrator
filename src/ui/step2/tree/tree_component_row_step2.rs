@@ -18,14 +18,10 @@ use crate::ui::step2::tree_compat_display_step2::compat_colors_redesign as compa
 use crate::ui::step2::tree_component_types_step2::{ComponentRenderState, ComponentRowsContext};
 use crate::ui::step2::tree_selection_rules_step2::set_component_checked_state;
 
-/// Layout options forwarded from the dispatching context to a component row.
 #[derive(Clone, Copy)]
 pub(crate) struct ComponentRowOptions<'a> {
-    /// Optional display string to show in place of the label derived from the component.
     pub(crate) display_override: Option<&'a str>,
-    /// Horizontal indent in logical pixels before the checkbox.
     pub(crate) indent: f32,
-    /// When true the widget slot uses a radio-style paint rather than a checkbox.
     pub(crate) is_radio_select: bool,
 }
 
@@ -148,8 +144,6 @@ fn render_component_checkbox(
     }
 }
 
-/// Paints a radio-style glyph at the checkbox position.
-/// Returns `true` if the glyph rect was clicked this frame.
 fn paint_radio_glyph(
     ui: &mut egui::Ui,
     checked: bool,

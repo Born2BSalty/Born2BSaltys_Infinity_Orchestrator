@@ -22,16 +22,9 @@ pub(crate) struct Step2UpdateExtractJob {
     pub(crate) backup_version_tag: String,
     pub(crate) installed_source_ref: Option<String>,
     pub(crate) installed_source_id: Option<String>,
-    /// Path captured at job-build time (main thread) for off-thread installed-refs writes.
-    /// Sourced from the install-context when available, otherwise from the ambient resolver.
     pub(crate) installed_refs_path: PathBuf,
 }
 
-/// Builds extract jobs.
-///
-/// `install_ctx_installed_refs_path` is `Some` when called from the install pipeline,
-/// carrying the per-modlist installed-refs path; when `None`, the ambient-aware
-/// resolver is used instead.
 pub(crate) fn build_extract_jobs(
     state: &mut WizardState,
     archive_dir: &Path,
@@ -54,8 +47,6 @@ pub(crate) fn build_extract_jobs(
             .push(err.clone());
     }
 
-    // Determine the installed-refs path once for all jobs in this batch.
-    // Install-context path takes priority over the ambient resolver.
     let refs_path = install_ctx_installed_refs_path.map_or_else(
         crate::app::app_step2_update_source_refs::installed_source_refs_path,
         Path::to_path_buf,

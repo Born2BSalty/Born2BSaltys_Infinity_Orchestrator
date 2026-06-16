@@ -58,8 +58,6 @@ pub fn render_live(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> For
     verify_downloaded_archives_once(orchestrator, &inputs.destination);
     ingest_downloaded_archives_once(orchestrator, &inputs.destination);
 
-    // Once extract finishes, clear the auto-build flags so the fork path lands on
-    // Workspace for review instead of firing the install-step handoff. Idempotent.
     if orchestrator.install_screen_state.pipeline_flags.armed()
         && orchestrator
             .install_screen_state

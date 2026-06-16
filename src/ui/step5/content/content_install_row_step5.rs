@@ -99,7 +99,6 @@ fn render_install_control(
         return None;
     }
 
-    // Clean success: decorative dead button, no action.
     if state.step5.has_run_once
         && !state.step5.resume_available
         && state.step5.last_exit_code == Some(0)
@@ -182,7 +181,6 @@ fn render_cancel_button(
     }
 }
 
-/// Returns `(label, primary)` for the install button in non-success, non-running states.
 const fn install_button_label(state: &WizardState) -> (&'static str, bool) {
     if state.step5.resume_available {
         ("Resume Install", true)

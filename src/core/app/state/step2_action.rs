@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-/// Where the source-editor saves its result: the user's global default file or
-/// the active modlist's per-modlist file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModSourceEditDestination {
-    /// Saves to the global `mod_downloads_user.toml`.
     #[default]
     GlobalDefault,
-    /// Saves to the active modlist's `mod_downloads_user.toml`.
     ThisModlist,
 }
 
@@ -56,11 +52,8 @@ pub enum Step2Action {
         source_id: String,
     },
     SetSelectedModUpdateLocked(bool),
-    /// Toggles the update lock for a specific mod identified by tp2 path.
     SetModUpdateLocked {
-        /// Normalized or raw tp2 path of the mod to lock or unlock.
         tp2: String,
-        /// `true` to lock, `false` to unlock.
         locked: bool,
     },
     OpenCompatForComponent {

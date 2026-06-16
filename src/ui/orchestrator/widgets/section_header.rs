@@ -7,11 +7,6 @@ use crate::ui::shared::redesign_tokens::{
     ThemePalette, redesign_text_muted, redesign_text_primary,
 };
 
-/// Renders a section title row with an optional item count.
-///
-/// Paints the title in primary text with strong weight, and appends
-/// ` (N)` in muted text when `count` is `Some`. Does not wrap content — the
-/// caller places a framed content block below.
 pub fn redesign_section_header(
     ui: &mut egui::Ui,
     palette: ThemePalette,

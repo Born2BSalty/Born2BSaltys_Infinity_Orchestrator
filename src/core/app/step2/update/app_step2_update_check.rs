@@ -219,10 +219,6 @@ fn apply_update_check_outcome(
     }
 }
 
-/// True when an auto-build must reproduce the exact pinned set: the installed-ref
-/// update comparison is bypassed so every resolved asset enters the pipeline (the
-/// hash-based checksum-then-skip layer dedups already-present archives). False
-/// otherwise, keeping the standard skip-if-installed behavior.
 const fn reproduce_exact_gate(state: &WizardState) -> bool {
     state.modlist_auto_build_active && state.reproduce_exact
 }

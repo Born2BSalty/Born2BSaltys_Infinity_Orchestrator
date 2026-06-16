@@ -145,7 +145,8 @@ fn patch_generated_parser_symbols(generated_dir: &Path) {
 
     let from = "LapduCombinedParserParserContext";
     let to = "LapduCombinedParserContext";
-    let replaced = source.replace(from, to);
+    let renamed = source.replace(from, to);
+    let replaced = strip_generated_condition_parens(&renamed);
     if replaced == source {
         panic!(
             "expected to find '{}' in generated parser {}, but found none",
@@ -162,12 +163,60 @@ fn patch_generated_parser_symbols(generated_dir: &Path) {
     });
 }
 
+fn strip_generated_condition_parens(source: &str) -> String {
+    source
+        .lines()
+        .map(strip_generated_condition_parens_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
+fn strip_generated_condition_parens_line(line: &str) -> String {
+    strip_keyword_condition_parens(line, "while")
+        .or_else(|| strip_keyword_condition_parens(line, "if"))
+        .unwrap_or_else(|| line.to_owned())
+}
+
+fn strip_keyword_condition_parens(line: &str, keyword: &str) -> Option<String> {
+    let indent_len = line.len() - line.trim_start().len();
+    let indent = &line[..indent_len];
+    let rest = &line[indent_len..];
+    let after_keyword = rest.strip_prefix(keyword)?.strip_prefix(' ')?;
+    if !after_keyword.starts_with('(') {
+        return None;
+    }
+
+    let mut depth = 0usize;
+    let mut close_index = None;
+    for (index, character) in after_keyword.char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    close_index = Some(index);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let close_index = close_index?;
+    let after_close = &after_keyword[close_index + 1..];
+    if after_close.trim_start() != "{" {
+        return None;
+    }
+
+    let condition = &after_keyword[1..close_index];
+    Some(format!("{indent}{keyword} {condition}{after_close}"))
+}
+
 fn write_generated_module_glue(out_dir: &Path, generated_dir: &Path) {
     let modules = [
         "lapducombinedlexer",
         "lapducombinedparser",
-        "lapducombinedparserbaselistener",
-        "lapducombinedparserbasevisitor",
         "lapducombinedparserlistener",
         "lapducombinedparservisitor",
     ];

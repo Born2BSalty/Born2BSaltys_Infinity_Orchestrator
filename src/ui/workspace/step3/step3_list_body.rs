@@ -41,18 +41,12 @@ const GLYPH_ICON_PX: f32 = 14.0;
 const GLYPH_FONT_SIZE: f32 = 12.0;
 const GLYPH_GAP_PX: f32 = 4.0;
 const GROUP_GAP_PX: f32 = 6.0;
-/// Horizontal space reserved for the floating scrollbar on the right edge.
 const SCROLLBAR_RESERVE: f32 = 14.0;
-/// Vertical padding above the header-bar content.
 const HEADER_BAR_VPAD_TOP: f32 = 6.0;
-/// Vertical padding below the header-bar content — asymmetric to correct visual centering.
 const HEADER_BAR_VPAD_BOT: f32 = 2.0;
-/// Dot spacing for the header-bar dotted border.
 const HEADER_DOT_STEP_PX: f32 = 7.0;
-/// Dot radius for the header-bar dotted border.
 const HEADER_DOT_RADIUS: f32 = 0.7;
 
-/// Per-frame rendering context bundling mutable state refs and read-only view data.
 struct RenderCtx<'a> {
     palette: ThemePalette,
     tab_id: &'a str,
@@ -75,7 +69,6 @@ struct RenderCtx<'a> {
     locked_blocks: &'a mut Vec<String>,
     undo_stack: &'a mut Vec<Vec<Step3ItemState>>,
     redo_stack: &'a mut Vec<Vec<Step3ItemState>>,
-    /// Left and right x-bounds of the current group's inner rect, used for full-width separators.
     current_group_x_bounds: Option<(f32, f32)>,
 }
 
@@ -104,7 +97,6 @@ impl RowAccumulator {
     }
 }
 
-/// Renders the Step 3 list body with redesign chrome.
 pub(crate) fn render(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
@@ -133,8 +125,6 @@ pub(crate) fn render(
         );
     }
 
-    // Inset left/top/bottom by BOX_PADDING; right side insets only by the border stroke width
-    // so the scroll region reaches the box's inner-right edge and the floating bar hugs it.
     let border_w = REDESIGN_BORDER_WIDTH_PX;
     let inner = egui::Rect::from_min_max(
         egui::pos2(box_rect.left() + BOX_PADDING, box_rect.top() + BOX_PADDING),
@@ -303,14 +293,11 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
 
         let block_id = ctx.items[idx].block_id.clone();
 
-        // Width clamped to the viewport (minus scrollbar reserve) and the parent's available
-        // width so the value is always finite even when one of the sources is unbounded.
         let viewport_w = (ui.clip_rect().width() - SCROLLBAR_RESERVE)
             .min(ui.available_width())
             .max(0.0);
         let top_cursor = ui.cursor().min;
 
-        // Reserve a paint slot before rendering widgets so the bg paints behind them.
         let bg_shape_id = ui.painter().add(egui::Shape::Noop);
 
         let scope_resp = ui.scope(|ui| {
@@ -329,7 +316,6 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             egui::vec2(viewport_w, scope_resp.response.rect.height()),
         );
 
-        // Fill bg behind the header-bar widgets.
         ui.painter().set(
             bg_shape_id,
             egui::Shape::rect_filled(
@@ -339,7 +325,6 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             ),
         );
 
-        // Dotted border on the header bar only — fainter warm-tan at 50% alpha.
         let dot_color = redesign_with_alpha(crate::ui::shared::theme_global::accent_path(), 1, 2);
         paint_dotted_rect(
             ui,
@@ -349,10 +334,8 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             HEADER_DOT_RADIUS,
         );
 
-        // Set group x-bounds to the header bar's extent for full-width child separators.
         ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
 
-        // Render children below the header without any enclosing border.
         while pos < ctx.visible_indices.len() {
             let child_idx = ctx.visible_indices[pos];
             if ctx.items[child_idx].is_parent || ctx.items[child_idx].block_id != block_id {
@@ -455,9 +438,6 @@ fn render_header_row(
     handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows);
 }
 
-/// Allocates a click-target and paints a lock glyph from `FiraCode Nerd Font`.
-///
-/// Uses `U+F023` (lock-closed) or `U+F09C` (lock-open) from the `FontAwesome` PUA range.
 fn paint_lock_button(ui: &mut egui::Ui, is_locked: bool, color: egui::Color32) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(
         egui::vec2(GLYPH_ICON_PX, GLYPH_ICON_PX),
@@ -479,9 +459,6 @@ fn paint_lock_button(ui: &mut egui::Ui, is_locked: bool, color: egui::Color32) -
     response
 }
 
-/// Allocates a click-target and paints a collapse/expand chevron.
-///
-/// Uses Geometric Shapes glyphs (▸ / ▾) via the `firacode_nerd` font family.
 fn paint_chevron_button(
     ui: &mut egui::Ui,
     collapsed: bool,
@@ -607,9 +584,6 @@ fn paint_dashed_separator(
     }
 }
 
-/// Paints a dotted rectangle border around `rect`, placing filled circles along each edge.
-///
-/// Corners are traversed in order; the dot cycle restarts at each corner.
 fn paint_dotted_rect(
     ui: &egui::Ui,
     rect: egui::Rect,
@@ -955,10 +929,6 @@ fn flush_row_outcome(state: &mut WizardState, tab_id: &str, acc: &mut RowAccumul
     }
 }
 
-/// Paints a full-viewport-width drag-insert marker line at the target insertion position.
-///
-/// The line spans the full clip-rect width minus a scrollbar reserve, so it is independent
-/// of how wide the row under the cursor happens to be.
 fn paint_insert_marker_full_width(
     ui: &egui::Ui,
     items: &[Step3ItemState],
@@ -991,10 +961,6 @@ fn paint_insert_marker_full_width(
     );
 }
 
-// ---------------------------------------------------------------------------
-// Unit tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1023,8 +989,6 @@ mod tests {
         make_item(mod_name, id, label, false)
     }
 
-    /// Verifies that `visible_indices` for a list with one parent and three children
-    /// returns all four indices when no blocks are collapsed.
     #[test]
     fn visible_indices_all_visible_when_not_collapsed() {
         let items = vec![
@@ -1039,7 +1003,6 @@ mod tests {
         assert_eq!(vis, vec![0, 1, 2, 3]);
     }
 
-    /// Verifies that child rows are hidden when their block is in the collapsed set.
     #[test]
     fn visible_indices_children_hidden_when_collapsed() {
         let items = vec![
@@ -1054,8 +1017,6 @@ mod tests {
         assert_eq!(vis[0], 0);
     }
 
-    /// Verifies that `count_children_in_block` counts only non-parent items
-    /// belonging to the same block.
     #[test]
     fn count_children_in_block_correct() {
         let items = vec![
@@ -1068,21 +1029,18 @@ mod tests {
         assert_eq!(count, 3);
     }
 
-    /// Verifies that `build_parent_title` produces the expected format for a locked block.
     #[test]
     fn build_parent_title_locked() {
         let title = build_parent_title("SomeMod", false, 3, true);
         assert_eq!(title, "SomeMod (3) [locked]");
     }
 
-    /// Verifies that `build_parent_title` for a placeholder row includes "(split target)".
     #[test]
     fn build_parent_title_placeholder() {
         let title = build_parent_title("SomeMod", true, 2, false);
         assert_eq!(title, "SomeMod (split target) (2)");
     }
 
-    /// Verifies that `toggle_locked` adds a block ID when not locked, and removes it when locked.
     #[test]
     fn toggle_locked_roundtrip() {
         let mut locked: Vec<String> = Vec::new();
@@ -1098,7 +1056,6 @@ mod tests {
         assert!(!locked.contains(&block));
     }
 
-    /// Verifies the lineno column width grows with digit count.
     #[test]
     fn lineno_col_width_grows_with_digits() {
         let w1 = lineno_col_width(9);
@@ -1106,7 +1063,6 @@ mod tests {
         assert!(w2 > w1, "two-digit column must be wider than one-digit");
     }
 
-    /// Verifies that `push_undo_snapshot` records a snapshot of the item list.
     #[test]
     fn undo_snapshot_records_state() {
         let items = vec![mod_item("ModA"), child_item("ModA", "1", "Component One")];
@@ -1118,7 +1074,6 @@ mod tests {
         assert!(redo_stack.is_empty());
     }
 
-    /// Verifies that undo restores the previous snapshot and redo re-applies it.
     #[test]
     fn undo_redo_roundtrip() {
         let original = vec![

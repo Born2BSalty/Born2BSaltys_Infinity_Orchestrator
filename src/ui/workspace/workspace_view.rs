@@ -106,10 +106,6 @@ fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {
 }
 
 fn auto_save_step4_weidu_logs_on_nav_edge(orchestrator: &OrchestratorApp) {
-    // Writes the current `step3.{bgee,bg2ee}_items` selection out to the per-install
-    // weidu.log files so the install runner consumes the user's edits, unconditionally
-    // (even in exact-WeiDU-logs mode, where the user's intent is to override the parent
-    // selection).
     if let Err(err) = write_step4_weidu_logs_unconditional(&orchestrator.wizard_state) {
         tracing::warn!(
             target = "orchestrator",

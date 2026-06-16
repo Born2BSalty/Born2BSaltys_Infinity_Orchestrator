@@ -60,7 +60,6 @@ pub fn render<T: TabLabel>(
             let fill = if active { active_fill } else { idle_fill };
             painter.rect_filled(rect, tab_corner, fill);
             if active {
-                // Outline is drawn last (after the body box) so it stays crisp.
                 active_rect = Some(rect);
             } else {
                 if response.hovered() {
@@ -108,10 +107,6 @@ pub fn render<T: TabLabel>(
     });
 }
 
-/// Opens the active tab into the content body: erases the body's top border
-/// under the tab, then re-strokes the tab (rounded top + sides) last, clipped
-/// above the seam so its bottom edge is never drawn. Stroking last keeps the
-/// side edges crisp and meeting the body border exactly at the tab's edges.
 fn open_active_tab_into_body(
     ui: &egui::Ui,
     tab_rect: egui::Rect,
@@ -147,9 +142,6 @@ fn open_active_tab_into_body(
         egui::StrokeKind::Inside,
     );
 
-    // When the active tab is flush with the body's left edge, the cover also
-    // erased the top of the body's left border; restore that short segment so
-    // the left border stays continuous. Only the left-most tab meets this.
     if (tab_rect.left() - body_rect.left()).abs() < 1.0 {
         let x = border.width.mul_add(0.5, body_rect.left());
         painter.line_segment(
