@@ -135,11 +135,9 @@ where
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-    use std::sync::Mutex;
 
     use super::*;
-
-    static REFS_TEST_LOCK: Mutex<()> = Mutex::new(());
+    use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
 
     struct AmbientGuard(Option<PathBuf>);
 
@@ -167,7 +165,7 @@ mod tests {
 
     #[test]
     fn installed_refs_ambient_unset_targets_global() {
-        let _lock = REFS_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -189,7 +187,7 @@ mod tests {
 
     #[test]
     fn installed_refs_ambient_set_targets_per_modlist() {
-        let _lock = REFS_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -228,7 +226,7 @@ mod tests {
 
     #[test]
     fn installed_refs_captured_path_write_is_thread_safe() {
-        let _lock = REFS_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -252,7 +250,7 @@ mod tests {
 
     #[test]
     fn installed_refs_paste_install_captures_per_modlist_not_global() {
-        let _lock = REFS_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();

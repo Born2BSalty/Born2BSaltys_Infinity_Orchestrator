@@ -663,9 +663,7 @@ mod tests {
         ));
     }
 
-    use std::sync::Mutex;
-
-    static AMBIENT_SYNC_TEST_LOCK: Mutex<()> = Mutex::new(());
+    use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
 
     struct AmbientGuard(Option<std::path::PathBuf>);
     impl AmbientGuard {
@@ -681,7 +679,7 @@ mod tests {
 
     #[test]
     fn sync_ambient_workspace_nav_sets_ambient_to_workspace_id() {
-        let _lock = AMBIENT_SYNC_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -703,7 +701,7 @@ mod tests {
 
     #[test]
     fn sync_ambient_non_workspace_no_pipeline_clears_ambient() {
-        let _lock = AMBIENT_SYNC_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -722,7 +720,7 @@ mod tests {
 
     #[test]
     fn sync_ambient_non_workspace_with_pipeline_pins_to_pipeline_modlist() {
-        let _lock = AMBIENT_SYNC_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -746,7 +744,7 @@ mod tests {
 
     #[test]
     fn sync_ambient_workspace_wins_over_pipeline() {
-        let _lock = AMBIENT_SYNC_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();

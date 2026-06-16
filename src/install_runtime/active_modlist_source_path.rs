@@ -14,12 +14,10 @@ pub fn clear_ambient() {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
     use super::*;
-    use crate::app::mod_downloads::{active_modlist_dir, active_modlist_downloads_path};
-
-    static NAV_TEST_LOCK: Mutex<()> = Mutex::new(());
+    use crate::app::mod_downloads::{
+        AMBIENT_TEST_LOCK, active_modlist_dir, active_modlist_downloads_path,
+    };
 
     struct AmbientGuard(Option<std::path::PathBuf>);
     impl AmbientGuard {
@@ -35,7 +33,7 @@ mod tests {
 
     #[test]
     fn set_ambient_for_modlist_sets_the_dir() {
-        let _lock = NAV_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -55,7 +53,7 @@ mod tests {
 
     #[test]
     fn clear_ambient_unsets_the_dir() {
-        let _lock = NAV_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
@@ -74,7 +72,7 @@ mod tests {
 
     #[test]
     fn workspace_switch_refreshes_ambient() {
-        let _lock = NAV_TEST_LOCK
+        let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
