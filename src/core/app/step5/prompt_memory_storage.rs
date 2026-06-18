@@ -30,16 +30,14 @@ pub(super) fn load_from_disk() -> HashMap<String, PromptAnswerEntry> {
             return HashMap::new();
         }
     };
-    match parse_content(&content) {
-        Some(parsed) => parsed,
-        None => {
-            set_last_load_error(Some(format!(
-                "Parse prompt memory failed for {}",
-                path.display()
-            )));
-            HashMap::new()
-        }
-    }
+    let Some(parsed) = parse_content(&content) else {
+        set_last_load_error(Some(format!(
+            "Parse prompt memory failed for {}",
+            path.display()
+        )));
+        return HashMap::new();
+    };
+    parsed
 }
 
 pub(super) fn save_to_disk(map: &HashMap<String, PromptAnswerEntry>) -> std::io::Result<()> {

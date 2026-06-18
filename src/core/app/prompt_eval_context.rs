@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use crate::app::state::{Step2ModState, WizardState};
 use crate::parser::prompt_eval_expr::{PromptEvalContext, normalize_tp2_stem};
 
+#[must_use]
 pub fn build_prompt_eval_context(state: &WizardState) -> PromptEvalContext {
     let mut checked_components = HashSet::<(String, String)>::new();
     collect_checked_components(&state.step2.bgee_mods, &mut checked_components);

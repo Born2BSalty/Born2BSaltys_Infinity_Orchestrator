@@ -5,6 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
 
 pub(crate) fn render_console(
@@ -13,6 +14,7 @@ pub(crate) fn render_console(
     console_view: &mut Step5ConsoleViewState,
     terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
+    palette: ThemePalette,
 ) {
     crate::ui::step5::status_console_step5::render_console_panel(
         ui,
@@ -20,6 +22,7 @@ pub(crate) fn render_console(
         console_view,
         terminal,
         terminal_error,
+        palette,
     );
 }
 
@@ -28,11 +31,11 @@ pub(crate) fn render_status_and_input(
     state: &mut WizardState,
     console_view: &mut Step5ConsoleViewState,
     mut terminal: Option<&mut EmbeddedTerminal>,
+    palette: ThemePalette,
 ) {
     let waiting_for_input_before = terminal
         .as_deref()
-        .map(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some())
-        .unwrap_or(false);
+        .is_some_and(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some());
     let prev_auto_key = state.step5.last_auto_prompt_key.clone();
     let prev_scripted_cycle = state.step5.last_scripted_cycle_signature.clone();
     let prev_scripted_send_ms = state.step5.last_scripted_send_unix_ms;
@@ -45,8 +48,7 @@ pub(crate) fn render_status_and_input(
 
     let waiting_for_input_after = terminal
         .as_deref()
-        .map(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some())
-        .unwrap_or(false);
+        .is_some_and(|t| t.likely_input_needed_visible() || t.current_prompt_info().is_some());
     let auto_answer_sent_this_tick = state.step5.last_auto_prompt_key != prev_auto_key
         || state.step5.last_scripted_cycle_signature != prev_scripted_cycle
         || state.step5.last_scripted_send_unix_ms != prev_scripted_send_ms;
@@ -65,8 +67,11 @@ pub(crate) fn render_status_and_input(
         state.step5.prompt_required_sound_latched = false;
     }
 
-    let phase_info =
-        crate::ui::step5::status_phase_step5::compute_phase(state, waiting_for_input_after);
+    let phase_info = crate::ui::step5::status_phase_step5::compute_phase(
+        state,
+        waiting_for_input_after,
+        palette,
+    );
 
     ui.horizontal(|ui| {
         crate::ui::step5::status_input_row_step5::render_input_row(
@@ -78,7 +83,7 @@ pub(crate) fn render_status_and_input(
     });
 
     ui.horizontal_centered(|ui| {
-        crate::ui::step5::status_phase_step5::render_phase(ui, state, &phase_info);
+        crate::ui::step5::status_phase_step5::render_phase(ui, state, &phase_info, palette);
         crate::ui::step5::service_process_line_step5::render_process_runtime_inline(
             ui,
             state,

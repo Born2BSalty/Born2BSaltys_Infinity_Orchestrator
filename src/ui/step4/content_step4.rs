@@ -11,9 +11,7 @@ use crate::ui::step4::action_step4::Step4Action;
 use crate::ui::step4::service_step4::read_source_log_lines;
 use crate::ui::step4::state_step4::active_tab_mut;
 use crate::ui::step5::diagnostics::format_step4_item;
-use crate::ui::step5::service_diagnostics_support_step5::{
-    export_diagnostics, restart_app_with_diagnostics, source_log_infos,
-};
+use crate::ui::step5::service_diagnostics_support_step5::{export_diagnostics, source_log_infos};
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -30,21 +28,16 @@ pub fn render(
     ui.horizontal(|ui| {
         ui.heading("Step 4: Review");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if dev_mode {
-                if ui.button("Export diagnostics").clicked() {
-                    match export_diagnostics(state, None, dev_mode, exe_fingerprint) {
-                        Ok(path) => {
-                            state.step5.last_status_text =
-                                format!("Diagnostics exported: {}", path.display());
-                        }
-                        Err(err) => {
-                            state.step5.last_status_text =
-                                format!("Diagnostics export failed: {err}");
-                        }
+            if dev_mode && ui.button("Export diagnostics").clicked() {
+                match export_diagnostics(state, None, dev_mode, exe_fingerprint) {
+                    Ok(path) => {
+                        state.step5.last_status_text =
+                            format!("Diagnostics exported: {}", path.display());
+                    }
+                    Err(err) => {
+                        state.step5.last_status_text = format!("Diagnostics export failed: {err}");
                     }
                 }
-            } else if ui.button("Restart App With Diagnostics").clicked() {
-                restart_app_with_diagnostics(state);
             }
         });
     });
@@ -107,16 +100,16 @@ pub fn render(
                 return;
             }
 
-            let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-            let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+            let show_first_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+            let show_second_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
             ui.horizontal(|ui| {
                 ui.add_space(12.0);
-                if show_bgee && show_bg2ee {
+                if show_first_game && show_second_game {
                     draw_tab(ui, active_tab_mut(state), "BGEE");
                     draw_tab(ui, active_tab_mut(state), "BG2EE");
-                } else if show_bgee {
+                } else if show_first_game {
                     ui.label(typo::monospace("BGEE"));
-                } else if show_bg2ee {
+                } else if show_second_game {
                     ui.label(typo::monospace("BG2EE"));
                 }
             });
@@ -149,7 +142,7 @@ pub fn draw_tab(ui: &mut egui::Ui, active: &mut String, value: &str) {
         .fill(fill)
         .stroke(stroke)
         .corner_radius(egui::CornerRadius::same(
-            crate::ui::shared::layout_tokens_global::RADIUS_SM as u8,
+            crate::ui::shared::layout_tokens_global::RADIUS_SM_U8,
         ));
     if ui.add_sized([58.0, 24.0], button).clicked() {
         *active = value.to_string();
@@ -198,15 +191,15 @@ pub fn render_source_logs(ui: &mut egui::Ui, state: &mut WizardState) {
         return;
     }
 
-    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let show_first_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let show_second_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
     ui.horizontal(|ui| {
-        if show_bgee && show_bg2ee {
+        if show_first_game && show_second_game {
             draw_tab(ui, &mut state.step3.active_game_tab, "BGEE");
             draw_tab(ui, &mut state.step3.active_game_tab, "BG2EE");
-        } else if show_bgee {
+        } else if show_first_game {
             ui.label(typo::monospace("BGEE"));
-        } else if show_bg2ee {
+        } else if show_second_game {
             ui.label(typo::monospace("BG2EE"));
         }
     });

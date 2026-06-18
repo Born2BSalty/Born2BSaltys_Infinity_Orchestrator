@@ -1,19 +1,27 @@
 [package]
 name = "bio"
-version = "0.1.0-beta.19"
+version = "0.1.0-Alpha.1"
 edition = "2024"
 build = "build.rs"
 authors = ["Born2BSalty"]
 license = "GPL-3.0-or-later"
 description = "Born2BSalty's Infinity Orchestrator (BIO) - Rust wizard for WeiDU/mod_installer installs"
 
+[lib]
+name = "bio"
+path = "src/lib.rs"
+
+[[bin]]
+name = "BIO_legacy"
+path = "src/main.rs"
+
 [[bin]]
 name = "BIO"
-path = "src/main.rs"
+path = "src/bin/infinity_orchestrator.rs"
 
 [dependencies]
 anyhow = "1.0.101"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.58", features = ["derive", "env"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
@@ -30,6 +38,8 @@ walkdir = "2.5.0"
 zip = "2.4.2"
 wait-timeout = "0.2.1"
 eframe = "0.31.1"
+egui-toast = "=0.17.0"
+image = { version = "0.25", default-features = false, features = ["png"] }
 rfd = "0.15.2"
 egui_term = "0.1.0"
 lapdu_parser_rust = { package = "lapdu-parser-rust", path = "vendor/lapdu-parser-rust-master" }
@@ -48,3 +58,13 @@ keyring = { version = "3", features = ["sync-secret-service"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
+
+# Dev-only: headless rendered-snapshot gate for the redesign egui UI.
+# `wgpu` adds the wgpu test renderer (`Harness::render() -> RgbaImage`);
+# `snapshot` adds the dify-based image-snapshot utility (the permanent gate).
+# `image` is used directly to encode the rendered frame to deterministic
+# PNG paths. Purely additive — does not change/upgrade any runtime
+# dependency and does not touch the `[patch.crates-io]` egui_term entry.
+[dev-dependencies]
+egui_kittest = { version = "0.31", features = ["wgpu", "snapshot"] }
+image = { version = "0.25", features = ["png"] }

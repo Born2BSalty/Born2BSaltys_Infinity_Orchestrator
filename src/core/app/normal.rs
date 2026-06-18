@@ -75,7 +75,7 @@ fn ensure_binary(label: &str, path: &Path) -> Result<()> {
     let mut checked = 0usize;
     let mut errors = Vec::new();
     exec_validation::check_file(label, value.as_ref(), &mut checked, &mut errors);
-    ensure_validation_passed(errors)
+    ensure_validation_passed(&errors)
 }
 
 fn ensure_game_directory(label: &str, path: &Path) -> Result<()> {
@@ -86,10 +86,10 @@ fn ensure_game_directory(label: &str, path: &Path) -> Result<()> {
     let mut checked = 0usize;
     let mut errors = Vec::new();
     fs_validation::check_game_dir(label, value.as_ref(), &mut checked, &mut errors);
-    ensure_validation_passed(errors)
+    ensure_validation_passed(&errors)
 }
 
-fn ensure_validation_passed(errors: Vec<String>) -> Result<()> {
+fn ensure_validation_passed(errors: &[String]) -> Result<()> {
     if errors.is_empty() {
         Ok(())
     } else {

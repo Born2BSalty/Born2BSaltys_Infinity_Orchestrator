@@ -38,7 +38,7 @@ pub(super) fn extract_update_archives(
             Ok(target_root) => {
                 result
                     .extracted
-                    .push(format!("{} -> {}", job.label, target_root.display()))
+                    .push(format!("{} -> {}", job.label, target_root.display()));
             }
             Err(err) => result.failed.push(format!("{}: {err}", job.label)),
         }
@@ -50,7 +50,7 @@ pub(super) fn extract_update_archives(
     result
 }
 
-fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
+pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
     let temp_root = temp_extract_root(&job.tp_file);
     if temp_root.exists() {
         let _ = fs::remove_dir_all(&temp_root);
@@ -80,10 +80,12 @@ fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
             &job.aliases,
             &target_root,
         )?;
+        let refs_target = &job.installed_refs_path;
         if let Some(source_ref) = &job.installed_source_ref {
             super::super::app_step2_update_source_refs::save_installed_source_ref(
                 &job.tp_file,
                 source_ref,
+                refs_target,
             )
             .map_err(|err| err.to_string())?;
         }
@@ -91,6 +93,7 @@ fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
             super::super::app_step2_update_source_refs::save_installed_source_id(
                 &job.tp_file,
                 source_id,
+                refs_target,
             )
             .map_err(|err| err.to_string())?;
         }
@@ -131,8 +134,7 @@ fn extract_archive(archive_path: &Path, out_dir: &Path) -> Result<(), String> {
 fn temp_extract_root(tp_file: &str) -> PathBuf {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_nanos());
     std::env::temp_dir().join(format!(
         "bio_step2_update_{}_{}_{}",
         std::process::id(),
@@ -185,11 +187,14 @@ fn find_extracted_mod_root(
         }
     }
     let tp2_path = matched_tp2.ok_or_else(|| {
-        if let Some(required) = subdir_require.as_deref() {
-            format!("matching .tp2 not found in extracted archive under required path: {required}")
-        } else {
-            "matching .tp2 not found in extracted archive".to_string()
-        }
+        subdir_require.as_deref().map_or_else(
+            || "matching .tp2 not found in extracted archive".to_string(),
+            |required| {
+                format!(
+                    "matching .tp2 not found in extracted archive under required path: {required}"
+                )
+            },
+        )
     })?;
     let tp2_parent = tp2_path
         .parent()
@@ -378,12 +383,11 @@ fn same_windows_drive(left: &Path, right: &Path) -> bool {
 }
 
 fn move_dir_or_copy(src: &Path, dst: &Path) -> io::Result<()> {
-    match fs::rename(src, dst) {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            copy_dir_all(src, dst)?;
-            fs::remove_dir_all(src)
-        }
+    if matches!(fs::rename(src, dst), Ok(())) {
+        Ok(())
+    } else {
+        copy_dir_all(src, dst)?;
+        fs::remove_dir_all(src)
     }
 }
 

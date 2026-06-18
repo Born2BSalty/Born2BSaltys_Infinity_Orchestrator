@@ -4,7 +4,7 @@
 pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_explain;
 pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_text_kind;
 
-pub(crate) mod compat_popup_action_row {
+pub mod compat_popup_action_row {
     use eframe::egui;
 
     use crate::app::compat_popup_nav;
@@ -14,7 +14,7 @@ pub(crate) mod compat_popup_action_row {
     use crate::ui::step2::compat_popup_step2::compat_popup_details as details;
     use crate::ui::step2::service_selection_step2::rule_source_open_path;
 
-    pub(crate) fn render_action_row(ui: &mut egui::Ui, state: &mut WizardState) {
+    pub fn render_action_row(ui: &mut egui::Ui, state: &mut WizardState) {
         let issue = details::selected_or_synth_issue(state);
         let can_jump_this = compat_popup_nav::selected_game_tab(state).is_some();
         let can_jump_related = issue
@@ -65,13 +65,17 @@ pub(crate) mod compat_popup_action_row {
     }
 }
 
-pub(crate) mod compat_popup_details {
+pub mod compat_popup_details {
     use eframe::egui;
 
     use crate::app::compat_issue::CompatIssue;
     use crate::app::compat_issue_text::display_source;
     use crate::app::selected_details::selected_compat_issue;
     use crate::app::state::WizardState;
+    use crate::ui::shared::redesign_tokens::{
+        ThemePalette, redesign_error_emphasis, redesign_text_disabled, redesign_text_muted,
+        redesign_text_primary, redesign_warning_soft,
+    };
     use crate::ui::step2::compat_popup_nav_step2::{
         COMPAT_POPUP_FILTER_OPTIONS, compat_filter_matches,
     };
@@ -80,7 +84,11 @@ pub(crate) mod compat_popup_details {
     use crate::ui::step2::compat_types_step2::{CompatIssueStatusTone, display_issue};
     use crate::ui::step2::content_step2::step2_details_select::selected_details;
 
-    pub(crate) fn render_details(ui: &mut egui::Ui, state: &mut WizardState) {
+    fn strong_text_primary(label: impl Into<String>, palette: ThemePalette) -> egui::RichText {
+        crate::ui::shared::typography_global::strong(label).color(redesign_text_primary(palette))
+    }
+
+    pub fn render_details(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
         let details = selected_details(state);
         let issue = selected_or_synth_issue(state);
         let issue_display = issue.as_ref().map(display_issue);
@@ -95,7 +103,7 @@ pub(crate) mod compat_popup_details {
             }
             _ => base_title.to_string(),
         };
-        ui.label(crate::ui::shared::typography_global::strong(title));
+        ui.label(strong_text_primary(title, palette));
         ui.add_space(6.0);
 
         if issue.is_none() && details.compat_kind.is_none() && details.disabled_reason.is_none() {
@@ -106,21 +114,17 @@ pub(crate) mod compat_popup_details {
         let kind = details
             .compat_kind
             .as_deref()
-            .or(issue_display.as_ref().map(|issue| issue.kind.as_str()))
+            .or_else(|| issue_display.as_ref().map(|issue| issue.kind.as_str()))
             .unwrap_or("unknown");
         if let Some(issue) = issue_display.as_ref()
             && !kind.eq_ignore_ascii_case("included")
         {
             ui.horizontal(|ui| {
-                ui.label(crate::ui::shared::typography_global::strong("Status"));
+                ui.label(strong_text_primary("Status", palette));
                 let badge_color = match issue.status_tone {
-                    CompatIssueStatusTone::Neutral => crate::ui::shared::theme_global::text_muted(),
-                    CompatIssueStatusTone::Blocking => {
-                        crate::ui::shared::theme_global::error_emphasis()
-                    }
-                    CompatIssueStatusTone::Warning => {
-                        crate::ui::shared::theme_global::warning_soft()
-                    }
+                    CompatIssueStatusTone::Neutral => redesign_text_muted(palette),
+                    CompatIssueStatusTone::Blocking => redesign_error_emphasis(palette),
+                    CompatIssueStatusTone::Warning => redesign_warning_soft(palette),
                 };
                 ui.label(
                     crate::ui::shared::typography_global::strong(issue.status_label.as_str())
@@ -129,7 +133,7 @@ pub(crate) mod compat_popup_details {
             });
         }
         ui.horizontal(|ui| {
-            ui.label(crate::ui::shared::typography_global::strong("Kind"));
+            ui.label(strong_text_primary("Kind", palette));
             ui.label(issue_text_kind::human_kind(kind));
         });
 
@@ -154,21 +158,19 @@ pub(crate) mod compat_popup_details {
         let source = details
             .compat_source
             .as_deref()
-            .or(issue.as_ref().map(|issue| issue.source.as_str()));
+            .or_else(|| issue.as_ref().map(|issue| issue.source.as_str()));
         if let Some(source) = source {
             ui.add_space(6.0);
-            ui.label(crate::ui::shared::typography_global::strong("Rule source"));
+            ui.label(strong_text_primary("Rule source", palette));
             ui.monospace(display_source(source));
         }
         if let Some(block) = details.compat_component_block.as_deref() {
             ui.add_space(6.0);
-            egui::CollapsingHeader::new(crate::ui::shared::typography_global::strong(
-                "Component block",
-            ))
-            .default_open(false)
-            .show(ui, |ui| {
-                ui.monospace(block);
-            });
+            egui::CollapsingHeader::new(strong_text_primary("Component block", palette))
+                .default_open(false)
+                .show(ui, |ui| {
+                    ui.monospace(block);
+                });
         }
 
         if issue.is_some() || details.compat_kind.is_some() {
@@ -177,16 +179,22 @@ pub(crate) mod compat_popup_details {
                 .as_ref()
                 .map(|issue| issue.kind.as_str())
                 .or(details.compat_kind.as_deref());
-            render_filter_row(ui, state, current_kind);
+            render_filter_row(ui, state, current_kind, palette);
         }
     }
 
-    pub(crate) fn selected_or_synth_issue(state: &WizardState) -> Option<CompatIssue> {
+    #[must_use]
+    pub fn selected_or_synth_issue(state: &WizardState) -> Option<CompatIssue> {
         selected_compat_issue(state)
     }
 
-    fn render_filter_row(ui: &mut egui::Ui, state: &mut WizardState, current_kind: Option<&str>) {
-        ui.label(crate::ui::shared::typography_global::strong("Filter"));
+    fn render_filter_row(
+        ui: &mut egui::Ui,
+        state: &mut WizardState,
+        current_kind: Option<&str>,
+        palette: ThemePalette,
+    ) {
+        ui.label(strong_text_primary("Filter", palette));
         ui.horizontal_wrapped(|ui| {
             for option in COMPAT_POPUP_FILTER_OPTIONS {
                 let is_selected = state.step2.compat_popup_filter.eq_ignore_ascii_case(option);
@@ -205,7 +213,7 @@ pub(crate) mod compat_popup_details {
                 if !compat_filter_matches(option, current_kind) {
                     button = button.stroke(egui::Stroke::new(
                         crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                        crate::ui::shared::theme_global::text_disabled(),
+                        redesign_text_disabled(palette),
                     ));
                 }
                 if ui.add(button).clicked() {

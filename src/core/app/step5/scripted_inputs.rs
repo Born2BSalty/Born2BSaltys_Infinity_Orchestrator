@@ -12,6 +12,7 @@ use crate::platform_defaults::compose_component_key;
 
 use super::prompt_memory;
 
+#[must_use]
 pub fn load_from_step1(step1: &Step1State) -> HashMap<String, Vec<String>> {
     let mut out: HashMap<String, Vec<String>> = HashMap::new();
     for path in source_log_paths(step1) {

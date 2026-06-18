@@ -34,7 +34,7 @@ pub(crate) struct ConflictScanContext {
     adjacency: HashMap<String, Vec<ConflictEdge>>,
 }
 
-pub(crate) fn build_conflict_scan_context(
+pub(in crate::app) fn build_conflict_scan_context(
     active_items: &[CompatActiveItem],
     conflict_cache: &mut ComponentConflictCache,
 ) -> ConflictScanContext {
@@ -44,7 +44,7 @@ pub(crate) fn build_conflict_scan_context(
     }
 }
 
-pub(crate) fn scan_conflict_hit_with_context(
+pub(in crate::app) fn scan_conflict_hit_with_context(
     current_tp_file: &str,
     current_component_id: &str,
     current_component_order: Option<usize>,

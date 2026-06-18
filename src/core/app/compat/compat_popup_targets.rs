@@ -52,7 +52,8 @@ pub(crate) fn extract_first_jump_target(
             index += 1;
             continue;
         };
-        let Some(component_ref) = token_value(tokens.get(index + 2)).and_then(parse_component_id)
+        let Some(component_ref) =
+            token_value(tokens.get(index + 2)).and_then(|value| parse_component_id(&value))
         else {
             index += 1;
             continue;
@@ -70,13 +71,10 @@ fn token_value(token: Option<&Token>) -> Option<String> {
     }
 }
 
-fn parse_component_id(value: String) -> Option<u32> {
+fn parse_component_id(value: &str) -> Option<u32> {
     let trimmed = value
         .trim()
         .trim_matches(|ch: char| matches!(ch, '~' | '"' | '\''));
-    let digits: String = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
+    let digits: String = trimmed.chars().take_while(char::is_ascii_digit).collect();
     digits.parse::<u32>().ok()
 }

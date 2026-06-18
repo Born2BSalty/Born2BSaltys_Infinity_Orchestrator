@@ -5,7 +5,7 @@ mod filters {
     use super::prompt::is_prompt_line;
     use super::utils::has_level_token;
 
-    pub(crate) fn likely_failure_visible(output: &str) -> bool {
+    pub(in crate::app::terminal) fn likely_failure_visible(output: &str) -> bool {
         let joined = output.to_ascii_uppercase();
         joined.contains("NOT INSTALLED DUE TO ERRORS")
             || joined.contains("ERROR INSTALLING")
@@ -13,7 +13,7 @@ mod filters {
             || joined.contains("WEIDU COMMAND FAILED")
     }
 
-    pub(crate) fn important_line(line: &str) -> bool {
+    pub(in crate::app::terminal) fn important_line(line: &str) -> bool {
         let u = line.to_ascii_uppercase();
         let t = u.trim();
         if t.is_empty() {
@@ -40,7 +40,7 @@ mod filters {
         false
     }
 
-    pub(crate) fn installed_line(line: &str) -> bool {
+    pub(in crate::app::terminal) fn installed_line(line: &str) -> bool {
         let u = line.to_ascii_uppercase();
         let t = u.trim();
         if t.is_empty() {
@@ -49,12 +49,12 @@ mod filters {
         t.contains("SUCCESSFULLY INSTALLED") || t.contains("INSTALLED MOD COMPONENT")
     }
 
-    pub(crate) fn parser_timestamp_line(line: &str) -> bool {
+    pub(in crate::app::terminal) fn parser_timestamp_line(line: &str) -> bool {
         let t = line.trim_start();
         t.starts_with('[') && t.contains("mod_installer::weidu_parser")
     }
 
-    pub(crate) fn warning_capture_start(line: &str) -> bool {
+    pub(in crate::app::terminal) fn warning_capture_start(line: &str) -> bool {
         let t = line.trim_start().to_ascii_uppercase();
         t.contains("WARNING:")
             || t.contains("INSTALLED WITH WARNINGS")
@@ -62,7 +62,7 @@ mod filters {
             || t.contains("] WARNING ")
     }
 
-    pub(crate) fn warning_capture_end(line: &str) -> bool {
+    pub(in crate::app::terminal) fn warning_capture_end(line: &str) -> bool {
         let t = line.trim_start().to_ascii_uppercase();
         if t.contains("SUCCESSFULLY INSTALLED")
             || t.contains("INSTALLING [")
@@ -78,7 +78,7 @@ mod filters {
         false
     }
 
-    pub(crate) fn extract_error_block(output: &str) -> String {
+    pub(in crate::app::terminal) fn extract_error_block(output: &str) -> String {
         let mut out = Vec::new();
         for line in output.lines().rev() {
             let u = line.to_ascii_uppercase();
@@ -104,18 +104,18 @@ mod filters {
 }
 mod model {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub(crate) enum PromptKind {
+    pub(in crate::app::terminal) enum PromptKind {
         YesNo,
         Path,
         Number,
         FreeText,
     }
 
-    pub(crate) struct PromptInfo {
+    pub struct PromptInfo {
         pub(crate) key: String,
         pub(crate) legacy_key: Option<String>,
         pub(crate) preview_line: String,
-        pub(crate) kind: PromptKind,
+        pub(in crate::app::terminal) kind: PromptKind,
         pub(crate) option_count: usize,
         pub(crate) line_count: usize,
         pub(crate) char_count: usize,
@@ -136,7 +136,7 @@ mod prompt_detect {
             && has_yes_no_prompt_tokens(line_upper)
     }
 
-    pub(crate) fn is_prompt_line(line: &str) -> bool {
+    pub(in crate::app::terminal) fn is_prompt_line(line: &str) -> bool {
         let u = line.to_ascii_uppercase();
         u.contains("USER INPUT REQUIRED")
             || u.contains("PLEASE CHOOSE")
@@ -146,12 +146,12 @@ mod prompt_detect {
             || likely_proceed_prompt(&u)
     }
 
-    pub(crate) fn prompt_capture_start(line: &str) -> bool {
+    pub(in crate::app::terminal) fn prompt_capture_start(line: &str) -> bool {
         let u = line.to_ascii_uppercase();
         u.contains("USER INPUT REQUIRED") || u.contains("QUESTION IS")
     }
 
-    pub(crate) fn prompt_capture_end(line: &str) -> bool {
+    pub(in crate::app::terminal) fn prompt_capture_end(line: &str) -> bool {
         let u = line.to_ascii_uppercase();
         u.contains("[SENT]")
             || u.contains("SUCCESSFULLY INSTALLED")
@@ -162,13 +162,13 @@ mod prompt_detect {
             || u.contains("=== GRACEFUL TERMINATE REQUESTED ===")
     }
 
-    pub(crate) fn likely_input_needed_visible(output: &str) -> bool {
+    pub(in crate::app::terminal) fn likely_input_needed_visible(output: &str) -> bool {
         recent_lines(output, 40)
             .iter()
             .any(|line| is_prompt_line(line))
     }
 
-    pub(crate) fn prompt_headers_ready(output: &str) -> bool {
+    pub(in crate::app::terminal) fn prompt_headers_ready(output: &str) -> bool {
         let mut has_input_required = false;
         let mut has_question_is = false;
         for line in recent_lines(output, 120) {
@@ -186,7 +186,7 @@ mod prompt_detect {
 mod prompt_match {
     use super::model::{PromptInfo, PromptKind};
 
-    pub(crate) fn prompt_kind_name(prompt: &PromptInfo) -> &'static str {
+    pub(in crate::app::terminal) const fn prompt_kind_name(prompt: &PromptInfo) -> &'static str {
         match prompt.kind {
             PromptKind::YesNo => "yes/no",
             PromptKind::Path => "path",
@@ -196,13 +196,13 @@ mod prompt_match {
     }
 }
 mod prompt {
-    pub(crate) use super::prompt_block::current_prompt_info;
-    pub(crate) use super::prompt_detect::is_prompt_line;
-    pub(crate) use super::prompt_detect::likely_input_needed_visible;
-    pub(crate) use super::prompt_detect::prompt_capture_end;
-    pub(crate) use super::prompt_detect::prompt_capture_start;
-    pub(crate) use super::prompt_detect::prompt_headers_ready;
-    pub(crate) use super::prompt_match::prompt_kind_name;
+    pub(in crate::app::terminal) use super::prompt_block::current_prompt_info;
+    pub(in crate::app::terminal) use super::prompt_detect::is_prompt_line;
+    pub(in crate::app::terminal) use super::prompt_detect::likely_input_needed_visible;
+    pub(in crate::app::terminal) use super::prompt_detect::prompt_capture_end;
+    pub(in crate::app::terminal) use super::prompt_detect::prompt_capture_start;
+    pub(in crate::app::terminal) use super::prompt_detect::prompt_headers_ready;
+    pub(in crate::app::terminal) use super::prompt_match::prompt_kind_name;
 }
 mod utils {
     pub(super) fn has_level_token(line: &str, token: &str) -> bool {
@@ -253,28 +253,28 @@ mod utils {
     }
 
     pub(super) fn fnv1a64(value: &str) -> u64 {
-        let mut hash = 0xcbf29ce484222325u64;
+        let mut hash = 0xcbf2_9ce4_8422_2325_u64;
         for &b in value.as_bytes() {
-            hash ^= b as u64;
-            hash = hash.wrapping_mul(0x100000001b3);
+            hash ^= u64::from(b);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
         }
         hash
     }
 }
 
-pub(crate) use model::PromptInfo;
+pub use model::PromptInfo;
 
-pub(crate) use filters::extract_error_block;
-pub(crate) use filters::important_line;
-pub(crate) use filters::installed_line;
-pub(crate) use filters::likely_failure_visible;
-pub(crate) use filters::parser_timestamp_line;
-pub(crate) use filters::warning_capture_end;
-pub(crate) use filters::warning_capture_start;
+pub(in crate::app::terminal) use filters::extract_error_block;
+pub(in crate::app::terminal) use filters::important_line;
+pub(in crate::app::terminal) use filters::installed_line;
+pub(in crate::app::terminal) use filters::likely_failure_visible;
+pub(in crate::app::terminal) use filters::parser_timestamp_line;
+pub(in crate::app::terminal) use filters::warning_capture_end;
+pub(in crate::app::terminal) use filters::warning_capture_start;
 
-pub(crate) use prompt::current_prompt_info;
-pub(crate) use prompt::likely_input_needed_visible;
-pub(crate) use prompt::prompt_capture_end;
-pub(crate) use prompt::prompt_capture_start;
-pub(crate) use prompt::prompt_headers_ready;
-pub(crate) use prompt::prompt_kind_name;
+pub(in crate::app::terminal) use prompt::current_prompt_info;
+pub(in crate::app::terminal) use prompt::likely_input_needed_visible;
+pub(in crate::app::terminal) use prompt::prompt_capture_end;
+pub(in crate::app::terminal) use prompt::prompt_capture_start;
+pub(in crate::app::terminal) use prompt::prompt_headers_ready;
+pub(in crate::app::terminal) use prompt::prompt_kind_name;

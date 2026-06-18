@@ -13,7 +13,7 @@
 edition = "2021"
 name = "egui_term"
 version = "0.1.0"
-authors = ["Ilya Shvyryalkin <ilyashvy@gmail.com>"]
+authors = []
 build = false
 autolib = false
 autobins = false

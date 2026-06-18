@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::app::state::WizardState;
+use std::fmt::Write as _;
+
+use crate::app::state::{Step1State, WizardState};
 
 use super::super::log_files::DiagnosticLogGroup;
 use super::{AppDataCopySummary, DiagnosticsContext, Tp2LayoutSummary, WriteCheckSummary};
@@ -11,6 +13,13 @@ mod step2;
 
 use super::undefined_detect;
 
+macro_rules! push_fmt {
+    ($dst:expr, $($arg:tt)*) => {
+        write!($dst, $($arg)*).expect("writing to String should not fail")
+    };
+}
+
+#[derive(Clone, Copy)]
 pub(super) struct BuildBaseTextInput<'a> {
     pub state: &'a WizardState,
     pub diagnostics_run_id: &'a str,
@@ -50,18 +59,17 @@ pub(super) fn build_base_text(input: BuildBaseTextInput<'_>) -> String {
         text.push('\n');
     }
     text.push_str("\n[Step5 Status]\n");
-    text.push_str(&format!(
+    push_fmt!(
+        text,
         "install_running={}\n",
         input.state.step5.install_running
-    ));
-    text.push_str(&format!(
-        "last_status={}\n",
-        input.state.step5.last_status_text
-    ));
-    text.push_str(&format!(
+    );
+    push_fmt!(text, "last_status={}\n", input.state.step5.last_status_text);
+    push_fmt!(
+        text,
         "last_exit_code={:?}\n",
         input.state.step5.last_exit_code
-    ));
+    );
     append_step5_runtime_summary(&mut text, input.state);
     append_weidu_log_groups(&mut text, input.log_groups);
     text.push_str("\n[Console Excerpt]\n");
@@ -109,22 +117,26 @@ fn append_weidu_log_groups(out: &mut String, log_groups: &[DiagnosticLogGroup]) 
 fn append_runtime_snapshot(out: &mut String, state: &WizardState, console_excerpt: &str) {
     out.push_str("\n[Startup/Runtime Snapshot]\n");
     out.push_str("source=state.step5.console_output\n");
-    out.push_str(&format!(
+    push_fmt!(
+        out,
         "console_buffer_chars={}\n",
         state.step5.console_output.chars().count()
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "console_excerpt_chars={}\n",
         console_excerpt.chars().count()
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "bio_full_debug_enabled={}\n",
         state.step1.bio_full_debug
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "raw_output_log_enabled={}\n",
         state.step1.log_raw_output_dev
-    ));
+    );
     out.push_str(
         "note=This snapshot contains UI/runtime output captured before or during install.\n",
     );
@@ -134,10 +146,11 @@ fn append_step5_runtime_summary(out: &mut String, state: &WizardState) {
     out.push_str("start_mode=");
     out.push_str(&state.step5.last_start_mode);
     out.push('\n');
-    out.push_str(&format!(
+    push_fmt!(
+        out,
         "resume_available_after_cancel={}\n",
         state.step5.resume_available
-    ));
+    );
     out.push_str("cancel_mode=");
     out.push_str(&state.step5.last_cancel_mode);
     out.push('\n');
@@ -150,11 +163,8 @@ fn append_step5_runtime_summary(out: &mut String, state: &WizardState) {
     out.push_str("resolved_game_dir=");
     out.push_str(&state.step5.resolved_game_dir);
     out.push('\n');
-    out.push_str(&format!("prep_ran={}\n", state.step5.prep_ran));
-    out.push_str(&format!(
-        "prep_used_backup={}\n",
-        state.step5.prep_used_backup
-    ));
+    push_fmt!(out, "prep_ran={}\n", state.step5.prep_ran);
+    push_fmt!(out, "prep_used_backup={}\n", state.step5.prep_used_backup);
     out.push_str("prep_backup_paths=");
     if state.step5.prep_backup_paths.is_empty() {
         out.push_str("<none>\n");
@@ -206,7 +216,7 @@ fn append_appdata_copies(out: &mut String, summary: &AppDataCopySummary) {
         out.push_str("none\n");
     } else {
         for p in &summary.copied {
-            out.push_str(&format!("{}\n", p.display()));
+            push_fmt!(out, "{}\n", p.display());
         }
     }
     out.push('\n');
@@ -216,7 +226,7 @@ fn append_appdata_copies(out: &mut String, summary: &AppDataCopySummary) {
         out.push_str("none\n");
     } else {
         for note in &summary.missing {
-            out.push_str(&format!("{note}\n"));
+            push_fmt!(out, "{note}\n");
         }
     }
     out.push('\n');
@@ -229,152 +239,156 @@ fn append_run_metadata(
     diag_ctx: &DiagnosticsContext,
 ) {
     out.push_str("[Run Metadata]\n");
-    out.push_str(&format!("app_name={}\n", env!("CARGO_PKG_NAME")));
-    out.push_str(&format!("app_version={}\n", env!("CARGO_PKG_VERSION")));
-    out.push_str(&format!("timestamp_unix={timestamp_unix_secs}\n"));
-    out.push_str(&format!("diagnostics_run_id={diagnostics_run_id}\n"));
-    out.push_str(&format!("os={}\n", std::env::consts::OS));
-    out.push_str(&format!("arch={}\n", std::env::consts::ARCH));
-    out.push_str(&format!("dev_mode={}\n", diag_ctx.dev_mode));
-    out.push_str(&format!("exe_fingerprint={}\n\n", diag_ctx.exe_fingerprint));
+    push_fmt!(out, "app_name={}\n", env!("CARGO_PKG_NAME"));
+    push_fmt!(out, "app_version={}\n", env!("CARGO_PKG_VERSION"));
+    push_fmt!(out, "timestamp_unix={timestamp_unix_secs}\n");
+    push_fmt!(out, "diagnostics_run_id={diagnostics_run_id}\n");
+    push_fmt!(out, "os={}\n", std::env::consts::OS);
+    push_fmt!(out, "arch={}\n", std::env::consts::ARCH);
+    push_fmt!(out, "dev_mode={}\n", diag_ctx.dev_mode);
+    push_fmt!(out, "exe_fingerprint={}\n\n", diag_ctx.exe_fingerprint);
 }
 
 fn append_validation_summary(out: &mut String, state: &WizardState) {
     out.push_str("[Validation Summary]\n");
-    match &state.step1_path_check {
-        Some((ok, msg)) => {
-            out.push_str(&format!("step1_path_check_ok={ok}\n"));
-            out.push_str(&format!("step1_path_check_msg={msg}\n"));
-        }
-        None => {
-            out.push_str("step1_path_check_ok=<not_run>\n");
-            out.push_str("step1_path_check_msg=<not_run>\n");
-        }
+    if let Some((ok, msg)) = &state.step1_path_check {
+        push_fmt!(out, "step1_path_check_ok={ok}\n");
+        push_fmt!(out, "step1_path_check_msg={msg}\n");
+    } else {
+        out.push_str("step1_path_check_ok=<not_run>\n");
+        out.push_str("step1_path_check_msg=<not_run>\n");
     }
-    out.push_str(&format!(
+    push_fmt!(
+        out,
         "step4_save_error_open={}\n",
         state.step4_save_error_open
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "step4_save_error_text={}\n\n",
         state.step4_save_error_text
-    ));
+    );
 }
 
 fn append_step1_snapshot(out: &mut String, state: &WizardState) {
     let s = &state.step1;
     out.push_str("[Step1 Full Snapshot]\n");
-    out.push_str(&format!("game_install={}\n", s.game_install));
-    out.push_str(&format!("have_weidu_logs={}\n", s.have_weidu_logs));
-    out.push_str(&format!("rust_log_debug={}\n", s.rust_log_debug));
-    out.push_str(&format!("rust_log_trace={}\n", s.rust_log_trace));
-    out.push_str(&format!("custom_scan_depth={}\n", s.custom_scan_depth));
-    out.push_str(&format!(
+    append_step1_general_options(out, s);
+    append_step1_paths(out, s);
+    append_step1_install_options(out, s);
+}
+
+fn append_step1_general_options(out: &mut String, s: &Step1State) {
+    push_fmt!(out, "game_install={}\n", s.game_install);
+    push_fmt!(out, "have_weidu_logs={}\n", s.have_weidu_logs);
+    push_fmt!(out, "rust_log_debug={}\n", s.rust_log_debug);
+    push_fmt!(out, "rust_log_trace={}\n", s.rust_log_trace);
+    push_fmt!(out, "custom_scan_depth={}\n", s.custom_scan_depth);
+    push_fmt!(
+        out,
         "timeout_per_mod_enabled={}\n",
         s.timeout_per_mod_enabled
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "auto_answer_initial_delay_enabled={}\n",
         s.auto_answer_initial_delay_enabled
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "auto_answer_post_send_delay_enabled={}\n",
         s.auto_answer_post_send_delay_enabled
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "prompt_required_sound_enabled={}\n",
         s.prompt_required_sound_enabled
-    ));
-    out.push_str(&format!("lookback_enabled={}\n", s.lookback_enabled));
-    out.push_str(&format!("bio_full_debug={}\n", s.bio_full_debug));
-    out.push_str(&format!("tick_dev_enabled={}\n", s.tick_dev_enabled));
-    out.push_str(&format!("log_raw_output_dev={}\n", s.log_raw_output_dev));
-    out.push_str(&format!(
-        "weidu_log_mode_enabled={}\n",
-        s.weidu_log_mode_enabled
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(out, "lookback_enabled={}\n", s.lookback_enabled);
+    push_fmt!(out, "bio_full_debug={}\n", s.bio_full_debug);
+    push_fmt!(out, "tick_dev_enabled={}\n", s.tick_dev_enabled);
+    push_fmt!(out, "log_raw_output_dev={}\n", s.log_raw_output_dev);
+    push_fmt!(out, "weidu_log_mode_enabled={}\n", s.weidu_log_mode_enabled);
+    push_fmt!(
+        out,
         "new_pre_eet_dir_enabled={}\n",
         s.new_pre_eet_dir_enabled
-    ));
-    out.push_str(&format!("new_eet_dir_enabled={}\n", s.new_eet_dir_enabled));
-    out.push_str(&format!(
+    );
+    push_fmt!(out, "new_eet_dir_enabled={}\n", s.new_eet_dir_enabled);
+    push_fmt!(
+        out,
         "generate_directory_enabled={}\n",
         s.generate_directory_enabled
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "prepare_target_dirs_before_install={}\n",
         s.prepare_target_dirs_before_install
-    ));
-    out.push_str(&format!("weidu_log_autolog={}\n", s.weidu_log_autolog));
-    out.push_str(&format!("weidu_log_logapp={}\n", s.weidu_log_logapp));
-    out.push_str(&format!("weidu_log_logextern={}\n", s.weidu_log_logextern));
-    out.push_str(&format!(
+    );
+    push_fmt!(out, "weidu_log_autolog={}\n", s.weidu_log_autolog);
+    push_fmt!(out, "weidu_log_logapp={}\n", s.weidu_log_logapp);
+    push_fmt!(out, "weidu_log_logextern={}\n", s.weidu_log_logextern);
+    push_fmt!(
+        out,
         "weidu_log_log_component={}\n",
         s.weidu_log_log_component
-    ));
-    out.push_str(&format!("weidu_log_folder={}\n", s.weidu_log_folder));
-    out.push_str(&format!(
-        "mod_installer_binary={}\n",
-        s.mod_installer_binary
-    ));
-    out.push_str(&format!("bgee_game_folder={}\n", s.bgee_game_folder));
-    out.push_str(&format!("bgee_log_folder={}\n", s.bgee_log_folder));
-    out.push_str(&format!("bgee_log_file={}\n", s.bgee_log_file));
-    out.push_str(&format!("bg2ee_game_folder={}\n", s.bg2ee_game_folder));
-    out.push_str(&format!("bg2ee_log_folder={}\n", s.bg2ee_log_folder));
-    out.push_str(&format!("bg2ee_log_file={}\n", s.bg2ee_log_file));
-    out.push_str(&format!(
-        "eet_bgee_game_folder={}\n",
-        s.eet_bgee_game_folder
-    ));
-    out.push_str(&format!("eet_bgee_log_folder={}\n", s.eet_bgee_log_folder));
-    out.push_str(&format!(
-        "eet_bg2ee_game_folder={}\n",
-        s.eet_bg2ee_game_folder
-    ));
-    out.push_str(&format!(
-        "eet_bg2ee_log_folder={}\n",
-        s.eet_bg2ee_log_folder
-    ));
-    out.push_str(&format!("eet_pre_dir={}\n", s.eet_pre_dir));
-    out.push_str(&format!("eet_new_dir={}\n", s.eet_new_dir));
-    out.push_str(&format!("game={}\n", s.game));
-    out.push_str(&format!("log_file={}\n", s.log_file));
-    out.push_str(&format!("generate_directory={}\n", s.generate_directory));
-    out.push_str(&format!("mods_folder={}\n", s.mods_folder));
-    out.push_str(&format!("weidu_binary={}\n", s.weidu_binary));
-    out.push_str(&format!("language={}\n", s.language));
-    out.push_str(&format!("depth={}\n", s.depth));
-    out.push_str(&format!("skip_installed={}\n", s.skip_installed));
-    out.push_str(&format!("abort_on_warnings={}\n", s.abort_on_warnings));
-    out.push_str(&format!("timeout={}\n", s.timeout));
-    out.push_str(&format!(
+    );
+}
+
+fn append_step1_paths(out: &mut String, s: &Step1State) {
+    push_fmt!(out, "weidu_log_folder={}\n", s.weidu_log_folder);
+    push_fmt!(out, "mod_installer_binary={}\n", s.mod_installer_binary);
+    push_fmt!(out, "bgee_game_folder={}\n", s.bgee_game_folder);
+    push_fmt!(out, "bgee_log_folder={}\n", s.bgee_log_folder);
+    push_fmt!(out, "bgee_log_file={}\n", s.bgee_log_file);
+    push_fmt!(out, "bg2ee_game_folder={}\n", s.bg2ee_game_folder);
+    push_fmt!(out, "bg2ee_log_folder={}\n", s.bg2ee_log_folder);
+    push_fmt!(out, "bg2ee_log_file={}\n", s.bg2ee_log_file);
+    push_fmt!(out, "eet_bgee_game_folder={}\n", s.eet_bgee_game_folder);
+    push_fmt!(out, "eet_bgee_log_folder={}\n", s.eet_bgee_log_folder);
+    push_fmt!(out, "eet_bg2ee_game_folder={}\n", s.eet_bg2ee_game_folder);
+    push_fmt!(out, "eet_bg2ee_log_folder={}\n", s.eet_bg2ee_log_folder);
+    push_fmt!(out, "eet_pre_dir={}\n", s.eet_pre_dir);
+    push_fmt!(out, "eet_new_dir={}\n", s.eet_new_dir);
+    push_fmt!(out, "game={}\n", s.game);
+    push_fmt!(out, "log_file={}\n", s.log_file);
+    push_fmt!(out, "generate_directory={}\n", s.generate_directory);
+    push_fmt!(out, "mods_folder={}\n", s.mods_folder);
+    push_fmt!(out, "weidu_binary={}\n", s.weidu_binary);
+}
+
+fn append_step1_install_options(out: &mut String, s: &Step1State) {
+    push_fmt!(out, "language={}\n", s.language);
+    push_fmt!(out, "depth={}\n", s.depth);
+    push_fmt!(out, "skip_installed={}\n", s.skip_installed);
+    push_fmt!(out, "abort_on_warnings={}\n", s.abort_on_warnings);
+    push_fmt!(out, "timeout={}\n", s.timeout);
+    push_fmt!(
+        out,
         "auto_answer_initial_delay_ms={}\n",
         s.auto_answer_initial_delay_ms
-    ));
-    out.push_str(&format!(
+    );
+    push_fmt!(
+        out,
         "auto_answer_post_send_delay_ms={}\n",
         s.auto_answer_post_send_delay_ms
-    ));
-    out.push_str(&format!("weidu_log_mode={}\n", s.weidu_log_mode));
-    out.push_str(&format!("strict_matching={}\n", s.strict_matching));
-    out.push_str(&format!("download={}\n", s.download));
-    out.push_str(&format!("download_archive={}\n", s.download_archive));
-    out.push_str(&format!("mods_archive_folder={}\n", s.mods_archive_folder));
-    out.push_str(&format!("mods_backup_folder={}\n", s.mods_backup_folder));
-    out.push_str(&format!("overwrite={}\n", s.overwrite));
-    out.push_str(&format!(
-        "check_last_installed={}\n",
-        s.check_last_installed
-    ));
-    out.push_str(&format!("tick={}\n", s.tick));
-    out.push_str(&format!("lookback={}\n", s.lookback));
-    out.push_str(&format!("casefold={}\n", s.casefold));
-    out.push_str(&format!(
+    );
+    push_fmt!(out, "weidu_log_mode={}\n", s.weidu_log_mode);
+    push_fmt!(out, "strict_matching={}\n", s.strict_matching);
+    push_fmt!(out, "download={}\n", s.download);
+    push_fmt!(out, "download_archive={}\n", s.download_archive);
+    push_fmt!(out, "mods_archive_folder={}\n", s.mods_archive_folder);
+    push_fmt!(out, "mods_backup_folder={}\n", s.mods_backup_folder);
+    push_fmt!(out, "overwrite={}\n", s.overwrite);
+    push_fmt!(out, "check_last_installed={}\n", s.check_last_installed);
+    push_fmt!(out, "tick={}\n", s.tick);
+    push_fmt!(out, "lookback={}\n", s.lookback);
+    push_fmt!(out, "casefold={}\n", s.casefold);
+    push_fmt!(
+        out,
         "backup_targets_before_eet_copy={}\n\n",
         s.backup_targets_before_eet_copy
-    ));
+    );
 }
 
 fn append_effective_installer_args(
@@ -383,13 +397,13 @@ fn append_effective_installer_args(
     installer_args: &[String],
 ) {
     out.push_str("[Effective Installer Args]\n");
-    out.push_str(&format!("program={installer_program}\n"));
+    push_fmt!(out, "program={installer_program}\n");
     if installer_args.is_empty() {
         out.push_str("args=<none>\n\n");
         return;
     }
     for (idx, arg) in installer_args.iter().enumerate() {
-        out.push_str(&format!("arg[{idx}]={arg}\n"));
+        push_fmt!(out, "arg[{idx}]={arg}\n");
     }
     out.push('\n');
 }
@@ -397,8 +411,8 @@ fn append_effective_installer_args(
 fn append_installer_invocation_context(out: &mut String) {
     out.push_str("[Installer Invocation Context]\n");
     match std::env::current_dir() {
-        Ok(cwd) => out.push_str(&format!("cwd={}\n", cwd.display())),
-        Err(err) => out.push_str(&format!("cwd=<unavailable: {err}>\n")),
+        Ok(cwd) => push_fmt!(out, "cwd={}\n", cwd.display()),
+        Err(err) => push_fmt!(out, "cwd=<unavailable: {err}>\n"),
     }
     for key in [
         "APPDATA",
@@ -409,7 +423,7 @@ fn append_installer_invocation_context(out: &mut String) {
         "LANG",
     ] {
         let value = std::env::var(key).unwrap_or_else(|_| "<unset>".to_string());
-        out.push_str(&format!("env[{key}]={value}\n"));
+        push_fmt!(out, "env[{key}]={value}\n");
     }
     out.push('\n');
 }

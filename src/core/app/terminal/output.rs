@@ -2,33 +2,40 @@
 // Copyright (c) 2026 Born2BSalty
 
 mod accessors {
-    use super::super::{EmbeddedTerminal, analyze};
+    use super::super::{EmbeddedTerminal, PromptInfo, analyze};
 
     impl EmbeddedTerminal {
+        #[must_use]
         pub fn likely_failure_visible(&self) -> bool {
             analyze::likely_failure_visible(&self.output_buffer)
         }
 
+        #[must_use]
         pub fn likely_input_needed_visible(&self) -> bool {
             analyze::likely_input_needed_visible(&self.output_buffer)
         }
 
+        #[must_use]
         pub fn prompt_headers_ready(&self) -> bool {
             analyze::prompt_headers_ready(&self.output_buffer)
         }
 
-        pub fn current_prompt_info(&self) -> Option<analyze::PromptInfo> {
+        #[must_use]
+        pub fn current_prompt_info(&self) -> Option<PromptInfo> {
             analyze::current_prompt_info(&self.output_buffer)
         }
 
-        pub fn prompt_kind_name(&self, prompt: &analyze::PromptInfo) -> &'static str {
+        #[must_use]
+        pub const fn prompt_kind_name(&self, prompt: &PromptInfo) -> &'static str {
             analyze::prompt_kind_name(prompt)
         }
 
+        #[must_use]
         pub fn extract_error_block(&self) -> String {
             analyze::extract_error_block(&self.output_buffer)
         }
 
+        #[must_use]
         pub fn console_excerpt(&self, max_chars: usize) -> String {
             if self.output_buffer.chars().count() <= max_chars {
                 return self.output_buffer.clone();
@@ -38,47 +45,58 @@ mod accessors {
             self.output_buffer.chars().skip(skip).collect()
         }
 
+        #[must_use]
         pub fn console_text(&self) -> String {
             self.output_buffer.clone()
         }
 
-        pub fn output_text(&self) -> &str {
-            &self.output_buffer
+        #[must_use]
+        pub const fn output_text(&self) -> &str {
+            self.output_buffer.as_str()
         }
 
-        pub fn important_text(&self) -> &str {
-            &self.important_buffer
+        #[must_use]
+        pub const fn important_text(&self) -> &str {
+            self.important_buffer.as_str()
         }
 
-        pub fn installed_text(&self) -> &str {
-            &self.installed_buffer
+        #[must_use]
+        pub const fn installed_text(&self) -> &str {
+            self.installed_buffer.as_str()
         }
 
-        pub fn output_len(&self) -> usize {
+        #[must_use]
+        pub const fn output_len(&self) -> usize {
             self.output_buffer.len()
         }
 
+        #[must_use]
         pub fn current_scripted_component_key(&self) -> Option<String> {
             self.current_component_key.clone()
         }
 
+        #[must_use]
         pub fn current_scripted_component_tp2(&self) -> Option<String> {
             self.current_component_tp2.clone()
         }
 
+        #[must_use]
         pub fn current_scripted_component_id(&self) -> Option<String> {
             self.current_component_id.clone()
         }
 
+        #[must_use]
         pub fn current_scripted_component_name(&self) -> Option<String> {
             self.current_component_name.clone()
         }
 
-        pub fn scripted_inputs_loaded_count(&self) -> usize {
+        #[must_use]
+        pub const fn scripted_inputs_loaded_count(&self) -> usize {
             self.scripted_inputs_loaded_count
         }
 
-        pub fn boundary_event_count(&self) -> u64 {
+        #[must_use]
+        pub const fn boundary_event_count(&self) -> u64 {
             self.boundary_event_count
         }
     }
@@ -95,17 +113,17 @@ mod buffers {
             self.important_buffer.clear();
             self.installed_buffer.clear();
             self.important_scan_tail.clear();
-            self.prompt_capture_active = false;
-            self.prompt_capture_lines = 0;
-            self.prompt_capture_after_send = false;
-            self.warning_capture_active = false;
-            self.warning_capture_lines = 0;
-            self.has_new_data = true;
+            self.prompt_capture.active = false;
+            self.prompt_capture.lines = 0;
+            self.prompt_capture.after_send = false;
+            self.warning_capture.active = false;
+            self.warning_capture.lines = 0;
+            self.events.has_new_data = true;
         }
 
         pub fn append_marker(&mut self, text: &str) {
             self.append_output(&format!("\n=== {text} ===\n"));
-            self.has_new_data = true;
+            self.events.has_new_data = true;
         }
 
         pub(in crate::app::terminal) fn append_output(&mut self, text: &str) {
@@ -116,8 +134,7 @@ mod buffers {
                     .output_buffer
                     .char_indices()
                     .nth(to_trim)
-                    .map(|(idx, _)| idx)
-                    .unwrap_or(0);
+                    .map_or(0, |(idx, _)| idx);
                 self.output_buffer.drain(..byte_idx);
             }
         }
@@ -149,8 +166,7 @@ mod buffers {
             if let Some(file) = self.bio_debug_log_file.as_mut() {
                 let ts = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
+                    .map_or(0, |d| d.as_secs());
                 let _ = writeln!(file, "[{ts}] {message}");
                 let _ = file.flush();
             }
@@ -171,56 +187,56 @@ mod capture {
 
             let has_trailing_newline = combined.ends_with('\n');
             let mut parts: Vec<&str> = combined.split('\n').collect();
-            if !has_trailing_newline {
-                self.important_scan_tail = parts.pop().unwrap_or_default().to_string();
-            } else {
+            if has_trailing_newline {
                 self.important_scan_tail.clear();
                 if matches!(parts.last(), Some(last) if last.is_empty()) {
                     let _ = parts.pop();
                 }
+            } else {
+                self.important_scan_tail = parts.pop().unwrap_or_default().to_string();
             }
 
             for line in parts {
                 let expanded = expand_escaped_newlines(line);
                 for sub in expanded.lines() {
                     if analyze::prompt_capture_start(sub) {
-                        self.prompt_capture_active = true;
-                        self.prompt_capture_lines = 0;
-                        self.prompt_capture_after_send = false;
+                        self.prompt_capture.active = true;
+                        self.prompt_capture.lines = 0;
+                        self.prompt_capture.after_send = false;
                     }
-                    if self.prompt_capture_active {
-                        if self.prompt_capture_after_send && analyze::parser_timestamp_line(sub) {
-                            self.prompt_capture_active = false;
-                            self.prompt_capture_lines = 0;
-                            self.prompt_capture_after_send = false;
+                    if self.prompt_capture.active {
+                        if self.prompt_capture.after_send && analyze::parser_timestamp_line(sub) {
+                            self.prompt_capture.active = false;
+                            self.prompt_capture.lines = 0;
+                            self.prompt_capture.after_send = false;
                         }
                         self.important_buffer.push_str(sub);
                         self.important_buffer.push('\n');
-                        self.prompt_capture_lines = self.prompt_capture_lines.saturating_add(1);
-                        if analyze::prompt_capture_end(sub) || self.prompt_capture_lines >= 5000 {
-                            self.prompt_capture_active = false;
-                            self.prompt_capture_lines = 0;
+                        self.prompt_capture.lines = self.prompt_capture.lines.saturating_add(1);
+                        if analyze::prompt_capture_end(sub) || self.prompt_capture.lines >= 5000 {
+                            self.prompt_capture.active = false;
+                            self.prompt_capture.lines = 0;
                         }
                         continue;
                     }
                     if analyze::warning_capture_start(sub) {
-                        self.warning_capture_active = true;
-                        self.warning_capture_lines = 0;
+                        self.warning_capture.active = true;
+                        self.warning_capture.lines = 0;
                     }
-                    if self.warning_capture_active {
-                        if analyze::warning_capture_end(sub) || self.warning_capture_lines >= 200 {
-                            self.warning_capture_active = false;
-                            self.warning_capture_lines = 0;
+                    if self.warning_capture.active {
+                        if analyze::warning_capture_end(sub) || self.warning_capture.lines >= 200 {
+                            self.warning_capture.active = false;
+                            self.warning_capture.lines = 0;
                         } else {
                             self.important_buffer.push_str(sub);
                             self.important_buffer.push('\n');
-                            self.warning_capture_lines =
-                                self.warning_capture_lines.saturating_add(1);
+                            self.warning_capture.lines =
+                                self.warning_capture.lines.saturating_add(1);
                             continue;
                         }
                     }
-                    if self.prompt_capture_after_send && analyze::parser_timestamp_line(sub) {
-                        self.prompt_capture_after_send = false;
+                    if self.prompt_capture.after_send && analyze::parser_timestamp_line(sub) {
+                        self.prompt_capture.after_send = false;
                     }
                     if analyze::important_line(sub) {
                         self.important_buffer.push_str(sub);

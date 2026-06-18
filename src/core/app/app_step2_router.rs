@@ -32,73 +32,19 @@ pub(crate) fn handle_step2_action(
             step2_cancel,
             step2_progress_queue,
         ),
-        Step2Action::CancelScan => super::app_step2_scan::cancel_step2_scan(state, step2_cancel),
-        Step2Action::OpenUpdatePopup => {
-            state.step2.update_selected_target_game_tab = None;
-            state.step2.update_selected_target_tp_file = None;
-            state.step2.update_selected_refresh_target_game_tab = None;
-            state.step2.update_selected_refresh_target_tp_file = None;
-            state.step2.update_selected_popup_open = true;
+        Step2Action::CancelScan => {
+            super::app_step2_scan::cancel_step2_scan(state, step2_cancel.as_ref());
         }
-        Step2Action::CheckExactLogModList => {
-            let active_game_tab = state.step2.active_game_tab.clone();
-            super::app_step2_saved_log_flow::queue_exact_log_update_preview(
-                state,
-                &active_game_tab,
-                false,
-            );
-        }
+        Step2Action::OpenUpdatePopup => open_update_popup(state),
+        Step2Action::CheckExactLogModList => check_exact_log_mod_list(state),
         Step2Action::DownloadUpdates => {
             super::app_step2_update_download::start_step2_update_download(
                 state,
                 step2_update_download_rx,
-            )
+            );
         }
         Step2Action::AcceptLatestForExactVersionMisses => {
-            let requests = state
-                .step2
-                .update_selected_exact_version_retry_requests
-                .iter()
-                .map(
-                    |request| super::app_step2_update_check::Step2UpdateCheckRequest {
-                        game_tab: request.game_tab.clone(),
-                        tp_file: request.tp_file.clone(),
-                        label: request.label.clone(),
-                        source_id: request.source_id.clone(),
-                        repo: request.repo.clone(),
-                        exact_github: Vec::new(),
-                        source_url: request.source_url.clone(),
-                        channel: request.channel.clone(),
-                        tag: request.tag.clone(),
-                        commit: request.commit.clone(),
-                        branch: request.branch.clone(),
-                        asset: request.asset.clone(),
-                        pkg: request.pkg.clone(),
-                        requested_version: None,
-                    },
-                )
-                .collect::<Vec<_>>();
-            if requests.is_empty() {
-                state.step2.scan_status =
-                    "No exact-version misses available for latest fallback".to_string();
-                state.step2.update_selected_confirm_latest_fallback_open = false;
-                return;
-            }
-            state.step2.update_selected_merge_latest_fallback = true;
-            state.step2.update_selected_confirm_latest_fallback_open = false;
-            state
-                .step2
-                .update_selected_exact_version_retry_requests
-                .clear();
-            state.step2.update_selected_check_done_count = 0;
-            state.step2.update_selected_check_total_count = requests.len();
-            state.step2.scan_status =
-                format!("Checking latest fallback sources: {}", requests.len());
-            super::app_step2_update_check::start_step2_update_check(
-                state,
-                step2_update_check_rx,
-                requests,
-            );
+            accept_latest_for_exact_version_misses(state, step2_update_check_rx);
         }
         Step2Action::PreviewUpdateSelected => {
             let loaded = mod_downloads::load_mod_download_sources();
@@ -117,37 +63,18 @@ pub(crate) fn handle_step2_action(
             );
         }
         Step2Action::SetSelectedModUpdateLocked(locked) => {
-            set_selected_mod_update_locked(state, locked)
+            set_selected_mod_update_locked(state, locked);
+        }
+        Step2Action::SetModUpdateLocked { tp2, locked } => {
+            set_mod_update_locked(state, &tp2, locked);
         }
         Step2Action::OpenSelectedReadme(path)
         | Step2Action::OpenSelectedTp2Folder(path)
         | Step2Action::OpenSelectedTp2(path)
         | Step2Action::OpenSelectedIni(path)
-        | Step2Action::OpenSelectedWeb(path) => {
-            if let Err(err) = open_in_shell(&path) {
-                state.step2.scan_status = format!("Open failed: {err}");
-            }
-        }
+        | Step2Action::OpenSelectedWeb(path) => open_selected_path(state, &path),
         Step2Action::DiscoverModDownloadForks { tp2, label, repo } => {
-            state.step2.mod_download_forks_popup_open = true;
-            state.step2.mod_download_forks_popup_title = format!("Forks for {label}");
-            state.step2.mod_download_forks_popup_tp2 = tp2;
-            state.step2.mod_download_forks_popup_label = label;
-            state.step2.mod_download_forks.clear();
-            match super::app_step2_update_github_forks::fetch_github_forks(&repo) {
-                Ok(forks) => {
-                    state.step2.mod_download_forks_popup_error = None;
-                    state.step2.mod_download_forks = forks;
-                    state.step2.scan_status = format!(
-                        "Found {} fork(s) for {repo}",
-                        state.step2.mod_download_forks.len()
-                    );
-                }
-                Err(err) => {
-                    state.step2.mod_download_forks_popup_error = Some(err.clone());
-                    state.step2.scan_status = format!("Discover forks failed: {err}");
-                }
-            }
+            discover_mod_download_forks(state, tp2, label, &repo);
         }
         Step2Action::AddDiscoveredModDownloadFork {
             tp2,
@@ -155,163 +82,409 @@ pub(crate) fn handle_step2_action(
             full_name,
             owner_login,
             default_branch,
-        } => {
-            let source_id = owner_login.trim().to_ascii_lowercase();
-            let source_block = format!(
-                "[[mods.sources]]\nid = \"{}\"\nlabel = \"{}\"\ntype = \"github\"\nurl = \"https://github.com/{}\"\nrepo = \"{}\"\nbranch = \"{}\"",
-                source_id,
-                owner_login.trim(),
-                full_name.trim(),
-                full_name.trim(),
-                default_branch.trim()
-            );
-            state.step2.mod_download_source_editor_open = true;
-            state.step2.mod_download_source_editor_tp2 = tp2;
-            state.step2.mod_download_source_editor_label = label;
-            state.step2.mod_download_source_editor_source_id = source_id;
-            state
-                .step2
-                .mod_download_source_editor_allow_source_id_change = true;
-            state.step2.mod_download_source_editor_text = source_block;
-            state.step2.mod_download_source_editor_error = None;
-            state.step2.scan_status = format!("Review fork source {full_name}");
-        }
-        Step2Action::OpenModDownloadsUserSource => {
-            if let Err(err) = mod_downloads::ensure_mod_downloads_files() {
-                state.step2.scan_status = format!("Open failed: {err}");
-                return;
-            }
-            let path = mod_downloads::mod_downloads_user_path();
-            if let Err(err) = open_in_shell(path.to_string_lossy().as_ref()) {
-                state.step2.scan_status = format!("Open failed: {err}");
-            }
-        }
-        Step2Action::ReloadModDownloadSources => {
-            if let Err(err) = mod_downloads::ensure_mod_downloads_files() {
-                state.step2.scan_status = format!("Reload sources failed: {err}");
-                return;
-            }
-            let loaded = mod_downloads::load_mod_download_sources();
-            if let Some(err) = loaded.error.as_ref() {
-                state.step2.scan_status = format!("Reload sources failed: {err}");
-            } else {
-                state.step2.scan_status =
-                    format!("Reloaded mod download sources: {}", loaded.sources.len());
-            }
-        }
+        } => add_discovered_mod_download_fork(
+            state,
+            tp2,
+            label,
+            &full_name,
+            &owner_login,
+            &default_branch,
+        ),
+        Step2Action::OpenModDownloadsUserSource => open_mod_downloads_user_source(state),
+        Step2Action::ReloadModDownloadSources => reload_mod_download_sources(state),
         Step2Action::OpenModDownloadSourceEditor {
             tp2,
             label,
             source_id,
             allow_source_id_change,
-        } => match mod_downloads::load_user_mod_download_source_block(
-            &tp2,
-            &label,
-            &source_id,
+            destination,
+        } => open_mod_download_source_editor(
+            state,
+            tp2,
+            label,
+            source_id,
             allow_source_id_change,
-        ) {
-            Ok(text) => {
-                state.step2.mod_download_source_editor_open = true;
-                state.step2.mod_download_source_editor_tp2 = tp2;
-                state.step2.mod_download_source_editor_label = label;
-                state.step2.mod_download_source_editor_source_id = source_id;
-                state
-                    .step2
-                    .mod_download_source_editor_allow_source_id_change = allow_source_id_change;
-                state.step2.mod_download_source_editor_text = text;
-                state.step2.mod_download_source_editor_error = None;
-            }
-            Err(err) => {
-                state.step2.scan_status = format!("Open source editor failed: {err}");
-            }
-        },
+            destination,
+        ),
         Step2Action::SaveModDownloadSourceEditor => {
-            let tp2 = state.step2.mod_download_source_editor_tp2.clone();
-            let label = state.step2.mod_download_source_editor_label.clone();
-            let source_id = state.step2.mod_download_source_editor_source_id.clone();
-            let allow_source_id_change = state
-                .step2
-                .mod_download_source_editor_allow_source_id_change;
-            let text = state.step2.mod_download_source_editor_text.clone();
-            match mod_downloads::save_user_mod_download_source_block(
-                &tp2,
-                &label,
-                &source_id,
-                allow_source_id_change,
-                &text,
-            ) {
-                Ok(()) => {
-                    state.step2.mod_download_source_editor_open = false;
-                    state.step2.mod_download_source_editor_error = None;
-                    let loaded = mod_downloads::load_mod_download_sources();
-                    if let Some(err) = loaded.error.as_ref() {
-                        invalidate_update_selected_results(state);
-                        state.step2.scan_status = format!("Source saved but reload failed: {err}");
-                    } else if state.step2.update_selected_has_run
-                        && refresh_update_result_for_tp2(
-                            state,
-                            step2_update_check_rx,
-                            &loaded,
-                            &tp2,
-                        )
-                    {
-                        state.step2.scan_status =
-                            format!("Saved source entry for {tp2}; refreshing update result");
-                    } else {
-                        invalidate_update_selected_results(state);
-                        state.step2.scan_status = format!("Saved source entry for {tp2}");
-                    }
-                }
-                Err(err) => {
-                    state.step2.mod_download_source_editor_error = Some(err.clone());
-                    state.step2.scan_status = format!("Save source entry failed: {err}");
-                }
-            }
+            save_mod_download_source_editor(state, step2_update_check_rx);
         }
         Step2Action::SetModDownloadSource { tp2, source_id } => {
-            set_mod_download_source(state, step2_update_check_rx, &tp2, &source_id)
+            set_mod_download_source(state, step2_update_check_rx, &tp2, &source_id);
         }
         Step2Action::OpenCompatForComponent {
             game_tab,
             tp_file,
             component_id,
             component_key,
-        } => {
-            state.step2.selected = Some(Step2Selection::Component {
-                game_tab,
-                tp_file,
-                component_id,
-                component_key,
-            });
-            state.step2.compat_popup_issue_override = None;
-            state.step2.compat_popup_open = true;
-        }
+        } => open_compat_for_component(state, game_tab, tp_file, component_id, component_key),
         Step2Action::SelectBgeeViaLog | Step2Action::SelectBg2eeViaLog => {}
     }
+}
+
+fn open_update_popup(state: &mut WizardState) {
+    state.step2.update_selected_target_game_tab = None;
+    state.step2.update_selected_target_tp_file = None;
+    state.step2.update_selected_refresh_target_game_tab = None;
+    state.step2.update_selected_refresh_target_tp_file = None;
+    state.step2.update_selected_popup_open = true;
+}
+
+fn check_exact_log_mod_list(state: &mut WizardState) {
+    let active_game_tab = state.step2.active_game_tab.clone();
+    super::app_step2_saved_log_flow::queue_exact_log_update_preview(state, &active_game_tab, false);
+}
+
+fn accept_latest_for_exact_version_misses(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+) {
+    let requests = state
+        .step2
+        .update_selected_exact_version_retry_requests
+        .iter()
+        .map(
+            |request| super::app_step2_update_check::Step2UpdateCheckRequest {
+                game_tab: request.game_tab.clone(),
+                tp_file: request.tp_file.clone(),
+                label: request.label.clone(),
+                source_id: request.source_id.clone(),
+                repo: request.repo.clone(),
+                exact_github: Vec::new(),
+                source_url: request.source_url.clone(),
+                channel: request.channel.clone(),
+                tag: request.tag.clone(),
+                commit: request.commit.clone(),
+                branch: request.branch.clone(),
+                asset: request.asset.clone(),
+                pkg: request.pkg.clone(),
+                requested_version: None,
+            },
+        )
+        .collect::<Vec<_>>();
+    if requests.is_empty() {
+        state.step2.scan_status =
+            "No exact-version misses available for latest fallback".to_string();
+        state.step2.update_selected_confirm_latest_fallback_open = false;
+        return;
+    }
+    state.step2.update_selected_merge_latest_fallback = true;
+    state.step2.update_selected_confirm_latest_fallback_open = false;
+    state
+        .step2
+        .update_selected_exact_version_retry_requests
+        .clear();
+    state.step2.update_selected_check_done_count = 0;
+    state.step2.update_selected_check_total_count = requests.len();
+    state.step2.scan_status = format!("Checking latest fallback sources: {}", requests.len());
+    super::app_step2_update_check::start_step2_update_check(state, step2_update_check_rx, requests);
+}
+
+fn open_selected_path(state: &mut WizardState, path: &str) {
+    if let Err(err) = open_in_shell(path) {
+        state.step2.scan_status = format!("Open failed: {err}");
+    }
+}
+
+fn discover_mod_download_forks(state: &mut WizardState, tp2: String, label: String, repo: &str) {
+    state.step2.mod_download_forks_popup_open = true;
+    state.step2.mod_download_forks_popup_title = format!("Forks for {label}");
+    state.step2.mod_download_forks_popup_tp2 = tp2;
+    state.step2.mod_download_forks_popup_label = label;
+    state.step2.mod_download_forks.clear();
+    match super::app_step2_update_github_forks::fetch_github_forks(repo) {
+        Ok(forks) => {
+            state.step2.mod_download_forks_popup_error = None;
+            state.step2.mod_download_forks = forks;
+            state.step2.scan_status = format!(
+                "Found {} fork(s) for {repo}",
+                state.step2.mod_download_forks.len()
+            );
+        }
+        Err(err) => {
+            state.step2.mod_download_forks_popup_error = Some(err.clone());
+            state.step2.scan_status = format!("Discover forks failed: {err}");
+        }
+    }
+}
+
+fn add_discovered_mod_download_fork(
+    state: &mut WizardState,
+    tp2: String,
+    label: String,
+    full_name: &str,
+    owner_login: &str,
+    default_branch: &str,
+) {
+    let source_id = owner_login.trim().to_ascii_lowercase();
+    let source_block = format!(
+        "[[mods.sources]]\nid = \"{}\"\nlabel = \"{}\"\ntype = \"github\"\nurl = \"https://github.com/{}\"\nrepo = \"{}\"\nbranch = \"{}\"",
+        source_id,
+        owner_login.trim(),
+        full_name.trim(),
+        full_name.trim(),
+        default_branch.trim()
+    );
+    state.step2.mod_download_source_editor_open = true;
+    state.step2.mod_download_source_editor_tp2 = tp2;
+    state.step2.mod_download_source_editor_label = label;
+    state.step2.mod_download_source_editor_source_id = source_id;
+    state
+        .step2
+        .mod_download_source_editor_allow_source_id_change = true;
+    state.step2.mod_download_source_editor_text = source_block;
+    state.step2.mod_download_source_editor_error = None;
+    state.step2.scan_status = format!("Review fork source {full_name}");
+}
+
+fn open_mod_downloads_user_source(state: &mut WizardState) {
+    if let Err(err) = mod_downloads::ensure_mod_downloads_files() {
+        state.step2.scan_status = format!("Open failed: {err}");
+        return;
+    }
+    let path = mod_downloads::mod_downloads_user_path();
+    if let Err(err) = open_in_shell(path.to_string_lossy().as_ref()) {
+        state.step2.scan_status = format!("Open failed: {err}");
+    }
+}
+
+fn reload_mod_download_sources(state: &mut WizardState) {
+    if let Err(err) = mod_downloads::ensure_mod_downloads_files() {
+        state.step2.scan_status = format!("Reload sources failed: {err}");
+        return;
+    }
+    let loaded = mod_downloads::load_mod_download_sources();
+    if let Some(err) = loaded.error.as_ref() {
+        state.step2.scan_status = format!("Reload sources failed: {err}");
+    } else {
+        state.step2.scan_status =
+            format!("Reloaded mod download sources: {}", loaded.sources.len());
+    }
+}
+
+fn open_mod_download_source_editor(
+    state: &mut WizardState,
+    tp2: String,
+    label: String,
+    source_id: String,
+    allow_source_id_change: bool,
+    destination: crate::app::step2_action::ModSourceEditDestination,
+) {
+    use crate::app::mod_downloads::SeedScope;
+    use crate::app::step2_action::ModSourceEditDestination;
+
+    let (target_path, seed_scope) = match destination {
+        ModSourceEditDestination::GlobalDefault => (None, SeedScope::GlobalOnly),
+        ModSourceEditDestination::ThisModlist => (
+            mod_downloads::active_modlist_downloads_path(),
+            SeedScope::Resolved,
+        ),
+    };
+
+    match mod_downloads::load_user_mod_download_source_block(
+        &tp2,
+        &label,
+        &source_id,
+        allow_source_id_change,
+        target_path.as_deref(),
+        seed_scope,
+    ) {
+        Ok(text) => {
+            state.step2.mod_download_source_editor_open = true;
+            state.step2.mod_download_source_editor_tp2 = tp2;
+            state.step2.mod_download_source_editor_label = label;
+            state.step2.mod_download_source_editor_source_id = source_id;
+            state
+                .step2
+                .mod_download_source_editor_allow_source_id_change = allow_source_id_change;
+            state.step2.mod_download_source_editor_text = text;
+            state.step2.mod_download_source_editor_error = None;
+            state.step2.mod_download_source_editor_destination = destination;
+        }
+        Err(err) => {
+            state.step2.scan_status = format!("Open source editor failed: {err}");
+        }
+    }
+}
+
+fn save_mod_download_source_editor(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+) {
+    use crate::app::step2_action::ModSourceEditDestination;
+
+    let tp2 = state.step2.mod_download_source_editor_tp2.clone();
+    let label = state.step2.mod_download_source_editor_label.clone();
+    let source_id = state.step2.mod_download_source_editor_source_id.clone();
+    let allow_source_id_change = state
+        .step2
+        .mod_download_source_editor_allow_source_id_change;
+    let text = state.step2.mod_download_source_editor_text.clone();
+    let destination = state.step2.mod_download_source_editor_destination;
+
+    let target_path = match destination {
+        ModSourceEditDestination::GlobalDefault => None,
+        ModSourceEditDestination::ThisModlist => mod_downloads::active_modlist_downloads_path(),
+    };
+
+    match mod_downloads::save_user_mod_download_source_block(
+        &tp2,
+        &label,
+        &source_id,
+        allow_source_id_change,
+        &text,
+        target_path.as_deref(),
+    ) {
+        Ok(()) => finish_saving_mod_download_source_editor(state, step2_update_check_rx, &tp2),
+        Err(err) => {
+            state.step2.mod_download_source_editor_error = Some(err.clone());
+            state.step2.scan_status = format!("Save source entry failed: {err}");
+        }
+    }
+}
+
+fn finish_saving_mod_download_source_editor(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+    tp2: &str,
+) {
+    state.step2.mod_download_source_editor_open = false;
+    state.step2.mod_download_source_editor_error = None;
+    let loaded = mod_downloads::load_mod_download_sources();
+    if let Some(err) = loaded.error.as_ref() {
+        invalidate_update_selected_results(state);
+        state.step2.scan_status = format!("Source saved but reload failed: {err}");
+    } else if state.step2.update_selected_has_run
+        && refresh_update_result_for_tp2(state, step2_update_check_rx, &loaded, tp2)
+    {
+        state.step2.scan_status = format!("Saved source entry for {tp2}; refreshing update result");
+    } else {
+        invalidate_update_selected_results(state);
+        state.step2.scan_status = format!("Saved source entry for {tp2}");
+    }
+}
+
+fn open_compat_for_component(
+    state: &mut WizardState,
+    game_tab: String,
+    tp_file: String,
+    component_id: String,
+    component_key: String,
+) {
+    state.step2.selected = Some(Step2Selection::Component {
+        game_tab,
+        tp_file,
+        component_id,
+        component_key,
+    });
+    state.step2.compat_popup_issue_override = None;
+    state.step2.compat_popup_open = true;
 }
 
 fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
     let Some(Step2Selection::Mod { game_tab, tp_file }) = state.step2.selected.clone() else {
         return;
     };
-    let mod_name;
-    let update_entry;
     let had_cached_update_entry = !locked && popup_has_cached_update_entry(state, &tp_file);
+
+    let mod_name: String;
+    let update_entry: Option<String>;
     {
-        let mods = if game_tab == "BGEE" {
+        let selected_mods = if game_tab == "BGEE" {
             &mut state.step2.bgee_mods
         } else {
             &mut state.step2.bg2ee_mods
         };
-        let Some(mod_state) = mods
-            .iter_mut()
-            .find(|mod_state| mod_state.tp_file == tp_file)
-        else {
+        let Some(selected_mod) = selected_mods.iter_mut().find(|m| m.tp_file == tp_file) else {
             return;
         };
-        if let Err(err) = super::mod_update_locks::set_mod_update_lock(&mod_state.tp_file, locked) {
+        if let Err(err) =
+            super::mod_update_locks::set_mod_update_lock(&selected_mod.tp_file, locked)
+        {
             state.step2.scan_status = format!("Update lock failed: {err}");
             return;
+        }
+        mod_name = selected_mod.name.clone();
+        update_entry = mod_update_entry_text(selected_mod);
+    }
+
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(&tp_file);
+    sync_update_locked_by_tp2(state, &tp2_key, locked, had_cached_update_entry);
+    sync_cached_popup_update_lock(state, &game_tab, &tp_file, update_entry.as_deref(), locked);
+    let verb = if locked { "Locked" } else { "Unlocked" };
+    state.step2.scan_status = format!("{verb} updates for {mod_name}");
+}
+
+fn set_mod_update_locked(state: &mut WizardState, tp2: &str, locked: bool) {
+    if let Err(err) = super::mod_update_locks::set_mod_update_lock(tp2, locked) {
+        state.step2.scan_status = format!("Update lock failed: {err}");
+        return;
+    }
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(tp2);
+    let had_cached = !locked
+        && state
+            .step2
+            .bgee_mods
+            .iter()
+            .chain(state.step2.bg2ee_mods.iter())
+            .any(|m| {
+                mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key
+                    && popup_has_cached_update_entry(state, &m.tp_file)
+            });
+    let (canonical_tp_file, mod_name) = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .find(|m| mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key)
+        .map_or_else(
+            || (tp2.to_string(), tp2.to_string()),
+            |m| (m.tp_file.clone(), m.name.clone()),
+        );
+    sync_update_locked_by_tp2(state, &tp2_key, locked, had_cached);
+    let update_entry = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .find(|m| mod_downloads::normalize_mod_download_tp2(&m.tp_file) == tp2_key)
+        .and_then(mod_update_entry_text);
+    sync_cached_popup_update_lock(
+        state,
+        "BGEE",
+        &canonical_tp_file,
+        update_entry.as_deref(),
+        locked,
+    );
+    let verb = if locked { "Locked" } else { "Unlocked" };
+    let label = if mod_name.trim().is_empty() {
+        &canonical_tp_file
+    } else {
+        &mod_name
+    };
+    state.step2.scan_status = format!("{verb} updates for {label}");
+}
+
+fn sync_update_locked_by_tp2(
+    state: &mut WizardState,
+    tp2_key: &str,
+    locked: bool,
+    had_cached_update_entry: bool,
+) {
+    for mod_state in state
+        .step2
+        .bgee_mods
+        .iter_mut()
+        .chain(state.step2.bg2ee_mods.iter_mut())
+    {
+        if mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) != tp2_key {
+            continue;
         }
         mod_state.update_locked = locked;
         if locked {
@@ -319,12 +492,7 @@ fn set_selected_mod_update_locked(state: &mut WizardState, locked: bool) {
         } else if had_cached_update_entry {
             mod_state.package_marker = Some('+');
         }
-        mod_name = mod_state.name.clone();
-        update_entry = mod_update_entry_text(mod_state);
     }
-    sync_cached_popup_update_lock(state, &game_tab, &tp_file, update_entry.as_deref(), locked);
-    let verb = if locked { "Locked" } else { "Unlocked" };
-    state.step2.scan_status = format!("{verb} updates for {mod_name}");
 }
 
 fn set_mod_download_source(
@@ -567,4 +735,98 @@ fn mod_update_entry_text(mod_state: &crate::app::state::Step2ModState) -> Option
         mod_state.name.trim()
     };
     Some(format!("{label} ({latest})"))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
+    use crate::app::state::{Step2ModState, Step2Selection, WizardState};
+
+    struct AmbientGuard(Option<PathBuf>);
+
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    fn unique_tmp_dir(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "bio_router_test_{}_{}_{label}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    fn make_mod_state(tp_file: &str) -> Step2ModState {
+        Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: format!("{tp_file}.tp2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn eet_dual_tab_lock_sync() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+
+        let tmp_dir = unique_tmp_dir("eet_lock");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        crate::app::mod_downloads::set_active_modlist_dir(Some(tmp_dir.clone()));
+
+        let tp_file = "cdtweaks/cdtweaks.tp2";
+        let mut state = WizardState::default();
+        state.step2.bgee_mods.push(make_mod_state(tp_file));
+        state.step2.bg2ee_mods.push(make_mod_state(tp_file));
+        state.step2.selected = Some(Step2Selection::Mod {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+        });
+
+        super::set_selected_mod_update_locked(&mut state, true);
+        assert!(
+            state.step2.bgee_mods[0].update_locked,
+            "bgee instance must be locked"
+        );
+        assert!(
+            state.step2.bg2ee_mods[0].update_locked,
+            "bg2ee instance must be locked after locking via bgee tab"
+        );
+
+        super::set_selected_mod_update_locked(&mut state, false);
+        assert!(
+            !state.step2.bgee_mods[0].update_locked,
+            "bgee instance must be unlocked"
+        );
+        assert!(
+            !state.step2.bg2ee_mods[0].update_locked,
+            "bg2ee instance must be unlocked after unlocking via bgee tab"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
 }

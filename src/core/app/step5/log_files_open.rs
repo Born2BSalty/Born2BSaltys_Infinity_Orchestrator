@@ -20,8 +20,7 @@ pub fn open_last_log_file(step1: &Step1State) -> std::io::Result<()> {
 pub fn save_console_log(step5: &Step5State, content: &str) -> std::io::Result<PathBuf> {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let run_id = current_or_new_run_id(step5);
     let out_dir = run_dir_from_id(&run_id);
     fs::create_dir_all(&out_dir)?;
@@ -47,8 +46,7 @@ fn newest_log_file(step1: &Step1State) -> Option<PathBuf> {
             if path
                 .extension()
                 .and_then(|s| s.to_str())
-                .map(|s| s.eq_ignore_ascii_case("log"))
-                != Some(true)
+                .is_none_or(|s| !s.eq_ignore_ascii_case("log"))
             {
                 continue;
             }

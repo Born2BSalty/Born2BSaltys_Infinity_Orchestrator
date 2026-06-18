@@ -5,18 +5,20 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 
 pub(crate) fn render_cancel_confirm(
-    ui: &mut egui::Ui,
+    ui: &egui::Ui,
     state: &mut WizardState,
     terminal: Option<&mut EmbeddedTerminal>,
+    palette: ThemePalette,
 ) {
     if !state.step5.cancel_confirm_open {
         return;
     }
 
     egui::Window::new("Confirm Cancel")
-        .collapsible(false)
+        .collapsible(true)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
         .show(ui.ctx(), |ui| {
@@ -31,7 +33,9 @@ pub(crate) fn render_cancel_confirm(
                     crate::ui::shared::typography_global::plain(
                         "Warning: force cancel can leave installation in a broken state.",
                     )
-                    .color(crate::ui::shared::theme_global::warning()),
+                    .color(
+                        crate::ui::shared::redesign_tokens::redesign_pill_warn(palette),
+                    ),
                 );
             } else {
                 ui.label(crate::ui::shared::typography_global::weak(

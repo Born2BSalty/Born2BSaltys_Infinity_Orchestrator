@@ -3,6 +3,6 @@
 
 use crate::app::state::WizardState;
 
-pub fn active_tab_mut(state: &mut WizardState) -> &mut String {
+pub const fn active_tab_mut(state: &mut WizardState) -> &mut String {
     &mut state.step3.active_game_tab
 }

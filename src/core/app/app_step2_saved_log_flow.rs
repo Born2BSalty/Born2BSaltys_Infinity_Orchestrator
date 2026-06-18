@@ -25,7 +25,6 @@ pub(crate) fn queue_exact_log_update_preview(
     };
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn advance_pending_saved_log_flow(
     state: &mut WizardState,
     step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
@@ -50,7 +49,7 @@ pub(crate) fn advance_pending_saved_log_flow(
         None
     };
     if let Some(reason) = preflight_blocker {
-        stop_auto_build(state, reason);
+        stop_auto_build(state, &reason);
         return;
     }
 
@@ -92,12 +91,12 @@ pub(crate) fn advance_pending_saved_log_flow(
     {
         if state.modlist_auto_build_active {
             if let Some(reason) = auto_build_blocker_before_download(state) {
-                stop_auto_build(state, reason);
+                stop_auto_build(state, &reason);
                 return;
             }
             if state.step2.update_selected_update_assets.is_empty() {
                 state.step2.pending_saved_log_download = false;
-                start_auto_build_install(state);
+                finish_auto_build_at_step5(state);
                 return;
             }
             state.modlist_auto_build_waiting_for_install = true;
@@ -118,24 +117,24 @@ pub(crate) fn advance_pending_saved_log_flow(
         && !state.step2.update_selected_extract_running
     {
         if scan_failed(state) {
-            stop_auto_build(state, "scan failed after extraction".to_string());
+            stop_auto_build(state, "scan failed after extraction");
             return;
         }
         if let Some(reason) = auto_build_blocker_before_install(state) {
-            stop_auto_build(state, reason);
+            stop_auto_build(state, &reason);
             return;
         }
-        start_auto_build_install(state);
+        finish_auto_build_at_step5(state);
     }
 }
 
-fn clear_pending(state: &mut WizardState) {
+const fn clear_pending(state: &mut WizardState) {
     state.step2.pending_saved_log_apply = false;
     state.step2.pending_saved_log_update_preview = false;
     state.step2.pending_saved_log_download = false;
 }
 
-fn stop_auto_build(state: &mut WizardState, reason: String) {
+fn stop_auto_build(state: &mut WizardState, reason: &str) {
     clear_pending(state);
     state.modlist_auto_build_active = false;
     state.modlist_auto_build_waiting_for_install = false;
@@ -144,15 +143,15 @@ fn stop_auto_build(state: &mut WizardState, reason: String) {
     state.step5.last_status_text = message;
 }
 
-fn start_auto_build_install(state: &mut WizardState) {
+fn finish_auto_build_at_step5(state: &mut WizardState) {
     state.modlist_auto_build_active = false;
     state.modlist_auto_build_waiting_for_install = false;
     state.step2.update_selected_popup_open = false;
     state.step2.update_selected_confirm_latest_fallback_open = false;
     state.step2.mod_download_forks_popup_open = false;
     state.current_step = 4;
-    state.step5.start_install_requested = true;
-    state.step5.last_status_text = "Auto Build: starting install".to_string();
+    state.step5.start_install_requested = false;
+    state.step5.last_status_text = "Auto Build: ready to install".to_string();
 }
 
 fn auto_build_blocker_before_download(state: &WizardState) -> Option<String> {
@@ -220,4 +219,29 @@ fn scan_failed(state: &WizardState) -> bool {
     state.step2.scan_status.starts_with("Scan failed:")
         || state.step2.scan_status == "Scan canceled"
         || state.step2.scan_status == "Scan worker disconnected"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finish_auto_build_routes_to_step5_without_auto_starting_install() {
+        let mut state = WizardState {
+            modlist_auto_build_active: true,
+            modlist_auto_build_waiting_for_install: true,
+            ..Default::default()
+        };
+
+        finish_auto_build_at_step5(&mut state);
+
+        assert!(!state.modlist_auto_build_active);
+        assert!(!state.modlist_auto_build_waiting_for_install);
+        assert_eq!(state.current_step, 4);
+        assert!(
+            !state.step5.start_install_requested,
+            "auto-build must stop on Step 5 and wait for the user to click Install"
+        );
+        assert_eq!(state.step5.last_status_text, "Auto Build: ready to install");
+    }
 }

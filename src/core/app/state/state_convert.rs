@@ -11,19 +11,22 @@ mod step1_settings_to_state {
 
     impl From<Step1Settings> for Step1State {
         fn from(value: Step1Settings) -> Self {
-            let install_mode = if value.install_mode.trim().is_empty() {
-                Step1State::derive_install_mode_from_legacy(
-                    value.have_weidu_logs,
-                    value.download_archive,
-                )
-            } else {
-                Step1State::normalize_install_mode(&value.install_mode).to_string()
-            };
-            let have_weidu_logs = matches!(
-                install_mode.as_str(),
-                Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS
-                    | Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
-            );
+            let install_mode = install_mode_from_settings(&value);
+            let have_weidu_logs = install_mode_uses_logs(&install_mode);
+            let mod_installer_binary =
+                resolve_mod_installer_binary_setting(&value.mod_installer_binary);
+            let weidu_binary = resolve_weidu_binary_setting(&value.weidu_binary);
+            let language = string_or_default(value.language, "en_US");
+            let depth = usize_or_default(value.depth, 5);
+            let timeout = usize_or_default(value.timeout, 3600);
+            let auto_answer_initial_delay_ms =
+                usize_or_default(value.auto_answer_initial_delay_ms, 2000);
+            let auto_answer_post_send_delay_ms =
+                usize_or_default(value.auto_answer_post_send_delay_ms, 5000);
+            let weidu_log_mode =
+                string_or_default(value.weidu_log_mode, "autolog,logapp,log-extern");
+            let tick = u64_or_default(value.tick, 500);
+            let lookback = usize_or_default(value.lookback, 10);
             Self {
                 game_install: value.game_install,
                 install_mode,
@@ -49,17 +52,14 @@ mod step1_settings_to_state {
                 weidu_log_logextern: value.weidu_log_logextern,
                 weidu_log_log_component: value.weidu_log_log_component,
                 weidu_log_folder: value.weidu_log_folder,
-                mod_installer_binary: if value.mod_installer_binary.trim().is_empty() {
-                    default_mod_installer_binary()
-                } else {
-                    resolve_mod_installer_binary(&value.mod_installer_binary)
-                },
+                mod_installer_binary,
                 bgee_game_folder: value.bgee_game_folder,
                 bgee_log_folder: value.bgee_log_folder,
                 bgee_log_file: value.bgee_log_file,
                 bg2ee_game_folder: value.bg2ee_game_folder,
                 bg2ee_log_folder: value.bg2ee_log_folder,
                 bg2ee_log_file: value.bg2ee_log_file,
+                iwdee_game_folder: value.iwdee_game_folder,
                 eet_bgee_game_folder: value.eet_bgee_game_folder,
                 eet_bgee_log_folder: value.eet_bgee_log_folder,
                 eet_bg2ee_game_folder: value.eet_bg2ee_game_folder,
@@ -70,39 +70,15 @@ mod step1_settings_to_state {
                 log_file: value.log_file,
                 generate_directory: value.generate_directory,
                 mods_folder: value.mods_folder,
-                weidu_binary: if value.weidu_binary.trim().is_empty() {
-                    default_weidu_binary()
-                } else {
-                    resolve_weidu_binary(&value.weidu_binary)
-                },
-                language: if value.language.is_empty() {
-                    "en_US".to_string()
-                } else {
-                    value.language
-                },
-                depth: if value.depth == 0 { 5 } else { value.depth },
+                weidu_binary,
+                language,
+                depth,
                 skip_installed: value.skip_installed,
                 abort_on_warnings: value.abort_on_warnings,
-                timeout: if value.timeout == 0 {
-                    3600
-                } else {
-                    value.timeout
-                },
-                auto_answer_initial_delay_ms: if value.auto_answer_initial_delay_ms == 0 {
-                    2000
-                } else {
-                    value.auto_answer_initial_delay_ms
-                },
-                auto_answer_post_send_delay_ms: if value.auto_answer_post_send_delay_ms == 0 {
-                    5000
-                } else {
-                    value.auto_answer_post_send_delay_ms
-                },
-                weidu_log_mode: if value.weidu_log_mode.is_empty() {
-                    "autolog,logapp,log-extern".to_string()
-                } else {
-                    value.weidu_log_mode
-                },
+                timeout,
+                auto_answer_initial_delay_ms,
+                auto_answer_post_send_delay_ms,
+                weidu_log_mode,
                 strict_matching: value.strict_matching,
                 download: value.download,
                 download_archive: value.download_archive,
@@ -110,16 +86,63 @@ mod step1_settings_to_state {
                 mods_backup_folder: value.mods_backup_folder,
                 overwrite: value.overwrite,
                 check_last_installed: value.check_last_installed,
-                tick: if value.tick == 0 { 500 } else { value.tick },
-                lookback: if value.lookback == 0 {
-                    10
-                } else {
-                    value.lookback
-                },
+                tick,
+                lookback,
                 casefold: value.casefold,
                 backup_targets_before_eet_copy: value.backup_targets_before_eet_copy,
             }
         }
+    }
+
+    fn install_mode_from_settings(value: &Step1Settings) -> String {
+        if value.install_mode.trim().is_empty() {
+            Step1State::derive_install_mode_from_legacy(
+                value.have_weidu_logs,
+                value.download_archive,
+            )
+        } else {
+            Step1State::normalize_install_mode(&value.install_mode).to_string()
+        }
+    }
+
+    fn install_mode_uses_logs(install_mode: &str) -> bool {
+        matches!(
+            install_mode,
+            Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS
+                | Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
+        )
+    }
+
+    fn resolve_mod_installer_binary_setting(value: &str) -> String {
+        if value.trim().is_empty() {
+            default_mod_installer_binary()
+        } else {
+            resolve_mod_installer_binary(value)
+        }
+    }
+
+    fn resolve_weidu_binary_setting(value: &str) -> String {
+        if value.trim().is_empty() {
+            default_weidu_binary()
+        } else {
+            resolve_weidu_binary(value)
+        }
+    }
+
+    fn string_or_default(value: String, fallback: &str) -> String {
+        if value.is_empty() {
+            fallback.to_string()
+        } else {
+            value
+        }
+    }
+
+    const fn usize_or_default(value: usize, fallback: usize) -> usize {
+        if value == 0 { fallback } else { value }
+    }
+
+    const fn u64_or_default(value: u64, fallback: u64) -> u64 {
+        if value == 0 { fallback } else { value }
     }
 }
 mod step1_state_to_settings {
@@ -161,6 +184,7 @@ mod step1_state_to_settings {
                 bg2ee_game_folder: value.bg2ee_game_folder,
                 bg2ee_log_folder: value.bg2ee_log_folder,
                 bg2ee_log_file: value.bg2ee_log_file,
+                iwdee_game_folder: value.iwdee_game_folder,
                 eet_bgee_game_folder: value.eet_bgee_game_folder,
                 eet_bgee_log_folder: value.eet_bgee_log_folder,
                 eet_bg2ee_game_folder: value.eet_bg2ee_game_folder,

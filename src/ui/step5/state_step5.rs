@@ -5,18 +5,23 @@ use crate::app::state::WizardState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step5ConsoleViewState {
-    pub important_only: bool,
-    pub installed_only: bool,
+    pub filter: ConsoleOutputFilter,
     pub auto_scroll: bool,
     pub request_input_focus: bool,
     pub last_selected_console_text_len: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsoleOutputFilter {
+    General,
+    Important,
+    Installed,
+}
+
 impl Default for Step5ConsoleViewState {
     fn default() -> Self {
         Self {
-            important_only: false,
-            installed_only: false,
+            filter: ConsoleOutputFilter::General,
             auto_scroll: true,
             request_input_focus: false,
             last_selected_console_text_len: 0,
@@ -24,6 +29,7 @@ impl Default for Step5ConsoleViewState {
     }
 }
 
-pub fn install_in_progress(state: &WizardState) -> bool {
+#[must_use]
+pub const fn install_in_progress(state: &WizardState) -> bool {
     state.step5.prep_running || state.step5.install_running || state.step5.cancel_pending
 }

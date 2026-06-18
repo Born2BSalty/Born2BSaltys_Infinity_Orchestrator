@@ -22,7 +22,7 @@ pub(crate) struct DragFinalizeContext<'a> {
 
 pub(crate) struct DragPointerContext<'a> {
     pub items: &'a [Step3ItemState],
-    pub drag_from: &'a Option<usize>,
+    pub drag_from: Option<&'a usize>,
     pub drag_over: &'a mut Option<usize>,
     pub drag_indices: &'a [usize],
     pub drag_grab_offset: &'a f32,
@@ -93,11 +93,11 @@ pub(crate) fn finalize_on_release(ui: &egui::Ui, ctx: &mut DragFinalizeContext<'
 pub(crate) fn draw_insert_marker(
     ui: &egui::Ui,
     items: &[Step3ItemState],
-    drag_from: &Option<usize>,
+    drag_active: bool,
     drag_over: Option<usize>,
     visible_rows: &[(usize, egui::Rect)],
 ) {
-    if drag_from.is_none() {
+    if !drag_active {
         return;
     }
     if let Some(insert_at) = drag_over {
@@ -129,7 +129,7 @@ pub(crate) fn update_drag_target_from_pointer(ui: &egui::Ui, ctx: &mut DragPoint
     let drag_indices = ctx.drag_indices;
     let drag_grab_offset = ctx.drag_grab_offset;
     let drag_grab_pos_in_block = ctx.drag_grab_pos_in_block;
-    let drag_row_h = ctx.drag_row_h;
+    let _ = ctx.drag_row_h;
     let visible_rows = ctx.visible_rows;
     if drag_from.is_none() {
         return;
@@ -142,29 +142,17 @@ pub(crate) fn update_drag_target_from_pointer(ui: &egui::Ui, ctx: &mut DragPoint
             .count()
             .max(1);
         if n > 0 && k > 0 {
-            let list_top_y = visible_rows
-                .first()
-                .map(|(_, r)| r.top())
-                .unwrap_or(pointer.y);
-            let row_h = if *drag_row_h > 0.0 {
-                *drag_row_h
-            } else {
-                (visible_rows
-                    .first()
-                    .map(|(_, r)| r.height())
-                    .unwrap_or(20.0)
-                    + ui.spacing().item_spacing.y.max(0.0))
-                .max(1.0)
-            };
-            let desired_block_start = drag::compute_desired_block_start(
-                pointer.y,
-                list_top_y,
-                row_h,
-                *drag_grab_offset,
-                *drag_grab_pos_in_block,
-                n,
-                k,
-            );
+            let target_y = pointer.y - *drag_grab_offset;
+            let desired_grabbed_row = visible_rows
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, rect))| rect.top() <= target_y)
+                .map(|(i, _)| i)
+                .next_back()
+                .unwrap_or(0);
+            let desired_start = desired_grabbed_row.saturating_sub(*drag_grab_pos_in_block);
+            let max_start = n.saturating_sub(k);
+            let desired_block_start = desired_start.min(max_start);
             *drag_over = Some(desired_block_start.min(items.len()));
         }
     }

@@ -1,0 +1,393 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 Born2BSalty
+
+use eframe::egui;
+use std::sync::mpsc::TryRecvError;
+use tracing::warn;
+
+use crate::app::state::Step1State;
+use crate::install_runtime::flag_policies::InstallWorkflow;
+use crate::install_runtime::install_concurrency;
+use crate::install_runtime::start_hooks::{self, InstallButtonVariant};
+use crate::registry::model::Game;
+use crate::ui::orchestrator::nav_destination::NavDestination;
+use crate::ui::orchestrator::orchestrator_app::{
+    DestinationPrepFlow, OrchestratorApp, PendingWorkspaceDestinationPrep,
+};
+use crate::ui::step5::action_step5::Step5Action;
+use crate::ui::workspace::step5::state_workspace_step5::PostInstallAction;
+use crate::ui::workspace::step5::{post_install_actions, share_paste_code_dialog, success_banner};
+
+pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id: &str) {
+    if orchestrator.workspace_step5.install_clicked
+        && orchestrator.workspace_view.loaded_workspace_id.as_deref()
+            != Some(orchestrator.workspace_view.modlist_id.as_str())
+    {
+        orchestrator.workspace_step5.reset_for_modlist();
+    }
+    poll_pending_destination_prep(orchestrator);
+
+    let palette = orchestrator.theme_palette;
+
+    let entry = orchestrator.registry.find(modlist_id).cloned();
+
+    if let Some(e) = entry.as_ref() {
+        success_banner::render(ui, palette, &orchestrator.wizard_state, e);
+    }
+
+    let post_install_action: Option<PostInstallAction> = entry
+        .as_ref()
+        .and_then(|e| post_install_actions::render(ui, palette, &orchestrator.wizard_state, e));
+
+    let exe_fingerprint = orchestrator.exe_fingerprint.clone();
+    let panel_rect = ui.available_rect_before_wrap();
+    let mut action: Option<Step5Action> = None;
+    clipped_pane(ui, panel_rect, |ui| {
+        action = crate::ui::step5::page_step5::render(
+            ui,
+            &mut orchestrator.wizard_state,
+            &mut orchestrator.step5_console_view,
+            orchestrator.step5_terminal.as_mut(),
+            orchestrator.step5_terminal_error.as_deref(),
+            crate::ui::step5::content_step5::Step5RenderCtx {
+                dev_mode: orchestrator.dev_mode,
+                exe_fingerprint: &exe_fingerprint,
+                palette,
+            },
+        );
+    });
+
+    if action == Some(Step5Action::StartInstall) && !handle_start_install(orchestrator, modlist_id)
+    {
+        return;
+    }
+
+    match post_install_action {
+        Some(PostInstallAction::ReturnToHome) => {
+            orchestrator.nav = NavDestination::Home;
+        }
+        Some(PostInstallAction::OpenInstallFolder) => {
+            if let Some(e) = entry.as_ref() {
+                let result = open_game_subfolder(e, &orchestrator.wizard_state.step1);
+                if let Err(msg) = result {
+                    orchestrator.notification_manager.error(msg);
+                }
+            }
+        }
+        None => {}
+    }
+
+    if orchestrator.workspace_step5.share_dialog_open {
+        let ctx = ui.ctx().clone();
+        let entry_for_dialog = entry.unwrap_or_default();
+        share_paste_code_dialog::render(
+            &ctx,
+            palette,
+            &mut orchestrator.workspace_step5,
+            &entry_for_dialog,
+        );
+    }
+}
+
+fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    let clip = rect.intersect(ui.clip_rect());
+    child.set_clip_rect(clip);
+    add(&mut child);
+    ui.allocate_rect(rect, egui::Sense::hover());
+}
+
+fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+    orchestrator.workspace_step5.install_clicked = true;
+
+    if let Some(running) = install_concurrency::install_in_progress(orchestrator)
+        && running.modlist_id != modlist_id
+    {
+        let running_name = orchestrator
+            .registry
+            .find(&running.modlist_id)
+            .map_or_else(|| running.modlist_id.clone(), |e| e.name.clone());
+        warn!(
+            target = "orchestrator",
+            "Install refused for {modlist_id}: {}",
+            install_concurrency::per_button_gate_tooltip(&running_name)
+        );
+        return false;
+    }
+
+    let variant = InstallButtonVariant::from_step5(&orchestrator.wizard_state, false);
+
+    if variant == InstallButtonVariant::Install
+        && start_pending_destination_prep(orchestrator, modlist_id)
+    {
+        return false;
+    }
+
+    start_workspace_install(orchestrator, modlist_id)
+}
+
+fn start_workspace_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+    let variant = InstallButtonVariant::from_step5(&orchestrator.wizard_state, false);
+    let workflow = orchestrator
+        .registry
+        .find(modlist_id)
+        .filter(|e| !e.forked_from.is_empty())
+        .map_or(InstallWorkflow::FreshCreate, |_| {
+            InstallWorkflow::ForkAndModify
+        });
+
+    let settings: crate::settings::model::Step1Settings =
+        orchestrator.wizard_state.step1.clone().into();
+
+    let OrchestratorApp {
+        wizard_state,
+        registry,
+        registry_store,
+        ..
+    } = &mut *orchestrator;
+
+    match start_hooks::on_install_start(
+        modlist_id,
+        variant,
+        workflow,
+        wizard_state,
+        registry,
+        registry_store,
+        &settings,
+    ) {
+        Ok(()) => {
+            orchestrator.wizard_state.step5.start_install_requested = true;
+        }
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "install-start hook failed for {modlist_id}: {err} \
+                 (install not started)"
+            );
+        }
+    }
+
+    true
+}
+
+fn start_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+    use crate::install_runtime::destination_prep;
+
+    if orchestrator.workspace_destination_prep_rx.is_some() {
+        return true;
+    }
+
+    let Some(workspace_state) = orchestrator.workspace_state.get(modlist_id) else {
+        return false;
+    };
+    let Some(choice) = workspace_state.pending_destination_prep else {
+        return false;
+    };
+    let Some(entry) = orchestrator.registry.find(modlist_id) else {
+        return false;
+    };
+    let destination = std::path::PathBuf::from(entry.destination_folder.trim());
+    let destination_text = entry.destination_folder.trim().to_string();
+    let token = orchestrator.next_destination_prep_token(
+        DestinationPrepFlow::WorkspaceStep5,
+        &destination_text,
+        Some(modlist_id.to_string()),
+    );
+
+    orchestrator.workspace_destination_prep_rx = Some(PendingWorkspaceDestinationPrep {
+        token,
+        modlist_id: modlist_id.to_string(),
+        worker: destination_prep::spawn_prepare_destination_worker(destination, Some(choice)),
+    });
+    orchestrator.wizard_state.step5.prep_running = true;
+    orchestrator.wizard_state.step5.last_status_text = "Preparing target destination".to_string();
+    if let Some(term) = orchestrator.step5_terminal.as_mut() {
+        term.append_marker("Preparing target destination");
+    }
+    true
+}
+
+fn poll_pending_destination_prep(orchestrator: &mut OrchestratorApp) {
+    let Some(pending) = orchestrator.workspace_destination_prep_rx.as_ref() else {
+        return;
+    };
+    if !pending_workspace_prep_matches_current(orchestrator, pending) {
+        orchestrator.abandon_workspace_destination_prep();
+        orchestrator.wizard_state.step5.prep_running = false;
+        return;
+    }
+
+    let id = pending.modlist_id.clone();
+    match pending.worker.rx.try_recv() {
+        Ok(Ok(report)) => {
+            let Some(pending) = orchestrator.workspace_destination_prep_rx.take() else {
+                return;
+            };
+            if !pending_workspace_prep_matches_current(orchestrator, &pending) {
+                orchestrator.wizard_state.step5.prep_running = false;
+                orchestrator.complete_destination_prep_worker(pending.worker);
+                return;
+            }
+            orchestrator.wizard_state.step5.prep_running = false;
+            tracing::info!(
+                target = "orchestrator",
+                "Step 5 fresh-Install: destination prep applied for \
+                 {id} (report={report:?})"
+            );
+            clear_pending_destination_prep(orchestrator, &id);
+            if let Some(term) = orchestrator.step5_terminal.as_mut() {
+                term.append_marker("Target destination prepared");
+            }
+            orchestrator.complete_destination_prep_worker(pending.worker);
+            let _ = start_workspace_install(orchestrator, &id);
+        }
+        Ok(Err(err)) => {
+            if let Some(pending) = orchestrator.workspace_destination_prep_rx.take() {
+                orchestrator.complete_destination_prep_worker(pending.worker);
+            }
+            orchestrator.wizard_state.step5.prep_running = false;
+            orchestrator
+                .wizard_state
+                .step5
+                .last_status_text
+                .clone_from(&err);
+            if let Some(term) = orchestrator.step5_terminal.as_mut() {
+                term.append_marker(&err);
+            }
+            warn!(
+                target = "orchestrator",
+                "Step 5 fresh-Install: destination prep failed for \
+                 {id}: {err} (install not started — fix the \
+                 destination and retry)"
+            );
+        }
+        Err(TryRecvError::Empty) => {}
+        Err(TryRecvError::Disconnected) => {
+            if let Some(pending) = orchestrator.workspace_destination_prep_rx.take() {
+                orchestrator.complete_destination_prep_worker(pending.worker);
+            }
+            orchestrator.wizard_state.step5.prep_running = false;
+            let err = "Target destination prep failed: worker disconnected".to_string();
+            orchestrator
+                .wizard_state
+                .step5
+                .last_status_text
+                .clone_from(&err);
+            if let Some(term) = orchestrator.step5_terminal.as_mut() {
+                term.append_marker(&err);
+            }
+            warn!(target = "orchestrator", "{err}");
+        }
+    }
+}
+
+fn pending_workspace_prep_matches_current(
+    orchestrator: &OrchestratorApp,
+    pending: &PendingWorkspaceDestinationPrep,
+) -> bool {
+    if orchestrator.workspace_view.loaded_workspace_id.as_deref()
+        != Some(pending.modlist_id.as_str())
+    {
+        return false;
+    }
+    let NavDestination::Workspace {
+        modlist_id: Some(current),
+    } = &orchestrator.nav
+    else {
+        return false;
+    };
+    if current != &pending.modlist_id {
+        return false;
+    }
+    let Some(entry) = orchestrator.registry.find(&pending.modlist_id) else {
+        return false;
+    };
+    pending.token.matches_context(
+        orchestrator.destination_prep_generation,
+        DestinationPrepFlow::WorkspaceStep5,
+        entry.destination_folder.trim(),
+        Some(&pending.modlist_id),
+    )
+}
+
+fn open_game_subfolder(
+    entry: &crate::registry::model::ModlistEntry,
+    step1: &Step1State,
+) -> Result<(), String> {
+    let dest = entry.destination_folder.trim();
+    if dest.is_empty() {
+        return Err(format!("\"{}\" has no install folder set yet.", entry.name));
+    }
+    let game_folder_name = match entry.game {
+        Game::BGEE => step1.bgee_game_folder.trim(),
+        Game::BG2EE => step1.bg2ee_game_folder.trim(),
+        Game::IWDEE => step1.iwdee_game_folder.trim(),
+        Game::EET => step1.eet_bg2ee_game_folder.trim(),
+    };
+    let candidate = if game_folder_name.is_empty() {
+        std::path::PathBuf::from(dest)
+    } else {
+        std::path::PathBuf::from(dest).join(game_folder_name)
+    };
+    let target = if candidate.is_dir() {
+        candidate
+    } else {
+        std::path::PathBuf::from(dest)
+    };
+    if !target.is_dir() {
+        return Err(format!(
+            "Install folder for \"{}\" not found on disk: {}",
+            entry.name,
+            target.display()
+        ));
+    }
+    open_in_file_manager(&target)
+        .map_err(|e| format!("Couldn't open the folder for \"{}\": {e}", entry.name))
+}
+
+fn open_in_file_manager(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+    }
+}
+
+fn clear_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) {
+    if let Some(ws) = orchestrator.workspace_state.get_mut(modlist_id) {
+        ws.pending_destination_prep = None;
+    }
+    if let Some(store) = orchestrator.workspace_stores.get(modlist_id)
+        && let Some(ws) = orchestrator.workspace_state.get(modlist_id)
+        && let Err(err) = store.save(ws)
+    {
+        warn!(
+            target = "orchestrator",
+            "Step 5: persisting cleared pending_destination_prep \
+             for {modlist_id} failed: {err}"
+        );
+    }
+    orchestrator
+        .persistence_cycle
+        .mark_workspace_dirty(modlist_id, std::time::Instant::now());
+}

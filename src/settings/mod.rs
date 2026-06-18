@@ -3,3 +3,6 @@
 
 pub mod model;
 pub mod store;
+
+pub mod redesign_fields;
+pub mod redesign_store;

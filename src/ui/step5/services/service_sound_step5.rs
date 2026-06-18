@@ -55,8 +55,7 @@ fn try_command(program: &str, args: &[&str]) -> bool {
     std::process::Command::new(program)
         .args(args)
         .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .is_ok_and(|status| status.success())
 }
 
 #[cfg(target_os = "macos")]

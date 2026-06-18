@@ -9,7 +9,7 @@ use crate::app::scan::ScannedComponent;
 use super::super::tp2_blocks::{
     parse_tp2_component_blocks_in_order, split_subcomponent_display_label,
 };
-use super::{DerivedCollapsibleGroup, block_is_deprecated_placeholder};
+use super::{DerivedCollapsibleGroup, Tp2ComponentBlock, block_is_deprecated_placeholder};
 
 pub(super) fn detect_derived_collapsible_groups(
     tp_file: &str,
@@ -21,13 +21,26 @@ pub(super) fn detect_derived_collapsible_groups(
         return HashMap::new();
     }
 
-    let deprecated_placeholder_ids = ordered_blocks
+    let deprecated_placeholder_ids = deprecated_placeholder_ids(&ordered_blocks);
+    let display_by_id = component_display_by_id(components);
+    let mut out = HashMap::<String, DerivedCollapsibleGroup>::new();
+    add_same_mod_installed_groups(tp_file, &ordered_blocks, &display_by_id, &mut out);
+    add_subcomponent_family_groups(&ordered_blocks, &display_by_id, &mut out);
+    add_bridged_placeholder_groups(components, &deprecated_placeholder_ids, &mut out);
+
+    out
+}
+
+fn deprecated_placeholder_ids(ordered_blocks: &[Tp2ComponentBlock]) -> HashSet<String> {
+    ordered_blocks
         .iter()
         .filter(|block| block_is_deprecated_placeholder(block))
         .map(|block| block.component_id.trim().to_string())
-        .collect::<HashSet<_>>();
+        .collect()
+}
 
-    let display_by_id: HashMap<String, String> = components
+fn component_display_by_id(components: &[ScannedComponent]) -> HashMap<String, String> {
+    components
         .iter()
         .map(|component| {
             (
@@ -35,23 +48,16 @@ pub(super) fn detect_derived_collapsible_groups(
                 component.display.trim().to_string(),
             )
         })
-        .collect();
+        .collect()
+}
 
-    let mut same_mod_installed_guards = HashMap::<String, String>::new();
-    for block in &ordered_blocks {
-        let mut targets = block
-            .body_lines
-            .iter()
-            .filter_map(|line| parse_same_mod_installed_guard_target(tp_file, line))
-            .collect::<Vec<_>>();
-        targets.sort();
-        targets.dedup();
-        if targets.len() == 1 {
-            same_mod_installed_guards.insert(block.component_id.clone(), targets[0].clone());
-        }
-    }
-
-    let mut out = HashMap::<String, DerivedCollapsibleGroup>::new();
+fn add_same_mod_installed_groups(
+    tp_file: &str,
+    ordered_blocks: &[Tp2ComponentBlock],
+    display_by_id: &HashMap<String, String>,
+    out: &mut HashMap<String, DerivedCollapsibleGroup>,
+) {
+    let same_mod_installed_guards = same_mod_installed_guards(tp_file, ordered_blocks);
     let mut index = 0usize;
     while index < ordered_blocks.len() {
         let umbrella = &ordered_blocks[index];
@@ -105,11 +111,37 @@ pub(super) fn detect_derived_collapsible_groups(
         }
         index += 1;
     }
+}
 
+fn same_mod_installed_guards(
+    tp_file: &str,
+    ordered_blocks: &[Tp2ComponentBlock],
+) -> HashMap<String, String> {
+    let mut guards = HashMap::<String, String>::new();
+    for block in ordered_blocks {
+        let mut targets = block
+            .body_lines
+            .iter()
+            .filter_map(|line| parse_same_mod_installed_guard_target(tp_file, line))
+            .collect::<Vec<_>>();
+        targets.sort();
+        targets.dedup();
+        if targets.len() == 1 {
+            guards.insert(block.component_id.clone(), targets[0].clone());
+        }
+    }
+    guards
+}
+
+fn add_subcomponent_family_groups(
+    ordered_blocks: &[Tp2ComponentBlock],
+    display_by_id: &HashMap<String, String>,
+    out: &mut HashMap<String, DerivedCollapsibleGroup>,
+) {
     let mut subcomponent_family_members = HashMap::<String, Vec<String>>::new();
     let mut subcomponent_family_headers = HashMap::<String, String>::new();
     let mut subcomponent_family_conflicts = HashSet::<String>::new();
-    for block in &ordered_blocks {
+    for block in ordered_blocks {
         let child_id = block.component_id.trim();
         if child_id.is_empty() || !display_by_id.contains_key(child_id) {
             continue;
@@ -176,7 +208,13 @@ pub(super) fn detect_derived_collapsible_groups(
             );
         }
     }
+}
 
+fn add_bridged_placeholder_groups(
+    components: &[ScannedComponent],
+    deprecated_placeholder_ids: &HashSet<String>,
+    out: &mut HashMap<String, DerivedCollapsibleGroup>,
+) {
     let mut index = 0usize;
     while index < components.len() {
         let Some((header, _)) = split_subcomponent_display_label(&components[index].display) else {
@@ -207,7 +245,7 @@ pub(super) fn detect_derived_collapsible_groups(
                 components,
                 next_index,
                 &header,
-                &deprecated_placeholder_ids,
+                deprecated_placeholder_ids,
             ) {
                 member_ids.push(next_component.component_id.trim().to_string());
                 bridged_placeholder_count += 1;
@@ -231,20 +269,22 @@ pub(super) fn detect_derived_collapsible_groups(
 
         index += 1;
     }
-
-    out
 }
 
 fn parse_subcomponent_parent_component_id(token: &str) -> Option<String> {
     let trimmed = token.trim();
-    let raw_digits = if let Some(rest) = trimmed.strip_prefix('@') {
-        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-        (!digits.is_empty()).then_some(digits)
-    } else if trimmed.chars().all(|c| c.is_ascii_digit()) {
-        Some(trimmed.to_string())
-    } else {
-        None
-    }?;
+    let raw_digits = trimmed.strip_prefix('@').map_or_else(
+        || {
+            trimmed
+                .chars()
+                .all(|c| c.is_ascii_digit())
+                .then(|| trimmed.to_string())
+        },
+        |rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            (!digits.is_empty()).then_some(digits)
+        },
+    )?;
     let normalized = raw_digits.trim_start_matches('0');
     if normalized.is_empty() {
         Some("0".to_string())
@@ -370,7 +410,7 @@ fn parse_same_mod_installed_guard_target(tp_file: &str, line: &str) -> Option<St
     }
 
     let tail = rest[end + quote.len_utf8()..].trim_start();
-    let component_id: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let component_id: String = tail.chars().take_while(char::is_ascii_digit).collect();
     if component_id.is_empty() {
         None
     } else {

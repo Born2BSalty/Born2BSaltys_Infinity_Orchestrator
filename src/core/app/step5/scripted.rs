@@ -38,7 +38,7 @@ pub(super) fn send_scripted(
     state.step5.last_status_text = if scripted.is_empty() {
         "Scripted @wlb-input sent: <blank>".to_string()
     } else {
-        format!("Scripted @wlb-input sent: {}", scripted)
+        format!("Scripted @wlb-input sent: {scripted}")
     };
     true
 }
@@ -56,8 +56,7 @@ pub(super) fn allow_json_fallback_after_scripted(
     let timed_out = state
         .step5
         .last_scripted_send_unix_ms
-        .map(|t| now_ms.saturating_sub(t) >= post_send_delay_ms)
-        .unwrap_or(false);
+        .is_some_and(|t| now_ms.saturating_sub(t) >= post_send_delay_ms);
     let same_prompt_as_last_scripted =
         state.step5.last_scripted_prompt_key.as_deref() == Some(prompt_key);
     timed_out && same_prompt_as_last_scripted

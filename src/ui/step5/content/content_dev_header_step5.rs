@@ -5,14 +5,16 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 
 const STEP5_TITLE: &str = "Step 5: Install, Logs, Diagnostics";
 
 pub(crate) fn render_dev_header(
     ui: &mut egui::Ui,
-    state: &mut WizardState,
+    state: &WizardState,
     terminal: Option<&EmbeddedTerminal>,
     dev_mode: bool,
+    palette: ThemePalette,
 ) {
     ui.heading(step5_title(state, terminal));
     ui.label("Final execution view.");
@@ -26,9 +28,9 @@ pub(crate) fn render_dev_header(
             "OFF"
         };
         let color = if has_rust_log {
-            crate::ui::shared::theme_global::success()
+            crate::ui::shared::redesign_tokens::redesign_success(palette)
         } else {
-            crate::ui::shared::theme_global::accent_path()
+            crate::ui::shared::redesign_tokens::redesign_accent_path(palette)
         };
         let msg = if has_rust_log {
             format!("Dev Mode: RUST_LOG={level} selected.")
@@ -45,7 +47,8 @@ fn step5_title(state: &WizardState, terminal: Option<&EmbeddedTerminal>) -> Stri
     if !state.step5.install_running {
         return STEP5_TITLE.to_string();
     }
-    let Some(current_tp2) = terminal.and_then(|term| term.current_scripted_component_tp2()) else {
+    let Some(current_tp2) = terminal.and_then(EmbeddedTerminal::current_scripted_component_tp2)
+    else {
         return STEP5_TITLE.to_string();
     };
     let current_tp2 = crate::platform_defaults::normalize_tp2_filename(&current_tp2);
@@ -53,9 +56,9 @@ fn step5_title(state: &WizardState, terminal: Option<&EmbeddedTerminal>) -> Stri
         return STEP5_TITLE.to_string();
     }
 
-    let bgee_progress = mod_progress_for_items(&current_tp2, &state.step3.bgee_items);
-    let bg2ee_progress = mod_progress_for_items(&current_tp2, &state.step3.bg2ee_items);
-    match (bgee_progress, bg2ee_progress) {
+    let first_progress = mod_progress_for_items(&current_tp2, &state.step3.bgee_items);
+    let second_progress = mod_progress_for_items(&current_tp2, &state.step3.bg2ee_items);
+    match (first_progress, second_progress) {
         (Some((index, total)), None) => {
             format!("{STEP5_TITLE} — Installing BGEE mod {index}/{total}")
         }

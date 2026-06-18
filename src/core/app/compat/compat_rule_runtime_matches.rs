@@ -3,15 +3,15 @@
 
 use crate::app::compat_rules::{CompatRule, StringOrMany};
 
-pub(crate) fn mode_matches(rule: &CompatRule, selected_mode: &str) -> bool {
+pub(in crate::app) fn mode_matches(rule: &CompatRule, selected_mode: &str) -> bool {
     option_list_matches(rule.mode.as_ref(), selected_mode)
 }
 
-pub(crate) fn tab_matches(rule: &CompatRule, tab: &str) -> bool {
+pub(in crate::app) fn tab_matches(rule: &CompatRule, tab: &str) -> bool {
     option_list_matches(rule.tab.as_ref(), tab)
 }
 
-pub(crate) fn compat_mod_matches(rule: &CompatRule, tp_file: &str, mod_name: &str) -> bool {
+pub(in crate::app) fn compat_mod_matches(rule: &CompatRule, tp_file: &str, mod_name: &str) -> bool {
     let rule_mods = rule.r#mod.trimmed_items();
     if rule_mods.is_empty() {
         return false;
@@ -27,7 +27,7 @@ pub(crate) fn compat_mod_matches(rule: &CompatRule, tp_file: &str, mod_name: &st
     })
 }
 
-pub(crate) fn compat_component_matches(
+pub(in crate::app) fn compat_component_matches(
     rule: &CompatRule,
     component_id: &str,
     label: &str,
@@ -70,7 +70,7 @@ pub(crate) fn compat_component_matches(
     id_match && label_match
 }
 
-pub(crate) fn match_kind_matches(
+pub(in crate::app) fn match_kind_matches(
     match_kind: Option<&StringOrMany>,
     current_kind: Option<&str>,
 ) -> bool {
@@ -88,7 +88,7 @@ pub(crate) fn match_kind_matches(
         .any(|item| item == needle)
 }
 
-pub(crate) fn clear_kind_matches(
+pub(in crate::app) fn clear_kind_matches(
     clear_kinds: Option<&StringOrMany>,
     current_kind: Option<&str>,
 ) -> bool {
@@ -106,7 +106,7 @@ pub(crate) fn clear_kind_matches(
         .any(|item| item == needle)
 }
 
-pub(crate) fn normalize_kind(kind: &str) -> &str {
+pub(in crate::app) fn normalize_kind(kind: &str) -> &str {
     let normalized = kind.trim();
     if normalized.eq_ignore_ascii_case("req_missing") {
         "missing_dep"
@@ -123,7 +123,7 @@ pub(crate) fn normalize_kind(kind: &str) -> &str {
     }
 }
 
-pub(crate) fn kind_disables_selection(kind: &str) -> bool {
+pub(in crate::app) const fn kind_disables_selection(kind: &str) -> bool {
     kind.eq_ignore_ascii_case("included")
         || kind.eq_ignore_ascii_case("not_needed")
         || kind.eq_ignore_ascii_case("not_compatible")
@@ -132,13 +132,11 @@ pub(crate) fn kind_disables_selection(kind: &str) -> bool {
         || kind.eq_ignore_ascii_case("path_requirement")
 }
 
-pub(crate) fn normalize_mod_key(value: &str) -> String {
+pub(in crate::app) fn normalize_mod_key(value: &str) -> String {
     let lower = value.to_ascii_lowercase();
-    let file = if let Some(idx) = lower.rfind(['/', '\\']) {
-        &lower[idx + 1..]
-    } else {
-        &lower
-    };
+    let file = lower
+        .rfind(['/', '\\'])
+        .map_or(lower.as_str(), |idx| &lower[idx + 1..]);
     let without_ext = file.strip_suffix(".tp2").unwrap_or(file);
     without_ext
         .strip_prefix("setup-")
@@ -146,7 +144,7 @@ pub(crate) fn normalize_mod_key(value: &str) -> String {
         .to_string()
 }
 
-pub(crate) fn non_empty(value: Option<&str>) -> Option<String> {
+pub(in crate::app) fn non_empty(value: Option<&str>) -> Option<String> {
     let value = value?.trim();
     if value.is_empty() {
         None
@@ -160,13 +158,11 @@ pub(super) fn string_or_many_items(value: Option<&StringOrMany>) -> Vec<String> 
 }
 
 fn option_list_matches(option: Option<&StringOrMany>, value: &str) -> bool {
-    option
-        .map(|items| {
-            let needle = value.trim().to_ascii_uppercase();
-            items
-                .normalized_items()
-                .into_iter()
-                .any(|item| item == needle)
-        })
-        .unwrap_or(true)
+    option.is_none_or(|items| {
+        let needle = value.trim().to_ascii_uppercase();
+        items
+            .normalized_items()
+            .into_iter()
+            .any(|item| item == needle)
+    })
 }

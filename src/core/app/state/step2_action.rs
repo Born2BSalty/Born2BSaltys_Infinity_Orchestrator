@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModSourceEditDestination {
+    #[default]
+    GlobalDefault,
+    ThisModlist,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step2Action {
     StartScan,
@@ -25,6 +32,7 @@ pub enum Step2Action {
         label: String,
         source_id: String,
         allow_source_id_change: bool,
+        destination: ModSourceEditDestination,
     },
     DiscoverModDownloadForks {
         tp2: String,
@@ -44,6 +52,10 @@ pub enum Step2Action {
         source_id: String,
     },
     SetSelectedModUpdateLocked(bool),
+    SetModUpdateLocked {
+        tp2: String,
+        locked: bool,
+    },
     OpenCompatForComponent {
         game_tab: String,
         tp_file: String,

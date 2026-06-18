@@ -5,7 +5,8 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::step5::state_step5::Step5ConsoleViewState;
+use crate::ui::shared::redesign_tokens::ThemePalette;
+use crate::ui::step5::state_step5::{ConsoleOutputFilter, Step5ConsoleViewState};
 
 fn is_component_id_token(token: &str) -> bool {
     let t = token.trim_matches(|c: char| c == ',' || c == '.' || c == ':' || c == ';');
@@ -30,11 +31,9 @@ fn split_chunks_preserve_quotes(line: &str) -> Vec<String> {
             cur.push(ch);
             continue;
         }
+        cur.push(ch);
         if ch.is_whitespace() && !in_quote {
-            cur.push(ch);
             out.push(std::mem::take(&mut cur));
-        } else {
-            cur.push(ch);
         }
     }
     if !cur.is_empty() {
@@ -43,17 +42,17 @@ fn split_chunks_preserve_quotes(line: &str) -> Vec<String> {
     out
 }
 
-fn token_color(token: &str) -> egui::Color32 {
+fn token_color(token: &str, palette: ThemePalette) -> egui::Color32 {
     let t = token.trim();
     let n = normalized_token(t);
-    let default = crate::ui::shared::theme_global::terminal_default();
-    let red = crate::ui::shared::theme_global::terminal_error();
-    let debug_blue = crate::ui::shared::theme_global::terminal_debug();
-    let sent_blue = crate::ui::shared::theme_global::terminal_sent();
-    let info_green = crate::ui::shared::theme_global::terminal_info();
-    let amber = crate::ui::shared::theme_global::terminal_amber();
-    let sand = crate::ui::shared::theme_global::terminal_sand();
-    let dim = crate::ui::shared::theme_global::terminal_dim();
+    let default = crate::ui::shared::redesign_tokens::redesign_terminal_default(palette);
+    let red = crate::ui::shared::redesign_tokens::redesign_terminal_error(palette);
+    let debug_blue = crate::ui::shared::redesign_tokens::redesign_terminal_debug(palette);
+    let sent_blue = crate::ui::shared::redesign_tokens::redesign_terminal_sent(palette);
+    let info_green = crate::ui::shared::redesign_tokens::redesign_terminal_info(palette);
+    let amber = crate::ui::shared::redesign_tokens::redesign_terminal_amber(palette);
+    let sand = crate::ui::shared::redesign_tokens::redesign_terminal_sand(palette);
+    let dim = crate::ui::shared::redesign_tokens::redesign_terminal_dim(palette);
 
     if n == "ERROR" || n == "FATAL" {
         return red;
@@ -84,31 +83,61 @@ fn token_color(token: &str) -> egui::Color32 {
     default
 }
 
-fn render_styled_line(ui: &mut egui::Ui, line: &str) {
+fn render_styled_line(ui: &mut egui::Ui, line: &str, max_width: f32, palette: ThemePalette) {
+    let job = build_styled_line_job(ui, line, max_width, palette);
+    ui.add(egui::Label::new(egui::WidgetText::from(job)).wrap());
+}
+
+fn build_styled_line_job(
+    ui: &egui::Ui,
+    line: &str,
+    max_width: f32,
+    palette: ThemePalette,
+) -> egui::text::LayoutJob {
     let line_upper = line.to_ascii_uppercase();
     let success_line = line_upper.contains("SUCCESSFULLY INSTALLED");
-    let success_green = crate::ui::shared::theme_global::success();
+    let success_green = crate::ui::shared::redesign_tokens::redesign_success(palette);
+    let font = egui::TextStyle::Monospace.resolve(ui.style());
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = max_width.max(32.0);
+    job.wrap.break_anywhere = true;
+
     if line.is_empty() {
-        ui.label(egui::RichText::new(" ").monospace().strong());
+        append_styled_text(&mut job, " ", &font, token_color("", palette));
+        return job;
+    }
+
+    for token in split_chunks_preserve_quotes(line) {
+        let n = normalized_token(&token);
+        let color = if success_line && (n == "SUCCESSFULLY" || n == "INSTALLED") {
+            success_green
+        } else {
+            token_color(&token, palette)
+        };
+        append_styled_text(&mut job, &token, &font, color);
+    }
+
+    job
+}
+
+fn append_styled_text(
+    job: &mut egui::text::LayoutJob,
+    text: &str,
+    font: &egui::FontId,
+    color: egui::Color32,
+) {
+    if text.is_empty() {
         return;
     }
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        for token in split_chunks_preserve_quotes(line) {
-            let n = normalized_token(&token);
-            let color = if success_line && (n == "SUCCESSFULLY" || n == "INSTALLED") {
-                success_green
-            } else {
-                token_color(&token)
-            };
-            ui.label(
-                egui::RichText::new(&token)
-                    .monospace()
-                    .strong()
-                    .color(color),
-            );
-        }
-    });
+    job.append(
+        text,
+        0.0,
+        egui::TextFormat {
+            font_id: font.clone(),
+            color,
+            ..Default::default()
+        },
+    );
 }
 
 pub(crate) fn render_console_panel(
@@ -117,9 +146,12 @@ pub(crate) fn render_console_panel(
     console_view: &mut Step5ConsoleViewState,
     terminal: Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
+    palette: ThemePalette,
 ) {
     ui.group(|ui| {
-        ui.set_width(ui.available_width());
+        let panel_w = ui.available_width();
+        ui.set_width(panel_w);
+        ui.set_max_width(panel_w);
         ui.label(crate::ui::shared::typography_global::section_title(
             "Console",
         ));
@@ -138,28 +170,39 @@ pub(crate) fn render_console_panel(
             let should_auto_scroll = console_view.auto_scroll
                 && selected_text_len > console_view.last_selected_console_text_len;
             console_view.last_selected_console_text_len = selected_text_len;
-            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                ui.scope(|ui| {
-                    let mut scroll = egui::style::ScrollStyle::solid();
-                    scroll.bar_width = 12.0;
-                    scroll.bar_inner_margin = 0.0;
-                    scroll.bar_outer_margin = 2.0;
-                    ui.style_mut().spacing.scroll = scroll;
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                    let out = egui::ScrollArea::vertical()
-                        .id_salt("step5_console_scroll")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            for line in selected_text.split('\n') {
-                                render_styled_line(ui, line);
-                            }
-                            if should_auto_scroll {
-                                ui.add_space(0.0);
-                                ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
-                            }
-                        });
-                    let _ = out;
-                });
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(rect)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            child.set_clip_rect(rect.intersect(ui.clip_rect()));
+            child.set_width(console_w);
+            child.set_max_width(console_w);
+            child.scope(|ui| {
+                let mut scroll = egui::style::ScrollStyle::solid();
+                scroll.bar_width = 12.0;
+                scroll.bar_inner_margin = 0.0;
+                scroll.bar_outer_margin = 2.0;
+                ui.style_mut().spacing.scroll = scroll;
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                let out = egui::ScrollArea::vertical()
+                    .id_salt("step5_console_scroll")
+                    .auto_shrink([false, false])
+                    .max_width(console_w)
+                    .max_height(console_h)
+                    .show(ui, |ui| {
+                        ui.set_width(console_w);
+                        ui.set_max_width(console_w);
+                        for line in selected_text.split('\n') {
+                            let line_w = ui.available_width();
+                            render_styled_line(ui, line, line_w, palette);
+                        }
+                        if should_auto_scroll {
+                            ui.add_space(0.0);
+                            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                        }
+                    });
+                let _ = out;
             });
         } else {
             ui.add_sized(
@@ -170,15 +213,13 @@ pub(crate) fn render_console_panel(
     });
 }
 
-fn selected_console_text<'a>(
+const fn selected_console_text<'a>(
     terminal: &'a EmbeddedTerminal,
     console_view: &Step5ConsoleViewState,
 ) -> &'a str {
-    if console_view.installed_only {
-        terminal.installed_text()
-    } else if console_view.important_only {
-        terminal.important_text()
-    } else {
-        terminal.output_text()
+    match console_view.filter {
+        ConsoleOutputFilter::General => terminal.output_text(),
+        ConsoleOutputFilter::Important => terminal.important_text(),
+        ConsoleOutputFilter::Installed => terminal.installed_text(),
     }
 }

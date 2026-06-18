@@ -9,24 +9,26 @@ use crate::app::mod_downloads;
 use crate::app::state::{Step2UpdateAsset, WizardState};
 
 #[derive(Debug, Clone)]
-pub(super) struct Step2UpdateExtractJob {
-    pub(super) label: String,
-    pub(super) tp_file: String,
-    pub(super) aliases: Vec<String>,
-    pub(super) tp2_rename: Option<mod_downloads::ModDownloadTp2Rename>,
-    pub(super) subdir_require: Option<String>,
-    pub(super) archive_path: PathBuf,
-    pub(super) mods_root: PathBuf,
-    pub(super) backup_root: PathBuf,
-    pub(super) target_root: Option<PathBuf>,
-    pub(super) backup_version_tag: String,
-    pub(super) installed_source_ref: Option<String>,
-    pub(super) installed_source_id: Option<String>,
+pub(crate) struct Step2UpdateExtractJob {
+    pub(crate) label: String,
+    pub(crate) tp_file: String,
+    pub(crate) aliases: Vec<String>,
+    pub(crate) tp2_rename: Option<mod_downloads::ModDownloadTp2Rename>,
+    pub(crate) subdir_require: Option<String>,
+    pub(crate) archive_path: PathBuf,
+    pub(crate) mods_root: PathBuf,
+    pub(crate) backup_root: PathBuf,
+    pub(crate) target_root: Option<PathBuf>,
+    pub(crate) backup_version_tag: String,
+    pub(crate) installed_source_ref: Option<String>,
+    pub(crate) installed_source_id: Option<String>,
+    pub(crate) installed_refs_path: PathBuf,
 }
 
-pub(super) fn build_extract_jobs(
+pub(crate) fn build_extract_jobs(
     state: &mut WizardState,
     archive_dir: &Path,
+    install_ctx_installed_refs_path: Option<&Path>,
 ) -> Vec<Step2UpdateExtractJob> {
     let mut jobs = Vec::new();
     let mods_root = PathBuf::from(state.step1.mods_folder.trim());
@@ -44,6 +46,12 @@ pub(super) fn build_extract_jobs(
             .update_selected_extract_failed_sources
             .push(err.clone());
     }
+
+    let refs_path = install_ctx_installed_refs_path.map_or_else(
+        crate::app::app_step2_update_source_refs::installed_source_refs_path,
+        Path::to_path_buf,
+    );
+
     for asset in &state.step2.update_selected_update_assets {
         let archive_path = archive_dir.join(app_step2_update_download::archive_file_name(asset));
         if !archive_path.exists() {
@@ -71,6 +79,7 @@ pub(super) fn build_extract_jobs(
             backup_version_tag: asset.tag.clone(),
             installed_source_ref: extract_source_ref(asset, source.as_ref()),
             installed_source_id,
+            installed_refs_path: refs_path.clone(),
         });
     }
     jobs

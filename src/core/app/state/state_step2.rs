@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::app::step2_action::ModSourceEditDestination;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptPopupMode {
     Text,
@@ -10,7 +12,7 @@ pub enum PromptPopupMode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Step2State {
+pub struct Step2State<Flag = bool> {
     pub search_query: String,
     pub scan_status: String,
     pub scan_progress_percent: u8,
@@ -22,25 +24,25 @@ pub struct Step2State {
     pub selected: Option<Step2Selection>,
     pub next_selection_order: usize,
     pub collapse_epoch: u64,
-    pub collapse_default_open: bool,
-    pub jump_to_selected_requested: bool,
-    pub is_scanning: bool,
-    pub compat_popup_open: bool,
+    pub collapse_default_open: Flag,
+    pub jump_to_selected_requested: Flag,
+    pub is_scanning: Flag,
+    pub compat_popup_open: Flag,
     pub compat_popup_issue_override: Option<crate::app::compat_issue::CompatIssue>,
     pub compat_popup_filter: String,
-    pub prompt_popup_open: bool,
+    pub prompt_popup_open: Flag,
     pub prompt_popup_mode: PromptPopupMode,
     pub prompt_popup_title: String,
     pub prompt_popup_text: String,
-    pub update_selected_popup_open: bool,
-    pub update_selected_has_run: bool,
+    pub update_selected_popup_open: Flag,
+    pub update_selected_has_run: Flag,
     pub update_selected_last_selection_signature: Option<String>,
-    pub update_selected_last_was_full_selection: bool,
-    pub update_selected_check_running: bool,
+    pub update_selected_last_was_full_selection: Flag,
+    pub update_selected_check_running: Flag,
     pub update_selected_check_done_count: usize,
     pub update_selected_check_total_count: usize,
-    pub update_selected_download_running: bool,
-    pub update_selected_extract_running: bool,
+    pub update_selected_download_running: Flag,
+    pub update_selected_extract_running: Flag,
     pub update_selected_update_assets: Vec<Step2UpdateAsset>,
     pub update_selected_update_sources: Vec<String>,
     pub update_selected_locked_update_assets: Vec<Step2UpdateAsset>,
@@ -57,16 +59,17 @@ pub struct Step2State {
     pub update_selected_failed_sources: Vec<String>,
     pub update_selected_check_requests: Vec<Step2UpdateRetryRequest>,
     pub update_selected_exact_version_retry_requests: Vec<Step2UpdateRetryRequest>,
-    pub update_selected_confirm_latest_fallback_open: bool,
-    pub update_selected_merge_latest_fallback: bool,
-    pub mod_download_source_editor_open: bool,
+    pub update_selected_confirm_latest_fallback_open: Flag,
+    pub update_selected_merge_latest_fallback: Flag,
+    pub mod_download_source_editor_open: Flag,
     pub mod_download_source_editor_tp2: String,
     pub mod_download_source_editor_label: String,
     pub mod_download_source_editor_source_id: String,
-    pub mod_download_source_editor_allow_source_id_change: bool,
+    pub mod_download_source_editor_allow_source_id_change: Flag,
     pub mod_download_source_editor_text: String,
     pub mod_download_source_editor_error: Option<String>,
-    pub mod_download_forks_popup_open: bool,
+    pub mod_download_source_editor_destination: ModSourceEditDestination,
+    pub mod_download_forks_popup_open: Flag,
     pub mod_download_forks_popup_title: String,
     pub mod_download_forks_popup_tp2: String,
     pub mod_download_forks_popup_label: String,
@@ -78,12 +81,12 @@ pub struct Step2State {
     pub update_selected_refresh_target_game_tab: Option<String>,
     pub update_selected_refresh_target_tp_file: Option<String>,
     pub log_pending_downloads: Vec<Step2LogPendingDownload>,
-    pub exact_log_mod_list_checked: bool,
-    pub pending_saved_log_apply: bool,
-    pub pending_saved_log_update_preview: bool,
-    pub pending_saved_log_download: bool,
-    pub review_edit_bgee_log_applied: bool,
-    pub review_edit_bg2ee_log_applied: bool,
+    pub exact_log_mod_list_checked: Flag,
+    pub pending_saved_log_apply: Flag,
+    pub pending_saved_log_update_preview: Flag,
+    pub pending_saved_log_download: Flag,
+    pub review_edit_bgee_log_applied: Flag,
+    pub review_edit_bg2ee_log_applied: Flag,
     pub left_pane_ratio: f32,
     pub last_scan_report: Option<Step2ScanReport>,
 }
@@ -146,6 +149,7 @@ impl Default for Step2State {
             mod_download_source_editor_allow_source_id_change: false,
             mod_download_source_editor_text: String::new(),
             mod_download_source_editor_error: None,
+            mod_download_source_editor_destination: ModSourceEditDestination::GlobalDefault,
             mod_download_forks_popup_open: false,
             mod_download_forks_popup_title: String::new(),
             mod_download_forks_popup_tp2: String::new(),
@@ -317,17 +321,17 @@ pub struct Step2HiddenComponentAudit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Step2ComponentState {
+pub struct Step2ComponentState<Flag = bool> {
     pub component_id: String,
     pub label: String,
     pub weidu_group: Option<String>,
     pub collapsible_group: Option<String>,
-    pub collapsible_group_is_umbrella: bool,
+    pub collapsible_group_is_umbrella: Flag,
     pub raw_line: String,
     pub prompt_summary: Option<String>,
     pub prompt_events: Vec<crate::parser::PromptSummaryEvent>,
-    pub is_meta_mode_component: bool,
-    pub disabled: bool,
+    pub is_meta_mode_component: Flag,
+    pub disabled: Flag,
     pub compat_kind: Option<String>,
     pub compat_source: Option<String>,
     pub compat_related_mod: Option<String>,
@@ -335,10 +339,11 @@ pub struct Step2ComponentState {
     pub compat_graph: Option<String>,
     pub compat_evidence: Option<String>,
     pub disabled_reason: Option<String>,
-    pub checked: bool,
+    pub checked: Flag,
     pub selected_order: Option<usize>,
 }
 
+#[must_use]
 pub fn update_selection_signature(step2: &Step2State) -> String {
     let mut entries = Vec::<String>::new();
     collect_update_selection_signature("BGEE", &step2.bgee_mods, &mut entries);
@@ -354,6 +359,7 @@ pub fn update_selection_signature(step2: &Step2State) -> String {
     entries.join(";")
 }
 
+#[must_use]
 pub fn exact_log_ready_to_install(state: &crate::app::state::WizardState) -> bool {
     state.step1.installs_exactly_from_weidu_logs()
         && state.step2.exact_log_mod_list_checked

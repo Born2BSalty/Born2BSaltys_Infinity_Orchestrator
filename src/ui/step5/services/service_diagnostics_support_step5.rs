@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::app::state::{Step1State, WizardState};
 use crate::app::terminal::EmbeddedTerminal;
 
-pub(crate) fn apply_dev_defaults(state: &mut WizardState, dev_mode: bool) {
+pub(crate) const fn apply_dev_defaults(state: &mut WizardState, dev_mode: bool) {
     if dev_mode {
         state.step1.bio_full_debug = true;
         state.step1.log_raw_output_dev = true;
@@ -30,23 +30,6 @@ pub(crate) fn export_diagnostics(
         exe_fingerprint: exe_fingerprint.to_string(),
     };
     crate::ui::step5::diagnostics::export_diagnostics(state, terminal, &ctx)
-}
-
-pub(crate) fn restart_app_with_diagnostics(state: &mut WizardState) {
-    match restart_with_diagnostics() {
-        Ok(()) => std::process::exit(0),
-        Err(err) => {
-            state.step5.last_status_text = format!("Restart with diagnostics failed: {err}");
-        }
-    }
-}
-
-fn restart_with_diagnostics() -> anyhow::Result<()> {
-    let exe = std::env::current_exe()?;
-    std::process::Command::new(exe)
-        .args(["-d", "gui"])
-        .spawn()?;
-    Ok(())
 }
 
 pub(crate) fn source_log_infos(

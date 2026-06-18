@@ -99,7 +99,11 @@ fn declared_language_tra_paths(tp2_path: &Path) -> Vec<std::path::PathBuf> {
                 break;
             };
             for token in extract_quoted_tokens(line) {
-                if !token.to_ascii_lowercase().ends_with(".tra") {
+                if !Path::new(&token)
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("tra"))
+                {
                     continue;
                 }
                 let candidate = Path::new(&token);
@@ -170,7 +174,10 @@ fn walk_setup_tra_files(base: &Path) -> Vec<std::path::PathBuf> {
             .file_name()
             .and_then(|value| value.to_str())
             .is_some_and(|name| {
-                name.ends_with(".tra") && name.to_ascii_lowercase().contains("setup")
+                path.extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("tra"))
+                    && name.to_ascii_lowercase().contains("setup")
             })
         {
             out.push(path);

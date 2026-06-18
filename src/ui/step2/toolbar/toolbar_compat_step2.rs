@@ -134,28 +134,27 @@ pub(crate) fn draw_active_tab_issue_badge(
         "Warning" => Some("warning"),
         _ => None,
     };
-    let (text_color, fill_color) = compat_colors(kind_key)
-        .map(|(text_color, fill_color, _)| (text_color, fill_color))
-        .unwrap_or((
-            crate::ui::shared::theme_global::text_muted(),
-            ui.visuals().widgets.inactive.bg_fill,
-        ));
-
-    let badge = egui::Button::new(
-        crate::ui::shared::typography_global::strong(format!(
-            "{game_tab} {} {}",
-            display_filter, display_count
+    let (text_color, fill_color) = compat_colors(kind_key).map_or_else(
+        || {
+            (
+                crate::ui::shared::theme_global::text_muted(),
+                ui.visuals().widgets.inactive.bg_fill,
+            )
+        },
+        |(text_color, fill_color, _)| (text_color, fill_color),
+    );
+    let badge_text =
+        crate::ui::shared::typography_global::strong(format!("{display_filter} {display_count}"))
+            .color(text_color)
+            .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT);
+    let badge = egui::Button::new(badge_text)
+        .fill(fill_color)
+        .stroke(egui::Stroke::new(
+            crate::ui::shared::layout_tokens_global::BORDER_THIN,
+            text_color,
         ))
-        .color(text_color)
-        .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT),
-    )
-    .fill(fill_color)
-    .stroke(egui::Stroke::new(
-        crate::ui::shared::layout_tokens_global::BORDER_THIN,
-        fill_color,
-    ))
-    .corner_radius(egui::CornerRadius::same(7))
-    .min_size(egui::vec2(0.0, 18.0));
+        .corner_radius(egui::CornerRadius::same(7))
+        .min_size(egui::vec2(0.0, 18.0));
     let issue_label = if summary.total_count == 1 {
         "issue"
     } else {

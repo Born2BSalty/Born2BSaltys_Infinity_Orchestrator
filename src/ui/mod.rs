@@ -12,4 +12,12 @@ pub mod step3;
 pub mod step4;
 pub mod step5;
 
+pub mod create;
+pub mod home;
+pub mod install;
+pub mod orchestrator;
+pub mod settings;
+pub mod shell;
+pub mod workspace;
+
 pub use run::run;

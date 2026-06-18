@@ -53,7 +53,7 @@ pub fn render_bottom(ui: &mut egui::Ui, state: &mut Step1State) {
             ui.set_width(ui.available_width());
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.set_min_height(TOP_BOX_HEIGHT - 20.0);
-            content_step1::render_mods_folder_content(ui, state);
+            content_step1::render_mods_archive_content(ui, state);
         });
         cols[1].group(|ui| {
             ui.set_width(ui.available_width());

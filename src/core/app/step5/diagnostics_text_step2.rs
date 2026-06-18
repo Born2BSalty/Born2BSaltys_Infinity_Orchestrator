@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::fmt::Write as _;
+
 use crate::app::state::WizardState;
 
 use super::super::undefined_detect::looks_like_undefined_signal;
@@ -14,9 +16,13 @@ pub(super) fn append_step2_sections(out: &mut String, state: &WizardState) {
 
 fn append_step2_summary(out: &mut String, state: &WizardState) {
     out.push_str("[Step2]\n");
-    out.push_str(&format!("selected_count={}\n", state.step2.selected_count));
-    out.push_str(&format!("total_count={}\n", state.step2.total_count));
-    out.push_str(&format!("active_tab={}\n\n", state.step2.active_game_tab));
+    writeln!(out, "selected_count={}", state.step2.selected_count)
+        .expect("writing to String should not fail");
+    writeln!(out, "total_count={}", state.step2.total_count)
+        .expect("writing to String should not fail");
+    writeln!(out, "active_tab={}", state.step2.active_game_tab)
+        .expect("writing to String should not fail");
+    out.push('\n');
 }
 
 fn append_step2_selected_components(out: &mut String, state: &WizardState) {
@@ -32,10 +38,12 @@ fn append_step2_selected_components(out: &mut String, state: &WizardState) {
                     continue;
                 }
                 listed = listed.saturating_add(1);
-                out.push_str(&format!(
-                    "{tab} | {} #{} | {}\n",
+                writeln!(
+                    out,
+                    "{tab} | {} #{} | {}",
                     mod_state.tp_file, component.component_id, component.label
-                ));
+                )
+                .expect("writing to String should not fail");
             }
         }
     }
@@ -60,14 +68,16 @@ fn append_step2_scan_undefined_signals(out: &mut String, state: &WizardState) {
                     continue;
                 }
                 listed = listed.saturating_add(1);
-                out.push_str(&format!(
-                    "{tab} | {} | tp2={} | #{} | label={} | raw={}\n",
+                writeln!(
+                    out,
+                    "{tab} | {} | tp2={} | #{} | label={} | raw={}",
                     mod_state.name,
                     mod_state.tp2_path,
                     component.component_id,
                     component.label,
                     component.raw_line
-                ));
+                )
+                .expect("writing to String should not fail");
             }
         }
     }
@@ -98,10 +108,12 @@ fn append_wlb_inputs_map(out: &mut String, state: &WizardState) {
                 continue;
             };
             listed = listed.saturating_add(1);
-            out.push_str(&format!(
-                "{tab} | {} #{} | {inputs}\n",
+            writeln!(
+                out,
+                "{tab} | {} #{} | {inputs}",
                 item.tp_file, item.component_id
-            ));
+            )
+            .expect("writing to String should not fail");
         }
     }
     if listed == 0 {

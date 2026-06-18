@@ -6,7 +6,7 @@ use crate::app::terminal::EmbeddedTerminal;
 
 use super::prompt_memory;
 
-pub(crate) fn try_auto_answer_prompt(
+pub fn try_auto_answer_prompt(
     state: &mut WizardState,
     terminal: Option<&mut EmbeddedTerminal>,
     waiting_for_input: bool,
@@ -39,9 +39,9 @@ pub(crate) fn try_auto_answer_prompt(
     let prompt_kind = term.prompt_kind_name(&prompt_info).to_string();
     let prompt_signature = if has_scripted_candidate {
         let component_key = term.current_scripted_component_key().unwrap_or_default();
-        format!("scripted|{}|{}", component_key, prompt_kind)
+        format!("scripted|{component_key}|{prompt_kind}")
     } else {
-        format!("{}|{}", prompt_key, prompt_kind)
+        format!("{prompt_key}|{prompt_kind}")
     };
     let now_ms = now_unix_millis();
     super::readiness::update_prompt_readiness(state, &prompt_signature, now_ms);
@@ -120,14 +120,16 @@ fn reset_auto_answer_state(state: &mut WizardState) {
 
 fn prompt_cycle_count(term: &EmbeddedTerminal) -> u64 {
     let upper = term.console_excerpt(12_000).to_ascii_uppercase();
-    let input_count = upper.match_indices("USER INPUT REQUIRED").count() as u64;
+    let input_count =
+        u64::try_from(upper.match_indices("USER INPUT REQUIRED").count()).unwrap_or(u64::MAX);
     if input_count > 0 {
         return input_count;
     }
-    upper.match_indices("QUESTION IS").count() as u64
+    u64::try_from(upper.match_indices("QUESTION IS").count()).unwrap_or(u64::MAX)
 }
 
-pub(crate) fn prompt_context(
+#[must_use]
+pub fn prompt_context(
     term: &EmbeddedTerminal,
     prompt_kind: String,
     source: &str,
@@ -142,7 +144,7 @@ pub(crate) fn prompt_context(
     }
 }
 
-pub(crate) fn send_manual_input(state: &mut WizardState, term: &mut EmbeddedTerminal, reply: &str) {
+pub fn send_manual_input(state: &mut WizardState, term: &mut EmbeddedTerminal, reply: &str) {
     if let Some(prompt_info) = term.current_prompt_info() {
         let ctx = prompt_context(
             term,
@@ -165,11 +167,10 @@ fn now_unix_millis() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-fn adaptive_prompt_debounce_ms(
+const fn adaptive_prompt_debounce_ms(
     base_delay_ms: u64,
     option_count: usize,
     line_count: usize,
@@ -188,7 +189,7 @@ fn adaptive_prompt_debounce_ms(
 
 fn initial_delay_base_ms(state: &WizardState) -> u64 {
     if state.step1.auto_answer_initial_delay_enabled {
-        state.step1.auto_answer_initial_delay_ms.clamp(500, 15_000) as u64
+        u64::try_from(state.step1.auto_answer_initial_delay_ms.clamp(500, 15_000)).unwrap_or(15_000)
     } else {
         2000
     }
@@ -196,10 +197,13 @@ fn initial_delay_base_ms(state: &WizardState) -> u64 {
 
 fn post_send_delay_ms(state: &WizardState) -> u64 {
     if state.step1.auto_answer_post_send_delay_enabled {
-        state
-            .step1
-            .auto_answer_post_send_delay_ms
-            .clamp(500, 15_000) as u64
+        u64::try_from(
+            state
+                .step1
+                .auto_answer_post_send_delay_ms
+                .clamp(500, 15_000),
+        )
+        .unwrap_or(15_000)
     } else {
         5000
     }

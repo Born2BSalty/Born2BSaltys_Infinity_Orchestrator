@@ -55,7 +55,7 @@ pub(super) struct GuardClassification {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PredicateGuardHit {
+pub(in crate::app) struct PredicateGuardHit {
     pub(crate) kind: &'static str,
     pub(crate) related_mod: Option<String>,
     pub(crate) related_component: Option<String>,
@@ -99,11 +99,7 @@ pub(super) fn preferred_guard_hit(
         if priority == 2 {
             return Some(candidate);
         }
-        if best
-            .as_ref()
-            .map(|(current, _)| priority > *current)
-            .unwrap_or(true)
-        {
+        if best.as_ref().is_none_or(|(current, _)| priority > *current) {
             best = Some((priority, candidate));
         }
     }

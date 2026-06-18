@@ -11,7 +11,7 @@ mod lookup {
         ensure_setup_prefix, maybe_last_two_parts, normalize_path_key, strip_setup_prefix,
     };
 
-    pub fn tp2_lookup_keys(tp2: &str) -> Vec<String> {
+    pub(in crate::app::controller) fn tp2_lookup_keys(tp2: &str) -> Vec<String> {
         let norm = normalize_path_key(tp2);
         let mut keys = Vec::<String>::new();
         keys.push(norm.clone());
@@ -24,7 +24,7 @@ mod lookup {
         keys.push(base.clone());
 
         if let Some(short) = maybe_last_two_parts(&norm) {
-            keys.push(short.clone());
+            keys.push(short);
         }
 
         let base_no_setup = strip_setup_prefix(&base);
@@ -57,7 +57,9 @@ mod lookup {
         dedupe(keys)
     }
 
-    pub fn mod_lookup_keys_for_mod(mod_state: &Step2ModState) -> Vec<String> {
+    pub(in crate::app::controller) fn mod_lookup_keys_for_mod(
+        mod_state: &Step2ModState,
+    ) -> Vec<String> {
         let mut keys = tp2_lookup_keys(mod_state.tp_file.as_str());
         if !mod_state.tp2_path.trim().is_empty() {
             keys.extend(tp2_lookup_keys(mod_state.tp2_path.as_str()));
@@ -65,7 +67,10 @@ mod lookup {
         dedupe(keys)
     }
 
-    pub fn log_lookup_keys(mod_name: &str, tp_file: &str) -> Vec<String> {
+    pub(in crate::app::controller) fn log_lookup_keys(
+        mod_name: &str,
+        tp_file: &str,
+    ) -> Vec<String> {
         let mut keys = tp2_lookup_keys(tp_file);
         if !mod_name.trim().is_empty() && !tp_file.trim().is_empty() {
             keys.extend(tp2_lookup_keys(format!("{mod_name}\\{tp_file}").as_str()));
@@ -91,7 +96,7 @@ mod matchers {
 
     use super::normalize::{normalize_path_key, strip_setup_prefix};
 
-    pub fn extract_tp2_filename(tp_file: &str) -> String {
+    pub(super) fn extract_tp2_filename(tp_file: &str) -> String {
         let norm = normalize_path_key(tp_file);
         Path::new(&norm)
             .file_name()
@@ -100,7 +105,7 @@ mod matchers {
             .to_ascii_uppercase()
     }
 
-    pub fn extract_tp2_stem(tp_file: &str) -> String {
+    pub(super) fn extract_tp2_stem(tp_file: &str) -> String {
         let filename = extract_tp2_filename(tp_file);
         let without_ext = Path::new(&filename)
             .file_stem()
@@ -110,7 +115,10 @@ mod matchers {
         strip_setup_prefix(&without_ext)
     }
 
-    pub fn find_mods_by_tp2_filename(mods: &[Step2ModState], tp_file: &str) -> Vec<usize> {
+    pub(in crate::app::controller) fn find_mods_by_tp2_filename(
+        mods: &[Step2ModState],
+        tp_file: &str,
+    ) -> Vec<usize> {
         let target_filename = extract_tp2_filename(tp_file);
         let mut results = Vec::new();
         for (idx, mod_state) in mods.iter().enumerate() {
@@ -122,7 +130,10 @@ mod matchers {
         results
     }
 
-    pub fn find_unique_mod_by_tp2_stem(mods: &[Step2ModState], tp_file: &str) -> Option<usize> {
+    pub(in crate::app::controller) fn find_unique_mod_by_tp2_stem(
+        mods: &[Step2ModState],
+        tp_file: &str,
+    ) -> Option<usize> {
         let target_stem = extract_tp2_stem(tp_file);
         if target_stem.is_empty() {
             return None;
@@ -174,6 +185,7 @@ mod normalize {
         }
     }
 
+    #[must_use]
     pub fn normalize_path_key(value: &str) -> String {
         let mut normalized = value.trim().trim_matches('"').replace('/', "\\");
         if normalized.starts_with(".\\") {
@@ -183,6 +195,10 @@ mod normalize {
     }
 }
 
-pub use lookup::{log_lookup_keys, mod_lookup_keys_for_mod, tp2_lookup_keys};
-pub use matchers::{find_mods_by_tp2_filename, find_unique_mod_by_tp2_stem};
+pub(in crate::app::controller) use lookup::{
+    log_lookup_keys, mod_lookup_keys_for_mod, tp2_lookup_keys,
+};
+pub(in crate::app::controller) use matchers::{
+    find_mods_by_tp2_filename, find_unique_mod_by_tp2_stem,
+};
 pub use normalize::normalize_path_key;

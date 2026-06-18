@@ -6,9 +6,7 @@ pub(crate) use crate::app::step3_toolbar::{
 };
 
 use crate::app::state::WizardState;
-use crate::ui::step5::service_diagnostics_support_step5::{
-    export_diagnostics, restart_app_with_diagnostics,
-};
+use crate::ui::step5::service_diagnostics_support_step5::export_diagnostics;
 
 pub(crate) fn export_diagnostics_from_step3(
     state: &mut WizardState,
@@ -23,10 +21,6 @@ pub(crate) fn export_diagnostics_from_step3(
             state.step5.last_status_text = format!("Diagnostics export failed: {err}");
         }
     }
-}
-
-pub(crate) fn restart_app_with_diagnostics_from_step3(state: &mut WizardState) {
-    restart_app_with_diagnostics(state);
 }
 
 pub(crate) fn expand_all_active(state: &mut WizardState) {

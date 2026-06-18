@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
-
+use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::step5::service_timefmt_step5::{fmt_duration, now_unix_secs};
 
 pub(crate) fn render_process_runtime_inline(
@@ -55,6 +55,6 @@ pub(crate) fn render_error_copy(
             .on_hover_text(crate::ui::shared::tooltip_global::STEP5_COPY_ERROR_BLOCK)
             .clicked()
     {
-        ui.ctx().copy_text(term.extract_error_block());
+        clipboard::copy(ui.ctx(), term.extract_error_block());
     }
 }

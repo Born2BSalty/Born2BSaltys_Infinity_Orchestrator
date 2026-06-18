@@ -17,28 +17,29 @@ use crate::app::terminal::EmbeddedTerminal;
 use crate::install::step5_command_install::build_install_invocation;
 use crate::install::step5_command_resume::{build_resume_invocation, capture_resume_targets};
 
-pub(crate) struct PendingInstallStart {
+pub struct PendingInstallStart {
     program: String,
     args: Vec<String>,
     resume_mode: bool,
     restart_mode: bool,
 }
 
-pub(crate) fn step3_install_block_reason(state: &WizardState) -> Option<String> {
-    let show_bgee = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_bg2ee = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+#[must_use]
+pub fn step3_install_block_reason(state: &WizardState) -> Option<String> {
+    let has_first_game_tab = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
+    let has_second_game_tab = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
     let mut blocked_tabs = Vec::<String>::new();
 
     for (tab, show, mods, items) in [
         (
             "BGEE",
-            show_bgee,
+            has_first_game_tab,
             &state.step2.bgee_mods,
             &state.step3.bgee_items,
         ),
         (
             "BG2EE",
-            show_bg2ee,
+            has_second_game_tab,
             &state.step2.bg2ee_mods,
             &state.step3.bg2ee_items,
         ),
@@ -69,12 +70,14 @@ pub(crate) fn step3_install_block_reason(state: &WizardState) -> Option<String> 
     }
 }
 
-pub(crate) fn prepare_start_request(
+pub fn prepare_start_request(
     state: &mut WizardState,
     term: &mut EmbeddedTerminal,
 ) -> Option<(PendingInstallStart, bool)> {
     state.step5.start_install_requested = false;
     state.step5.prep_running = false;
+    state.step5.last_install_failed = false;
+    state.step5.last_exit_code = None;
     state.step5.prep_ran = false;
     state.step5.prep_used_backup = false;
     state.step5.prep_backup_paths.clear();
@@ -84,7 +87,7 @@ pub(crate) fn prepare_start_request(
     state.step5.resolved_game_dir.clear();
 
     if let Some(reason) = step3_install_block_reason(state) {
-        state.step5.last_status_text = reason.clone();
+        state.step5.last_status_text.clone_from(&reason);
         term.append_marker(&reason);
         return None;
     }
@@ -131,9 +134,8 @@ pub(crate) fn prepare_start_request(
     ))
 }
 
-pub(crate) fn spawn_target_prep_worker(
-    step1: Step1State,
-) -> Receiver<Result<TargetPrepResult, String>> {
+#[must_use]
+pub fn spawn_target_prep_worker(step1: Step1State) -> Receiver<Result<TargetPrepResult, String>> {
     let (tx, rx) = channel();
     thread::spawn(move || {
         let result = prepare_target_dirs_before_install(&step1)
@@ -148,7 +150,7 @@ pub(crate) fn spawn_target_prep_worker(
     rx
 }
 
-pub(crate) fn apply_completed_prep(
+pub fn apply_completed_prep(
     state: &mut WizardState,
     term: &mut EmbeddedTerminal,
     result: Result<TargetPrepResult, String>,
@@ -188,14 +190,14 @@ pub(crate) fn apply_completed_prep(
         Err(err) => {
             state.step5.prep_backup_paths.clear();
             state.step5.prep_cleaned_paths.clear();
-            state.step5.last_status_text = err.clone();
+            state.step5.last_status_text.clone_from(&err);
             term.append_marker(&err);
             false
         }
     }
 }
 
-pub(crate) fn start_install_process(
+pub fn start_install_process(
     state: &mut WizardState,
     term: &mut EmbeddedTerminal,
     pending: PendingInstallStart,
@@ -261,10 +263,7 @@ pub(crate) fn start_install_process(
     }
 }
 
-pub(crate) fn confirm_cancel_request(
-    state: &mut WizardState,
-    terminal: Option<&mut EmbeddedTerminal>,
-) {
+pub fn confirm_cancel_request(state: &mut WizardState, terminal: Option<&mut EmbeddedTerminal>) {
     state.step5.cancel_requested = true;
     if state.step5.cancel_force_checked {
         if let Some(term) = terminal {
@@ -297,7 +296,7 @@ pub(crate) fn confirm_cancel_request(
     state.step5.cancel_force_checked = false;
 }
 
-pub(crate) fn dismiss_cancel_request(state: &mut WizardState) {
+pub const fn dismiss_cancel_request(state: &mut WizardState) {
     state.step5.cancel_confirm_open = false;
     state.step5.cancel_force_checked = false;
     state.step5.cancel_requested = false;
@@ -335,6 +334,44 @@ fn arg_value(args: &[String], flag: &str) -> Option<String> {
 fn now_unix_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepare_start_request_preserves_previous_console_run_output() {
+        let mut state = WizardState::default();
+        let mut term = EmbeddedTerminal::new().expect("embedded terminal");
+        term.append_marker("previous run line that must persist");
+        assert!(term.output_text().contains("previous run line"));
+
+        let _ = prepare_start_request(&mut state, &mut term);
+
+        assert!(
+            term.output_text().contains("previous run line"),
+            "starting a new install attempt must not clear the Step 5 console"
+        );
+    }
+
+    #[test]
+    fn prepare_start_request_invalidates_previous_clean_exit() {
+        let mut state = WizardState::default();
+        state.step5.last_exit_code = Some(0);
+        state.step5.last_install_failed = false;
+        let mut term = EmbeddedTerminal::new().expect("embedded terminal");
+
+        let _ = prepare_start_request(&mut state, &mut term);
+
+        assert_eq!(
+            state.step5.last_exit_code, None,
+            "a new attempt must not inherit the previous successful exit code"
+        );
+        assert!(
+            !crate::ui::workspace::step5::success_banner::clean_exit(&state),
+            "after a new attempt starts, nav-away reset must not see stale success"
+        );
+    }
 }

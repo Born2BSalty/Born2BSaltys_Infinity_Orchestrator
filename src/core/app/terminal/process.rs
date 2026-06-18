@@ -28,15 +28,13 @@ mod config {
                 self.child_env
                     .push(("BIO_FULL_DEBUG".to_string(), "1".to_string()));
             }
-            let diagnostics_dir = run_id
-                .map(run_dir_from_id)
-                .unwrap_or_else(|| PathBuf::from("diagnostics"));
+            let diagnostics_dir =
+                run_id.map_or_else(|| PathBuf::from("diagnostics"), run_dir_from_id);
             let logs_dir = diagnostics_dir.join("logs");
             self.raw_log_path = if step1.log_raw_output_dev {
                 let ts = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
+                    .map_or(0, |d| d.as_secs());
                 Some(logs_dir.join(format!("raw_output_{ts}.log")))
             } else {
                 None
@@ -44,8 +42,7 @@ mod config {
             self.bio_debug_log_path = if step1.bio_full_debug {
                 let ts = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
+                    .map_or(0, |d| d.as_secs());
                 Some(logs_dir.join(format!("bio_full_debug_{ts}.log")))
             } else {
                 None
@@ -115,7 +112,7 @@ mod lifecycle {
             self.child = Some(spawned.child);
             self.stdin = spawned.stdin;
             self.output_rx = Some(spawned.rx);
-            self.saw_exit_event = false;
+            self.events.saw_exit_event = false;
             self.current_component_key = None;
             self.current_component_tp2 = None;
             self.current_component_id = None;
@@ -143,7 +140,7 @@ mod lifecycle {
         }
 
         pub fn poll_output(&mut self) {
-            self.has_new_data = false;
+            self.events.has_new_data = false;
             if let Some(rx) = &self.output_rx {
                 let mut chunks: Vec<String> = Vec::new();
                 while let Ok(event) = rx.try_recv() {
@@ -156,14 +153,15 @@ mod lifecycle {
                     self.update_boundary_events(&joined);
                     scripted_inputs::update_current_component_from_output(self, &joined);
                     self.update_important_lines(&joined);
-                    let mut raw_log_error = None::<String>;
-                    if let Some(raw) = self.raw_log_file.as_mut() {
+                    let raw_log_error = self.raw_log_file.as_mut().and_then(|raw| {
                         if let Err(err) = raw.write_all(joined.as_bytes()) {
-                            raw_log_error = Some(format!("raw log write failed: {err}"));
+                            Some(format!("raw log write failed: {err}"))
                         } else if let Err(err) = raw.flush() {
-                            raw_log_error = Some(format!("raw log flush failed: {err}"));
+                            Some(format!("raw log flush failed: {err}"))
+                        } else {
+                            None
                         }
-                    }
+                    });
                     if let Some(message) = raw_log_error {
                         self.record_runtime_error(message);
                         self.raw_log_file = None;
@@ -176,7 +174,7 @@ mod lifecycle {
                         joined.len(),
                         joined.len()
                     ));
-                    self.has_new_data = true;
+                    self.events.has_new_data = true;
                 }
             }
             if let Some(child) = self.child.as_mut() {
@@ -192,8 +190,8 @@ mod lifecycle {
                         self.current_component_tp2 = None;
                         self.current_component_id = None;
                         self.current_component_name = None;
-                        self.saw_exit_event = true;
-                        self.has_new_data = true;
+                        self.events.saw_exit_event = true;
+                        self.events.has_new_data = true;
                     }
                     Ok(None) => {}
                     Err(err) => {
@@ -208,39 +206,41 @@ mod lifecycle {
                         self.current_component_tp2 = None;
                         self.current_component_id = None;
                         self.current_component_name = None;
-                        self.saw_exit_event = true;
-                        self.has_new_data = true;
+                        self.events.saw_exit_event = true;
+                        self.events.has_new_data = true;
                     }
                 }
             }
         }
 
+        #[must_use]
         pub fn process_id(&self) -> Option<u32> {
-            self.child.as_ref().map(|c| c.id())
+            self.child.as_ref().map(std::process::Child::id)
         }
 
         pub(in crate::app::terminal) fn write_bytes(&mut self, data: &[u8]) {
             self.log_bio_debug(&format!("write_bytes len={}", data.len()));
-            let mut stdin_error = None::<String>;
-            if let Some(stdin) = self.stdin.as_mut() {
+            let stdin_error = self.stdin.as_mut().and_then(|stdin| {
                 if let Err(err) = stdin.write_all(data) {
-                    stdin_error = Some(format!("stdin write failed: {err}"));
+                    Some(format!("stdin write failed: {err}"))
                 } else if let Err(err) = stdin.flush() {
-                    stdin_error = Some(format!("stdin flush failed: {err}"));
+                    Some(format!("stdin flush failed: {err}"))
+                } else {
+                    None
                 }
-            }
+            });
             if let Some(message) = stdin_error {
                 self.record_runtime_error(message);
             }
         }
 
         pub(in crate::app::terminal) fn record_runtime_error(&mut self, message: String) {
-            self.last_runtime_error = Some(message.clone());
             self.append_output(&format!("\n[terminal] {message}\n"));
             self.important_buffer.push_str("[terminal] ");
             self.important_buffer.push_str(&message);
             self.important_buffer.push('\n');
-            self.has_new_data = true;
+            self.events.has_new_data = true;
+            self.last_runtime_error = Some(message);
         }
     }
 }
@@ -259,33 +259,29 @@ mod terminate {
         }
 
         fn terminate_process_tree(&mut self, marker: &str) {
-            self.log_bio_debug(&format!("terminate_process_tree marker=\"{}\"", marker));
-            let pid = self.child.as_ref().map(|c| c.id());
-            let mut kill_error = None::<String>;
-            if let Some(child) = self.child.as_mut()
-                && let Err(err) = child.kill()
-            {
-                kill_error = Some(format!("process kill failed: {err}"));
-            }
+            self.log_bio_debug(&format!("terminate_process_tree marker=\"{marker}\""));
+            let pid = self.child.as_ref().map(std::process::Child::id);
+            let kill_error = self
+                .child
+                .as_mut()
+                .and_then(|child| child.kill().err())
+                .map(|err| format!("process kill failed: {err}"));
             if let Some(message) = kill_error {
                 self.record_runtime_error(message);
             }
             #[cfg(target_os = "windows")]
-            if let Some(pid) = pid {
-                // Non-blocking tree kill: do not wait on UI thread.
-                if let Err(err) = Command::new("taskkill")
+            if let Some(pid) = pid
+                && let Err(err) = Command::new("taskkill")
                     .args(["/PID", &pid.to_string(), "/T", "/F"])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .spawn()
-                {
-                    self.record_runtime_error(format!("taskkill spawn failed: {err}"));
-                }
+            {
+                self.record_runtime_error(format!("taskkill spawn failed: {err}"));
             }
             #[cfg(not(target_os = "windows"))]
             if let Some(pid) = pid {
-                // Best-effort child tree termination on Unix-like systems.
                 let pid_s = pid.to_string();
                 if let Err(err) = Command::new("pkill")
                     .args(["-TERM", "-P", &pid_s])
@@ -310,9 +306,9 @@ mod terminate {
             self.stdin = None;
             self.output_rx = None;
             self.last_exit_code = Some(1);
-            self.saw_exit_event = true;
+            self.events.saw_exit_event = true;
             self.append_marker(marker);
-            self.has_new_data = true;
+            self.events.has_new_data = true;
         }
     }
 }

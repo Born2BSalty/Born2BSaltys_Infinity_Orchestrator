@@ -6,12 +6,12 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-pub(crate) mod compat_dependency_expr;
+pub mod compat_dependency_expr;
 pub mod lapdu;
-pub(crate) mod prompt_eval_expr;
-pub(crate) mod prompt_eval_expr_tokens;
-pub(crate) mod weidu_component_line;
-pub(crate) mod weidu_version;
+pub mod prompt_eval_expr;
+pub mod prompt_eval_expr_tokens;
+pub mod weidu_component_line;
+pub mod weidu_version;
 
 #[derive(Debug, Clone, Default)]
 pub struct PromptSummaryIndex {
@@ -50,6 +50,7 @@ pub struct PromptSummaryEvent {
     pub game_deny: Vec<String>,
 }
 
+#[must_use]
 pub fn collect_prompt_summary_index(
     tp2_path: &Path,
     mods_root: &Path,
@@ -89,7 +90,7 @@ pub(crate) fn collect_tp2_component_blocks<'a>(tp2_text: &'a str) -> Vec<(String
             }
             let index = upper_line.find("DESIGNATED")?;
             let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-            let digits: String = tail.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+            let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
             if digits.is_empty() {
                 return None;
             }

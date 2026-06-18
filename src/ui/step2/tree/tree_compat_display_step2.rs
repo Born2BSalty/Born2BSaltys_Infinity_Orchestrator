@@ -4,6 +4,12 @@
 use eframe::egui;
 
 use crate::app::state::{Step2ComponentState, Step2ModState};
+use crate::ui::shared::redesign_tokens::{
+    ThemePalette, redesign_conditional, redesign_conditional_fill, redesign_conflict,
+    redesign_conflict_fill, redesign_conflict_parent, redesign_game_mismatch,
+    redesign_game_mismatch_fill, redesign_included, redesign_included_fill, redesign_info,
+    redesign_info_fill, redesign_warning_emphasis, redesign_warning_fill, redesign_warning_parent,
+};
 
 pub(crate) fn compat_colors(
     kind: Option<&str>,
@@ -58,8 +64,63 @@ pub(crate) fn compat_colors(
     }
 }
 
+pub(crate) fn compat_colors_redesign(
+    kind: Option<&str>,
+    palette: ThemePalette,
+) -> Option<(egui::Color32, egui::Color32, &'static str)> {
+    match kind.unwrap_or_default() {
+        "included" | "not_needed" => Some((
+            redesign_included(palette),
+            redesign_included_fill(palette),
+            "Included",
+        )),
+        "not_compatible" | "conflict" => Some((
+            redesign_conflict(palette),
+            redesign_conflict_fill(palette),
+            "Conflict",
+        )),
+        "order_block" => Some((
+            redesign_warning_emphasis(palette),
+            redesign_warning_fill(palette),
+            "Install Order",
+        )),
+        "missing_dep" => Some((
+            redesign_info(palette),
+            redesign_info_fill(palette),
+            "Missing Dep",
+        )),
+        "mismatch" => Some((
+            redesign_game_mismatch(palette),
+            redesign_game_mismatch_fill(palette),
+            "Mismatch",
+        )),
+        "path_requirement" => Some((
+            redesign_info(palette),
+            redesign_info_fill(palette),
+            "Path Requirement",
+        )),
+        "conditional" => Some((
+            redesign_conditional(palette),
+            redesign_conditional_fill(palette),
+            "Conditional",
+        )),
+        "warning" => Some((
+            redesign_warning_emphasis(palette),
+            redesign_warning_fill(palette),
+            "Warning",
+        )),
+        "deprecated" => Some((
+            redesign_warning_emphasis(palette),
+            redesign_warning_fill(palette),
+            "Deprecated",
+        )),
+        _ => None,
+    }
+}
+
 pub(crate) fn parent_compat_summary(
     mod_state: &Step2ModState,
+    palette: ThemePalette,
 ) -> Option<(egui::Color32, egui::Color32, String)> {
     let mut conflicts = 0usize;
     let mut order_blocks = 0usize;
@@ -74,8 +135,8 @@ pub(crate) fn parent_compat_summary(
     }
     if conflicts > 0 {
         return Some((
-            crate::ui::shared::theme_global::conflict_parent(),
-            crate::ui::shared::theme_global::conflict_fill(),
+            redesign_conflict_parent(palette),
+            redesign_conflict_fill(palette),
             format!(
                 "{conflicts} conflict{}",
                 if conflicts == 1 { "" } else { "s" }
@@ -84,8 +145,8 @@ pub(crate) fn parent_compat_summary(
     }
     if order_blocks > 0 {
         return Some((
-            crate::ui::shared::theme_global::warning_parent(),
-            crate::ui::shared::theme_global::warning_fill(),
+            redesign_warning_parent(palette),
+            redesign_warning_fill(palette),
             format!(
                 "{order_blocks} order issue{}",
                 if order_blocks == 1 { "" } else { "s" }
@@ -94,8 +155,8 @@ pub(crate) fn parent_compat_summary(
     }
     if warnings > 0 {
         return Some((
-            crate::ui::shared::theme_global::warning_parent(),
-            crate::ui::shared::theme_global::warning_fill(),
+            redesign_warning_parent(palette),
+            redesign_warning_fill(palette),
             format!("{warnings} warning{}", if warnings == 1 { "" } else { "s" }),
         ));
     }

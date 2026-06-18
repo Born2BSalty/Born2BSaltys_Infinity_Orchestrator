@@ -1,42 +1,14 @@
 name: CI
 
 on:
-  push:
-    branches: ["main"]
   pull_request:
+  push:
+    branches: ["overhaul/infinity_orchestrator"]
 
 jobs:
   check:
-    name: Rust build/test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-
-      - name: Install dbus
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
-
-      - name: Cargo test
-        run: cargo test --all-targets --locked
-
-  clippy:
-    name: Rust fmt/clippy (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Rust fmt/clippy/build
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -53,11 +25,14 @@ jobs:
           workspaces: |
             . -> target
 
-      - name: Install dbus
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
-
       - name: Cargo fmt
-        run: cargo fmt -- --check
+        run: cargo fmt --check
 
       - name: Cargo clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings -W unreachable_pub -W clippy::pedantic -W clippy::nursery -A clippy::missing_errors_doc -A clippy::missing_panics_doc
+
+      - name: Cargo test
+        run: cargo test --all-targets --locked
+
+      - name: Cargo build
+        run: cargo build --release

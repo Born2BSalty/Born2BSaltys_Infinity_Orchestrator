@@ -2,7 +2,10 @@
 /backup/
 /TODO.md
 /diagnostics/
+/control/
+/project.json
 /vendor/lapdu-parser-rust-master/tests/
+/tests/
 
 .vscode/
 .idea/
