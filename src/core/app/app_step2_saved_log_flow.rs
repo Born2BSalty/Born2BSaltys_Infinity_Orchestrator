@@ -282,93 +282,70 @@ mod tests {
     }
 
     #[test]
-    fn blocker_clear_when_no_failures() {
-        let state = WizardState::default();
-        assert!(unresolved_required_mods_blocker(&state).is_none());
-    }
+    fn unresolved_required_mods_blocker_maps_each_bucket_and_honors_precedence() {
+        use crate::app::state::Step2State;
 
-    #[test]
-    fn blocker_exact_version_failed() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_exact_version_failed_sources: vec!["ISNF".to_string()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let reason = unresolved_required_mods_blocker(&state);
-        assert!(reason.is_some());
-        assert!(reason.unwrap().contains("exact pinned version"));
-    }
+        type Setup = fn(&mut Step2State);
 
-    #[test]
-    fn blocker_manual_source() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_manual_sources: vec!["ManualMod".to_string()],
-                ..Default::default()
-            },
-            ..Default::default()
+        let blocker_for = |setup: Setup| -> Option<String> {
+            let mut state = WizardState::default();
+            setup(&mut state.step2);
+            unresolved_required_mods_blocker(&state)
         };
-        let reason = unresolved_required_mods_blocker(&state);
-        assert!(reason.is_some());
-        assert!(reason.unwrap().contains("manual-only source"));
-    }
 
-    #[test]
-    fn blocker_unknown_source() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_unknown_sources: vec!["UnknownMod".to_string()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let reason = unresolved_required_mods_blocker(&state);
-        assert!(reason.is_some());
-        assert!(reason.unwrap().contains("failed source resolution"));
-    }
+        assert!(
+            blocker_for(|_| {}).is_none(),
+            "no unresolved sources -> no blocker"
+        );
 
-    #[test]
-    fn blocker_failed_source() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_failed_sources: vec!["TNT".to_string()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let reason = unresolved_required_mods_blocker(&state);
-        assert!(reason.is_some());
-        assert!(reason.unwrap().contains("failed source check"));
-    }
+        let cases: &[(Setup, &str)] = &[
+            (
+                |s| s.update_selected_exact_version_failed_sources = vec!["ISNF".to_string()],
+                "exact pinned version",
+            ),
+            (
+                |s| s.update_selected_manual_sources = vec!["ManualMod".to_string()],
+                "manual-only source",
+            ),
+            (
+                |s| s.update_selected_unknown_sources = vec!["UnknownMod".to_string()],
+                "failed source resolution",
+            ),
+            (
+                |s| s.update_selected_failed_sources = vec!["TNT".to_string()],
+                "failed source check",
+            ),
+            (
+                |s| s.update_selected_download_failed_sources = vec!["DlMod".to_string()],
+                "failed download",
+            ),
+            (
+                |s| s.update_selected_extract_failed_sources = vec!["ExMod".to_string()],
+                "failed extraction",
+            ),
+            (
+                |s| s.update_selected_missing_sources = vec!["MissMod".to_string()],
+                "no resolved archive",
+            ),
+        ];
+        for (setup, expected) in cases {
+            let reason = blocker_for(*setup);
+            assert!(
+                reason.as_deref().is_some_and(|r| r.contains(expected)),
+                "bucket must halt with '{expected}', got {reason:?}"
+            );
+        }
 
-    #[test]
-    fn blocker_download_failed() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_download_failed_sources: vec!["SomeMod".to_string()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let reason = unresolved_required_mods_blocker(&state);
-        assert!(reason.is_some());
-        assert!(reason.unwrap().contains("failed download"));
-    }
-
-    #[test]
-    fn blocker_extract_failed() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_extract_failed_sources: vec!["SomeMod".to_string()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let reason = unresolved_required_mods_blocker(&state);
-        assert!(reason.is_some());
-        assert!(reason.unwrap().contains("failed extraction"));
+        let precedence = blocker_for(|s| {
+            s.update_selected_exact_version_failed_sources = vec!["ISNF".to_string()];
+            s.update_selected_manual_sources = vec!["ManualMod".to_string()];
+        });
+        assert!(
+            precedence
+                .as_deref()
+                .is_some_and(|r| r.contains("exact pinned version")),
+            "exact-version bucket must win precedence, got {precedence:?}"
+        );
     }
 
     #[test]

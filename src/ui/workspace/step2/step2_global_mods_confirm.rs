@@ -16,16 +16,6 @@ pub const fn global_mods_scan_confirm<'a>() -> ConfirmDialog<'a> {
 }
 
 #[must_use]
-pub const fn global_mods_scan_dialog_title() -> &'static str {
-    "Rescan with a different mods source?"
-}
-
-#[must_use]
-pub const fn global_mods_scan_dialog_confirm_label() -> &'static str {
-    "Scan anyway"
-}
-
-#[must_use]
 pub const fn resolve_confirm_outcome(
     pending: Option<()>,
     outcome: ConfirmOutcome,
@@ -40,22 +30,6 @@ pub const fn resolve_confirm_outcome(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn confirm_descriptor_is_not_danger_with_scan_anyway_label() {
-        let d = global_mods_scan_confirm();
-        assert!(!d.danger);
-        assert_eq!(d.confirm_label, "Scan anyway");
-        assert_eq!(d.id_salt, "step2_global_mods_scan");
-        assert_eq!(d.title, "Rescan with a different mods source?");
-    }
-
-    #[test]
-    fn title_and_label_helpers_match_descriptor() {
-        let d = global_mods_scan_confirm();
-        assert_eq!(global_mods_scan_dialog_title(), d.title);
-        assert_eq!(global_mods_scan_dialog_confirm_label(), d.confirm_label);
-    }
 
     #[test]
     fn pending_confirmed_triggers_scan_and_clears_flag() {
