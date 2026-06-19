@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState};
+use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState, ModsSource};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
@@ -12,7 +12,22 @@ pub fn maybe_trigger_resume_scan(
     orchestrator: &mut OrchestratorApp,
     workspace: &ModlistWorkspaceState,
 ) {
-    let Some(folder) = pick_resume_folder(orchestrator.dev_mode, workspace) else {
+    let global_folder = if workspace.mods_source == ModsSource::GlobalModsFolder {
+        orchestrator
+            .settings_store
+            .load()
+            .ok()
+            .map(|s| s.step1.mods_folder)
+    } else {
+        None
+    };
+    let installation_folder = pick_resume_folder(orchestrator.dev_mode, workspace);
+    let Some(folder) = choose_resume_folder(
+        workspace.mods_source,
+        global_folder.as_deref(),
+        installation_folder,
+    )
+    .map(str::to_string) else {
         return;
     };
     let has_order = !workspace.order_bgee.is_empty()
@@ -30,7 +45,7 @@ pub fn maybe_trigger_resume_scan(
         return;
     }
 
-    orchestrator.wizard_state.step1.mods_folder = folder.to_string();
+    orchestrator.wizard_state.step1.mods_folder = folder;
 
     let mut bgee = snapshot_from_order(&workspace.order_bgee);
     if !workspace.order_iwdee.is_empty() {
@@ -59,6 +74,20 @@ pub fn maybe_trigger_resume_scan(
 
     orchestrator.workspace_view.step2.was_scanning =
         step2_rescan_reconcile::armed_was_scanning_for_inflight_scan();
+}
+
+fn choose_resume_folder<'a>(
+    mods_source: ModsSource,
+    global_folder: Option<&'a str>,
+    installation_folder: Option<&'a str>,
+) -> Option<&'a str> {
+    match mods_source {
+        ModsSource::GlobalModsFolder => global_folder
+            .map(str::trim)
+            .filter(|f| !f.is_empty())
+            .or(installation_folder),
+        ModsSource::InstallationFolder => installation_folder,
+    }
 }
 
 fn pick_resume_folder(dev_mode: bool, workspace: &ModlistWorkspaceState) -> Option<&str> {
@@ -178,6 +207,59 @@ mod tests {
         let ws = ModlistWorkspaceState::default();
         assert_eq!(pick_resume_folder(true, &ws), None);
         assert_eq!(pick_resume_folder(false, &ws), None);
+    }
+
+    #[test]
+    fn choose_resume_global_uses_global_folder() {
+        assert_eq!(
+            choose_resume_folder(
+                ModsSource::GlobalModsFolder,
+                Some(r"D:\global\mods"),
+                Some(r"D:\install\mods"),
+            ),
+            Some(r"D:\global\mods"),
+            "global source must resume from the settings mods folder, not the installation folder"
+        );
+    }
+
+    #[test]
+    fn choose_resume_global_falls_back_to_installation_when_global_empty() {
+        assert_eq!(
+            choose_resume_folder(
+                ModsSource::GlobalModsFolder,
+                Some("   "),
+                Some(r"D:\install")
+            ),
+            Some(r"D:\install"),
+        );
+        assert_eq!(
+            choose_resume_folder(ModsSource::GlobalModsFolder, None, Some(r"D:\install")),
+            Some(r"D:\install"),
+        );
+    }
+
+    #[test]
+    fn choose_resume_installation_ignores_global_folder() {
+        assert_eq!(
+            choose_resume_folder(
+                ModsSource::InstallationFolder,
+                Some(r"D:\global\mods"),
+                Some(r"D:\install\mods"),
+            ),
+            Some(r"D:\install\mods"),
+        );
+    }
+
+    #[test]
+    fn choose_resume_none_when_nothing_available() {
+        assert_eq!(
+            choose_resume_folder(ModsSource::GlobalModsFolder, None, None),
+            None
+        );
+        assert_eq!(
+            choose_resume_folder(ModsSource::InstallationFolder, Some(r"D:\global"), None),
+            None
+        );
     }
 
     use crate::app::controller::step3_sync;

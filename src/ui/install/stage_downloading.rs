@@ -520,6 +520,8 @@ pub fn render_live(
     verify_downloaded_archives_once(orchestrator, &inputs.destination);
     ingest_downloaded_archives_once(orchestrator, &inputs.destination);
     install_empty_asset_clean_finish(orchestrator);
+    gate_pre_step5_blocker_once(orchestrator);
+    toast_version_override_warnings_once(orchestrator);
 
     let progress = build_and_hold_progress(orchestrator);
     let arm_error = orchestrator.install_screen_state.pipeline_arm_error.clone();
@@ -820,15 +822,9 @@ fn install_empty_asset_clean_finish(
         .update_selected_extracted_sources
         .len();
     let archives_observed = extracted_count + skip_count;
-    let failed_sources = &orchestrator
-        .wizard_state
-        .step2
-        .update_selected_failed_sources;
-    if !failed_sources.is_empty() {
-        let reason = format!(
-            "failed source check: {}",
-            failed_sources.first().map_or("(unknown)", String::as_str)
-        );
+    if let Some(reason) = crate::app::app_step2_saved_log_flow::unresolved_required_mods_blocker(
+        &orchestrator.wizard_state,
+    ) {
         orchestrator.install_screen_state.pipeline_arm_error = Some(reason.clone());
         orchestrator.wizard_state.modlist_auto_build_active = false;
         orchestrator
@@ -849,6 +845,72 @@ fn install_empty_asset_clean_finish(
         );
         route_install_to_step5(&mut orchestrator.wizard_state);
     }
+}
+
+fn gate_pre_step5_blocker_once(
+    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+) {
+    let flags = orchestrator.install_screen_state.pipeline_flags;
+    if !flags.armed()
+        || !flags.explicit_resolve_started()
+        || orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_some()
+        || !orchestrator.wizard_state.modlist_auto_build_active
+        || orchestrator
+            .wizard_state
+            .step2
+            .update_selected_check_running
+        || !flags.archives_ingested()
+        || orchestrator.install_screen_state.pre_step5_blocker_checked
+    {
+        return;
+    }
+    orchestrator.install_screen_state.pre_step5_blocker_checked = true;
+    if let Some(reason) = crate::app::app_step2_saved_log_flow::unresolved_required_mods_blocker(
+        &orchestrator.wizard_state,
+    ) {
+        orchestrator.install_screen_state.pipeline_arm_error = Some(reason.clone());
+        orchestrator.wizard_state.modlist_auto_build_active = false;
+        orchestrator
+            .wizard_state
+            .modlist_auto_build_waiting_for_install = false;
+        tracing::warn!(target = "orchestrator", "{reason}");
+    }
+}
+
+fn toast_version_override_warnings_once(
+    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+) {
+    let flags = orchestrator.install_screen_state.pipeline_flags;
+    if !flags.explicit_resolve_started()
+        || orchestrator
+            .wizard_state
+            .step2
+            .update_selected_check_running
+        || flags.override_warnings_toasted()
+    {
+        return;
+    }
+    orchestrator
+        .install_screen_state
+        .pipeline_flags
+        .set_override_warnings_toasted(true);
+    let warnings = &orchestrator
+        .wizard_state
+        .step2
+        .update_selected_version_override_warnings;
+    if warnings.is_empty() {
+        return;
+    }
+    let message = build_version_override_toast(warnings);
+    orchestrator.notification_manager.warn_persistent(message);
+}
+
+fn build_version_override_toast(warnings: &[String]) -> String {
+    let header = "Pinned versions of the following mods not available. Latest will be installed:";
+    format!("{header}\n- {}", warnings.join("\n- "))
 }
 
 fn route_install_to_step5(state: &mut crate::app::state::WizardState) {
@@ -2561,5 +2623,28 @@ mod tests {
         assert_eq!(InstallPhase::Downloading.verb(), "Downloading");
         assert_eq!(InstallPhase::Extracting.verb(), "Extracting");
         assert_eq!(InstallPhase::default(), InstallPhase::Downloading);
+    }
+
+    #[test]
+    fn build_version_override_toast_single_entry() {
+        let warnings = vec!["ISNF (6.5.5 -> 6.5.6)".to_string()];
+        let msg = build_version_override_toast(&warnings);
+        assert_eq!(
+            msg,
+            "Pinned versions of the following mods not available. Latest will be installed:\n- ISNF (6.5.5 -> 6.5.6)"
+        );
+    }
+
+    #[test]
+    fn build_version_override_toast_multiple_entries() {
+        let warnings = vec![
+            "ISNF (6.5.5 -> 6.5.6)".to_string(),
+            "OtherMod (v0.3 -> v1.0)".to_string(),
+        ];
+        let msg = build_version_override_toast(&warnings);
+        assert_eq!(
+            msg,
+            "Pinned versions of the following mods not available. Latest will be installed:\n- ISNF (6.5.5 -> 6.5.6)\n- OtherMod (v0.3 -> v1.0)"
+        );
     }
 }

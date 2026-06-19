@@ -44,7 +44,7 @@ pub struct NotificationRecord {
 
 #[derive(Default)]
 pub struct NotificationManager {
-    pending: Vec<(ToastKind, String)>,
+    pending: Vec<(ToastKind, String, bool)>,
     history: VecDeque<NotificationRecord>,
     pub history_open: bool,
 }
@@ -56,23 +56,27 @@ impl NotificationManager {
     }
 
     pub fn success(&mut self, text: impl Into<String>) {
-        self.push(ToastKind::Success, text.into());
+        self.push(ToastKind::Success, text.into(), false);
     }
 
     pub fn info(&mut self, text: impl Into<String>) {
-        self.push(ToastKind::Info, text.into());
+        self.push(ToastKind::Info, text.into(), false);
     }
 
     pub fn warn(&mut self, text: impl Into<String>) {
-        self.push(ToastKind::Warning, text.into());
+        self.push(ToastKind::Warning, text.into(), false);
+    }
+
+    pub fn warn_persistent(&mut self, text: impl Into<String>) {
+        self.push(ToastKind::Warning, text.into(), true);
     }
 
     pub fn error(&mut self, text: impl Into<String>) {
-        self.push(ToastKind::Error, text.into());
+        self.push(ToastKind::Error, text.into(), false);
     }
 
-    fn push(&mut self, kind: ToastKind, text: String) {
-        self.pending.push((kind, text.clone()));
+    fn push(&mut self, kind: ToastKind, text: String, persistent: bool) {
+        self.pending.push((kind, text.clone(), persistent));
         if self.history.len() == HISTORY_CAP {
             self.history.pop_front();
         }
@@ -114,8 +118,15 @@ impl NotificationManager {
                 render_custom_toast(ui, toast, palette)
             });
 
-        for (kind, text) in self.pending.drain(..) {
-            let options = toast_options_for(kind);
+        for (kind, text, persistent) in self.pending.drain(..) {
+            let options = if persistent {
+                ToastOptions::default()
+                    .show_icon(false)
+                    .show_progress(false)
+                    .duration(None::<Duration>)
+            } else {
+                toast_options_for(kind)
+            };
             toasts.add(Toast::new().kind(kind).text(text).options(options));
         }
 
@@ -550,6 +561,16 @@ mod tests {
             (opts.progress() - 0.0_f64).abs() < f64::EPSILON,
             "error toast must have zero progress (infinite TTL)"
         );
+    }
+
+    #[test]
+    fn warn_persistent_queues_warning_kind_with_infinite_ttl() {
+        let mut mgr = NotificationManager::new();
+        mgr.warn_persistent("test persistent warning");
+        let (kind, _, persistent) = &mgr.pending[0];
+        assert_eq!(*kind, ToastKind::Warning);
+        assert!(*persistent, "warn_persistent must set persistent flag");
+        assert_eq!(mgr.history().back().unwrap().kind, ToastKind::Warning);
     }
 
     #[test]

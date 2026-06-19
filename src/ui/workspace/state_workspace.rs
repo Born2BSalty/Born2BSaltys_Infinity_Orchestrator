@@ -17,6 +17,7 @@ pub struct WorkspaceStep2State {
     pub resume_pending: bool,
     pub pending_weidu_log_confirm: Option<bool>,
     pub pending_update_download_snapshot: Option<RescanSnapshot>,
+    pub pending_global_mods_scan: Option<()>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -275,6 +275,17 @@ fn append_mode_sections(lines: &mut Vec<String>, state: &WizardState, modes: Pop
 }
 
 fn append_result_sections(lines: &mut Vec<String>, state: &WizardState, modes: PopupReportModes) {
+    if !state
+        .step2
+        .update_selected_version_override_warnings
+        .is_empty()
+    {
+        append_spaced_report_section(
+            lines,
+            "Pinned versions of the following mods not available. Latest will be installed:",
+            &state.step2.update_selected_version_override_warnings,
+        );
+    }
     if (modes.exact_log || modes.hybrid_missing)
         && !state
             .step2

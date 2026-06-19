@@ -6,7 +6,7 @@ use crate::app::state::{
     Step1State, Step2ComponentState, Step2ModState, Step3ItemState, WizardState,
 };
 use crate::registry::model::{Game, ModlistEntry};
-use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState};
+use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState, ModsSource};
 use crate::settings::store::SettingsStore;
 
 const PARENT_PLACEHOLDER_ID: &str = "__PARENT__";
@@ -20,7 +20,7 @@ pub fn populate_wizard_state_from_workspace(
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
 
     sync_paths_from_settings(settings_store, wizard_state);
-    apply_scratch_mods_folder(workspace, wizard_state);
+    apply_mods_source(workspace, settings_store, wizard_state);
 
     if let Err(err) = crate::install_runtime::per_install_dirs::derive_per_install_dirs(
         &mut wizard_state.step1,
@@ -227,6 +227,8 @@ pub fn extract_workspace_state_from_wizard(
         scratch_mods_folder: prior.scratch_mods_folder.clone(),
         dev_scanned_mods_folder: prior.dev_scanned_mods_folder.clone(),
         pending_destination_prep: prior.pending_destination_prep,
+        mods_source: prior.mods_source,
+        last_rescanned_mods_source: prior.last_rescanned_mods_source,
     }
 }
 
@@ -305,7 +307,26 @@ pub fn sync_paths_from_settings(settings_store: &SettingsStore, wizard_state: &m
     dst.mod_installer_binary = from.mod_installer_binary;
 }
 
-fn apply_scratch_mods_folder(workspace: &ModlistWorkspaceState, wizard_state: &mut WizardState) {
+fn apply_mods_source(
+    workspace: &ModlistWorkspaceState,
+    settings_store: &SettingsStore,
+    wizard_state: &mut WizardState,
+) {
+    match workspace.mods_source {
+        ModsSource::GlobalModsFolder => {
+            if let Ok(settings) = settings_store.load() {
+                let folder = settings.step1.mods_folder;
+                if !folder.trim().is_empty() {
+                    wizard_state.step1.mods_folder = folder;
+                    wizard_state.step1.install_mode =
+                        Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
+                    wizard_state.step1.sync_install_mode_flags();
+                    return;
+                }
+            }
+        }
+        ModsSource::InstallationFolder => {}
+    }
     let Some(folder) = workspace
         .scratch_mods_folder
         .as_deref()
@@ -509,6 +530,56 @@ mod tests {
         assert_eq!(
             extracted.dev_scanned_mods_folder.as_deref(),
             Some(r"D:\corpus")
+        );
+    }
+
+    #[test]
+    fn extract_carries_mods_source_fields_through() {
+        use crate::registry::workspace_model::ModsSource;
+        let ws = WizardState::default();
+        let prior = ModlistWorkspaceState {
+            mods_source: ModsSource::GlobalModsFolder,
+            last_rescanned_mods_source: ModsSource::GlobalModsFolder,
+            ..Default::default()
+        };
+        let extracted = extract_workspace_state_from_wizard(&ws, &prior);
+        assert_eq!(extracted.mods_source, ModsSource::GlobalModsFolder);
+        assert_eq!(
+            extracted.last_rescanned_mods_source,
+            ModsSource::GlobalModsFolder
+        );
+    }
+
+    #[test]
+    fn apply_mods_source_installation_uses_scratch_folder() {
+        use crate::registry::workspace_model::ModsSource;
+        let workspace = ModlistWorkspaceState {
+            mods_source: ModsSource::InstallationFolder,
+            scratch_mods_folder: Some(r"D:\scratch\mods".to_string()),
+            ..Default::default()
+        };
+        let mut ws = WizardState::default();
+        apply_mods_source(&workspace, &SettingsStore::new_default(), &mut ws);
+        assert_eq!(ws.step1.mods_folder, r"D:\scratch\mods");
+    }
+
+    #[test]
+    fn apply_mods_source_default_behaves_as_installation_folder() {
+        use crate::registry::workspace_model::ModsSource;
+        let workspace = ModlistWorkspaceState {
+            scratch_mods_folder: Some(r"D:\scratch\mods".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            workspace.mods_source,
+            ModsSource::InstallationFolder,
+            "default mods_source must be InstallationFolder"
+        );
+        let mut ws = WizardState::default();
+        apply_mods_source(&workspace, &SettingsStore::new_default(), &mut ws);
+        assert_eq!(
+            ws.step1.mods_folder, r"D:\scratch\mods",
+            "default source (InstallationFolder) must use scratch folder"
         );
     }
 

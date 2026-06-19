@@ -645,7 +645,6 @@ fn extend_log_pending_update_requests(
     pending_preview: &mut PendingLogUpdatePreview<'_>,
 ) {
     let include_all_tabs = state.step1.game_install == "EET";
-    let exact_log_mode = state.step1.installs_exactly_from_weidu_logs();
     let game_tab = state.step2.active_game_tab.as_str();
     for pending in &state.step2.log_pending_downloads {
         if !include_all_tabs && pending.game_tab != game_tab {
@@ -662,11 +661,7 @@ fn extend_log_pending_update_requests(
                     &pending.game_tab,
                     &pending.tp_file,
                     &pending.label,
-                    if exact_log_mode {
-                        pending.requested_version.as_deref()
-                    } else {
-                        None
-                    },
+                    forwarded_version(state, pending.requested_version.as_deref()),
                     &source,
                     pending_preview.update_requests,
                 );
@@ -677,6 +672,17 @@ fn extend_log_pending_update_requests(
         } else {
             pending_preview.unknown.push(pending.label.clone());
         }
+    }
+}
+
+#[must_use]
+fn forwarded_version<'a>(state: &WizardState, pending_version: Option<&'a str>) -> Option<&'a str> {
+    if state.step1.installs_exactly_from_weidu_logs()
+        || super::app_step2_update_check::reproduce_exact_gate(state)
+    {
+        pending_version
+    } else {
+        None
     }
 }
 
@@ -713,5 +719,21 @@ mod tests {
                 .is_empty(),
             "the extract-failed list must clear alongside it"
         );
+    }
+
+    #[test]
+    fn reproduce_mode_forwards_pinned_version() {
+        let state = WizardState {
+            modlist_auto_build_active: true,
+            reproduce_exact: true,
+            ..Default::default()
+        };
+        assert_eq!(forwarded_version(&state, Some("8.39")), Some("8.39"));
+    }
+
+    #[test]
+    fn non_reproduce_non_exact_drops_version() {
+        let state = WizardState::default();
+        assert_eq!(forwarded_version(&state, Some("8.39")), None);
     }
 }

@@ -62,18 +62,18 @@ fn check_github_modhub_download_page(
         Ok(releases) => releases,
         Err(err) => return failed_outcome(request.clone(), &err),
     };
+    if let Some(asset_name) = request.asset.as_deref() {
+        if let Some(outcome) = first_named_asset_outcome(request, &releases, channel, asset_name) {
+            return outcome;
+        }
+        return failed_outcome(
+            request.clone(),
+            &format!("GitHub release asset not found: {}", asset_name.trim()),
+        );
+    }
     for release in &releases {
         if !release_matches_channel(release, channel) {
             continue;
-        }
-        if let Some(asset_name) = request.asset.as_deref() {
-            if let Some(outcome) = named_release_asset_outcome(request, release, asset_name) {
-                return outcome;
-            }
-            return failed_outcome(
-                request.clone(),
-                &format!("GitHub release asset not found: {}", asset_name.trim()),
-            );
         }
         if let Some(pkg_list) = request.pkg.as_deref() {
             if let Some(outcome) = packaged_release_outcome(request, release, pkg_list) {
@@ -87,6 +87,19 @@ fn check_github_modhub_download_page(
         return repo_source_outcome(agent, request);
     }
     failed_outcome(request.clone(), "no matching GitHub release found")
+}
+
+#[must_use]
+fn first_named_asset_outcome(
+    request: &Step2UpdateCheckRequest,
+    releases: &[GitHubRelease],
+    channel: GitHubChannel,
+    asset_name: &str,
+) -> Option<Step2UpdateCheckOutcome> {
+    releases
+        .iter()
+        .filter(|release| release_matches_channel(release, channel))
+        .find_map(|release| named_release_asset_outcome(request, release, asset_name))
 }
 
 fn check_github_exact_version_download_page(
@@ -276,6 +289,7 @@ fn release_asset_outcome(
         asset_url: Some(asset_url),
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
+        version_pin_overridden: None,
     })
 }
 
@@ -302,6 +316,7 @@ fn packaged_release_outcome(
         asset_url: Some(asset_url),
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
+        version_pin_overridden: None,
     })
 }
 
@@ -328,6 +343,7 @@ fn named_release_asset_outcome(
         asset_url: Some(asset_url),
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
+        version_pin_overridden: None,
     })
 }
 
@@ -352,6 +368,7 @@ fn tagged_source_outcome(
         asset_url: Some(release.zipball_url.clone()),
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
+        version_pin_overridden: None,
     }
 }
 
@@ -374,6 +391,7 @@ fn branch_source_outcome(
             asset_url: Some(asset_url),
             error: None,
             package_kind: Step2PackageKind::SourceSnapshot,
+            version_pin_overridden: None,
         };
     }
     failed_outcome(
@@ -412,6 +430,7 @@ fn commit_source_outcome(
         )),
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
+        version_pin_overridden: None,
     }
 }
 
@@ -458,6 +477,7 @@ fn tagged_tag_source_outcome(
         )),
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
+        version_pin_overridden: None,
     }
 }
 
@@ -479,6 +499,7 @@ fn repo_source_outcome(
         asset_url: Some(asset_url),
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
+        version_pin_overridden: None,
     }
 }
 
@@ -703,4 +724,80 @@ struct GitHubTreeEntry {
     path: String,
     #[serde(rename = "type")]
     kind: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GitHubAsset, GitHubChannel, GitHubRelease, first_named_asset_outcome};
+    use crate::app::app_step2_update_check::Step2UpdateCheckRequest;
+
+    fn make_request(asset: Option<&str>) -> Step2UpdateCheckRequest {
+        Step2UpdateCheckRequest {
+            game_tab: String::new(),
+            tp_file: String::new(),
+            label: String::new(),
+            source_id: String::new(),
+            repo: String::new(),
+            exact_github: vec![],
+            source_url: String::new(),
+            channel: Some("release".to_string()),
+            tag: None,
+            commit: None,
+            branch: None,
+            asset: asset.map(ToString::to_string),
+            pkg: None,
+            requested_version: None,
+        }
+    }
+
+    fn make_release(tag: &str, asset_names: &[&str]) -> GitHubRelease {
+        GitHubRelease {
+            tag_name: tag.to_string(),
+            prerelease: false,
+            zipball_url: format!("https://example.com/{tag}.zip"),
+            assets: asset_names
+                .iter()
+                .map(|name| GitHubAsset {
+                    name: name.to_string(),
+                    browser_download_url: format!("https://example.com/{name}"),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn pinned_asset_on_older_release_resolves() {
+        let releases = vec![
+            make_release("v8.40", &["tweaks-and-tricks-v8.40.zip"]),
+            make_release("v8.39", &["tweaks-and-tricks-v8.39.zip"]),
+        ];
+        let request = make_request(Some("tweaks-and-tricks-v8.39.zip"));
+        let outcome = first_named_asset_outcome(
+            &request,
+            &releases,
+            GitHubChannel::Stable,
+            "tweaks-and-tricks-v8.39.zip",
+        );
+        let outcome = outcome.expect("expected Some outcome for v8.39 asset");
+        assert_eq!(
+            outcome.asset_name.as_deref(),
+            Some("tweaks-and-tricks-v8.39.zip")
+        );
+        assert_eq!(outcome.tag.as_deref(), Some("v8.39"));
+    }
+
+    #[test]
+    fn pinned_asset_on_no_release_returns_none() {
+        let releases = vec![
+            make_release("v8.40", &["tweaks-and-tricks-v8.40.zip"]),
+            make_release("v8.39", &["tweaks-and-tricks-v8.39.zip"]),
+        ];
+        let outcome = first_named_asset_outcome(
+            &make_request(Some("tweaks-and-tricks-v8.38.zip")),
+            &releases,
+            GitHubChannel::Stable,
+            "tweaks-and-tricks-v8.38.zip",
+        );
+        assert!(outcome.is_none());
+    }
 }

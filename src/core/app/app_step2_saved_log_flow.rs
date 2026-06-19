@@ -206,6 +206,42 @@ fn auto_build_blocker_before_install(state: &WizardState) -> Option<String> {
     None
 }
 
+pub(crate) fn unresolved_required_mods_blocker(state: &WizardState) -> Option<String> {
+    if !state
+        .step2
+        .update_selected_exact_version_failed_sources
+        .is_empty()
+        || !state
+            .step2
+            .update_selected_exact_version_retry_requests
+            .is_empty()
+    {
+        return Some("exact pinned version unavailable".to_string());
+    }
+    if let Some(source) = state.step2.update_selected_manual_sources.first() {
+        return Some(format!("manual-only source required: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_unknown_sources.first() {
+        return Some(format!("failed source resolution: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_failed_sources.first() {
+        return Some(format!("failed source check: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_download_failed_sources.first() {
+        return Some(format!("failed download: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_extract_failed_sources.first() {
+        return Some(format!("failed extraction/config restore: {source}"));
+    }
+    if state.step2.update_selected_update_assets.is_empty()
+        && (!state.step2.update_selected_missing_sources.is_empty()
+            || !state.step2.update_selected_update_sources.is_empty())
+    {
+        return Some("downloadable sources have no resolved archive".to_string());
+    }
+    None
+}
+
 fn auto_build_preflight_blocker(state: &WizardState) -> Option<String> {
     let (ok, message) = crate::app::state_validation::run_path_check(&state.step1);
     if ok {
@@ -243,5 +279,114 @@ mod tests {
             "auto-build must stop on Step 5 and wait for the user to click Install"
         );
         assert_eq!(state.step5.last_status_text, "Auto Build: ready to install");
+    }
+
+    #[test]
+    fn blocker_clear_when_no_failures() {
+        let state = WizardState::default();
+        assert!(unresolved_required_mods_blocker(&state).is_none());
+    }
+
+    #[test]
+    fn blocker_exact_version_failed() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                update_selected_exact_version_failed_sources: vec!["ISNF".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("exact pinned version"));
+    }
+
+    #[test]
+    fn blocker_manual_source() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                update_selected_manual_sources: vec!["ManualMod".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("manual-only source"));
+    }
+
+    #[test]
+    fn blocker_unknown_source() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                update_selected_unknown_sources: vec!["UnknownMod".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("failed source resolution"));
+    }
+
+    #[test]
+    fn blocker_failed_source() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                update_selected_failed_sources: vec!["TNT".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("failed source check"));
+    }
+
+    #[test]
+    fn blocker_download_failed() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                update_selected_download_failed_sources: vec!["SomeMod".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("failed download"));
+    }
+
+    #[test]
+    fn blocker_extract_failed() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                update_selected_extract_failed_sources: vec!["SomeMod".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("failed extraction"));
+    }
+
+    #[test]
+    fn gate_failure_bucket_halts_auto_build() {
+        let mut state = WizardState {
+            modlist_auto_build_active: true,
+            modlist_auto_build_waiting_for_install: true,
+            step2: crate::app::state::Step2State {
+                update_selected_failed_sources: vec!["TNT".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some(), "blocker must fire for failed source");
+        stop_auto_build(&mut state, reason.as_deref().unwrap_or(""));
+        assert!(!state.modlist_auto_build_active);
+        assert!(!state.modlist_auto_build_waiting_for_install);
+        assert!(state.step2.scan_status.contains("Auto Build stopped"));
     }
 }

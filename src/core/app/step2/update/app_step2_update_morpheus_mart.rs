@@ -29,14 +29,7 @@ pub(super) fn check_morpheus_mart_download_page(
     let Some(version) = version_from_filename(&asset_name) else {
         return failed_morpheus_mart_outcome(request, "morpheus-mart filename has no version");
     };
-    if let Some(requested_version) = request.requested_version.as_deref()
-        && normalize_version_text(&version) != normalize_version_text(requested_version)
-    {
-        return failed_morpheus_mart_outcome(
-            request,
-            &format!("exact version not found: {requested_version}"),
-        );
-    }
+    let pin_overridden = version_override(request.requested_version.as_deref(), &version);
     Step2UpdateCheckOutcome {
         game_tab: request.game_tab.clone(),
         tp_file: request.tp_file.clone(),
@@ -48,7 +41,16 @@ pub(super) fn check_morpheus_mart_download_page(
         asset_url: Some(force_dropbox_download(&download_url)),
         error: None,
         package_kind: Step2PackageKind::PageArchive,
+        version_pin_overridden: pin_overridden,
     }
+}
+
+fn version_override(requested: Option<&str>, current: &str) -> Option<String> {
+    let req = requested?;
+    if normalize_version_text(req) == normalize_version_text(current) {
+        return None;
+    }
+    Some(req.to_string())
 }
 
 fn fetch_morpheus_mart_page(agent: &ureq::Agent, url: &str) -> Result<ureq::Response, String> {
@@ -88,6 +90,7 @@ fn failed_morpheus_mart_outcome(
         asset_url: None,
         error: Some(error.to_string()),
         package_kind: Step2PackageKind::PageArchive,
+        version_pin_overridden: None,
     }
 }
 
@@ -159,4 +162,33 @@ fn html_entity_decode_basic(value: &str) -> String {
         .replace("&#038;", "&")
         .replace("&quot;", "\"")
         .replace("&#8217;", "'")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_override;
+
+    #[test]
+    fn mismatch_returns_the_requested_version() {
+        let result = version_override(Some("6.5.5"), "6.5.6");
+        assert_eq!(result, Some("6.5.5".to_string()));
+    }
+
+    #[test]
+    fn match_returns_none() {
+        let result = version_override(Some("6.5.6"), "6.5.6");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn no_pin_returns_none() {
+        let result = version_override(None, "6.5.6");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn normalized_match_with_v_prefix_returns_none() {
+        let result = version_override(Some("v6.5.6"), "6.5.6");
+        assert_eq!(result, None);
+    }
 }

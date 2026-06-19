@@ -44,6 +44,7 @@ pub(crate) struct Step2UpdateCheckOutcome {
     pub(crate) asset_url: Option<String>,
     pub(crate) error: Option<String>,
     pub(crate) package_kind: Step2PackageKind,
+    pub(crate) version_pin_overridden: Option<String>,
 }
 pub(crate) fn start_step2_update_check(
     state: &mut WizardState,
@@ -195,6 +196,10 @@ fn clear_previous_update_check_results(
             .step2
             .update_selected_exact_version_retry_requests
             .clear();
+        state
+            .step2
+            .update_selected_version_override_warnings
+            .clear();
     }
 }
 
@@ -219,7 +224,7 @@ fn apply_update_check_outcome(
     }
 }
 
-const fn reproduce_exact_gate(state: &WizardState) -> bool {
+pub(super) const fn reproduce_exact_gate(state: &WizardState) -> bool {
     state.modlist_auto_build_active && state.reproduce_exact
 }
 
@@ -231,6 +236,12 @@ fn apply_successful_update_check_outcome(
     merge_latest_fallback: bool,
 ) {
     store_latest_checked_version(state, &outcome.game_tab, &outcome.tp_file, tag);
+    if let Some(wanted) = outcome.version_pin_overridden.as_deref() {
+        state
+            .step2
+            .update_selected_version_override_warnings
+            .push(format!("{} ({wanted} -> {tag})", outcome.label));
+    }
     let has_current_version = mod_has_current_version(state, &outcome.game_tab, &outcome.tp_file);
     let allow_log_missing_download =
         exact_log_missing_download_requested(state, &outcome.game_tab, &outcome.tp_file)
@@ -381,6 +392,7 @@ pub(super) fn failed_outcome(
         asset_url: None,
         error: Some(error.to_string()),
         package_kind,
+        version_pin_overridden: None,
     }
 }
 
@@ -448,6 +460,10 @@ pub(crate) fn clear_update_check_result_for_mod(
         .step2
         .update_selected_extract_failed_sources
         .retain(|entry| !entry.starts_with(&format!("{label}:")));
+    state
+        .step2
+        .update_selected_version_override_warnings
+        .retain(|entry| !entry.starts_with(&format!("{label} (")));
 }
 
 fn store_latest_checked_version(state: &mut WizardState, game_tab: &str, tp_file: &str, tag: &str) {
@@ -568,5 +584,80 @@ mod tests {
         );
 
         assert!(!reproduce_exact_gate(&WizardState::<bool>::default()));
+    }
+
+    #[test]
+    fn override_outcome_lands_in_assets_and_warnings() {
+        use crate::app::mod_downloads::ModDownloadsLoad;
+        use crate::app::state::{Step2ComponentState, Step2ModState};
+
+        let mut state = WizardState::<bool>::default();
+        state.step2.bgee_mods = vec![Step2ModState {
+            name: "ISNF".to_string(),
+            tp_file: "ISNF.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: vec![Step2ComponentState {
+                component_id: "100".to_string(),
+                label: "ISNF".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                raw_line: "~ISNF.tp2~ #0 #100 // 6.5.5".to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: true,
+                selected_order: Some(1),
+            }],
+        }];
+
+        let outcome = Step2UpdateCheckOutcome {
+            game_tab: "BGEE".to_string(),
+            tp_file: "ISNF.tp2".to_string(),
+            label: "ISNF".to_string(),
+            source_id: "weaselmods".to_string(),
+            tag: Some("6.5.6".to_string()),
+            source_ref: None,
+            asset_name: Some("isnf-6.5.6.zip".to_string()),
+            asset_url: Some("https://example.com/isnf-6.5.6.zip".to_string()),
+            error: None,
+            package_kind: Step2PackageKind::PageArchive,
+            version_pin_overridden: Some("6.5.5".to_string()),
+        };
+
+        let sources = ModDownloadsLoad::default();
+        apply_update_check_outcome(&mut state, &outcome, &sources, false);
+
+        assert!(
+            !state.step2.update_selected_update_assets.is_empty(),
+            "override outcome must push asset to update_selected_update_assets"
+        );
+        assert_eq!(
+            state.step2.update_selected_update_assets[0].tag, "6.5.6",
+            "asset must carry the current (served) version tag"
+        );
+        assert_eq!(
+            state.step2.update_selected_version_override_warnings,
+            vec!["ISNF (6.5.5 -> 6.5.6)"],
+            "override warning must use compact format: label (pinned -> served)"
+        );
     }
 }

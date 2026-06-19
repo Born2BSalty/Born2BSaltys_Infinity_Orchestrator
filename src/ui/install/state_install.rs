@@ -124,6 +124,7 @@ impl InstallPipelineFlags {
     const DOWNLOAD_PHASE_STARTED: u8 = 0b0001_0000;
     const ARCHIVE_SKIP_COMPLETED: u8 = 0b0010_0000;
     const EXPLICIT_RESOLVE_STARTED: u8 = 0b0100_0000;
+    const OVERRIDE_WARNINGS_TOASTED: u8 = 0b1000_0000;
 
     #[must_use]
     pub const fn armed(self) -> bool {
@@ -188,6 +189,15 @@ impl InstallPipelineFlags {
         self.set_bit(Self::EXPLICIT_RESOLVE_STARTED, value);
     }
 
+    #[must_use]
+    pub const fn override_warnings_toasted(self) -> bool {
+        self.bits & Self::OVERRIDE_WARNINGS_TOASTED != 0
+    }
+
+    pub const fn set_override_warnings_toasted(&mut self, value: bool) {
+        self.set_bit(Self::OVERRIDE_WARNINGS_TOASTED, value);
+    }
+
     pub const fn reset(&mut self) {
         self.bits = 0;
     }
@@ -215,6 +225,7 @@ pub struct InstallScreenState {
     pub download_progress: DownloadProgress,
     pub pipeline_flags: InstallPipelineFlags,
     pub pipeline_arm_error: Option<String>,
+    pub pre_step5_blocker_checked: bool,
     pub expected_archive_meta: Vec<crate::registry::share_export::ArchiveMeta>,
     pub pre_skip_assets: Vec<crate::app::state::Step2UpdateAsset>,
     pub skipped_mods: Vec<SkippedMod>,
