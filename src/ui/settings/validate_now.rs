@@ -12,7 +12,7 @@ pub const FIELD_BG2EE_GAME_FOLDER: &str = "bg2ee_game_folder";
 pub const FIELD_IWDEE_GAME_FOLDER: &str = "iwdee_game_folder";
 pub const FIELD_EET_BGEE_GAME_FOLDER: &str = "eet_bgee_game_folder";
 pub const FIELD_EET_BG2EE_GAME_FOLDER: &str = "eet_bg2ee_game_folder";
-pub const FIELD_MODS_FOLDER: &str = "mods_folder";
+pub const FIELD_GLOBAL_MODS_FOLDER: &str = "global_mods_folder";
 pub const FIELD_MODS_ARCHIVE_FOLDER: &str = "mods_archive_folder";
 pub const FIELD_MODS_BACKUP_FOLDER: &str = "mods_backup_folder";
 pub const FIELD_WEIDU_LOG_FOLDER: &str = "weidu_log_folder";
@@ -48,7 +48,7 @@ pub fn run_now(step1: &Step1State) -> ValidationReport {
         (FIELD_IWDEE_GAME_FOLDER, &step1.iwdee_game_folder),
         (FIELD_EET_BGEE_GAME_FOLDER, &step1.eet_bgee_game_folder),
         (FIELD_EET_BG2EE_GAME_FOLDER, &step1.eet_bg2ee_game_folder),
-        (FIELD_MODS_FOLDER, &step1.mods_folder),
+        (FIELD_GLOBAL_MODS_FOLDER, &step1.global_mods_folder),
         (FIELD_MODS_ARCHIVE_FOLDER, &step1.mods_archive_folder),
         (FIELD_MODS_BACKUP_FOLDER, &step1.mods_backup_folder),
         (FIELD_WEIDU_LOG_FOLDER, &step1.weidu_log_folder),
@@ -89,7 +89,7 @@ pub fn run_for_field(step1: &Step1State, field: &'static str) -> PathStatus {
         FIELD_IWDEE_GAME_FOLDER => &step1.iwdee_game_folder,
         FIELD_EET_BGEE_GAME_FOLDER => &step1.eet_bgee_game_folder,
         FIELD_EET_BG2EE_GAME_FOLDER => &step1.eet_bg2ee_game_folder,
-        FIELD_MODS_FOLDER => &step1.mods_folder,
+        FIELD_GLOBAL_MODS_FOLDER => &step1.global_mods_folder,
         FIELD_MODS_ARCHIVE_FOLDER => &step1.mods_archive_folder,
         FIELD_MODS_BACKUP_FOLDER => &step1.mods_backup_folder,
         FIELD_WEIDU_LOG_FOLDER => &step1.weidu_log_folder,

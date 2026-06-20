@@ -17,7 +17,7 @@ pub fn maybe_trigger_resume_scan(
             .settings_store
             .load()
             .ok()
-            .map(|s| s.step1.mods_folder)
+            .map(|s| s.step1.effective_global_mods_folder().to_string())
     } else {
         None
     };

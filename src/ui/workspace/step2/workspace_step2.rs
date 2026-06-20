@@ -300,7 +300,7 @@ fn render_global_mods_scan_confirm(
                     .settings_store
                     .load()
                     .ok()
-                    .map(|s| s.step1.mods_folder)
+                    .map(|s| s.step1.effective_global_mods_folder().to_string())
                     .unwrap_or_default(),
                 ModsSource::InstallationFolder => orchestrator
                     .workspace_state

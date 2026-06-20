@@ -34,6 +34,9 @@ pub(crate) fn initialize(dev_mode: bool) -> AppBootstrap {
         }
     };
     let mut step1 = Step1State::from(loaded.step1);
+    if step1.global_mods_folder.trim().is_empty() && !step1.mods_folder.trim().is_empty() {
+        step1.global_mods_folder.clone_from(&step1.mods_folder);
+    }
     if !dev_mode {
         scrub_dev_settings(&mut step1);
     }

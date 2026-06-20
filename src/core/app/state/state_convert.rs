@@ -70,6 +70,7 @@ mod step1_settings_to_state {
                 log_file: value.log_file,
                 generate_directory: value.generate_directory,
                 mods_folder: value.mods_folder,
+                global_mods_folder: value.global_mods_folder,
                 weidu_binary,
                 language,
                 depth,
@@ -145,6 +146,48 @@ mod step1_settings_to_state {
         if value == 0 { fallback } else { value }
     }
 }
+#[cfg(test)]
+mod tests {
+    use crate::app::state::Step1State;
+    use crate::settings::model::Step1Settings;
+
+    #[test]
+    fn global_mods_folder_survives_settings_to_state() {
+        let s = Step1Settings {
+            mods_folder: r"C:\old\mods".to_string(),
+            global_mods_folder: r"C:\global\mods".to_string(),
+            ..Step1Settings::default()
+        };
+        let state = Step1State::from(s);
+        assert_eq!(state.global_mods_folder, r"C:\global\mods");
+        assert_eq!(state.mods_folder, r"C:\old\mods");
+    }
+
+    #[test]
+    fn global_mods_folder_survives_state_to_settings() {
+        let state = Step1State {
+            mods_folder: r"C:\old\mods".to_string(),
+            global_mods_folder: r"C:\global\mods".to_string(),
+            ..Step1State::default()
+        };
+        let s = Step1Settings::from(state);
+        assert_eq!(s.global_mods_folder, r"C:\global\mods");
+        assert_eq!(s.mods_folder, r"C:\old\mods");
+    }
+
+    #[test]
+    fn global_mods_folder_round_trips_settings_state_settings() {
+        let original = Step1Settings {
+            mods_folder: r"C:\old\mods".to_string(),
+            global_mods_folder: r"C:\global\mods".to_string(),
+            ..Step1Settings::default()
+        };
+        let round_tripped = Step1Settings::from(Step1State::from(original));
+        assert_eq!(round_tripped.global_mods_folder, r"C:\global\mods");
+        assert_eq!(round_tripped.mods_folder, r"C:\old\mods");
+    }
+}
+
 mod step1_state_to_settings {
     use crate::app::state::Step1State;
     use crate::settings::model::Step1Settings;
@@ -195,6 +238,7 @@ mod step1_state_to_settings {
                 log_file: value.log_file,
                 generate_directory: value.generate_directory,
                 mods_folder: value.mods_folder,
+                global_mods_folder: value.global_mods_folder,
                 weidu_binary: value.weidu_binary,
                 language: value.language,
                 depth: value.depth,

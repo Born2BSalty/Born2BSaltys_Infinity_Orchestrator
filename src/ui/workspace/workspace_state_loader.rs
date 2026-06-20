@@ -299,7 +299,12 @@ pub fn sync_paths_from_settings(settings_store: &SettingsStore, wizard_state: &m
     dst.eet_new_dir = from.eet_new_dir;
     dst.generate_directory = from.generate_directory;
 
-    dst.mods_folder = from.mods_folder;
+    dst.mods_folder.clone_from(&from.mods_folder);
+    if from.global_mods_folder.trim().is_empty() && !from.mods_folder.trim().is_empty() {
+        dst.global_mods_folder = from.mods_folder;
+    } else {
+        dst.global_mods_folder = from.global_mods_folder;
+    }
     dst.mods_archive_folder = from.mods_archive_folder;
     dst.mods_backup_folder = from.mods_backup_folder;
 
@@ -315,7 +320,7 @@ fn apply_mods_source(
     match workspace.mods_source {
         ModsSource::GlobalModsFolder => {
             if let Ok(settings) = settings_store.load() {
-                let folder = settings.step1.mods_folder;
+                let folder = settings.step1.effective_global_mods_folder().to_string();
                 if !folder.trim().is_empty() {
                     wizard_state.step1.mods_folder = folder;
                     wizard_state.step1.install_mode =

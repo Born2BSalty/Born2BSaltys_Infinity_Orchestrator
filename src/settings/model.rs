@@ -50,6 +50,7 @@ pub struct Step1Settings<Flag = bool> {
     pub log_file: String,
     pub generate_directory: String,
     pub mods_folder: String,
+    pub global_mods_folder: String,
     pub weidu_binary: String,
     pub language: String,
     pub depth: usize,
@@ -117,6 +118,7 @@ impl Default for Step1Settings {
             log_file: String::new(),
             generate_directory: String::new(),
             mods_folder: String::new(),
+            global_mods_folder: String::new(),
             weidu_binary: default_weidu_binary(),
             language: "en_US".to_string(),
             depth: 5,
@@ -141,9 +143,80 @@ impl Default for Step1Settings {
     }
 }
 
+impl Step1Settings {
+    #[must_use]
+    pub fn effective_global_mods_folder(&self) -> &str {
+        let trimmed = self.global_mods_folder.trim();
+        if trimmed.is_empty() {
+            &self.mods_folder
+        } else {
+            trimmed
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(default)]
 pub struct AppSettings {
     pub exe_fingerprint: String,
     pub step1: Step1Settings,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn step1_settings_round_trips_global_mods_folder() {
+        let s = Step1Settings {
+            mods_folder: r"C:\old\mods".to_string(),
+            global_mods_folder: r"C:\global\mods".to_string(),
+            ..Step1Settings::default()
+        };
+        let json = serde_json::to_string(&s).expect("serialize");
+        let s2: Step1Settings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(s2.global_mods_folder, r"C:\global\mods");
+        assert_eq!(s2.mods_folder, r"C:\old\mods");
+    }
+
+    #[test]
+    fn step1_settings_legacy_default_missing_global_mods_folder() {
+        let json = r#"{"mods_folder":"C:\\old\\mods"}"#;
+        let s: Step1Settings = serde_json::from_str(json).expect("deserialize legacy");
+        assert_eq!(s.mods_folder, r"C:\old\mods");
+        assert_eq!(
+            s.global_mods_folder, "",
+            "missing key must default to empty"
+        );
+    }
+
+    #[test]
+    fn effective_global_mods_folder_returns_global_when_set() {
+        let s = Step1Settings {
+            mods_folder: r"C:\old\mods".to_string(),
+            global_mods_folder: r"C:\global\mods".to_string(),
+            ..Step1Settings::default()
+        };
+        assert_eq!(s.effective_global_mods_folder(), r"C:\global\mods");
+    }
+
+    #[test]
+    fn effective_global_mods_folder_falls_back_to_mods_folder_when_global_empty() {
+        let s = Step1Settings {
+            mods_folder: r"C:\old\mods".to_string(),
+            global_mods_folder: String::new(),
+            ..Step1Settings::default()
+        };
+        assert_eq!(s.effective_global_mods_folder(), r"C:\old\mods");
+    }
+
+    #[test]
+    fn effective_global_mods_folder_treats_whitespace_only_global_as_empty() {
+        let s = Step1Settings {
+            mods_folder: r"C:\old\mods".to_string(),
+            global_mods_folder: "   ".to_string(),
+            ..Step1Settings::default()
+        };
+        assert_eq!(s.effective_global_mods_folder(), r"C:\old\mods");
+    }
 }
