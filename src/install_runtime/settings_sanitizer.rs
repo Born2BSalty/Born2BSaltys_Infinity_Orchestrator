@@ -113,6 +113,26 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_preserves_global_mods_folder_while_reverting_mods_folder() {
+        let mut settings = global_settings();
+        settings.global_mods_folder = r"C:\Games\BIO\mods".to_string();
+
+        let mut step1 = polluted_step1();
+        step1.global_mods_folder = r"C:\Games\BIO\mods".to_string();
+
+        sanitize_step1_for_settings_persistence(&mut step1, &settings);
+
+        assert_eq!(
+            step1.mods_folder, "",
+            "mods_folder must be reverted to the global value (empty in this fixture)"
+        );
+        assert_eq!(
+            step1.global_mods_folder, r"C:\Games\BIO\mods",
+            "global_mods_folder must NOT be touched by the sanitizer"
+        );
+    }
+
+    #[test]
     fn sanitize_resets_per_install_fields_to_global_values_and_keeps_globals_intact() {
         let settings = global_settings();
         let mut step1 = polluted_step1();

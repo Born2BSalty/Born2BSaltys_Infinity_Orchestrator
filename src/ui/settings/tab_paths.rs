@@ -43,7 +43,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         palette,
         orchestrator,
         "Mods folder",
-        validate_now::FIELD_MODS_FOLDER,
+        validate_now::FIELD_GLOBAL_MODS_FOLDER,
     );
     path_row_for_field(
         ui,
@@ -124,7 +124,7 @@ fn field_mut<'a>(
         f if f == validate_now::FIELD_EET_BG2EE_GAME_FOLDER => {
             Some(&mut step1.eet_bg2ee_game_folder)
         }
-        f if f == validate_now::FIELD_MODS_FOLDER => Some(&mut step1.mods_folder),
+        f if f == validate_now::FIELD_GLOBAL_MODS_FOLDER => Some(&mut step1.global_mods_folder),
         f if f == validate_now::FIELD_MODS_ARCHIVE_FOLDER => Some(&mut step1.mods_archive_folder),
         f if f == validate_now::FIELD_MODS_BACKUP_FOLDER => Some(&mut step1.mods_backup_folder),
         f if f == validate_now::FIELD_WEIDU_LOG_FOLDER => Some(&mut step1.weidu_log_folder),

@@ -3,6 +3,7 @@
 
 use crate::app::controller::step3_sync;
 use crate::app::state::Step2ModState;
+use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
 use crate::ui::workspace::workspace_state_loader::{extract_wlb_inputs, reattach_wlb_inputs};
@@ -60,6 +61,15 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
 
     if !completion_edge_fires(was_scanning, scanning_now) {
         return;
+    }
+
+    let modlist_id = orchestrator.workspace_view.modlist_id.trim().to_string();
+    let current_source = orchestrator
+        .workspace_state
+        .get(modlist_id.as_str())
+        .map_or_else(ModsSource::default, |w| w.mods_source);
+    if let Some(workspace) = orchestrator.workspace_state.get_mut(modlist_id.as_str()) {
+        workspace.last_rescanned_mods_source = current_source;
     }
 
     let Some(snapshot) = orchestrator.workspace_view.step2.rescan_snapshot.take() else {

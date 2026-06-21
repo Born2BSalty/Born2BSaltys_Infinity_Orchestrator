@@ -5,6 +5,10 @@ use std::fs;
 use std::path::Path;
 
 use crate::app::state::{ResumeTargets, Step1State};
+use crate::install::plan::InstallPlan;
+use crate::install::runner::check_missing_mod_folders;
+use crate::mods::log_file::LogFile;
+use crate::platform_defaults::compose_weidu_log_path;
 
 use super::target_prep::paths_point_to_same_dir;
 
@@ -65,7 +69,53 @@ pub fn validate_runtime_prep_paths(step1: &Step1State) -> Result<(), String> {
         }
     }
 
+    validate_mod_folders_for_log(step1)?;
+
     Ok(())
+}
+
+fn resolve_log_file_path(step1: &Step1State) -> Option<String> {
+    let candidate = if !step1.bgee_log_file.trim().is_empty() {
+        step1.bgee_log_file.trim().to_string()
+    } else if !step1.bg2ee_log_file.trim().is_empty() {
+        step1.bg2ee_log_file.trim().to_string()
+    } else {
+        let folder = if step1.game_install == "EET" {
+            step1.eet_bgee_log_folder.trim()
+        } else if step1.game_install == "BG2EE" {
+            step1.bg2ee_log_folder.trim()
+        } else {
+            step1.bgee_log_folder.trim()
+        };
+        compose_weidu_log_path(folder)
+    };
+    if candidate.is_empty() {
+        None
+    } else {
+        Some(candidate)
+    }
+}
+
+fn validate_mod_folders_for_log(step1: &Step1State) -> Result<(), String> {
+    let mods_dir = step1.mods_folder.trim();
+    if mods_dir.is_empty() {
+        return Ok(());
+    }
+    let Some(log_path) = resolve_log_file_path(step1) else {
+        return Ok(());
+    };
+    let log_path = Path::new(&log_path);
+    if !log_path.is_file() {
+        return Ok(());
+    }
+    let log_file = LogFile::from_path(log_path).map_err(|err| format!("{err}"))?;
+    if log_file.is_empty() {
+        return Ok(());
+    }
+    let plan = InstallPlan::from_log_file(&log_file);
+    check_missing_mod_folders(Path::new(mods_dir), step1.depth, &plan.components)
+        .map(|_| ())
+        .map_err(|err| format!("{err}"))
 }
 
 pub fn verify_targets_prepared(step1: &Step1State) -> Result<(), String> {
@@ -140,4 +190,89 @@ pub fn validate_resume_paths(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use crate::app::state::Step1State;
+
+    use super::validate_mod_folders_for_log;
+
+    fn temp_dir() -> PathBuf {
+        let mut base = std::env::temp_dir();
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be valid")
+            .as_nanos();
+        base.push(format!("bio_validators_test_{ts}"));
+        base
+    }
+
+    #[test]
+    fn missing_mod_folder_returns_err_naming_component() {
+        let root = temp_dir();
+        let mods_dir = root.join("mods");
+        let log_dir = root.join("game");
+        fs::create_dir_all(&mods_dir).expect("create mods dir");
+        fs::create_dir_all(&log_dir).expect("create game dir");
+        let log_path = log_dir.join("weidu.log");
+        fs::write(&log_path, b"~ISNF/ISNF.TP2~ #0 #0 // ISNF:1.0\n").expect("write log");
+
+        let step1 = Step1State {
+            mods_folder: mods_dir.to_string_lossy().into_owned(),
+            bgee_log_file: log_path.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+
+        let result = validate_mod_folders_for_log(&step1);
+        assert!(result.is_err(), "missing mod folder must be an error");
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("ISNF") || msg.contains("missing mod folder"),
+            "error must name the missing component: {msg}"
+        );
+    }
+
+    #[test]
+    fn present_mod_folder_with_tp2_passes() {
+        let root = temp_dir();
+        let mods_dir = root.join("mods");
+        let mod_folder = mods_dir.join("ISNF");
+        let log_dir = root.join("game");
+        fs::create_dir_all(&mod_folder).expect("create mod folder");
+        fs::create_dir_all(&log_dir).expect("create game dir");
+        fs::write(mod_folder.join("ISNF.TP2"), b"// stub").expect("write tp2");
+        let log_path = log_dir.join("weidu.log");
+        fs::write(&log_path, b"~ISNF/ISNF.TP2~ #0 #0 // ISNF:1.0\n").expect("write log");
+
+        let step1 = Step1State {
+            mods_folder: mods_dir.to_string_lossy().into_owned(),
+            bgee_log_file: log_path.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+
+        let result = validate_mod_folders_for_log(&step1);
+        assert!(result.is_ok(), "present mod folder must pass: {result:?}");
+    }
+
+    #[test]
+    fn no_log_file_skips_check() {
+        let step1 = Step1State {
+            mods_folder: "/nonexistent/mods".to_string(),
+            ..Default::default()
+        };
+        let result = validate_mod_folders_for_log(&step1);
+        assert!(result.is_ok(), "no log file path must skip the check");
+    }
+
+    #[test]
+    fn empty_mods_folder_skips_check() {
+        let step1 = Step1State::default();
+        let result = validate_mod_folders_for_log(&step1);
+        assert!(result.is_ok(), "empty mods_folder must skip the check");
+    }
 }

@@ -14,7 +14,7 @@ use crate::registry::model::Game;
 use crate::registry::operations;
 use crate::registry::operations_create::create_modlist_with_author;
 use crate::registry::store_workspace::WorkspaceStore;
-use crate::registry::workspace_model::ModlistWorkspaceState;
+use crate::registry::workspace_model::{ModlistWorkspaceState, ModsSource};
 use crate::ui::create::destination_default::default_destination;
 use crate::ui::create::load_draft_dialog::{self, LoadDraftOutcome};
 use crate::ui::create::stage_choose::{self, ChooseOutcome};
@@ -446,9 +446,18 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
         .notification_manager
         .success(format!("Created \"{}\"", entry.name));
 
+    let global_non_empty = orchestrator
+        .settings_store
+        .load()
+        .ok()
+        .is_some_and(|s| !s.step1.effective_global_mods_folder().trim().is_empty());
+    let source = default_scratch_mods_source(global_non_empty);
+
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
     let workspace_state = ModlistWorkspaceState {
         scratch_mods_folder: Some(scratch_mods_folder),
+        mods_source: source,
+        last_rescanned_mods_source: source,
         ..Default::default()
     };
     if let Err(err) = canonical_store.save(&workspace_state) {
@@ -485,6 +494,15 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
     orchestrator.nav = NavDestination::Workspace {
         modlist_id: Some(new_id),
     };
+}
+
+#[must_use]
+const fn default_scratch_mods_source(global_folder_non_empty: bool) -> ModsSource {
+    if global_folder_non_empty {
+        ModsSource::GlobalModsFolder
+    } else {
+        ModsSource::InstallationFolder
+    }
 }
 
 fn create_scratch_mods_folder(destination: &str, game: Game) -> Result<String, String> {
@@ -581,6 +599,18 @@ mod tests {
         app.registry_store = RegistryStore::new_with_path(tmp);
         app.registry = ModlistRegistry::default();
         app
+    }
+
+    #[test]
+    fn scratch_mods_source_defaults_to_global_when_folder_configured() {
+        assert_eq!(
+            default_scratch_mods_source(true),
+            ModsSource::GlobalModsFolder
+        );
+        assert_eq!(
+            default_scratch_mods_source(false),
+            ModsSource::InstallationFolder
+        );
     }
 
     #[test]

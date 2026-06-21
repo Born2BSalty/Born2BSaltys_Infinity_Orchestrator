@@ -4,32 +4,26 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::config::options::CoreOptions;
 use crate::install::plan::InstallPlan;
 use crate::install::weidu_exec;
 use crate::mods::discovery::DiscoveryIndex;
 
-pub fn run_plan(plan: &InstallPlan, options: &CoreOptions, game_directory: &Path) -> Result<()> {
-    let index = DiscoveryIndex::build(&options.mod_directories, options.depth)?;
+pub fn check_missing_mod_folders(
+    mods_dir: &Path,
+    depth: usize,
+    components: &[crate::mods::component::Component],
+) -> Result<Vec<PathBuf>> {
+    let index = DiscoveryIndex::build(mods_dir, depth)?;
     let mut missing = Vec::new();
-    let mut resolved_sources = Vec::new();
+    let mut resolved = Vec::new();
 
-    for component in &plan.components {
+    for component in components {
         if let Some(folder) = index.find_folder(component) {
-            info!(
-                "preflight found mod folder: name={} tp_file={} folder={}",
-                component.name,
-                component.tp_file,
-                folder.display()
-            );
-            resolved_sources.push((component, folder.to_path_buf()));
+            resolved.push(folder.to_path_buf());
         } else {
-            warn!(
-                "preflight missing mod folder: name={} tp_file={}",
-                component.name, component.tp_file
-            );
             missing.push(format!("{}/{}", component.name, component.tp_file));
         }
     }
@@ -41,12 +35,25 @@ pub fn run_plan(plan: &InstallPlan, options: &CoreOptions, game_directory: &Path
             missing.join(", ")
         ));
     }
+
+    Ok(resolved)
+}
+
+pub fn run_plan(plan: &InstallPlan, options: &CoreOptions, game_directory: &Path) -> Result<()> {
+    let resolved_paths =
+        check_missing_mod_folders(&options.mod_directories, options.depth, &plan.components)?;
     info!(
         "install preflight passed for {} component(s)",
         plan.components.len()
     );
 
-    for (component, source_folder) in resolved_sources {
+    for (component, source_folder) in plan.components.iter().zip(resolved_paths) {
+        info!(
+            "preflight found mod folder: name={} tp_file={} folder={}",
+            component.name,
+            component.tp_file,
+            source_folder.display()
+        );
         let mod_folder_in_game = stage_mod_folder(
             game_directory,
             &source_folder,

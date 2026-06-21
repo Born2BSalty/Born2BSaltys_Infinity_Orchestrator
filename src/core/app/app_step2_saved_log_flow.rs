@@ -206,6 +206,42 @@ fn auto_build_blocker_before_install(state: &WizardState) -> Option<String> {
     None
 }
 
+pub(crate) fn unresolved_required_mods_blocker(state: &WizardState) -> Option<String> {
+    if !state
+        .step2
+        .update_selected_exact_version_failed_sources
+        .is_empty()
+        || !state
+            .step2
+            .update_selected_exact_version_retry_requests
+            .is_empty()
+    {
+        return Some("exact pinned version unavailable".to_string());
+    }
+    if let Some(source) = state.step2.update_selected_manual_sources.first() {
+        return Some(format!("manual-only source required: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_unknown_sources.first() {
+        return Some(format!("failed source resolution: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_failed_sources.first() {
+        return Some(format!("failed source check: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_download_failed_sources.first() {
+        return Some(format!("failed download: {source}"));
+    }
+    if let Some(source) = state.step2.update_selected_extract_failed_sources.first() {
+        return Some(format!("failed extraction/config restore: {source}"));
+    }
+    if state.step2.update_selected_update_assets.is_empty()
+        && (!state.step2.update_selected_missing_sources.is_empty()
+            || !state.step2.update_selected_update_sources.is_empty())
+    {
+        return Some("downloadable sources have no resolved archive".to_string());
+    }
+    None
+}
+
 fn auto_build_preflight_blocker(state: &WizardState) -> Option<String> {
     let (ok, message) = crate::app::state_validation::run_path_check(&state.step1);
     if ok {
@@ -243,5 +279,91 @@ mod tests {
             "auto-build must stop on Step 5 and wait for the user to click Install"
         );
         assert_eq!(state.step5.last_status_text, "Auto Build: ready to install");
+    }
+
+    #[test]
+    fn unresolved_required_mods_blocker_maps_each_bucket_and_honors_precedence() {
+        use crate::app::state::Step2State;
+
+        type Setup = fn(&mut Step2State);
+
+        let blocker_for = |setup: Setup| -> Option<String> {
+            let mut state = WizardState::default();
+            setup(&mut state.step2);
+            unresolved_required_mods_blocker(&state)
+        };
+
+        assert!(
+            blocker_for(|_| {}).is_none(),
+            "no unresolved sources -> no blocker"
+        );
+
+        let cases: &[(Setup, &str)] = &[
+            (
+                |s| s.update_selected_exact_version_failed_sources = vec!["ISNF".to_string()],
+                "exact pinned version",
+            ),
+            (
+                |s| s.update_selected_manual_sources = vec!["ManualMod".to_string()],
+                "manual-only source",
+            ),
+            (
+                |s| s.update_selected_unknown_sources = vec!["UnknownMod".to_string()],
+                "failed source resolution",
+            ),
+            (
+                |s| s.update_selected_failed_sources = vec!["TNT".to_string()],
+                "failed source check",
+            ),
+            (
+                |s| s.update_selected_download_failed_sources = vec!["DlMod".to_string()],
+                "failed download",
+            ),
+            (
+                |s| s.update_selected_extract_failed_sources = vec!["ExMod".to_string()],
+                "failed extraction",
+            ),
+            (
+                |s| s.update_selected_missing_sources = vec!["MissMod".to_string()],
+                "no resolved archive",
+            ),
+        ];
+        for (setup, expected) in cases {
+            let reason = blocker_for(*setup);
+            assert!(
+                reason.as_deref().is_some_and(|r| r.contains(expected)),
+                "bucket must halt with '{expected}', got {reason:?}"
+            );
+        }
+
+        let precedence = blocker_for(|s| {
+            s.update_selected_exact_version_failed_sources = vec!["ISNF".to_string()];
+            s.update_selected_manual_sources = vec!["ManualMod".to_string()];
+        });
+        assert!(
+            precedence
+                .as_deref()
+                .is_some_and(|r| r.contains("exact pinned version")),
+            "exact-version bucket must win precedence, got {precedence:?}"
+        );
+    }
+
+    #[test]
+    fn gate_failure_bucket_halts_auto_build() {
+        let mut state = WizardState {
+            modlist_auto_build_active: true,
+            modlist_auto_build_waiting_for_install: true,
+            step2: crate::app::state::Step2State {
+                update_selected_failed_sources: vec!["TNT".to_string()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let reason = unresolved_required_mods_blocker(&state);
+        assert!(reason.is_some(), "blocker must fire for failed source");
+        stop_auto_build(&mut state, reason.as_deref().unwrap_or(""));
+        assert!(!state.modlist_auto_build_active);
+        assert!(!state.modlist_auto_build_waiting_for_install);
+        assert!(state.step2.scan_status.contains("Auto Build stopped"));
     }
 }

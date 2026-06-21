@@ -7,6 +7,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::ui::install::state_install::DestChoice;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModsSource {
+    #[default]
+    InstallationFolder,
+    GlobalModsFolder,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ComponentRef {
@@ -54,6 +62,12 @@ pub struct ModlistWorkspaceState {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_destination_prep: Option<DestChoice>,
+
+    #[serde(default)]
+    pub mods_source: ModsSource,
+
+    #[serde(default)]
+    pub last_rescanned_mods_source: ModsSource,
 }
 
 impl ModlistWorkspaceState {
@@ -166,6 +180,42 @@ mod tests {
             Some(r"D:\mods\test-corpus")
         );
         assert_eq!(w, w2);
+    }
+
+    #[test]
+    fn mods_source_round_trips_and_defaults() {
+        let legacy: ModlistWorkspaceState =
+            serde_json::from_str(r#"{"order_bgee":[]}"#).expect("parse legacy");
+        assert_eq!(legacy.mods_source, ModsSource::InstallationFolder);
+        assert_eq!(
+            legacy.last_rescanned_mods_source,
+            ModsSource::InstallationFolder
+        );
+        assert!(legacy.is_empty());
+
+        let w = ModlistWorkspaceState {
+            mods_source: ModsSource::GlobalModsFolder,
+            last_rescanned_mods_source: ModsSource::GlobalModsFolder,
+            ..Default::default()
+        };
+        let s = serde_json::to_string(&w).expect("serialize");
+        let w2: ModlistWorkspaceState = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(w2.mods_source, ModsSource::GlobalModsFolder);
+        assert_eq!(w2.last_rescanned_mods_source, ModsSource::GlobalModsFolder);
+        assert_eq!(w, w2);
+
+        let with_install = ModlistWorkspaceState {
+            mods_source: ModsSource::InstallationFolder,
+            last_rescanned_mods_source: ModsSource::InstallationFolder,
+            ..Default::default()
+        };
+        let s2 = serde_json::to_string(&with_install).expect("serialize");
+        let w3: ModlistWorkspaceState = serde_json::from_str(&s2).expect("deserialize");
+        assert_eq!(w3.mods_source, ModsSource::InstallationFolder);
+        assert_eq!(
+            w3.last_rescanned_mods_source,
+            ModsSource::InstallationFolder
+        );
     }
 
     #[test]
