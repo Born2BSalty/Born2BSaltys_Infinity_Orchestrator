@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::orchestrator::widgets::{BtnOpts, clipboard, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, clipboard, redesign_btn, redesign_btn_glyph};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::action_step5::Step5Action;
 use crate::ui::step5::content_step5::Step5RenderCtx;
@@ -103,10 +103,11 @@ fn render_install_control(
         && !state.step5.resume_available
         && state.step5.last_exit_code == Some(0)
     {
-        redesign_btn(
+        let _ = redesign_btn_glyph(
             ui,
             palette,
-            "\u{2713} Installed",
+            "\u{2713}",
+            " Installed",
             BtnOpts {
                 disabled: true,
                 small: true,

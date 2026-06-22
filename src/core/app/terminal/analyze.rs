@@ -6,11 +6,16 @@ mod filters {
     use super::utils::has_level_token;
 
     pub(in crate::app::terminal) fn likely_failure_visible(output: &str) -> bool {
-        let joined = output.to_ascii_uppercase();
-        joined.contains("NOT INSTALLED DUE TO ERRORS")
-            || joined.contains("ERROR INSTALLING")
-            || joined.contains("PARSE ERROR")
-            || joined.contains("WEIDU COMMAND FAILED")
+        output.lines().any(|line| {
+            if line.contains("ParserConfig") {
+                return false;
+            }
+            let u = line.to_ascii_uppercase();
+            u.contains("NOT INSTALLED DUE TO ERRORS")
+                || u.contains("ERROR INSTALLING")
+                || u.contains("PARSE ERROR")
+                || u.contains("WEIDU COMMAND FAILED")
+        })
     }
 
     pub(in crate::app::terminal) fn important_line(line: &str) -> bool {
@@ -99,6 +104,44 @@ mod filters {
             "No error lines found in current console output.".to_string()
         } else {
             out.join("\n")
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::likely_failure_visible;
+
+        #[test]
+        fn config_dump_line_is_not_a_failure() {
+            let output = "[2026-06-22T00:00:00Z DEBUG mod_installer::config] \
+                Using existing config: ParserConfig { failed_with_error: \
+                {\"installation aborted\", \"not installed due to errors\"} }";
+            assert!(
+                !likely_failure_visible(output),
+                "ParserConfig echo must not trigger the failure heuristic"
+            );
+        }
+
+        #[test]
+        fn genuine_failure_line_is_detected() {
+            let output = "[2026-06-22T00:00:00Z INFO  mod_installer::parser] \
+                NOT INSTALLED DUE TO ERRORS  Some Mod";
+            assert!(
+                likely_failure_visible(output),
+                "a real WeiDU failure status line must be detected"
+            );
+        }
+
+        #[test]
+        fn other_failure_phrases_still_detected() {
+            assert!(
+                likely_failure_visible("PARSE ERROR in BG1UB.TP2"),
+                "PARSE ERROR must still be detected on a non-ParserConfig line"
+            );
+            assert!(
+                likely_failure_visible("WEIDU COMMAND FAILED exit 1"),
+                "WEIDU COMMAND FAILED must still be detected"
+            );
         }
     }
 }
