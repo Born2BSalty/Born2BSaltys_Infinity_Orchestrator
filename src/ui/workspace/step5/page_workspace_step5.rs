@@ -143,12 +143,24 @@ fn start_workspace_install(orchestrator: &mut OrchestratorApp, modlist_id: &str)
     let settings: crate::settings::model::Step1Settings =
         orchestrator.wizard_state.step1.clone().into();
 
+    let mods_source = orchestrator
+        .workspace_state
+        .get(modlist_id)
+        .map_or_else(crate::registry::workspace_model::ModsSource::default, |w| {
+            w.mods_source
+        });
+
     let OrchestratorApp {
         wizard_state,
         registry,
         registry_store,
         ..
     } = &mut *orchestrator;
+
+    let ctx = start_hooks::InstallStartCtx {
+        settings: &settings,
+        mods_source,
+    };
 
     match start_hooks::on_install_start(
         modlist_id,
@@ -157,7 +169,7 @@ fn start_workspace_install(orchestrator: &mut OrchestratorApp, modlist_id: &str)
         wizard_state,
         registry,
         registry_store,
-        &settings,
+        &ctx,
     ) {
         Ok(()) => {
             orchestrator.wizard_state.step5.start_install_requested = true;

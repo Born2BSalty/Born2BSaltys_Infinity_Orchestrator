@@ -13,6 +13,7 @@ use crate::install_runtime::registry_transition;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::share_export::{self, ShareMeta};
 use crate::registry::store::RegistryStore;
+use crate::registry::workspace_model::ModsSource;
 use crate::settings::model::Step1Settings;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,6 +161,19 @@ pub fn write_install_start_artifacts_with_code(
     Ok(())
 }
 
+pub struct InstallStartCtx<'a> {
+    pub settings: &'a Step1Settings,
+    pub mods_source: ModsSource,
+}
+
+fn global_mods_folder_override(ctx: &InstallStartCtx<'_>) -> Option<String> {
+    if ctx.mods_source != ModsSource::GlobalModsFolder {
+        return None;
+    }
+    let folder = ctx.settings.effective_global_mods_folder().trim();
+    (!folder.is_empty()).then(|| folder.to_string())
+}
+
 pub fn on_install_start(
     modlist_id: &str,
     variant: InstallButtonVariant,
@@ -167,9 +181,9 @@ pub fn on_install_start(
     wizard_state: &mut WizardState,
     registry: &mut ModlistRegistry,
     store: &RegistryStore,
-    settings: &Step1Settings,
+    ctx: &InstallStartCtx<'_>,
 ) -> Result<(), String> {
-    flag_policies::apply_flags(&mut wizard_state.step1, workflow, settings);
+    flag_policies::apply_flags(&mut wizard_state.step1, workflow, ctx.settings);
 
     write_install_start_artifacts(modlist_id, variant, wizard_state, registry, store)?;
 
@@ -201,6 +215,10 @@ pub fn on_install_start(
         game,
     )
     .map_err(|err| format!("per-install directory derivation failed for {modlist_id}: {err}"))?;
+
+    if let Some(folder) = global_mods_folder_override(ctx) {
+        wizard_state.step1.mods_folder = folder;
+    }
 
     Ok(())
 }
@@ -541,6 +559,49 @@ mod tests {
             !store_path.exists(),
             "no registry save on the missing-entry early Err"
         );
+    }
+
+    #[test]
+    fn global_mods_folder_override_returns_some_for_global_source_with_path() {
+        let settings = Step1Settings {
+            global_mods_folder: r"D:\GlobalMods".to_string(),
+            ..Step1Settings::default()
+        };
+        let ctx = InstallStartCtx {
+            settings: &settings,
+            mods_source: ModsSource::GlobalModsFolder,
+        };
+        let result = global_mods_folder_override(&ctx);
+        assert_eq!(result, Some(r"D:\GlobalMods".to_string()));
+    }
+
+    #[test]
+    fn global_mods_folder_override_returns_none_when_both_mods_fields_empty() {
+        let settings = Step1Settings {
+            global_mods_folder: String::new(),
+            mods_folder: String::new(),
+            ..Step1Settings::default()
+        };
+        let ctx = InstallStartCtx {
+            settings: &settings,
+            mods_source: ModsSource::GlobalModsFolder,
+        };
+        let result = global_mods_folder_override(&ctx);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn global_mods_folder_override_returns_none_for_installation_folder_source() {
+        let settings = Step1Settings {
+            global_mods_folder: r"D:\GlobalMods".to_string(),
+            ..Step1Settings::default()
+        };
+        let ctx = InstallStartCtx {
+            settings: &settings,
+            mods_source: ModsSource::InstallationFolder,
+        };
+        let result = global_mods_folder_override(&ctx);
+        assert_eq!(result, None);
     }
 
     #[test]
