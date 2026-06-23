@@ -9,6 +9,120 @@ use crate::ui::shared::redesign_tokens::{
     redesign_shell_bg, redesign_text_primary, redesign_with_alpha,
 };
 
+#[must_use]
+pub fn redesign_btn_glyph(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    glyph: &str,
+    label: &str,
+    opts: BtnOpts,
+) -> egui::Response {
+    let (pad_x, pad_y, font_size): (f32, f32, f32) = if opts.small {
+        (10.0, 4.0, 12.0)
+    } else {
+        (16.0, 8.0, 14.0)
+    };
+    let fill = if opts.danger {
+        redesign_pill_danger(palette)
+    } else if opts.primary {
+        redesign_accent(palette)
+    } else {
+        redesign_shell_bg(palette)
+    };
+    let text_color = if opts.danger || opts.primary {
+        egui::Color32::from_rgb(0x1a, 0x26, 0x38)
+    } else {
+        redesign_text_primary(palette)
+    };
+
+    let glyph_font = egui::FontId::new(font_size, egui::FontFamily::Name("firacode_nerd".into()));
+    let prose_font = egui::FontId::new(font_size, egui::FontFamily::Name("poppins_medium".into()));
+
+    let g_galley = ui
+        .painter()
+        .layout_no_wrap(glyph.to_string(), glyph_font.clone(), text_color);
+    let p_galley = ui
+        .painter()
+        .layout_no_wrap(label.to_string(), prose_font.clone(), text_color);
+
+    let content_w = g_galley.size().x + p_galley.size().x;
+    let content_h = g_galley.size().y.max(p_galley.size().y);
+
+    let width = if opts.block {
+        ui.available_width()
+    } else {
+        pad_x.mul_add(2.0, content_w)
+    };
+    let desired_size = egui::vec2(width, pad_y.mul_add(2.0, content_h));
+
+    let sense = if opts.disabled {
+        egui::Sense::hover()
+    } else {
+        egui::Sense::click()
+    };
+    let (rect, response) = ui.allocate_exact_size(desired_size, sense);
+
+    let pressed = !opts.disabled && response.is_pointer_button_down_on();
+    let rect = if pressed {
+        rect.translate(egui::vec2(1.0, 1.0))
+    } else {
+        rect
+    };
+
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let (alpha_num, alpha_den) = if opts.disabled { (1, 2) } else { (1, 1) };
+        let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
+
+        if (opts.primary || opts.danger) && !opts.no_shadow {
+            let shadow_rect = rect.translate(egui::vec2(
+                REDESIGN_SHADOW_OFFSET_BTN_PX,
+                REDESIGN_SHADOW_OFFSET_BTN_PX,
+            ));
+            painter.rect_filled(
+                shadow_rect,
+                radius,
+                redesign_with_alpha(redesign_shadow(palette), alpha_num, alpha_den),
+            );
+        }
+
+        painter.rect_filled(
+            rect,
+            radius,
+            redesign_with_alpha(fill, alpha_num, alpha_den),
+        );
+
+        painter.rect_stroke(
+            rect,
+            radius,
+            egui::Stroke::new(
+                REDESIGN_BORDER_WIDTH_PX,
+                redesign_with_alpha(redesign_border_strong(palette), alpha_num, alpha_den),
+            ),
+            egui::StrokeKind::Inside,
+        );
+
+        let start_x = rect.center().x - content_w / 2.0;
+        let cy = rect.center().y;
+        painter.text(
+            egui::pos2(start_x, cy),
+            egui::Align2::LEFT_CENTER,
+            glyph,
+            glyph_font,
+            redesign_with_alpha(text_color, alpha_num, alpha_den),
+        );
+        painter.text(
+            egui::pos2(start_x + g_galley.size().x, cy),
+            egui::Align2::LEFT_CENTER,
+            label,
+            prose_font,
+            redesign_with_alpha(text_color, alpha_num, alpha_den),
+        );
+    }
+
+    response
+}
+
 pub type BtnFlag = bool;
 
 #[derive(Debug, Clone, Copy, Default)]

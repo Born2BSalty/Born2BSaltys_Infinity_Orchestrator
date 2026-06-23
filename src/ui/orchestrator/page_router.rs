@@ -103,6 +103,18 @@ fn render_workspace(
     }
 
     if orchestrator.workspace_view.loaded_workspace_id.as_deref() != Some(id) {
+        let has_pending =
+            orchestrator.step5_prep_rx.is_some() || orchestrator.step5_pending_start.is_some();
+        if !step5_attempt_in_progress(&orchestrator.wizard_state, has_pending) {
+            if let Some(term) = orchestrator.step5_terminal.as_mut() {
+                term.clear_console();
+            }
+            orchestrator.step5_terminal = None;
+            orchestrator.step5_terminal_error = None;
+            orchestrator.step5_console_view =
+                crate::ui::step5::state_step5::Step5ConsoleViewState::default();
+        }
+
         if !orchestrator.workspace_state.contains_key(id) {
             let store = WorkspaceStore::new_for_id(id);
             let loaded = match store.load() {
@@ -661,6 +673,25 @@ mod tests {
             &wizard,
             false
         ));
+    }
+
+    #[test]
+    fn step5_in_progress_blocks_terminal_clear_on_swap() {
+        let mut wizard = crate::app::state::WizardState::default();
+        wizard.step5.install_running = true;
+        assert!(
+            step5_attempt_in_progress(&wizard, false),
+            "an active install must block the terminal teardown on workspace swap"
+        );
+        wizard.step5.install_running = false;
+        assert!(
+            !step5_attempt_in_progress(&wizard, false),
+            "no in-progress state means the terminal may be cleared on swap"
+        );
+        assert!(
+            step5_attempt_in_progress(&wizard, true),
+            "a pending-start (has_pending=true) must also block the teardown"
+        );
     }
 
     use crate::app::mod_downloads::AMBIENT_TEST_LOCK;

@@ -22,6 +22,8 @@ pub type SizeWorkerReceiver = Receiver<SizeWorkerResult>;
 pub fn count_mods_and_components(state: &WizardState) -> (u32, u32) {
     let tabs: &[&[crate::app::state::Step3ItemState]] = if workspace_step4::is_dual_game(state) {
         &[&state.step3.bgee_items, &state.step3.bg2ee_items]
+    } else if state.step1.game_install == "BG2EE" {
+        &[&state.step3.bg2ee_items]
     } else {
         &[&state.step3.bgee_items]
     };
@@ -347,6 +349,36 @@ mod tests {
         let (mods, comps) = count_mods_and_components(&s);
         assert_eq!(comps, 4, "2 BGEE leaves + 2 BG2EE leaves");
         assert_eq!(mods, 3, "A + B + C distinct across both tabs");
+    }
+
+    #[test]
+    fn counts_bg2ee_reads_bg2ee_items_not_bgee_items() {
+        let mut s = WizardState::default();
+        s.step1.game_install = "BG2EE".to_string();
+        s.step3.bgee_items = vec![leaf("SHOULD_NOT_COUNT.TP2", "0")];
+        s.step3.bg2ee_items = vec![
+            parent("SCS.TP2"),
+            leaf("SCS.TP2", "0"),
+            leaf("SCS.TP2", "1"),
+            leaf("ATWEAKS.TP2", "0"),
+        ];
+        let (mods, comps) = count_mods_and_components(&s);
+        assert_eq!(
+            comps, 3,
+            "BG2EE modlist must count bg2ee_items leaves (3), not bgee_items"
+        );
+        assert_eq!(mods, 2, "2 distinct tp_files in bg2ee_items");
+    }
+
+    #[test]
+    fn counts_bg2ee_all_parents_returns_zero() {
+        let mut s = WizardState::default();
+        s.step1.game_install = "BG2EE".to_string();
+        s.step3.bgee_items = vec![leaf("BGEE_MOD.TP2", "0")];
+        s.step3.bg2ee_items = vec![parent("SCS.TP2")];
+        let (mods, comps) = count_mods_and_components(&s);
+        assert_eq!(comps, 0, "only parent rows ⇒ 0 components");
+        assert_eq!(mods, 0, "only parent rows ⇒ 0 mods");
     }
 
     #[test]
