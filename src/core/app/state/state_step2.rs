@@ -329,6 +329,7 @@ pub struct Step2ComponentState<Flag = bool> {
     pub weidu_group: Option<String>,
     pub collapsible_group: Option<String>,
     pub collapsible_group_is_umbrella: Flag,
+    pub collapsible_group_combinable: bool,
     pub raw_line: String,
     pub prompt_summary: Option<String>,
     pub prompt_events: Vec<crate::parser::PromptSummaryEvent>,

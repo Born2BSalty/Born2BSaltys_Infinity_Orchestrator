@@ -273,6 +273,17 @@ fn component_range_has_visible_row(
     })
 }
 
+#[must_use]
+const fn component_is_radio_select(comp: &Step2ComponentState, radio_all: bool) -> bool {
+    if radio_all {
+        true
+    } else if comp.collapsible_group_combinable {
+        comp.collapsible_group_is_umbrella
+    } else {
+        comp.collapsible_group.is_some() && !comp.collapsible_group_is_umbrella
+    }
+}
+
 fn render_visible_component_rows(
     ui: &mut egui::Ui,
     ctx: &mut ComponentRowsContext<'_>,
@@ -288,21 +299,8 @@ fn render_visible_component_rows(
             &mod_state.components[idx],
             ctx.filter,
         ) {
-            let is_radio_select = if group.radio_all {
-                true
-            } else {
-                mod_state.components[idx].collapsible_group.is_some()
-                    && !mod_state.components[idx].collapsible_group_is_umbrella
-            };
-            render_component_at(
-                ui,
-                ctx,
-                mod_state,
-                render_state,
-                idx,
-                group.indent,
-                is_radio_select,
-            );
+            let radio = component_is_radio_select(&mod_state.components[idx], group.radio_all);
+            render_component_at(ui, ctx, mod_state, render_state, idx, group.indent, radio);
         }
     }
 }
@@ -551,6 +549,7 @@ mod tests {
             weidu_group: Some(group.to_string()),
             collapsible_group: Some(family.to_string()),
             collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
             raw_line: String::new(),
             prompt_summary: None,
             prompt_events: Vec::new(),
@@ -566,6 +565,126 @@ mod tests {
             checked: false,
             selected_order: None,
         }
+    }
+
+    fn flavor_a_umbrella() -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: "1".to_string(),
+            label: "Install All Tweaks".to_string(),
+            weidu_group: None,
+            collapsible_group: Some("Tweaks".to_string()),
+            collapsible_group_is_umbrella: true,
+            collapsible_group_combinable: true,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    fn flavor_a_member() -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: "2".to_string(),
+            label: "Tweak A".to_string(),
+            weidu_group: None,
+            collapsible_group: Some("Tweaks".to_string()),
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: true,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    fn flavor_b_parent() -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: "10".to_string(),
+            label: "Kitpack".to_string(),
+            weidu_group: None,
+            collapsible_group: Some("Kits".to_string()),
+            collapsible_group_is_umbrella: true,
+            collapsible_group_combinable: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    fn flavor_b_child() -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: "11".to_string(),
+            label: "Kits -> Fighter".to_string(),
+            weidu_group: None,
+            collapsible_group: Some("Kits".to_string()),
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    #[test]
+    fn glyph_matrix_flavor_a_and_b() {
+        assert!(
+            component_is_radio_select(&flavor_a_umbrella(), false),
+            "flavor-A umbrella must render as radio",
+        );
+        assert!(
+            !component_is_radio_select(&flavor_a_member(), false),
+            "flavor-A member must render as checkbox",
+        );
+        assert!(
+            !component_is_radio_select(&flavor_b_parent(), false),
+            "flavor-B parent must render as checkbox",
+        );
+        assert!(
+            component_is_radio_select(&flavor_b_child(), false),
+            "flavor-B child must render as radio",
+        );
     }
 
     #[test]
