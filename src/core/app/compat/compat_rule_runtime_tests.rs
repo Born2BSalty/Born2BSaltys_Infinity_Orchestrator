@@ -30,6 +30,7 @@ fn compat_component_matches_star_component_id() {
         weidu_group: None,
         collapsible_group: None,
         collapsible_group_is_umbrella: false,
+        collapsible_group_combinable: false,
         raw_line: "BEGIN @42 DESIGNATED 42".to_string(),
         prompt_summary: None,
         prompt_events: Vec::new(),

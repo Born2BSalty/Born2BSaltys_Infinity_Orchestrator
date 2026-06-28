@@ -16,6 +16,7 @@ mod weidu;
 pub(super) struct DerivedCollapsibleGroup {
     pub header: String,
     pub is_umbrella: bool,
+    pub combinable_members: bool,
 }
 
 pub(super) fn detect_derived_collapsible_groups(

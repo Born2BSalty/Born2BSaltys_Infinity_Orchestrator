@@ -157,6 +157,7 @@ fn render_workspace(
             crate::ui::workspace::state_workspace::WorkspaceStep2State::default();
         orchestrator.workspace_view.loaded_workspace_id = Some(id.to_string());
         orchestrator.workspace_view.fork_meta = fork_meta_from_entry(&entry);
+        orchestrator.workspace_step5.reset_for_modlist();
 
         step2_resume_scan::maybe_trigger_resume_scan(orchestrator, &workspace);
     }

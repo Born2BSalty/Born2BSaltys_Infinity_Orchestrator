@@ -275,6 +275,7 @@ mod tests {
             weidu_group: None,
             collapsible_group: None,
             collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
             raw_line: format!("~BG1UB/BG1UB.TP2~ #0 #{id} // Component {id}"),
             prompt_summary: None,
             prompt_events: Vec::new(),

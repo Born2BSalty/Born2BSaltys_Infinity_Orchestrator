@@ -93,6 +93,7 @@ fn add_same_mod_installed_groups(
                 DerivedCollapsibleGroup {
                     header: header.clone(),
                     is_umbrella: true,
+                    combinable_members: true,
                 },
             );
             for child_id in child_ids {
@@ -102,6 +103,7 @@ fn add_same_mod_installed_groups(
                         DerivedCollapsibleGroup {
                             header: header.clone(),
                             is_umbrella: false,
+                            combinable_members: true,
                         },
                     );
                 }
@@ -196,6 +198,7 @@ fn add_subcomponent_family_groups(
             DerivedCollapsibleGroup {
                 header: header.clone(),
                 is_umbrella: true,
+                combinable_members: false,
             },
         );
         for child_id in child_ids {
@@ -204,6 +207,7 @@ fn add_subcomponent_family_groups(
                 DerivedCollapsibleGroup {
                     header: header.clone(),
                     is_umbrella: false,
+                    combinable_members: false,
                 },
             );
         }
@@ -261,6 +265,7 @@ fn add_bridged_placeholder_groups(
                     .or_insert_with(|| DerivedCollapsibleGroup {
                         header: header.clone(),
                         is_umbrella: false,
+                        combinable_members: false,
                     });
             }
             index = next_index;

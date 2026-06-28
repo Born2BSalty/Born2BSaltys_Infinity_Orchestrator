@@ -180,6 +180,9 @@ fn component_states_for(
                 collapsible_group_is_umbrella: derived_group
                     .as_ref()
                     .is_some_and(|group| group.is_umbrella),
+                collapsible_group_combinable: derived_group
+                    .as_ref()
+                    .is_some_and(|group| group.combinable_members),
                 raw_line: component.raw_line,
                 prompt_summary: component.prompt_summary,
                 prompt_events: component.prompt_events,
