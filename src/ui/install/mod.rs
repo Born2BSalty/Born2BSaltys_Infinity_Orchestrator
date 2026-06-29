@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod destination_not_empty;
+pub mod destination_owned;
 pub mod page_install;
 pub mod preview_counts;
 pub mod preview_tabs;

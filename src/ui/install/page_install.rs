@@ -25,7 +25,12 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 
     match orchestrator.install_screen_state.stage {
         InstallStage::Paste => {
-            match stage_paste::render(ui, palette, &mut orchestrator.install_screen_state) {
+            match stage_paste::render(
+                ui,
+                palette,
+                &mut orchestrator.install_screen_state,
+                &orchestrator.registry,
+            ) {
                 PasteOutcome::Advance(InstallStage::Preview) => {
                     run_preview_parse(&mut orchestrator.install_screen_state);
                     request = Some(InstallRequest::Stage(InstallStage::Preview));

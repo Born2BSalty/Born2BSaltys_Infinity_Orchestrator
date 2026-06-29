@@ -3,9 +3,11 @@
 
 use eframe::egui;
 
-use crate::ui::install::destination_not_empty;
+use crate::registry::model::ModlistRegistry;
+use crate::registry::operations::{DestinationOwnership, classify_destination};
 use crate::ui::install::state_install::{InstallScreenState, InstallStage};
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
+use crate::ui::install::{destination_not_empty, destination_owned};
 use crate::ui::orchestrator::widgets::{
     InputOpts, redesign_box, redesign_text_input, render_screen_title,
 };
@@ -37,6 +39,7 @@ pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut InstallScreenState,
+    registry: &ModlistRegistry,
 ) -> PasteOutcome {
     let is_partial = state.is_partial();
 
@@ -51,6 +54,7 @@ pub fn render(
         }),
     );
 
+    let mut ownership_blocks = false;
     redesign_box(ui, palette, None, |ui| {
         let dest_changed = folder_input(
             ui,
@@ -61,6 +65,15 @@ pub fn render(
         );
         if dest_changed {
             state.destination_choice = None;
+        }
+
+        let ownership = classify_destination(&state.destination, registry);
+        ownership_blocks = matches!(
+            &ownership,
+            DestinationOwnership::InsideOwner(_) | DestinationOwnership::ContainsOwners(_)
+        );
+        if ownership_blocks {
+            destination_owned::render(ui, &ownership, registry);
         }
 
         if destination_is_non_empty(&state.destination)
@@ -93,7 +106,7 @@ pub fn render(
         !t.is_empty() && std::path::Path::new(t).is_dir()
     };
     let code_empty = state.import_code.trim().is_empty();
-    let primary_disabled = !dest_valid || (!is_partial && code_empty);
+    let primary_disabled = !dest_valid || (!is_partial && code_empty) || ownership_blocks;
     let hint: &str = if !dest_valid {
         "set a valid destination folder (browse to a real folder) to continue"
     } else if is_partial {

@@ -9,9 +9,10 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette,
 };
 
-const WARN_BORDER: egui::Color32 = egui::Color32::from_rgb(0xed, 0xc5, 0x47);
-const WARN_INK: egui::Color32 = egui::Color32::from_rgb(0xff, 0xff, 0xff);
-fn warn_fill() -> egui::Color32 {
+pub(crate) const WARN_BORDER: egui::Color32 = egui::Color32::from_rgb(0xed, 0xc5, 0x47);
+pub(crate) const WARN_INK: egui::Color32 = egui::Color32::from_rgb(0xff, 0xff, 0xff);
+#[must_use]
+pub(crate) fn warn_fill() -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(0xED, 0xC5, 0x47, 46)
 }
 
@@ -91,7 +92,11 @@ pub fn render(
     picked
 }
 
-fn paint_warning_triangle(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
+pub(crate) fn paint_warning_triangle(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    color: egui::Color32,
+) {
     let stroke = egui::Stroke::new(1.6, color);
     let hw = 6.5;
     let top = center.y - 6.0;

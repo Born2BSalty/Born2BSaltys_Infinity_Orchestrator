@@ -3,10 +3,11 @@
 
 use eframe::egui;
 
-use crate::registry::model::Game;
+use crate::registry::model::{Game, ModlistRegistry};
+use crate::registry::operations::{DestinationOwnership, classify_destination};
 use crate::ui::create::state_create::{CreateScreenState, StartingPoint};
-use crate::ui::install::destination_not_empty;
 use crate::ui::install::sub_flow_footer::{self, PrimaryBtn};
+use crate::ui::install::{destination_not_empty, destination_owned};
 use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, redesign_box, redesign_btn, redesign_text_input, render_screen_title,
 };
@@ -49,10 +50,15 @@ pub fn render(
     palette: ThemePalette,
     state: &mut CreateScreenState,
     destination_prep_running: bool,
+    registry: &ModlistRegistry,
+    active_install_id: Option<&str>,
 ) -> ChooseOutcome {
     let mut outcome = ChooseOutcome::Stay;
+    let mut ownership = DestinationOwnership::Free;
 
-    render_body(ui, palette, state, &mut outcome);
+    render_body(ui, palette, state, &mut outcome, registry, &mut ownership);
+
+    let proceed_ok = destination_owned::proceed_allowed(&ownership, active_install_id);
 
     let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
     if spacer > 0.0 {
@@ -71,7 +77,7 @@ pub fn render(
             } else {
                 "Start"
             },
-            disabled: destination_prep_running,
+            disabled: destination_prep_running || !proceed_ok,
         },
     );
     if footer.primary_clicked {
@@ -89,9 +95,11 @@ fn render_body(
     palette: ThemePalette,
     state: &mut CreateScreenState,
     outcome: &mut ChooseOutcome,
+    registry: &ModlistRegistry,
+    ownership: &mut DestinationOwnership,
 ) {
     render_title_row(ui, palette, outcome);
-    render_setup_box(ui, palette, state);
+    render_setup_box(ui, palette, state, registry, ownership);
     render_starting_point_boxes(ui, palette, state);
 }
 
@@ -131,7 +139,13 @@ fn render_title_row(ui: &mut egui::Ui, palette: ThemePalette, outcome: &mut Choo
     });
 }
 
-fn render_setup_box(ui: &mut egui::Ui, palette: ThemePalette, state: &mut CreateScreenState) {
+fn render_setup_box(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut CreateScreenState,
+    registry: &ModlistRegistry,
+    ownership: &mut DestinationOwnership,
+) {
     redesign_box(ui, palette, None, |ui| {
         ui.spacing_mut().item_spacing.y = 14.0;
 
@@ -210,6 +224,12 @@ fn render_setup_box(ui: &mut egui::Ui, palette: ThemePalette, state: &mut Create
         );
         if dest_changed {
             state.destination_choice = None;
+        }
+
+        *ownership = classify_destination(&state.destination, registry);
+
+        if !matches!(*ownership, DestinationOwnership::Free) {
+            destination_owned::render(ui, ownership, registry);
         }
 
         if destination_is_non_empty(&state.destination)
