@@ -8,7 +8,9 @@ use crate::registry::operations::DestinationOwnership;
 use crate::ui::install::destination_not_empty::{
     WARN_BORDER, WARN_INK, paint_warning_triangle, warn_fill,
 };
-use crate::ui::shared::redesign_tokens::{REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX};
+use crate::ui::shared::redesign_tokens::{
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_error,
+};
 
 #[must_use]
 pub(crate) fn proceed_allowed(
@@ -26,21 +28,48 @@ pub(crate) fn proceed_allowed(
 
 pub(crate) fn render(
     ui: &mut egui::Ui,
+    palette: ThemePalette,
     ownership: &DestinationOwnership,
     registry: &ModlistRegistry,
 ) {
     match ownership {
         DestinationOwnership::Free => {}
         DestinationOwnership::ExactOwners(ids) => render_exact_warning(ui, ids, registry),
-        DestinationOwnership::InsideOwner(id) => render_inside_block(ui, id, registry),
-        DestinationOwnership::ContainsOwners(ids) => render_contains_block(ui, ids, registry),
+        DestinationOwnership::InsideOwner(id) => render_inside_block(ui, palette, id, registry),
+        DestinationOwnership::ContainsOwners(ids) => {
+            render_contains_block(ui, palette, ids, registry);
+        }
     }
 }
 
-fn warning_frame() -> egui::Frame {
+#[derive(Clone, Copy)]
+struct BannerStyle {
+    border: egui::Color32,
+    fill: egui::Color32,
+    ink: egui::Color32,
+}
+
+fn warning_style() -> BannerStyle {
+    BannerStyle {
+        border: WARN_BORDER,
+        fill: warn_fill(),
+        ink: WARN_INK,
+    }
+}
+
+fn danger_style(palette: ThemePalette) -> BannerStyle {
+    let error = redesign_error(palette);
+    BannerStyle {
+        border: error,
+        fill: egui::Color32::from_rgba_unmultiplied(error.r(), error.g(), error.b(), 46),
+        ink: WARN_INK,
+    }
+}
+
+fn banner_frame(style: BannerStyle) -> egui::Frame {
     egui::Frame::default()
-        .fill(warn_fill())
-        .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, WARN_BORDER))
+        .fill(style.fill)
+        .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, style.border))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
         .inner_margin(egui::Margin {
             left: 14,
@@ -50,16 +79,16 @@ fn warning_frame() -> egui::Frame {
         })
 }
 
-fn header_row(ui: &mut egui::Ui, title: &str) {
+fn header_row(ui: &mut egui::Ui, title: &str, ink: egui::Color32) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
         let (icon_rect, _) = ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
-        paint_warning_triangle(ui.painter(), icon_rect.center(), WARN_INK);
+        paint_warning_triangle(ui.painter(), icon_rect.center(), ink);
         ui.label(
             egui::RichText::new(title)
                 .size(13.0)
                 .family(egui::FontFamily::Name("poppins_medium".into()))
-                .color(WARN_INK),
+                .color(ink),
         );
     });
 }
@@ -82,9 +111,10 @@ fn render_exact_warning(ui: &mut egui::Ui, ids: &[String], registry: &ModlistReg
     } else {
         "Folder claimed by other modlists"
     };
-    warning_frame().show(ui, |ui| {
+    let style = warning_style();
+    banner_frame(style).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        header_row(ui, title);
+        header_row(ui, title, style.ink);
         ui.add_space(4.0);
         for id in ids {
             let name = registry
@@ -95,12 +125,18 @@ fn render_exact_warning(ui: &mut egui::Ui, ids: &[String], registry: &ModlistReg
     });
 }
 
-fn render_inside_block(ui: &mut egui::Ui, id: &str, registry: &ModlistRegistry) {
+fn render_inside_block(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    id: &str,
+    registry: &ModlistRegistry,
+) {
     ui.add_space(12.0);
     let name = registry.find(id).map_or_else(|| id, |e| e.name.as_str());
-    warning_frame().show(ui, |ui| {
+    let style = danger_style(palette);
+    banner_frame(style).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        header_row(ui, "Folder is inside another modlist's folder");
+        header_row(ui, "Folder is inside another modlist's folder", style.ink);
         ui.add_space(4.0);
         body_label(
             ui,
@@ -109,7 +145,12 @@ fn render_inside_block(ui: &mut egui::Ui, id: &str, registry: &ModlistRegistry) 
     });
 }
 
-fn render_contains_block(ui: &mut egui::Ui, ids: &[String], registry: &ModlistRegistry) {
+fn render_contains_block(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    ids: &[String],
+    registry: &ModlistRegistry,
+) {
     ui.add_space(12.0);
     let names: Vec<&str> = ids
         .iter()
@@ -124,9 +165,10 @@ fn render_contains_block(ui: &mut egui::Ui, ids: &[String], registry: &ModlistRe
         .map(|n| format!("\"{n}\""))
         .collect::<Vec<_>>()
         .join(", ");
-    warning_frame().show(ui, |ui| {
+    let style = danger_style(palette);
+    banner_frame(style).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        header_row(ui, "Folder contains other modlists");
+        header_row(ui, "Folder contains other modlists", style.ink);
         ui.add_space(4.0);
         body_label(
             ui,

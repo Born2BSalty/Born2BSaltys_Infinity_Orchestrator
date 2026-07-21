@@ -13,8 +13,8 @@ use crate::ui::orchestrator::widgets::{
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_input_bg, redesign_shell_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    redesign_border_strong, redesign_error, redesign_input_bg, redesign_shell_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -56,14 +56,16 @@ pub fn render(
     let mut outcome = ChooseOutcome::Stay;
     let mut ownership = DestinationOwnership::Free;
 
-    render_body(ui, palette, state, &mut outcome, registry, &mut ownership);
+    let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
+    ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                render_body(ui, palette, state, &mut outcome, registry, &mut ownership);
+            });
+    });
 
     let proceed_ok = destination_owned::proceed_allowed(&ownership, active_install_id);
-
-    let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
-    if spacer > 0.0 {
-        ui.add_space(spacer);
-    }
 
     let footer = sub_flow_footer::render(
         ui,
@@ -214,6 +216,12 @@ fn render_setup_box(
             })
             .inner;
 
+        *ownership = classify_destination(&state.destination, registry);
+        let hard_block = matches!(
+            *ownership,
+            DestinationOwnership::InsideOwner(_) | DestinationOwnership::ContainsOwners(_)
+        );
+
         let dest_changed = folder_input(
             ui,
             palette,
@@ -221,18 +229,18 @@ fn render_setup_box(
             "D:\\BG2EE_install_test",
             &mut state.destination,
             input_box_h,
+            hard_block,
         );
         if dest_changed {
             state.destination_choice = None;
         }
 
-        *ownership = classify_destination(&state.destination, registry);
-
         if !matches!(*ownership, DestinationOwnership::Free) {
-            destination_owned::render(ui, ownership, registry);
+            destination_owned::render(ui, palette, ownership, registry);
         }
 
-        if destination_is_non_empty(&state.destination)
+        if !hard_block
+            && destination_is_non_empty(&state.destination)
             && let Some(picked) =
                 destination_not_empty::render(ui, palette, state.destination_choice, false)
         {
@@ -420,8 +428,15 @@ fn folder_input(
     placeholder: &str,
     value: &mut String,
     box_h: f32,
+    error: bool,
 ) -> bool {
     let mut changed = false;
+
+    let border = if error {
+        Some(redesign_error(palette))
+    } else {
+        None
+    };
 
     ui.label(
         egui::RichText::new(label)
@@ -458,7 +473,7 @@ fn folder_input(
                     .margin(FORM_INPUT_MARGIN),
                 margin: FORM_INPUT_MARGIN,
                 size: egui::vec2(edit_width, box_h),
-                border: None,
+                border,
             },
         );
         if response.changed() || *value != pre {
