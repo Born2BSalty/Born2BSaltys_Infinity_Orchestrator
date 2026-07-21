@@ -97,7 +97,7 @@ pub(crate) fn paint_warning_triangle(
     center: egui::Pos2,
     color: egui::Color32,
 ) {
-    let stroke = egui::Stroke::new(1.6, color);
+    let stroke = egui::Stroke::new(1.6_f32, color);
     let hw = 6.5;
     let top = center.y - 6.0;
     let base_y = center.y + 5.0;

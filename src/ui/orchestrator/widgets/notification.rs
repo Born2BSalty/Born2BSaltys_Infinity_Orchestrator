@@ -433,7 +433,7 @@ fn render_history_icon(ui: &mut egui::Ui, kind: ToastKind, accent: egui::Color32
 }
 
 fn paint_warning_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.5, color);
+    let stroke = egui::Stroke::new(1.5_f32, color);
     let hw = 5.0_f32;
     let top = center.y - 5.0;
     let base_y = center.y + 4.0;
@@ -458,7 +458,7 @@ fn paint_warning_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::
 fn paint_info_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
     painter.circle_filled(center, 5.5, color);
     let ink = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 210);
-    let stroke = egui::Stroke::new(1.4, ink);
+    let stroke = egui::Stroke::new(1.4_f32, ink);
     painter.circle_filled(egui::pos2(center.x, center.y - 2.5), 0.9, ink);
     painter.line_segment(
         [
@@ -472,7 +472,7 @@ fn paint_info_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Col
 fn paint_error_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
     painter.circle_filled(center, 5.5, color);
     let ink = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 210);
-    let stroke = egui::Stroke::new(1.4, ink);
+    let stroke = egui::Stroke::new(1.4_f32, ink);
     painter.line_segment(
         [
             egui::pos2(center.x, center.y - 3.0),

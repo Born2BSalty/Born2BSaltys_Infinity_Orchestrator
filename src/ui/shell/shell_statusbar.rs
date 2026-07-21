@@ -73,7 +73,7 @@ pub fn render(
     painter.circle_stroke(
         dot_center,
         4.0,
-        egui::Stroke::new(1.0, redesign_border_strong(palette)),
+        egui::Stroke::new(1.0_f32, redesign_border_strong(palette)),
     );
 
     let mut x = dot_center.x + 4.0 + 8.0;

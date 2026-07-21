@@ -30,7 +30,7 @@ pub fn build_for(palette: ThemePalette) -> egui::Visuals {
 
     let border_strong_stroke =
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette));
-    let text_primary_stroke = egui::Stroke::new(1.0, redesign_text_primary(palette));
+    let text_primary_stroke = egui::Stroke::new(1.0_f32, redesign_text_primary(palette));
     let corner = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
     v.override_text_color = Some(redesign_text_primary(palette));

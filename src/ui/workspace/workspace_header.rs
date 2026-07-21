@@ -442,7 +442,7 @@ fn paint_pencil_glyph(painter: &egui::Painter, center: egui::Pos2, ink: f32, col
     let ferrule = cap_end - axis * (ink * 0.22);
     painter.line_segment(
         [ferrule + nrm * w, ferrule - nrm * w],
-        egui::Stroke::new(1.0, color),
+        egui::Stroke::new(1.0_f32, color),
     );
 }
 
@@ -589,7 +589,7 @@ fn saved_flash_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respons
 }
 
 fn paint_fork_at(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.4, color);
+    let stroke = egui::Stroke::new(1.4_f32, color);
     let half_h = 4.5;
     let split_y = center.y - 0.5;
     let tine_dx = 3.0;

@@ -317,7 +317,7 @@ fn paint_nav_icon(
 }
 
 fn icon_stroke(color: egui::Color32) -> egui::Stroke {
-    egui::Stroke::new(1.8, color)
+    egui::Stroke::new(1.8_f32, color)
 }
 
 fn paint_home_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
@@ -451,7 +451,7 @@ fn render_status_row(ui: &mut egui::Ui, palette: ThemePalette, validation: &Path
     painter.circle_stroke(
         dot_center,
         4.0,
-        egui::Stroke::new(1.0, redesign_border_strong(palette)),
+        egui::Stroke::new(1.0_f32, redesign_border_strong(palette)),
     );
 
     let text_pos = egui::pos2(dot_center.x + 12.0, rect.center().y);
@@ -481,7 +481,7 @@ fn draw_dashed_horizontal(
         let x_end = (x + dash_w).min(right);
         painter.line_segment(
             [egui::pos2(x, y), egui::pos2(x_end, y)],
-            egui::Stroke::new(1.0, color),
+            egui::Stroke::new(1.0_f32, color),
         );
         x += dash_w + gap_w;
     }

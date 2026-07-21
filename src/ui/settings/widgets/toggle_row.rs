@@ -57,7 +57,7 @@ pub fn render(
         painter.circle_stroke(
             knob_center,
             knob_size * 0.5,
-            egui::Stroke::new(1.0, redesign_border_strong(palette)),
+            egui::Stroke::new(1.0_f32, redesign_border_strong(palette)),
         );
 
         if response.clicked() {

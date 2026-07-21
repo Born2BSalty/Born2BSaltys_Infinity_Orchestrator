@@ -230,10 +230,9 @@ fn parse_subcomponent_key(line: &str) -> Option<String> {
     let upper = content.to_ascii_uppercase();
     let keyword_index = if let Some(index) = upper.find("FORCED_SUBCOMPONENT ") {
         (index, "FORCED_SUBCOMPONENT")
-    } else if let Some(index) = upper.find("SUBCOMPONENT ") {
-        (index, "SUBCOMPONENT")
     } else {
-        return None;
+        let index = upper.find("SUBCOMPONENT ")?;
+        (index, "SUBCOMPONENT")
     };
     let keyword = keyword_index.1;
     let tail = content[keyword_index.0 + keyword.len()..].trim_start();
