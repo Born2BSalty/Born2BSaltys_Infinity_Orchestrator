@@ -109,7 +109,7 @@ fn render_traffic_lights(ui: &egui::Ui, rect: egui::Rect, palette: ThemePalette)
         painter.circle_stroke(
             center,
             dot_d * 0.5,
-            egui::Stroke::new(1.2, redesign_border_strong(palette)),
+            egui::Stroke::new(1.2_f32, redesign_border_strong(palette)),
         );
         cx += dot_d + dot_gap;
     }

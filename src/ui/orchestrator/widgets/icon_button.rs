@@ -67,7 +67,7 @@ pub(crate) fn render(
 }
 
 pub(crate) fn paint_close_icon(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.5, color);
+    let stroke = egui::Stroke::new(1.5_f32, color);
     let center = rect.center();
     painter.line_segment(
         [
@@ -86,7 +86,7 @@ pub(crate) fn paint_close_icon(painter: &egui::Painter, rect: egui::Rect, color:
 }
 
 fn paint_copy_icon(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.4, color);
+    let stroke = egui::Stroke::new(1.4_f32, color);
     let center = rect.center();
     let back = egui::Rect::from_min_size(center + egui::vec2(-6.0, -6.0), egui::vec2(9.0, 9.0));
     let front = egui::Rect::from_min_size(center + egui::vec2(-2.0, -2.0), egui::vec2(9.0, 9.0));
@@ -115,7 +115,7 @@ fn paint_details_icon(painter: &egui::Painter, rect: egui::Rect, color: egui::Co
 }
 
 fn paint_open_icon(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.4, color);
+    let stroke = egui::Stroke::new(1.4_f32, color);
     let center = rect.center();
     let box_rect = egui::Rect::from_min_size(center + egui::vec2(-6.0, -2.0), egui::vec2(9.0, 9.0));
     painter.rect_stroke(

@@ -116,7 +116,7 @@ pub(crate) fn draw_insert_marker(
             };
             ui.painter().line_segment(
                 [egui::pos2(x0, y), egui::pos2(x1, y)],
-                egui::Stroke::new(1.5, ui.visuals().selection.stroke.color),
+                egui::Stroke::new(1.5_f32, ui.visuals().selection.stroke.color),
             );
         }
     }

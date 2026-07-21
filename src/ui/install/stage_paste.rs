@@ -3,15 +3,17 @@
 
 use eframe::egui;
 
-use crate::ui::install::destination_not_empty;
+use crate::registry::model::ModlistRegistry;
+use crate::registry::operations::{DestinationOwnership, classify_destination};
 use crate::ui::install::state_install::{InstallScreenState, InstallStage};
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
+use crate::ui::install::{destination_not_empty, destination_owned};
 use crate::ui::orchestrator::widgets::{
     InputOpts, redesign_box, redesign_text_input, render_screen_title,
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
+    redesign_error, redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
     redesign_text_primary,
 };
 
@@ -37,63 +39,75 @@ pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut InstallScreenState,
+    registry: &ModlistRegistry,
 ) -> PasteOutcome {
     let is_partial = state.is_partial();
+    let mut ownership_blocks = false;
 
-    render_screen_title(
-        ui,
-        palette,
-        "Install shared modlist",
-        Some(if is_partial {
-            "destination has existing modlist \u{2014} share code skipped"
-        } else {
-            "set destination + mods paths, paste a BIO share code, then preview before importing"
-        }),
-    );
+    let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
+    ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                render_screen_title(
+                    ui,
+                    palette,
+                    "Install shared modlist",
+                    Some(if is_partial {
+                        "destination has existing modlist \u{2014} share code skipped"
+                    } else {
+                        "set destination + mods paths, paste a BIO share code, then preview before importing"
+                    }),
+                );
 
-    redesign_box(ui, palette, None, |ui| {
-        let dest_changed = folder_input(
-            ui,
-            palette,
-            "destination folder",
-            "D:\\BG2EE_install_test",
-            &mut state.destination,
-        );
-        if dest_changed {
-            state.destination_choice = None;
-        }
+                redesign_box(ui, palette, None, |ui| {
+                    let ownership = classify_destination(&state.destination, registry);
+                    ownership_blocks = matches!(
+                        &ownership,
+                        DestinationOwnership::InsideOwner(_) | DestinationOwnership::ContainsOwners(_)
+                    );
 
-        if destination_is_non_empty(&state.destination)
-            && let Some(picked) =
-                destination_not_empty::render(ui, palette, state.destination_choice, true)
-        {
-            state.destination_choice = Some(picked);
-        }
+                    let dest_changed = folder_input(
+                        ui,
+                        palette,
+                        "destination folder",
+                        "D:\\BG2EE_install_test",
+                        &mut state.destination,
+                        ownership_blocks,
+                    );
+                    if dest_changed {
+                        state.destination_choice = None;
+                    }
+
+                    if ownership_blocks {
+                        destination_owned::render(ui, palette, &ownership, registry);
+                    }
+
+                    if !ownership_blocks
+                        && destination_is_non_empty(&state.destination)
+                        && let Some(picked) =
+                            destination_not_empty::render(ui, palette, state.destination_choice, true)
+                    {
+                        state.destination_choice = Some(picked);
+                    }
+                });
+
+                ui.add_space(14.0);
+
+                if is_partial {
+                    partial_info_box(ui, palette, &state.destination);
+                } else {
+                    import_code_box(ui, palette, &mut state.import_code);
+                }
+            });
     });
-
-    ui.add_space(14.0);
-
-    if is_partial {
-        partial_info_box(ui, palette, &state.destination);
-        let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
-        if spacer > 0.0 {
-            ui.add_space(spacer);
-        }
-    } else {
-        let box_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(160.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), box_h),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| import_code_box(ui, palette, &mut state.import_code),
-        );
-    }
 
     let dest_valid = {
         let t = state.destination.trim();
         !t.is_empty() && std::path::Path::new(t).is_dir()
     };
     let code_empty = state.import_code.trim().is_empty();
-    let primary_disabled = !dest_valid || (!is_partial && code_empty);
+    let primary_disabled = !dest_valid || (!is_partial && code_empty) || ownership_blocks;
     let hint: &str = if !dest_valid {
         "set a valid destination folder (browse to a real folder) to continue"
     } else if is_partial {
@@ -142,8 +156,15 @@ fn folder_input(
     label: &str,
     placeholder: &str,
     value: &mut String,
+    error: bool,
 ) -> bool {
     let mut changed = false;
+
+    let border = if error {
+        Some(redesign_error(palette))
+    } else {
+        None
+    };
 
     ui.label(
         egui::RichText::new(label)
@@ -188,7 +209,7 @@ fn folder_input(
                     .margin(FORM_INPUT_MARGIN),
                 margin: FORM_INPUT_MARGIN,
                 size: egui::vec2(edit_width, box_h),
-                border: None,
+                border,
             },
         );
         if response.changed() || *value != pre {

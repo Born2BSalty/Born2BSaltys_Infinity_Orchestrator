@@ -11,7 +11,9 @@ use tracing::warn;
 use crate::app::modlist_share::preview_modlist_share_code;
 use crate::install_runtime::{destination_prep, fork_pipeline_arm, per_install_dirs};
 use crate::registry::model::Game;
-use crate::registry::operations;
+use crate::registry::operations::{
+    self, DestinationOwnership, classify_destination, remove_entry_keep_folder,
+};
 use crate::registry::operations_create::create_modlist_with_author;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::{ModlistWorkspaceState, ModsSource};
@@ -88,6 +90,8 @@ fn collect_stage_request(
                 palette,
                 &mut orchestrator.create_screen_state,
                 orchestrator.create_destination_prep_rx.is_some(),
+                &orchestrator.registry,
+                orchestrator.active_install_modlist_id.as_deref(),
             ) {
                 ChooseOutcome::StartScratch => Some(CreateRequest::StartScratch),
                 ChooseOutcome::GoForkPaste => Some(CreateRequest::GoForkPaste),
@@ -412,7 +416,42 @@ fn pending_create_matches_current(
     ) && pending.game == orchestrator.create_screen_state.game
 }
 
+fn scratch_take_over_if_needed(orchestrator: &mut OrchestratorApp, dest: &str) -> bool {
+    let ownership = classify_destination(dest, &orchestrator.registry);
+    let DestinationOwnership::ExactOwners(ids) = ownership else {
+        return true;
+    };
+    if ids.iter().any(|id| {
+        orchestrator
+            .active_install_modlist_id
+            .as_deref()
+            .is_some_and(|active| active == id.as_str())
+    }) {
+        warn!(
+            target = "orchestrator",
+            "Create scratch: take-over refused — destination owned by an actively-installing modlist"
+        );
+        return false;
+    }
+    for id in &ids {
+        if let Err(err) =
+            remove_entry_keep_folder(id, &orchestrator.registry_store, &mut orchestrator.registry)
+        {
+            warn!(
+                target = "orchestrator",
+                "Create scratch: take-over remove_entry_keep_folder({id}) failed: {err}"
+            );
+        }
+    }
+    orchestrator.persistence_cycle.last_saved_registry = orchestrator.registry.clone();
+    true
+}
+
 fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Game, dest: &str) {
+    if !scratch_take_over_if_needed(orchestrator, dest) {
+        return;
+    }
+
     let scratch_mods_folder = match create_scratch_mods_folder(dest, game) {
         Ok(path) => path,
         Err(err) => {

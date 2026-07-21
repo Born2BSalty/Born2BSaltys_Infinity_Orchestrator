@@ -74,6 +74,84 @@ fn is_safe_install_folder(dest: &str) -> bool {
     path.is_dir()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DestinationOwnership {
+    Free,
+    ExactOwners(Vec<String>),
+    InsideOwner(String),
+    ContainsOwners(Vec<String>),
+}
+
+fn normalize_to_components(raw: &str) -> Option<Vec<String>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut s = trimmed
+        .replace('/', std::path::MAIN_SEPARATOR_STR)
+        .to_ascii_lowercase();
+    let sep = std::path::MAIN_SEPARATOR;
+    while s.len() > 3 && s.ends_with(sep) {
+        s.pop();
+    }
+    let path = Path::new(&s);
+    if !path.is_absolute() {
+        return None;
+    }
+    Some(
+        path.components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect(),
+    )
+}
+
+fn is_strict_prefix_of(prefix: &[String], target: &[String]) -> bool {
+    target.len() > prefix.len() && target.starts_with(prefix)
+}
+
+#[must_use]
+pub fn classify_destination(candidate: &str, registry: &ModlistRegistry) -> DestinationOwnership {
+    let Some(cand_comps) = normalize_to_components(candidate) else {
+        return DestinationOwnership::Free;
+    };
+    let mut exact: Vec<String> = Vec::new();
+    let mut inside: Option<String> = None;
+    let mut contains: Vec<String> = Vec::new();
+    for entry in &registry.entries {
+        let Some(entry_comps) = normalize_to_components(&entry.destination_folder) else {
+            continue;
+        };
+        if cand_comps == entry_comps {
+            exact.push(entry.id.clone());
+        } else if inside.is_none() && is_strict_prefix_of(&entry_comps, &cand_comps) {
+            inside = Some(entry.id.clone());
+        } else if is_strict_prefix_of(&cand_comps, &entry_comps) {
+            contains.push(entry.id.clone());
+        }
+    }
+    if !exact.is_empty() {
+        DestinationOwnership::ExactOwners(exact)
+    } else if let Some(id) = inside {
+        DestinationOwnership::InsideOwner(id)
+    } else if !contains.is_empty() {
+        DestinationOwnership::ContainsOwners(contains)
+    } else {
+        DestinationOwnership::Free
+    }
+}
+
+pub fn remove_entry_keep_folder(
+    id: &str,
+    store: &RegistryStore,
+    registry: &mut ModlistRegistry,
+) -> Result<(), RegistryError> {
+    if let Some(entry) = registry.find_mut(id) {
+        entry.destination_folder = String::new();
+    }
+    remove_entry_and_save(id, store, registry)?;
+    Ok(())
+}
+
 #[must_use]
 pub fn share_code_for(id: &str, registry: &ModlistRegistry) -> Option<String> {
     registry.find(id).and_then(|e| e.latest_share_code.clone())
@@ -386,6 +464,327 @@ mod tests {
             let result = rx.recv().expect("each worker signals");
             assert!(result.is_ok(), "concurrent delete succeeded: {result:?}");
             assert!(!dir.exists(), "dir removed: {}", dir.display());
+        }
+    }
+
+    #[cfg(windows)]
+    mod classifier_windows {
+        use super::*;
+
+        fn wreg(ids_dests: &[(&str, &str)]) -> ModlistRegistry {
+            let mut reg = ModlistRegistry::default();
+            for (id, dest) in ids_dests {
+                reg.entries.push(entry(id, dest));
+            }
+            reg
+        }
+
+        #[test]
+        fn exact_match() {
+            let reg = wreg(&[("AAA000000001", "C:\\Games\\EET")]);
+            assert_eq!(
+                classify_destination("C:\\Games\\EET", &reg),
+                DestinationOwnership::ExactOwners(vec!["AAA000000001".to_string()])
+            );
+        }
+
+        #[test]
+        fn exact_match_case_insensitive() {
+            let reg = wreg(&[("AAA000000002", "C:\\Games\\EET")]);
+            assert_eq!(
+                classify_destination("c:\\games\\eet", &reg),
+                DestinationOwnership::ExactOwners(vec!["AAA000000002".to_string()])
+            );
+        }
+
+        #[test]
+        fn exact_match_forward_slash_normalized() {
+            let reg = wreg(&[("AAA000000003", "C:\\Games\\EET")]);
+            assert_eq!(
+                classify_destination("C:/Games/EET", &reg),
+                DestinationOwnership::ExactOwners(vec!["AAA000000003".to_string()])
+            );
+        }
+
+        #[test]
+        fn exact_match_trailing_separator_stripped() {
+            let reg = wreg(&[("AAA000000004", "C:\\Games\\EET")]);
+            assert_eq!(
+                classify_destination("C:\\Games\\EET\\", &reg),
+                DestinationOwnership::ExactOwners(vec!["AAA000000004".to_string()])
+            );
+        }
+
+        #[test]
+        fn eetx_is_not_inside_eet() {
+            let reg = wreg(&[("AAA000000005", "C:\\Games\\EET")]);
+            assert_eq!(
+                classify_destination("C:\\Games\\EETX", &reg),
+                DestinationOwnership::Free
+            );
+        }
+
+        #[test]
+        fn inside_detection() {
+            let reg = wreg(&[("AAA000000006", "C:\\Games\\EET")]);
+            assert_eq!(
+                classify_destination("C:\\Games\\EET\\mods", &reg),
+                DestinationOwnership::InsideOwner("AAA000000006".to_string())
+            );
+        }
+
+        #[test]
+        fn contains_single() {
+            let reg = wreg(&[("AAA000000007", "C:\\Games\\EET")]);
+            assert_eq!(
+                classify_destination("C:\\Games", &reg),
+                DestinationOwnership::ContainsOwners(vec!["AAA000000007".to_string()])
+            );
+        }
+
+        #[test]
+        fn contains_multiple() {
+            let reg = wreg(&[
+                ("AAA000000008", "C:\\Games\\EET"),
+                ("AAA000000009", "C:\\Games\\BGEE"),
+            ]);
+            let result = classify_destination("C:\\Games", &reg);
+            if let DestinationOwnership::ContainsOwners(ids) = result {
+                assert_eq!(ids.len(), 2);
+                assert!(ids.contains(&"AAA000000008".to_string()));
+                assert!(ids.contains(&"AAA000000009".to_string()));
+            } else {
+                panic!("expected ContainsOwners, got {result:?}");
+            }
+        }
+
+        #[test]
+        fn eet_base_vs_sibling_base_is_free() {
+            let reg = wreg(&[("AAA000000010", "C:\\Games\\EET2")]);
+            assert_eq!(
+                classify_destination("C:\\Games\\EET", &reg),
+                DestinationOwnership::Free
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    mod classifier_unix {
+        use super::*;
+
+        fn ureg(ids_dests: &[(&str, &str)]) -> ModlistRegistry {
+            let mut reg = ModlistRegistry::default();
+            for (id, dest) in ids_dests {
+                reg.entries.push(entry(id, dest));
+            }
+            reg
+        }
+
+        #[test]
+        fn exact_match() {
+            let reg = ureg(&[("BBB000000001", "/games/eet")]);
+            assert_eq!(
+                classify_destination("/games/eet", &reg),
+                DestinationOwnership::ExactOwners(vec!["BBB000000001".to_string()])
+            );
+        }
+
+        #[test]
+        fn exact_match_trailing_slash_stripped() {
+            let reg = ureg(&[("BBB000000002", "/games/eet")]);
+            assert_eq!(
+                classify_destination("/games/eet/", &reg),
+                DestinationOwnership::ExactOwners(vec!["BBB000000002".to_string()])
+            );
+        }
+
+        #[test]
+        fn eetx_is_not_inside_eet() {
+            let reg = ureg(&[("BBB000000003", "/games/eet")]);
+            assert_eq!(
+                classify_destination("/games/eetx", &reg),
+                DestinationOwnership::Free
+            );
+        }
+
+        #[test]
+        fn inside_detection() {
+            let reg = ureg(&[("BBB000000004", "/games/eet")]);
+            assert_eq!(
+                classify_destination("/games/eet/mods", &reg),
+                DestinationOwnership::InsideOwner("BBB000000004".to_string())
+            );
+        }
+
+        #[test]
+        fn contains_single() {
+            let reg = ureg(&[("BBB000000005", "/games/eet")]);
+            assert_eq!(
+                classify_destination("/games", &reg),
+                DestinationOwnership::ContainsOwners(vec!["BBB000000005".to_string()])
+            );
+        }
+
+        #[test]
+        fn contains_multiple() {
+            let reg = ureg(&[
+                ("BBB000000006", "/games/eet"),
+                ("BBB000000007", "/games/bgee"),
+            ]);
+            let result = classify_destination("/games", &reg);
+            if let DestinationOwnership::ContainsOwners(ids) = result {
+                assert_eq!(ids.len(), 2);
+                assert!(ids.contains(&"BBB000000006".to_string()));
+                assert!(ids.contains(&"BBB000000007".to_string()));
+            } else {
+                panic!("expected ContainsOwners, got {result:?}");
+            }
+        }
+
+        #[test]
+        fn sibling_base_is_free() {
+            let reg = ureg(&[("BBB000000008", "/games/eet2")]);
+            assert_eq!(
+                classify_destination("/games/eet", &reg),
+                DestinationOwnership::Free
+            );
+        }
+    }
+
+    mod classifier_cross_platform {
+        use super::*;
+
+        #[test]
+        fn empty_candidate_is_free() {
+            let mut reg = ModlistRegistry::default();
+            reg.entries.push(entry("CCC000000001", ""));
+            assert_eq!(classify_destination("", &reg), DestinationOwnership::Free);
+            assert_eq!(
+                classify_destination("   ", &reg),
+                DestinationOwnership::Free
+            );
+        }
+
+        #[test]
+        fn relative_candidate_is_free() {
+            let mut reg = ModlistRegistry::default();
+            reg.entries.push(entry("CCC000000002", ""));
+            assert_eq!(
+                classify_destination("relative/path", &reg),
+                DestinationOwnership::Free
+            );
+            assert_eq!(
+                classify_destination("./foo", &reg),
+                DestinationOwnership::Free
+            );
+        }
+
+        #[test]
+        fn empty_registry_is_free() {
+            let reg = ModlistRegistry::default();
+            assert_eq!(
+                classify_destination("/some/path", &reg),
+                DestinationOwnership::Free
+            );
+        }
+
+        #[test]
+        fn entry_with_empty_dest_is_skipped() {
+            let mut reg = ModlistRegistry::default();
+            reg.entries.push(entry("CCC000000003", ""));
+            assert_eq!(
+                classify_destination("/some/path", &reg),
+                DestinationOwnership::Free
+            );
+        }
+
+        #[test]
+        fn entry_with_relative_dest_is_skipped() {
+            let mut reg = ModlistRegistry::default();
+            reg.entries.push(entry("CCC000000004", "relative/path"));
+            assert_eq!(
+                classify_destination("/some/path", &reg),
+                DestinationOwnership::Free
+            );
+        }
+    }
+
+    mod takeover_tests {
+        use super::*;
+
+        #[test]
+        fn remove_entry_keep_folder_blanks_dest_and_skips_disk_wipe() {
+            let path = tmp_registry_path("rekf_nowipe");
+            let store = RegistryStore::new_with_path(&path);
+
+            let dir = std::env::temp_dir().join(format!(
+                "bio_rekf_dir_{}_{}",
+                std::process::id(),
+                TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+
+            let mut reg = ModlistRegistry::default();
+            reg.entries
+                .push(entry("RKF111000000", dir.to_str().unwrap()));
+
+            remove_entry_keep_folder("RKF111000000", &store, &mut reg).expect("ok");
+
+            assert!(
+                reg.entries.is_empty(),
+                "entry removed from in-memory registry"
+            );
+            assert!(dir.is_dir(), "folder must NOT be deleted from disk");
+
+            let reloaded = store.load().expect("reload");
+            assert!(
+                reloaded.entries.is_empty(),
+                "entry removed from persisted registry"
+            );
+
+            let _ = std::fs::remove_dir_all(&dir);
+            let _ = std::fs::remove_file(&path);
+        }
+
+        #[test]
+        fn blank_first_then_remove_yields_none_delete_target() {
+            let path = tmp_registry_path("rekf_none");
+            let store = RegistryStore::new_with_path(&path);
+
+            let dir = std::env::temp_dir().join(format!(
+                "bio_rekf_none_{}_{}",
+                std::process::id(),
+                TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+
+            let mut reg = ModlistRegistry::default();
+            reg.entries
+                .push(entry("RKF222000000", dir.to_str().unwrap()));
+
+            reg.find_mut("RKF222000000").unwrap().destination_folder = String::new();
+            let target = remove_entry_and_save("RKF222000000", &store, &mut reg).expect("ok");
+
+            assert!(
+                target.is_none(),
+                "blanked dest must yield no delete target — the folder is never wiped"
+            );
+            assert!(dir.is_dir(), "folder untouched after blank-first removal");
+
+            let _ = std::fs::remove_dir_all(&dir);
+            let _ = std::fs::remove_file(&path);
+        }
+
+        #[test]
+        fn remove_entry_keep_folder_returns_ok_for_unknown_id() {
+            let path = tmp_registry_path("rekf_unknown");
+            let store = RegistryStore::new_with_path(&path);
+            let mut reg = ModlistRegistry::default();
+
+            let result = remove_entry_keep_folder("NOTEXIST0000", &store, &mut reg);
+            assert!(result.is_ok(), "unknown id must not error");
+            assert!(reg.entries.is_empty());
+            let _ = std::fs::remove_file(&path);
         }
     }
 }

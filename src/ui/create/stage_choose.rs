@@ -3,17 +3,18 @@
 
 use eframe::egui;
 
-use crate::registry::model::Game;
+use crate::registry::model::{Game, ModlistRegistry};
+use crate::registry::operations::{DestinationOwnership, classify_destination};
 use crate::ui::create::state_create::{CreateScreenState, StartingPoint};
-use crate::ui::install::destination_not_empty;
 use crate::ui::install::sub_flow_footer::{self, PrimaryBtn};
+use crate::ui::install::{destination_not_empty, destination_owned};
 use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, redesign_box, redesign_btn, redesign_text_input, render_screen_title,
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_input_bg, redesign_shell_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    redesign_border_strong, redesign_error, redesign_input_bg, redesign_shell_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -49,15 +50,22 @@ pub fn render(
     palette: ThemePalette,
     state: &mut CreateScreenState,
     destination_prep_running: bool,
+    registry: &ModlistRegistry,
+    active_install_id: Option<&str>,
 ) -> ChooseOutcome {
     let mut outcome = ChooseOutcome::Stay;
+    let mut ownership = DestinationOwnership::Free;
 
-    render_body(ui, palette, state, &mut outcome);
+    let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
+    ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                render_body(ui, palette, state, &mut outcome, registry, &mut ownership);
+            });
+    });
 
-    let spacer = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
-    if spacer > 0.0 {
-        ui.add_space(spacer);
-    }
+    let proceed_ok = destination_owned::proceed_allowed(&ownership, active_install_id);
 
     let footer = sub_flow_footer::render(
         ui,
@@ -71,7 +79,7 @@ pub fn render(
             } else {
                 "Start"
             },
-            disabled: destination_prep_running,
+            disabled: destination_prep_running || !proceed_ok,
         },
     );
     if footer.primary_clicked {
@@ -89,9 +97,11 @@ fn render_body(
     palette: ThemePalette,
     state: &mut CreateScreenState,
     outcome: &mut ChooseOutcome,
+    registry: &ModlistRegistry,
+    ownership: &mut DestinationOwnership,
 ) {
     render_title_row(ui, palette, outcome);
-    render_setup_box(ui, palette, state);
+    render_setup_box(ui, palette, state, registry, ownership);
     render_starting_point_boxes(ui, palette, state);
 }
 
@@ -131,7 +141,13 @@ fn render_title_row(ui: &mut egui::Ui, palette: ThemePalette, outcome: &mut Choo
     });
 }
 
-fn render_setup_box(ui: &mut egui::Ui, palette: ThemePalette, state: &mut CreateScreenState) {
+fn render_setup_box(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut CreateScreenState,
+    registry: &ModlistRegistry,
+    ownership: &mut DestinationOwnership,
+) {
     redesign_box(ui, palette, None, |ui| {
         ui.spacing_mut().item_spacing.y = 14.0;
 
@@ -200,6 +216,12 @@ fn render_setup_box(ui: &mut egui::Ui, palette: ThemePalette, state: &mut Create
             })
             .inner;
 
+        *ownership = classify_destination(&state.destination, registry);
+        let hard_block = matches!(
+            *ownership,
+            DestinationOwnership::InsideOwner(_) | DestinationOwnership::ContainsOwners(_)
+        );
+
         let dest_changed = folder_input(
             ui,
             palette,
@@ -207,12 +229,18 @@ fn render_setup_box(ui: &mut egui::Ui, palette: ThemePalette, state: &mut Create
             "D:\\BG2EE_install_test",
             &mut state.destination,
             input_box_h,
+            hard_block,
         );
         if dest_changed {
             state.destination_choice = None;
         }
 
-        if destination_is_non_empty(&state.destination)
+        if !matches!(*ownership, DestinationOwnership::Free) {
+            destination_owned::render(ui, palette, ownership, registry);
+        }
+
+        if !hard_block
+            && destination_is_non_empty(&state.destination)
             && let Some(picked) =
                 destination_not_empty::render(ui, palette, state.destination_choice, false)
         {
@@ -400,8 +428,15 @@ fn folder_input(
     placeholder: &str,
     value: &mut String,
     box_h: f32,
+    error: bool,
 ) -> bool {
     let mut changed = false;
+
+    let border = if error {
+        Some(redesign_error(palette))
+    } else {
+        None
+    };
 
     ui.label(
         egui::RichText::new(label)
@@ -438,7 +473,7 @@ fn folder_input(
                     .margin(FORM_INPUT_MARGIN),
                 margin: FORM_INPUT_MARGIN,
                 size: egui::vec2(edit_width, box_h),
-                border: None,
+                border,
             },
         );
         if response.changed() || *value != pre {

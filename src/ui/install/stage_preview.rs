@@ -336,7 +336,7 @@ fn fork_info_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response 
 }
 
 fn paint_fork_glyph(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
-    let stroke = egui::Stroke::new(1.4, color);
+    let stroke = egui::Stroke::new(1.4_f32, color);
     let half_h = 4.5;
     let split_y = center.y - 0.5;
     let tine_dx = 3.0;

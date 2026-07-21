@@ -243,7 +243,7 @@ fn draw_dashed_horizontal(
         let x_end = (x + dash_w).min(right);
         painter.line_segment(
             [egui::pos2(x, y), egui::pos2(x_end, y)],
-            egui::Stroke::new(1.0, color),
+            egui::Stroke::new(1.0_f32, color),
         );
         x += dash_w + gap_w;
     }

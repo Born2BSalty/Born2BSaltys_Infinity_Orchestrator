@@ -8,6 +8,9 @@ use tracing::warn;
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::registry::errors::RegistryError;
 use crate::registry::model::Game;
+use crate::registry::operations::{
+    DestinationOwnership, classify_destination, remove_entry_keep_folder,
+};
 use crate::registry::operations_create::{ForkedModlistInput, create_forked_modlist};
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
@@ -51,6 +54,31 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
 
     let (parent_name, parent_author, game, fork_name, dest, code, choice) =
         derive_inputs(&preview, &orchestrator.create_screen_state);
+
+    let ownership = classify_destination(&dest, &orchestrator.registry);
+    if let DestinationOwnership::ExactOwners(ids) = ownership {
+        if ids.iter().any(|id| {
+            orchestrator
+                .active_install_modlist_id
+                .as_deref()
+                .is_some_and(|active| active == id.as_str())
+        }) {
+            return Err(ForkMintError::MidInstall);
+        }
+        for id in &ids {
+            if let Err(err) = remove_entry_keep_folder(
+                id,
+                &orchestrator.registry_store,
+                &mut orchestrator.registry,
+            ) {
+                warn!(
+                    target = "orchestrator",
+                    "Create fork: take-over remove_entry_keep_folder({id}) failed: {err}"
+                );
+            }
+        }
+        orchestrator.persistence_cycle.last_saved_registry = orchestrator.registry.clone();
+    }
 
     let user_name = orchestrator.redesign_settings.user_name.clone();
 
@@ -177,6 +205,7 @@ fn derive_inputs(
 pub enum ForkMintError {
     NoParsedPreview,
     Registry(RegistryError),
+    MidInstall,
 }
 
 impl std::fmt::Display for ForkMintError {
@@ -186,6 +215,10 @@ impl std::fmt::Display for ForkMintError {
                 write!(f, "fork import requested without a parsed parent preview")
             }
             Self::Registry(err) => write!(f, "registry: {err}"),
+            Self::MidInstall => write!(
+                f,
+                "cannot take over a folder that is actively being installed"
+            ),
         }
     }
 }
