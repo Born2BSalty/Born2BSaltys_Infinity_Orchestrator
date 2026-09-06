@@ -506,8 +506,7 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
     let global_non_empty = orchestrator
         .settings_store
         .load()
-        .ok()
-        .is_some_and(|s| !s.step1.effective_global_mods_folder().trim().is_empty());
+        .is_ok_and(|s| !s.step1.effective_global_mods_folder().trim().is_empty());
     let source = default_scratch_mods_source(global_non_empty);
 
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);

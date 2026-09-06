@@ -34,12 +34,7 @@ pub fn copy_with_message(ctx: &egui::Context, text: impl Into<String>, message: 
 
 #[must_use]
 pub fn take_pending_toasts(ctx: &egui::Context) -> Vec<String> {
-    ctx.memory_mut(|m| {
-        m.data
-            .get_temp_mut_or_default::<Vec<String>>(queue_id())
-            .drain(..)
-            .collect()
-    })
+    ctx.memory_mut(|m| std::mem::take(m.data.get_temp_mut_or_default::<Vec<String>>(queue_id())))
 }
 
 #[cfg(test)]
