@@ -53,11 +53,27 @@ If you run BIO for the first time and want to help fix things faster, run BIO in
 
 
 ## Wizard Overview
-![Step 1 Setup](docs/images/step1-setup.png)
-![Step 2 Scan and Select](docs/images/step2-scan-select.png)
-![Step 3 Reorder and Resolve](docs/images/step3-reorder-resolve.png)
-![Step 4 Review](docs/images/step4-review.png)
-![Step 5 Install and Diagnostics](docs/images/step5-install-diagnostics.png)
+![BIO screenshot 0](docs/images/Home.png)
+![BIO screenshot 1](docs/images/Install.png)
+![BIO screenshot 2](docs/images/Summary.png)
+![BIO screenshot 3](docs/images/Install%20Weidu%20Preview.png)
+![BIO screenshot 4](docs/images/Install%20Weidu%202%20Preview.png)
+![BIO screenshot 5](docs/images/Install%20Download%20Preview.png)
+![BIO screenshot 6](docs/images/Install%20Refs%20Preview.png)
+![BIO screenshot 7](docs/images/Install%20Mod%20Config.png)
+![BIO screenshot 8](docs/images/Download%20and%20Extract.png)
+![BIO screenshot 9](docs/images/Install%20step%205%20screen.png)
+![BIO screenshot 10](docs/images/Installation%20Preview.png)
+![BIO screenshot 11](docs/images/Installation%20Preview%202.png)
+![BIO screenshot 12](docs/images/Create%20Start.png)
+![BIO screenshot 13](docs/images/Create%20Scanned%20Preview.png)
+![BIO screenshot 14](docs/images/Create%20Step%203%20preview.png)
+![BIO screenshot 15](docs/images/Create%20step%204%20preview.png)
+![BIO screenshot 16](docs/images/Settings%201.png)
+![BIO screenshot 17](docs/images/Settings%202.png)
+![BIO screenshot 18](docs/images/Settings%203.png)
+![BIO screenshot 19](docs/images/Settings%204%20.png)
+![BIO screenshot 20](docs/images/Settings%205.png)
 
 ### Step 1: Setup
 - Configure game mode, folders, binaries, and install flags.
