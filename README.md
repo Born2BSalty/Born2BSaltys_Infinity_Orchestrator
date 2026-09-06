@@ -1,56 +1,64 @@
-Born2BSalty's Infinity Orchestrator (BIO) - BGEE / BG2EE / EET WeiDU Mod Installer
+# Born2BSalty's Infinity Orchestrator (BIO) - BGEE / BG2EE / EET / IWD WeiDU Mod Installer
 
-BIO is a WeiDU mod installer and install-order orchestrator for BGEE, BG2EE, and EET.
+BIO is a WeiDU mod installer and install-order orchestrator for BGEE, BG2EE, EET / And IWD.
 
 If you are looking for a Baldur's Gate mod manager, BGEE WeiDU installer, or EET mod installer, this project is built for that.
 
-Community & Support
+## Supported Targets
 
-Join the BIO Discord for:
-
-installation help
-test builds
-bug reports
-modlist sharing
-development discussion
-
-[![Discord](https://img.shields.io/badge/Discord-Join%20BIO-5865F2?logo=discord&logoColor=white)](https://discord.gg/QqZtzvHDG5)
-
-What BIO Does
-Scans WeiDU mods for BGEE, BG2EE, and EET
-Builds install order from TP2 component structure
-Checks compatibility, dependencies, and install-order problems
-Installs WeiDU mod setups in a guided workflow
-  
-## Supported targets:
 - BGEE
 - BG2EE
 - EET
+- IWDEE
 
-BIO scans TP2 components, lets you select and reorder installs, validates compatibility, and runs `mod_installer` with live console control.
+For IWD-in-EET style setups, use the EET workflow. Those mods install into the EET/BG2EE target, not into a normal IWDEE install.
 
+## Community & Support
 
+Join the BIO Discord for:
+
+- installation help
+- test builds
+- bug reports
+- modlist sharing
+- development discussion
+
+[![Discord](https://img.shields.io/badge/Discord-Join%20BIO-5865F2?logo=discord&logoColor=white)](https://discord.gg/QqZtzvHDG5)
+
+## What BIO Does
+
+- Scans WeiDU mods and TP2 components.
+- Builds modlists from selected components.
+- Checks compatibility, dependencies, conflicts, game-target rules, and install-order problems.
+- Supports BGEE, BG2EE, EET, and IWDEE workflows.
+- Lets users save, load, and share BIO modlists.
+- Guides users through installing a BIO modlist.
+- Runs installs with live output, prompt handling, and diagnostics.
+- Helps support troubleshooting through exported diagnostic bundles.
+  
 ## Quick Start (Normal Users)
 
-1. Download the BIO release zip and extract it.
-2. Download weidu installer at https://github.com/WeiDUorg/weidu
-3. Download Mod installer at https://github.com/dark0dave/mod_installer
-4. Launch BIO_legacy.exe.
-5. In Step 1, set:
-- your game mode (BGEE, BG2EE, or EET)
-- path to your Mods Folder (location of your extracted downloads)
-- path to your weidu binary (location of your weidu installer)
-- path to your mod_installer binary (location of your Mod installer)
-- path to required game/log paths for your selected mode
-4. Go to Step 2, click Scan Mods Folder, select components.
-5. Go to Step 3, reorder if needed, click Revalidate.
-6. Go to Step 4, review/save.
-7. Go to Step 5, run install.
+1. Download the latest BIO release for your system.
+2. Download WeiDU v249 from https://github.com/WeiDUorg/weidu/releases/tag/v249.00
 
-If you run BIO for the first time and want to help fix things faster, run BIO in dev mode:
-- Windows cmd: BIO_legacy.exe -d gui | or have "-d gui" added to the BIO_legacy shortcut of the exe! example  Target: <E:\downloads\BIO_legacy.exe -d gui>
-- Linux/macOS: ./BIO_legacy -d gui
+   WeiDU v249 is currently recommended because it has had the fewest reported issues with BIO.
+   
+4. Extract the download fully before running BIO.
+5. Launch `BIO.exe`.
+6. Open `Settings` and configure the required game/tool paths.
+7. Use `Create` to scan mods and build a BIO modlist.
+8. Use `Install` to install an existing BIO modlist or shared BIO code.
+9. If something fails, export diagnostics and share them in the BIO Discord.
 
+## Diagnostic Mode
+
+If you are testing BIO or reporting a bug, enable Diagnostic Mode from inside BIO.
+
+1. Open `Settings`.
+2. Go to the `General` tab.
+3. Enable `Diagnostic Mode`.
+
+Diagnostic Mode provides extra logging and support information that can help track down bugs.
 
 ## Wizard Overview
 ![BIO screenshot 0](docs/images/Home.png)
@@ -75,209 +83,129 @@ If you run BIO for the first time and want to help fix things faster, run BIO in
 ![BIO screenshot 19](docs/images/Settings%204%20.png)
 ![BIO screenshot 20](docs/images/Settings%205.png)
 
-### Step 1: Setup
-- Configure game mode, folders, binaries, and install flags.
-- Configure optional behavior (scan depth, timeout, prompt settings, target prep).
-- If Next is disabled, Step 1 validation found a required missing/invalid path.
+## Main Workflows
 
-### Step 2: Scan and Select
-- Scan Mods Folder for TP2 components.
-- Select components for install.
-- Apply existing WeiDU log selections (if enabled).
-- Review compatibility pills/details.
+### Home
 
-### Step 3: Reorder and Resolve
-- Reorder selected components.
-- Validate dependency/conflict/order/game-target rules against the chosen set.
-- Resolve blockers before install.
+The Home screen is the starting point for BIO. From here you can create a new modlist,install an existing one, continue previous work, or open settings.
 
-### Step 4: Preview and Save
-- Review final install order.
-- Save/export effective WeiDU-log style output.
+### Create
 
-### Step 5: Install, Logs, Diagnostics
-- Start install with live console.
-- Manual prompt input + auto-answer support.
-- Cancel/force cancel controls.
-- Export diagnostics bundle.
+Create is for building a BIO modlist.
 
+Use Create to:
 
-## Core Features
+- choose the target game mode
+- scan a folder of extracted WeiDU mods
+- inspect available TP2 components
+- select components for install
+- review compatibility warnings and mismatches
+- reorder selected components
+- save or share the finished BIO modlist
 
-### Scan and Selection
-- Fast TP2 component scan.
-- Search/filter and bulk selection.
-- EET-friendly BGEE/BG2EE bucket workflow.
-- Import selection from existing WeiDU logs.
+### Install
 
-### Compatibility Validation
-- TP2-driven checks:
-- dependency rules
-- forbid/conflict rules
-- game target predicates
-- conditional patterns
-- Step 2/Step 3 issue views with rule details.
-- Optional rule overrides via step2_compat_rules.toml.
+Install is for using an existing BIO modlist.
 
-### Install + Console
-- Embedded process console.
-- Views: General, Important only, Installed only.
-- Prompt detection and response flow.
-- Optional auto-answer from:
-- inline @wlb-inputs
-- saved prompt answer memory
-- Optional sound cue when manual input is needed.
+Use Install to:
 
-### Diagnostics
-- Export run diagnostics to diagnostics/run_<timestamp>/.
-- Includes:
-- bio_diag.txt
-- compat_summary.json
-- source WeiDU logs snapshot
-- appdata snapshots (bio + mod_installer config)
-- TP2 layout snapshot and validation summary
+- load a BIO modlist or share code
+- review the install summary
+- check required WeiDU references
+- configure install options
+- download and extract supported mod archives
+- run the install
+- watch live install output
+- export diagnostics if support is needed
 
+### Settings
 
-## Requirements
+Settings is where BIO paths and behavior are configured.
 
-- Runtime target: Windows/Linux/macOS.
-- External tools configured in Step 1:
-- mod_installer (.exe on Windows)
-- weidu (.exe on Windows)
+Use Settings to configure:
 
+- game folders
+- WeiDU path
+- mod installer path
+- download behavior
+- install behavior
+- prompt handling
+- diagnostics and support options
 
-## Build and Run (Source Users)
+## Compatibility Checks
 
-Build dependencies:
-- Rust stable 1.85+ (Edition 2024) via [rustup](https://rustup.rs/).
-- JDK 11+ on PATH (ANTLR codegen for the vendored TP2 parser).
-- Windows: MSVC Build Tools with the C++ workload — `winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait"`
-- Linux: `sudo apt-get install -y libdbus-1-dev pkg-config` (keyring backend).
+BIO checks TP2 and install-order data to help catch problems before install.
 
-Build:
-cargo build --release
+BIO can report:
 
-Run GUI:
-./target/release/BIO_legacy.exe
+- missing dependencies
+- conflicts
+- game mismatches
+- install-order warnings
+- conditional compatibility cases
+- EET phase or target issues
 
-Linux/macOS binary:
-./target/release/BIO_legacy
+A mismatch means BIO believes a component does not match the selected target game or install context. For example, a component requiring GAME_IS ~eet~ should be installed in an EET workflow, not a normal IWDEE workflow.
 
-Dev mode:
-./target/release/BIO_legacy.exe -d gui
+## WeiDU and Mod Installer
 
+BIO does not replace WeiDU. BIO orchestrates WeiDU-based installs and helps users build, validate, and run modlists.
 
-## @wlb-inputs Prompt Auto-Input
+Depending on the release and setup, BIO may require paths to external tools such as:
 
-Append scripted answers on a WeiDU log line:
+- WeiDU
+- mod_installer
 
-// @wlb-inputs: y,1,,n
-
-Rules:
-- answers are consumed left-to-right
-- ,, means blank answer (press Enter)
-- keep marker exact: @wlb-inputs:
-
-Examples:
-
-~EET\EET.TP2~ #0 #0 // EET core: v14.0 // @wlb-inputs: y
-~EET\EET.TP2~ #0 #0 // EET core: v14.0 // @wlb-inputs: D:\My Games\BG2
-~VIENXAY\VIENXAY.TP2~ #0 #0 // Vienxay: 1.67 // @wlb-inputs: 1,2
-
-
-## Step 1 Flags (Practical)
-
-- -s Skip installed
-- -c Check last installed
-- -a Abort on warnings
-- -x Strict matching
-- --download Download missing mods
-- -o Overwrite mod folder
-
-Directory clone modes:
-- -p Clone BGEE -> Pre-EET target
-- -n Clone BG2EE -> EET target
-- -g Clone source game -> target directory
-
-
-## Compatibility Semantics
-
-Issue classes:
-- Missing dependency (REQ_MISSING)
-- Conflict (FORBID_HIT)
-- Game mismatch (GAME_MISMATCH)
-- Conditional patch (CONDITIONAL)
-- Order warning (ORDER_WARN)
-
-For EET:
-- BGEE/BG2EE tabs are selection buckets/phases.
-- Rules are validated in EET context where applicable.
-
+Configure these in Settings if BIO asks for them.
 
 ## Diagnostics for Support
 
 When reporting a problem:
 
 1. Reproduce the issue.
-2. Export diagnostics from Step 5.
-3. Send:
-- the full diagnostics/run_<timestamp>/ folder
-- a short note:
-- what you expected
-- what happened instead
-- which component failed
+2. Export diagnostics from BIO.
+3. Send the diagnostics folder in the BIO Discord.
+4. Include a short explanation of:
+  - what you expected
+  - what happened instead
+  - which mod/component failed
+  - which game mode you selected
 
+Diagnostics help support identify modlist, path, compatibility, and install-output problems faster.
 
-## Important Paths
+## App Data
 
-### Runtime output (working directory)
-- diagnostics/
-Contains run bundles, console snapshots, and debug artifacts (when enabled).
+BIO stores user settings and support files in the normal per-user app data location for your operating system.
 
-### App settings (per-user)
+Common files may include:
 
-bio_settings.json:
-- Windows: %APPDATA%\bio\bio_settings.json
-- Linux: ~/.config/bio/bio_settings.json
-- macOS: ~/Library/Application Support/bio/bio_settings.json
+- bio_settings.json
+- prompt_answers.json
+- compatibility rule files
+- diagnostics exports
 
-prompt_answers.json:
-- Windows: %APPDATA%\bio\prompt_answers.json
-- Linux: ~/.config/bio/prompt_answers.json
-- macOS: ~/Library/Application Support/bio/prompt_answers.json
+## Build From Source
 
-step2_compat_rules.toml:
-- Windows: %APPDATA%\bio\step2_compat_rules.toml
-- Linux: ~/.config/bio/step2_compat_rules.toml
-- macOS: ~/Library/Application Support/bio/step2_compat_rules.toml
-- legacy fallback: config/step2_compat_rules.toml
+Source users need:
 
+- Rust stable
+- system build tools required by Rust dependencies
+- Java/JDK if parser generation is required by the build
 
-## CLI (Non-GUI)
+Build:
 
-Supported subcommands:
-- gui
-- normal
-- eet
-- scan components
-- scan languages
+cargo build --release
 
-Examples:
+The built BIO executable will be under:
 
-BIO_legacy.exe scan components --game-directory "D:\Games\BG2EE" --mod-directories "D:\Modding\Mods Folder"
-BIO_legacy scan components --game-directory "/games/BG2EE" --mod-directories "/mods"
-BIO_legacy.exe scan languages --mod-directories "D:\Modding\Mods Folder"
-BIO_legacy.exe normal --log-file "D:\Logs\BG2\weidu.log" --game-directory "D:\Games\BG2EE"
-BIO_legacy.exe eet --bg1-game-directory "D:\Games\BGEE" --bg1-log-file "D:\Logs\BG1\weidu.log" --bg2-game-directory "D:
-\Games\BG2EE" --bg2-log-file "D:\Logs\BG2\weidu.log"
-
+target/release/
 
 ## Media
 
-Video will be uploaded later!
+Videos and additional previews will be added later.
 
 ## License and Ownership
 
-- License: GNU GPL v3.0 or later (LICENSE)
+- License: GNU GPL v3.0 or later
 - Maintainer/Owner: Born2BSalty
-- Ownership/attribution details: NOTICE
+- Ownership and attribution details: see NOTICE
