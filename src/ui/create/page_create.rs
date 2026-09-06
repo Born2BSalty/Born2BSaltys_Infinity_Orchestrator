@@ -169,17 +169,22 @@ fn handle_create_request(
             orchestrator.create_screen_state.clear_fork_preview();
             orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
         }
-        CreateRequest::ForkBeginImport => match fork_pipeline_arm::mint_and_arm(orchestrator) {
-            Ok(_) => {
-                orchestrator.create_screen_state.stage = CreateStage::ForkDownload;
+        CreateRequest::ForkBeginImport => {
+            if !ensure_creator_name(orchestrator) {
+                return;
             }
-            Err(err) => {
-                warn!(
-                    target = "orchestrator",
-                    "Create fork: mint_and_arm failed: {err}"
-                );
+            match fork_pipeline_arm::mint_and_arm(orchestrator) {
+                Ok(_) => {
+                    orchestrator.create_screen_state.stage = CreateStage::ForkDownload;
+                }
+                Err(err) => {
+                    warn!(
+                        target = "orchestrator",
+                        "Create fork: mint_and_arm failed: {err}"
+                    );
+                }
             }
-        },
+        }
         CreateRequest::ForkDownloadCancel => fork_download_cancel(orchestrator),
         CreateRequest::ForkExtractCompleteRouteToWorkspace(id) => {
             fork_extract_complete_route_to_workspace(orchestrator, id);
@@ -291,6 +296,9 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
         );
         return;
     }
+    if !ensure_creator_name(orchestrator) {
+        return;
+    }
     let game = orchestrator.create_screen_state.game;
     let dest = {
         let d = orchestrator.create_screen_state.destination.trim();
@@ -319,6 +327,16 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     }
 
     finish_start_scratch(orchestrator, &name, game, &dest);
+}
+
+fn ensure_creator_name(orchestrator: &mut OrchestratorApp) -> bool {
+    if !orchestrator.redesign_settings.user_name.trim().is_empty() {
+        return true;
+    }
+    orchestrator
+        .notification_manager
+        .error("Set your name in Settings > General before creating or sharing a modlist.");
+    false
 }
 
 fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
@@ -690,6 +708,25 @@ mod tests {
         assert_eq!(
             record.text, "Imported \"Imported Fork\" \u{2014} ready to edit",
             "toast text must include the imported modlist name"
+        );
+    }
+
+    #[test]
+    fn start_scratch_requires_creator_name() {
+        let mut app = orch_for_create_test();
+        app.create_screen_state.modlist_name = "No Author Build".to_string();
+        app.redesign_settings.user_name.clear();
+
+        start_scratch(&mut app);
+
+        assert!(app.registry.entries.is_empty());
+        let history = app.notification_manager.history();
+        assert_eq!(history.len(), 1);
+        let record = history.back().unwrap();
+        assert_eq!(record.kind, ToastKind::Error);
+        assert_eq!(
+            record.text,
+            "Set your name in Settings > General before creating or sharing a modlist."
         );
     }
 }
