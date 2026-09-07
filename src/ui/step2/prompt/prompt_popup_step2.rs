@@ -22,7 +22,7 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
     let window_title = format!("Parsed prompts - {title}");
-    let footer_height_id = egui::Id::new(&window_title).with("footer_height");
+    let trailing_height_id = egui::Id::new(&window_title).with("trailing_height");
     egui::Window::new(&window_title)
         .open(&mut open)
         .resizable(true)
@@ -33,13 +33,15 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
         .show(ui.ctx(), |ui| {
             ui.label("Prompt summary from Lapdu parser:");
             ui.separator();
-            let reserved_height = if jump_ids.is_empty() {
+            let trailing_default = if jump_ids.is_empty() {
                 SPACE_SM
             } else {
-                ui.data(|data| data.get_temp::<f32>(footer_height_id))
-                    .unwrap_or(PROMPT_POPUP_FOOTER_RESERVE)
-                    + SPACE_SM
+                PROMPT_POPUP_FOOTER_RESERVE
             };
+            let reserved_height = ui
+                .data(|data| data.get_temp::<f32>(trailing_height_id))
+                .unwrap_or(trailing_default)
+                + SPACE_SM;
             let max_scroll_height =
                 (ui.available_height() - reserved_height).max(PROMPT_POPUP_MIN_SCROLL_HEIGHT);
             let scroll_width = ui.available_width();
@@ -50,14 +52,14 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
                     ui.set_min_width(scroll_width);
                     ui.label(&text);
                 });
+            let trailing_top = ui.cursor().top();
             if jump_ids.is_empty() {
                 ui.add_space(SPACE_SM);
             } else {
-                let footer_top = ui.cursor().top();
                 jump_to_component_id = render_jump_footer(ui, &jump_ids);
-                let footer_height = ui.cursor().top() - footer_top;
-                ui.data_mut(|data| data.insert_temp(footer_height_id, footer_height));
             }
+            let trailing_height = ui.cursor().top() - trailing_top;
+            ui.data_mut(|data| data.insert_temp(trailing_height_id, trailing_height));
         });
     state.step2.prompt_popup_open = open;
     if let Some(component_id) = jump_to_component_id {
