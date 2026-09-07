@@ -5,9 +5,14 @@ use eframe::egui;
 
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::prompt_popup_nav;
-use crate::app::prompt_popup_text::{PromptToolbarModEntry, prompt_toolbar_count};
+use crate::app::prompt_popup_text::{
+    PromptToolbarModEntry, format_prompt_toolbar_row, prompt_toolbar_count,
+};
 use crate::app::state::{PromptPopupMode, WizardState};
 use crate::ui::shared::layout_tokens_global::{SPACE_MD, SPACE_SM, SPACE_XS};
+
+const PROMPT_TOOLBAR_ROW_H: f32 = 22.0;
+const MOD_LEVEL_PROMPT_ROW: &str = "Mod-level prompt";
 
 pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     if !state.step2.prompt_popup_open {
@@ -141,6 +146,51 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
     )
 }
 
+fn prompt_toolbar_row_text(ui: &egui::Ui, row: &str) -> egui::WidgetText {
+    let (id_text, label_text) = row.split_once(' ').unwrap_or((row, ""));
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        id_text,
+        0.0,
+        egui::TextFormat {
+            font_id: egui::TextStyle::Monospace.resolve(ui.style()),
+            color: crate::ui::shared::theme_global::accent_numbers(),
+            ..Default::default()
+        },
+    );
+    if !label_text.is_empty() {
+        job.append(
+            label_text,
+            SPACE_XS,
+            egui::TextFormat {
+                font_id: egui::TextStyle::Body.resolve(ui.style()),
+                color: ui.visuals().text_color(),
+                ..Default::default()
+            },
+        );
+    }
+    egui::WidgetText::from(job)
+}
+
+fn render_prompt_toolbar_row(
+    ui: &mut egui::Ui,
+    text: impl Into<egui::WidgetText>,
+    hover: &str,
+) -> bool {
+    let width = ui.available_width();
+    let fill = ui.visuals().widgets.inactive.bg_fill;
+    let stroke = ui.visuals().widgets.inactive.bg_stroke;
+    ui.add(
+        egui::Button::new(text)
+            .truncate()
+            .min_size(egui::vec2(width, PROMPT_TOOLBAR_ROW_H))
+            .fill(fill)
+            .stroke(stroke),
+    )
+    .on_hover_text(hover)
+    .clicked()
+}
+
 fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
     let title = state.step2.prompt_popup_title.clone();
     let entries = prompt_popup_nav::collect_active_prompt_toolbar_entries(state);
@@ -170,34 +220,24 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
                         egui::CollapsingHeader::new(header)
                             .default_open(false)
                             .show(ui, |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    if entry.mod_level && ui.button("Mod-level prompt").clicked() {
-                                        jump_target = Some((entry.tp_file.clone(), None));
+                                if entry.mod_level
+                                    && render_prompt_toolbar_row(
+                                        ui,
+                                        MOD_LEVEL_PROMPT_ROW,
+                                        MOD_LEVEL_PROMPT_ROW,
+                                    )
+                                {
+                                    jump_target = Some((entry.tp_file.clone(), None));
+                                }
+                                for component in &entry.components {
+                                    let row =
+                                        format_prompt_toolbar_row(component.id, &component.label);
+                                    let row_text = prompt_toolbar_row_text(ui, &row);
+                                    if render_prompt_toolbar_row(ui, row_text, &row) {
+                                        jump_target =
+                                            Some((entry.tp_file.clone(), Some(component.id)));
                                     }
-                                    for component_id in &entry.component_ids {
-                                        let button_text =
-                                            crate::ui::shared::typography_global::monospace(
-                                                component_id.to_string(),
-                                            )
-                                            .color(
-                                                crate::ui::shared::theme_global::accent_numbers(),
-                                            );
-                                        if ui
-                                            .add(
-                                                egui::Button::new(button_text)
-                                                    .min_size(egui::vec2(42.0, 22.0))
-                                                    .fill(ui.visuals().widgets.inactive.bg_fill)
-                                                    .stroke(
-                                                        ui.visuals().widgets.inactive.bg_stroke,
-                                                    ),
-                                            )
-                                            .clicked()
-                                        {
-                                            jump_target =
-                                                Some((entry.tp_file.clone(), Some(*component_id)));
-                                        }
-                                    }
-                                });
+                                }
                             });
                     }
                 });

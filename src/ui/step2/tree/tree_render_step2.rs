@@ -87,7 +87,6 @@ fn render_mod_header(
             active_tab: ctx.active_tab,
             selected: ctx.selected.as_ref(),
             next_selection_order: ctx.next_selection_order,
-            prompt_eval: ctx.prompt_eval,
             jump_to_selected_requested: ctx.jump_to_selected_requested,
             palette: ctx.palette,
         },
@@ -147,9 +146,6 @@ impl ModTreePending {
         }
         if result.open_compat_for_component.is_some() {
             self.open_compat_for_component = result.open_compat_for_component;
-        }
-        if result.open_prompt_popup.is_some() {
-            self.open_prompt_popup = result.open_prompt_popup;
         }
         self.open_details |= result.open_details;
     }
