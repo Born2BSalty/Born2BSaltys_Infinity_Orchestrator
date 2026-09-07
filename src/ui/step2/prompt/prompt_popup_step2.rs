@@ -155,6 +155,7 @@ fn prompt_toolbar_row_text(ui: &egui::Ui, row: &str) -> egui::WidgetText {
         egui::TextFormat {
             font_id: egui::TextStyle::Monospace.resolve(ui.style()),
             color: crate::ui::shared::theme_global::accent_numbers(),
+            valign: egui::Align::Center,
             ..Default::default()
         },
     );
@@ -165,6 +166,7 @@ fn prompt_toolbar_row_text(ui: &egui::Ui, row: &str) -> egui::WidgetText {
             egui::TextFormat {
                 font_id: egui::TextStyle::Body.resolve(ui.style()),
                 color: ui.visuals().text_color(),
+                valign: egui::Align::Center,
                 ..Default::default()
             },
         );
