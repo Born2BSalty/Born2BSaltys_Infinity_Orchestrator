@@ -21,17 +21,23 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     let jump_ids = prompt_popup_nav::collect_text_prompt_jump_ids(state, &title, &text);
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
+    let reserved_height = if jump_ids.is_empty() {
+        PROMPT_POPUP_HEADER_RESERVE
+    } else {
+        PROMPT_POPUP_HEADER_RESERVE + PROMPT_POPUP_FOOTER_RESERVE
+    };
     egui::Window::new(format!("Parsed prompts - {title}"))
         .open(&mut open)
         .resizable(true)
         .collapsible(true)
         .default_width(700.0)
         .default_height(320.0)
+        .min_size(egui::vec2(320.0, 220.0))
         .show(ui.ctx(), |ui| {
-            ui.set_min_size(ui.available_size());
             ui.label("Prompt summary from Lapdu parser:");
             ui.separator();
-            let max_scroll_height = (ui.available_height() - 72.0).max(140.0);
+            let max_scroll_height =
+                (ui.available_height() - reserved_height).max(PROMPT_POPUP_MIN_SCROLL_HEIGHT);
             let scroll_width = ui.available_width();
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
@@ -40,39 +46,50 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
                     ui.set_min_width(scroll_width);
                     ui.label(&text);
                 });
-            if !jump_ids.is_empty() {
-                ui.add_space(SPACE_MD);
-                ui.separator();
+            if jump_ids.is_empty() {
                 ui.add_space(SPACE_SM);
-                ui.label(crate::ui::shared::typography_global::strong(
-                    "Jump to component",
-                ));
-                ui.add_space(SPACE_XS);
-                ui.horizontal_wrapped(|ui| {
-                    for component_id in jump_ids {
-                        let button_text = crate::ui::shared::typography_global::monospace(
-                            component_id.to_string(),
-                        )
-                        .color(crate::ui::shared::theme_global::accent_numbers());
-                        if ui
-                            .add(
-                                egui::Button::new(button_text)
-                                    .min_size(egui::vec2(42.0, 22.0))
-                                    .fill(ui.visuals().widgets.inactive.bg_fill)
-                                    .stroke(ui.visuals().widgets.inactive.bg_stroke),
-                            )
-                            .clicked()
-                        {
-                            jump_to_component_id = Some(component_id);
-                        }
-                    }
-                });
+            } else {
+                jump_to_component_id = render_jump_footer(ui, &jump_ids);
             }
         });
     state.step2.prompt_popup_open = open;
     if let Some(component_id) = jump_to_component_id {
         prompt_popup_nav::apply_text_prompt_jump(state, &title, component_id);
     }
+}
+
+const PROMPT_POPUP_HEADER_RESERVE: f32 = 40.0;
+const PROMPT_POPUP_FOOTER_RESERVE: f32 = 100.0;
+const PROMPT_POPUP_MIN_SCROLL_HEIGHT: f32 = 140.0;
+
+fn render_jump_footer(ui: &mut egui::Ui, jump_ids: &[u32]) -> Option<u32> {
+    let mut jump_to_component_id = None;
+    ui.add_space(SPACE_MD);
+    ui.separator();
+    ui.add_space(SPACE_SM);
+    ui.label(crate::ui::shared::typography_global::strong(
+        "Jump to component",
+    ));
+    ui.add_space(SPACE_XS);
+    ui.horizontal_wrapped(|ui| {
+        for component_id in jump_ids {
+            let button_text =
+                crate::ui::shared::typography_global::monospace(component_id.to_string())
+                    .color(crate::ui::shared::theme_global::accent_numbers());
+            if ui
+                .add(
+                    egui::Button::new(button_text)
+                        .min_size(egui::vec2(42.0, 22.0))
+                        .fill(ui.visuals().widgets.inactive.bg_fill)
+                        .stroke(ui.visuals().widgets.inactive.bg_stroke),
+                )
+                .clicked()
+            {
+                jump_to_component_id = Some(*component_id);
+            }
+        }
+    });
+    jump_to_component_id
 }
 
 pub(crate) fn open_text_prompt_popup(state: &mut WizardState, title: String, text: String) {
@@ -123,8 +140,8 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
         .collapsible(true)
         .default_width(420.0)
         .default_height(320.0)
+        .min_size(egui::vec2(320.0, 180.0))
         .show(ui.ctx(), |ui| {
-            ui.set_min_size(ui.available_size());
             if entries.is_empty() {
                 ui.label("No component prompts in the active tab.");
                 return;

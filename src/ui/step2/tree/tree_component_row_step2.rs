@@ -14,7 +14,9 @@ use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
     format_component_row_label_with_display,
 };
-use crate::ui::step2::tree_compat_display_step2::compat_colors_redesign as compat_colors;
+use crate::ui::step2::tree_compat_display_step2::{
+    compat_colors_redesign as compat_colors, counts_for_status_display, is_effectively_disabled,
+};
 use crate::ui::step2::tree_component_types_step2::{ComponentRenderState, ComponentRowsContext};
 use crate::ui::step2::tree_selection_rules_step2::set_component_checked_state;
 
@@ -40,11 +42,7 @@ pub(crate) fn render_component_row(
     component: &mut Step2ComponentState,
     opts: ComponentRowOptions<'_>,
 ) {
-    let effectively_disabled = component.disabled
-        || matches!(
-            component.compat_kind.as_deref(),
-            Some("mismatch" | "included")
-        );
+    let effectively_disabled = is_effectively_disabled(component);
     let display_label = match opts.display_override {
         Some(display) => format_component_row_label_with_display(
             component.raw_line.as_str(),
@@ -182,6 +180,9 @@ fn render_compat_dot(
     ctx: &ComponentRowsContext<'_>,
     component: &Step2ComponentState,
 ) {
+    if !counts_for_status_display(component) {
+        return;
+    }
     if let Some((dot_color, _, _)) = compat_colors(component.compat_kind.as_deref(), ctx.palette) {
         ui.label(crate::ui::shared::typography_global::strong("•").color(dot_color));
     }
@@ -296,6 +297,9 @@ fn render_compat_pill(
     ui_state: &mut ComponentRenderState<'_>,
     component: &Step2ComponentState,
 ) {
+    if !counts_for_status_display(component) {
+        return;
+    }
     let Some((pill_text_color, pill_bg, pill_label)) =
         compat_colors(component.compat_kind.as_deref(), ctx.palette)
     else {

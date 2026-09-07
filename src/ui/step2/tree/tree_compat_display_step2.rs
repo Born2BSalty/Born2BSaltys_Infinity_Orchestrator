@@ -118,6 +118,18 @@ pub(crate) fn compat_colors_redesign(
     }
 }
 
+pub(crate) fn is_effectively_disabled(component: &Step2ComponentState) -> bool {
+    component.disabled
+        || matches!(
+            component.compat_kind.as_deref(),
+            Some("mismatch" | "included")
+        )
+}
+
+pub(crate) fn counts_for_status_display(component: &Step2ComponentState) -> bool {
+    component.checked || is_effectively_disabled(component)
+}
+
 pub(crate) fn parent_compat_summary(
     mod_state: &Step2ModState,
     palette: ThemePalette,
@@ -126,6 +138,9 @@ pub(crate) fn parent_compat_summary(
     let mut order_blocks = 0usize;
     let mut warnings = 0usize;
     for component in &mod_state.components {
+        if !counts_for_status_display(component) {
+            continue;
+        }
         match component.compat_kind.as_deref().unwrap_or_default() {
             "not_compatible" | "conflict" => conflicts = conflicts.saturating_add(1),
             "order_block" => order_blocks = order_blocks.saturating_add(1),
@@ -175,17 +190,99 @@ pub(crate) fn parent_compat_target(mod_state: &Step2ModState) -> Option<&Step2Co
         let prefer_checked =
             kind == "conflict" || kind == "order_block" || kind == "not_compatible";
         if let Some(component) = mod_state.components.iter().find(|component| {
-            component.compat_kind.as_deref() == Some(kind) && (!prefer_checked || component.checked)
+            counts_for_status_display(component)
+                && component.compat_kind.as_deref() == Some(kind)
+                && (!prefer_checked || component.checked)
         }) {
             return Some(component);
         }
-        if let Some(component) = mod_state
-            .components
-            .iter()
-            .find(|component| component.compat_kind.as_deref() == Some(kind))
-        {
+        if let Some(component) = mod_state.components.iter().find(|component| {
+            counts_for_status_display(component) && component.compat_kind.as_deref() == Some(kind)
+        }) {
             return Some(component);
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn blank_component(
+        compat_kind: Option<&str>,
+        checked: bool,
+        disabled: bool,
+    ) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: "1".to_string(),
+            label: "Component".to_string(),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled,
+            compat_kind: compat_kind.map(str::to_string),
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked,
+            selected_order: None,
+        }
+    }
+
+    #[test]
+    fn is_effectively_disabled_true_when_disabled_flag_set() {
+        let component = blank_component(None, false, true);
+        assert!(is_effectively_disabled(&component));
+    }
+
+    #[test]
+    fn is_effectively_disabled_true_for_mismatch_kind() {
+        let component = blank_component(Some("mismatch"), false, false);
+        assert!(is_effectively_disabled(&component));
+    }
+
+    #[test]
+    fn is_effectively_disabled_true_for_included_kind() {
+        let component = blank_component(Some("included"), false, false);
+        assert!(is_effectively_disabled(&component));
+    }
+
+    #[test]
+    fn is_effectively_disabled_false_for_conflict_kind() {
+        let component = blank_component(Some("conflict"), false, false);
+        assert!(!is_effectively_disabled(&component));
+    }
+
+    #[test]
+    fn counts_for_status_display_true_when_checked() {
+        let component = blank_component(Some("conflict"), true, false);
+        assert!(counts_for_status_display(&component));
+    }
+
+    #[test]
+    fn counts_for_status_display_false_when_unticked_and_not_disabled() {
+        let component = blank_component(Some("conflict"), false, false);
+        assert!(!counts_for_status_display(&component));
+    }
+
+    #[test]
+    fn counts_for_status_display_true_when_unticked_but_effectively_disabled() {
+        let component = blank_component(Some("mismatch"), false, false);
+        assert!(counts_for_status_display(&component));
+    }
+
+    #[test]
+    fn counts_for_status_display_true_when_unticked_with_mismatch_kind() {
+        let component = blank_component(Some("mismatch"), false, true);
+        assert!(counts_for_status_display(&component));
+    }
 }

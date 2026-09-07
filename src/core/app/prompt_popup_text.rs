@@ -33,6 +33,9 @@ pub(crate) fn build_mod_prompt_popup_text(
 ) -> Option<String> {
     let mut sections = Vec::<String>::new();
     for component in &mod_state.components {
+        if !component.checked {
+            continue;
+        }
         let mut summary = evaluate_component_prompt_summary(component, prompt_eval);
         if summary.is_empty() {
             summary = format_prompt_event_blocks(&component.prompt_events, None);
@@ -76,18 +79,17 @@ pub(crate) fn mod_has_any_prompt(
     prompt_eval: &PromptEvalContext,
 ) -> bool {
     let component_has_prompt_data = mod_state.components.iter().any(|component| {
-        component
-            .prompt_summary
-            .as_deref()
-            .map(str::trim)
-            .is_some_and(|summary| !summary.is_empty())
-            || !component.prompt_events.is_empty()
+        component.checked
+            && (component
+                .prompt_summary
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|summary| !summary.is_empty())
+                || !component.prompt_events.is_empty())
     });
-    mod_state
-        .components
-        .iter()
-        .any(|component| !evaluate_component_prompt_summary(component, prompt_eval).is_empty())
-        || component_has_prompt_data
+    mod_state.components.iter().any(|component| {
+        component.checked && !evaluate_component_prompt_summary(component, prompt_eval).is_empty()
+    }) || component_has_prompt_data
         || mod_state
             .mod_prompt_events
             .iter()
@@ -110,6 +112,9 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
                 .components
                 .iter()
                 .filter_map(|component| {
+                    if !component.checked {
+                        return None;
+                    }
                     let has_prompt = component
                         .prompt_summary
                         .as_deref()
@@ -315,4 +320,134 @@ fn is_real_question_block(block: &PromptDisplayBlock) -> bool {
 fn is_real_question_line(line: &str) -> bool {
     let trimmed = line.trim();
     trimmed.contains('?') || trimmed.ends_with(':')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn blank_component(
+        id: &str,
+        checked: bool,
+        prompt_summary: Option<&str>,
+    ) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: id.to_string(),
+            label: id.to_string(),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: String::new(),
+            prompt_summary: prompt_summary.map(str::to_string),
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked,
+            selected_order: None,
+        }
+    }
+
+    fn blank_mod(components: Vec<Step2ComponentState>) -> Step2ModState {
+        Step2ModState {
+            name: "Mod".to_string(),
+            tp_file: "mod.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components,
+        }
+    }
+
+    fn blank_mod_event() -> PromptSummaryEvent {
+        PromptSummaryEvent {
+            kind: "prompt".to_string(),
+            node_id: String::new(),
+            text: String::new(),
+            summary_line: "Mod-level question?".to_string(),
+            source_file: String::new(),
+            line: None,
+            branch_path: Vec::new(),
+            condition: None,
+            condition_id: None,
+            game_allow: Vec::new(),
+            game_deny: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn mod_has_any_prompt_false_when_component_with_prompt_is_unticked() {
+        let mod_state = blank_mod(vec![blank_component("1", false, Some("Pick a value"))]);
+        let prompt_eval = PromptEvalContext::default();
+        assert!(!mod_has_any_prompt(&mod_state, &prompt_eval));
+    }
+
+    #[test]
+    fn mod_has_any_prompt_true_when_component_with_prompt_is_ticked() {
+        let mod_state = blank_mod(vec![blank_component("1", true, Some("Pick a value"))]);
+        let prompt_eval = PromptEvalContext::default();
+        assert!(mod_has_any_prompt(&mod_state, &prompt_eval));
+    }
+
+    #[test]
+    fn mod_has_any_prompt_true_when_mod_level_event_present() {
+        let mut mod_state = blank_mod(vec![blank_component("1", false, None)]);
+        mod_state.mod_prompt_events.push(blank_mod_event());
+        let prompt_eval = PromptEvalContext::default();
+        assert!(mod_has_any_prompt(&mod_state, &prompt_eval));
+    }
+
+    #[test]
+    fn build_mod_prompt_popup_text_skips_unticked_components() {
+        let mod_state = blank_mod(vec![blank_component("1", false, Some("Pick a value"))]);
+        let prompt_eval = PromptEvalContext::default();
+        assert_eq!(build_mod_prompt_popup_text(&mod_state, &prompt_eval), None);
+    }
+
+    #[test]
+    fn build_mod_prompt_popup_text_includes_ticked_components() {
+        let mod_state = blank_mod(vec![blank_component("1", true, Some("Pick a value"))]);
+        let prompt_eval = PromptEvalContext::default();
+        assert!(
+            build_mod_prompt_popup_text(&mod_state, &prompt_eval)
+                .is_some_and(|text| text.contains("Pick a value"))
+        );
+    }
+
+    #[test]
+    fn collect_step2_prompt_toolbar_entries_excludes_unticked_components() {
+        let mods = vec![blank_mod(vec![blank_component(
+            "1",
+            false,
+            Some("Pick a value"),
+        )])];
+        assert!(collect_step2_prompt_toolbar_entries(&mods).is_empty());
+    }
+
+    #[test]
+    fn collect_step2_prompt_toolbar_entries_includes_ticked_components() {
+        let mods = vec![blank_mod(vec![blank_component(
+            "1",
+            true,
+            Some("Pick a value"),
+        )])];
+        let entries = collect_step2_prompt_toolbar_entries(&mods);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].component_ids, vec![1]);
+    }
 }
