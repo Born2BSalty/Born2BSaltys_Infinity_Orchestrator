@@ -59,6 +59,9 @@ pub(crate) fn build_mod_prompt_popup_text(
     if !sections.is_empty() {
         return Some(sections.join("\n\n----------------\n\n"));
     }
+    if !mod_level_prompt_can_apply(mod_state) {
+        return None;
+    }
     if !mod_state.mod_prompt_events.is_empty() {
         let summary = format_prompt_event_blocks(&mod_state.mod_prompt_events, Some(prompt_eval));
         if !summary.is_empty() {
@@ -74,32 +77,47 @@ pub(crate) fn build_mod_prompt_popup_text(
         .map(std::string::ToString::to_string)
 }
 
+fn component_has_prompt_data(component: &Step2ComponentState) -> bool {
+    component
+        .prompt_summary
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|summary| !summary.is_empty())
+        || !component.prompt_events.is_empty()
+}
+
+fn mod_level_prompt_can_apply(mod_state: &Step2ModState) -> bool {
+    let any_checked = mod_state
+        .components
+        .iter()
+        .any(|component| component.checked);
+    let summary_is_component_aggregate = mod_state.components.iter().any(component_has_prompt_data);
+    any_checked && !summary_is_component_aggregate
+}
+
 pub(crate) fn mod_has_any_prompt(
     mod_state: &Step2ModState,
     prompt_eval: &PromptEvalContext,
 ) -> bool {
-    let component_has_prompt_data = mod_state.components.iter().any(|component| {
+    let checked_component_has_prompt = mod_state.components.iter().any(|component| {
         component.checked
-            && (component
-                .prompt_summary
-                .as_deref()
-                .map(str::trim)
-                .is_some_and(|summary| !summary.is_empty())
-                || !component.prompt_events.is_empty())
+            && (component_has_prompt_data(component)
+                || !evaluate_component_prompt_summary(component, prompt_eval).is_empty())
     });
-    mod_state.components.iter().any(|component| {
-        component.checked && !evaluate_component_prompt_summary(component, prompt_eval).is_empty()
-    }) || component_has_prompt_data
-        || mod_state
+    if checked_component_has_prompt {
+        return true;
+    }
+    mod_level_prompt_can_apply(mod_state)
+        && (mod_state
             .mod_prompt_events
             .iter()
             .any(|event| event_applies(event, prompt_eval))
-        || (mod_state.mod_prompt_events.is_empty()
-            && mod_state
-                .mod_prompt_summary
-                .as_deref()
-                .map(str::trim)
-                .is_some_and(|summary| !summary.is_empty()))
+            || (mod_state.mod_prompt_events.is_empty()
+                && mod_state
+                    .mod_prompt_summary
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|summary| !summary.is_empty())))
 }
 
 pub(crate) fn collect_step2_prompt_toolbar_entries(
@@ -405,10 +423,12 @@ mod tests {
     }
 
     #[test]
-    fn mod_has_any_prompt_true_when_mod_level_event_present() {
+    fn mod_level_event_counts_only_when_a_component_is_ticked() {
         let mut mod_state = blank_mod(vec![blank_component("1", false, None)]);
         mod_state.mod_prompt_events.push(blank_mod_event());
         let prompt_eval = PromptEvalContext::default();
+        assert!(!mod_has_any_prompt(&mod_state, &prompt_eval));
+        mod_state.components[0].checked = true;
         assert!(mod_has_any_prompt(&mod_state, &prompt_eval));
     }
 
@@ -449,5 +469,49 @@ mod tests {
         let entries = collect_step2_prompt_toolbar_entries(&mods);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].component_ids, vec![1]);
+    }
+
+    #[test]
+    fn mod_has_any_prompt_false_when_only_aggregate_summary_and_nothing_ticked() {
+        let mut mod_state = blank_mod(vec![blank_component("1", false, Some("Pick a flavour"))]);
+        mod_state.mod_prompt_summary = Some("Component 1:\nPick a flavour".to_string());
+        assert!(!mod_has_any_prompt(
+            &mod_state,
+            &PromptEvalContext::default()
+        ));
+        assert!(build_mod_prompt_popup_text(&mod_state, &PromptEvalContext::default()).is_none());
+    }
+
+    #[test]
+    fn mod_has_any_prompt_false_when_aggregate_summary_and_only_promptless_component_ticked() {
+        let mut mod_state = blank_mod(vec![
+            blank_component("1", false, Some("Pick a flavour")),
+            blank_component("2", true, None),
+        ]);
+        mod_state.mod_prompt_summary = Some("Component 1:\nPick a flavour".to_string());
+        assert!(!mod_has_any_prompt(
+            &mod_state,
+            &PromptEvalContext::default()
+        ));
+        assert!(build_mod_prompt_popup_text(&mod_state, &PromptEvalContext::default()).is_none());
+    }
+
+    #[test]
+    fn mod_level_summary_applies_only_when_a_component_is_ticked() {
+        let mut mod_state = blank_mod(vec![blank_component("1", false, None)]);
+        mod_state.mod_prompt_summary = Some("Install language?".to_string());
+        assert!(!mod_has_any_prompt(
+            &mod_state,
+            &PromptEvalContext::default()
+        ));
+        mod_state.components[0].checked = true;
+        assert!(mod_has_any_prompt(
+            &mod_state,
+            &PromptEvalContext::default()
+        ));
+        assert_eq!(
+            build_mod_prompt_popup_text(&mod_state, &PromptEvalContext::default()).as_deref(),
+            Some("Install language?")
+        );
     }
 }
