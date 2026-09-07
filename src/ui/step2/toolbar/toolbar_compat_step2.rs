@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::app::state::Step2ModState;
-use crate::ui::step2::tree_compat_display_step2::compat_colors;
+use crate::ui::step2::tree_compat_display_step2::{compat_colors, counts_for_status_display};
 
 #[derive(Clone)]
 pub(crate) struct Step2ToolbarCompatSummary {
@@ -40,6 +40,9 @@ pub(crate) fn active_tab_compat_summary(mods: &[Step2ModState]) -> Step2ToolbarC
     let mut bucket_counts = std::collections::BTreeMap::<&'static str, usize>::new();
     for mod_state in mods {
         for component in &mod_state.components {
+            if !counts_for_status_display(component) {
+                continue;
+            }
             let Some(kind) = component.compat_kind.as_deref() else {
                 continue;
             };
@@ -79,6 +82,9 @@ pub(crate) fn first_active_tab_issue_target(
     let mut first_any = None::<Step2ToolbarIssueTarget>;
     for mod_state in mods {
         for component in &mod_state.components {
+            if !counts_for_status_display(component) {
+                continue;
+            }
             let Some(kind) = component.compat_kind.as_deref() else {
                 continue;
             };
@@ -173,4 +179,92 @@ pub(crate) fn draw_active_tab_issue_badge(
             summary.dominant_count
         ))
         .clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::state::Step2ComponentState;
+
+    fn component(id: &str, checked: bool, disabled: bool, kind: &str) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: id.to_string(),
+            label: id.to_string(),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: format!("~MOD.TP2~ #0 #{id}"),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled,
+            compat_kind: Some(kind.to_string()),
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked,
+            selected_order: None,
+        }
+    }
+
+    fn mod_with(components: Vec<Step2ComponentState>) -> Step2ModState {
+        Step2ModState {
+            name: "Mod".to_string(),
+            tp_file: "mod.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components,
+        }
+    }
+
+    #[test]
+    fn badge_counts_only_ticked_or_disabled_components() {
+        let mods = vec![mod_with(vec![
+            component("1", true, false, "conflict"),
+            component("2", false, false, "conflict"),
+            component("3", false, true, "not_compatible"),
+            component("4", false, false, "warning"),
+        ])];
+        let summary = active_tab_compat_summary(&mods);
+        assert_eq!(summary.total_count, 2);
+        assert_eq!(summary.dominant_filter, "Conflict");
+        assert_eq!(summary.dominant_count, 2);
+    }
+
+    #[test]
+    fn badge_hidden_when_no_ticked_component_has_an_issue() {
+        let mods = vec![mod_with(vec![
+            component("1", false, false, "conflict"),
+            component("2", false, false, "warning"),
+        ])];
+        assert_eq!(active_tab_compat_summary(&mods).total_count, 0);
+    }
+
+    #[test]
+    fn jump_target_skips_unticked_components() {
+        let mods = vec![mod_with(vec![
+            component("1", false, false, "conflict"),
+            component("2", true, false, "conflict"),
+        ])];
+        let target = first_active_tab_issue_target(&mods, "Conflict").expect("target");
+        assert_eq!(target.component_id, "2");
+        let none = first_active_tab_issue_target(
+            &[mod_with(vec![component("1", false, false, "conflict")])],
+            "Conflict",
+        );
+        assert!(none.is_none());
+    }
 }
