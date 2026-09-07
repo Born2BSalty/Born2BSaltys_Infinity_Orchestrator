@@ -21,12 +21,9 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     let jump_ids = prompt_popup_nav::collect_text_prompt_jump_ids(state, &title, &text);
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
-    let reserved_height = if jump_ids.is_empty() {
-        PROMPT_POPUP_HEADER_RESERVE
-    } else {
-        PROMPT_POPUP_HEADER_RESERVE + PROMPT_POPUP_FOOTER_RESERVE
-    };
-    egui::Window::new(format!("Parsed prompts - {title}"))
+    let window_title = format!("Parsed prompts - {title}");
+    let footer_height_id = egui::Id::new(&window_title).with("footer_height");
+    egui::Window::new(&window_title)
         .open(&mut open)
         .resizable(true)
         .collapsible(true)
@@ -36,6 +33,13 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
         .show(ui.ctx(), |ui| {
             ui.label("Prompt summary from Lapdu parser:");
             ui.separator();
+            let reserved_height = if jump_ids.is_empty() {
+                SPACE_SM
+            } else {
+                ui.data(|data| data.get_temp::<f32>(footer_height_id))
+                    .unwrap_or(PROMPT_POPUP_FOOTER_RESERVE)
+                    + SPACE_SM
+            };
             let max_scroll_height =
                 (ui.available_height() - reserved_height).max(PROMPT_POPUP_MIN_SCROLL_HEIGHT);
             let scroll_width = ui.available_width();
@@ -49,7 +53,10 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
             if jump_ids.is_empty() {
                 ui.add_space(SPACE_SM);
             } else {
+                let footer_top = ui.cursor().top();
                 jump_to_component_id = render_jump_footer(ui, &jump_ids);
+                let footer_height = ui.cursor().top() - footer_top;
+                ui.data_mut(|data| data.insert_temp(footer_height_id, footer_height));
             }
         });
     state.step2.prompt_popup_open = open;
@@ -58,9 +65,8 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     }
 }
 
-const PROMPT_POPUP_HEADER_RESERVE: f32 = 40.0;
 const PROMPT_POPUP_FOOTER_RESERVE: f32 = 100.0;
-const PROMPT_POPUP_MIN_SCROLL_HEIGHT: f32 = 140.0;
+const PROMPT_POPUP_MIN_SCROLL_HEIGHT: f32 = 60.0;
 
 fn render_jump_footer(ui: &mut egui::Ui, jump_ids: &[u32]) -> Option<u32> {
     let mut jump_to_component_id = None;

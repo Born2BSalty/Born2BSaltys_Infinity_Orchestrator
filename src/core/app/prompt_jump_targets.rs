@@ -11,11 +11,12 @@ pub(crate) fn collect_prompt_jump_component_ids(
     let mut ids = parse_prompt_jump_component_ids(text);
     let mod_ref = prompt_popup_mod_ref(title);
     let target_mod_key = normalize_mod_key(&mod_ref);
+    let mut checked_prompt_ids = Vec::<u32>::new();
+    let mut unchecked_ids = Vec::<u32>::new();
     for mod_state in mods {
         if normalize_mod_key(&mod_state.tp_file) != target_mod_key {
             continue;
         }
-        let mut unchecked_ids = Vec::<u32>::new();
         for component in &mod_state.components {
             let Ok(id) = component.component_id.trim().parse::<u32>() else {
                 continue;
@@ -29,11 +30,16 @@ pub(crate) fn collect_prompt_jump_component_ids(
                 .as_ref()
                 .is_some_and(|summary| !summary.trim().is_empty())
                 || !component.prompt_events.is_empty();
-            if has_prompt && !ids.contains(&id) {
-                ids.push(id);
+            if has_prompt {
+                checked_prompt_ids.push(id);
             }
         }
-        ids.retain(|id| !unchecked_ids.contains(id));
+    }
+    ids.retain(|id| !unchecked_ids.contains(id) || checked_prompt_ids.contains(id));
+    for id in checked_prompt_ids {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
     }
     ids.sort_unstable();
     ids
@@ -136,6 +142,21 @@ mod tests {
         assert_eq!(
             collect_prompt_jump_component_ids(&mods, "mod.tp2", ""),
             vec![1]
+        );
+    }
+
+    #[test]
+    fn jump_ids_survive_duplicate_mod_keys() {
+        let mods = vec![
+            mod_with(vec![component("5", true, Some("prompt"))]),
+            Step2ModState {
+                tp_file: "setup-mod.tp2".to_string(),
+                ..mod_with(vec![component("5", false, Some("prompt"))])
+            },
+        ];
+        assert_eq!(
+            collect_prompt_jump_component_ids(&mods, "mod.tp2", ""),
+            vec![5]
         );
     }
 
