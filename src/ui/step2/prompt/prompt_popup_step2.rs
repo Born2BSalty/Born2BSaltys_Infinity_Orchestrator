@@ -22,7 +22,8 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
     let window_title = format!("Parsed prompts - {title}");
-    let trailing_height_id = egui::Id::new(&window_title).with("trailing_height");
+    let trailing_height_id =
+        egui::Id::new(&window_title).with(("trailing_height", jump_ids.is_empty()));
     egui::Window::new(&window_title)
         .open(&mut open)
         .resizable(true)

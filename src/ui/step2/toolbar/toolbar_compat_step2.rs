@@ -66,6 +66,7 @@ pub(crate) fn active_tab_compat_summary(mods: &[Step2ModState]) -> Step2ToolbarC
         "Other",
     ]
     .into_iter()
+    .rev()
     .max_by_key(|bucket| bucket_counts.get(bucket).copied().unwrap_or(0))
     .unwrap_or("All");
     Step2ToolbarCompatSummary {
@@ -242,6 +243,18 @@ mod tests {
         assert_eq!(summary.total_count, 2);
         assert_eq!(summary.dominant_filter, "Conflict");
         assert_eq!(summary.dominant_count, 2);
+    }
+
+    #[test]
+    fn badge_tie_breaks_toward_the_more_severe_bucket() {
+        let mods = vec![mod_with(vec![
+            component("1", true, false, "warning"),
+            component("2", true, false, "conflict"),
+        ])];
+        let summary = active_tab_compat_summary(&mods);
+        assert_eq!(summary.dominant_filter, "Conflict");
+        let target = first_active_tab_issue_target(&mods, summary.dominant_filter).expect("target");
+        assert_eq!(target.component_id, "2");
     }
 
     #[test]
