@@ -8,7 +8,8 @@ use crate::app::prompt_popup_text::{
     collect_step3_prompt_toolbar_entries,
 };
 use crate::app::selection_jump::{step2_jump_to_target, step3_jump_to_target};
-use crate::app::state::{PromptPopupMode, Step2ModState, WizardState};
+use crate::app::selection_refs::normalize_mod_key;
+use crate::app::state::{PromptPopupMode, Step2ModState, Step2Selection, WizardState};
 
 pub(crate) fn open_text_prompt_popup(state: &mut WizardState, title: String, text: String) {
     state.step2.prompt_popup_mode = PromptPopupMode::Text;
@@ -55,29 +56,106 @@ pub(crate) fn apply_text_prompt_jump(state: &mut WizardState, title: &str, compo
 pub(crate) fn collect_active_prompt_toolbar_entries(
     state: &WizardState,
 ) -> Vec<PromptToolbarModEntry> {
+    let prompt_eval = build_prompt_eval_context(state);
     if state.current_step == 2 {
-        let prompt_eval = build_prompt_eval_context(state);
         let items = if state.step3.active_game_tab == "BGEE" {
             &state.step3.bgee_items
         } else {
             &state.step3.bg2ee_items
         };
-        collect_step3_prompt_toolbar_entries(items, &prompt_eval)
+        let mods = if state.step3.active_game_tab == "BGEE" {
+            &state.step2.bgee_mods
+        } else {
+            &state.step2.bg2ee_mods
+        };
+        collect_step3_prompt_toolbar_entries(items, mods, &prompt_eval)
     } else {
-        collect_step2_prompt_toolbar_entries(active_step2_mods(state))
+        collect_step2_prompt_toolbar_entries(active_step2_mods(state), &prompt_eval)
     }
 }
 
-pub(crate) fn apply_toolbar_prompt_jump(state: &mut WizardState, mod_ref: &str, component_id: u32) {
+pub(crate) fn apply_toolbar_prompt_jump(
+    state: &mut WizardState,
+    mod_ref: &str,
+    component_id: Option<u32>,
+) {
     let game_tab = if state.current_step == 2 {
         state.step3.active_game_tab.clone()
     } else {
         state.step2.active_game_tab.clone()
     };
     if state.current_step == 2 {
-        let _ = step3_jump_to_target(state, &game_tab, mod_ref, Some(component_id));
-    } else {
+        let _ = step3_jump_to_target(state, &game_tab, mod_ref, component_id);
+    } else if let Some(component_id) = component_id {
         step2_jump_to_target(state, &game_tab, mod_ref, Some(component_id));
         state.step2.jump_to_selected_requested = true;
+    } else {
+        select_step2_mod_row(state, &game_tab, mod_ref);
+    }
+}
+
+fn select_step2_mod_row(state: &mut WizardState, game_tab: &str, mod_ref: &str) {
+    let target_key = normalize_mod_key(mod_ref);
+    let mods = if game_tab.eq_ignore_ascii_case("BGEE") {
+        &state.step2.bgee_mods
+    } else {
+        &state.step2.bg2ee_mods
+    };
+    let Some(tp_file) = mods
+        .iter()
+        .find(|mod_state| normalize_mod_key(&mod_state.tp_file) == target_key)
+        .map(|mod_state| mod_state.tp_file.clone())
+    else {
+        return;
+    };
+    state.step2.selected = Some(Step2Selection::Mod {
+        game_tab: game_tab.to_string(),
+        tp_file,
+    });
+    state.step2.active_game_tab = game_tab.to_string();
+    state.step2.jump_to_selected_requested = true;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state_with_mod(tp_file: &str) -> WizardState {
+        let mut state = WizardState {
+            current_step: 1,
+            ..WizardState::default()
+        };
+        state.step2.active_game_tab = "BGEE".to_string();
+        state.step2.bgee_mods = vec![Step2ModState {
+            name: "DLC Merger".to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }];
+        state
+    }
+
+    #[test]
+    fn mod_level_toolbar_jump_selects_the_parent_mod_row() {
+        let mut state = state_with_mod("DLCMERGER/DLCMERGER.TP2");
+        apply_toolbar_prompt_jump(&mut state, "dlcmerger/dlcmerger.tp2", None);
+        match state.step2.selected.as_ref() {
+            Some(Step2Selection::Mod { game_tab, tp_file }) => {
+                assert_eq!(game_tab, "BGEE");
+                assert_eq!(tp_file, "DLCMERGER/DLCMERGER.TP2");
+            }
+            _ => panic!("expected the parent mod row to be selected"),
+        }
+        assert!(state.step2.jump_to_selected_requested);
     }
 }

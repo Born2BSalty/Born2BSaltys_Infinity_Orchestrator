@@ -4,7 +4,7 @@
 use crate::app::compat_issue::CompatIssue;
 use crate::app::compat_step3_rules::Step3CompatMarker;
 use crate::app::prompt_eval_context::build_prompt_eval_context;
-use crate::app::prompt_popup_text::collect_step3_prompt_toolbar_entries;
+use crate::app::prompt_popup_text::{collect_step3_prompt_toolbar_entries, prompt_toolbar_count};
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
 
 #[derive(Clone)]
@@ -55,18 +55,20 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
     };
     let prompt_eval = build_prompt_eval_context(state);
     let first_game_prompt_count = if has_first_game_tab {
-        collect_step3_prompt_toolbar_entries(&state.step3.bgee_items, &prompt_eval)
-            .into_iter()
-            .map(|entry| entry.component_ids.len())
-            .sum()
+        prompt_toolbar_count(&collect_step3_prompt_toolbar_entries(
+            &state.step3.bgee_items,
+            &state.step2.bgee_mods,
+            &prompt_eval,
+        ))
     } else {
         0
     };
     let second_game_prompt_count = if has_second_game_tab {
-        collect_step3_prompt_toolbar_entries(&state.step3.bg2ee_items, &prompt_eval)
-            .into_iter()
-            .map(|entry| entry.component_ids.len())
-            .sum()
+        prompt_toolbar_count(&collect_step3_prompt_toolbar_entries(
+            &state.step3.bg2ee_items,
+            &state.step2.bg2ee_mods,
+            &prompt_eval,
+        ))
     } else {
         0
     };

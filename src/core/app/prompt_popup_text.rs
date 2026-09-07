@@ -5,6 +5,7 @@ use crate::app::prompt_eval_summary::{
     evaluate_component_prompt_summary, event_applies, normalize_prompt_blocks,
 };
 use crate::app::prompt_eval_summary_step3::evaluate_step3_item_prompt_summary;
+use crate::app::selection_refs::normalize_mod_key;
 use crate::app::state::{Step2ComponentState, Step2ModState, Step3ItemState};
 use crate::parser::{PromptSummaryEvent, prompt_eval_expr::PromptEvalContext};
 
@@ -13,6 +14,14 @@ pub(crate) struct PromptToolbarModEntry {
     pub(crate) mod_name: String,
     pub(crate) tp_file: String,
     pub(crate) component_ids: Vec<u32>,
+    pub(crate) mod_level: bool,
+}
+
+pub(crate) fn prompt_toolbar_count(entries: &[PromptToolbarModEntry]) -> usize {
+    entries
+        .iter()
+        .map(|entry| entry.component_ids.len() + usize::from(entry.mod_level))
+        .sum()
 }
 
 pub(crate) fn format_component_prompt_popup_text_with_body(
@@ -115,6 +124,7 @@ pub(crate) fn mod_has_any_prompt(
 
 pub(crate) fn collect_step2_prompt_toolbar_entries(
     mods: &[Step2ModState],
+    prompt_eval: &PromptEvalContext,
 ) -> Vec<PromptToolbarModEntry> {
     let mut entries = mods
         .iter()
@@ -123,16 +133,9 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
                 .components
                 .iter()
                 .filter_map(|component| {
-                    if !component.checked {
-                        return None;
-                    }
-                    let has_prompt = component
-                        .prompt_summary
-                        .as_deref()
-                        .map(str::trim)
-                        .is_some_and(|summary| !summary.is_empty())
-                        || !component.prompt_events.is_empty();
-                    if !has_prompt {
+                    if !component.checked
+                        || component_prompt_body(component, prompt_eval).is_empty()
+                    {
                         return None;
                     }
                     component.component_id.trim().parse::<u32>().ok()
@@ -140,13 +143,15 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
                 .collect::<Vec<_>>();
             component_ids.sort_unstable();
             component_ids.dedup();
-            if component_ids.is_empty() {
+            let mod_level = mod_level_prompt_text(mod_state, prompt_eval).is_some();
+            if component_ids.is_empty() && !mod_level {
                 None
             } else {
                 Some(PromptToolbarModEntry {
                     mod_name: mod_state.name.clone(),
                     tp_file: mod_state.tp_file.clone(),
                     component_ids,
+                    mod_level,
                 })
             }
         })
@@ -161,10 +166,14 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
 
 pub(crate) fn collect_step3_prompt_toolbar_entries(
     items: &[Step3ItemState],
+    mods: &[Step2ModState],
     prompt_eval: &PromptEvalContext,
 ) -> Vec<PromptToolbarModEntry> {
     let mut by_mod = std::collections::BTreeMap::<(String, String), Vec<u32>>::new();
     for item in items.iter().filter(|item| !item.is_parent) {
+        let ids = by_mod
+            .entry((item.mod_name.clone(), item.tp_file.clone()))
+            .or_default();
         let summary = evaluate_step3_item_prompt_summary(item, prompt_eval);
         if summary.trim().is_empty() {
             continue;
@@ -172,22 +181,28 @@ pub(crate) fn collect_step3_prompt_toolbar_entries(
         let Ok(component_id) = item.component_id.trim().parse::<u32>() else {
             continue;
         };
-        by_mod
-            .entry((item.mod_name.clone(), item.tp_file.clone()))
-            .or_default()
-            .push(component_id);
+        ids.push(component_id);
     }
 
     by_mod
         .into_iter()
-        .map(|((mod_name, tp_file), mut component_ids)| {
+        .filter_map(|((mod_name, tp_file), mut component_ids)| {
             component_ids.sort_unstable();
             component_ids.dedup();
-            PromptToolbarModEntry {
+            let mod_key = normalize_mod_key(&tp_file);
+            let mod_level = mods
+                .iter()
+                .find(|mod_state| normalize_mod_key(&mod_state.tp_file) == mod_key)
+                .is_some_and(|mod_state| mod_level_prompt_text(mod_state, prompt_eval).is_some());
+            if component_ids.is_empty() && !mod_level {
+                return None;
+            }
+            Some(PromptToolbarModEntry {
                 mod_name,
                 tp_file,
                 component_ids,
-            }
+                mod_level,
+            })
         })
         .collect()
 }
@@ -385,6 +400,13 @@ mod tests {
         }
     }
 
+    fn blank_summary_event() -> PromptSummaryEvent {
+        PromptSummaryEvent {
+            summary_line: "   ".to_string(),
+            ..blank_mod_event()
+        }
+    }
+
     fn blank_mod_event() -> PromptSummaryEvent {
         PromptSummaryEvent {
             kind: "prompt".to_string(),
@@ -449,7 +471,9 @@ mod tests {
             false,
             Some("Pick a value"),
         )])];
-        assert!(collect_step2_prompt_toolbar_entries(&mods).is_empty());
+        assert!(
+            collect_step2_prompt_toolbar_entries(&mods, &PromptEvalContext::default()).is_empty()
+        );
     }
 
     #[test]
@@ -459,9 +483,89 @@ mod tests {
             true,
             Some("Pick a value"),
         )])];
-        let entries = collect_step2_prompt_toolbar_entries(&mods);
+        let entries = collect_step2_prompt_toolbar_entries(&mods, &PromptEvalContext::default());
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].component_ids, vec![1]);
+        assert!(!entries[0].mod_level);
+        assert_eq!(prompt_toolbar_count(&entries), 1);
+    }
+
+    #[test]
+    fn collect_step2_prompt_toolbar_entries_keeps_mod_level_only_mods() {
+        let mut mod_state = blank_mod(vec![blank_component("1", true, None)]);
+        mod_state.mod_prompt_events.push(blank_mod_event());
+        let entries =
+            collect_step2_prompt_toolbar_entries(&[mod_state], &PromptEvalContext::default());
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].component_ids.is_empty());
+        assert!(entries[0].mod_level);
+        assert_eq!(prompt_toolbar_count(&entries), 1);
+    }
+
+    #[test]
+    fn collect_step2_prompt_toolbar_entries_drops_mod_level_when_nothing_ticked() {
+        let mut mod_state = blank_mod(vec![blank_component("1", false, None)]);
+        mod_state.mod_prompt_events.push(blank_mod_event());
+        assert!(
+            collect_step2_prompt_toolbar_entries(&[mod_state], &PromptEvalContext::default())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn prompt_toolbar_count_sums_component_ids_and_mod_level_entries() {
+        let entries = vec![
+            PromptToolbarModEntry {
+                mod_name: "A".to_string(),
+                tp_file: "a.tp2".to_string(),
+                component_ids: vec![1, 2],
+                mod_level: true,
+            },
+            PromptToolbarModEntry {
+                mod_name: "B".to_string(),
+                tp_file: "b.tp2".to_string(),
+                component_ids: Vec::new(),
+                mod_level: true,
+            },
+            PromptToolbarModEntry {
+                mod_name: "C".to_string(),
+                tp_file: "c.tp2".to_string(),
+                component_ids: vec![7],
+                mod_level: false,
+            },
+        ];
+        assert_eq!(prompt_toolbar_count(&entries), 5);
+    }
+
+    #[test]
+    fn toolbar_entry_presence_matches_the_mod_row_pill() {
+        let prompt_eval = PromptEvalContext::default();
+        let mut shapes = vec![
+            blank_mod(vec![blank_component("1", true, Some("prompt"))]),
+            blank_mod(vec![blank_component("1", false, Some("prompt"))]),
+            blank_mod(vec![blank_component("1", true, None)]),
+        ];
+        let mut with_event = blank_mod(vec![blank_component("1", true, None)]);
+        with_event.mod_prompt_events.push(blank_mod_event());
+        shapes.push(with_event);
+        let mut unticked_event = blank_mod(vec![blank_component("1", false, None)]);
+        unticked_event.mod_prompt_events.push(blank_mod_event());
+        shapes.push(unticked_event);
+        let mut blank_event_component = blank_component("1", true, None);
+        blank_event_component
+            .prompt_events
+            .push(blank_summary_event());
+        shapes.push(blank_mod(vec![blank_event_component]));
+        for mod_state in &shapes {
+            assert_eq!(
+                mod_has_any_prompt(mod_state, &prompt_eval),
+                !collect_step2_prompt_toolbar_entries(
+                    std::slice::from_ref(mod_state),
+                    &prompt_eval
+                )
+                .is_empty()
+            );
+        }
     }
 
     #[test]

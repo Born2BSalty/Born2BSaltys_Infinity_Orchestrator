@@ -3,8 +3,9 @@
 
 use eframe::egui;
 
+use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::prompt_popup_nav;
-use crate::app::prompt_popup_text::PromptToolbarModEntry;
+use crate::app::prompt_popup_text::{PromptToolbarModEntry, prompt_toolbar_count};
 use crate::app::state::{PromptPopupMode, WizardState};
 use crate::ui::shared::layout_tokens_global::{SPACE_MD, SPACE_SM, SPACE_XS};
 
@@ -133,8 +134,10 @@ pub(crate) fn draw_prompt_toolbar_badge(ui: &mut egui::Ui, count: usize) -> bool
 pub(crate) fn collect_step2_prompt_toolbar_entries(
     state: &WizardState,
 ) -> Vec<PromptToolbarModEntry> {
+    let prompt_eval = build_prompt_eval_context(state);
     crate::app::prompt_popup_text::collect_step2_prompt_toolbar_entries(
         prompt_popup_nav::active_step2_mods(state),
+        &prompt_eval,
     )
 }
 
@@ -142,7 +145,7 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
     let title = state.step2.prompt_popup_title.clone();
     let entries = prompt_popup_nav::collect_active_prompt_toolbar_entries(state);
     let mut open = state.step2.prompt_popup_open;
-    let mut jump_target: Option<(String, u32)> = None;
+    let mut jump_target: Option<(String, Option<u32>)> = None;
     egui::Window::new(title)
         .open(&mut open)
         .resizable(true)
@@ -152,18 +155,25 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
         .min_size(egui::vec2(320.0, 180.0))
         .show(ui.ctx(), |ui| {
             if entries.is_empty() {
-                ui.label("No component prompts in the active tab.");
+                ui.label("No prompts in the active tab.");
                 return;
             }
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for entry in &entries {
-                        let header = format!("{} ({})", entry.mod_name, entry.component_ids.len());
+                        let header = format!(
+                            "{} ({})",
+                            entry.mod_name,
+                            prompt_toolbar_count(std::slice::from_ref(entry))
+                        );
                         egui::CollapsingHeader::new(header)
                             .default_open(false)
                             .show(ui, |ui| {
                                 ui.horizontal_wrapped(|ui| {
+                                    if entry.mod_level && ui.button("Mod-level prompt").clicked() {
+                                        jump_target = Some((entry.tp_file.clone(), None));
+                                    }
                                     for component_id in &entry.component_ids {
                                         let button_text =
                                             crate::ui::shared::typography_global::monospace(
@@ -184,7 +194,7 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
                                             .clicked()
                                         {
                                             jump_target =
-                                                Some((entry.tp_file.clone(), *component_id));
+                                                Some((entry.tp_file.clone(), Some(*component_id)));
                                         }
                                     }
                                 });

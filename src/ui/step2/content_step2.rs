@@ -322,10 +322,9 @@ fn draw_game_tabs(ui: &mut egui::Ui, state: &mut WizardState, scan: TabScanState
 }
 
 fn prompt_toolbar_count(state: &WizardState) -> usize {
-    collect_step2_prompt_toolbar_entries(state)
-        .iter()
-        .map(|entry| entry.component_ids.len())
-        .sum()
+    crate::app::prompt_popup_text::prompt_toolbar_count(&collect_step2_prompt_toolbar_entries(
+        state,
+    ))
 }
 
 fn can_bootstrap_from_log(state: &WizardState, has_completed_scan: bool) -> bool {

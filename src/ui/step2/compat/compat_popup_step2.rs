@@ -73,11 +73,11 @@ pub mod compat_popup_details {
     use crate::app::selected_details::selected_compat_issue;
     use crate::app::state::WizardState;
     use crate::ui::shared::redesign_tokens::{
-        ThemePalette, redesign_error_emphasis, redesign_text_disabled, redesign_text_muted,
-        redesign_text_primary, redesign_warning_soft,
+        ThemePalette, redesign_error_emphasis, redesign_text_muted, redesign_text_primary,
+        redesign_warning_soft,
     };
     use crate::ui::step2::compat_popup_nav_step2::{
-        COMPAT_POPUP_FILTER_OPTIONS, compat_filter_matches,
+        available_popup_filters, normalize_popup_filter, select_first_matching_target,
     };
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_explain as issue_text_explain;
     use crate::ui::step2::compat_popup_step2::compat_popup_issue_text_kind as issue_text_kind;
@@ -175,11 +175,7 @@ pub mod compat_popup_details {
 
         if issue.is_some() || details.compat_kind.is_some() {
             ui.add_space(6.0);
-            let current_kind = issue
-                .as_ref()
-                .map(|issue| issue.kind.as_str())
-                .or(details.compat_kind.as_deref());
-            render_filter_row(ui, state, current_kind, palette);
+            render_filter_row(ui, state, palette);
         }
     }
 
@@ -188,16 +184,13 @@ pub mod compat_popup_details {
         selected_compat_issue(state)
     }
 
-    fn render_filter_row(
-        ui: &mut egui::Ui,
-        state: &mut WizardState,
-        current_kind: Option<&str>,
-        palette: ThemePalette,
-    ) {
+    fn render_filter_row(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
+        let options = available_popup_filters(state);
+        normalize_popup_filter(state, &options);
         ui.label(strong_text_primary("Filter", palette));
         ui.horizontal_wrapped(|ui| {
-            for option in COMPAT_POPUP_FILTER_OPTIONS {
-                let is_selected = state.step2.compat_popup_filter.eq_ignore_ascii_case(option);
+            for (name, count) in &options {
+                let is_selected = state.step2.compat_popup_filter.eq_ignore_ascii_case(name);
                 let visuals = ui.visuals();
                 let fill = if is_selected {
                     visuals.widgets.active.bg_fill
@@ -209,15 +202,12 @@ pub mod compat_popup_details {
                 } else {
                     visuals.widgets.inactive.bg_stroke
                 };
-                let mut button = egui::Button::new(*option).fill(fill).stroke(stroke);
-                if !compat_filter_matches(option, current_kind) {
-                    button = button.stroke(egui::Stroke::new(
-                        crate::ui::shared::layout_tokens_global::BORDER_THIN,
-                        redesign_text_disabled(palette),
-                    ));
-                }
+                let button = egui::Button::new(format!("{name} {count}"))
+                    .fill(fill)
+                    .stroke(stroke);
                 if ui.add(button).clicked() {
-                    state.step2.compat_popup_filter = (*option).to_string();
+                    state.step2.compat_popup_filter = (*name).to_string();
+                    select_first_matching_target(state);
                 }
             }
         });

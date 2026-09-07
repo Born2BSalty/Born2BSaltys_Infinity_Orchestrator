@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::controller::step3_sync;
-use crate::app::state::Step2ModState;
+use crate::app::state::{Step2ComponentState, Step2ModState};
 use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
@@ -80,14 +80,30 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
         return;
     }
 
-    let first_dropped = reapply_snapshot(
+    reapply_snapshot(
         &snapshot.bgee,
         &mut orchestrator.wizard_state.step2.bgee_mods,
     );
-    let second_dropped = reapply_snapshot(
+    reapply_snapshot(
         &snapshot.bg2ee,
         &mut orchestrator.wizard_state.step2.bg2ee_mods,
     );
+
+    if let Some(err) = crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
+        &orchestrator.wizard_state.step1,
+        &mut orchestrator.wizard_state.step2.bgee_mods,
+        &mut orchestrator.wizard_state.step2.bg2ee_mods,
+    ) {
+        orchestrator.wizard_state.step2.scan_status = format!("Compat rules load failed: {err}");
+    }
+
+    let mut unrestored =
+        collect_unrestored(&snapshot.bgee, &orchestrator.wizard_state.step2.bgee_mods);
+    unrestored.extend(collect_unrestored(
+        &snapshot.bg2ee,
+        &orchestrator.wizard_state.step2.bg2ee_mods,
+    ));
+
     recompute_mod_checked(&mut orchestrator.wizard_state.step2.bgee_mods);
     recompute_mod_checked(&mut orchestrator.wizard_state.step2.bg2ee_mods);
 
@@ -103,18 +119,129 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
             step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bg2ee_mods);
     }
 
-    let mut dropped: Vec<&RescanSelection> = Vec::new();
-    dropped.extend(first_dropped.iter());
-    dropped.extend(second_dropped.iter());
-    if dropped.is_empty() {
+    if unrestored.is_empty() {
         orchestrator.workspace_view.step2.rescan_drop_warning = None;
         return;
     }
-    let dropped_components = dropped.len();
-    let missing_mods = distinct_tp2_count(&dropped);
-    orchestrator.workspace_view.step2.rescan_drop_warning = Some(format!(
-        "{dropped_components} component(s) dropped \u{2014} {missing_mods} mod(s) no longer present"
-    ));
+    orchestrator.workspace_view.step2.rescan_drop_warning =
+        Some(format_unrestored_status(&unrestored));
+    orchestrator
+        .notification_manager
+        .warn_persistent(format_unrestored_notification(&unrestored));
+}
+
+struct UnrestoredComponent {
+    mod_name: String,
+    component_id: String,
+    reason: String,
+}
+
+fn collect_unrestored(
+    snapshot: &[RescanSelection],
+    mods: &[Step2ModState],
+) -> Vec<UnrestoredComponent> {
+    let mut out = Vec::new();
+    for entry in snapshot {
+        let matched_mods = mods
+            .iter()
+            .filter(|mod_state| mod_state.tp_file.to_ascii_uppercase() == entry.tp2_upper)
+            .collect::<Vec<_>>();
+        let Some(first_mod) = matched_mods.first() else {
+            out.push(UnrestoredComponent {
+                mod_name: tp2_display_name(&entry.tp2_upper),
+                component_id: entry.component_id.clone(),
+                reason: "mod no longer present".to_string(),
+            });
+            continue;
+        };
+        let matched_components = matched_mods
+            .iter()
+            .flat_map(|mod_state| {
+                mod_state
+                    .components
+                    .iter()
+                    .map(move |component| (*mod_state, component))
+            })
+            .filter(|(_, component)| component.component_id == entry.component_id)
+            .collect::<Vec<_>>();
+        let Some(first_match) = matched_components.first().copied() else {
+            out.push(UnrestoredComponent {
+                mod_name: first_mod.name.clone(),
+                component_id: entry.component_id.clone(),
+                reason: "component no longer present".to_string(),
+            });
+            continue;
+        };
+        if matched_components
+            .iter()
+            .any(|(_, component)| component.checked)
+        {
+            continue;
+        }
+        let (reason_mod, reason_component) = matched_components
+            .iter()
+            .copied()
+            .find(|(_, component)| has_disabled_reason(component))
+            .unwrap_or(first_match);
+        out.push(UnrestoredComponent {
+            mod_name: reason_mod.name.clone(),
+            component_id: entry.component_id.clone(),
+            reason: exclusion_reason(reason_component),
+        });
+    }
+    out
+}
+
+fn has_disabled_reason(component: &Step2ComponentState) -> bool {
+    component
+        .disabled_reason
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|reason| !reason.is_empty())
+}
+
+fn exclusion_reason(component: &Step2ComponentState) -> String {
+    component
+        .disabled_reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .map_or_else(
+            || "excluded by compatibility rules".to_string(),
+            std::string::ToString::to_string,
+        )
+}
+
+fn tp2_display_name(tp2_upper: &str) -> String {
+    tp2_upper
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(tp2_upper)
+        .to_string()
+}
+
+fn format_unrestored_status(unrestored: &[UnrestoredComponent]) -> String {
+    let components = unrestored.len();
+    let mods = unrestored
+        .iter()
+        .map(|entry| entry.mod_name.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    format!("{components} saved component(s) could not be restored \u{2014} {mods} mod(s) affected")
+}
+
+fn format_unrestored_notification(unrestored: &[UnrestoredComponent]) -> String {
+    let mut lines = vec![format!(
+        "{} saved component(s) could not be restored",
+        unrestored.len()
+    )];
+    lines.extend(unrestored.iter().map(|entry| {
+        format!(
+            "{} #{}: {}",
+            entry.mod_name, entry.component_id, entry.reason
+        )
+    }));
+    lines.join("\n")
 }
 
 fn advance_pending_download_snapshot(
@@ -165,13 +292,8 @@ const fn completion_edge_fires(was_scanning: bool, scanning_now: bool) -> bool {
     was_scanning && !scanning_now
 }
 
-fn reapply_snapshot<'a>(
-    snapshot: &'a [RescanSelection],
-    mods: &mut [Step2ModState],
-) -> Vec<&'a RescanSelection> {
-    let mut dropped = Vec::new();
+fn reapply_snapshot(snapshot: &[RescanSelection], mods: &mut [Step2ModState]) {
     for entry in snapshot {
-        let mut matched = false;
         for mod_state in mods.iter_mut() {
             if mod_state.tp_file.to_ascii_uppercase() != entry.tp2_upper {
                 continue;
@@ -183,15 +305,10 @@ fn reapply_snapshot<'a>(
                     if let Some(inputs) = entry.wlb_inputs.as_deref() {
                         reattach_wlb_inputs(component, inputs);
                     }
-                    matched = true;
                 }
             }
         }
-        if !matched {
-            dropped.push(entry);
-        }
     }
-    dropped
 }
 
 fn recompute_mod_checked(mods: &mut [Step2ModState]) {
@@ -206,14 +323,6 @@ fn max_selected_order(mods: &[Step2ModState]) -> usize {
         .filter_map(|c| c.selected_order)
         .max()
         .unwrap_or(0)
-}
-
-fn distinct_tp2_count(dropped: &[&RescanSelection]) -> usize {
-    let mut seen = std::collections::BTreeSet::new();
-    for d in dropped {
-        seen.insert(d.tp2_upper.as_str());
-    }
-    seen.len()
 }
 
 #[cfg(test)]
@@ -298,13 +407,143 @@ mod tests {
             "eefixpack.tp2",
             vec![comp("0", false, None), comp("5", false, None)],
         )];
-        let dropped = reapply_snapshot(&snapshot, &mut mods);
+        reapply_snapshot(&snapshot, &mut mods);
         assert!(mods[0].components[0].checked);
         assert_eq!(mods[0].components[0].selected_order, Some(2));
         assert!(!mods[0].components[1].checked);
-        assert_eq!(dropped.len(), 1);
-        assert_eq!(dropped[0].component_id, "1");
-        assert_eq!(distinct_tp2_count(&dropped), 1);
+        let unrestored = collect_unrestored(&snapshot, &mods);
+        assert_eq!(unrestored.len(), 1);
+        assert_eq!(unrestored[0].component_id, "1");
+        assert_eq!(unrestored[0].mod_name, "GONEMOD.TP2");
+        assert_eq!(unrestored[0].reason, "mod no longer present");
+    }
+
+    #[test]
+    fn unrestored_reports_component_excluded_by_compatibility_with_its_reason() {
+        let snapshot = vec![RescanSelection {
+            tp2_upper: "OLIRP.TP2".to_string(),
+            component_id: "7".to_string(),
+            selected_order: Some(1),
+            wlb_inputs: None,
+        }];
+        let mut excluded = comp("7", false, None);
+        excluded.disabled = true;
+        excluded.disabled_reason = Some("Conditional on component #3".to_string());
+        let mut named = mod_state("olirp.tp2", vec![excluded]);
+        named.name = "Oli's Roleplay".to_string();
+        let mods = vec![named];
+
+        let unrestored = collect_unrestored(&snapshot, &mods);
+        assert_eq!(unrestored.len(), 1);
+        assert_eq!(unrestored[0].mod_name, "Oli's Roleplay");
+        assert_eq!(unrestored[0].component_id, "7");
+        assert_eq!(unrestored[0].reason, "Conditional on component #3");
+        assert_eq!(
+            format_unrestored_notification(&unrestored),
+            "1 saved component(s) could not be restored\nOli's Roleplay #7: Conditional on component #3"
+        );
+    }
+
+    #[test]
+    fn unrestored_reason_comes_from_the_first_match_that_carries_one() {
+        let snapshot = vec![RescanSelection {
+            tp2_upper: "MOD.TP2".to_string(),
+            component_id: "1".to_string(),
+            selected_order: None,
+            wlb_inputs: None,
+        }];
+        let mut with_reason = comp("1", false, None);
+        with_reason.disabled_reason = Some("Blocked by rule".to_string());
+        let mut second = mod_state("mod.tp2", vec![with_reason]);
+        second.name = "Second Copy".to_string();
+        let mods = vec![mod_state("mod.tp2", vec![comp("1", false, None)]), second];
+
+        let unrestored = collect_unrestored(&snapshot, &mods);
+        assert_eq!(unrestored.len(), 1);
+        assert_eq!(unrestored[0].reason, "Blocked by rule");
+        assert_eq!(unrestored[0].mod_name, "Second Copy");
+    }
+
+    #[test]
+    fn unrestored_falls_back_to_generic_exclusion_reason() {
+        let snapshot = vec![RescanSelection {
+            tp2_upper: "MOD.TP2".to_string(),
+            component_id: "1".to_string(),
+            selected_order: None,
+            wlb_inputs: None,
+        }];
+        let mods = vec![mod_state("mod.tp2", vec![comp("1", false, None)])];
+        let unrestored = collect_unrestored(&snapshot, &mods);
+        assert_eq!(unrestored.len(), 1);
+        assert_eq!(unrestored[0].reason, "excluded by compatibility rules");
+    }
+
+    #[test]
+    fn unrestored_distinguishes_missing_mod_from_missing_component() {
+        let snapshot = vec![
+            RescanSelection {
+                tp2_upper: "GONE.TP2".to_string(),
+                component_id: "0".to_string(),
+                selected_order: None,
+                wlb_inputs: None,
+            },
+            RescanSelection {
+                tp2_upper: "MOD.TP2".to_string(),
+                component_id: "9".to_string(),
+                selected_order: None,
+                wlb_inputs: None,
+            },
+        ];
+        let mods = vec![mod_state("mod.tp2", vec![comp("1", true, Some(1))])];
+        let unrestored = collect_unrestored(&snapshot, &mods);
+        assert_eq!(unrestored.len(), 2);
+        assert_eq!(unrestored[0].reason, "mod no longer present");
+        assert_eq!(unrestored[1].reason, "component no longer present");
+        assert_eq!(unrestored[1].mod_name, "mod.tp2");
+    }
+
+    #[test]
+    fn unrestored_is_empty_when_every_saved_component_survives() {
+        let snapshot = vec![RescanSelection {
+            tp2_upper: "MOD.TP2".to_string(),
+            component_id: "1".to_string(),
+            selected_order: Some(1),
+            wlb_inputs: None,
+        }];
+        let mut mods = vec![mod_state("mod.tp2", vec![comp("1", false, None)])];
+        reapply_snapshot(&snapshot, &mut mods);
+        assert!(collect_unrestored(&snapshot, &mods).is_empty());
+    }
+
+    #[test]
+    fn unrestored_status_counts_all_reasons_and_distinct_mods() {
+        let unrestored = vec![
+            UnrestoredComponent {
+                mod_name: "A".to_string(),
+                component_id: "1".to_string(),
+                reason: "mod no longer present".to_string(),
+            },
+            UnrestoredComponent {
+                mod_name: "A".to_string(),
+                component_id: "2".to_string(),
+                reason: "component no longer present".to_string(),
+            },
+            UnrestoredComponent {
+                mod_name: "B".to_string(),
+                component_id: "3".to_string(),
+                reason: "excluded by compatibility rules".to_string(),
+            },
+        ];
+        assert_eq!(
+            format_unrestored_status(&unrestored),
+            "3 saved component(s) could not be restored \u{2014} 2 mod(s) affected"
+        );
+    }
+
+    #[test]
+    fn tp2_display_name_strips_the_path() {
+        assert_eq!(tp2_display_name("BG1UB/BG1UB.TP2"), "BG1UB.TP2");
+        assert_eq!(tp2_display_name("MOD.TP2"), "MOD.TP2");
     }
 
     #[test]
@@ -369,7 +608,7 @@ mod tests {
             return (bgee_mods, step3_items, resume_pending);
         }
 
-        let _ = reapply_snapshot(&snapshot.bgee, &mut bgee_mods);
+        reapply_snapshot(&snapshot.bgee, &mut bgee_mods);
         recompute_mod_checked(&mut bgee_mods);
         if std::mem::take(&mut resume_pending) {
             step3_items = step3_sync::build_step3_items(&bgee_mods);
@@ -501,8 +740,11 @@ mod tests {
             }],
         )];
 
-        let dropped = reapply_snapshot(&captured, &mut fresh_mods);
-        assert!(dropped.is_empty(), "component must be found, not dropped");
+        reapply_snapshot(&captured, &mut fresh_mods);
+        assert!(
+            collect_unrestored(&captured, &fresh_mods).is_empty(),
+            "component must be found, not dropped"
+        );
         assert!(
             fresh_mods[0].components[0]
                 .raw_line
