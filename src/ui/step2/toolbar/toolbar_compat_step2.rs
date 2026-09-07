@@ -3,8 +3,8 @@
 
 use eframe::egui;
 
-use crate::app::state::Step2ModState;
-use crate::ui::step2::tree_compat_display_step2::{compat_colors, counts_for_status_display};
+use crate::app::state::{Step2ComponentState, Step2ModState};
+use crate::ui::step2::tree_compat_display_step2::compat_colors;
 
 #[derive(Clone)]
 pub(crate) struct Step2ToolbarCompatSummary {
@@ -35,22 +35,28 @@ fn issue_filter_bucket(kind: &str) -> &'static str {
     }
 }
 
+fn actionable_issue_bucket(component: &Step2ComponentState) -> Option<&'static str> {
+    if !component.checked {
+        return None;
+    }
+    let kind = component.compat_kind.as_deref()?.trim();
+    if kind.is_empty() {
+        return None;
+    }
+    let bucket = issue_filter_bucket(kind);
+    (!matches!(bucket, "Mismatch" | "Included")).then_some(bucket)
+}
+
 pub(crate) fn active_tab_compat_summary(mods: &[Step2ModState]) -> Step2ToolbarCompatSummary {
     let mut count = 0usize;
     let mut bucket_counts = std::collections::BTreeMap::<&'static str, usize>::new();
     for mod_state in mods {
         for component in &mod_state.components {
-            if !counts_for_status_display(component) {
-                continue;
-            }
-            let Some(kind) = component.compat_kind.as_deref() else {
+            let Some(bucket) = actionable_issue_bucket(component) else {
                 continue;
             };
-            if kind.trim().is_empty() {
-                continue;
-            }
             count += 1;
-            *bucket_counts.entry(issue_filter_bucket(kind)).or_default() += 1;
+            *bucket_counts.entry(bucket).or_default() += 1;
         }
     }
     let dominant_filter = [
@@ -83,21 +89,15 @@ pub(crate) fn first_active_tab_issue_target(
     let mut first_any = None::<Step2ToolbarIssueTarget>;
     for mod_state in mods {
         for component in &mod_state.components {
-            if !counts_for_status_display(component) {
-                continue;
-            }
-            let Some(kind) = component.compat_kind.as_deref() else {
+            let Some(bucket) = actionable_issue_bucket(component) else {
                 continue;
             };
-            if kind.trim().is_empty() {
-                continue;
-            }
             let target = Step2ToolbarIssueTarget {
                 tp_file: mod_state.tp_file.clone(),
                 component_id: component.component_id.clone(),
                 component_key: component.raw_line.clone(),
             };
-            if issue_filter_bucket(kind).eq_ignore_ascii_case(filter) {
+            if bucket.eq_ignore_ascii_case(filter) {
                 return Some(target);
             }
             if first_any.is_none() {
@@ -185,7 +185,6 @@ pub(crate) fn draw_active_tab_issue_badge(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::state::Step2ComponentState;
 
     fn component(id: &str, checked: bool, disabled: bool, kind: &str) -> Step2ComponentState {
         Step2ComponentState {
@@ -232,17 +231,33 @@ mod tests {
     }
 
     #[test]
-    fn badge_counts_only_ticked_or_disabled_components() {
+    fn badge_counts_only_ticked_actionable_components() {
         let mods = vec![mod_with(vec![
             component("1", true, false, "conflict"),
             component("2", false, false, "conflict"),
             component("3", false, true, "not_compatible"),
-            component("4", false, false, "warning"),
+            component("4", true, false, "warning"),
+            component("5", false, false, "warning"),
         ])];
         let summary = active_tab_compat_summary(&mods);
         assert_eq!(summary.total_count, 2);
         assert_eq!(summary.dominant_filter, "Conflict");
-        assert_eq!(summary.dominant_count, 2);
+        assert_eq!(summary.dominant_count, 1);
+    }
+
+    #[test]
+    fn badge_ignores_informational_kinds_even_when_ticked() {
+        let mods = vec![mod_with(vec![
+            component("1", true, false, "mismatch"),
+            component("2", true, false, "game_mismatch"),
+            component("3", true, false, "included"),
+            component("4", true, false, "not_needed"),
+            component("5", true, true, "mismatch"),
+        ])];
+        let summary = active_tab_compat_summary(&mods);
+        assert_eq!(summary.total_count, 0);
+        assert!(first_active_tab_issue_target(&mods, "Mismatch").is_none());
+        assert!(first_active_tab_issue_target(&mods, "All").is_none());
     }
 
     #[test]
