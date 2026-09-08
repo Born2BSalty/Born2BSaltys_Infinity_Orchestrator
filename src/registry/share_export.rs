@@ -142,6 +142,30 @@ pub fn set_allow_auto_install(code: &str, allow_auto_install: bool) -> Result<St
     ))
 }
 
+pub fn set_packed_name(code: &str, name: &str) -> Result<String, String> {
+    let encoded = code
+        .trim()
+        .strip_prefix(SHARE_CODE_PREFIX)
+        .ok_or_else(|| "share code did not start with BIO-MODLIST-V1:".to_string())?;
+    let compressed = base64url_decode(encoded)?;
+    let json_bytes = zlib_decompress(&compressed)?;
+    let mut payload: Value = serde_json::from_slice(&json_bytes)
+        .map_err(|err| format!("share payload was not valid JSON: {err}"))?;
+
+    let obj = payload
+        .as_object_mut()
+        .ok_or_else(|| "share payload was not a JSON object".to_string())?;
+    obj.insert("name".to_string(), Value::String(name.to_string()));
+
+    let out_bytes =
+        serde_json::to_vec(&payload).map_err(|err| format!("re-serialize failed: {err}"))?;
+    let recompressed = zlib_compress(&out_bytes)?;
+    Ok(format!(
+        "{SHARE_CODE_PREFIX}{}",
+        base64url_encode(&recompressed)
+    ))
+}
+
 fn insert_archive_meta(obj: &mut serde_json::Map<String, Value>, archive_meta: &[ArchiveMeta]) {
     if archive_meta.is_empty() {
         return;
@@ -660,6 +684,40 @@ mod tests {
         assert_eq!(v["allow_auto_install"], json!(true));
         assert_eq!(v["game_install"], json!("BG2EE"));
         assert_eq!(v["x"], json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn set_packed_name_overwrites_the_name_and_preserves_all_other_keys() {
+        let original = make_base(&json!({
+            "format_version": 1,
+            "bio_version": "0.1.0-test",
+            "game_install": "EET",
+            "install_mode": "build_from_scanned_mods",
+            "allow_auto_install": true,
+            "name": "Old Name",
+            "author": "@sharer",
+            "forked_from": [{ "name": "Root", "author": "@root" }],
+        }));
+
+        let renamed = set_packed_name(&original, "My Renamed List").expect("rename ok");
+        let v = decode_payload(&renamed);
+
+        assert_eq!(v["name"], json!("My Renamed List"));
+        assert_eq!(v["author"], json!("@sharer"));
+        assert_eq!(v["allow_auto_install"], json!(true));
+        assert_eq!(v["game_install"], json!("EET"));
+        assert_eq!(v["install_mode"], json!("build_from_scanned_mods"));
+        assert_eq!(v["bio_version"], json!("0.1.0-test"));
+        assert_eq!(
+            v["forked_from"],
+            json!([{ "name": "Root", "author": "@root" }])
+        );
+    }
+
+    #[test]
+    fn set_packed_name_errs_on_non_bio_code() {
+        assert!(set_packed_name("not a share code", "X").is_err());
+        assert!(set_packed_name("BIO-MODLIST-V1:!!!not-base64!!!", "X").is_err());
     }
 
     fn am(name: &str, size: u64, hash: &str) -> ArchiveMeta {

@@ -40,9 +40,9 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         .to_string();
 
     let back_target = if orchestrator.install_screen_state.preview_cached {
-        InstallStage::Preview
+        InstallStage::Review
     } else {
-        InstallStage::Paste
+        InstallStage::Gallery
     };
 
     let mut outcome = StageInstallingOutcome::Stay;
@@ -254,22 +254,30 @@ mod tests {
     }
 
     #[test]
-    fn back_target_is_preview_when_cached_else_paste() {
+    fn back_target_is_review_when_cached_else_gallery() {
         use crate::ui::install::state_install::InstallScreenState;
         let mut st = InstallScreenState::default();
         assert!(!st.preview_cached);
         let t = if st.preview_cached {
-            InstallStage::Preview
+            InstallStage::Review
         } else {
-            InstallStage::Paste
+            InstallStage::Gallery
         };
-        assert_eq!(t, InstallStage::Paste, "no cached preview ⇒ Back to Paste");
+        assert_eq!(
+            t,
+            InstallStage::Gallery,
+            "no cached preview means Back returns to the gallery"
+        );
         st.preview_cached = true;
         let t = if st.preview_cached {
-            InstallStage::Preview
+            InstallStage::Review
         } else {
-            InstallStage::Paste
+            InstallStage::Gallery
         };
-        assert_eq!(t, InstallStage::Preview, "cached preview ⇒ Back to Preview");
+        assert_eq!(
+            t,
+            InstallStage::Review,
+            "a cached preview means Back returns to Review"
+        );
     }
 }

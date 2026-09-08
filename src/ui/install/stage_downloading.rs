@@ -5,8 +5,8 @@ use eframe::egui;
 
 use crate::app::state::WizardState;
 use crate::install_runtime::archive_store;
+use crate::ui::install::state_install::PipelineKind;
 use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
-use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::{
     DestinationPrepFlow, PendingInstallDestinationPrep,
 };
@@ -548,12 +548,10 @@ impl LivePipelineInputs {
     pub(crate) fn from(
         orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     ) -> Self {
-        let workflow = if orchestrator.install_screen_state.is_partial() {
-            crate::install_runtime::flag_policies::InstallWorkflow::ContinuePartialInstall
-        } else {
-            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall
-        };
-        Self::from_workflow(orchestrator, workflow)
+        Self::from_workflow(
+            orchestrator,
+            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+        )
     }
 
     pub(crate) fn from_workflow(
@@ -584,7 +582,7 @@ pub(crate) fn arm_pipeline_once(
     use crate::install_runtime::destination_prep;
     use std::sync::mpsc::TryRecvError;
 
-    let flow = install_destination_prep_flow(orchestrator);
+    let flow = install_destination_prep_flow(orchestrator.install_screen_state.pipeline_kind);
 
     if orchestrator.install_screen_state.pipeline_flags.armed()
         || orchestrator
@@ -677,13 +675,10 @@ pub(crate) fn arm_pipeline_once(
         "Auto Build: preparing target destination".to_string();
 }
 
-const fn install_destination_prep_flow(
-    orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
-) -> DestinationPrepFlow {
-    if matches!(orchestrator.nav, NavDestination::Create) {
-        DestinationPrepFlow::CreateForkDownload
-    } else {
-        DestinationPrepFlow::InstallPipeline
+pub(crate) const fn install_destination_prep_flow(kind: PipelineKind) -> DestinationPrepFlow {
+    match kind {
+        PipelineKind::Fork => DestinationPrepFlow::CreateForkDownload,
+        PipelineKind::Install => DestinationPrepFlow::InstallPipeline,
     }
 }
 
@@ -2632,6 +2627,18 @@ mod tests {
         assert_eq!(
             msg,
             "Pinned versions of the following mods not available. Latest will be installed:\n- ISNF (6.5.5 -> 6.5.6)"
+        );
+    }
+
+    #[test]
+    fn pipeline_kind_picks_the_destination_prep_flow() {
+        assert_eq!(
+            install_destination_prep_flow(PipelineKind::Install),
+            DestinationPrepFlow::InstallPipeline
+        );
+        assert_eq!(
+            install_destination_prep_flow(PipelineKind::Fork),
+            DestinationPrepFlow::CreateForkDownload
         );
     }
 

@@ -2,15 +2,65 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::modlist_share::ModlistSharePreview;
+use crate::ui::install::gallery::filter::GalleryFilter;
 use crate::ui::install::stage_downloading::{DownloadProgress, SkippedMod};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InstallStage {
     #[default]
+    Gallery,
+    Details,
     Paste,
-    Preview,
+    Review,
     Downloading,
     InstallingStub,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReviewOrigin {
+    #[default]
+    Details,
+    Paste,
+    Reinstall,
+}
+
+impl ReviewOrigin {
+    #[must_use]
+    pub const fn back_stage(self) -> InstallStage {
+        match self {
+            Self::Details => InstallStage::Details,
+            Self::Paste => InstallStage::Paste,
+            Self::Reinstall => InstallStage::Gallery,
+        }
+    }
+}
+
+#[must_use]
+pub const fn install_stage_is_idle(stage: InstallStage) -> bool {
+    matches!(
+        stage,
+        InstallStage::Gallery | InstallStage::Details | InstallStage::Paste | InstallStage::Review
+    )
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ReviewState {
+    pub origin: ReviewOrigin,
+    pub name: String,
+    pub modify: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PipelineKind {
+    #[default]
+    Install,
+    Fork,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GalleryScreenState {
+    pub(crate) filter: GalleryFilter,
+    pub(crate) selected: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -214,6 +264,9 @@ impl InstallPipelineFlags {
 #[derive(Debug, Clone, Default)]
 pub struct InstallScreenState {
     pub stage: InstallStage,
+    pub pipeline_kind: PipelineKind,
+    pub(crate) gallery: GalleryScreenState,
+    pub review: ReviewState,
     pub destination: String,
     pub destination_choice: Option<DestChoice>,
     pub import_code: String,
@@ -237,7 +290,7 @@ pub struct InstallScreenState {
 impl InstallScreenState {
     #[must_use]
     pub fn has_route_context(&self) -> bool {
-        self.stage != InstallStage::Paste
+        self.stage != InstallStage::Gallery
             || !self.destination.trim().is_empty()
             || !self.import_code.trim().is_empty()
             || self.parsed_preview.is_some()
@@ -259,13 +312,8 @@ impl InstallScreenState {
             || !self.skip_indices.is_empty()
     }
 
-    pub fn reset_to_paste(&mut self) {
+    pub fn reset_to_gallery(&mut self) {
         *self = Self::default();
-    }
-
-    #[must_use]
-    pub fn is_partial(&self) -> bool {
-        self.destination_choice == Some(DestChoice::Continue)
     }
 
     pub fn clear_preview(&mut self) {
@@ -317,20 +365,47 @@ mod tests {
     }
 
     #[test]
-    fn is_partial_only_for_continue() {
-        let mut st = InstallScreenState::default();
-        assert!(!st.is_partial());
-        st.destination_choice = Some(DestChoice::Clear);
-        assert!(!st.is_partial());
-        st.destination_choice = Some(DestChoice::Backup);
-        assert!(!st.is_partial());
-        st.destination_choice = Some(DestChoice::Continue);
-        assert!(st.is_partial());
+    fn continue_stays_in_the_enum_for_persisted_workspaces() {
+        let round_trip: DestChoice =
+            serde_json::from_str(&serde_json::to_string(&DestChoice::Continue).expect("serialize"))
+                .expect("a workspace.json that persisted Continue must still load");
+        assert_eq!(round_trip, DestChoice::Continue);
     }
 
     #[test]
-    fn default_stage_is_paste() {
-        assert_eq!(InstallScreenState::default().stage, InstallStage::Paste);
+    fn default_pipeline_kind_is_install() {
+        assert_eq!(PipelineKind::default(), PipelineKind::Install);
+        assert_eq!(
+            InstallScreenState::default().pipeline_kind,
+            PipelineKind::Install
+        );
+    }
+
+    #[test]
+    fn review_back_stage_follows_the_origin() {
+        assert_eq!(ReviewOrigin::Details.back_stage(), InstallStage::Details);
+        assert_eq!(ReviewOrigin::Paste.back_stage(), InstallStage::Paste);
+        assert_eq!(ReviewOrigin::Reinstall.back_stage(), InstallStage::Gallery);
+    }
+
+    #[test]
+    fn default_review_state_is_an_unnamed_unmodified_details_review() {
+        let review = InstallScreenState::default().review;
+        assert_eq!(review.origin, ReviewOrigin::Details);
+        assert!(review.name.is_empty());
+        assert!(!review.modify);
+    }
+
+    #[test]
+    fn default_stage_is_gallery() {
+        assert_eq!(InstallScreenState::default().stage, InstallStage::Gallery);
+    }
+
+    #[test]
+    fn default_gallery_has_no_filter_and_no_selection() {
+        let st = InstallScreenState::default();
+        assert_eq!(st.gallery.filter, GalleryFilter::default());
+        assert!(st.gallery.selected.is_none());
     }
 
     #[test]
@@ -421,6 +496,20 @@ mod tests {
     }
 
     #[test]
+    fn idle_stages_are_the_four_pre_pipeline_stages() {
+        assert!(install_stage_is_idle(InstallStage::Gallery));
+        assert!(install_stage_is_idle(InstallStage::Details));
+        assert!(install_stage_is_idle(InstallStage::Paste));
+        assert!(install_stage_is_idle(InstallStage::Review));
+    }
+
+    #[test]
+    fn pipeline_stages_are_not_idle() {
+        assert!(!install_stage_is_idle(InstallStage::Downloading));
+        assert!(!install_stage_is_idle(InstallStage::InstallingStub));
+    }
+
+    #[test]
     fn route_context_tracks_non_default_install_flow_state() {
         let mut st = InstallScreenState::default();
         assert!(!st.has_route_context());
@@ -428,14 +517,14 @@ mod tests {
         st.stage = InstallStage::InstallingStub;
         assert!(st.has_route_context());
 
-        st.reset_to_paste();
+        st.reset_to_gallery();
         assert!(!st.has_route_context());
 
         st.import_code = "BIO:example".to_string();
         assert!(st.has_route_context());
-        st.reset_to_paste();
+        st.reset_to_gallery();
         assert!(st.import_code.is_empty());
-        assert_eq!(st.stage, InstallStage::Paste);
+        assert_eq!(st.stage, InstallStage::Gallery);
         assert!(!st.has_route_context());
     }
 }

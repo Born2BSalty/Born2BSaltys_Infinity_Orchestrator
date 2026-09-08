@@ -2,16 +2,27 @@
 // Copyright (c) 2026 Born2BSalty
 
 use eframe::egui;
+use tracing::warn;
 
 use crate::app::modlist_share::preview_modlist_share_code;
-use crate::install_runtime::start_hooks;
+use crate::install_runtime::fork_pipeline_arm::{self, ForkArmRequest};
+use crate::install_runtime::{fork_route, start_hooks};
+use crate::registry::share_export;
+use crate::ui::install::gallery::catalog::{self, GalleryEntry};
+use crate::ui::install::stage_details::{self, DetailsOutcome};
 use crate::ui::install::stage_downloading::{self, DownloadScreenCopy, DownloadingOutcome};
+use crate::ui::install::stage_fork_download::{self, ForkDownloadOutcome};
+use crate::ui::install::stage_gallery::{self, GalleryOutcome};
 use crate::ui::install::stage_installing::{self, StageInstallingOutcome};
 use crate::ui::install::stage_paste::{self, PasteOutcome};
-use crate::ui::install::stage_preview::{self, PreviewOutcome};
-use crate::ui::install::state_install::InstallStage;
+use crate::ui::install::stage_review::{self, ReviewOutcome};
+use crate::ui::install::state_install::{
+    InstallScreenState, InstallStage, PipelineKind, ReviewOrigin,
+};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::widgets::NotificationManager;
+use crate::ui::shared::redesign_tokens::ThemePalette;
 
 enum InstallRequest {
     Stage(InstallStage),
@@ -21,79 +32,19 @@ enum InstallRequest {
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
     let palette = orchestrator.theme_palette;
 
-    let mut request: Option<InstallRequest> = None;
-
-    match orchestrator.install_screen_state.stage {
-        InstallStage::Paste => {
-            match stage_paste::render(
-                ui,
-                palette,
-                &mut orchestrator.install_screen_state,
-                &orchestrator.registry,
-            ) {
-                PasteOutcome::Advance(InstallStage::Preview) => {
-                    run_preview_parse(&mut orchestrator.install_screen_state);
-                    request = Some(InstallRequest::Stage(InstallStage::Preview));
-                }
-                PasteOutcome::Advance(stage) => {
-                    request = Some(InstallRequest::Stage(stage));
-                }
-                PasteOutcome::Stay => {}
-            }
-        }
-        InstallStage::Preview => {
-            match stage_preview::render(ui, palette, ctx, &mut orchestrator.install_screen_state) {
-                PreviewOutcome::Back => {
-                    orchestrator.install_screen_state.clear_preview();
-                    request = Some(InstallRequest::Stage(InstallStage::Paste));
-                }
-                PreviewOutcome::OpenInCreate => {
-                    request = Some(InstallRequest::Nav(NavDestination::Create));
-                }
-                PreviewOutcome::Advance => {
-                    if let Some(reinstall_id) = orchestrator.pending_reinstall_id.clone() {
-                        let OrchestratorApp {
-                            wizard_state,
-                            registry,
-                            registry_store,
-                            pending_reinstall_id,
-                            ..
-                        } = &mut *orchestrator;
-                        start_hooks::reinstall_flip_at_install_click(
-                            &reinstall_id,
-                            wizard_state,
-                            registry,
-                            registry_store,
-                            pending_reinstall_id,
-                        );
-                    }
-                    request = Some(InstallRequest::Stage(InstallStage::Downloading));
-                }
-                PreviewOutcome::Stay => {}
-            }
-        }
-        InstallStage::Downloading => {
-            match stage_downloading::render_live(ui, orchestrator, DownloadScreenCopy::INSTALL) {
-                DownloadingOutcome::Cancel => {
-                    orchestrator.reset_install_screen_to_paste();
-                    request = Some(InstallRequest::Stage(InstallStage::Paste));
-                }
-                DownloadingOutcome::Advance => {
-                    request = Some(InstallRequest::Stage(InstallStage::InstallingStub));
-                }
-                DownloadingOutcome::Stay => {}
-            }
-        }
-        InstallStage::InstallingStub => match stage_installing::render(ui, orchestrator) {
-            StageInstallingOutcome::Back(stage) => {
-                request = Some(InstallRequest::Stage(stage));
-            }
-            StageInstallingOutcome::Nav(dest) => {
-                request = Some(InstallRequest::Nav(dest));
-            }
-            StageInstallingOutcome::Stay => {}
-        },
-    }
+    let request = match orchestrator.install_screen_state.stage {
+        InstallStage::Gallery => gallery_stage(ui, palette, &mut orchestrator.install_screen_state),
+        InstallStage::Details => details_stage(
+            ui,
+            palette,
+            &mut orchestrator.install_screen_state,
+            &mut orchestrator.notification_manager,
+        ),
+        InstallStage::Paste => paste_stage(ui, palette, &mut orchestrator.install_screen_state),
+        InstallStage::Review => review_stage(ui, palette, orchestrator, ctx),
+        InstallStage::Downloading => downloading_stage(ui, orchestrator),
+        InstallStage::InstallingStub => installing_stage(ui, orchestrator),
+    };
 
     if let Some(req) = request {
         match req {
@@ -108,7 +59,278 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     }
 }
 
-fn run_preview_parse(state: &mut crate::ui::install::state_install::InstallScreenState) {
+fn gallery_stage(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut InstallScreenState,
+) -> Option<InstallRequest> {
+    match stage_gallery::render(ui, palette, state) {
+        GalleryOutcome::OpenPaste => {
+            state.clear_preview();
+            Some(InstallRequest::Stage(InstallStage::Paste))
+        }
+        GalleryOutcome::OpenDetails(index) => {
+            state.gallery.selected = Some(index);
+            Some(InstallRequest::Stage(InstallStage::Details))
+        }
+        GalleryOutcome::Stay => None,
+    }
+}
+
+fn details_stage(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut InstallScreenState,
+    notification_manager: &mut NotificationManager,
+) -> Option<InstallRequest> {
+    let Some(entry) = selected_entry(state) else {
+        state.gallery.selected = None;
+        return Some(InstallRequest::Stage(InstallStage::Gallery));
+    };
+    match stage_details::render(ui, palette, entry) {
+        DetailsOutcome::Back => Some(InstallRequest::Stage(InstallStage::Gallery)),
+        DetailsOutcome::ReviewInstallation => {
+            open_review_from_gallery_entry(entry, state, notification_manager)
+        }
+        DetailsOutcome::Stay => None,
+    }
+}
+
+fn paste_stage(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut InstallScreenState,
+) -> Option<InstallRequest> {
+    match stage_paste::render(ui, palette, state) {
+        PasteOutcome::Advance(InstallStage::Review) => {
+            run_preview_parse(state);
+            if state.preview_parse_error.is_some() {
+                return None;
+            }
+            state.review.origin = ReviewOrigin::Paste;
+            state.review.name = state
+                .parsed_preview
+                .as_ref()
+                .map_or_else(String::new, |preview| {
+                    stage_review::display_name("", preview)
+                });
+            state.review.modify = false;
+            Some(InstallRequest::Stage(InstallStage::Review))
+        }
+        PasteOutcome::Advance(next) => Some(InstallRequest::Stage(next)),
+        PasteOutcome::Stay => None,
+    }
+}
+
+fn review_stage(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+    ctx: &egui::Context,
+) -> Option<InstallRequest> {
+    let outcome = stage_review::render(
+        ui,
+        palette,
+        ctx,
+        &mut orchestrator.install_screen_state,
+        &orchestrator.registry,
+        orchestrator.pending_reinstall_id.as_deref(),
+    );
+    match outcome {
+        ReviewOutcome::Back => {
+            let back = orchestrator.install_screen_state.review.origin.back_stage();
+            if back == InstallStage::Gallery {
+                orchestrator.install_screen_state.clear_preview();
+                orchestrator.pending_reinstall_id = None;
+            }
+            Some(InstallRequest::Stage(back))
+        }
+        ReviewOutcome::BeginInstall => Some(InstallRequest::Stage(begin_install(orchestrator))),
+        ReviewOutcome::BeginImport => Some(InstallRequest::Stage(begin_import(orchestrator))),
+        ReviewOutcome::Stay => None,
+    }
+}
+
+fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
+    {
+        let state = &mut orchestrator.install_screen_state;
+        state.destination = state.destination.trim().to_string();
+        state.import_code = state.import_code.trim().to_string();
+        state.pipeline_kind = PipelineKind::Install;
+
+        let typed = state.review.name.trim().to_string();
+        let current = state
+            .parsed_preview
+            .as_ref()
+            .and_then(|p| p.name.as_deref())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if !typed.is_empty() && typed != current {
+            if let Some(preview) = state.parsed_preview.as_mut() {
+                preview.name = Some(typed.clone());
+            }
+            match share_export::set_packed_name(&state.import_code, &typed) {
+                Ok(renamed) => state.import_code = renamed,
+                Err(err) => {
+                    warn!(
+                        target = "orchestrator",
+                        "Begin Install: could not write the typed name into the share code: {err}"
+                    );
+                }
+            }
+        }
+    }
+
+    if let Some(reinstall_id) = orchestrator.pending_reinstall_id.clone() {
+        let OrchestratorApp {
+            wizard_state,
+            registry,
+            registry_store,
+            pending_reinstall_id,
+            ..
+        } = &mut *orchestrator;
+        start_hooks::reinstall_flip_at_install_click(
+            &reinstall_id,
+            wizard_state,
+            registry,
+            registry_store,
+            pending_reinstall_id,
+        );
+    }
+
+    InstallStage::Downloading
+}
+
+fn begin_import(orchestrator: &mut OrchestratorApp) -> InstallStage {
+    let Some(preview) = orchestrator.install_screen_state.parsed_preview.clone() else {
+        return InstallStage::Review;
+    };
+    let name = orchestrator.install_screen_state.review.name.clone();
+    let destination = orchestrator
+        .install_screen_state
+        .destination
+        .trim()
+        .to_string();
+    let code = orchestrator
+        .install_screen_state
+        .import_code
+        .trim()
+        .to_string();
+    let choice = orchestrator.install_screen_state.destination_choice;
+
+    match fork_pipeline_arm::mint_and_arm(
+        orchestrator,
+        &ForkArmRequest {
+            preview: &preview,
+            name: &name,
+            destination: &destination,
+            code: &code,
+            choice,
+        },
+    ) {
+        Ok(_) => InstallStage::Downloading,
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "Review: fork mint_and_arm failed: {err}"
+            );
+            orchestrator
+                .notification_manager
+                .error(format!("Could not start the import: {err}"));
+            InstallStage::Review
+        }
+    }
+}
+
+fn downloading_stage(
+    ui: &mut egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+) -> Option<InstallRequest> {
+    match orchestrator.install_screen_state.pipeline_kind {
+        PipelineKind::Install => {
+            match stage_downloading::render_live(ui, orchestrator, DownloadScreenCopy::INSTALL) {
+                DownloadingOutcome::Cancel => {
+                    orchestrator.reset_install_screen_to_gallery();
+                    Some(InstallRequest::Stage(InstallStage::Gallery))
+                }
+                DownloadingOutcome::Advance => {
+                    Some(InstallRequest::Stage(InstallStage::InstallingStub))
+                }
+                DownloadingOutcome::Stay => None,
+            }
+        }
+        PipelineKind::Fork => match stage_fork_download::render_live(ui, orchestrator) {
+            ForkDownloadOutcome::Cancel => {
+                orchestrator.reset_install_screen_to_gallery();
+                Some(InstallRequest::Stage(InstallStage::Gallery))
+            }
+            ForkDownloadOutcome::Import => {
+                let id = orchestrator.active_install_modlist_id.clone()?;
+                fork_route::extract_complete_route_to_workspace(orchestrator, id);
+                None
+            }
+            ForkDownloadOutcome::Stay => None,
+        },
+    }
+}
+
+fn installing_stage(
+    ui: &mut egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+) -> Option<InstallRequest> {
+    match stage_installing::render(ui, orchestrator) {
+        StageInstallingOutcome::Back(stage) => Some(InstallRequest::Stage(stage)),
+        StageInstallingOutcome::Nav(dest) => Some(InstallRequest::Nav(dest)),
+        StageInstallingOutcome::Stay => None,
+    }
+}
+
+fn selected_entry(state: &InstallScreenState) -> Option<&'static GalleryEntry> {
+    state
+        .gallery
+        .selected
+        .and_then(|index| catalog::entries().get(index))
+}
+
+fn open_review_from_gallery_entry(
+    entry: &GalleryEntry,
+    state: &mut InstallScreenState,
+    notification_manager: &mut NotificationManager,
+) -> Option<InstallRequest> {
+    match catalog::share_code(entry) {
+        Ok(code) => {
+            state.import_code = code;
+            run_preview_parse(state);
+            if let Some(err) = state.preview_parse_error.clone() {
+                notification_manager.error(format!(
+                    "Could not prepare \"{}\" for review: {err}",
+                    entry.name
+                ));
+                return None;
+            }
+            state.review.origin = ReviewOrigin::Details;
+            state.review.name = entry.name.to_string();
+            state.review.modify = false;
+            Some(InstallRequest::Stage(InstallStage::Review))
+        }
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "Gallery: share code for {} could not be generated: {err}", entry.id
+            );
+            state.clear_preview();
+            state.preview_parse_error = Some(err.clone());
+            notification_manager.error(format!(
+                "Could not prepare \"{}\" for review: {err}",
+                entry.name
+            ));
+            None
+        }
+    }
+}
+
+fn run_preview_parse(state: &mut InstallScreenState) {
     state.clear_preview();
     match preview_modlist_share_code(state.import_code.trim()) {
         Ok(preview) => {
@@ -119,5 +341,122 @@ fn run_preview_parse(state: &mut crate::ui::install::state_install::InstallScree
         Err(msg) => {
             state.preview_parse_error = Some(msg);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::*;
+    use crate::registry::model::ModlistRegistry;
+    use crate::registry::store::RegistryStore;
+
+    static PAGEINSTALLTEST_TMP: AtomicU64 = AtomicU64::new(0);
+
+    fn orch_for_install_test() -> OrchestratorApp {
+        let mut app = OrchestratorApp::new(false);
+        let tmp = std::env::temp_dir().join(format!(
+            "bio_pageinstalltest_{}_{}.json",
+            std::process::id(),
+            PAGEINSTALLTEST_TMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        app.registry_store = RegistryStore::new_with_path(tmp);
+        app.registry = ModlistRegistry::default();
+        app
+    }
+
+    #[test]
+    fn begin_install_writes_the_typed_name_into_the_preview_and_code() {
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+
+        let mut app = orch_for_install_test();
+        app.install_screen_state.import_code = code;
+        app.install_screen_state.parsed_preview = Some(preview);
+        app.install_screen_state.review.name = "My Renamed List".to_string();
+        app.install_screen_state.destination = "D:\\eet install".to_string();
+
+        begin_install(&mut app);
+
+        assert_eq!(
+            app.install_screen_state
+                .parsed_preview
+                .as_ref()
+                .and_then(|p| p.name.as_deref()),
+            Some("My Renamed List")
+        );
+        let reparsed = preview_modlist_share_code(&app.install_screen_state.import_code)
+            .expect("renamed code still parses");
+        assert_eq!(reparsed.name.as_deref(), Some("My Renamed List"));
+    }
+
+    #[test]
+    fn begin_install_keeps_the_packed_name_when_the_typed_name_is_blank() {
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+        let original_name = preview.name.clone();
+
+        let mut app = orch_for_install_test();
+        app.install_screen_state.import_code = code.clone();
+        app.install_screen_state.parsed_preview = Some(preview);
+        app.install_screen_state.review.name = "   ".to_string();
+        app.install_screen_state.destination = "D:\\eet install".to_string();
+
+        begin_install(&mut app);
+
+        assert_eq!(app.install_screen_state.import_code, code.trim());
+        assert_eq!(
+            app.install_screen_state
+                .parsed_preview
+                .as_ref()
+                .and_then(|p| p.name.clone()),
+            original_name
+        );
+    }
+
+    #[test]
+    fn details_review_prefills_the_entry_name_and_records_its_origin() {
+        let entry = catalog::entries()
+            .iter()
+            .find(|e| e.id == "eet-essentials")
+            .expect("EET Essentials is in the catalog");
+        let mut state = InstallScreenState::default();
+        let mut notification_manager = NotificationManager::new();
+
+        let request = open_review_from_gallery_entry(entry, &mut state, &mut notification_manager);
+
+        assert!(matches!(
+            request,
+            Some(InstallRequest::Stage(InstallStage::Review))
+        ));
+        assert_eq!(state.review.origin, ReviewOrigin::Details);
+        assert_eq!(state.review.name, "EET Essentials");
+        assert!(!state.review.modify);
+        assert!(state.preview_cached);
+        assert!(state.parsed_preview.is_some());
+        assert!(!state.import_code.is_empty());
+    }
+
+    #[test]
+    fn a_gallery_entry_generates_its_code_once_per_transition() {
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let mut state = InstallScreenState::default();
+        let mut notification_manager = NotificationManager::new();
+        open_review_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        let first = state.import_code.clone();
+        open_review_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        assert_eq!(
+            first, state.import_code,
+            "regenerating the same entry must be deterministic"
+        );
     }
 }

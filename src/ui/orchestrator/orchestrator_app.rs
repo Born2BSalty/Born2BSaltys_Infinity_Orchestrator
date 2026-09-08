@@ -557,7 +557,7 @@ impl OrchestratorApp {
         }
     }
 
-    pub(crate) fn reset_install_screen_to_paste(&mut self) {
+    pub(crate) fn reset_install_screen_to_gallery(&mut self) {
         reset_install_pipeline_state(InstallPipelineResetSet {
             stream_download_rx: &mut self.stream_download_rx,
             archive_skip_rx: &mut self.archive_skip_rx,
@@ -1421,7 +1421,8 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     wizard_state.step2.update_selected_extract_running = false;
 
     install_screen_state.clear_preview();
-    install_screen_state.stage = crate::ui::install::state_install::InstallStage::Paste;
+    install_screen_state.pipeline_kind = crate::ui::install::state_install::PipelineKind::Install;
+    install_screen_state.stage = crate::ui::install::state_install::InstallStage::Gallery;
 
     if let Ok(mut g) = hash_progress.lock() {
         *g = None;
@@ -1628,6 +1629,7 @@ mod tests {
     fn dirty_iss() -> InstallScreenState {
         let mut iss = InstallScreenState {
             stage: crate::ui::install::state_install::InstallStage::Downloading,
+            pipeline_kind: crate::ui::install::state_install::PipelineKind::Fork,
             ..Default::default()
         };
         iss.pipeline_flags.set_armed(true);
@@ -1816,7 +1818,12 @@ mod tests {
         assert!(iss.hashed_indices.is_empty());
         assert_eq!(
             iss.stage,
-            crate::ui::install::state_install::InstallStage::Paste
+            crate::ui::install::state_install::InstallStage::Gallery
+        );
+        assert_eq!(
+            iss.pipeline_kind,
+            crate::ui::install::state_install::PipelineKind::Install,
+            "a cancelled or completed run must not leave the screen armed as a fork"
         );
 
         assert!(hash.lock().unwrap().is_none(), "shared hash mutex blanked");

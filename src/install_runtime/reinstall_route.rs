@@ -5,35 +5,45 @@ use tracing::warn;
 
 use crate::app::modlist_share::preview_modlist_share_code;
 use crate::registry::model::ModlistEntry;
-use crate::ui::install::state_install::{DestChoice, InstallStage, PreviewTab};
+use crate::ui::install::state_install::{
+    DestChoice, InstallStage, PipelineKind, PreviewTab, ReviewOrigin,
+};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 
 pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorApp) {
-    let st = &mut orchestrator.install_screen_state;
+    let code = modlist.latest_share_code.clone().unwrap_or_default();
 
-    st.destination.clone_from(&modlist.destination_folder);
-    st.import_code = modlist.latest_share_code.clone().unwrap_or_default();
-
-    st.destination_choice = Some(DestChoice::Clear);
-
-    st.clear_preview();
-    match preview_modlist_share_code(st.import_code.trim()) {
-        Ok(preview) => {
-            st.parsed_preview = Some(preview);
-            st.preview_cached = true;
-            st.active_preview_tab = PreviewTab::default();
-        }
+    let preview = match preview_modlist_share_code(code.trim()) {
+        Ok(preview) => preview,
         Err(msg) => {
             warn!(
                 target = "orchestrator",
-                "Reinstall: stored share code for {} did not parse: {msg} \
-                 (preview will surface the error)",
-                modlist.id
+                "Reinstall: stored share code for {} did not parse: {msg}", modlist.id
             );
-            st.preview_parse_error = Some(msg);
+            orchestrator.notification_manager.error(format!(
+                "Could not read the stored share code for \"{}\": {msg}",
+                modlist.name
+            ));
+            return;
         }
-    }
+    };
+
+    let st = &mut orchestrator.install_screen_state;
+
+    st.destination.clone_from(&modlist.destination_folder);
+    st.import_code = code;
+
+    st.destination_choice = Some(DestChoice::Clear);
+    st.pipeline_kind = PipelineKind::Install;
+    st.review.origin = ReviewOrigin::Reinstall;
+    st.review.name.clone_from(&modlist.name);
+    st.review.modify = false;
+
+    st.clear_preview();
+    st.parsed_preview = Some(preview);
+    st.preview_cached = true;
+    st.active_preview_tab = PreviewTab::default();
 
     let dest_flags = DestChoice::Clear.to_flags();
     orchestrator
@@ -47,23 +57,44 @@ pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorAp
 
     orchestrator.pending_reinstall_id = Some(modlist.id.clone());
 
-    orchestrator.install_screen_state.stage = InstallStage::Preview;
+    orchestrator.install_screen_state.stage = InstallStage::Review;
     orchestrator.nav = NavDestination::Install;
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
-    use crate::registry::model::{Game, ModlistEntry, ModlistState};
+    use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
+    use crate::registry::store::RegistryStore;
+
+    static REINSTALLTEST_TMP: AtomicU64 = AtomicU64::new(0);
+
+    fn orch_for_reinstall_test() -> OrchestratorApp {
+        let mut app = OrchestratorApp::new(false);
+        let tmp = std::env::temp_dir().join(format!(
+            "bio_reinstalltest_{}_{}.json",
+            std::process::id(),
+            REINSTALLTEST_TMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        app.registry_store = RegistryStore::new_with_path(tmp);
+        app.registry = ModlistRegistry::default();
+        app
+    }
 
     fn entry() -> ModlistEntry {
+        let stub = crate::ui::install::gallery::catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = crate::ui::install::gallery::catalog::share_code(stub).expect("stub code");
         ModlistEntry {
             id: "REINSTALL0001".to_string(),
             name: "Polished EET".to_string(),
             game: Game::EET,
             destination_folder: "D:\\eet install".to_string(),
             state: ModlistState::Installed,
-            latest_share_code: Some("BIO-MODLIST-V1:NOT-A-REAL-CODE".to_string()),
+            latest_share_code: Some(code),
             ..Default::default()
         }
     }
@@ -85,6 +116,55 @@ mod tests {
             "Reinstall is a fresh from-scratch reinstall — no -s/-c \
              (SPEC §3.1 / §13.12 #1 'OFF for fresh installs')"
         );
+    }
+
+    #[test]
+    fn reinstall_lands_on_review_with_the_entry_name_folder_and_clear_forced() {
+        let modlist = entry();
+        let mut app = orch_for_reinstall_test();
+
+        start_reinstall(&modlist, &mut app);
+
+        let st = &app.install_screen_state;
+        assert_eq!(st.stage, InstallStage::Review);
+        assert_eq!(st.review.origin, ReviewOrigin::Reinstall);
+        assert_eq!(st.review.name, "Polished EET");
+        assert!(!st.review.modify);
+        assert_eq!(st.destination, "D:\\eet install");
+        assert_eq!(st.destination_choice, Some(DestChoice::Clear));
+        assert_eq!(st.pipeline_kind, PipelineKind::Install);
+        assert_eq!(app.nav, NavDestination::Install);
+        assert_eq!(app.pending_reinstall_id.as_deref(), Some("REINSTALL0001"));
+    }
+
+    #[test]
+    fn reinstall_with_unreadable_code_stays_put_and_reports() {
+        let modlist = ModlistEntry {
+            latest_share_code: Some("not a share code".to_string()),
+            ..entry()
+        };
+        let mut app = orch_for_reinstall_test();
+        let nav_before = app.nav.clone();
+        let stage_before = app.install_screen_state.stage;
+
+        start_reinstall(&modlist, &mut app);
+
+        assert_eq!(app.nav, nav_before);
+        assert_eq!(app.install_screen_state.stage, stage_before);
+        assert!(app.pending_reinstall_id.is_none());
+        let errors: Vec<_> = app
+            .notification_manager
+            .history()
+            .iter()
+            .filter(|record| matches!(record.kind, egui_toast::ToastKind::Error))
+            .collect();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].text.contains(&modlist.name));
+    }
+
+    #[test]
+    fn reinstall_back_returns_to_the_gallery() {
+        assert_eq!(ReviewOrigin::Reinstall.back_stage(), InstallStage::Gallery);
     }
 
     #[test]

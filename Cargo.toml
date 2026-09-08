@@ -1,6 +1,6 @@
 [package]
 name = "bio"
-version = "0.2.2-alpha"
+version = "0.3.0-alpha"
 edition = "2024"
 build = "build.rs"
 authors = ["Born2BSalty"]
