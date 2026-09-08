@@ -239,7 +239,7 @@ fn resolve_requirement_path(value: &str, game_dir: Option<&str>) -> Option<PathB
     Some(Path::new(game_dir).join(trimmed))
 }
 
-fn looks_like_windows_absolute(value: &str) -> bool {
+const fn looks_like_windows_absolute(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() > 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic()
 }

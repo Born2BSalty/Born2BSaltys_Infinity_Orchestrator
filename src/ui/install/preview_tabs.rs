@@ -163,9 +163,16 @@ fn summary_text(p: &ModlistSharePreview) -> String {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("Shared modlist");
+    let author = p
+        .author
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("None");
     format!(
         "BIO Modlist Import Preview\n\n\
          Modlist: {modlist_name}\n\
+         Creator / author: {author}\n\
          BIO version: {bio}\n\
          Game install: {game}\n\
          Install mode: {mode}\n\n\
@@ -184,6 +191,7 @@ fn summary_text(p: &ModlistSharePreview) -> String {
          - Store pending mod config files if included.\n\
          - Keep local game, mods, archive, and backup paths unchanged.",
         bio = p.bio_version,
+        author = author,
         game = p.game_install,
         mode = p.install_mode,
         bgee = p.bgee_entries,
@@ -233,6 +241,7 @@ mod tests {
         let s = summary_text(&p);
         assert!(s.starts_with("BIO Modlist Import Preview"));
         assert!(s.contains("Modlist: Tactical EET 2026"));
+        assert!(s.contains("Creator / author: @hidden"));
         assert!(s.contains("Game install: EET"));
         assert!(s.contains("BGEE: 21 entries"));
         assert!(s.contains("BG2EE: 115 entries"));
@@ -240,9 +249,15 @@ mod tests {
         assert!(s.contains("Mod config files: 4"));
         assert!(!s.contains("Step 1"));
         assert!(
-            !s.contains("@hidden") && !s.contains("Root"),
-            "summary shows the modlist name, not author/fork details"
+            !s.contains("Root"),
+            "summary shows direct author but not fork details"
         );
+    }
+
+    #[test]
+    fn summary_shows_none_when_author_absent() {
+        let s = summary_text(&sample_preview());
+        assert!(s.contains("Creator / author: None"));
     }
 
     #[test]
