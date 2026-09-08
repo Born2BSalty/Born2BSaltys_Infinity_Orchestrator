@@ -144,10 +144,9 @@ impl Step2TabRowState {
                 &target_filter,
             ),
             issue_summary,
-            prompt_count: collect_step2_prompt_toolbar_entries(&orchestrator.wizard_state)
-                .iter()
-                .map(|e| e.component_ids.len())
-                .sum(),
+            prompt_count: crate::app::prompt_popup_text::prompt_toolbar_count(
+                &collect_step2_prompt_toolbar_entries(&orchestrator.wizard_state),
+            ),
             selected_count: orchestrator.wizard_state.step2.selected_count,
             total_count: orchestrator.wizard_state.step2.total_count,
             is_fork: orchestrator.workspace_view.fork_meta.is_some(),

@@ -3,9 +3,7 @@
 
 use eframe::egui;
 
-use crate::app::prompt_popup_text::{build_mod_prompt_popup_text, mod_has_any_prompt};
 use crate::app::state::{Step2ModState, Step2Selection};
-use crate::parser::prompt_eval_expr::PromptEvalContext;
 use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step2::tree_compat_display_step2::{parent_compat_summary, parent_compat_target};
@@ -19,7 +17,6 @@ use crate::ui::step2::tree_selection_rules_step2::{
 pub(crate) struct ParentRowResult {
     pub selection: Option<Step2Selection>,
     pub open_compat_for_component: Option<(String, String, String)>,
-    pub open_prompt_popup: Option<(String, String)>,
     pub open_details: bool,
 }
 
@@ -35,7 +32,6 @@ struct ParentSelectionCounts {
 struct ParentRenderContext<'a> {
     active_tab: &'a str,
     selected: Option<&'a Step2Selection>,
-    prompt_eval: &'a PromptEvalContext,
     jump_to_selected_requested: &'a mut bool,
     palette: ThemePalette,
 }
@@ -44,7 +40,6 @@ pub(crate) struct ParentRowInput<'a> {
     pub active_tab: &'a str,
     pub selected: Option<&'a Step2Selection>,
     pub next_selection_order: &'a mut usize,
-    pub prompt_eval: &'a PromptEvalContext,
     pub jump_to_selected_requested: &'a mut bool,
     pub palette: ThemePalette,
 }
@@ -58,7 +53,6 @@ pub(crate) fn render_parent_row(
         active_tab,
         selected,
         next_selection_order,
-        prompt_eval,
         jump_to_selected_requested,
         palette,
     } = input;
@@ -73,7 +67,6 @@ pub(crate) fn render_parent_row(
     let mut row_ctx = ParentRenderContext {
         active_tab,
         selected,
-        prompt_eval,
         jump_to_selected_requested,
         palette,
     };
@@ -216,7 +209,6 @@ fn render_parent_label_area(
             );
             crate::ui::step2::tree_header_marker_step2::render(ui, mod_state, ctx.palette);
             render_parent_compat_pill(ui, mod_state, result, parent_summary);
-            render_parent_prompt_pill(ui, mod_state, ctx, result);
             render_parent_details_action(ui, mod_state, ctx, result, row_hovered || is_selected);
         },
     );
@@ -310,39 +302,5 @@ fn render_parent_compat_pill(
             target_compat.component_id.clone(),
             target_compat.raw_line.clone(),
         ));
-    }
-}
-
-fn render_parent_prompt_pill(
-    ui: &mut egui::Ui,
-    mod_state: &Step2ModState,
-    ctx: &ParentRenderContext<'_>,
-    result: &mut ParentRowResult,
-) {
-    if !mod_has_any_prompt(mod_state, ctx.prompt_eval) {
-        return;
-    }
-    ui.add_space(6.0);
-    let prompt_resp = ui.add(
-        egui::Button::new(
-            crate::ui::shared::typography_global::strong("PROMPT")
-                .color(crate::ui::shared::theme_global::prompt_text())
-                .size(crate::ui::shared::typography_global::SIZE_PILL_TEXT),
-        )
-        .fill(crate::ui::shared::theme_global::prompt_fill())
-        .stroke(egui::Stroke::new(
-            crate::ui::shared::layout_tokens_global::BORDER_THIN,
-            crate::ui::shared::theme_global::prompt_stroke(),
-        ))
-        .corner_radius(egui::CornerRadius::same(7))
-        .min_size(egui::vec2(0.0, 18.0)),
-    );
-    let prompt_resp =
-        prompt_resp.on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
-    if prompt_resp.clicked() {
-        select_parent(result, ctx.active_tab, &mod_state.tp_file);
-        if let Some(text) = build_mod_prompt_popup_text(mod_state, ctx.prompt_eval) {
-            result.open_prompt_popup = Some((mod_state.tp_file.clone(), text));
-        }
     }
 }

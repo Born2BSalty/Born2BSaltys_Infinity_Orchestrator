@@ -47,9 +47,6 @@ pub(super) fn build_prompt_summary_index(
             game_allow: event.game_allow.clone(),
             game_deny: event.game_deny.clone(),
         };
-        mod_lines.push(line.clone());
-        mod_events.push(summary_event.clone());
-
         if let Some(component_id) = extract_component_id_from_node_id(&event.node_id) {
             by_component_id
                 .entry(component_id.clone())
@@ -59,6 +56,9 @@ pub(super) fn build_prompt_summary_index(
                 .entry(component_id)
                 .or_default()
                 .push(summary_event);
+        } else {
+            mod_lines.push(line);
+            mod_events.push(summary_event);
         }
     }
 
@@ -239,5 +239,66 @@ fn diagnostic_preview(output: &ParserOutput) -> Option<String> {
         Some(code.to_string())
     } else {
         Some(format!("{code}: {msg}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn readln(node_id: &str, text: &str) -> ParserEvent {
+        ParserEvent {
+            kind: "readln".to_string(),
+            node_id: node_id.to_string(),
+            text: text.to_string(),
+            ..ParserEvent::default()
+        }
+    }
+
+    fn output(events: Vec<ParserEvent>) -> ParserOutput {
+        ParserOutput {
+            schema_version: 2,
+            source_file: "setup-mod.tp2".to_string(),
+            tra_language_requested: String::new(),
+            tra_language_used: String::new(),
+            events,
+            flow: Vec::new(),
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn component_bound_events_never_reach_the_mod_level_list() {
+        let index = build_prompt_summary_index(
+            &output(vec![
+                readln(
+                    "readln:lib/502.tpa:@502:1",
+                    "Please enter the storage capacity",
+                ),
+                readln("readln:lib/502.tpa:@502:2", "Try again"),
+            ]),
+            None,
+        );
+        assert!(index.mod_events.is_empty());
+        assert!(index.mod_summary.is_none());
+        assert_eq!(index.by_component_id_events["502"].len(), 2);
+        assert!(index.by_component_id["502"].contains("storage capacity"));
+    }
+
+    #[test]
+    fn events_without_a_component_stay_mod_level() {
+        let index = build_prompt_summary_index(
+            &output(vec![
+                readln("readln:setup-mod.tp2:1", "Install language?"),
+                readln("readln:lib/10.tpa:@10:1", "Pick a flavour"),
+            ]),
+            None,
+        );
+        assert_eq!(index.mod_events.len(), 1);
+        assert_eq!(index.mod_events[0].text, "Install language?");
+        assert_eq!(index.mod_summary.as_deref(), Some("Install language?"));
+        assert_eq!(index.by_component_id_events["10"].len(), 1);
+        assert!(!index.by_component_id.contains_key("0"));
     }
 }

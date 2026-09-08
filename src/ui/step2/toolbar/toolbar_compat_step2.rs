@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::app::state::Step2ModState;
+use crate::app::state::{Step2ComponentState, Step2ModState};
 use crate::ui::step2::tree_compat_display_step2::compat_colors;
 
 #[derive(Clone)]
@@ -35,19 +35,28 @@ fn issue_filter_bucket(kind: &str) -> &'static str {
     }
 }
 
+fn actionable_issue_bucket(component: &Step2ComponentState) -> Option<&'static str> {
+    if !component.checked {
+        return None;
+    }
+    let kind = component.compat_kind.as_deref()?.trim();
+    if kind.is_empty() {
+        return None;
+    }
+    let bucket = issue_filter_bucket(kind);
+    (!matches!(bucket, "Mismatch" | "Included")).then_some(bucket)
+}
+
 pub(crate) fn active_tab_compat_summary(mods: &[Step2ModState]) -> Step2ToolbarCompatSummary {
     let mut count = 0usize;
     let mut bucket_counts = std::collections::BTreeMap::<&'static str, usize>::new();
     for mod_state in mods {
         for component in &mod_state.components {
-            let Some(kind) = component.compat_kind.as_deref() else {
+            let Some(bucket) = actionable_issue_bucket(component) else {
                 continue;
             };
-            if kind.trim().is_empty() {
-                continue;
-            }
             count += 1;
-            *bucket_counts.entry(issue_filter_bucket(kind)).or_default() += 1;
+            *bucket_counts.entry(bucket).or_default() += 1;
         }
     }
     let dominant_filter = [
@@ -63,6 +72,7 @@ pub(crate) fn active_tab_compat_summary(mods: &[Step2ModState]) -> Step2ToolbarC
         "Other",
     ]
     .into_iter()
+    .rev()
     .max_by_key(|bucket| bucket_counts.get(bucket).copied().unwrap_or(0))
     .unwrap_or("All");
     Step2ToolbarCompatSummary {
@@ -79,18 +89,15 @@ pub(crate) fn first_active_tab_issue_target(
     let mut first_any = None::<Step2ToolbarIssueTarget>;
     for mod_state in mods {
         for component in &mod_state.components {
-            let Some(kind) = component.compat_kind.as_deref() else {
+            let Some(bucket) = actionable_issue_bucket(component) else {
                 continue;
             };
-            if kind.trim().is_empty() {
-                continue;
-            }
             let target = Step2ToolbarIssueTarget {
                 tp_file: mod_state.tp_file.clone(),
                 component_id: component.component_id.clone(),
                 component_key: component.raw_line.clone(),
             };
-            if issue_filter_bucket(kind).eq_ignore_ascii_case(filter) {
+            if bucket.eq_ignore_ascii_case(filter) {
                 return Some(target);
             }
             if first_any.is_none() {
@@ -173,4 +180,119 @@ pub(crate) fn draw_active_tab_issue_badge(
             summary.dominant_count
         ))
         .clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn component(id: &str, checked: bool, disabled: bool, kind: &str) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: id.to_string(),
+            label: id.to_string(),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: format!("~MOD.TP2~ #0 #{id}"),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled,
+            compat_kind: Some(kind.to_string()),
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked,
+            selected_order: None,
+        }
+    }
+
+    fn mod_with(components: Vec<Step2ComponentState>) -> Step2ModState {
+        Step2ModState {
+            name: "Mod".to_string(),
+            tp_file: "mod.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components,
+        }
+    }
+
+    #[test]
+    fn badge_counts_only_ticked_actionable_components() {
+        let mods = vec![mod_with(vec![
+            component("1", true, false, "conflict"),
+            component("2", false, false, "conflict"),
+            component("3", false, true, "not_compatible"),
+            component("4", true, false, "warning"),
+            component("5", false, false, "warning"),
+        ])];
+        let summary = active_tab_compat_summary(&mods);
+        assert_eq!(summary.total_count, 2);
+        assert_eq!(summary.dominant_filter, "Conflict");
+        assert_eq!(summary.dominant_count, 1);
+    }
+
+    #[test]
+    fn badge_ignores_informational_kinds_even_when_ticked() {
+        let mods = vec![mod_with(vec![
+            component("1", true, false, "mismatch"),
+            component("2", true, false, "game_mismatch"),
+            component("3", true, false, "included"),
+            component("4", true, false, "not_needed"),
+            component("5", true, true, "mismatch"),
+        ])];
+        let summary = active_tab_compat_summary(&mods);
+        assert_eq!(summary.total_count, 0);
+        assert!(first_active_tab_issue_target(&mods, "Mismatch").is_none());
+        assert!(first_active_tab_issue_target(&mods, "All").is_none());
+    }
+
+    #[test]
+    fn badge_tie_breaks_toward_the_more_severe_bucket() {
+        let mods = vec![mod_with(vec![
+            component("1", true, false, "warning"),
+            component("2", true, false, "conflict"),
+        ])];
+        let summary = active_tab_compat_summary(&mods);
+        assert_eq!(summary.dominant_filter, "Conflict");
+        let target = first_active_tab_issue_target(&mods, summary.dominant_filter).expect("target");
+        assert_eq!(target.component_id, "2");
+    }
+
+    #[test]
+    fn badge_hidden_when_no_ticked_component_has_an_issue() {
+        let mods = vec![mod_with(vec![
+            component("1", false, false, "conflict"),
+            component("2", false, false, "warning"),
+        ])];
+        assert_eq!(active_tab_compat_summary(&mods).total_count, 0);
+    }
+
+    #[test]
+    fn jump_target_skips_unticked_components() {
+        let mods = vec![mod_with(vec![
+            component("1", false, false, "conflict"),
+            component("2", true, false, "conflict"),
+        ])];
+        let target = first_active_tab_issue_target(&mods, "Conflict").expect("target");
+        assert_eq!(target.component_id, "2");
+        let none = first_active_tab_issue_target(
+            &[mod_with(vec![component("1", false, false, "conflict")])],
+            "Conflict",
+        );
+        assert!(none.is_none());
+    }
 }
