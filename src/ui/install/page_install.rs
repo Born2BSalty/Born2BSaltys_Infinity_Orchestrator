@@ -24,6 +24,7 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::NotificationManager;
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
+#[derive(Debug, PartialEq, Eq)]
 enum InstallRequest {
     Stage(InstallStage),
     Nav(NavDestination),
@@ -203,6 +204,9 @@ fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
 }
 
 fn begin_import(orchestrator: &mut OrchestratorApp) -> InstallStage {
+    if !orchestrator.ensure_creator_name() {
+        return InstallStage::Review;
+    }
     let Some(preview) = orchestrator.install_screen_state.parsed_preview.clone() else {
         return InstallStage::Review;
     };
@@ -279,8 +283,20 @@ fn installing_stage(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
 ) -> Option<InstallRequest> {
-    match stage_installing::render(ui, orchestrator) {
+    let outcome = stage_installing::render(ui, orchestrator);
+    console_back_request(orchestrator, outcome)
+}
+
+fn console_back_request(
+    orchestrator: &mut OrchestratorApp,
+    outcome: StageInstallingOutcome,
+) -> Option<InstallRequest> {
+    match outcome {
         StageInstallingOutcome::Back(stage) => Some(InstallRequest::Stage(stage)),
+        StageInstallingOutcome::BackAfterCompletedInstall => {
+            crate::ui::orchestrator::page_router::reset_completed_install_runtime(orchestrator);
+            Some(InstallRequest::Stage(InstallStage::Gallery))
+        }
         StageInstallingOutcome::Nav(dest) => Some(InstallRequest::Nav(dest)),
         StageInstallingOutcome::Stay => None,
     }
@@ -346,24 +362,11 @@ fn run_preview_parse(state: &mut InstallScreenState) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::registry::model::ModlistRegistry;
-    use crate::registry::store::RegistryStore;
-
-    static PAGEINSTALLTEST_TMP: AtomicU64 = AtomicU64::new(0);
 
     fn orch_for_install_test() -> OrchestratorApp {
-        let mut app = OrchestratorApp::new(false);
-        let tmp = std::env::temp_dir().join(format!(
-            "bio_pageinstalltest_{}_{}.json",
-            std::process::id(),
-            PAGEINSTALLTEST_TMP.fetch_add(1, Ordering::Relaxed)
-        ));
-        app.registry_store = RegistryStore::new_with_path(tmp);
-        app.registry = ModlistRegistry::default();
-        app
+        OrchestratorApp::new_isolated_for_test("pageinstalltest")
     }
 
     #[test]
@@ -419,6 +422,89 @@ mod tests {
                 .and_then(|p| p.name.clone()),
             original_name
         );
+    }
+
+    #[test]
+    fn begin_import_requires_creator_name() {
+        use egui_toast::ToastKind;
+
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+
+        let mut app = orch_for_install_test();
+        app.install_screen_state.import_code = code;
+        app.install_screen_state.parsed_preview = Some(preview);
+        app.install_screen_state.review.name = "Gate Test".to_string();
+        let tmp_dest = std::env::temp_dir()
+            .join("bio_pageinstalltest_gate_dest")
+            .to_string_lossy()
+            .to_string();
+        app.install_screen_state.destination = tmp_dest;
+        app.install_screen_state.stage = InstallStage::Review;
+        app.redesign_settings.user_name.clear();
+
+        let stage = begin_import(&mut app);
+
+        assert_eq!(stage, InstallStage::Review);
+        assert!(app.registry.entries.is_empty());
+        let history = app.notification_manager.history();
+        assert_eq!(history.len(), 1);
+        let record = history.back().unwrap();
+        assert_eq!(record.kind, ToastKind::Error);
+        assert_eq!(
+            record.text,
+            "Set your name in Settings > General before creating or sharing a modlist."
+        );
+    }
+
+    #[test]
+    fn console_back_after_a_finished_install_resets_the_screen_to_the_gallery() {
+        use crate::ui::orchestrator::orchestrator_app::PostInstallResetGate;
+
+        let mut app = orch_for_install_test();
+        app.install_screen_state.review.name = "Old".to_string();
+        app.install_screen_state.destination = "C:\\old".to_string();
+        app.install_screen_state.import_code = "x".to_string();
+        app.install_screen_state.preview_cached = true;
+        app.install_screen_state.stage = InstallStage::InstallingStub;
+        app.post_install_reset_gate = PostInstallResetGate::Pending;
+
+        let request =
+            console_back_request(&mut app, StageInstallingOutcome::BackAfterCompletedInstall);
+
+        assert_eq!(request, Some(InstallRequest::Stage(InstallStage::Gallery)));
+        assert!(app.install_screen_state.review.name.is_empty());
+        assert!(app.install_screen_state.destination.is_empty());
+        assert!(app.install_screen_state.import_code.is_empty());
+        assert!(!app.install_screen_state.preview_cached);
+        assert!(!app.post_install_reset_gate.is_pending());
+    }
+
+    #[test]
+    fn console_back_during_a_running_install_keeps_the_review() {
+        use crate::ui::orchestrator::orchestrator_app::PostInstallResetGate;
+        use crate::ui::orchestrator::page_router;
+
+        let mut app = orch_for_install_test();
+        app.install_screen_state.review.name = "Old".to_string();
+        app.install_screen_state.destination = "C:\\old".to_string();
+        app.install_screen_state.import_code = "x".to_string();
+        app.install_screen_state.preview_cached = true;
+        app.install_screen_state.stage = InstallStage::InstallingStub;
+        app.post_install_reset_gate = PostInstallResetGate::Pending;
+        app.wizard_state.step5.install_running = true;
+
+        assert!(!page_router::completed_install_reset_due(&app));
+
+        let request =
+            console_back_request(&mut app, StageInstallingOutcome::Back(InstallStage::Review));
+
+        assert_eq!(request, Some(InstallRequest::Stage(InstallStage::Review)));
+        assert_eq!(app.install_screen_state.review.name, "Old");
+        assert_eq!(app.install_screen_state.destination, "C:\\old");
     }
 
     #[test]

@@ -498,25 +498,12 @@ fn render_card_list(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::registry::model::ModlistRegistry;
-    use crate::registry::store::RegistryStore;
     use crate::ui::install::state_install::InstallStage;
 
-    static HOMETEST_TMP: AtomicU64 = AtomicU64::new(0);
-
     fn orch_for_home_test() -> OrchestratorApp {
-        let mut app = OrchestratorApp::new(false);
-        let tmp = std::env::temp_dir().join(format!(
-            "bio_hometest_{}_{}.json",
-            std::process::id(),
-            HOMETEST_TMP.fetch_add(1, Ordering::Relaxed)
-        ));
-        app.registry_store = RegistryStore::new_with_path(tmp);
-        app.registry = ModlistRegistry::default();
-        app
+        OrchestratorApp::new_isolated_for_test("hometest")
     }
 
     #[test]

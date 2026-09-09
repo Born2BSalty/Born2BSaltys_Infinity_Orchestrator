@@ -1355,6 +1355,15 @@ impl OrchestratorApp {
         }
     }
 
+    pub(crate) fn ensure_creator_name(&mut self) -> bool {
+        if !self.redesign_settings.user_name.trim().is_empty() {
+            return true;
+        }
+        self.notification_manager
+            .error("Set your name in Settings > General before creating or sharing a modlist.");
+        false
+    }
+
     fn refresh_path_validation_status(&mut self) {
         self.path_validation = compute_path_validation_summary(&self.wizard_state);
         let issue_count = self
@@ -1554,6 +1563,32 @@ impl eframe::App for OrchestratorApp {
     }
 }
 
+#[cfg(test)]
+impl OrchestratorApp {
+    pub(crate) fn new_isolated_for_test(tag: &str) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static ISOLATED_TEST_SEQ: AtomicU64 = AtomicU64::new(0);
+        let stem = format!(
+            "bio_{tag}_{}_{}",
+            std::process::id(),
+            ISOLATED_TEST_SEQ.fetch_add(1, Ordering::Relaxed)
+        );
+        let dir = std::env::temp_dir();
+        let mut app = Self::new(false);
+        app.registry_store =
+            RegistryStore::new_with_path(dir.join(format!("{stem}_registry.json")));
+        app.registry = ModlistRegistry::default();
+        app.redesign_settings_store =
+            crate::settings::redesign_store::RedesignSettingsStore::new_with_path(
+                dir.join(format!("{stem}_redesign_settings.json")),
+            );
+        app.settings_store = crate::settings::store::SettingsStore::new_with_path(
+            dir.join(format!("{stem}_settings.json")),
+        );
+        app
+    }
+}
+
 impl Drop for OrchestratorApp {
     fn drop(&mut self) {
         self.join_all_destination_prep_workers();
@@ -1611,6 +1646,29 @@ fn next_debounce_due_in(app: &OrchestratorApp) -> Option<std::time::Duration> {
 mod tests {
     use super::*;
     use std::sync::mpsc::TryRecvError;
+
+    #[test]
+    fn isolated_test_app_flushes_settings_to_temp_not_the_config_dir() {
+        let probe = format!("isolation-probe-{}", std::process::id());
+        let real_before = crate::settings::redesign_store::RedesignSettingsStore::new_default()
+            .load()
+            .map(|s| s.user_name)
+            .unwrap_or_default();
+        let mut app = OrchestratorApp::new_isolated_for_test("isolationtest");
+        app.redesign_settings.user_name.clone_from(&probe);
+        app.flush_all_now();
+        let isolated = app
+            .redesign_settings_store
+            .load()
+            .expect("temp store loads");
+        assert_eq!(isolated.user_name, probe);
+        let real_after = crate::settings::redesign_store::RedesignSettingsStore::new_default()
+            .load()
+            .map(|s| s.user_name)
+            .unwrap_or_default();
+        assert_eq!(real_after, real_before);
+        assert_ne!(real_after, probe);
+    }
 
     fn dirty_ws() -> WizardState {
         let mut ws = WizardState {

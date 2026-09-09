@@ -337,7 +337,15 @@ fn reset_completed_install_route_on_enter_install(
     reset_completed_install_runtime(orchestrator);
 }
 
-fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
+pub(crate) const fn completed_install_reset_due(orchestrator: &OrchestratorApp) -> bool {
+    should_reset_completed_install_route(
+        orchestrator.post_install_reset_gate.is_pending(),
+        &orchestrator.wizard_state,
+        orchestrator.step5_prep_rx.is_some() || orchestrator.step5_pending_start.is_some(),
+    )
+}
+
+pub(crate) fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
     orchestrator.post_install_reset_gate =
         crate::ui::orchestrator::orchestrator_app::PostInstallResetGate::Idle;
     if let Some(term) = orchestrator.step5_terminal.as_mut() {
@@ -707,7 +715,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Workspace {
             modlist_id: Some("WS-AMBIENT-A".to_string()),
         };
@@ -729,7 +737,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Create;
         app.active_install_modlist_id = None;
 
@@ -748,7 +756,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Create;
         app.active_install_modlist_id = Some("FORK-PIPELINE-ID".to_string());
 
@@ -772,7 +780,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Workspace {
             modlist_id: Some("OPEN-WS".to_string()),
         };

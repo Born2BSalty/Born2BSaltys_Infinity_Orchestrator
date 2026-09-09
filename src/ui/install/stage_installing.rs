@@ -7,6 +7,7 @@ use crate::registry::operations;
 use crate::ui::install::state_install::InstallStage;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::page_router;
 use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
@@ -23,6 +24,7 @@ pub enum StageInstallingOutcome {
     #[default]
     Stay,
     Back(InstallStage),
+    BackAfterCompletedInstall,
     Nav(NavDestination),
 }
 
@@ -39,31 +41,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         .unwrap_or(FALLBACK_NAME)
         .to_string();
 
-    let back_target = if orchestrator.install_screen_state.preview_cached {
-        InstallStage::Review
-    } else {
-        InstallStage::Gallery
-    };
-
-    let mut outcome = StageInstallingOutcome::Stay;
-    let sub = format!("{name} \u{00B7} live install console");
-    ui.horizontal_top(|ui| {
-        let back_btn_w = 130.0;
-        let title_w = (ui.available_width() - back_btn_w).max(160.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(title_w, ui.available_height()),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                render_screen_title(ui, palette, "Installing modlist", Some(&sub));
-            },
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            ui.add_space(0.0);
-            if back_to_import_btn(ui, palette).clicked() {
-                outcome = StageInstallingOutcome::Back(back_target);
-            }
-        });
-    });
+    let mut outcome = render_header(ui, orchestrator, palette, &name);
     ui.add_space(10.0);
 
     let dest = orchestrator
@@ -138,6 +116,50 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
     outcome
 }
 
+fn render_header(
+    ui: &mut egui::Ui,
+    orchestrator: &OrchestratorApp,
+    palette: ThemePalette,
+    name: &str,
+) -> StageInstallingOutcome {
+    let back_target = if orchestrator.install_screen_state.preview_cached {
+        InstallStage::Review
+    } else {
+        InstallStage::Gallery
+    };
+    let reset_due = page_router::completed_install_reset_due(orchestrator);
+    let back_label = if reset_due || back_target == InstallStage::Gallery {
+        "back to gallery"
+    } else {
+        "back to import"
+    };
+
+    let mut outcome = StageInstallingOutcome::Stay;
+    let sub = format!("{name} \u{00B7} live install console");
+    ui.horizontal_top(|ui| {
+        let back_btn_w = 145.0;
+        let title_w = (ui.available_width() - back_btn_w).max(160.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(title_w, ui.available_height()),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                render_screen_title(ui, palette, "Installing modlist", Some(&sub));
+            },
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            ui.add_space(0.0);
+            if back_to_import_btn(ui, palette, back_label).clicked() {
+                outcome = if reset_due {
+                    StageInstallingOutcome::BackAfterCompletedInstall
+                } else {
+                    StageInstallingOutcome::Back(back_target)
+                };
+            }
+        });
+    });
+    outcome
+}
+
 fn sync_share_provenance(
     orchestrator: &mut OrchestratorApp,
     entry: Option<&crate::registry::model::ModlistEntry>,
@@ -172,7 +194,7 @@ fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui:
     ui.allocate_rect(rect, egui::Sense::hover());
 }
 
-fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response {
+fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette, label: &str) -> egui::Response {
     let pad_x = 10.0;
     let pad_y = 4.0;
     let font_size = 12.0;
@@ -190,7 +212,7 @@ fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respons
             .layout_no_wrap("\u{2190}".to_string(), glyph_font.clone(), text_color);
     let prose_galley =
         ui.painter()
-            .layout_no_wrap("back to import".to_string(), prose_font.clone(), text_color);
+            .layout_no_wrap(label.to_string(), prose_font.clone(), text_color);
 
     let content_w = glyph_galley.size().x + gap + prose_galley.size().x;
     let content_h = glyph_galley.size().y.max(prose_galley.size().y);
@@ -227,7 +249,7 @@ fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respons
         painter.text(
             egui::pos2(start_x + glyph_galley.size().x + gap, cy),
             egui::Align2::LEFT_CENTER,
-            "back to import",
+            label,
             prose_font,
             text_color,
         );

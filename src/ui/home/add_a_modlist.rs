@@ -31,7 +31,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &OrchestratorApp) -> AddAModlistA
                 BtnOpts {
                     primary: true,
                     block: true,
-                    no_shadow: true,
                     ..Default::default()
                 },
             )

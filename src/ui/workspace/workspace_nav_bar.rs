@@ -4,9 +4,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary, redesign_with_alpha,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_soft, redesign_border_strong, redesign_shell_bg, redesign_text_faint,
+    redesign_text_primary, redesign_with_alpha,
 };
 use crate::ui::workspace::state_workspace::WorkspaceStep;
 
@@ -193,7 +193,6 @@ fn glyph_btn(
 struct GlyphButtonVisuals {
     fill: egui::Color32,
     border: egui::Color32,
-    shadow: egui::Color32,
     text_color: egui::Color32,
     glyph_font: egui::FontId,
     prose_font: egui::FontId,
@@ -215,7 +214,6 @@ impl GlyphButtonVisuals {
         Self {
             fill: button_alpha(fill, disabled),
             border: button_alpha(redesign_border_strong(palette), disabled),
-            shadow: button_alpha(redesign_shadow(palette), disabled),
             text_color: button_alpha(text_color, disabled),
             glyph_font: egui::FontId::new(12.0, egui::FontFamily::Name("firacode_nerd".into())),
             prose_font: egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into())),
@@ -241,20 +239,15 @@ fn paint_glyph_button(
 ) {
     let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
-    if visuals.primary {
-        let shadow_rect = paint.rect.translate(egui::vec2(
-            REDESIGN_SHADOW_OFFSET_BTN_PX,
-            REDESIGN_SHADOW_OFFSET_BTN_PX,
-        ));
-        painter.rect_filled(shadow_rect, radius, visuals.shadow);
-    }
     painter.rect_filled(paint.rect, radius, visuals.fill);
-    painter.rect_stroke(
-        paint.rect,
-        radius,
-        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, visuals.border),
-        egui::StrokeKind::Inside,
-    );
+    if !visuals.primary {
+        painter.rect_stroke(
+            paint.rect,
+            radius,
+            egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, visuals.border),
+            egui::StrokeKind::Inside,
+        );
+    }
 
     let total_w = paint.glyph_galley.size().x + paint.gap + paint.prose_galley.size().x;
     let start_x = paint.rect.center().x - total_w / 2.0;

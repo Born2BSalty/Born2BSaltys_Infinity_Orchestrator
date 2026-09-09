@@ -216,7 +216,7 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
         );
         return;
     }
-    if !ensure_creator_name(orchestrator) {
+    if !orchestrator.ensure_creator_name() {
         return;
     }
     let game = orchestrator.create_screen_state.game;
@@ -247,16 +247,6 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     }
 
     finish_start_scratch(orchestrator, &name, game, &dest);
-}
-
-fn ensure_creator_name(orchestrator: &mut OrchestratorApp) -> bool {
-    if !orchestrator.redesign_settings.user_name.trim().is_empty() {
-        return true;
-    }
-    orchestrator
-        .notification_manager
-        .error("Set your name in Settings > General before creating or sharing a modlist.");
-    false
 }
 
 fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
@@ -509,25 +499,13 @@ fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id:
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
-    use crate::registry::store::RegistryStore;
+    use crate::registry::model::{Game, ModlistEntry, ModlistState};
     use egui_toast::ToastKind;
 
-    static CREATETEST_TMP: AtomicU64 = AtomicU64::new(0);
-
     fn orch_for_create_test() -> OrchestratorApp {
-        let mut app = OrchestratorApp::new(false);
-        let tmp = std::env::temp_dir().join(format!(
-            "bio_createtest_{}_{}.json",
-            std::process::id(),
-            CREATETEST_TMP.fetch_add(1, Ordering::Relaxed)
-        ));
-        app.registry_store = RegistryStore::new_with_path(tmp);
-        app.registry = ModlistRegistry::default();
-        app
+        OrchestratorApp::new_isolated_for_test("createtest")
     }
 
     #[test]

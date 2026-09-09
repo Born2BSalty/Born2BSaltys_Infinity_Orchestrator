@@ -63,24 +63,12 @@ pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorAp
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
-    use crate::registry::store::RegistryStore;
-
-    static REINSTALLTEST_TMP: AtomicU64 = AtomicU64::new(0);
+    use crate::registry::model::{Game, ModlistEntry, ModlistState};
 
     fn orch_for_reinstall_test() -> OrchestratorApp {
-        let mut app = OrchestratorApp::new(false);
-        let tmp = std::env::temp_dir().join(format!(
-            "bio_reinstalltest_{}_{}.json",
-            std::process::id(),
-            REINSTALLTEST_TMP.fetch_add(1, Ordering::Relaxed)
-        ));
-        app.registry_store = RegistryStore::new_with_path(tmp);
-        app.registry = ModlistRegistry::default();
-        app
+        OrchestratorApp::new_isolated_for_test("reinstalltest")
     }
 
     fn entry() -> ModlistEntry {

@@ -64,7 +64,7 @@ pub fn render(ui: &mut egui::Ui, palette: ThemePalette, entry: &GalleryEntry) ->
         palette,
         None::<sub_flow_footer::BackBtn<'_>>,
         None::<sub_flow_footer::SecondaryBtn<'_>>,
-        Some(&format!("{} mods in this collection", entry.mods.len())),
+        Some(&format!("{} mods in this collection", entry.mod_count())),
         PrimaryBtn {
             label: "Review Installation",
             disabled: false,

@@ -4,9 +4,9 @@
 use eframe::egui;
 
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary, redesign_with_alpha,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_soft, redesign_border_strong, redesign_shell_bg, redesign_text_faint,
+    redesign_text_primary, redesign_with_alpha,
 };
 
 const ARROW_BACK: &str = "\u{2190}";
@@ -185,27 +185,18 @@ fn glyph_btn(
         let alpha = if disabled { 0.5 } else { 1.0 };
         let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
-        if primary {
-            let shadow_rect = rect.translate(egui::vec2(
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-            ));
-            painter.rect_filled(
-                shadow_rect,
+        painter.rect_filled(rect, radius, with_alpha(fill, alpha));
+        if !primary {
+            painter.rect_stroke(
+                rect,
                 radius,
-                with_alpha(redesign_shadow(palette), alpha),
+                egui::Stroke::new(
+                    REDESIGN_BORDER_WIDTH_PX,
+                    with_alpha(redesign_border_strong(palette), alpha),
+                ),
+                egui::StrokeKind::Inside,
             );
         }
-        painter.rect_filled(rect, radius, with_alpha(fill, alpha));
-        painter.rect_stroke(
-            rect,
-            radius,
-            egui::Stroke::new(
-                REDESIGN_BORDER_WIDTH_PX,
-                with_alpha(redesign_border_strong(palette), alpha),
-            ),
-            egui::StrokeKind::Inside,
-        );
 
         let total_w = glyph_galley.size().x + gap + prose_galley.size().x;
         let start_x = rect.center().x - total_w / 2.0;

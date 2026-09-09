@@ -430,7 +430,6 @@ fn card(
                 primary: true,
                 small: true,
                 block: true,
-                no_shadow: true,
                 ..Default::default()
             },
         )
