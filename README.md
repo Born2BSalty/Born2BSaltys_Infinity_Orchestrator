@@ -23,7 +23,7 @@ Join the BIO Discord for:
 - modlist sharing
 - development discussion
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20BIO-5865F2?logo=discord&logoColor=white)](https://discord.gg/QqZtzvHDG5)
+[![Discord](https://img.shields.io/badge/Discord-Join%20BIO-5865F2?logo=discord&logoColor=white)](https://discord.gg/mJFs3639tS)
 
 ## What BIO Does
 
