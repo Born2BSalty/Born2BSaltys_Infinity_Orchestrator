@@ -68,10 +68,7 @@ fn gallery_stage(
     notification_manager: &mut NotificationManager,
 ) -> Option<InstallRequest> {
     match stage_gallery::render(ui, palette, state) {
-        GalleryOutcome::OpenPaste => {
-            state.clear_preview();
-            Some(InstallRequest::Stage(InstallStage::Paste))
-        }
+        GalleryOutcome::OpenPaste => Some(open_paste_from_gallery(state)),
         GalleryOutcome::OpenDetails(index) => {
             state.gallery.selected = Some(index);
             let entry = selected_entry(state)?;
@@ -139,8 +136,15 @@ fn drawer_request(
 
 fn details_back(state: &mut InstallScreenState) -> InstallRequest {
     state.clear_preview();
+    state.import_code.clear();
     state.gallery.selected = None;
     InstallRequest::Stage(InstallStage::Gallery)
+}
+
+fn open_paste_from_gallery(state: &mut InstallScreenState) -> InstallRequest {
+    state.clear_preview();
+    state.import_code.clear();
+    InstallRequest::Stage(InstallStage::Paste)
 }
 
 fn paste_stage(
@@ -627,6 +631,30 @@ mod tests {
         assert_eq!(request, InstallRequest::Stage(InstallStage::Gallery));
         assert!(state.parsed_preview.is_none());
         assert!(state.gallery.selected.is_none());
+        assert!(state.import_code.is_empty());
+    }
+
+    #[test]
+    fn paste_opens_with_an_empty_code_box_after_details() {
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+
+        let mut state = InstallScreenState {
+            import_code: code,
+            parsed_preview: Some(preview),
+            ..Default::default()
+        };
+        state.gallery.selected = Some(0);
+
+        details_back(&mut state);
+        let request = open_paste_from_gallery(&mut state);
+
+        assert_eq!(request, InstallRequest::Stage(InstallStage::Paste));
+        assert!(state.import_code.is_empty());
+        assert!(state.parsed_preview.is_none());
     }
 
     #[test]
