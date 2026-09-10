@@ -15,7 +15,7 @@ use crate::registry::operations_create::{ForkedModlistInput, create_forked_modli
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::create::destination_default::default_destination;
-use crate::ui::install::state_install::{DestChoice, InstallStage, PipelineKind, PreviewTab};
+use crate::ui::install::state_install::{DestChoice, InstallStage, PipelineKind};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,7 +153,6 @@ pub(crate) fn mint_and_arm(
         st.destination_choice = choice;
         st.parsed_preview = Some(preview);
         st.preview_cached = true;
-        st.active_preview_tab = PreviewTab::default();
         st.pipeline_kind = PipelineKind::Fork;
         st.stage = InstallStage::Downloading;
     }

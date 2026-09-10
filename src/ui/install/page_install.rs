@@ -8,6 +8,7 @@ use crate::app::modlist_share::preview_modlist_share_code;
 use crate::install_runtime::fork_pipeline_arm::{self, ForkArmRequest};
 use crate::install_runtime::{fork_route, start_hooks};
 use crate::registry::share_export;
+use crate::ui::install::drawers;
 use crate::ui::install::gallery::catalog::{self, GalleryEntry};
 use crate::ui::install::stage_details::{self, DetailsOutcome};
 use crate::ui::install::stage_downloading::{self, DownloadScreenCopy, DownloadingOutcome};
@@ -40,7 +41,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             &mut orchestrator.install_screen_state,
             &mut orchestrator.notification_manager,
         ),
-        InstallStage::Details => details_stage(ui, palette, &mut orchestrator.install_screen_state),
+        InstallStage::Details => details_stage(ui, palette, orchestrator, ctx),
         InstallStage::Paste => paste_stage(ui, palette, &mut orchestrator.install_screen_state),
         InstallStage::Review => review_stage(ui, palette, orchestrator, ctx),
         InstallStage::Downloading => downloading_stage(ui, orchestrator),
@@ -83,24 +84,51 @@ fn gallery_stage(
 fn details_stage(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    state: &mut InstallScreenState,
+    orchestrator: &mut OrchestratorApp,
+    ctx: &egui::Context,
 ) -> Option<InstallRequest> {
-    let Some(entry) = selected_entry(state) else {
-        state.gallery.selected = None;
+    let Some(entry) = selected_entry(&orchestrator.install_screen_state) else {
+        orchestrator.install_screen_state.gallery.selected = None;
         return Some(InstallRequest::Stage(InstallStage::Gallery));
     };
-    let Some(preview) = state.parsed_preview.clone() else {
-        state.gallery.selected = None;
-        state.clear_preview();
+    let Some(preview) = orchestrator.install_screen_state.parsed_preview.clone() else {
+        orchestrator.install_screen_state.gallery.selected = None;
+        orchestrator.install_screen_state.clear_preview();
         return Some(InstallRequest::Stage(InstallStage::Gallery));
     };
-    match stage_details::render(ui, palette, entry, &preview) {
-        DetailsOutcome::Back => Some(details_back(state)),
+    let stage_request = match stage_details::render(ui, palette, entry, &preview) {
+        DetailsOutcome::Back => Some(details_back(&mut orchestrator.install_screen_state)),
         DetailsOutcome::OpenDrawer(kind) => {
-            state.drawer.open = Some(kind);
+            orchestrator.install_screen_state.drawer.open = Some(kind);
             None
         }
         DetailsOutcome::Stay => None,
+    };
+
+    stage_request.or_else(|| drawer_request(orchestrator, ctx, palette, true))
+}
+
+fn drawer_request(
+    orchestrator: &mut OrchestratorApp,
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    offer_install: bool,
+) -> Option<InstallRequest> {
+    match drawers::render(
+        ctx,
+        palette,
+        &mut orchestrator.install_screen_state,
+        &orchestrator.registry,
+        orchestrator.pending_reinstall_id.as_deref(),
+        offer_install,
+    ) {
+        drawers::DrawerOutcome::BeginInstall => {
+            Some(InstallRequest::Stage(begin_install(orchestrator)))
+        }
+        drawers::DrawerOutcome::BeginImport => {
+            begin_import(orchestrator).map(InstallRequest::Stage)
+        }
+        drawers::DrawerOutcome::Stay => None,
     }
 }
 
@@ -150,7 +178,7 @@ fn review_stage(
         &orchestrator.registry,
         orchestrator.pending_reinstall_id.as_deref(),
     );
-    match outcome {
+    let stage_request = match outcome {
         ReviewOutcome::Back => {
             let back = orchestrator.install_screen_state.review.origin.back_stage();
             if back == InstallStage::Gallery {
@@ -160,9 +188,15 @@ fn review_stage(
             Some(InstallRequest::Stage(back))
         }
         ReviewOutcome::BeginInstall => Some(InstallRequest::Stage(begin_install(orchestrator))),
-        ReviewOutcome::BeginImport => Some(InstallRequest::Stage(begin_import(orchestrator))),
+        ReviewOutcome::BeginImport => begin_import(orchestrator).map(InstallRequest::Stage),
+        ReviewOutcome::OpenDrawer(kind) => {
+            orchestrator.install_screen_state.drawer.open = Some(kind);
+            None
+        }
         ReviewOutcome::Stay => None,
-    }
+    };
+
+    stage_request.or_else(|| drawer_request(orchestrator, ctx, palette, false))
 }
 
 fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
@@ -171,6 +205,7 @@ fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
         state.destination = state.destination.trim().to_string();
         state.import_code = state.import_code.trim().to_string();
         state.pipeline_kind = PipelineKind::Install;
+        state.drawer.open = None;
 
         let typed = state.review.name.trim().to_string();
         let current = state
@@ -216,13 +251,11 @@ fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
     InstallStage::Downloading
 }
 
-fn begin_import(orchestrator: &mut OrchestratorApp) -> InstallStage {
+fn begin_import(orchestrator: &mut OrchestratorApp) -> Option<InstallStage> {
     if !orchestrator.ensure_creator_name() {
-        return InstallStage::Review;
+        return None;
     }
-    let Some(preview) = orchestrator.install_screen_state.parsed_preview.clone() else {
-        return InstallStage::Review;
-    };
+    let preview = orchestrator.install_screen_state.parsed_preview.clone()?;
     let name = orchestrator.install_screen_state.review.name.clone();
     let destination = orchestrator
         .install_screen_state
@@ -246,7 +279,7 @@ fn begin_import(orchestrator: &mut OrchestratorApp) -> InstallStage {
             choice,
         },
     ) {
-        Ok(_) => InstallStage::Downloading,
+        Ok(_) => Some(InstallStage::Downloading),
         Err(err) => {
             warn!(
                 target = "orchestrator",
@@ -255,7 +288,7 @@ fn begin_import(orchestrator: &mut OrchestratorApp) -> InstallStage {
             orchestrator
                 .notification_manager
                 .error(format!("Could not start the import: {err}"));
-            InstallStage::Review
+            None
         }
     }
 }
@@ -367,7 +400,6 @@ fn run_preview_parse(state: &mut InstallScreenState) {
         Ok(preview) => {
             state.parsed_preview = Some(preview);
             state.preview_cached = true;
-            state.active_preview_tab = crate::ui::install::state_install::PreviewTab::default();
         }
         Err(msg) => {
             state.preview_parse_error = Some(msg);
@@ -461,9 +493,11 @@ mod tests {
         app.install_screen_state.stage = InstallStage::Review;
         app.redesign_settings.user_name.clear();
 
+        let stage_before = app.install_screen_state.stage;
         let stage = begin_import(&mut app);
 
-        assert_eq!(stage, InstallStage::Review);
+        assert_eq!(stage, None);
+        assert_eq!(app.install_screen_state.stage, stage_before);
         assert!(app.registry.entries.is_empty());
         let history = app.notification_manager.history();
         assert_eq!(history.len(), 1);
@@ -581,5 +615,43 @@ mod tests {
         assert_eq!(request, InstallRequest::Stage(InstallStage::Gallery));
         assert!(state.parsed_preview.is_none());
         assert!(state.gallery.selected.is_none());
+    }
+
+    #[test]
+    fn begin_install_closes_the_drawer() {
+        use crate::ui::install::state_install::DrawerKind;
+
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+
+        let mut app = orch_for_install_test();
+        app.install_screen_state.import_code = code;
+        app.install_screen_state.parsed_preview = Some(preview);
+        app.install_screen_state.review.name = "Tactical EET".to_string();
+        app.install_screen_state.destination = "D:\\eet install".to_string();
+        app.install_screen_state.drawer.open = Some(DrawerKind::Install);
+
+        begin_install(&mut app);
+
+        assert!(app.install_screen_state.drawer.open.is_none());
+    }
+
+    #[test]
+    fn a_drawer_install_click_swaps_to_the_install_form() {
+        use crate::ui::install::drawers::after_included_mods;
+        use crate::ui::install::drawers::included_mods::IncludedModsOutcome;
+        use crate::ui::install::state_install::{DrawerKind, DrawerState};
+
+        let mut drawer = DrawerState {
+            open: Some(DrawerKind::IncludedMods),
+            ..Default::default()
+        };
+
+        after_included_mods(&IncludedModsOutcome::Install, &mut drawer);
+
+        assert_eq!(drawer.open, Some(DrawerKind::Install));
     }
 }

@@ -6,11 +6,11 @@ use eframe::egui;
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::operations::{DestinationOwnership, classify_destination};
-use crate::ui::install::state_install::{DestChoice, InstallScreenState, ReviewOrigin};
+use crate::ui::install::state_install::{DestChoice, DrawerKind, InstallScreenState, ReviewOrigin};
 use crate::ui::install::sub_flow_footer::{self, BackBtn, FooterClick, PrimaryBtn, SecondaryBtn};
+use crate::ui::install::whats_inside::{self, InsideClick, InsideCounts};
 use crate::ui::install::{
-    destination_field, destination_not_empty, destination_owned, fork_info_button,
-    preview_overview, preview_tabs,
+    destination_field, destination_not_empty, destination_owned, fork_info_button, preview_overview,
 };
 use crate::ui::orchestrator::widgets::dialogs::fork_info_popup::{self, SelfNode};
 use crate::ui::orchestrator::widgets::{
@@ -18,9 +18,8 @@ use crate::ui::orchestrator::widgets::{
     render_screen_title,
 };
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft,
-    redesign_border_strong, redesign_input_bg, redesign_shell_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft, redesign_input_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 pub(crate) const FALLBACK_NAME: &str = "Shared modlist";
@@ -46,6 +45,7 @@ pub(crate) enum ReviewOutcome {
     Back,
     BeginInstall,
     BeginImport,
+    OpenDrawer(DrawerKind),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +101,65 @@ pub(crate) fn begin_disabled(guards: &BeginGuards<'_>) -> bool {
         || guards.code.trim().is_empty()
 }
 
+pub(crate) struct DestinationChecks {
+    pub(crate) ownership: DestinationOwnership,
+    pub(crate) ownership_blocks: bool,
+    pub(crate) dest_valid: bool,
+    pub(crate) dest_non_empty: bool,
+}
+
+#[must_use]
+pub(crate) fn destination_checks(
+    destination: &str,
+    registry: &ModlistRegistry,
+) -> DestinationChecks {
+    let ownership = classify_destination(destination, registry);
+    let ownership_blocks = matches!(
+        &ownership,
+        DestinationOwnership::InsideOwner(_) | DestinationOwnership::ContainsOwners(_)
+    );
+    let dest_valid = destination_is_valid(destination);
+    let dest_non_empty = destination_is_non_empty(destination);
+    DestinationChecks {
+        ownership,
+        ownership_blocks,
+        dest_valid,
+        dest_non_empty,
+    }
+}
+
+#[must_use]
+pub(crate) fn begin_disabled_for(state: &InstallScreenState, checks: &DestinationChecks) -> bool {
+    begin_disabled(&BeginGuards {
+        name: &state.review.name,
+        code: &state.import_code,
+        destination_valid: checks.dest_valid,
+        ownership_blocks: checks.ownership_blocks,
+        destination_non_empty: checks.dest_non_empty,
+        choice: state.destination_choice,
+    })
+}
+
+#[must_use]
+pub(crate) const fn begin_label(modify: bool) -> &'static str {
+    if modify {
+        "Begin Import"
+    } else {
+        "Begin Install"
+    }
+}
+
+pub(crate) const fn force_modify_for_availability(
+    state: &mut InstallScreenState,
+    preview: &ModlistSharePreview,
+) {
+    match modify_choice_available(state.review.origin, preview.allow_auto_install) {
+        ModifyAvailability::OnlyModify => state.review.modify = true,
+        ModifyAvailability::OnlyInstall => state.review.modify = false,
+        ModifyAvailability::Both => {}
+    }
+}
+
 pub(crate) fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -113,26 +172,16 @@ pub(crate) fn render(
         return ReviewOutcome::Back;
     };
 
-    match modify_choice_available(state.review.origin, preview.allow_auto_install) {
-        ModifyAvailability::OnlyModify => state.review.modify = true,
-        ModifyAvailability::OnlyInstall => state.review.modify = false,
-        ModifyAvailability::Both => {}
-    }
+    force_modify_for_availability(state, &preview);
 
-    let ownership = classify_destination(&state.destination, registry);
-    let ownership_blocks = matches!(
-        &ownership,
-        DestinationOwnership::InsideOwner(_) | DestinationOwnership::ContainsOwners(_)
-    );
-    let dest_valid = destination_is_valid(&state.destination);
-    let dest_non_empty = destination_is_non_empty(&state.destination);
+    let checks = destination_checks(&state.destination, registry);
 
     let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
     let total_w = ui.available_width();
     let left_w = ((total_w - COLUMN_GAP_PX) * LEFT_FRACTION).floor();
     let right_w = (total_w - COLUMN_GAP_PX - left_w).max(0.0);
 
-    let mut fork_info_clicked = false;
+    let mut left_outcome = LeftColumnOutcome::default();
     ui.allocate_ui(egui::vec2(total_w, body_h), |ui| {
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = COLUMN_GAP_PX;
@@ -141,7 +190,7 @@ pub(crate) fn render(
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.set_width(left_w);
-                    fork_info_clicked = left_column(ui, palette, state, &preview);
+                    left_outcome = left_column(ui, palette, state, &preview);
                 },
             );
             ui.allocate_ui_with_layout(
@@ -153,20 +202,20 @@ pub(crate) fn render(
                         .id_salt("install_review_settings_scroll")
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
-                            right_column(
+                            render_install_settings(
                                 ui,
                                 palette,
                                 state,
                                 &preview,
                                 &RightColumnCtx {
                                     ownership_banner: ownership_banner_visible(
-                                        &ownership,
+                                        &checks.ownership,
                                         pending_reinstall_id,
                                     )
-                                    .then_some(&ownership),
+                                    .then_some(&checks.ownership),
                                     registry,
-                                    ownership_blocks,
-                                    dest_non_empty,
+                                    ownership_blocks: checks.ownership_blocks,
+                                    dest_non_empty: checks.dest_non_empty,
                                 },
                             );
                         });
@@ -175,29 +224,28 @@ pub(crate) fn render(
         });
     });
 
-    if fork_info_clicked {
+    if left_outcome.fork_info_clicked {
         state.fork_info_open = true;
     }
 
-    let outcome = footer(
-        ui,
-        palette,
-        state,
-        ownership_blocks,
-        dest_valid,
-        dest_non_empty,
-    );
+    let outcome = footer(ui, palette, state, &checks, left_outcome.click);
     render_fork_popup(ctx, palette, state, &preview);
     outcome
+}
+
+#[derive(Default)]
+struct LeftColumnOutcome {
+    fork_info_clicked: bool,
+    click: InsideClick,
 }
 
 fn left_column(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    state: &mut InstallScreenState,
+    state: &InstallScreenState,
     preview: &ModlistSharePreview,
-) -> bool {
-    let mut fork_info_clicked = false;
+) -> LeftColumnOutcome {
+    let mut outcome = LeftColumnOutcome::default();
     let title = display_name(&state.review.name, preview);
     let has_lineage = !preview.forked_from.is_empty();
 
@@ -218,57 +266,28 @@ fn left_column(
         if has_lineage {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if fork_info_button::render(ui, palette).clicked() {
-                    fork_info_clicked = true;
+                    outcome.fork_info_clicked = true;
                 }
             });
         }
     });
 
     preview_overview::render(ui, palette, preview);
-    ui.add_space(12.0);
+    ui.add_space(16.0);
 
-    let active_tab_rect =
-        preview_tabs::render_tab_strip(ui, palette, &mut state.active_preview_tab);
-    let item_gap = ui.spacing().item_spacing.y;
-    ui.add_space(-item_gap);
-    let panel_top_y = ui.cursor().top();
+    outcome.click = whats_inside::render(ui, palette, &InsideCounts::from_preview(preview));
 
-    let content_h = ui.available_height().max(80.0);
-    let content_frame = egui::Frame::default()
-        .fill(redesign_shell_bg(palette))
-        .stroke(egui::Stroke::new(
-            REDESIGN_BORDER_WIDTH_PX,
-            redesign_border_strong(palette),
-        ))
-        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-        .inner_margin(egui::Margin::same(14));
-    ui.allocate_ui_with_layout(
-        egui::vec2(ui.available_width(), content_h),
-        egui::Layout::top_down(egui::Align::Min),
-        |ui| {
-            content_frame.show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.set_min_height(content_h - 28.0);
-                preview_tabs::render_tab_body(ui, palette, state.active_preview_tab, preview);
-            });
-        },
-    );
-
-    if let Some(tab_rect) = active_tab_rect {
-        preview_tabs::paint_preview_seam_cover(ui.painter(), palette, tab_rect, panel_top_y);
-    }
-
-    fork_info_clicked
+    outcome
 }
 
-struct RightColumnCtx<'a> {
-    ownership_banner: Option<&'a DestinationOwnership>,
-    registry: &'a ModlistRegistry,
-    ownership_blocks: bool,
-    dest_non_empty: bool,
+pub(crate) struct RightColumnCtx<'a> {
+    pub(crate) ownership_banner: Option<&'a DestinationOwnership>,
+    pub(crate) registry: &'a ModlistRegistry,
+    pub(crate) ownership_blocks: bool,
+    pub(crate) dest_non_empty: bool,
 }
 
-fn right_column(
+pub(crate) fn render_install_settings(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut InstallScreenState,
@@ -395,18 +414,10 @@ fn footer(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &InstallScreenState,
-    ownership_blocks: bool,
-    dest_valid: bool,
-    dest_non_empty: bool,
+    checks: &DestinationChecks,
+    click: InsideClick,
 ) -> ReviewOutcome {
-    let disabled = begin_disabled(&BeginGuards {
-        name: &state.review.name,
-        code: &state.import_code,
-        destination_valid: dest_valid,
-        ownership_blocks,
-        destination_non_empty: dest_non_empty,
-        choice: state.destination_choice,
-    });
+    let disabled = begin_disabled_for(state, checks);
 
     let outcome = sub_flow_footer::render(
         ui,
@@ -416,11 +427,7 @@ fn footer(
         None,
         None,
         PrimaryBtn {
-            label: if state.review.modify {
-                "Begin Import"
-            } else {
-                "Begin Install"
-            },
+            label: begin_label(state.review.modify),
             disabled,
         },
     );
@@ -429,7 +436,9 @@ fn footer(
         FooterClick::Back => ReviewOutcome::Back,
         FooterClick::Primary if state.review.modify => ReviewOutcome::BeginImport,
         FooterClick::Primary => ReviewOutcome::BeginInstall,
-        FooterClick::None | FooterClick::Secondary | FooterClick::LeftAction => ReviewOutcome::Stay,
+        FooterClick::None | FooterClick::Secondary | FooterClick::LeftAction => {
+            DrawerKind::from_click(click).map_or(ReviewOutcome::Stay, ReviewOutcome::OpenDrawer)
+        }
     }
 }
 
@@ -749,5 +758,32 @@ mod tests {
         assert!((left - 600.0).abs() < 1.0);
         assert!((right - 400.0).abs() < 1.0);
         assert!(left + right + COLUMN_GAP_PX <= total + f32::EPSILON);
+    }
+
+    #[test]
+    fn begin_disabled_for_mirrors_begin_disabled() {
+        let good_checks = DestinationChecks {
+            ownership: DestinationOwnership::Free,
+            ownership_blocks: false,
+            dest_valid: true,
+            dest_non_empty: false,
+        };
+        let good_state = InstallScreenState {
+            review: crate::ui::install::state_install::ReviewState {
+                name: "Tactical EET".to_string(),
+                ..Default::default()
+            },
+            import_code: "BIO-MODLIST-V1:CODE".to_string(),
+            ..Default::default()
+        };
+        assert!(!begin_disabled_for(&good_state, &good_checks));
+
+        let blocked_checks = DestinationChecks {
+            ownership: DestinationOwnership::Free,
+            ownership_blocks: true,
+            dest_valid: true,
+            dest_non_empty: false,
+        };
+        assert!(begin_disabled_for(&good_state, &blocked_checks));
     }
 }

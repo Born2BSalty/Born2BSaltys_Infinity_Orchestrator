@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::mod_downloads::SourceTiers;
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::ui::install::gallery::filter::GalleryFilter;
+use crate::ui::install::inside_model::{self, InsideModel};
 use crate::ui::install::stage_downloading::{DownloadProgress, SkippedMod};
 use crate::ui::install::whats_inside::InsideClick;
 
@@ -124,40 +126,6 @@ impl DestChoice {
                 skip_installed: true,
                 check_last_installed: DestCheckFlag::new(true),
             },
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PreviewTab {
-    #[default]
-    Summary,
-    BgeeWeidu,
-    Bg2eeWeidu,
-    UserDownloads,
-    InstalledRefs,
-    ModConfigs,
-}
-
-impl PreviewTab {
-    pub const ALL: [Self; 6] = [
-        Self::Summary,
-        Self::BgeeWeidu,
-        Self::Bg2eeWeidu,
-        Self::UserDownloads,
-        Self::InstalledRefs,
-        Self::ModConfigs,
-    ];
-
-    #[must_use]
-    pub const fn display_label(self) -> &'static str {
-        match self {
-            Self::Summary => "Summary",
-            Self::BgeeWeidu => "BGEE WeiDU",
-            Self::Bg2eeWeidu => "BG2EE WeiDU",
-            Self::UserDownloads => "User Downloads",
-            Self::InstalledRefs => "Installed Refs",
-            Self::ModConfigs => "Mod Configs",
         }
     }
 }
@@ -306,7 +274,7 @@ pub struct InstallScreenState {
     pub import_code: String,
     pub(crate) parsed_preview: Option<ModlistSharePreview>,
     pub preview_parse_error: Option<String>,
-    pub active_preview_tab: PreviewTab,
+    pub(crate) inside: Option<InsideModel>,
     pub fork_info_open: bool,
     pub preview_cached: bool,
     pub download_progress: DownloadProgress,
@@ -350,9 +318,22 @@ impl InstallScreenState {
         *self = Self::default();
     }
 
+    pub(crate) fn inside_model(
+        &mut self,
+        load_tiers: impl FnOnce(&str) -> SourceTiers,
+    ) -> Option<&InsideModel> {
+        if self.inside.is_none() {
+            let preview = self.parsed_preview.as_ref()?;
+            let tiers = load_tiers(&preview.source_overrides_text);
+            self.inside = Some(inside_model::build(preview, &tiers));
+        }
+        self.inside.as_ref()
+    }
+
     pub fn clear_preview(&mut self) {
         self.parsed_preview = None;
         self.preview_parse_error = None;
+        self.inside = None;
         self.fork_info_open = false;
         self.preview_cached = false;
         self.download_progress = DownloadProgress::default();
@@ -441,31 +422,6 @@ mod tests {
         let st = InstallScreenState::default();
         assert_eq!(st.gallery.filter, GalleryFilter::default());
         assert!(st.gallery.selected.is_none());
-    }
-
-    #[test]
-    fn preview_tab_labels_are_wireframe_verbatim() {
-        let labels: Vec<&str> = PreviewTab::ALL.iter().map(|t| t.display_label()).collect();
-        assert_eq!(
-            labels,
-            vec![
-                "Summary",
-                "BGEE WeiDU",
-                "BG2EE WeiDU",
-                "User Downloads",
-                "Installed Refs",
-                "Mod Configs",
-            ]
-        );
-    }
-
-    #[test]
-    fn default_preview_tab_is_summary() {
-        assert_eq!(PreviewTab::default(), PreviewTab::Summary);
-        assert_eq!(
-            InstallScreenState::default().active_preview_tab,
-            PreviewTab::Summary
-        );
     }
 
     #[test]
@@ -604,5 +560,43 @@ mod tests {
         assert!(st.import_code.is_empty());
         assert_eq!(st.stage, InstallStage::Gallery);
         assert!(!st.has_route_context());
+    }
+
+    #[test]
+    fn inside_model_is_built_once_and_dropped_with_the_preview() {
+        let preview = ModlistSharePreview {
+            bio_version: "0.1.0-test".to_string(),
+            game_install: "EET".to_string(),
+            install_mode: "build_from_scanned_mods".to_string(),
+            bgee_entries: 0,
+            bg2ee_entries: 0,
+            has_source_overrides: false,
+            has_installed_refs: false,
+            bgee_log_text: String::new(),
+            bg2ee_log_text: String::new(),
+            source_overrides_text: String::new(),
+            installed_refs_text: String::new(),
+            mod_config_count: 0,
+            mod_configs_text: String::new(),
+            allow_auto_install: true,
+            name: None,
+            author: None,
+            forked_from: Vec::new(),
+        };
+        let mut st = InstallScreenState {
+            parsed_preview: Some(preview),
+            ..Default::default()
+        };
+        let calls = std::cell::Cell::new(0);
+        let load = |_: &str| {
+            calls.set(calls.get() + 1);
+            SourceTiers::default()
+        };
+        assert!(st.inside_model(load).is_some());
+        assert!(st.inside_model(load).is_some());
+        assert_eq!(calls.get(), 1);
+
+        st.clear_preview();
+        assert!(st.inside.is_none());
     }
 }

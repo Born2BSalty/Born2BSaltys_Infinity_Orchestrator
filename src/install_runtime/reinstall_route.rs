@@ -5,9 +5,7 @@ use tracing::warn;
 
 use crate::app::modlist_share::preview_modlist_share_code;
 use crate::registry::model::ModlistEntry;
-use crate::ui::install::state_install::{
-    DestChoice, InstallStage, PipelineKind, PreviewTab, ReviewOrigin,
-};
+use crate::ui::install::state_install::{DestChoice, InstallStage, PipelineKind, ReviewOrigin};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 
@@ -43,7 +41,6 @@ pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorAp
     st.clear_preview();
     st.parsed_preview = Some(preview);
     st.preview_cached = true;
-    st.active_preview_tab = PreviewTab::default();
 
     let dest_flags = DestChoice::Clear.to_flags();
     orchestrator

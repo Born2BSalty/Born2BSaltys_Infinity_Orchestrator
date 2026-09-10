@@ -40,21 +40,21 @@ pub(crate) struct DrawerSpec<'a> {
     pub(crate) width: DrawerWidth,
 }
 
-pub(crate) struct DrawerResponse<B, F> {
+pub(crate) struct DrawerResponse<F> {
     pub(crate) close_requested: bool,
-    pub(crate) body: B,
     pub(crate) footer: F,
 }
 
-pub(crate) fn render<B, F>(
+pub(crate) fn render<F>(
     ctx: &egui::Context,
     palette: ThemePalette,
     spec: &DrawerSpec<'_>,
-    body: impl FnOnce(&mut egui::Ui) -> B,
+    body: impl FnOnce(&mut egui::Ui),
     footer: impl FnOnce(&mut egui::Ui) -> F,
-) -> DrawerResponse<B, F> {
+) -> DrawerResponse<F> {
     let screen = ctx.screen_rect();
     let w = drawer_width(screen.width(), spec.width);
+    let popup_was_open = ctx.memory(egui::Memory::any_popup_open);
 
     let scrim_clicked = egui::Area::new(Id::new(("drawer_scrim", spec.id_salt)))
         .order(Order::Foreground)
@@ -69,7 +69,6 @@ pub(crate) fn render<B, F>(
         .inner;
 
     let mut head_close_clicked = false;
-    let mut body_out: Option<B> = None;
     let mut footer_out: Option<F> = None;
 
     egui::Area::new(Id::new(("drawer", spec.id_salt)))
@@ -94,19 +93,15 @@ pub(crate) fn render<B, F>(
                         head_close_clicked = render_head(ui, palette, spec);
 
                         let body_h = (ui.available_height() - FOOTER_HEIGHT_PX).max(0.0);
-                        body_out = Some(
-                            ScrollArea::vertical()
-                                .id_salt(("drawer_body", spec.id_salt))
-                                .auto_shrink([false, false])
-                                .max_height(body_h)
-                                .show(ui, |ui| {
-                                    Frame::default()
-                                        .inner_margin(Margin::symmetric(22, 18))
-                                        .show(ui, body)
-                                        .inner
-                                })
-                                .inner,
-                        );
+                        ScrollArea::vertical()
+                            .id_salt(("drawer_body", spec.id_salt))
+                            .auto_shrink([false, false])
+                            .max_height(body_h)
+                            .show(ui, |ui| {
+                                Frame::default()
+                                    .inner_margin(Margin::symmetric(22, 18))
+                                    .show(ui, body);
+                            });
 
                         ui.painter().hline(
                             ui.max_rect().x_range(),
@@ -129,12 +124,10 @@ pub(crate) fn render<B, F>(
                 });
         });
 
-    let escape_closes =
-        ctx.input(|i| i.key_pressed(Key::Escape)) && !ctx.memory(egui::Memory::any_popup_open);
+    let escape_closes = ctx.input(|i| i.key_pressed(Key::Escape)) && !popup_was_open;
 
     DrawerResponse {
         close_requested: scrim_clicked || head_close_clicked || escape_closes,
-        body: body_out.expect("drawer body renders every frame"),
         footer: footer_out.expect("drawer footer renders every frame"),
     }
 }
