@@ -117,13 +117,6 @@ pub(crate) fn filter_section(section: &GameSection, query_lower: &str) -> Vec<(u
         .collect()
 }
 
-pub(crate) fn match_count(section: &GameSection, query_lower: &str) -> usize {
-    filter_section(section, query_lower)
-        .iter()
-        .map(|(_, rows)| rows.len())
-        .sum()
-}
-
 fn parse_section(text: &str, tiers: &SourceTiers) -> Vec<ModGroup> {
     let mut groups: Vec<ModGroup> = Vec::new();
     for line in text.lines() {
@@ -364,7 +357,6 @@ mod tests {
         assert_eq!(filtered.len(), 2);
         assert_eq!(filtered[0], (0, vec![0, 1]));
         assert_eq!(filtered[1], (1, vec![0]));
-        assert_eq!(match_count(&section, "fix"), 3);
     }
 
     #[test]

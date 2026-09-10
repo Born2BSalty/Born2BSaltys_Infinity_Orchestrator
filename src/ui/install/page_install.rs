@@ -91,12 +91,17 @@ fn details_stage(
         orchestrator.install_screen_state.gallery.selected = None;
         return Some(InstallRequest::Stage(InstallStage::Gallery));
     };
+    let Some(counts) = orchestrator.install_screen_state.inside_counts().cloned() else {
+        orchestrator.install_screen_state.gallery.selected = None;
+        orchestrator.install_screen_state.clear_preview();
+        return Some(InstallRequest::Stage(InstallStage::Gallery));
+    };
     let Some(preview) = orchestrator.install_screen_state.parsed_preview.clone() else {
         orchestrator.install_screen_state.gallery.selected = None;
         orchestrator.install_screen_state.clear_preview();
         return Some(InstallRequest::Stage(InstallStage::Gallery));
     };
-    let stage_request = match stage_details::render(ui, palette, entry, &preview) {
+    let stage_request = match stage_details::render(ui, palette, entry, &preview, &counts) {
         DetailsOutcome::Back => Some(details_back(&mut orchestrator.install_screen_state)),
         DetailsOutcome::OpenDrawer(kind) => {
             orchestrator.install_screen_state.drawer.open = Some(kind);

@@ -18,6 +18,7 @@ const ALSO_INCLUDED: &str = "Also included:";
 const REFS_LINK: &str = "installed refs & pins";
 const SOURCES_LINK: &str = "download sources";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct InsideCounts {
     pub(crate) mods: usize,
     pub(crate) components: usize,

@@ -47,6 +47,10 @@ pub(crate) fn render(
         state.drawer.open = None;
         return DrawerOutcome::Stay;
     };
+    let Some(counts) = state.inside_counts().cloned() else {
+        state.drawer.open = None;
+        return DrawerOutcome::Stay;
+    };
 
     match kind {
         DrawerKind::IncludedMods => {
@@ -67,6 +71,7 @@ pub(crate) fn render(
             text_drawer::TextDrawer::WeiduLogs,
             state,
             &preview,
+            &counts,
         ),
         DrawerKind::InstalledRefs => close_text_drawer(
             ctx,
@@ -74,6 +79,7 @@ pub(crate) fn render(
             text_drawer::TextDrawer::InstalledRefs,
             state,
             &preview,
+            &counts,
         ),
         DrawerKind::DownloadSources => close_text_drawer(
             ctx,
@@ -81,6 +87,7 @@ pub(crate) fn render(
             text_drawer::TextDrawer::DownloadSources,
             state,
             &preview,
+            &counts,
         ),
         DrawerKind::ConfigFiles => close_text_drawer(
             ctx,
@@ -88,6 +95,7 @@ pub(crate) fn render(
             text_drawer::TextDrawer::ConfigFiles,
             state,
             &preview,
+            &counts,
         ),
         DrawerKind::Install => {
             match install_drawer::render(
@@ -95,6 +103,7 @@ pub(crate) fn render(
                 palette,
                 state,
                 &preview,
+                &counts,
                 registry,
                 pending_reinstall_id,
             ) {
@@ -119,8 +128,9 @@ fn close_text_drawer(
     kind: text_drawer::TextDrawer,
     state: &mut InstallScreenState,
     preview: &crate::app::modlist_share::ModlistSharePreview,
+    counts: &crate::ui::install::whats_inside::InsideCounts,
 ) -> DrawerOutcome {
-    if text_drawer::render(ctx, palette, kind, state, preview) {
+    if text_drawer::render(ctx, palette, kind, state, preview, counts) {
         state.drawer.open = None;
     }
     DrawerOutcome::Stay

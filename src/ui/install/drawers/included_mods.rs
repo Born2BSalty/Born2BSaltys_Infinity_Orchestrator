@@ -8,7 +8,7 @@ use crate::app::controller::util::open_in_shell;
 use crate::app::mod_downloads::SourceTier;
 use crate::ui::install::highlight::highlight_label;
 use crate::ui::install::inside_model::{
-    ComponentRow, GameSection, InsideModel, ModGroup, ResolvedSource, filter_section, match_count,
+    ComponentRow, GameSection, InsideModel, ModGroup, ResolvedSource, filter_section,
 };
 use crate::ui::install::state_install::DrawerState;
 use crate::ui::install::sub_flow_footer::{GlyphSide, glyph_btn};
@@ -92,17 +92,30 @@ fn render_body(
     let query_lower = drawer.mods_query.to_ascii_lowercase();
     let query_active = !query_lower.is_empty();
 
-    render_toolbar(ui, palette, drawer, inside, &query_lower, query_active);
+    let filtered: Vec<Vec<(usize, Vec<usize>)>> = inside
+        .sections
+        .iter()
+        .map(|section| filter_section(section, &query_lower))
+        .collect();
+    let hits: Vec<usize> = filtered
+        .iter()
+        .map(|rows| rows.iter().map(|(_, r)| r.len()).sum())
+        .collect();
+
+    render_toolbar(ui, palette, drawer, inside, &hits, query_active);
     ui.add_space(12.0);
 
     if inside.sections.len() > 1 {
         let tab_items: Vec<(String, String)> = inside
             .sections
             .iter()
-            .map(|section| {
+            .zip(hits.iter())
+            .map(|(section, section_hits)| {
                 let total = section_component_count(section);
-                let hits = section_match_count(section, &query_lower);
-                (section.game.clone(), tab_sub(total, hits, query_active))
+                (
+                    section.game.clone(),
+                    tab_sub(total, *section_hits, query_active),
+                )
             })
             .collect();
         let tabs: Vec<TabItem<'_>> = tab_items
@@ -118,13 +131,13 @@ fn render_body(
         ui.add_space(-item_gap);
         let panel_top_y = ui.cursor().top();
 
-        render_list_frame(ui, palette, drawer, inside, &query_lower);
+        render_list_frame(ui, palette, drawer, inside, &filtered, &hits, &query_lower);
 
         if let Some(tab_rect) = active_tab_rect {
             tab_strip::paint_tab_seam_cover(ui.painter(), palette, tab_rect, panel_top_y);
         }
     } else {
-        render_list_frame(ui, palette, drawer, inside, &query_lower);
+        render_list_frame(ui, palette, drawer, inside, &filtered, &hits, &query_lower);
     }
 }
 
@@ -133,14 +146,10 @@ fn render_toolbar(
     palette: ThemePalette,
     drawer: &mut DrawerState,
     inside: &InsideModel,
-    query_lower: &str,
+    hits: &[usize],
     query_active: bool,
 ) {
-    let hits: usize = inside
-        .sections
-        .iter()
-        .map(|section| section_match_count(section, query_lower))
-        .sum();
+    let hits: usize = hits.iter().sum();
     let count_text = count_label(inside.component_count, hits, query_active);
     let count_font = egui::FontId::new(12.0, egui::FontFamily::Name("poppins_light".into()));
     let count_color = redesign_text_muted(palette);
@@ -199,6 +208,8 @@ fn render_list_frame(
     palette: ThemePalette,
     drawer: &mut DrawerState,
     inside: &InsideModel,
+    filtered: &[Vec<(usize, Vec<usize>)>],
+    hits: &[usize],
     query_lower: &str,
 ) {
     let active_index = drawer.mods_tab.min(inside.sections.len().saturating_sub(1));
@@ -215,18 +226,20 @@ fn render_list_frame(
             let Some(section) = inside.sections.get(active_index) else {
                 return;
             };
-            let filtered = filter_section(section, query_lower);
-            if filtered.is_empty() {
-                render_empty(ui, palette, drawer, inside, active_index, query_lower);
+            let Some(active_filtered) = filtered.get(active_index) else {
+                return;
+            };
+            if active_filtered.is_empty() {
+                render_empty(ui, palette, drawer, inside, active_index, hits, query_lower);
                 return;
             }
-            for (group_index, rows) in filtered {
+            for (group_index, rows) in active_filtered {
                 render_group(
                     ui,
                     palette,
-                    group_index,
-                    &section.mods[group_index],
-                    &rows,
+                    *group_index,
+                    &section.mods[*group_index],
+                    rows,
                     query_lower,
                 );
             }
@@ -239,13 +252,14 @@ fn render_empty(
     drawer: &mut DrawerState,
     inside: &InsideModel,
     active_index: usize,
+    hits: &[usize],
     query_lower: &str,
 ) {
     if query_lower.is_empty() {
         muted_label(ui, palette, NO_COMPONENTS_AT_REST);
         return;
     }
-    let others = other_sections_with_hits(inside, active_index, query_lower);
+    let others = other_sections_with_hits(inside, active_index, hits);
     let current = inside
         .sections
         .get(active_index)
@@ -642,26 +656,18 @@ fn section_component_count(section: &GameSection) -> usize {
         .sum()
 }
 
-fn section_match_count(section: &GameSection, query_lower: &str) -> usize {
-    match_count(section, query_lower)
-}
-
 fn other_sections_with_hits(
     inside: &InsideModel,
     active_index: usize,
-    query_lower: &str,
+    hits: &[usize],
 ) -> Vec<(String, usize)> {
     inside
         .sections
         .iter()
+        .zip(hits.iter())
         .enumerate()
         .filter(|(index, _)| *index != active_index)
-        .map(|(_, section)| {
-            (
-                section.game.clone(),
-                section_match_count(section, query_lower),
-            )
-        })
+        .map(|(_, (section, section_hits))| (section.game.clone(), *section_hits))
         .collect()
 }
 

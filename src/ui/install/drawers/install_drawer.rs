@@ -55,6 +55,7 @@ pub(crate) fn render(
     palette: ThemePalette,
     state: &mut InstallScreenState,
     preview: &ModlistSharePreview,
+    counts: &InsideCounts,
     registry: &ModlistRegistry,
     pending_reinstall_id: Option<&str>,
 ) -> InstallDrawerOutcome {
@@ -64,8 +65,7 @@ pub(crate) fn render(
         "Install {}",
         stage_review::display_name(&state.review.name, preview)
     );
-    let counts = InsideCounts::from_preview(preview);
-    let scope = scope_line(preview, &counts);
+    let scope = scope_line(preview, counts);
 
     let spec = DrawerSpec {
         id_salt: "install_drawer",

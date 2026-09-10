@@ -159,11 +159,11 @@ pub(crate) fn render(
     kind: TextDrawer,
     state: &mut InstallScreenState,
     preview: &ModlistSharePreview,
+    counts: &InsideCounts,
 ) -> bool {
     let name = stage_review::display_name(&state.review.name, preview);
     let sections = text_sections(kind, preview);
-    let counts = InsideCounts::from_preview(preview);
-    let subtitle = subtitle_for(kind, &name, &sections, &counts);
+    let subtitle = subtitle_for(kind, &name, &sections, counts);
 
     let initial_tab = if state.drawer.logs_tab < sections.len() {
         state.drawer.logs_tab
@@ -187,7 +187,7 @@ pub(crate) fn render(
         |ui| {
             let subs: Vec<String> = sections
                 .iter()
-                .map(|(game, _)| whats_inside::plural(entries_for(&counts, game), "entry"))
+                .map(|(game, _)| whats_inside::plural(entries_for(counts, game), "entry"))
                 .collect();
             let mut active_tab_rect = None;
             if sections.len() > 1 {

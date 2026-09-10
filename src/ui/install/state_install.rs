@@ -6,7 +6,7 @@ use crate::app::modlist_share::ModlistSharePreview;
 use crate::ui::install::gallery::filter::GalleryFilter;
 use crate::ui::install::inside_model::{self, InsideModel};
 use crate::ui::install::stage_downloading::{DownloadProgress, SkippedMod};
-use crate::ui::install::whats_inside::InsideClick;
+use crate::ui::install::whats_inside::{InsideClick, InsideCounts};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InstallStage {
@@ -275,6 +275,7 @@ pub struct InstallScreenState {
     pub(crate) parsed_preview: Option<ModlistSharePreview>,
     pub preview_parse_error: Option<String>,
     pub(crate) inside: Option<InsideModel>,
+    pub(crate) inside_counts: Option<InsideCounts>,
     pub fork_info_open: bool,
     pub preview_cached: bool,
     pub download_progress: DownloadProgress,
@@ -330,10 +331,19 @@ impl InstallScreenState {
         self.inside.as_ref()
     }
 
+    pub(crate) fn inside_counts(&mut self) -> Option<&InsideCounts> {
+        if self.inside_counts.is_none() {
+            let preview = self.parsed_preview.as_ref()?;
+            self.inside_counts = Some(InsideCounts::from_preview(preview));
+        }
+        self.inside_counts.as_ref()
+    }
+
     pub fn clear_preview(&mut self) {
         self.parsed_preview = None;
         self.preview_parse_error = None;
         self.inside = None;
+        self.inside_counts = None;
         self.fork_info_open = false;
         self.preview_cached = false;
         self.download_progress = DownloadProgress::default();
@@ -598,5 +608,37 @@ mod tests {
 
         st.clear_preview();
         assert!(st.inside.is_none());
+    }
+
+    #[test]
+    fn inside_counts_are_built_once_and_dropped_with_the_preview() {
+        use crate::app::modlist_share::preview_modlist_share_code;
+        use crate::ui::install::gallery::catalog;
+
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+
+        let mut st = InstallScreenState {
+            parsed_preview: Some(preview),
+            ..Default::default()
+        };
+
+        let first = st.inside_counts().cloned();
+        assert!(first.is_some());
+        let second = st.inside_counts().cloned();
+        assert_eq!(first, second);
+
+        if let Some(preview) = st.parsed_preview.as_mut() {
+            preview.bgee_entries += 1000;
+        }
+        let third = st.inside_counts().cloned();
+        assert_eq!(first, third, "the cached counts must not be rebuilt");
+
+        st.clear_preview();
+        assert!(st.inside_counts().is_none());
+        assert!(st.inside_counts.is_none());
     }
 }

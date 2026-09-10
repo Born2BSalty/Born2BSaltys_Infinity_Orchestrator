@@ -171,6 +171,9 @@ pub(crate) fn render(
     let Some(preview) = state.parsed_preview.clone() else {
         return ReviewOutcome::Back;
     };
+    let Some(counts) = state.inside_counts().cloned() else {
+        return ReviewOutcome::Back;
+    };
 
     force_modify_for_availability(state, &preview);
 
@@ -190,7 +193,7 @@ pub(crate) fn render(
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.set_width(left_w);
-                    left_outcome = left_column(ui, palette, state, &preview);
+                    left_outcome = left_column(ui, palette, state, &preview, &counts);
                 },
             );
             ui.allocate_ui_with_layout(
@@ -244,6 +247,7 @@ fn left_column(
     palette: ThemePalette,
     state: &InstallScreenState,
     preview: &ModlistSharePreview,
+    counts: &InsideCounts,
 ) -> LeftColumnOutcome {
     let mut outcome = LeftColumnOutcome::default();
     let title = display_name(&state.review.name, preview);
@@ -275,7 +279,7 @@ fn left_column(
     preview_overview::render(ui, palette, preview);
     ui.add_space(16.0);
 
-    outcome.click = whats_inside::render(ui, palette, &InsideCounts::from_preview(preview));
+    outcome.click = whats_inside::render(ui, palette, counts);
 
     outcome
 }

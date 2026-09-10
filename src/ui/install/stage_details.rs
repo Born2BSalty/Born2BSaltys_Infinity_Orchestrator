@@ -59,9 +59,9 @@ pub(crate) fn render(
     palette: ThemePalette,
     entry: &GalleryEntry,
     preview: &ModlistSharePreview,
+    counts: &InsideCounts,
 ) -> DetailsOutcome {
     let mut outcome = DetailsOutcome::Stay;
-    let counts = InsideCounts::from_preview(preview);
 
     let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
     ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
@@ -86,7 +86,7 @@ pub(crate) fn render(
 
                 header_row(ui, palette, entry);
                 ui.add_space(20.0);
-                if let Some(click) = body_columns(ui, palette, entry, &counts, preview) {
+                if let Some(click) = body_columns(ui, palette, entry, counts, preview) {
                     outcome = click;
                 }
             });
