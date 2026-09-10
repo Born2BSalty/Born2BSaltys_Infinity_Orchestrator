@@ -281,7 +281,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
         let idx = ctx.visible_indices[pos];
         if !ctx.items[idx].is_parent {
             child_counter += 1;
-            render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w, false);
+            let _ = render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w, false);
             pos += 1;
             continue;
         }
@@ -298,10 +298,17 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             .max(0.0);
         let top_cursor = ui.cursor().min;
 
+        let group_w_id = egui::Id::new(("step3_group_w", ctx.tab_id, block_id.as_str()));
+        let remembered = ui
+            .ctx()
+            .data(|d| d.get_temp::<f32>(group_w_id))
+            .unwrap_or(0.0);
+        let group_w = group_width(viewport_w, remembered);
+
         let bg_shape_id = ui.painter().add(egui::Shape::Noop);
 
         let scope_resp = ui.scope(|ui| {
-            ui.set_min_width(viewport_w);
+            ui.set_min_width(group_w);
             ui.add_space(HEADER_BAR_VPAD_TOP);
             ui.horizontal(|ui| {
                 ui.add_space(6.0);
@@ -313,7 +320,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
 
         let header_rect = egui::Rect::from_min_size(
             top_cursor,
-            egui::vec2(viewport_w, scope_resp.response.rect.height()),
+            egui::vec2(group_w, scope_resp.response.rect.height()),
         );
 
         ui.painter().set(
@@ -336,6 +343,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
 
         ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
 
+        let mut measured: f32 = 0.0;
         while pos < ctx.visible_indices.len() {
             let child_idx = ctx.visible_indices[pos];
             if ctx.items[child_idx].is_parent || ctx.items[child_idx].block_id != block_id {
@@ -346,7 +354,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             let is_last_in_group = next_pos >= ctx.visible_indices.len()
                 || ctx.items[ctx.visible_indices[next_pos]].is_parent
                 || ctx.items[ctx.visible_indices[next_pos]].block_id != block_id;
-            render_child_row(
+            let right = render_child_row(
                 ui,
                 ctx,
                 child_idx,
@@ -355,13 +363,27 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
                 lineno_w,
                 is_last_in_group,
             );
+            measured = measured.max(right - top_cursor.x);
             pos += 1;
         }
 
         ctx.current_group_x_bounds = None;
+
+        if width_changed(measured, remembered) {
+            ui.ctx().data_mut(|d| d.insert_temp(group_w_id, measured));
+            ui.ctx().request_repaint();
+        }
     }
 
     acc
+}
+
+const fn group_width(viewport_w: f32, remembered: f32) -> f32 {
+    viewport_w.max(remembered)
+}
+
+fn width_changed(measured: f32, remembered: f32) -> bool {
+    (measured - remembered).abs() > 0.5
 }
 
 fn render_header_row(
@@ -509,6 +531,7 @@ fn toggle_locked(locked_blocks: &mut Vec<String>, block_id: &str, is_locked: &mu
     }
 }
 
+#[must_use]
 fn render_child_row(
     ui: &mut egui::Ui,
     ctx: &mut RenderCtx<'_>,
@@ -517,7 +540,7 @@ fn render_child_row(
     child_counter: usize,
     lineno_w: f32,
     is_last_in_group: bool,
-) {
+) -> f32 {
     let item = &ctx.items[idx];
     let prompt_summary =
         prompt_eval_summary_step3::evaluate_step3_item_prompt_summary(item, ctx.prompt_eval);
@@ -525,25 +548,26 @@ fn render_child_row(
         .compat_markers
         .get(&crate::app::compat_step3_rules::marker_key(item));
 
-    let label_response = ui
-        .horizontal(|ui| {
-            ui.add_space(CHILD_INDENT);
+    let row_outer = ui.horizontal(|ui| {
+        ui.add_space(CHILD_INDENT);
 
-            render_lineno(ui, ctx.palette, child_counter, lineno_w);
+        render_lineno(ui, ctx.palette, child_counter, lineno_w);
 
-            let text = format_step3::format_step3_item(&ctx.items[idx]);
-            let row_text = format_step3::weidu_colored_widget_text(ui, &text);
-            let resp = ui.selectable_label(ctx.selected.contains(&idx), row_text);
+        let text = format_step3::format_step3_item(&ctx.items[idx]);
+        let row_text = format_step3::weidu_colored_widget_text(ui, &text);
+        let resp = ui.selectable_label(ctx.selected.contains(&idx), row_text);
 
-            if let Some(marker) = compat_marker {
-                render_compat_pill(ui, &ctx.items[idx], marker, acc, ctx.palette);
-            }
-            if !prompt_summary.trim().is_empty() {
-                render_prompt_pill(ui, &ctx.items[idx], &prompt_summary, acc, ctx.palette);
-            }
+        if let Some(marker) = compat_marker {
+            render_compat_pill(ui, &ctx.items[idx], marker, acc, ctx.palette);
+        }
+        if !prompt_summary.trim().is_empty() {
+            render_prompt_pill(ui, &ctx.items[idx], &prompt_summary, acc, ctx.palette);
+        }
 
-            resp
-        })
+        resp
+    });
+    let row_right = row_outer.response.rect.right();
+    let label_response = row_outer
         .inner
         .on_hover_text(crate::ui::shared::tooltip_global::STEP3_DRAG_ROW);
 
@@ -563,6 +587,56 @@ fn render_child_row(
     handle_jump_to_selected(ui, ctx, idx, label_response.rect);
     handle_row_selection(ui, ctx, idx, &label_response, &drag_response);
     handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows);
+
+    row_right
+}
+
+#[must_use]
+fn visible_dot_range(
+    from: f32,
+    to: f32,
+    step: f32,
+    vis_min: f32,
+    vis_max: f32,
+) -> Option<(f32, f32)> {
+    let start_k = ((vis_min - from) / step).ceil().max(0.0);
+    let first = step.mul_add(start_k, from);
+    let end = to.min(vis_max);
+    if first > end {
+        return None;
+    }
+    let steps_between = ((end - first) / step).floor();
+    let last = step.mul_add(steps_between, first);
+    Some((first, last))
+}
+
+struct DotRun {
+    fixed: f32,
+    start: f32,
+    end: f32,
+    step: f32,
+    radius: f32,
+    color: egui::Color32,
+    horizontal: bool,
+}
+
+fn paint_dot_run(painter: &egui::Painter, run: &DotRun) {
+    let tolerance = run.step.mul_add(0.001, run.end);
+    for v in std::iter::successors(Some(run.start), |&prev| {
+        let next = prev + run.step;
+        if next <= tolerance { Some(next) } else { None }
+    }) {
+        let pt = if run.horizontal {
+            egui::pos2(v, run.fixed)
+        } else {
+            egui::pos2(run.fixed, v)
+        };
+        painter.circle_filled(pt, run.radius, run.color);
+    }
+}
+
+fn is_within(v: f32, min: f32, max: f32) -> bool {
+    (min..=max).contains(&v)
 }
 
 fn paint_dashed_separator(
@@ -576,12 +650,24 @@ fn paint_dashed_separator(
     let base_color = redesign_text_fainter(palette);
     let color = redesign_with_alpha(base_color, 1, 8);
     let painter = ui.painter();
-    for x in std::iter::successors(Some(x0), |&prev| {
-        let next = prev + DOT_STEP_PX;
-        if next <= x1 { Some(next) } else { None }
-    }) {
-        painter.circle_filled(egui::pos2(x, y), DOT_RADIUS, color);
-    }
+    let visible = ui.clip_rect();
+    let Some((start, end)) =
+        visible_dot_range(x0, x1, DOT_STEP_PX, visible.left(), visible.right())
+    else {
+        return;
+    };
+    paint_dot_run(
+        painter,
+        &DotRun {
+            fixed: y,
+            start,
+            end,
+            step: DOT_STEP_PX,
+            radius: DOT_RADIUS,
+            color,
+            horizontal: true,
+        },
+    );
 }
 
 fn paint_dotted_rect(
@@ -592,28 +678,76 @@ fn paint_dotted_rect(
     radius: f32,
 ) {
     let painter = ui.painter();
-    let corners = [
-        (rect.left_top(), rect.right_top()),
-        (rect.right_top(), rect.right_bottom()),
-        (rect.right_bottom(), rect.left_bottom()),
-        (rect.left_bottom(), rect.left_top()),
-    ];
-    for (from, to) in corners {
-        let dx = to.x - from.x;
-        let dy = to.y - from.y;
-        let edge_len = dx.hypot(dy);
-        if edge_len < 1.0 {
-            continue;
+    let visible = ui.clip_rect();
+
+    if let Some((y0, y1)) = visible_dot_range(
+        rect.top(),
+        rect.bottom(),
+        step_px,
+        visible.top(),
+        visible.bottom(),
+    ) {
+        if is_within(rect.left(), visible.left(), visible.right()) {
+            paint_dot_run(
+                painter,
+                &DotRun {
+                    fixed: rect.left(),
+                    start: y0,
+                    end: y1,
+                    step: step_px,
+                    radius,
+                    color,
+                    horizontal: false,
+                },
+            );
         }
-        let ux = dx / edge_len;
-        let uy = dy / edge_len;
-        for t in std::iter::successors(Some(0.0_f32), |&prev| {
-            let next = prev + step_px;
-            if next <= edge_len { Some(next) } else { None }
-        }) {
-            let pt = egui::pos2(ux.mul_add(t, from.x), uy.mul_add(t, from.y));
-            painter.circle_filled(pt, radius, color);
+        if is_within(rect.right(), visible.left(), visible.right()) {
+            paint_dot_run(
+                painter,
+                &DotRun {
+                    fixed: rect.right(),
+                    start: y0,
+                    end: y1,
+                    step: step_px,
+                    radius,
+                    color,
+                    horizontal: false,
+                },
+            );
         }
+    }
+
+    if let Some((x0, x1)) = visible_dot_range(
+        rect.left(),
+        rect.right(),
+        step_px,
+        visible.left(),
+        visible.right(),
+    ) {
+        paint_dot_run(
+            painter,
+            &DotRun {
+                fixed: rect.top(),
+                start: x0,
+                end: x1,
+                step: step_px,
+                radius,
+                color,
+                horizontal: true,
+            },
+        );
+        paint_dot_run(
+            painter,
+            &DotRun {
+                fixed: rect.bottom(),
+                start: x0,
+                end: x1,
+                step: step_px,
+                radius,
+                color,
+                horizontal: true,
+            },
+        );
     }
 }
 
@@ -1054,6 +1188,45 @@ mod tests {
         toggle_locked(&mut locked, &block, &mut is_locked);
         assert!(!is_locked);
         assert!(!locked.contains(&block));
+    }
+
+    #[test]
+    fn group_width_uses_viewport_when_nothing_remembered() {
+        assert!((group_width(700.0, 0.0) - 700.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn group_width_uses_remembered_when_wider() {
+        assert!((group_width(700.0, 900.0) - 900.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn width_changed_ignores_a_small_jitter() {
+        assert!(!width_changed(900.0, 900.2));
+    }
+
+    #[test]
+    fn width_changed_true_for_a_real_shift() {
+        assert!(width_changed(900.0, 700.0));
+    }
+
+    #[test]
+    fn visible_dot_range_clips_into_the_middle_of_a_long_run() {
+        let (start, end) = visible_dot_range(0.0, 3000.0, 7.0, 1000.0, 1100.0).unwrap();
+        assert!((start - 1001.0).abs() < f32::EPSILON);
+        assert!((end - 1099.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn visible_dot_range_is_none_when_nothing_is_visible() {
+        assert!(visible_dot_range(0.0, 100.0, 7.0, 200.0, 300.0).is_none());
+    }
+
+    #[test]
+    fn visible_dot_range_clamps_to_the_run_when_visible_is_wider() {
+        let (start, end) = visible_dot_range(0.0, 100.0, 7.0, -50.0, 500.0).unwrap();
+        assert!((start - 0.0).abs() < f32::EPSILON);
+        assert!((end - 98.0).abs() < f32::EPSILON);
     }
 
     #[test]

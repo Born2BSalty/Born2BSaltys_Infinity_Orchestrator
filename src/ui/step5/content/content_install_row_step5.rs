@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::orchestrator::widgets::{BtnOpts, clipboard, redesign_btn, redesign_btn_glyph};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_glyph};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::action_step5::Step5Action;
 use crate::ui::step5::content_step5::Step5RenderCtx;
@@ -42,11 +42,9 @@ pub(crate) fn render_install_row(
         if ctx.dev_mode {
             crate::ui::step5::prompt_answers_step5::render_button(ui, state, ctx.palette);
         }
-        render_export_modlist_button(ui, state);
         render_console_filters(ui, console_view);
     });
     crate::ui::step5::content_cancel_step5::render_cancel_confirm(ui, state, terminal, ctx.palette);
-    render_modlist_share_popup(ui, state, ctx.palette);
     action
 }
 
@@ -226,26 +224,6 @@ fn render_step5_menus(
     );
 }
 
-fn render_export_modlist_button(ui: &mut egui::Ui, state: &mut WizardState) {
-    if state.step5.has_run_once
-        && !state.step5.install_running
-        && state.step5.last_exit_code == Some(0)
-        && ui.button("Export Modlist…").clicked()
-    {
-        match crate::app::modlist_share::export_modlist_share_code(state) {
-            Ok(code) => {
-                state.step5.modlist_share_code = code;
-                state.step5.modlist_share_error.clear();
-            }
-            Err(err) => {
-                state.step5.modlist_share_code.clear();
-                state.step5.modlist_share_error = err;
-            }
-        }
-        state.step5.modlist_share_window_open = true;
-    }
-}
-
 fn render_console_filters(ui: &mut egui::Ui, console_view: &mut Step5ConsoleViewState) {
     ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
     let mut general_only = console_view.filter == ConsoleOutputFilter::General;
@@ -281,54 +259,4 @@ fn render_console_filters(ui: &mut egui::Ui, console_view: &mut Step5ConsoleView
     }
     ui.checkbox(&mut console_view.auto_scroll, "Auto-scroll")
         .on_hover_text(crate::ui::shared::tooltip_global::STEP5_AUTO_SCROLL);
-}
-
-fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState, palette: ThemePalette) {
-    let mut open = state.step5.modlist_share_window_open;
-    if !open {
-        return;
-    }
-    egui::Window::new("Export Modlist Share Code")
-        .open(&mut open)
-        .resizable(true)
-        .default_size(egui::vec2(720.0, 360.0))
-        .show(ui.ctx(), |ui| {
-            if !state.step5.modlist_share_error.trim().is_empty() {
-                ui.label(
-                    crate::ui::shared::typography_global::plain(&state.step5.modlist_share_error)
-                        .color(crate::ui::shared::redesign_tokens::redesign_error(palette)),
-                );
-            }
-            ui.label(
-                "Share this text with another BIO user. It contains no game files or mod archives.",
-            );
-            ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
-            let text_height = (ui.available_height() - 32.0).max(120.0);
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .max_height(text_height)
-                .show(ui, |ui| {
-                    ui.add_sized(
-                        [ui.available_width(), text_height],
-                        egui::TextEdit::multiline(&mut state.step5.modlist_share_code)
-                            .code_editor(),
-                    );
-                });
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(
-                        !state.step5.modlist_share_code.trim().is_empty(),
-                        egui::Button::new("Copy"),
-                    )
-                    .clicked()
-                {
-                    clipboard::copy(ui.ctx(), state.step5.modlist_share_code.clone());
-                    state.step5.last_status_text = "Modlist share code copied".to_string();
-                }
-                if ui.button("Close").clicked() {
-                    state.step5.modlist_share_window_open = false;
-                }
-            });
-        });
-    state.step5.modlist_share_window_open = open && state.step5.modlist_share_window_open;
 }

@@ -222,6 +222,7 @@ fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
         state.destination = state.destination.trim().to_string();
         state.import_code = state.import_code.trim().to_string();
         state.pipeline_kind = PipelineKind::Install;
+        state.set_auto_start_fired(false);
         state.drawer.open = None;
 
         let typed = state.review.name.trim().to_string();
@@ -742,6 +743,27 @@ mod tests {
         begin_install(&mut app);
 
         assert!(app.install_screen_state.drawer.open.is_none());
+    }
+
+    #[test]
+    fn begin_install_rearms_the_auto_start() {
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+
+        let mut app = OrchestratorApp::new_isolated_for_test("auto_start_rearm");
+        app.install_screen_state.import_code = code;
+        app.install_screen_state.parsed_preview = Some(preview);
+        app.install_screen_state.review.name = "Tactical EET".to_string();
+        app.install_screen_state.destination = "D:\\eet install".to_string();
+        app.install_screen_state.set_auto_start_fired(true);
+
+        let stage = begin_install(&mut app);
+
+        assert!(!app.install_screen_state.auto_start_fired());
+        assert_eq!(stage, InstallStage::Downloading);
     }
 
     #[test]

@@ -3,6 +3,8 @@
 
 use eframe::egui;
 
+use crate::app::state::WizardState;
+use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::registry::operations;
 use crate::ui::install::state_install::InstallStage;
 use crate::ui::orchestrator::nav_destination::NavDestination;
@@ -96,6 +98,24 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         }
     }
 
+    if !orchestrator.install_screen_state.auto_start_fired() {
+        orchestrator.install_screen_state.set_auto_start_fired(true);
+        let armed = orchestrator.install_screen_state.pipeline_flags.armed();
+        let registered = entry.is_some();
+        let allowed = auto_start_allowed(
+            &orchestrator.wizard_state,
+            orchestrator.step5_terminal_error.as_deref(),
+            orchestrator.dev_mode,
+        );
+        if auto_start_should_fire(armed, registered, allowed) {
+            orchestrator.wizard_state.step5.start_install_requested = true;
+            tracing::info!(
+                target = "orchestrator",
+                "install console: auto-starting the install (install as provided)"
+            );
+        }
+    }
+
     match post_install_action {
         Some(PostInstallAction::ReturnToHome) => {
             outcome = StageInstallingOutcome::Nav(NavDestination::Home);
@@ -114,6 +134,26 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
     }
 
     outcome
+}
+
+pub(crate) fn auto_start_allowed(
+    state: &WizardState,
+    terminal_error: Option<&str>,
+    dev_mode: bool,
+) -> bool {
+    let s5 = &state.step5;
+    terminal_error.is_none()
+        && !s5.start_install_requested
+        && !s5.install_running
+        && !s5.prep_running
+        && step3_install_block_reason(state).is_none()
+        && (!dev_mode || crate::ui::step5::menus_step5::diagnostics_ready_for_dev(state))
+        && !(s5.has_run_once && !s5.resume_available && s5.last_exit_code == Some(0))
+}
+
+#[must_use]
+pub(crate) const fn auto_start_should_fire(armed: bool, registered: bool, allowed: bool) -> bool {
+    armed && registered && allowed
 }
 
 fn render_header(
@@ -273,6 +313,61 @@ mod tests {
             StageInstallingOutcome::default(),
             StageInstallingOutcome::Stay
         );
+    }
+
+    #[test]
+    fn auto_start_allowed_on_a_fresh_console() {
+        let state = WizardState::default();
+        assert!(auto_start_allowed(&state, None, false));
+    }
+
+    #[test]
+    fn auto_start_blocked_while_in_flight() {
+        let mut state = WizardState::default();
+        state.step5.start_install_requested = true;
+        assert!(!auto_start_allowed(&state, None, false));
+
+        let mut state = WizardState::default();
+        state.step5.install_running = true;
+        assert!(!auto_start_allowed(&state, None, false));
+
+        let mut state = WizardState::default();
+        state.step5.prep_running = true;
+        assert!(!auto_start_allowed(&state, None, false));
+    }
+
+    #[test]
+    fn auto_start_blocked_after_a_clean_install() {
+        let mut state = WizardState::default();
+        state.step5.has_run_once = true;
+        state.step5.resume_available = false;
+        state.step5.last_exit_code = Some(0);
+        assert!(!auto_start_allowed(&state, None, false));
+
+        state.step5.last_exit_code = Some(1);
+        assert!(auto_start_allowed(&state, None, false));
+    }
+
+    #[test]
+    fn auto_start_blocked_by_a_terminal_error() {
+        let state = WizardState::default();
+        assert!(!auto_start_allowed(&state, Some("boom"), false));
+    }
+
+    #[test]
+    fn auto_start_requires_an_armed_pipeline() {
+        assert!(!auto_start_should_fire(false, true, true));
+        assert!(auto_start_should_fire(true, true, true));
+        assert!(!auto_start_should_fire(false, true, false));
+        assert!(!auto_start_should_fire(true, true, false));
+    }
+
+    #[test]
+    fn auto_start_requires_a_registered_destination() {
+        assert!(!auto_start_should_fire(true, false, true));
+        assert!(auto_start_should_fire(true, true, true));
+        assert!(!auto_start_should_fire(false, false, true));
+        assert!(!auto_start_should_fire(true, false, false));
     }
 
     #[test]

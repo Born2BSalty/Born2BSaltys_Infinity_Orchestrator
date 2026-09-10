@@ -120,6 +120,17 @@ pub(crate) fn render(
     outcome
 }
 
+fn lineage_line_prefix(author: &str) -> Option<String> {
+    let trimmed = author.trim();
+    if trimmed.is_empty() {
+        None
+    } else if trimmed.starts_with('@') {
+        Some(format!("{trimmed}/"))
+    } else {
+        Some(format!("@{trimmed}/"))
+    }
+}
+
 fn chain_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -145,6 +156,19 @@ fn chain_row(
             );
         }
 
+        ui.spacing_mut().item_spacing.x = 0.0;
+
+        if let Some(prefix) = lineage_line_prefix(author) {
+            ui.label(
+                egui::RichText::new(prefix)
+                    .size(14.0)
+                    .family(egui::FontFamily::Name("poppins_medium".into()))
+                    .color(redesign_text_muted(palette)),
+            );
+        }
+
+        ui.spacing_mut().item_spacing.x = 8.0;
+
         let name_color = if current {
             redesign_accent_deep(palette)
         } else {
@@ -165,19 +189,6 @@ fn chain_row(
             current_tag(ui, palette);
         }
     });
-
-    if !author.trim().is_empty() {
-        ui.horizontal(|ui| {
-            let extra = if generation > 0 { 21.0 } else { 0.0 };
-            ui.add_space(indent + extra);
-            ui.label(
-                egui::RichText::new(format!("by {}", author.trim()))
-                    .size(12.0)
-                    .family(egui::FontFamily::Name("firacode_nerd".into()))
-                    .color(redesign_text_faint(palette)),
-            );
-        });
-    }
 
     if !is_root || generation > 0 || current {
         ui.add_space(10.0);
@@ -279,5 +290,20 @@ mod tests {
             author: "",
         };
         assert!(s.author.trim().is_empty());
+    }
+
+    #[test]
+    fn lineage_prefix_adds_the_at_sign() {
+        assert_eq!(lineage_line_prefix("b2bs"), Some("@b2bs/".to_string()));
+    }
+
+    #[test]
+    fn lineage_prefix_keeps_an_existing_at_sign() {
+        assert_eq!(lineage_line_prefix("@b2bs"), Some("@b2bs/".to_string()));
+    }
+
+    #[test]
+    fn lineage_prefix_is_absent_for_an_empty_author() {
+        assert_eq!(lineage_line_prefix("  "), None);
     }
 }

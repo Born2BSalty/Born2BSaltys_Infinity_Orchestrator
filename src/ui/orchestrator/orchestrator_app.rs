@@ -1585,6 +1585,12 @@ impl OrchestratorApp {
         app.settings_store = crate::settings::store::SettingsStore::new_with_path(
             dir.join(format!("{stem}_settings.json")),
         );
+        app.wizard_state.step1 = crate::app::state::Step1State::default();
+        app.path_validation = compute_path_validation_summary(&app.wizard_state);
+        app.bio_settings_last_saved = AppSettings {
+            exe_fingerprint: app.exe_fingerprint.clone(),
+            step1: app.wizard_state.step1.clone().into(),
+        };
         app
     }
 }
@@ -1668,6 +1674,20 @@ mod tests {
             .unwrap_or_default();
         assert_eq!(real_after, real_before);
         assert_ne!(real_after, probe);
+    }
+
+    #[test]
+    fn isolated_app_carries_no_machine_paths() {
+        let app = OrchestratorApp::new_isolated_for_test("no_machine_paths");
+        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
+        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
+        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
+        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
+        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(
+            app.wizard_state.step1.prepare_target_dirs_before_install,
+            crate::app::state::Step1State::default().prepare_target_dirs_before_install
+        );
     }
 
     fn dirty_ws() -> WizardState {

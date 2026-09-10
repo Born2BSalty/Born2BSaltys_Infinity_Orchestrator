@@ -162,18 +162,19 @@ pub(crate) struct DrawerState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct InstallPipelineFlags {
-    bits: u8,
+    bits: u16,
 }
 
 impl InstallPipelineFlags {
-    const ARMED: u8 = 0b0000_0001;
-    const ARCHIVES_STAGED: u8 = 0b0000_0010;
-    const ARCHIVES_INGESTED: u8 = 0b0000_0100;
-    const ARCHIVES_VERIFIED: u8 = 0b0000_1000;
-    const DOWNLOAD_PHASE_STARTED: u8 = 0b0001_0000;
-    const ARCHIVE_SKIP_COMPLETED: u8 = 0b0010_0000;
-    const EXPLICIT_RESOLVE_STARTED: u8 = 0b0100_0000;
-    const OVERRIDE_WARNINGS_TOASTED: u8 = 0b1000_0000;
+    const ARMED: u16 = 0b0000_0001;
+    const ARCHIVES_STAGED: u16 = 0b0000_0010;
+    const ARCHIVES_INGESTED: u16 = 0b0000_0100;
+    const ARCHIVES_VERIFIED: u16 = 0b0000_1000;
+    const DOWNLOAD_PHASE_STARTED: u16 = 0b0001_0000;
+    const ARCHIVE_SKIP_COMPLETED: u16 = 0b0010_0000;
+    const EXPLICIT_RESOLVE_STARTED: u16 = 0b0100_0000;
+    const OVERRIDE_WARNINGS_TOASTED: u16 = 0b1000_0000;
+    const AUTO_START_FIRED: u16 = 0b1_0000_0000;
 
     #[must_use]
     pub const fn armed(self) -> bool {
@@ -247,11 +248,20 @@ impl InstallPipelineFlags {
         self.set_bit(Self::OVERRIDE_WARNINGS_TOASTED, value);
     }
 
+    #[must_use]
+    pub const fn auto_start_fired(self) -> bool {
+        self.bits & Self::AUTO_START_FIRED != 0
+    }
+
+    pub const fn set_auto_start_fired(&mut self, value: bool) {
+        self.set_bit(Self::AUTO_START_FIRED, value);
+    }
+
     pub const fn reset(&mut self) {
         self.bits = 0;
     }
 
-    const fn set_bit(&mut self, bit: u8, value: bool) {
+    const fn set_bit(&mut self, bit: u16, value: bool) {
         if value {
             self.bits |= bit;
         } else {
@@ -354,6 +364,15 @@ impl InstallScreenState {
         self.skip_indices = std::collections::HashSet::new();
         self.hashed_indices = std::collections::HashSet::new();
         self.drawer = DrawerState::default();
+    }
+
+    #[must_use]
+    pub const fn auto_start_fired(&self) -> bool {
+        self.pipeline_flags.auto_start_fired()
+    }
+
+    pub const fn set_auto_start_fired(&mut self, value: bool) {
+        self.pipeline_flags.set_auto_start_fired(value);
     }
 }
 
