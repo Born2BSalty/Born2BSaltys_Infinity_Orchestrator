@@ -61,7 +61,7 @@ pub(crate) fn render<F>(
     let popup_was_open = ctx.memory(egui::Memory::any_popup_open);
 
     let scrim_clicked = egui::Area::new(Id::new(("drawer_scrim", spec.id_salt)))
-        .order(Order::Foreground)
+        .order(Order::Middle)
         .fixed_pos(panel.min)
         .interactable(true)
         .show(ctx, |ui| {
@@ -128,8 +128,6 @@ pub(crate) fn render<F>(
                     });
                 });
         });
-
-    ctx.move_to_top(egui::LayerId::new(Order::Foreground, drawer_id));
 
     let escape_closes = ctx.input(|i| i.key_pressed(Key::Escape)) && !popup_was_open;
 
