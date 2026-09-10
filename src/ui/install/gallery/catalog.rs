@@ -124,7 +124,7 @@ const ENTRIES: &[GalleryEntry] = &[
             },
             GalleryMod {
                 mod_name: "EEFixPack",
-                tp_file: "EEFIXPACK.TP2",
+                tp_file: "SETUP-EEFIXPACK.TP2",
                 component_id: "0",
                 component_label: "Core Fixes",
                 target: Game::BGEE,
@@ -132,7 +132,7 @@ const ENTRIES: &[GalleryEntry] = &[
             },
             GalleryMod {
                 mod_name: "EEFixPack",
-                tp_file: "EEFIXPACK.TP2",
+                tp_file: "SETUP-EEFIXPACK.TP2",
                 component_id: "2",
                 component_label: "Game Text Update",
                 target: Game::BGEE,
@@ -140,7 +140,7 @@ const ENTRIES: &[GalleryEntry] = &[
             },
             GalleryMod {
                 mod_name: "EEFixPack",
-                tp_file: "EEFIXPACK.TP2",
+                tp_file: "SETUP-EEFIXPACK.TP2",
                 component_id: "0",
                 component_label: "Core Fixes",
                 target: Game::BG2EE,
@@ -148,7 +148,7 @@ const ENTRIES: &[GalleryEntry] = &[
             },
             GalleryMod {
                 mod_name: "EEFixPack",
-                tp_file: "EEFIXPACK.TP2",
+                tp_file: "SETUP-EEFIXPACK.TP2",
                 component_id: "2",
                 component_label: "Game Text Update",
                 target: Game::BG2EE,
@@ -186,7 +186,7 @@ const ENTRIES: &[GalleryEntry] = &[
         mods: &[
             GalleryMod {
                 mod_name: "EEFixPack",
-                tp_file: "EEFIXPACK.TP2",
+                tp_file: "SETUP-EEFIXPACK.TP2",
                 component_id: "0",
                 component_label: "Core Fixes",
                 target: Game::BGEE,
@@ -194,7 +194,7 @@ const ENTRIES: &[GalleryEntry] = &[
             },
             GalleryMod {
                 mod_name: "EEFixPack",
-                tp_file: "EEFIXPACK.TP2",
+                tp_file: "SETUP-EEFIXPACK.TP2",
                 component_id: "2",
                 component_label: "Game Text Update",
                 target: Game::BGEE,
@@ -202,7 +202,7 @@ const ENTRIES: &[GalleryEntry] = &[
             },
             GalleryMod {
                 mod_name: "CDTweaks",
-                tp_file: "CDTWEAKS.TP2",
+                tp_file: "SETUP-CDTWEAKS.TP2",
                 component_id: "2010",
                 component_label: "Increase Ammo Stacking",
                 target: Game::BGEE,
@@ -223,7 +223,7 @@ const ENTRIES: &[GalleryEntry] = &[
         version: "1.0.0",
         mods: &[GalleryMod {
             mod_name: "CDTweaks",
-            tp_file: "CDTWEAKS.TP2",
+            tp_file: "SETUP-CDTWEAKS.TP2",
             component_id: "2010",
             component_label: "Increase Ammo Stacking",
             target: Game::IWDEE,
@@ -442,12 +442,12 @@ mod tests {
 
         let first_game_lines = log_lines(&fixes_preview.bgee_log_text);
         assert!(first_game_lines[0].contains("DLCMERGER.TP2~ #0 #1"));
-        assert!(first_game_lines[1].contains("EEFIXPACK.TP2~ #0 #0"));
-        assert!(first_game_lines[2].contains("EEFIXPACK.TP2~ #0 #2"));
+        assert!(first_game_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
+        assert!(first_game_lines[2].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
 
         let second_game_lines = log_lines(&fixes_preview.bg2ee_log_text);
-        assert!(second_game_lines[0].contains("EEFIXPACK.TP2~ #0 #0"));
-        assert!(second_game_lines[1].contains("EEFIXPACK.TP2~ #0 #2"));
+        assert!(second_game_lines[0].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
+        assert!(second_game_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
         assert!(second_game_lines[2].contains("EET.TP2~ #0 #0"));
         assert!(second_game_lines[3].contains("EET_END.TP2~ #0 #0"));
 
@@ -460,9 +460,9 @@ mod tests {
         assert_eq!(vanilla_preview.bgee_entries, 3);
 
         let vanilla_lines = log_lines(&vanilla_preview.bgee_log_text);
-        assert!(vanilla_lines[0].contains("EEFIXPACK.TP2~ #0 #0"));
-        assert!(vanilla_lines[1].contains("EEFIXPACK.TP2~ #0 #2"));
-        assert!(vanilla_lines[2].contains("CDTWEAKS.TP2~ #0 #2010"));
+        assert!(vanilla_lines[0].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
+        assert!(vanilla_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
+        assert!(vanilla_lines[2].contains("SETUP-CDTWEAKS.TP2~ #0 #2010"));
     }
 
     #[test]
