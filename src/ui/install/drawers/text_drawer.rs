@@ -216,12 +216,6 @@ pub(crate) fn render(
             }
         },
         |ui| {
-            ui.label(
-                egui::RichText::new(footer_text(kind, sections.len()))
-                    .size(12.0)
-                    .family(egui::FontFamily::Name("poppins_light".into()))
-                    .color(redesign_text_muted(palette)),
-            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let game = sections
                     .get(active_tab_cell.get())
@@ -240,6 +234,18 @@ pub(crate) fn render(
                 {
                     copy_requested = true;
                 }
+                ui.add_space(12.0);
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(footer_text(kind, sections.len()))
+                                .size(12.0)
+                                .family(egui::FontFamily::Name("poppins_light".into()))
+                                .color(redesign_text_muted(palette)),
+                        )
+                        .wrap(),
+                    );
+                });
             });
         },
     );
