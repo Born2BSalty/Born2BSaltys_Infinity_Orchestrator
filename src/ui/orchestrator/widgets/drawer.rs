@@ -17,6 +17,7 @@ const CONTENT_MAX_PX: f32 = 920.0;
 const FORM_FRACTION: f32 = 0.42;
 const FORM_MIN_PX: f32 = 380.0;
 const FORM_MAX_PX: f32 = 540.0;
+const FOOTER_MIN_HEIGHT_PX: f32 = 50.0;
 const FOOTER_MAX_HEIGHT_PX: f32 = 64.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +60,11 @@ pub(crate) fn render<F>(
     );
     let w = drawer_width(screen.width(), spec.width);
     let popup_was_open = ctx.memory(egui::Memory::any_popup_open);
+    let footer_h_id = Id::new(("drawer_footer_height", spec.id_salt));
+    let footer_h = ctx
+        .data(|d| d.get_temp::<f32>(footer_h_id))
+        .unwrap_or(FOOTER_MIN_HEIGHT_PX)
+        .clamp(FOOTER_MIN_HEIGHT_PX, FOOTER_MAX_HEIGHT_PX);
 
     let scrim_clicked = egui::Area::new(Id::new(("drawer_scrim", spec.id_salt)))
         .order(Order::Middle)
@@ -98,46 +104,50 @@ pub(crate) fn render<F>(
                         ui.spacing_mut().item_spacing.y = 0.0;
                         head_close_clicked = render_head(ui, palette, spec);
 
-                        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                            ui.spacing_mut().item_spacing.y = 0.0;
-                            footer_out = Some(
-                                ScrollArea::vertical()
-                                    .id_salt(("drawer_footer", spec.id_salt))
-                                    .auto_shrink([false, true])
-                                    .max_height(FOOTER_MAX_HEIGHT_PX)
-                                    .scroll_bar_visibility(
-                                        egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
-                                    )
-                                    .show(ui, |ui| {
-                                        ui.set_width(w);
-                                        Frame::default()
-                                            .inner_margin(Margin {
-                                                left: 22,
-                                                right: 22,
-                                                top: 12,
-                                                bottom: 12,
-                                            })
-                                            .show(ui, |ui| ui.horizontal(footer).inner)
-                                            .inner
+                        let body_h = (ui.available_height() - footer_h).max(0.0);
+                        ScrollArea::vertical()
+                            .id_salt(("drawer_body", spec.id_salt))
+                            .auto_shrink([false, false])
+                            .max_height(body_h)
+                            .show(ui, |ui| {
+                                Frame::default()
+                                    .inner_margin(Margin::symmetric(22, 18))
+                                    .show(ui, body);
+                            });
+
+                        ui.painter().hline(
+                            ui.max_rect().x_range(),
+                            ui.cursor().top(),
+                            egui::Stroke::new(1.0_f32, redesign_border_soft(palette)),
+                        );
+
+                        let footer_output = ScrollArea::vertical()
+                            .id_salt(("drawer_footer", spec.id_salt))
+                            .auto_shrink([false, false])
+                            .max_height(footer_h)
+                            .scroll_bar_visibility(
+                                egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
+                            )
+                            .show(ui, |ui| {
+                                Frame::default()
+                                    .inner_margin(Margin {
+                                        left: 22,
+                                        right: 22,
+                                        top: 12,
+                                        bottom: 12,
                                     })
-                                    .inner,
-                            );
-
-                            ui.painter().hline(
-                                ui.max_rect().x_range(),
-                                ui.cursor().bottom(),
-                                egui::Stroke::new(1.0_f32, redesign_border_soft(palette)),
-                            );
-
-                            ScrollArea::vertical()
-                                .id_salt(("drawer_body", spec.id_salt))
-                                .auto_shrink([false, false])
-                                .show(ui, |ui| {
-                                    Frame::default()
-                                        .inner_margin(Margin::symmetric(22, 18))
-                                        .show(ui, body);
-                                });
-                        });
+                                    .show(ui, |ui| ui.horizontal(footer).inner)
+                                    .inner
+                            });
+                        let wanted_h = footer_output
+                            .content_size
+                            .y
+                            .clamp(FOOTER_MIN_HEIGHT_PX, FOOTER_MAX_HEIGHT_PX);
+                        if (wanted_h - footer_h).abs() > 0.5 {
+                            ctx.data_mut(|d| d.insert_temp(footer_h_id, wanted_h));
+                            ctx.request_repaint();
+                        }
+                        footer_out = Some(footer_output.inner);
                     });
                 });
         });
