@@ -4,8 +4,11 @@
 pub mod destination_field;
 pub mod destination_not_empty;
 pub mod destination_owned;
+pub mod drawers;
 pub mod fork_info_button;
 pub mod gallery;
+pub mod highlight;
+pub mod inside_model;
 pub mod page_install;
 pub mod preview_counts;
 pub mod preview_overview;
@@ -19,3 +22,4 @@ pub mod stage_paste;
 pub mod stage_review;
 pub mod state_install;
 pub mod sub_flow_footer;
+pub mod whats_inside;

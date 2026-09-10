@@ -34,13 +34,13 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     let palette = orchestrator.theme_palette;
 
     let request = match orchestrator.install_screen_state.stage {
-        InstallStage::Gallery => gallery_stage(ui, palette, &mut orchestrator.install_screen_state),
-        InstallStage::Details => details_stage(
+        InstallStage::Gallery => gallery_stage(
             ui,
             palette,
             &mut orchestrator.install_screen_state,
             &mut orchestrator.notification_manager,
         ),
+        InstallStage::Details => details_stage(ui, palette, &mut orchestrator.install_screen_state),
         InstallStage::Paste => paste_stage(ui, palette, &mut orchestrator.install_screen_state),
         InstallStage::Review => review_stage(ui, palette, orchestrator, ctx),
         InstallStage::Downloading => downloading_stage(ui, orchestrator),
@@ -64,6 +64,7 @@ fn gallery_stage(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut InstallScreenState,
+    notification_manager: &mut NotificationManager,
 ) -> Option<InstallRequest> {
     match stage_gallery::render(ui, palette, state) {
         GalleryOutcome::OpenPaste => {
@@ -72,7 +73,8 @@ fn gallery_stage(
         }
         GalleryOutcome::OpenDetails(index) => {
             state.gallery.selected = Some(index);
-            Some(InstallRequest::Stage(InstallStage::Details))
+            let entry = selected_entry(state)?;
+            open_details_from_gallery_entry(entry, state, notification_manager)
         }
         GalleryOutcome::Stay => None,
     }
@@ -82,19 +84,30 @@ fn details_stage(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut InstallScreenState,
-    notification_manager: &mut NotificationManager,
 ) -> Option<InstallRequest> {
     let Some(entry) = selected_entry(state) else {
         state.gallery.selected = None;
         return Some(InstallRequest::Stage(InstallStage::Gallery));
     };
-    match stage_details::render(ui, palette, entry) {
-        DetailsOutcome::Back => Some(InstallRequest::Stage(InstallStage::Gallery)),
-        DetailsOutcome::ReviewInstallation => {
-            open_review_from_gallery_entry(entry, state, notification_manager)
+    let Some(preview) = state.parsed_preview.clone() else {
+        state.gallery.selected = None;
+        state.clear_preview();
+        return Some(InstallRequest::Stage(InstallStage::Gallery));
+    };
+    match stage_details::render(ui, palette, entry, &preview) {
+        DetailsOutcome::Back => Some(details_back(state)),
+        DetailsOutcome::OpenDrawer(kind) => {
+            state.drawer.open = Some(kind);
+            None
         }
         DetailsOutcome::Stay => None,
     }
+}
+
+fn details_back(state: &mut InstallScreenState) -> InstallRequest {
+    state.clear_preview();
+    state.gallery.selected = None;
+    InstallRequest::Stage(InstallStage::Gallery)
 }
 
 fn paste_stage(
@@ -309,7 +322,7 @@ fn selected_entry(state: &InstallScreenState) -> Option<&'static GalleryEntry> {
         .and_then(|index| catalog::entries().get(index))
 }
 
-fn open_review_from_gallery_entry(
+fn open_details_from_gallery_entry(
     entry: &GalleryEntry,
     state: &mut InstallScreenState,
     notification_manager: &mut NotificationManager,
@@ -323,12 +336,13 @@ fn open_review_from_gallery_entry(
                     "Could not prepare \"{}\" for review: {err}",
                     entry.name
                 ));
+                state.gallery.selected = None;
                 return None;
             }
             state.review.origin = ReviewOrigin::Details;
             state.review.name = entry.name.to_string();
             state.review.modify = false;
-            Some(InstallRequest::Stage(InstallStage::Review))
+            Some(InstallRequest::Stage(InstallStage::Details))
         }
         Err(err) => {
             warn!(
@@ -337,6 +351,7 @@ fn open_review_from_gallery_entry(
             );
             state.clear_preview();
             state.preview_parse_error = Some(err.clone());
+            state.gallery.selected = None;
             notification_manager.error(format!(
                 "Could not prepare \"{}\" for review: {err}",
                 entry.name
@@ -508,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn details_review_prefills_the_entry_name_and_records_its_origin() {
+    fn opening_details_generates_the_code_and_arms_the_review_state() {
         let entry = catalog::entries()
             .iter()
             .find(|e| e.id == "eet-essentials")
@@ -516,11 +531,11 @@ mod tests {
         let mut state = InstallScreenState::default();
         let mut notification_manager = NotificationManager::new();
 
-        let request = open_review_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        let request = open_details_from_gallery_entry(entry, &mut state, &mut notification_manager);
 
         assert!(matches!(
             request,
-            Some(InstallRequest::Stage(InstallStage::Review))
+            Some(InstallRequest::Stage(InstallStage::Details))
         ));
         assert_eq!(state.review.origin, ReviewOrigin::Details);
         assert_eq!(state.review.name, "EET Essentials");
@@ -537,12 +552,34 @@ mod tests {
             .expect("the catalog is not empty");
         let mut state = InstallScreenState::default();
         let mut notification_manager = NotificationManager::new();
-        open_review_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        open_details_from_gallery_entry(entry, &mut state, &mut notification_manager);
         let first = state.import_code.clone();
-        open_review_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        open_details_from_gallery_entry(entry, &mut state, &mut notification_manager);
         assert_eq!(
             first, state.import_code,
             "regenerating the same entry must be deterministic"
         );
+    }
+
+    #[test]
+    fn details_back_clears_the_preview_and_the_selection() {
+        let entry = catalog::entries()
+            .first()
+            .expect("the catalog is not empty");
+        let code = catalog::share_code(entry).expect("stub code generates");
+        let preview = preview_modlist_share_code(&code).expect("stub code parses");
+
+        let mut state = InstallScreenState {
+            import_code: code,
+            parsed_preview: Some(preview),
+            ..Default::default()
+        };
+        state.gallery.selected = Some(0);
+
+        let request = details_back(&mut state);
+
+        assert_eq!(request, InstallRequest::Stage(InstallStage::Gallery));
+        assert!(state.parsed_preview.is_none());
+        assert!(state.gallery.selected.is_none());
     }
 }

@@ -68,6 +68,7 @@ pub fn render(
         None::<sub_flow_footer::BackBtn<'_>>,
         None::<sub_flow_footer::SecondaryBtn<'_>>,
         None,
+        None,
         PrimaryBtn {
             label: if destination_prep_running {
                 "Preparing"
@@ -77,7 +78,7 @@ pub fn render(
             disabled: destination_prep_running || !proceed_ok,
         },
     );
-    if footer.primary_clicked {
+    if footer == sub_flow_footer::FooterClick::Primary {
         outcome = ChooseOutcome::StartScratch;
     }
 

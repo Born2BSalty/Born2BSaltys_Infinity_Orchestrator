@@ -4,6 +4,7 @@
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::ui::install::gallery::filter::GalleryFilter;
 use crate::ui::install::stage_downloading::{DownloadProgress, SkippedMod};
+use crate::ui::install::whats_inside::InsideClick;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InstallStage {
@@ -161,6 +162,38 @@ impl PreviewTab {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DrawerKind {
+    IncludedMods,
+    WeiduLogs,
+    InstalledRefs,
+    DownloadSources,
+    ConfigFiles,
+    Install,
+}
+
+impl DrawerKind {
+    #[must_use]
+    pub(crate) const fn from_click(click: InsideClick) -> Option<Self> {
+        match click {
+            InsideClick::None => None,
+            InsideClick::IncludedMods => Some(Self::IncludedMods),
+            InsideClick::WeiduLogs => Some(Self::WeiduLogs),
+            InsideClick::InstalledRefs => Some(Self::InstalledRefs),
+            InsideClick::DownloadSources => Some(Self::DownloadSources),
+            InsideClick::ConfigFiles => Some(Self::ConfigFiles),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DrawerState {
+    pub(crate) open: Option<DrawerKind>,
+    pub(crate) logs_tab: usize,
+    pub(crate) mods_tab: usize,
+    pub(crate) mods_query: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct InstallPipelineFlags {
     bits: u8,
@@ -266,6 +299,7 @@ pub struct InstallScreenState {
     pub stage: InstallStage,
     pub pipeline_kind: PipelineKind,
     pub(crate) gallery: GalleryScreenState,
+    pub(crate) drawer: DrawerState,
     pub review: ReviewState,
     pub destination: String,
     pub destination_choice: Option<DestChoice>,
@@ -330,6 +364,7 @@ impl InstallScreenState {
         self.expected_archive_sizes = std::collections::BTreeMap::new();
         self.skip_indices = std::collections::HashSet::new();
         self.hashed_indices = std::collections::HashSet::new();
+        self.drawer = DrawerState::default();
     }
 }
 
@@ -507,6 +542,49 @@ mod tests {
     fn pipeline_stages_are_not_idle() {
         assert!(!install_stage_is_idle(InstallStage::Downloading));
         assert!(!install_stage_is_idle(InstallStage::InstallingStub));
+    }
+
+    #[test]
+    fn clear_preview_closes_the_drawer_and_forgets_its_query() {
+        let mut st = InstallScreenState {
+            drawer: DrawerState {
+                open: Some(DrawerKind::IncludedMods),
+                logs_tab: 1,
+                mods_tab: 1,
+                mods_query: "fix".to_string(),
+            },
+            ..Default::default()
+        };
+        st.clear_preview();
+        assert!(st.drawer.open.is_none());
+        assert_eq!(st.drawer.logs_tab, 0);
+        assert_eq!(st.drawer.mods_tab, 0);
+        assert!(st.drawer.mods_query.is_empty());
+    }
+
+    #[test]
+    fn drawer_kind_maps_every_inside_click_and_none_to_none() {
+        assert_eq!(DrawerKind::from_click(InsideClick::None), None);
+        assert_eq!(
+            DrawerKind::from_click(InsideClick::IncludedMods),
+            Some(DrawerKind::IncludedMods)
+        );
+        assert_eq!(
+            DrawerKind::from_click(InsideClick::WeiduLogs),
+            Some(DrawerKind::WeiduLogs)
+        );
+        assert_eq!(
+            DrawerKind::from_click(InsideClick::InstalledRefs),
+            Some(DrawerKind::InstalledRefs)
+        );
+        assert_eq!(
+            DrawerKind::from_click(InsideClick::DownloadSources),
+            Some(DrawerKind::DownloadSources)
+        );
+        assert_eq!(
+            DrawerKind::from_click(InsideClick::ConfigFiles),
+            Some(DrawerKind::ConfigFiles)
+        );
     }
 
     #[test]

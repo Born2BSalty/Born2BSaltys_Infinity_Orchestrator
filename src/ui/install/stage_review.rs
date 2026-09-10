@@ -7,7 +7,7 @@ use crate::app::modlist_share::ModlistSharePreview;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::operations::{DestinationOwnership, classify_destination};
 use crate::ui::install::state_install::{DestChoice, InstallScreenState, ReviewOrigin};
-use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn, SecondaryBtn};
+use crate::ui::install::sub_flow_footer::{self, BackBtn, FooterClick, PrimaryBtn, SecondaryBtn};
 use crate::ui::install::{
     destination_field, destination_not_empty, destination_owned, fork_info_button,
     preview_overview, preview_tabs,
@@ -414,6 +414,7 @@ fn footer(
         Some(BackBtn { label: "Back" }),
         None::<SecondaryBtn<'_>>,
         None,
+        None,
         PrimaryBtn {
             label: if state.review.modify {
                 "Begin Import"
@@ -424,16 +425,11 @@ fn footer(
         },
     );
 
-    if outcome.back_clicked {
-        ReviewOutcome::Back
-    } else if outcome.primary_clicked {
-        if state.review.modify {
-            ReviewOutcome::BeginImport
-        } else {
-            ReviewOutcome::BeginInstall
-        }
-    } else {
-        ReviewOutcome::Stay
+    match outcome {
+        FooterClick::Back => ReviewOutcome::Back,
+        FooterClick::Primary if state.review.modify => ReviewOutcome::BeginImport,
+        FooterClick::Primary => ReviewOutcome::BeginInstall,
+        FooterClick::None | FooterClick::Secondary | FooterClick::LeftAction => ReviewOutcome::Stay,
     }
 }
 

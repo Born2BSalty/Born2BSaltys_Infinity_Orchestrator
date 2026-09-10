@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::ui::install::state_install::{InstallScreenState, InstallStage};
-use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
+use crate::ui::install::sub_flow_footer::{self, BackBtn, FooterClick, PrimaryBtn};
 use crate::ui::orchestrator::widgets::{redesign_box, render_screen_title};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
@@ -60,20 +60,18 @@ pub fn render(
         }),
         None::<sub_flow_footer::SecondaryBtn<'_>>,
         Some("no install starts until preview is accepted"),
+        None,
         PrimaryBtn {
             label: "Review",
             disabled: state.import_code.trim().is_empty(),
         },
     );
 
-    if outcome.back_clicked {
-        return PasteOutcome::Advance(InstallStage::Gallery);
+    match outcome {
+        FooterClick::Back => PasteOutcome::Advance(InstallStage::Gallery),
+        FooterClick::Primary => PasteOutcome::Advance(InstallStage::Review),
+        FooterClick::None | FooterClick::Secondary | FooterClick::LeftAction => PasteOutcome::Stay,
     }
-    if outcome.primary_clicked {
-        return PasteOutcome::Advance(InstallStage::Review);
-    }
-
-    PasteOutcome::Stay
 }
 
 fn import_code_box(ui: &mut egui::Ui, palette: ThemePalette, code: &mut String) {

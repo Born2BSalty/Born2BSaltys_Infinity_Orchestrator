@@ -1250,12 +1250,13 @@ pub(crate) fn render_chrome(
         Some(BackBtn { label: "Cancel" }),
         None::<sub_flow_footer::SecondaryBtn<'_>>,
         None,
+        None,
         PrimaryBtn {
             label: "Waiting\u{2026}",
             disabled: true,
         },
     );
-    footer.back_clicked
+    footer == sub_flow_footer::FooterClick::Back
 }
 
 fn render_overall_progress(
