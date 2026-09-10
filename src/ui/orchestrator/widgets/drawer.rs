@@ -102,6 +102,7 @@ pub(crate) fn render<F>(
 
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 0.0;
+                        ui.visuals_mut().clip_rect_margin = 0.0;
                         head_close_clicked = render_head(ui, palette, spec);
 
                         let body_h = (ui.available_height() - footer_h).max(0.0);
