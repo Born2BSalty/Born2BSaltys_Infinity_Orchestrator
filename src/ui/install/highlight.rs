@@ -66,15 +66,35 @@ pub(crate) fn highlight_label(
     color: egui::Color32,
     palette: ThemePalette,
 ) -> egui::Response {
-    let job = highlight_job(
+    ui.label(marked_job(text, query_lower, font, color, palette))
+}
+
+pub(crate) fn highlight_label_wrapped(
+    ui: &mut egui::Ui,
+    text: &str,
+    query_lower: &str,
+    font: egui::FontId,
+    color: egui::Color32,
+    palette: ThemePalette,
+) -> egui::Response {
+    ui.add(egui::Label::new(marked_job(text, query_lower, font, color, palette)).wrap())
+}
+
+fn marked_job(
+    text: &str,
+    query_lower: &str,
+    font: egui::FontId,
+    color: egui::Color32,
+    palette: ThemePalette,
+) -> egui::text::LayoutJob {
+    highlight_job(
         text,
         query_lower,
         font,
         color,
         redesign_selection_highlight(palette),
         redesign_text_primary(palette),
-    );
-    ui.label(job)
+    )
 }
 
 #[cfg(test)]

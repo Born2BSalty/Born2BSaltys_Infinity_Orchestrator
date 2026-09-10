@@ -6,7 +6,7 @@ use tracing::warn;
 
 use crate::app::controller::util::open_in_shell;
 use crate::app::mod_downloads::SourceTier;
-use crate::ui::install::highlight::highlight_label;
+use crate::ui::install::highlight::{highlight_label, highlight_label_wrapped};
 use crate::ui::install::inside_model::{
     ComponentRow, GameSection, InsideModel, ModGroup, ResolvedSource, filter_section,
 };
@@ -527,7 +527,7 @@ fn render_component_row(
                         redesign_accent_numbers(palette),
                         palette,
                     );
-                    highlight_label(
+                    highlight_label_wrapped(
                         ui,
                         &row.label,
                         query_lower,
