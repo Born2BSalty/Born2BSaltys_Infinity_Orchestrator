@@ -107,10 +107,7 @@ pub(crate) fn render(
                     state.drawer.open = None;
                     DrawerOutcome::BeginInstall
                 }
-                install_drawer::InstallDrawerOutcome::BeginImport => {
-                    state.drawer.open = None;
-                    DrawerOutcome::BeginImport
-                }
+                install_drawer::InstallDrawerOutcome::BeginImport => DrawerOutcome::BeginImport,
             }
         }
     }

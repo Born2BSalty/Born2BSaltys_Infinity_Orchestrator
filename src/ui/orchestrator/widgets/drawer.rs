@@ -6,8 +6,8 @@ use eframe::egui::{Color32, Frame, Id, Key, Margin, Order, Pos2, ScrollArea, Sen
 
 use crate::ui::orchestrator::widgets::btn::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_border_soft, redesign_border_strong, redesign_shell_bg,
-    redesign_text_muted, redesign_text_primary,
+    REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_border_soft, redesign_border_strong,
+    redesign_shell_bg, redesign_text_muted, redesign_text_primary,
 };
 use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
@@ -53,17 +53,21 @@ pub(crate) fn render<F>(
     footer: impl FnOnce(&mut egui::Ui) -> F,
 ) -> DrawerResponse<F> {
     let screen = ctx.screen_rect();
+    let panel = egui::Rect::from_min_max(
+        Pos2::new(screen.left(), screen.top() + REDESIGN_TITLEBAR_HEIGHT_PX),
+        screen.max,
+    );
     let w = drawer_width(screen.width(), spec.width);
     let popup_was_open = ctx.memory(egui::Memory::any_popup_open);
 
     let scrim_clicked = egui::Area::new(Id::new(("drawer_scrim", spec.id_salt)))
         .order(Order::Foreground)
-        .fixed_pos(screen.min)
+        .fixed_pos(panel.min)
         .interactable(true)
         .show(ctx, |ui| {
-            let response = ui.allocate_rect(screen, Sense::click());
+            let response = ui.allocate_rect(panel, Sense::click());
             ui.painter()
-                .rect_filled(screen, 0.0, Color32::from_black_alpha(148));
+                .rect_filled(panel, 0.0, Color32::from_black_alpha(148));
             response.clicked()
         })
         .inner;
@@ -71,17 +75,18 @@ pub(crate) fn render<F>(
     let mut head_close_clicked = false;
     let mut footer_out: Option<F> = None;
 
-    egui::Area::new(Id::new(("drawer", spec.id_salt)))
+    let drawer_id = Id::new(("drawer", spec.id_salt));
+    egui::Area::new(drawer_id)
         .order(Order::Foreground)
-        .fixed_pos(Pos2::new(screen.right() - w, screen.top()))
+        .fixed_pos(Pos2::new(panel.right() - w, panel.top()))
         .show(ctx, |ui| {
             Frame::default()
                 .fill(redesign_shell_bg(palette))
                 .shadow(redesign_overlay_shadow(palette))
                 .inner_margin(Margin::ZERO)
                 .show(ui, |ui| {
-                    ui.set_min_size(Vec2::new(w, screen.height()));
-                    ui.set_max_size(Vec2::new(w, screen.height()));
+                    ui.set_min_size(Vec2::new(w, panel.height()));
+                    ui.set_max_size(Vec2::new(w, panel.height()));
 
                     let border_rect = ui.max_rect();
                     ui.painter().line_segment(
@@ -123,6 +128,8 @@ pub(crate) fn render<F>(
                     });
                 });
         });
+
+    ctx.move_to_top(egui::LayerId::new(Order::Foreground, drawer_id));
 
     let escape_closes = ctx.input(|i| i.key_pressed(Key::Escape)) && !popup_was_open;
 

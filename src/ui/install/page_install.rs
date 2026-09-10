@@ -493,11 +493,18 @@ mod tests {
         app.install_screen_state.stage = InstallStage::Review;
         app.redesign_settings.user_name.clear();
 
+        app.install_screen_state.drawer.open =
+            Some(crate::ui::install::state_install::DrawerKind::Install);
         let stage_before = app.install_screen_state.stage;
         let stage = begin_import(&mut app);
 
         assert_eq!(stage, None);
         assert_eq!(app.install_screen_state.stage, stage_before);
+        assert_eq!(
+            app.install_screen_state.drawer.open,
+            Some(crate::ui::install::state_install::DrawerKind::Install),
+            "a refused Begin Import must leave the Install drawer open"
+        );
         assert!(app.registry.entries.is_empty());
         let history = app.notification_manager.history();
         assert_eq!(history.len(), 1);

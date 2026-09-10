@@ -26,6 +26,7 @@ const SEARCH_HINT: &str = "Search by mod, tp2, or component\u{2026}";
 const NO_SOURCE_TITLE: &str = "No download source";
 const NO_SOURCE_BODY: &str = "BIO could not resolve a source for this mod from the modlist, your download sources, or the BIO defaults. It is treated as user-provided: place it in your mods folder before installing.";
 const NO_MATCHES_ANYWHERE: &str = "No mods or components match.";
+const NO_COMPONENTS_AT_REST: &str = "(none in this share code)";
 
 pub(crate) enum IncludedModsOutcome {
     Stay,
@@ -240,6 +241,10 @@ fn render_empty(
     active_index: usize,
     query_lower: &str,
 ) {
+    if query_lower.is_empty() {
+        muted_label(ui, palette, NO_COMPONENTS_AT_REST);
+        return;
+    }
     let others = other_sections_with_hits(inside, active_index, query_lower);
     let current = inside
         .sections

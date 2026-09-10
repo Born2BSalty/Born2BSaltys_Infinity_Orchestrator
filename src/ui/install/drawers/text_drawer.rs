@@ -165,10 +165,12 @@ pub(crate) fn render(
     let counts = InsideCounts::from_preview(preview);
     let subtitle = subtitle_for(kind, &name, &sections, &counts);
 
-    if state.drawer.logs_tab >= sections.len() {
-        state.drawer.logs_tab = 0;
-    }
-    let active_tab_cell = std::cell::Cell::new(state.drawer.logs_tab);
+    let initial_tab = if state.drawer.logs_tab < sections.len() {
+        state.drawer.logs_tab
+    } else {
+        0
+    };
+    let active_tab_cell = std::cell::Cell::new(initial_tab);
 
     let spec = DrawerSpec {
         id_salt: "text_drawer",
@@ -242,7 +244,9 @@ pub(crate) fn render(
         },
     );
 
-    state.drawer.logs_tab = active_tab_cell.get();
+    if sections.len() > 1 {
+        state.drawer.logs_tab = active_tab_cell.get();
+    }
 
     if copy_requested {
         let (game, text) = sections
