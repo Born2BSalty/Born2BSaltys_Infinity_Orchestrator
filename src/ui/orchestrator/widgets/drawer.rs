@@ -17,7 +17,7 @@ const CONTENT_MAX_PX: f32 = 920.0;
 const FORM_FRACTION: f32 = 0.42;
 const FORM_MIN_PX: f32 = 380.0;
 const FORM_MAX_PX: f32 = 540.0;
-const FOOTER_MIN_HEIGHT_PX: f32 = 50.0;
+const FOOTER_MIN_HEIGHT_PX: f32 = 40.0;
 const FOOTER_MAX_HEIGHT_PX: f32 = 64.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,6 +124,7 @@ pub(crate) fn render<F>(
                         let footer_output = ScrollArea::vertical()
                             .id_salt(("drawer_footer", spec.id_salt))
                             .auto_shrink([false, false])
+                            .min_scrolled_height(footer_h)
                             .max_height(footer_h)
                             .scroll_bar_visibility(
                                 egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
