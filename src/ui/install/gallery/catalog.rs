@@ -185,6 +185,14 @@ const ENTRIES: &[GalleryEntry] = &[
         version: "1.0.0",
         mods: &[
             GalleryMod {
+                mod_name: "DlcMerger",
+                tp_file: "DLCMERGER.TP2",
+                component_id: "1",
+                component_label: "Merge DLC into game -> Siege of Dragonspear",
+                target: Game::BGEE,
+                wlb_inputs: None,
+            },
+            GalleryMod {
                 mod_name: "EEFixPack",
                 tp_file: "SETUP-EEFIXPACK.TP2",
                 component_id: "0",
@@ -300,7 +308,7 @@ mod tests {
                 .expect("entry is in the catalog")
         };
         assert_eq!(by_id("eet-plus-fixes").mod_count(), 4);
-        assert_eq!(by_id("bgee-vanilla-plus").mod_count(), 2);
+        assert_eq!(by_id("bgee-vanilla-plus").mod_count(), 3);
         assert_eq!(by_id("eet-essentials").mod_count(), 3);
         assert_eq!(by_id("iwdee-essentials").mod_count(), 1);
     }
@@ -457,12 +465,13 @@ mod tests {
             .expect("BGEE Vanilla+ is in the catalog");
         let vanilla_code = share_code(vanilla_entry).expect("export");
         let vanilla_preview = preview_modlist_share_code(&vanilla_code).expect("parse");
-        assert_eq!(vanilla_preview.bgee_entries, 3);
+        assert_eq!(vanilla_preview.bgee_entries, 4);
 
         let vanilla_lines = log_lines(&vanilla_preview.bgee_log_text);
-        assert!(vanilla_lines[0].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
-        assert!(vanilla_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
-        assert!(vanilla_lines[2].contains("SETUP-CDTWEAKS.TP2~ #0 #2010"));
+        assert!(vanilla_lines[0].contains("DLCMERGER.TP2~ #0 #1"));
+        assert!(vanilla_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
+        assert!(vanilla_lines[2].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
+        assert!(vanilla_lines[3].contains("SETUP-CDTWEAKS.TP2~ #0 #2010"));
     }
 
     #[test]
