@@ -123,7 +123,7 @@ fn render_header(
     name: &str,
 ) -> StageInstallingOutcome {
     let back_target = if orchestrator.install_screen_state.preview_cached {
-        InstallStage::Review
+        InstallStage::Details
     } else {
         InstallStage::Gallery
     };
@@ -276,12 +276,12 @@ mod tests {
     }
 
     #[test]
-    fn back_target_is_review_when_cached_else_gallery() {
+    fn back_target_is_details_when_cached_else_gallery() {
         use crate::ui::install::state_install::InstallScreenState;
         let mut st = InstallScreenState::default();
         assert!(!st.preview_cached);
         let t = if st.preview_cached {
-            InstallStage::Review
+            InstallStage::Details
         } else {
             InstallStage::Gallery
         };
@@ -292,14 +292,14 @@ mod tests {
         );
         st.preview_cached = true;
         let t = if st.preview_cached {
-            InstallStage::Review
+            InstallStage::Details
         } else {
             InstallStage::Gallery
         };
         assert_eq!(
             t,
-            InstallStage::Review,
-            "a cached preview means Back returns to Review"
+            InstallStage::Details,
+            "a cached preview means Back returns to Details"
         );
     }
 }

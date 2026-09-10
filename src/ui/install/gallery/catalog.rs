@@ -48,7 +48,18 @@ const COMMUNITY: &str = "Community Collection";
 const REQUIREMENTS_EET: &str =
     "Baldur's Gate: Enhanced Edition and Baldur's Gate II: Enhanced Edition";
 const REQUIREMENTS_BGEE: &str = "Baldur's Gate: Enhanced Edition";
+const REQUIREMENTS_BG2EE: &str = "Baldur's Gate II: Enhanced Edition";
 const REQUIREMENTS_IWDEE: &str = "Icewind Dale: Enhanced Edition";
+
+#[must_use]
+pub(crate) const fn requirements_for(game: Game) -> &'static str {
+    match game {
+        Game::BGEE => REQUIREMENTS_BGEE,
+        Game::BG2EE => REQUIREMENTS_BG2EE,
+        Game::IWDEE => REQUIREMENTS_IWDEE,
+        Game::EET => REQUIREMENTS_EET,
+    }
+}
 
 const EET_BG1_FOLDER_PROMPT: &str = r"y,C:\BIO\Baldur's Gate Enhanced Edition";
 

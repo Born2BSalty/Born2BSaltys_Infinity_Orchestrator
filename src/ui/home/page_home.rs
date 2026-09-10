@@ -524,7 +524,7 @@ mod tests {
     #[test]
     fn install_cta_resets_a_stale_review_to_the_gallery() {
         let mut app = orch_for_home_test();
-        app.install_screen_state.stage = InstallStage::Review;
+        app.install_screen_state.stage = InstallStage::Details;
         app.pending_reinstall_id = Some("REINSTALL0001".to_string());
 
         apply_nav_request(&mut app, NavRequest::Install);

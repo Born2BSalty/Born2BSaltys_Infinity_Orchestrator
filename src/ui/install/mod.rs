@@ -11,7 +11,6 @@ pub mod highlight;
 pub mod inside_model;
 pub mod page_install;
 pub mod preview_counts;
-pub mod preview_overview;
 pub mod stage_details;
 pub mod stage_downloading;
 pub mod stage_fork_download;

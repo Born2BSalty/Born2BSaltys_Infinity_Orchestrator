@@ -40,7 +40,6 @@ pub(crate) fn render(
     drawer: &mut DrawerState,
     name: &str,
     inside: &InsideModel,
-    offer_install: bool,
 ) -> IncludedModsOutcome {
     let max_tab = inside.sections.len().saturating_sub(1);
     if drawer.mods_tab > max_tab {
@@ -71,7 +70,7 @@ pub(crate) fn render(
         palette,
         &spec,
         |ui| render_body(ui, palette, drawer, inside),
-        |ui| render_footer(ui, palette, &footer_line, offer_install),
+        |ui| render_footer(ui, palette, &footer_line),
     );
 
     if response.footer {
@@ -548,17 +547,8 @@ fn render_component_row(
         });
 }
 
-fn render_footer(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    footer_line: &str,
-    offer_install: bool,
-) -> bool {
-    let button_w = if offer_install {
-        install_button_width(ui)
-    } else {
-        0.0
-    };
+fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer_line: &str) -> bool {
+    let button_w = install_button_width(ui);
     let label_w = (ui.available_width() - button_w - 12.0).max(120.0);
     ui.allocate_ui_with_layout(
         egui::vec2(label_w, ui.available_height()),
@@ -578,22 +568,20 @@ fn render_footer(
     );
 
     let mut install_clicked = false;
-    if offer_install {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if glyph_btn(
-                ui,
-                palette,
-                GlyphSide::Trailing("\u{2192}"),
-                "Install",
-                true,
-                false,
-            )
-            .clicked()
-            {
-                install_clicked = true;
-            }
-        });
-    }
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if glyph_btn(
+            ui,
+            palette,
+            GlyphSide::Trailing("\u{2192}"),
+            "Install",
+            true,
+            false,
+        )
+        .clicked()
+        {
+            install_clicked = true;
+        }
+    });
     install_clicked
 }
 

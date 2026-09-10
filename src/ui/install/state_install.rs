@@ -14,7 +14,6 @@ pub enum InstallStage {
     Gallery,
     Details,
     Paste,
-    Review,
     Downloading,
     InstallingStub,
 }
@@ -31,9 +30,8 @@ impl ReviewOrigin {
     #[must_use]
     pub const fn back_stage(self) -> InstallStage {
         match self {
-            Self::Details => InstallStage::Details,
+            Self::Details | Self::Reinstall => InstallStage::Gallery,
             Self::Paste => InstallStage::Paste,
-            Self::Reinstall => InstallStage::Gallery,
         }
     }
 }
@@ -42,7 +40,7 @@ impl ReviewOrigin {
 pub const fn install_stage_is_idle(stage: InstallStage) -> bool {
     matches!(
         stage,
-        InstallStage::Gallery | InstallStage::Details | InstallStage::Paste | InstallStage::Review
+        InstallStage::Gallery | InstallStage::Details | InstallStage::Paste
     )
 }
 
@@ -409,7 +407,7 @@ mod tests {
 
     #[test]
     fn review_back_stage_follows_the_origin() {
-        assert_eq!(ReviewOrigin::Details.back_stage(), InstallStage::Details);
+        assert_eq!(ReviewOrigin::Details.back_stage(), InstallStage::Gallery);
         assert_eq!(ReviewOrigin::Paste.back_stage(), InstallStage::Paste);
         assert_eq!(ReviewOrigin::Reinstall.back_stage(), InstallStage::Gallery);
     }
@@ -497,11 +495,10 @@ mod tests {
     }
 
     #[test]
-    fn idle_stages_are_the_four_pre_pipeline_stages() {
+    fn idle_stages_are_the_three_pre_pipeline_stages() {
         assert!(install_stage_is_idle(InstallStage::Gallery));
         assert!(install_stage_is_idle(InstallStage::Details));
         assert!(install_stage_is_idle(InstallStage::Paste));
-        assert!(install_stage_is_idle(InstallStage::Review));
     }
 
     #[test]

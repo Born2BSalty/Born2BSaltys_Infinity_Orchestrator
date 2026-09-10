@@ -37,7 +37,6 @@ pub(crate) fn render(
     state: &mut InstallScreenState,
     registry: &ModlistRegistry,
     pending_reinstall_id: Option<&str>,
-    offer_install: bool,
 ) -> DrawerOutcome {
     let Some(kind) = state.drawer.open else {
         return DrawerOutcome::Stay;
@@ -61,7 +60,7 @@ pub(crate) fn render(
                 drawer.open = None;
                 return DrawerOutcome::Stay;
             };
-            let outcome = included_mods::render(ctx, palette, drawer, &name, inside, offer_install);
+            let outcome = included_mods::render(ctx, palette, drawer, &name, inside);
             after_included_mods(&outcome, drawer);
             DrawerOutcome::Stay
         }

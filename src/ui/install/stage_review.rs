@@ -6,16 +6,10 @@ use eframe::egui;
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::operations::{DestinationOwnership, classify_destination};
-use crate::ui::install::state_install::{DestChoice, DrawerKind, InstallScreenState, ReviewOrigin};
-use crate::ui::install::sub_flow_footer::{self, BackBtn, FooterClick, PrimaryBtn, SecondaryBtn};
-use crate::ui::install::whats_inside::{self, InsideClick, InsideCounts};
-use crate::ui::install::{
-    destination_field, destination_not_empty, destination_owned, fork_info_button, preview_overview,
-};
-use crate::ui::orchestrator::widgets::dialogs::fork_info_popup::{self, SelfNode};
+use crate::ui::install::state_install::{DestChoice, InstallScreenState, ReviewOrigin};
+use crate::ui::install::{destination_field, destination_not_empty, destination_owned};
 use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, redesign_btn, redesign_section_header, redesign_text_input,
-    render_screen_title,
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft, redesign_input_bg,
@@ -24,7 +18,6 @@ use crate::ui::shared::redesign_tokens::{
 
 pub(crate) const FALLBACK_NAME: &str = "Shared modlist";
 
-const SUBTITLE: &str = "review what will be installed before BIO downloads anything";
 const MODIFY_QUESTION: &str = "Modify this modlist before installing?";
 const MODIFY_NO: &str = "No, install as provided";
 const MODIFY_YES: &str = "Yes, review and modify";
@@ -34,19 +27,6 @@ const NO_DISABLED_REASON: &str =
     "this share code was exported mid-install, so it can only be reviewed and modified";
 const REINSTALL_ONLY_INSTALL_REASON: &str =
     "reinstall keeps this modlist as it is; to change it, open it from Home";
-
-const COLUMN_GAP_PX: f32 = 24.0;
-const LEFT_FRACTION: f32 = 0.6;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum ReviewOutcome {
-    #[default]
-    Stay,
-    Back,
-    BeginInstall,
-    BeginImport,
-    OpenDrawer(DrawerKind),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ModifyAvailability {
@@ -158,130 +138,6 @@ pub(crate) const fn force_modify_for_availability(
         ModifyAvailability::OnlyInstall => state.review.modify = false,
         ModifyAvailability::Both => {}
     }
-}
-
-pub(crate) fn render(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    ctx: &egui::Context,
-    state: &mut InstallScreenState,
-    registry: &ModlistRegistry,
-    pending_reinstall_id: Option<&str>,
-) -> ReviewOutcome {
-    let Some(preview) = state.parsed_preview.clone() else {
-        return ReviewOutcome::Back;
-    };
-    let Some(counts) = state.inside_counts().cloned() else {
-        return ReviewOutcome::Back;
-    };
-
-    force_modify_for_availability(state, &preview);
-
-    let checks = destination_checks(&state.destination, registry);
-
-    let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
-    let total_w = ui.available_width();
-    let left_w = ((total_w - COLUMN_GAP_PX) * LEFT_FRACTION).floor();
-    let right_w = (total_w - COLUMN_GAP_PX - left_w).max(0.0);
-
-    let mut left_outcome = LeftColumnOutcome::default();
-    ui.allocate_ui(egui::vec2(total_w, body_h), |ui| {
-        ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = COLUMN_GAP_PX;
-            ui.allocate_ui_with_layout(
-                egui::vec2(left_w, body_h),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    ui.set_width(left_w);
-                    left_outcome = left_column(ui, palette, state, &preview, &counts);
-                },
-            );
-            ui.allocate_ui_with_layout(
-                egui::vec2(right_w, body_h),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    ui.set_width(right_w);
-                    egui::ScrollArea::vertical()
-                        .id_salt("install_review_settings_scroll")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            render_install_settings(
-                                ui,
-                                palette,
-                                state,
-                                &preview,
-                                &RightColumnCtx {
-                                    ownership_banner: ownership_banner_visible(
-                                        &checks.ownership,
-                                        pending_reinstall_id,
-                                    )
-                                    .then_some(&checks.ownership),
-                                    registry,
-                                    ownership_blocks: checks.ownership_blocks,
-                                    dest_non_empty: checks.dest_non_empty,
-                                },
-                            );
-                        });
-                },
-            );
-        });
-    });
-
-    if left_outcome.fork_info_clicked {
-        state.fork_info_open = true;
-    }
-
-    let outcome = footer(ui, palette, state, &checks, left_outcome.click);
-    render_fork_popup(ctx, palette, state, &preview);
-    outcome
-}
-
-#[derive(Default)]
-struct LeftColumnOutcome {
-    fork_info_clicked: bool,
-    click: InsideClick,
-}
-
-fn left_column(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    state: &InstallScreenState,
-    preview: &ModlistSharePreview,
-    counts: &InsideCounts,
-) -> LeftColumnOutcome {
-    let mut outcome = LeftColumnOutcome::default();
-    let title = display_name(&state.review.name, preview);
-    let has_lineage = !preview.forked_from.is_empty();
-
-    ui.horizontal_top(|ui| {
-        let button_w = if has_lineage {
-            fork_info_button::WIDTH_PX
-        } else {
-            0.0
-        };
-        let title_w = (ui.available_width() - button_w).max(120.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(title_w, ui.available_height()),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                render_screen_title(ui, palette, &title, Some(SUBTITLE));
-            },
-        );
-        if has_lineage {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                if fork_info_button::render(ui, palette).clicked() {
-                    outcome.fork_info_clicked = true;
-                }
-            });
-        }
-    });
-
-    preview_overview::render(ui, palette, preview);
-    ui.add_space(16.0);
-
-    outcome.click = whats_inside::render(ui, palette, counts);
-
-    outcome
 }
 
 pub(crate) struct RightColumnCtx<'a> {
@@ -411,64 +267,6 @@ fn modify_toggle(
                 .family(egui::FontFamily::Name("poppins_light".into()))
                 .color(redesign_text_muted(palette)),
         );
-    }
-}
-
-fn footer(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    state: &InstallScreenState,
-    checks: &DestinationChecks,
-    click: InsideClick,
-) -> ReviewOutcome {
-    let disabled = begin_disabled_for(state, checks);
-
-    let outcome = sub_flow_footer::render(
-        ui,
-        palette,
-        Some(BackBtn { label: "Back" }),
-        None::<SecondaryBtn<'_>>,
-        None,
-        None,
-        PrimaryBtn {
-            label: begin_label(state.review.modify),
-            disabled,
-        },
-    );
-
-    match outcome {
-        FooterClick::Back => ReviewOutcome::Back,
-        FooterClick::Primary if state.review.modify => ReviewOutcome::BeginImport,
-        FooterClick::Primary => ReviewOutcome::BeginInstall,
-        FooterClick::None | FooterClick::Secondary | FooterClick::LeftAction => {
-            DrawerKind::from_click(click).map_or(ReviewOutcome::Stay, ReviewOutcome::OpenDrawer)
-        }
-    }
-}
-
-fn render_fork_popup(
-    ctx: &egui::Context,
-    palette: ThemePalette,
-    state: &mut InstallScreenState,
-    preview: &ModlistSharePreview,
-) {
-    if !state.fork_info_open {
-        return;
-    }
-    let self_author = preview.author.as_deref().unwrap_or("").trim();
-    let self_name = display_name(&state.review.name, preview);
-    let result = fork_info_popup::render(
-        ctx,
-        palette,
-        "install_review",
-        &preview.forked_from,
-        &SelfNode {
-            name: &self_name,
-            author: self_author,
-        },
-    );
-    if result == fork_info_popup::ForkInfoOutcome::Closed {
-        state.fork_info_open = false;
     }
 }
 
@@ -752,16 +550,6 @@ mod tests {
             &classification,
             Some("REINSTALL0001")
         ));
-    }
-
-    #[test]
-    fn the_left_column_takes_sixty_percent_of_the_gapped_width() {
-        let total = 1024.0_f32;
-        let left = ((total - COLUMN_GAP_PX) * LEFT_FRACTION).floor();
-        let right = total - COLUMN_GAP_PX - left;
-        assert!((left - 600.0).abs() < 1.0);
-        assert!((right - 400.0).abs() < 1.0);
-        assert!(left + right + COLUMN_GAP_PX <= total + f32::EPSILON);
     }
 
     #[test]

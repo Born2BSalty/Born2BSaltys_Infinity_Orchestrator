@@ -54,7 +54,7 @@ pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorAp
 
     orchestrator.pending_reinstall_id = Some(modlist.id.clone());
 
-    orchestrator.install_screen_state.stage = InstallStage::Review;
+    orchestrator.install_screen_state.stage = InstallStage::Details;
     orchestrator.nav = NavDestination::Install;
 }
 
@@ -104,14 +104,14 @@ mod tests {
     }
 
     #[test]
-    fn reinstall_lands_on_review_with_the_entry_name_folder_and_clear_forced() {
+    fn reinstall_lands_on_details_with_the_entry_name_folder_and_clear_forced() {
         let modlist = entry();
         let mut app = orch_for_reinstall_test();
 
         start_reinstall(&modlist, &mut app);
 
         let st = &app.install_screen_state;
-        assert_eq!(st.stage, InstallStage::Review);
+        assert_eq!(st.stage, InstallStage::Details);
         assert_eq!(st.review.origin, ReviewOrigin::Reinstall);
         assert_eq!(st.review.name, "Polished EET");
         assert!(!st.review.modify);

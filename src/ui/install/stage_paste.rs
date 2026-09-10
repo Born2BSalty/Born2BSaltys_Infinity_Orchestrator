@@ -35,7 +35,7 @@ pub fn render(
                     ui,
                     palette,
                     "Paste a share code",
-                    Some("paste a BIO share code to review what it installs"),
+                    Some("paste a BIO share code to see what it installs"),
                 );
 
                 import_code_box(ui, palette, &mut state.import_code);
@@ -62,14 +62,14 @@ pub fn render(
         Some("no install starts until preview is accepted"),
         None,
         PrimaryBtn {
-            label: "Review",
+            label: "Details",
             disabled: state.import_code.trim().is_empty(),
         },
     );
 
     match outcome {
         FooterClick::Back => PasteOutcome::Advance(InstallStage::Gallery),
-        FooterClick::Primary => PasteOutcome::Advance(InstallStage::Review),
+        FooterClick::Primary => PasteOutcome::Advance(InstallStage::Details),
         FooterClick::None | FooterClick::Secondary | FooterClick::LeftAction => PasteOutcome::Stay,
     }
 }
