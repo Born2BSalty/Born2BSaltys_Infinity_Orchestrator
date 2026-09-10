@@ -17,7 +17,7 @@ const CONTENT_MAX_PX: f32 = 920.0;
 const FORM_FRACTION: f32 = 0.42;
 const FORM_MIN_PX: f32 = 380.0;
 const FORM_MAX_PX: f32 = 540.0;
-const FOOTER_HEIGHT_PX: f32 = 52.0;
+const FOOTER_HEIGHT_PX: f32 = 64.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DrawerWidth {
@@ -115,14 +115,24 @@ pub(crate) fn render<F>(
                         );
 
                         footer_out = Some(
-                            Frame::default()
-                                .inner_margin(Margin {
-                                    left: 22,
-                                    right: 22,
-                                    top: 12,
-                                    bottom: 12,
+                            ScrollArea::vertical()
+                                .id_salt(("drawer_footer", spec.id_salt))
+                                .auto_shrink([false, false])
+                                .max_height(FOOTER_HEIGHT_PX)
+                                .scroll_bar_visibility(
+                                    egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
+                                )
+                                .show(ui, |ui| {
+                                    Frame::default()
+                                        .inner_margin(Margin {
+                                            left: 22,
+                                            right: 22,
+                                            top: 12,
+                                            bottom: 12,
+                                        })
+                                        .show(ui, |ui| ui.horizontal(footer).inner)
+                                        .inner
                                 })
-                                .show(ui, |ui| ui.horizontal(footer).inner)
                                 .inner,
                         );
                     });
