@@ -12,8 +12,8 @@ use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, redesign_btn, redesign_section_header, redesign_text_input,
 };
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft, redesign_input_bg,
-    redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft,
+    redesign_input_bg, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 pub(crate) const FALLBACK_NAME: &str = "Shared modlist";
@@ -214,7 +214,11 @@ pub(crate) fn render_install_settings(
     ui.add_space(16.0);
 
     if let Some(issue) = state.source_compat_issue {
-        render_source_warning(ui, palette, issue, locked);
+        render_source_warning(
+            ui,
+            issue,
+            source_warning_action(locked, state.review.modify),
+        );
         ui.add_space(16.0);
     }
 
@@ -260,28 +264,97 @@ fn fact_row(ui: &mut egui::Ui, palette: ThemePalette, label: &str, value: &str) 
     );
 }
 
-pub(crate) fn render_source_warning(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    issue: &str,
-    locked: bool,
-) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SourceWarningAction {
+    Reinstall,
+    ChooseModify,
+    ModifyOn,
+}
+
+#[must_use]
+pub(crate) const fn source_warning_action(locked: bool, modify_on: bool) -> SourceWarningAction {
+    if locked {
+        SourceWarningAction::Reinstall
+    } else if modify_on {
+        SourceWarningAction::ModifyOn
+    } else {
+        SourceWarningAction::ChooseModify
+    }
+}
+
+const SOURCE_WARNING_TITLE: &str = "DLC Merger required";
+const SOURCE_WARNING_ACTION_REINSTALL: &str = "This list cannot be reinstalled as provided. Use Create to make a modified copy with DLC Merger first in the BGEE installation order.";
+const SOURCE_WARNING_ACTION_CHOOSE_MODIFY: &str = "Choose \"Yes, review and modify\" when you install, then put DLC Merger first in the BGEE installation order.";
+const SOURCE_WARNING_ACTION_MODIFY_ON: &str =
+    "Once the workspace opens, put DLC Merger first in the BGEE installation order.";
+
+#[must_use]
+pub(crate) const fn source_warning_action_copy(action: SourceWarningAction) -> &'static str {
+    match action {
+        SourceWarningAction::Reinstall => SOURCE_WARNING_ACTION_REINSTALL,
+        SourceWarningAction::ChooseModify => SOURCE_WARNING_ACTION_CHOOSE_MODIFY,
+        SourceWarningAction::ModifyOn => SOURCE_WARNING_ACTION_MODIFY_ON,
+    }
+}
+
+pub(crate) fn render_source_warning(ui: &mut egui::Ui, issue: &str, action: SourceWarningAction) {
+    let body_color = egui::Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 0xCC);
     egui::Frame::default()
         .fill(destination_not_empty::warn_fill())
-        .stroke(egui::Stroke::new(1.0_f32, destination_not_empty::WARN_BORDER))
-        .corner_radius(egui::CornerRadius::same(4))
-        .inner_margin(12)
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            destination_not_empty::WARN_BORDER,
+        ))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .inner_margin(egui::Margin {
+            left: 14,
+            right: 14,
+            top: 10,
+            bottom: 10,
+        })
         .show(ui, |ui| {
-            ui.label(egui::RichText::new("DLC Merger required").strong().color(redesign_text_primary(palette)));
+            ui.set_width(ui.available_width());
+
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                let (icon_rect, _) =
+                    ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
+                destination_not_empty::paint_warning_triangle(
+                    ui.painter(),
+                    icon_rect.center(),
+                    destination_not_empty::WARN_INK,
+                );
+                ui.label(
+                    egui::RichText::new(SOURCE_WARNING_TITLE)
+                        .size(13.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(destination_not_empty::WARN_INK),
+                );
+            });
+
+            ui.add_space(4.0);
+
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(issue)
+                        .size(14.0)
+                        .family(egui::FontFamily::Name("poppins_light".into()))
+                        .color(body_color),
+                )
+                .wrap(),
+            );
+
             ui.add_space(6.0);
-            ui.add(egui::Label::new(issue).wrap());
-            ui.add_space(8.0);
-            let action = if locked {
-                "This list cannot be reinstalled as provided. Use Create to make a modified copy with DLC Merger as the first mod in the BGEE installation order, before any other mods."
-            } else {
-                "Enable Modify before installing and add DLC Merger as the first mod in the BGEE installation order, before any other mods."
-            };
-            ui.add(egui::Label::new(action).wrap());
+
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(source_warning_action_copy(action))
+                        .size(14.0)
+                        .family(egui::FontFamily::Name("poppins_light".into()))
+                        .color(body_color),
+                )
+                .wrap(),
+            );
         });
 }
 
@@ -662,6 +735,26 @@ mod tests {
         assert!(reinstall_locked(ReviewOrigin::Reinstall));
         assert!(!reinstall_locked(ReviewOrigin::Details));
         assert!(!reinstall_locked(ReviewOrigin::Paste));
+    }
+
+    #[test]
+    fn source_warning_action_follows_the_drawer_state() {
+        assert_eq!(
+            source_warning_action(true, false),
+            SourceWarningAction::Reinstall
+        );
+        assert_eq!(
+            source_warning_action(true, true),
+            SourceWarningAction::Reinstall
+        );
+        assert_eq!(
+            source_warning_action(false, true),
+            SourceWarningAction::ModifyOn
+        );
+        assert_eq!(
+            source_warning_action(false, false),
+            SourceWarningAction::ChooseModify
+        );
     }
 
     #[test]

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry as HashMapEntry;
 use std::path::{Path, PathBuf};
 
 use crate::app::state::{Step1State, Step2ModState, Step3ItemState};
@@ -99,7 +100,7 @@ pub(crate) fn preview_issue(
         ),
         Some(0) => None,
         Some(_) => Some(
-            "Your BGEE source contains DLC that needs merging. Move DLC Merger (#1 or #3) to the first component/mod in the BGEE log.",
+            "Your BGEE source contains DLC that needs merging. Move DLC Merger (#1 or #3) first in the BGEE installation order.",
         ),
     }
 }
@@ -108,10 +109,9 @@ fn marker(step1: &Step1State, kind: &str, component: &str) -> Step3CompatMarker 
     Step3CompatMarker {
         kind: kind.to_string(),
         message: Some(if kind == "order_block" {
-            "Install DLC Merger (#1 or #3) as the first component/mod in the BGEE phase."
-                .to_string()
+            "Install DLC Merger (#1 or #3) first in the BGEE installation order.".to_string()
         } else {
-            "Requires DLC Merger in the BGEE phase: select Merge Siege of Dragonspear (#1) or All available DLCs (#3).".to_string()
+            "Requires DLC Merger first in the BGEE installation order: select Merge Siege of Dragonspear (#1) or All available DLCs (#3).".to_string()
         }),
         related_mod: Some("dlcmerger".to_string()),
         related_component: Some(component.to_string()),
@@ -179,6 +179,9 @@ pub(crate) fn apply_step3(
         if normalize_mod_key(&item.tp_file) != "cdtweaks" {
             continue;
         }
+        let HashMapEntry::Vacant(slot) = markers.entry(marker_key(item)) else {
+            continue;
+        };
         let hit = match merger {
             None => marker(step1, "missing_dep", "1"),
             Some((order, dependency)) if order != 0 => {
@@ -186,7 +189,7 @@ pub(crate) fn apply_step3(
             }
             Some(_) => continue,
         };
-        markers.insert(marker_key(item), hit);
+        slot.insert(hit);
     }
 }
 

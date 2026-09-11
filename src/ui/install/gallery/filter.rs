@@ -98,7 +98,7 @@ mod tests {
             ..Default::default()
         };
         assert!(by_author.matches(entry("EET Essentials")));
-        assert!(!by_author.matches(entry("BGEE Vanilla+")));
+        assert!(!by_author.matches(entry("BGEE Vanilla+ (with DLC)")));
 
         let by_tag = GalleryFilter {
             search: "fixes".to_string(),
@@ -135,7 +135,7 @@ mod tests {
                 .iter()
                 .filter(|e| filter.matches(e))
                 .count(),
-            1
+            2
         );
     }
 

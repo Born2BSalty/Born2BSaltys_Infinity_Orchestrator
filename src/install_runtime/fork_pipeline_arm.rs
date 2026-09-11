@@ -156,6 +156,10 @@ pub(crate) fn mint_and_arm(
         st.pipeline_kind = PipelineKind::Fork;
         st.stage = InstallStage::Downloading;
     }
+    crate::ui::install::page_install::refresh_source_compat_issue(
+        &mut orchestrator.install_screen_state,
+        &orchestrator.wizard_state.step1,
+    );
     orchestrator.create_screen_state.destination_choice = None;
     orchestrator.pending_reinstall_id = None;
     orchestrator.active_install_modlist_id = Some(modlist_id.clone());

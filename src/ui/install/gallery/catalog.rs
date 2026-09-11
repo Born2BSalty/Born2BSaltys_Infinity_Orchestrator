@@ -48,6 +48,8 @@ const COMMUNITY: &str = "Community Collection";
 const REQUIREMENTS_EET: &str =
     "Baldur's Gate: Enhanced Edition and Baldur's Gate II: Enhanced Edition";
 const REQUIREMENTS_BGEE: &str = "Baldur's Gate: Enhanced Edition";
+const REQUIREMENTS_BGEE_SOD: &str =
+    "Baldur's Gate: Enhanced Edition with the Siege of Dragonspear DLC";
 const REQUIREMENTS_BG2EE: &str = "Baldur's Gate II: Enhanced Edition";
 const REQUIREMENTS_IWDEE: &str = "Icewind Dale: Enhanced Edition";
 
@@ -174,16 +176,24 @@ const ENTRIES: &[GalleryEntry] = &[
     },
     GalleryEntry {
         id: "bgee-vanilla-plus",
-        name: "BGEE Vanilla+",
+        name: "BGEE Vanilla+ (with DLC)",
         author: COMMUNITY,
         game: Game::BGEE,
-        tags: &["Vanilla+", "Quality of life"],
+        tags: &["Vanilla+", "Quality of life", "Siege of Dragonspear"],
         starter: false,
         sample: true,
-        description: "Baldur's Gate as it shipped, minus the rough edges: the community fixpack plus a light pass of quality-of-life tweaks.",
-        requirements: REQUIREMENTS_BGEE,
+        description: "Baldur's Gate as it shipped, minus the rough edges: Siege of Dragonspear merged in first, then the community fixpack and a light pass of quality-of-life tweaks.",
+        requirements: REQUIREMENTS_BGEE_SOD,
         version: "1.0.0",
         mods: &[
+            GalleryMod {
+                mod_name: "DlcMerger",
+                tp_file: "DLCMERGER.TP2",
+                component_id: "1",
+                component_label: "Merge DLC into game -> Siege of Dragonspear",
+                target: Game::BGEE,
+                wlb_inputs: None,
+            },
             GalleryMod {
                 mod_name: "EEFixPack",
                 tp_file: "SETUP-EEFIXPACK.TP2",
@@ -205,6 +215,36 @@ const ENTRIES: &[GalleryEntry] = &[
                 tp_file: "SETUP-CDTWEAKS.TP2",
                 component_id: "2010",
                 component_label: "Increase Ammo Stacking",
+                target: Game::BGEE,
+                wlb_inputs: None,
+            },
+        ],
+    },
+    GalleryEntry {
+        id: "bgee-vanilla-plus-no-dlc",
+        name: "BGEE Vanilla+ (no DLC)",
+        author: COMMUNITY,
+        game: Game::BGEE,
+        tags: &["Vanilla+", "Fixes only"],
+        starter: false,
+        sample: true,
+        description: "Baldur's Gate as it shipped, minus the rough edges, for a game without the Siege of Dragonspear archive: the community fixpack only.",
+        requirements: REQUIREMENTS_BGEE,
+        version: "1.0.0",
+        mods: &[
+            GalleryMod {
+                mod_name: "EEFixPack",
+                tp_file: "SETUP-EEFIXPACK.TP2",
+                component_id: "0",
+                component_label: "Core Fixes",
+                target: Game::BGEE,
+                wlb_inputs: None,
+            },
+            GalleryMod {
+                mod_name: "EEFixPack",
+                tp_file: "SETUP-EEFIXPACK.TP2",
+                component_id: "2",
+                component_label: "Game Text Update",
                 target: Game::BGEE,
                 wlb_inputs: None,
             },
@@ -300,20 +340,22 @@ mod tests {
                 .expect("entry is in the catalog")
         };
         assert_eq!(by_id("eet-plus-fixes").mod_count(), 4);
-        assert_eq!(by_id("bgee-vanilla-plus").mod_count(), 2);
+        assert_eq!(by_id("bgee-vanilla-plus").mod_count(), 3);
+        assert_eq!(by_id("bgee-vanilla-plus-no-dlc").mod_count(), 1);
         assert_eq!(by_id("eet-essentials").mod_count(), 3);
         assert_eq!(by_id("iwdee-essentials").mod_count(), 1);
     }
 
     #[test]
-    fn catalog_holds_the_four_stub_entries() {
+    fn catalog_holds_the_five_stub_entries() {
         let names: Vec<&str> = entries().iter().map(|e| e.name).collect();
         assert_eq!(
             names,
             vec![
                 "EET Essentials",
                 "EET + Fixes",
-                "BGEE Vanilla+",
+                "BGEE Vanilla+ (with DLC)",
+                "BGEE Vanilla+ (no DLC)",
                 "Icewind Dale Essentials",
             ]
         );
@@ -454,16 +496,30 @@ mod tests {
         let vanilla_entry = entries()
             .iter()
             .find(|e| e.id == "bgee-vanilla-plus")
-            .expect("BGEE Vanilla+ is in the catalog");
+            .expect("BGEE Vanilla+ (with DLC) is in the catalog");
         let vanilla_code = share_code(vanilla_entry).expect("export");
         let vanilla_preview = preview_modlist_share_code(&vanilla_code).expect("parse");
-        assert_eq!(vanilla_preview.bgee_entries, 3);
+        assert_eq!(vanilla_preview.bgee_entries, 4);
 
         let vanilla_lines = log_lines(&vanilla_preview.bgee_log_text);
-        assert!(vanilla_lines[0].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
-        assert!(vanilla_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
-        assert!(vanilla_lines[2].contains("SETUP-CDTWEAKS.TP2~ #0 #2010"));
-        assert!(!vanilla_preview.bgee_log_text.contains("DLCMERGER.TP2"));
+        assert!(vanilla_lines[0].contains("DLCMERGER.TP2~ #0 #1"));
+        assert!(vanilla_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
+        assert!(vanilla_lines[2].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
+        assert!(vanilla_lines[3].contains("SETUP-CDTWEAKS.TP2~ #0 #2010"));
+
+        let no_dlc_entry = entries()
+            .iter()
+            .find(|e| e.id == "bgee-vanilla-plus-no-dlc")
+            .expect("BGEE Vanilla+ (no DLC) is in the catalog");
+        let no_dlc_code = share_code(no_dlc_entry).expect("export");
+        let no_dlc_preview = preview_modlist_share_code(&no_dlc_code).expect("parse");
+        assert_eq!(no_dlc_preview.bgee_entries, 2);
+
+        let no_dlc_lines = log_lines(&no_dlc_preview.bgee_log_text);
+        assert!(no_dlc_lines[0].contains("SETUP-EEFIXPACK.TP2~ #0 #0"));
+        assert!(no_dlc_lines[1].contains("SETUP-EEFIXPACK.TP2~ #0 #2"));
+        assert!(!no_dlc_preview.bgee_log_text.contains("DLCMERGER.TP2"));
+        assert!(!no_dlc_preview.bgee_log_text.contains("CDTWEAKS"));
     }
 
     #[test]

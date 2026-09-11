@@ -52,6 +52,11 @@ pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorAp
         .step1
         .backup_targets_before_eet_copy = dest_flags.backup_targets_before_eet_copy;
 
+    crate::ui::install::page_install::refresh_source_compat_issue(
+        &mut orchestrator.install_screen_state,
+        &orchestrator.wizard_state.step1,
+    );
+
     orchestrator.pending_reinstall_id = Some(modlist.id.clone());
 
     orchestrator.install_screen_state.stage = InstallStage::Details;
@@ -120,6 +125,56 @@ mod tests {
         assert_eq!(st.pipeline_kind, PipelineKind::Install);
         assert_eq!(app.nav, NavDestination::Install);
         assert_eq!(app.pending_reinstall_id.as_deref(), Some("REINSTALL0001"));
+    }
+
+    #[test]
+    fn reinstall_stores_the_dlc_issue_when_the_source_holds_the_archive() {
+        use crate::ui::install::gallery::catalog::{GalleryEntry, GalleryMod, share_code};
+
+        const TWEAKS_ONLY: GalleryEntry = GalleryEntry {
+            id: "tweaks-only",
+            name: "Tweaks only",
+            author: "Test",
+            game: Game::BGEE,
+            tags: &[],
+            starter: false,
+            sample: false,
+            description: "",
+            requirements: "",
+            version: "1.0.0",
+            mods: &[GalleryMod {
+                mod_name: "CDTweaks",
+                tp_file: "SETUP-CDTWEAKS.TP2",
+                component_id: "2010",
+                component_label: "Increase Ammo Stacking",
+                target: Game::BGEE,
+                wlb_inputs: None,
+            }],
+        };
+
+        let source =
+            std::env::temp_dir().join(format!("bio-reinstall-source-{}", std::process::id()));
+        std::fs::create_dir_all(&source).expect("create source fixture");
+        std::fs::write(source.join("sod-dlc.zip"), b"synthetic archive fixture")
+            .expect("write synthetic archive");
+
+        let mut app = orch_for_reinstall_test();
+        app.wizard_state.step1.bgee_game_folder = source.to_string_lossy().into_owned();
+        assert!(crate::app::compat_dlc_source::refresh_source_check(
+            &mut app.wizard_state.step1
+        ));
+        let modlist = ModlistEntry {
+            game: Game::BGEE,
+            latest_share_code: Some(share_code(&TWEAKS_ONLY).expect("tweaks-only code")),
+            ..entry()
+        };
+
+        start_reinstall(&modlist, &mut app);
+
+        assert_eq!(app.install_screen_state.stage, InstallStage::Details);
+        assert!(app.install_screen_state.source_compat_issue.is_some());
+
+        std::fs::remove_dir_all(&source).expect("clean up source fixture");
     }
 
     #[test]

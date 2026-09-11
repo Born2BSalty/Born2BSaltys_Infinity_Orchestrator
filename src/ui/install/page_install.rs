@@ -39,10 +39,16 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             ui,
             palette,
             &mut orchestrator.install_screen_state,
+            &orchestrator.wizard_state.step1,
             &mut orchestrator.notification_manager,
         ),
         InstallStage::Details => details_stage(ui, palette, orchestrator, ctx),
-        InstallStage::Paste => paste_stage(ui, palette, &mut orchestrator.install_screen_state),
+        InstallStage::Paste => paste_stage(
+            ui,
+            palette,
+            &mut orchestrator.install_screen_state,
+            &orchestrator.wizard_state.step1,
+        ),
         InstallStage::Downloading => downloading_stage(ui, orchestrator),
         InstallStage::InstallingStub => installing_stage(ui, orchestrator),
     };
@@ -64,6 +70,7 @@ fn gallery_stage(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut InstallScreenState,
+    step1: &crate::app::state::Step1State,
     notification_manager: &mut NotificationManager,
 ) -> Option<InstallRequest> {
     match stage_gallery::render(ui, palette, state) {
@@ -71,7 +78,7 @@ fn gallery_stage(
         GalleryOutcome::OpenDetails(index) => {
             state.gallery.selected = Some(index);
             let entry = selected_entry(state)?;
-            open_details_from_gallery_entry(entry, state, notification_manager)
+            open_details_from_gallery_entry(entry, state, step1, notification_manager)
         }
         GalleryOutcome::Stay => None,
     }
@@ -109,8 +116,6 @@ fn details_stage(
         )
     };
     let availability = stage_review::modify_choice_available(origin, preview.allow_auto_install);
-    orchestrator.install_screen_state.source_compat_issue =
-        crate::app::compat_dlc_source::preview_issue(&orchestrator.wizard_state.step1, &preview);
     header.source_compat_issue = orchestrator.install_screen_state.source_compat_issue;
     let mut fork_info_open = orchestrator.install_screen_state.fork_info_open;
 
@@ -196,10 +201,11 @@ fn paste_stage(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     state: &mut InstallScreenState,
+    step1: &crate::app::state::Step1State,
 ) -> Option<InstallRequest> {
     match stage_paste::render(ui, palette, state) {
         PasteOutcome::Advance(InstallStage::Details) => {
-            run_preview_parse(state);
+            run_preview_parse(state, step1);
             if state.preview_parse_error.is_some() {
                 return None;
             }
@@ -220,14 +226,11 @@ fn paste_stage(
 }
 
 fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
-    let issue = orchestrator
-        .install_screen_state
-        .parsed_preview
-        .as_ref()
-        .and_then(|preview| {
-            crate::app::compat_dlc_source::preview_issue(&orchestrator.wizard_state.step1, preview)
-        });
-    orchestrator.install_screen_state.source_compat_issue = issue;
+    refresh_source_compat_issue(
+        &mut orchestrator.install_screen_state,
+        &orchestrator.wizard_state.step1,
+    );
+    let issue = orchestrator.install_screen_state.source_compat_issue;
     if issue.is_some() {
         orchestrator.install_screen_state.drawer.open = Some(DrawerKind::Install);
         return InstallStage::Details;
@@ -396,12 +399,13 @@ fn selected_entry(state: &InstallScreenState) -> Option<&'static GalleryEntry> {
 fn open_details_from_gallery_entry(
     entry: &GalleryEntry,
     state: &mut InstallScreenState,
+    step1: &crate::app::state::Step1State,
     notification_manager: &mut NotificationManager,
 ) -> Option<InstallRequest> {
     match catalog::share_code(entry) {
         Ok(code) => {
             state.import_code = code;
-            run_preview_parse(state);
+            run_preview_parse(state, step1);
             if let Some(err) = state.preview_parse_error.clone() {
                 notification_manager.error(format!("Could not open \"{}\": {err}", entry.name));
                 state.gallery.selected = None;
@@ -426,17 +430,28 @@ fn open_details_from_gallery_entry(
     }
 }
 
-fn run_preview_parse(state: &mut InstallScreenState) {
+fn run_preview_parse(state: &mut InstallScreenState, step1: &crate::app::state::Step1State) {
     state.clear_preview();
     match preview_modlist_share_code(state.import_code.trim()) {
         Ok(preview) => {
             state.parsed_preview = Some(preview);
             state.preview_cached = true;
+            refresh_source_compat_issue(state, step1);
         }
         Err(msg) => {
             state.preview_parse_error = Some(msg);
         }
     }
+}
+
+pub(crate) fn refresh_source_compat_issue(
+    state: &mut InstallScreenState,
+    step1: &crate::app::state::Step1State,
+) {
+    state.source_compat_issue = state
+        .parsed_preview
+        .as_ref()
+        .and_then(|preview| crate::app::compat_dlc_source::preview_issue(step1, preview));
 }
 
 #[cfg(test)]
@@ -474,6 +489,59 @@ mod tests {
         let reparsed = preview_modlist_share_code(&app.install_screen_state.import_code)
             .expect("renamed code still parses");
         assert_eq!(reparsed.name.as_deref(), Some("My Renamed List"));
+    }
+
+    #[test]
+    fn preview_issue_is_stored_when_the_preview_is_parsed() {
+        use crate::app::compat_dlc_source::refresh_source_check;
+        use crate::app::modlist_share::ModlistSharePreview;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+        let source = std::env::temp_dir().join(format!(
+            "bio-page-install-source-{}-{}",
+            std::process::id(),
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&source).expect("create source fixture");
+        std::fs::write(source.join("sod-dlc.zip"), b"synthetic archive fixture")
+            .expect("write synthetic archive");
+
+        let mut app = orch_for_install_test();
+        app.wizard_state.step1.bgee_game_folder = source.to_string_lossy().into_owned();
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        assert!(refresh_source_check(&mut app.wizard_state.step1));
+        app.install_screen_state.parsed_preview = Some(ModlistSharePreview {
+            bio_version: String::new(),
+            game_install: "BGEE".to_string(),
+            install_mode: "custom".to_string(),
+            bgee_entries: 0,
+            bg2ee_entries: 0,
+            has_source_overrides: false,
+            has_installed_refs: false,
+            bgee_log_text: "~CDTWEAKS/SETUP-CDTWEAKS.TP2~ #0 #2010 // x: v1".to_string(),
+            bg2ee_log_text: String::new(),
+            source_overrides_text: String::new(),
+            installed_refs_text: String::new(),
+            mod_config_count: 0,
+            mod_configs_text: String::new(),
+            allow_auto_install: true,
+            name: None,
+            author: None,
+            forked_from: Vec::new(),
+        });
+
+        refresh_source_compat_issue(&mut app.install_screen_state, &app.wizard_state.step1);
+        assert!(app.install_screen_state.source_compat_issue.is_some());
+
+        std::fs::remove_file(source.join("sod-dlc.zip")).expect("remove synthetic archive");
+        app.wizard_state.step1.bgee_game_folder.clear();
+        assert!(refresh_source_check(&mut app.wizard_state.step1));
+
+        refresh_source_compat_issue(&mut app.install_screen_state, &app.wizard_state.step1);
+        assert!(app.install_screen_state.source_compat_issue.is_none());
+
+        std::fs::remove_dir_all(&source).expect("clean up source fixture");
     }
 
     #[test]
@@ -610,7 +678,9 @@ mod tests {
         let mut state = InstallScreenState::default();
         let mut notification_manager = NotificationManager::new();
 
-        let request = open_details_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        let step1 = crate::app::state::Step1State::default();
+        let request =
+            open_details_from_gallery_entry(entry, &mut state, &step1, &mut notification_manager);
 
         assert!(matches!(
             request,
@@ -630,10 +700,11 @@ mod tests {
             .first()
             .expect("the catalog is not empty");
         let mut state = InstallScreenState::default();
+        let step1 = crate::app::state::Step1State::default();
         let mut notification_manager = NotificationManager::new();
-        open_details_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        open_details_from_gallery_entry(entry, &mut state, &step1, &mut notification_manager);
         let first = state.import_code.clone();
-        open_details_from_gallery_entry(entry, &mut state, &mut notification_manager);
+        open_details_from_gallery_entry(entry, &mut state, &step1, &mut notification_manager);
         assert_eq!(
             first, state.import_code,
             "regenerating the same entry must be deterministic"

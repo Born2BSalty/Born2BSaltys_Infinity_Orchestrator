@@ -1445,15 +1445,28 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     *active_install_modlist_id = None;
 }
 
-fn refresh_source_compatibility(state: &mut WizardState) {
-    if crate::app::compat_dlc_source::refresh_source_check(&mut state.step1) {
-        state.last_step2_sync_signature = None;
-        let _ = crate::app::compat_logic::apply_step2_compat_rules(
-            &state.step1,
-            &mut state.step2.bgee_mods,
-            &mut state.step2.bg2ee_mods,
-        );
+pub(crate) fn source_probe_deferred(debounce: &HashMap<&'static str, Instant>) -> bool {
+    debounce.contains_key(crate::ui::settings::validate_now::FIELD_BGEE_GAME_FOLDER)
+}
+
+fn refresh_source_compatibility(app: &mut OrchestratorApp) {
+    if source_probe_deferred(&app.settings_screen_state.path_edit_debounce) {
+        return;
     }
+    if !crate::app::compat_dlc_source::refresh_source_check(&mut app.wizard_state.step1) {
+        return;
+    }
+    if let Some(err) = crate::app::compat_logic::apply_step2_compat_rules(
+        &app.wizard_state.step1,
+        &mut app.wizard_state.step2.bgee_mods,
+        &mut app.wizard_state.step2.bg2ee_mods,
+    ) {
+        app.wizard_state.step2.scan_status = format!("Compat rules load failed: {err}");
+    }
+    crate::ui::install::page_install::refresh_source_compat_issue(
+        &mut app.install_screen_state,
+        &app.wizard_state.step1,
+    );
 }
 
 impl eframe::App for OrchestratorApp {
@@ -1462,7 +1475,7 @@ impl eframe::App for OrchestratorApp {
         ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
 
         validate_debounce::tick(self, Instant::now());
-        refresh_source_compatibility(&mut self.wizard_state);
+        refresh_source_compatibility(self);
         if let Some(next_due_in) = next_debounce_due_in(self) {
             ctx.request_repaint_after(next_due_in);
         }
@@ -1665,6 +1678,26 @@ fn next_debounce_due_in(app: &OrchestratorApp) -> Option<std::time::Duration> {
 mod tests {
     use super::*;
     use std::sync::mpsc::TryRecvError;
+
+    #[test]
+    fn source_probe_waits_for_the_bgee_source_debounce() {
+        let empty = HashMap::new();
+        assert!(!source_probe_deferred(&empty));
+
+        let mut with_bgee_source = HashMap::new();
+        with_bgee_source.insert(
+            crate::ui::settings::validate_now::FIELD_BGEE_GAME_FOLDER,
+            Instant::now(),
+        );
+        assert!(source_probe_deferred(&with_bgee_source));
+
+        let mut with_other_field = HashMap::new();
+        with_other_field.insert(
+            crate::ui::settings::validate_now::FIELD_BG2EE_GAME_FOLDER,
+            Instant::now(),
+        );
+        assert!(!source_probe_deferred(&with_other_field));
+    }
 
     #[test]
     fn isolated_test_app_flushes_settings_to_temp_not_the_config_dir() {

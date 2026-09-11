@@ -353,7 +353,7 @@ fn preview(
 const TWEAKS_LOG: &str = "~CDTWEAKS/SETUP-CDTWEAKS.TP2~ #0 #2010 // Custom label: v1";
 const OTHER_LOG: &str = "~OTHER/OTHER.TP2~ #0 #0 // CDTweaks DLCmerger: v1";
 const MISSING: &str = "Your BGEE source contains DLC that needs merging. This modlist includes CDTweaks, which requires DLC Merger for this source.";
-const LATE: &str = "Your BGEE source contains DLC that needs merging. Move DLC Merger (#1 or #3) to the first component/mod in the BGEE log.";
+const LATE: &str = "Your BGEE source contains DLC that needs merging. Move DLC Merger (#1 or #3) first in the BGEE installation order.";
 
 #[test]
 fn preview_uses_preview_game_and_relevant_logs_even_in_custom_mode() {
@@ -468,7 +468,7 @@ fn absent_source_dlc_leaves_step2_and_step3_unchanged() {
 }
 
 #[test]
-fn step2_preserves_existing_issue_and_step3_overrides_nonblocking_warning() {
+fn existing_markers_win_on_both_steps() {
     let root = fixture();
     archive(&root, "sod-dlc.zip");
     let state = source_state(&root, "BGEE");
@@ -478,11 +478,13 @@ fn step2_preserves_existing_issue_and_step3_overrides_nonblocking_warning() {
     let before = first.clone();
     apply_step2(&state, &mut first, &mut []);
     assert_eq!(first, before);
-    let items = [item("cdtweaks.tp2", "2010")];
+    let items = [item("cdtweaks.tp2", "2010"), item("cdtweaks.tp2", "42")];
     let mut result = markers(&state, "BGEE", &items, &items);
     let key = marker_key(&items[0]);
     result.get_mut(&key).expect("source marker").kind = "conditional".to_string();
     apply_step3(&state, "BGEE", &items, &items, &mut result);
-    assert_eq!(result[&key].kind, "missing_dep");
-    assert_eq!(result[&key].related_mod.as_deref(), Some("dlcmerger"));
+    assert_eq!(result[&key].kind, "conditional");
+    let other_key = marker_key(&items[1]);
+    assert_eq!(result[&other_key].kind, "missing_dep");
+    assert_eq!(result[&other_key].related_mod.as_deref(), Some("dlcmerger"));
 }

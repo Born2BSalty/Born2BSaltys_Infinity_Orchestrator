@@ -184,15 +184,6 @@ pub(crate) fn render(
 
                 header_row(ui, palette, header, fork_info_open);
                 ui.add_space(20.0);
-                if let Some(issue) = header.source_compat_issue {
-                    crate::ui::install::stage_review::render_source_warning(
-                        ui,
-                        palette,
-                        issue,
-                        availability == ModifyAvailability::OnlyInstall,
-                    );
-                    ui.add_space(16.0);
-                }
                 if let Some(click) = body_columns(ui, palette, header, counts, availability) {
                     outcome = click;
                 }
@@ -353,6 +344,17 @@ fn body_columns(
             egui::Layout::top_down(egui::Align::Min),
             |ui| {
                 ui.set_width(prose_w);
+                if let Some(issue) = header.source_compat_issue {
+                    stage_review::render_source_warning(
+                        ui,
+                        issue,
+                        stage_review::source_warning_action(
+                            availability == ModifyAvailability::OnlyInstall,
+                            availability == ModifyAvailability::OnlyModify,
+                        ),
+                    );
+                    ui.add_space(16.0);
+                }
                 prose_section(
                     ui,
                     palette,
