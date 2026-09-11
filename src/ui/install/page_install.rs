@@ -94,7 +94,7 @@ fn details_stage(
         orchestrator.install_screen_state.clear_preview();
         return Some(InstallRequest::Stage(InstallStage::Gallery));
     };
-    let header = if origin == ReviewOrigin::Details {
+    let mut header = if origin == ReviewOrigin::Details {
         let Some(entry) = selected_entry(&orchestrator.install_screen_state) else {
             orchestrator.install_screen_state.gallery.selected = None;
             orchestrator.install_screen_state.clear_preview();
@@ -109,6 +109,9 @@ fn details_stage(
         )
     };
     let availability = stage_review::modify_choice_available(origin, preview.allow_auto_install);
+    orchestrator.install_screen_state.source_compat_issue =
+        crate::app::compat_dlc_source::preview_issue(&orchestrator.wizard_state.step1, &preview);
+    header.source_compat_issue = orchestrator.install_screen_state.source_compat_issue;
     let mut fork_info_open = orchestrator.install_screen_state.fork_info_open;
 
     let outcome = stage_details::render(
@@ -217,6 +220,18 @@ fn paste_stage(
 }
 
 fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
+    let issue = orchestrator
+        .install_screen_state
+        .parsed_preview
+        .as_ref()
+        .and_then(|preview| {
+            crate::app::compat_dlc_source::preview_issue(&orchestrator.wizard_state.step1, preview)
+        });
+    orchestrator.install_screen_state.source_compat_issue = issue;
+    if issue.is_some() {
+        orchestrator.install_screen_state.drawer.open = Some(DrawerKind::Install);
+        return InstallStage::Details;
+    }
     {
         let state = &mut orchestrator.install_screen_state;
         state.destination = state.destination.trim().to_string();

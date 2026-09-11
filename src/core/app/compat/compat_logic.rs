@@ -47,6 +47,7 @@ pub(crate) fn apply_step2_compat_rules(
         apply_relation_rules_to_tab(step1, "BG2EE", &rules, second_game_mods);
     }
 
+    super::compat_dlc_source::apply_step2(step1, first_game_mods, second_game_mods);
     finalize_step2_compat_state(first_game_mods);
     finalize_step2_compat_state(second_game_mods);
     loaded.error

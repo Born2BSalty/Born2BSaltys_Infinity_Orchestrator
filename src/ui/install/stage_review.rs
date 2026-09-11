@@ -128,14 +128,15 @@ pub(crate) fn destination_checks(
 
 #[must_use]
 pub(crate) fn begin_disabled_for(state: &InstallScreenState, checks: &DestinationChecks) -> bool {
-    begin_disabled(&BeginGuards {
-        name: &state.review.name,
-        code: &state.import_code,
-        destination_valid: checks.dest_valid,
-        ownership_blocks: checks.ownership_blocks,
-        destination_non_empty: checks.dest_non_empty,
-        choice: state.destination_choice,
-    })
+    (state.source_compat_issue.is_some() && !state.review.modify)
+        || begin_disabled(&BeginGuards {
+            name: &state.review.name,
+            code: &state.import_code,
+            destination_valid: checks.dest_valid,
+            ownership_blocks: checks.ownership_blocks,
+            destination_non_empty: checks.dest_non_empty,
+            choice: state.destination_choice,
+        })
 }
 
 #[must_use]
@@ -212,6 +213,11 @@ pub(crate) fn render_install_settings(
     divider(ui, palette);
     ui.add_space(16.0);
 
+    if let Some(issue) = state.source_compat_issue {
+        render_source_warning(ui, palette, issue, locked);
+        ui.add_space(16.0);
+    }
+
     if locked {
         fact_row(ui, palette, "install mode", REINSTALL_MODE_FACT);
         return;
@@ -252,6 +258,31 @@ fn fact_row(ui: &mut egui::Ui, palette: ThemePalette, label: &str, value: &str) 
             .family(egui::FontFamily::Name("poppins_medium".into()))
             .color(redesign_text_primary(palette)),
     );
+}
+
+pub(crate) fn render_source_warning(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    issue: &str,
+    locked: bool,
+) {
+    egui::Frame::default()
+        .fill(destination_not_empty::warn_fill())
+        .stroke(egui::Stroke::new(1.0_f32, destination_not_empty::WARN_BORDER))
+        .corner_radius(egui::CornerRadius::same(4))
+        .inner_margin(12)
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new("DLC Merger required").strong().color(redesign_text_primary(palette)));
+            ui.add_space(6.0);
+            ui.add(egui::Label::new(issue).wrap());
+            ui.add_space(8.0);
+            let action = if locked {
+                "This list cannot be reinstalled as provided. Use Create to make a modified copy with DLC Merger as the first mod in the BGEE installation order, before any other mods."
+            } else {
+                "Enable Modify before installing and add DLC Merger as the first mod in the BGEE installation order, before any other mods."
+            };
+            ui.add(egui::Label::new(action).wrap());
+        });
 }
 
 fn modify_toggle(
@@ -413,6 +444,27 @@ fn divider(ui: &mut egui::Ui, palette: ThemePalette) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_issue_blocks_direct_install_but_allows_modify() {
+        let checks = DestinationChecks {
+            ownership: DestinationOwnership::Free,
+            ownership_blocks: false,
+            dest_valid: true,
+            dest_non_empty: false,
+        };
+        let mut state = InstallScreenState::default();
+        state.review.name = "Test".to_string();
+        state.import_code = "code".to_string();
+        assert!(!begin_disabled_for(&state, &checks));
+        state.source_compat_issue = Some("DLC Merger required");
+        assert!(begin_disabled_for(&state, &checks));
+        state.review.modify = true;
+        assert!(!begin_disabled_for(&state, &checks));
+        assert!(state.source_compat_issue.is_some());
+        state.clear_preview();
+        assert!(state.source_compat_issue.is_none());
+    }
 
     fn all_good<'a>() -> BeginGuards<'a> {
         BeginGuards {

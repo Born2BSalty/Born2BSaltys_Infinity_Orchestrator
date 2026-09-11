@@ -84,7 +84,11 @@ pub(crate) fn render(
     };
 
     let disabled = stage_review::begin_disabled_for(state, &checks);
-    let begin_label = stage_review::begin_label(state.review.modify);
+    let begin_label = if state.source_compat_issue.is_some() && state.review.modify {
+        "Continue to Modify"
+    } else {
+        stage_review::begin_label(state.review.modify)
+    };
 
     let mut cancel_clicked = false;
     let mut begin_clicked = false;
@@ -152,7 +156,7 @@ pub(crate) fn render(
 
     if cancel_clicked || response.close_requested {
         InstallDrawerOutcome::Close
-    } else if begin_clicked {
+    } else if begin_clicked && !stage_review::begin_disabled_for(state, &checks) {
         if state.review.modify {
             InstallDrawerOutcome::BeginImport
         } else {
