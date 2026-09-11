@@ -27,6 +27,24 @@ const NO_DISABLED_REASON: &str =
     "this share code was exported mid-install, so it can only be reviewed and modified";
 const REINSTALL_ONLY_INSTALL_REASON: &str =
     "reinstall keeps this modlist as it is; to change it, open it from Home";
+const REINSTALL_FOLDER_MISSING: &str =
+    "This folder no longer exists. Use Create to install the list somewhere else.";
+const REINSTALL_MODE_FACT: &str =
+    "As provided. A reinstall keeps the list's mods and order; use Create for a changed copy.";
+
+#[must_use]
+pub(crate) const fn reinstall_locked(origin: ReviewOrigin) -> bool {
+    matches!(origin, ReviewOrigin::Reinstall)
+}
+
+#[must_use]
+pub(crate) const fn reinstall_folder_note(dest_valid: bool) -> Option<&'static str> {
+    if dest_valid {
+        None
+    } else {
+        Some(REINSTALL_FOLDER_MISSING)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ModifyAvailability {
@@ -145,6 +163,7 @@ pub(crate) struct RightColumnCtx<'a> {
     pub(crate) registry: &'a ModlistRegistry,
     pub(crate) ownership_blocks: bool,
     pub(crate) dest_non_empty: bool,
+    pub(crate) dest_valid: bool,
 }
 
 pub(crate) fn render_install_settings(
@@ -161,7 +180,20 @@ pub(crate) fn render_install_settings(
     name_input(ui, palette, &mut state.review.name);
     ui.add_space(14.0);
 
-    if destination_field::render(ui, palette, &mut state.destination, ctx.ownership_blocks) {
+    let locked = reinstall_locked(state.review.origin);
+
+    if locked {
+        fact_row(ui, palette, "destination folder", state.destination.trim());
+        if let Some(note) = reinstall_folder_note(ctx.dest_valid) {
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new(note)
+                    .size(12.0)
+                    .family(egui::FontFamily::Name("poppins_light".into()))
+                    .color(redesign_text_muted(palette)),
+            );
+        }
+    } else if destination_field::render(ui, palette, &mut state.destination, ctx.ownership_blocks) {
         state.destination_choice = None;
     }
 
@@ -179,6 +211,11 @@ pub(crate) fn render_install_settings(
     ui.add_space(16.0);
     divider(ui, palette);
     ui.add_space(16.0);
+
+    if locked {
+        fact_row(ui, palette, "install mode", REINSTALL_MODE_FACT);
+        return;
+    }
 
     ui.label(
         egui::RichText::new(MODIFY_QUESTION)
@@ -204,6 +241,16 @@ pub(crate) fn render_install_settings(
         .size(13.0)
         .family(egui::FontFamily::Name("poppins_light".into()))
         .color(redesign_text_faint(palette)),
+    );
+}
+
+fn fact_row(ui: &mut egui::Ui, palette: ThemePalette, label: &str, value: &str) {
+    field_label(ui, palette, label);
+    ui.label(
+        egui::RichText::new(value)
+            .size(13.0)
+            .family(egui::FontFamily::Name("poppins_medium".into()))
+            .color(redesign_text_primary(palette)),
     );
 }
 
@@ -550,6 +597,19 @@ mod tests {
             &classification,
             Some("REINSTALL0001")
         ));
+    }
+
+    #[test]
+    fn reinstall_folder_note_appears_only_when_the_folder_is_gone() {
+        assert_eq!(reinstall_folder_note(true), None);
+        assert_eq!(reinstall_folder_note(false), Some(REINSTALL_FOLDER_MISSING));
+    }
+
+    #[test]
+    fn reinstall_locks_everything_but_name_and_folder_choice() {
+        assert!(reinstall_locked(ReviewOrigin::Reinstall));
+        assert!(!reinstall_locked(ReviewOrigin::Details));
+        assert!(!reinstall_locked(ReviewOrigin::Paste));
     }
 
     #[test]

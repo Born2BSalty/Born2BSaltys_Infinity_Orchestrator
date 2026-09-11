@@ -14,7 +14,17 @@ use crate::ui::orchestrator::widgets::{BtnOpts, redesign_box, redesign_btn};
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
 
 const SUBTITLE: &str = "name it, pick a destination, then choose how to install";
+const SUBTITLE_REINSTALL: &str = "rename if you like, then choose what happens to the folder";
 const CANCEL_LABEL: &str = "Cancel";
+
+#[must_use]
+fn drawer_copy(locked: bool, name: &str) -> (String, &'static str) {
+    if locked {
+        (format!("Reinstall {name}"), SUBTITLE_REINSTALL)
+    } else {
+        (format!("Install {name}"), SUBTITLE)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstallDrawerOutcome {
@@ -61,16 +71,15 @@ pub(crate) fn render(
 ) -> InstallDrawerOutcome {
     stage_review::force_modify_for_availability(state, preview);
     let checks = stage_review::destination_checks(&state.destination, registry);
-    let title = format!(
-        "Install {}",
-        stage_review::display_name(&state.review.name, preview)
-    );
+    let locked = stage_review::reinstall_locked(state.review.origin);
+    let name = stage_review::display_name(&state.review.name, preview);
+    let (title, subtitle) = drawer_copy(locked, &name);
     let scope = scope_line(preview, counts);
 
     let spec = DrawerSpec {
         id_salt: "install_drawer",
         title: &title,
-        subtitle: SUBTITLE,
+        subtitle,
         width: DrawerWidth::Form,
     };
 
@@ -98,6 +107,7 @@ pub(crate) fn render(
                     registry,
                     ownership_blocks: checks.ownership_blocks,
                     dest_non_empty: checks.dest_non_empty,
+                    dest_valid: checks.dest_valid,
                 },
             );
             ui.add_space(22.0);
@@ -177,6 +187,18 @@ mod tests {
             author: None,
             forked_from: Vec::new(),
         }
+    }
+
+    #[test]
+    fn reinstall_drawer_uses_the_reinstall_title_and_subtitle() {
+        assert_eq!(
+            drawer_copy(true, "Tactical EET"),
+            ("Reinstall Tactical EET".to_string(), SUBTITLE_REINSTALL)
+        );
+        assert_eq!(
+            drawer_copy(false, "Tactical EET"),
+            ("Install Tactical EET".to_string(), SUBTITLE)
+        );
     }
 
     #[test]

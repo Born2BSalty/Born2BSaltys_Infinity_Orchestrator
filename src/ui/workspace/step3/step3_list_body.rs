@@ -276,12 +276,25 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
     let mut child_counter = 0usize;
     let mut first_group = true;
 
+    let list_left_x = ui.cursor().min.x;
+    let viewport_w = (ui.clip_rect().width() - SCROLLBAR_RESERVE)
+        .min(ui.available_width())
+        .max(0.0);
+    let tab_w_id = egui::Id::new(("step3_tab_w", ctx.tab_id));
+    let remembered = ui
+        .ctx()
+        .data(|d| d.get_temp::<f32>(tab_w_id))
+        .unwrap_or(0.0);
+    let group_w = group_width(viewport_w, remembered);
+    let mut measured: f32 = 0.0;
+
     let mut pos = 0;
     while pos < ctx.visible_indices.len() {
         let idx = ctx.visible_indices[pos];
         if !ctx.items[idx].is_parent {
             child_counter += 1;
-            let _ = render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w, false);
+            let right = render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w, false);
+            measured = measured.max(right - list_left_x);
             pos += 1;
             continue;
         }
@@ -293,17 +306,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
 
         let block_id = ctx.items[idx].block_id.clone();
 
-        let viewport_w = (ui.clip_rect().width() - SCROLLBAR_RESERVE)
-            .min(ui.available_width())
-            .max(0.0);
         let top_cursor = ui.cursor().min;
-
-        let group_w_id = egui::Id::new(("step3_group_w", ctx.tab_id, block_id.as_str()));
-        let remembered = ui
-            .ctx()
-            .data(|d| d.get_temp::<f32>(group_w_id))
-            .unwrap_or(0.0);
-        let group_w = group_width(viewport_w, remembered);
 
         let bg_shape_id = ui.painter().add(egui::Shape::Noop);
 
@@ -343,7 +346,6 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
 
         ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
 
-        let mut measured: f32 = 0.0;
         while pos < ctx.visible_indices.len() {
             let child_idx = ctx.visible_indices[pos];
             if ctx.items[child_idx].is_parent || ctx.items[child_idx].block_id != block_id {
@@ -363,16 +365,16 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
                 lineno_w,
                 is_last_in_group,
             );
-            measured = measured.max(right - top_cursor.x);
+            measured = measured.max(right - list_left_x);
             pos += 1;
         }
 
         ctx.current_group_x_bounds = None;
+    }
 
-        if width_changed(measured, remembered) {
-            ui.ctx().data_mut(|d| d.insert_temp(group_w_id, measured));
-            ui.ctx().request_repaint();
-        }
+    if width_changed(measured, remembered) {
+        ui.ctx().data_mut(|d| d.insert_temp(tab_w_id, measured));
+        ui.ctx().request_repaint();
     }
 
     acc

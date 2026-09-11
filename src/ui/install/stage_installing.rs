@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::app::state::WizardState;
+use crate::app::state::{Step5State, WizardState};
 use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::registry::operations;
 use crate::ui::install::state_install::InstallStage;
@@ -156,6 +156,11 @@ pub(crate) const fn auto_start_should_fire(armed: bool, registered: bool, allowe
     armed && registered && allowed
 }
 
+#[must_use]
+pub(crate) const fn back_link_available(s5: &Step5State) -> bool {
+    !(s5.start_install_requested || s5.prep_running || s5.install_running)
+}
+
 fn render_header(
     ui: &mut egui::Ui,
     orchestrator: &OrchestratorApp,
@@ -173,6 +178,7 @@ fn render_header(
     } else {
         "back to import"
     };
+    let show_back = back_link_available(&orchestrator.wizard_state.step5);
 
     let mut outcome = StageInstallingOutcome::Stay;
     let sub = format!("{name} \u{00B7} live install console");
@@ -186,16 +192,18 @@ fn render_header(
                 render_screen_title(ui, palette, "Installing modlist", Some(&sub));
             },
         );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            ui.add_space(0.0);
-            if back_to_import_btn(ui, palette, back_label).clicked() {
-                outcome = if reset_due {
-                    StageInstallingOutcome::BackAfterCompletedInstall
-                } else {
-                    StageInstallingOutcome::Back(back_target)
-                };
-            }
-        });
+        if show_back {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.add_space(0.0);
+                if back_to_import_btn(ui, palette, back_label).clicked() {
+                    outcome = if reset_due {
+                        StageInstallingOutcome::BackAfterCompletedInstall
+                    } else {
+                        StageInstallingOutcome::Back(back_target)
+                    };
+                }
+            });
+        }
     });
     outcome
 }
@@ -368,6 +376,27 @@ mod tests {
         assert!(auto_start_should_fire(true, true, true));
         assert!(!auto_start_should_fire(false, false, true));
         assert!(!auto_start_should_fire(true, false, false));
+    }
+
+    #[test]
+    fn back_link_hidden_while_an_attempt_is_underway() {
+        let mut s5 = Step5State::default();
+        assert!(back_link_available(&s5));
+
+        s5.start_install_requested = true;
+        assert!(!back_link_available(&s5));
+
+        let s5 = Step5State {
+            prep_running: true,
+            ..Default::default()
+        };
+        assert!(!back_link_available(&s5));
+
+        let s5 = Step5State {
+            install_running: true,
+            ..Default::default()
+        };
+        assert!(!back_link_available(&s5));
     }
 
     #[test]
