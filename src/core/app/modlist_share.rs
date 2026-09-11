@@ -14,16 +14,14 @@ use crate::app::step5::diagnostics::build_weidu_export_lines;
 
 const SHARE_CODE_PREFIX: &str = "BIO-MODLIST-V1:";
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ShareExportSources {
+    pub(crate) mod_downloads_user: Option<String>,
+    pub(crate) mod_installed_refs: Option<String>,
+}
+
 pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, String> {
     crate::app::mod_downloads::ensure_mod_downloads_files().map_err(|err| err.to_string())?;
-    let weidu_logs = export_weidu_logs(state)?;
-    if relevant_weidu_text_is_empty(
-        state,
-        weidu_logs.bgee.as_deref(),
-        weidu_logs.bg2ee.as_deref(),
-    ) {
-        return Err("No WeiDU entries available to export.".to_string());
-    }
 
     let mod_downloads_user = if crate::app::mod_downloads::active_modlist_downloads_path().is_some()
     {
@@ -44,6 +42,31 @@ pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, S
             |_| false,
         )
     };
+
+    export_modlist_share_code_with(
+        state,
+        &ShareExportSources {
+            mod_downloads_user,
+            mod_installed_refs,
+        },
+    )
+}
+
+pub(crate) fn export_modlist_share_code_with(
+    state: &WizardState,
+    sources: &ShareExportSources,
+) -> Result<String, String> {
+    let weidu_logs = export_weidu_logs(state)?;
+    if relevant_weidu_text_is_empty(
+        state,
+        weidu_logs.bgee.as_deref(),
+        weidu_logs.bg2ee.as_deref(),
+    ) {
+        return Err("No WeiDU entries available to export.".to_string());
+    }
+
+    let mod_downloads_user = sources.mod_downloads_user.clone();
+    let mod_installed_refs = sources.mod_installed_refs.clone();
 
     let mod_configs = export_mod_config_files(state)?;
     let mut payload = json!({
@@ -1055,6 +1078,35 @@ mod tests {
                 author: "@root".to_string(),
             }]
         );
+    }
+
+    #[test]
+    fn export_with_empty_sources_omits_overrides_and_refs() {
+        let state = state_with_one_bgee_component();
+        let code =
+            export_modlist_share_code_with(&state, &ShareExportSources::default()).expect("export");
+        let preview = preview_modlist_share_code(&code).expect("preview");
+        assert!(!preview.has_source_overrides);
+        assert!(!preview.has_installed_refs);
+    }
+
+    #[test]
+    fn export_with_supplied_sources_embeds_them() {
+        let state = state_with_one_bgee_component();
+        let sources = ShareExportSources {
+            mod_downloads_user: Some("[[mods]]\nname = \"X\"".to_string()),
+            mod_installed_refs: Some("[sources]\nx = \"y\"".to_string()),
+        };
+        let code = export_modlist_share_code_with(&state, &sources).expect("export");
+        let preview = preview_modlist_share_code(&code).expect("preview");
+        assert!(preview.has_source_overrides);
+        assert!(preview.has_installed_refs);
+        assert!(
+            preview
+                .source_overrides_text
+                .contains("[[mods]]\nname = \"X\"")
+        );
+        assert!(preview.installed_refs_text.contains("[sources]\nx = \"y\""));
     }
 
     struct AmbientGuard(Option<std::path::PathBuf>);

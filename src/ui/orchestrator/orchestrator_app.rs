@@ -376,12 +376,13 @@ impl OrchestratorApp {
     pub fn new(dev_mode: bool) -> Self {
         let bootstrap = app_bootstrap_init::initialize(dev_mode);
 
-        let wizard_state = WizardState {
+        let mut wizard_state = WizardState {
             step1: bootstrap.step1.clone(),
             github_auth_login: bootstrap.github_auth_login,
             ..Default::default()
         };
 
+        crate::app::compat_dlc_source::refresh_source_check(&mut wizard_state.step1);
         let path_validation = compute_path_validation_summary(&wizard_state);
 
         let registry_store = RegistryStore::new_default();
@@ -557,7 +558,7 @@ impl OrchestratorApp {
         }
     }
 
-    pub(crate) fn reset_install_screen_to_paste(&mut self) {
+    pub(crate) fn reset_install_screen_to_gallery(&mut self) {
         reset_install_pipeline_state(InstallPipelineResetSet {
             stream_download_rx: &mut self.stream_download_rx,
             archive_skip_rx: &mut self.archive_skip_rx,
@@ -1355,6 +1356,15 @@ impl OrchestratorApp {
         }
     }
 
+    pub(crate) fn ensure_creator_name(&mut self) -> bool {
+        if !self.redesign_settings.user_name.trim().is_empty() {
+            return true;
+        }
+        self.notification_manager
+            .error("Set your name in Settings > General before creating or sharing a modlist.");
+        false
+    }
+
     fn refresh_path_validation_status(&mut self) {
         self.path_validation = compute_path_validation_summary(&self.wizard_state);
         let issue_count = self
@@ -1421,7 +1431,8 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     wizard_state.step2.update_selected_extract_running = false;
 
     install_screen_state.clear_preview();
-    install_screen_state.stage = crate::ui::install::state_install::InstallStage::Paste;
+    install_screen_state.pipeline_kind = crate::ui::install::state_install::PipelineKind::Install;
+    install_screen_state.stage = crate::ui::install::state_install::InstallStage::Gallery;
 
     if let Ok(mut g) = hash_progress.lock() {
         *g = None;
@@ -1434,12 +1445,37 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     *active_install_modlist_id = None;
 }
 
+pub(crate) fn source_probe_deferred(debounce: &HashMap<&'static str, Instant>) -> bool {
+    debounce.contains_key(crate::ui::settings::validate_now::FIELD_BGEE_GAME_FOLDER)
+}
+
+fn refresh_source_compatibility(app: &mut OrchestratorApp) {
+    if source_probe_deferred(&app.settings_screen_state.path_edit_debounce) {
+        return;
+    }
+    if !crate::app::compat_dlc_source::refresh_source_check(&mut app.wizard_state.step1) {
+        return;
+    }
+    if let Some(err) = crate::app::compat_logic::apply_step2_compat_rules(
+        &app.wizard_state.step1,
+        &mut app.wizard_state.step2.bgee_mods,
+        &mut app.wizard_state.step2.bg2ee_mods,
+    ) {
+        app.wizard_state.step2.scan_status = format!("Compat rules load failed: {err}");
+    }
+    crate::ui::install::page_install::refresh_source_compat_issue(
+        &mut app.install_screen_state,
+        &app.wizard_state.step1,
+    );
+}
+
 impl eframe::App for OrchestratorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let palette = self.theme_palette;
         ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
 
         validate_debounce::tick(self, Instant::now());
+        refresh_source_compatibility(self);
         if let Some(next_due_in) = next_debounce_due_in(self) {
             ctx.request_repaint_after(next_due_in);
         }
@@ -1553,6 +1589,38 @@ impl eframe::App for OrchestratorApp {
     }
 }
 
+#[cfg(test)]
+impl OrchestratorApp {
+    pub(crate) fn new_isolated_for_test(tag: &str) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static ISOLATED_TEST_SEQ: AtomicU64 = AtomicU64::new(0);
+        let stem = format!(
+            "bio_{tag}_{}_{}",
+            std::process::id(),
+            ISOLATED_TEST_SEQ.fetch_add(1, Ordering::Relaxed)
+        );
+        let dir = std::env::temp_dir();
+        let mut app = Self::new(false);
+        app.registry_store =
+            RegistryStore::new_with_path(dir.join(format!("{stem}_registry.json")));
+        app.registry = ModlistRegistry::default();
+        app.redesign_settings_store =
+            crate::settings::redesign_store::RedesignSettingsStore::new_with_path(
+                dir.join(format!("{stem}_redesign_settings.json")),
+            );
+        app.settings_store = crate::settings::store::SettingsStore::new_with_path(
+            dir.join(format!("{stem}_settings.json")),
+        );
+        app.wizard_state.step1 = crate::app::state::Step1State::default();
+        app.path_validation = compute_path_validation_summary(&app.wizard_state);
+        app.bio_settings_last_saved = AppSettings {
+            exe_fingerprint: app.exe_fingerprint.clone(),
+            step1: app.wizard_state.step1.clone().into(),
+        };
+        app
+    }
+}
+
 impl Drop for OrchestratorApp {
     fn drop(&mut self) {
         self.join_all_destination_prep_workers();
@@ -1611,6 +1679,63 @@ mod tests {
     use super::*;
     use std::sync::mpsc::TryRecvError;
 
+    #[test]
+    fn source_probe_waits_for_the_bgee_source_debounce() {
+        let empty = HashMap::new();
+        assert!(!source_probe_deferred(&empty));
+
+        let mut with_bgee_source = HashMap::new();
+        with_bgee_source.insert(
+            crate::ui::settings::validate_now::FIELD_BGEE_GAME_FOLDER,
+            Instant::now(),
+        );
+        assert!(source_probe_deferred(&with_bgee_source));
+
+        let mut with_other_field = HashMap::new();
+        with_other_field.insert(
+            crate::ui::settings::validate_now::FIELD_BG2EE_GAME_FOLDER,
+            Instant::now(),
+        );
+        assert!(!source_probe_deferred(&with_other_field));
+    }
+
+    #[test]
+    fn isolated_test_app_flushes_settings_to_temp_not_the_config_dir() {
+        let probe = format!("isolation-probe-{}", std::process::id());
+        let real_before = crate::settings::redesign_store::RedesignSettingsStore::new_default()
+            .load()
+            .map(|s| s.user_name)
+            .unwrap_or_default();
+        let mut app = OrchestratorApp::new_isolated_for_test("isolationtest");
+        app.redesign_settings.user_name.clone_from(&probe);
+        app.flush_all_now();
+        let isolated = app
+            .redesign_settings_store
+            .load()
+            .expect("temp store loads");
+        assert_eq!(isolated.user_name, probe);
+        let real_after = crate::settings::redesign_store::RedesignSettingsStore::new_default()
+            .load()
+            .map(|s| s.user_name)
+            .unwrap_or_default();
+        assert_eq!(real_after, real_before);
+        assert_ne!(real_after, probe);
+    }
+
+    #[test]
+    fn isolated_app_carries_no_machine_paths() {
+        let app = OrchestratorApp::new_isolated_for_test("no_machine_paths");
+        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
+        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
+        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
+        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
+        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(
+            app.wizard_state.step1.prepare_target_dirs_before_install,
+            crate::app::state::Step1State::default().prepare_target_dirs_before_install
+        );
+    }
+
     fn dirty_ws() -> WizardState {
         let mut ws = WizardState {
             modlist_auto_build_active: true,
@@ -1628,6 +1753,7 @@ mod tests {
     fn dirty_iss() -> InstallScreenState {
         let mut iss = InstallScreenState {
             stage: crate::ui::install::state_install::InstallStage::Downloading,
+            pipeline_kind: crate::ui::install::state_install::PipelineKind::Fork,
             ..Default::default()
         };
         iss.pipeline_flags.set_armed(true);
@@ -1816,7 +1942,12 @@ mod tests {
         assert!(iss.hashed_indices.is_empty());
         assert_eq!(
             iss.stage,
-            crate::ui::install::state_install::InstallStage::Paste
+            crate::ui::install::state_install::InstallStage::Gallery
+        );
+        assert_eq!(
+            iss.pipeline_kind,
+            crate::ui::install::state_install::PipelineKind::Install,
+            "a cancelled or completed run must not leave the screen armed as a fork"
         );
 
         assert!(hash.lock().unwrap().is_none(), "shared hash mutex blanked");

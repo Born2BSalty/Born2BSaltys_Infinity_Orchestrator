@@ -39,6 +39,7 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
             "BGEE",
             &state.step2.bgee_mods,
             &state.step3.bgee_items,
+            &state.step3.bgee_items,
         )
     } else {
         std::collections::HashMap::new()
@@ -49,6 +50,7 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
             "BG2EE",
             &state.step2.bg2ee_mods,
             &state.step3.bg2ee_items,
+            &state.step3.bgee_items,
         )
     } else {
         std::collections::HashMap::new()

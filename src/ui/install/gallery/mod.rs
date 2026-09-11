@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 Born2BSalty
+
+pub mod card_art;
+pub mod catalog;
+pub mod filter;

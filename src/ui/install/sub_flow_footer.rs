@@ -3,10 +3,11 @@
 
 use eframe::egui;
 
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_SHADOW_OFFSET_BTN_PX,
-    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_shadow,
-    redesign_shell_bg, redesign_text_faint, redesign_text_primary, redesign_with_alpha,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_soft, redesign_border_strong, redesign_shell_bg, redesign_text_faint,
+    redesign_text_primary, redesign_with_alpha,
 };
 
 const ARROW_BACK: &str = "\u{2190}";
@@ -15,10 +16,13 @@ const ARROW_FWD: &str = "\u{2192}";
 pub const FOOTER_HEIGHT_PX: f32 = 64.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct FooterOutcome {
-    pub back_clicked: bool,
-    pub secondary_clicked: bool,
-    pub primary_clicked: bool,
+pub enum FooterClick {
+    #[default]
+    None,
+    Back,
+    Secondary,
+    LeftAction,
+    Primary,
 }
 
 #[derive(Clone, Copy)]
@@ -37,15 +41,21 @@ pub struct PrimaryBtn<'a> {
     pub disabled: bool,
 }
 
+#[derive(Clone, Copy)]
+pub struct LeftActionBtn<'a> {
+    pub label: &'a str,
+}
+
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     back: Option<BackBtn<'_>>,
     secondary: Option<SecondaryBtn<'_>>,
     hint: Option<&str>,
+    left_action: Option<LeftActionBtn<'_>>,
     primary: PrimaryBtn<'_>,
-) -> FooterOutcome {
-    let mut outcome = FooterOutcome::default();
+) -> FooterClick {
+    let mut outcome = FooterClick::None;
 
     ui.add_space(20.0);
     let top_y = ui.cursor().top();
@@ -72,7 +82,7 @@ pub fn render(
             )
             .clicked()
         {
-            outcome.back_clicked = true;
+            outcome = FooterClick::Back;
         }
 
         if let Some(h) = hint {
@@ -85,6 +95,23 @@ pub fn render(
             );
         }
 
+        if let Some(a) = left_action {
+            ui.add_space(6.0);
+            if redesign_btn(
+                ui,
+                palette,
+                a.label,
+                BtnOpts {
+                    small: true,
+                    ..Default::default()
+                },
+            )
+            .clicked()
+            {
+                outcome = FooterClick::LeftAction;
+            }
+        }
+
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let resp = glyph_btn(
                 ui,
@@ -95,7 +122,7 @@ pub fn render(
                 primary.disabled,
             );
             if !primary.disabled && resp.clicked() {
-                outcome.primary_clicked = true;
+                outcome = FooterClick::Primary;
             }
 
             if let Some(s) = secondary {
@@ -108,7 +135,7 @@ pub fn render(
                     false,
                 );
                 if sresp.clicked() {
-                    outcome.secondary_clicked = true;
+                    outcome = FooterClick::Secondary;
                 }
             }
         });
@@ -118,12 +145,12 @@ pub fn render(
 }
 
 #[derive(Clone, Copy)]
-enum GlyphSide {
+pub(crate) enum GlyphSide {
     Leading(&'static str),
     Trailing(&'static str),
 }
 
-fn glyph_btn(
+pub(crate) fn glyph_btn(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     side: GlyphSide,
@@ -185,27 +212,18 @@ fn glyph_btn(
         let alpha = if disabled { 0.5 } else { 1.0 };
         let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
 
-        if primary {
-            let shadow_rect = rect.translate(egui::vec2(
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-                REDESIGN_SHADOW_OFFSET_BTN_PX,
-            ));
-            painter.rect_filled(
-                shadow_rect,
+        painter.rect_filled(rect, radius, with_alpha(fill, alpha));
+        if !primary {
+            painter.rect_stroke(
+                rect,
                 radius,
-                with_alpha(redesign_shadow(palette), alpha),
+                egui::Stroke::new(
+                    REDESIGN_BORDER_WIDTH_PX,
+                    with_alpha(redesign_border_strong(palette), alpha),
+                ),
+                egui::StrokeKind::Inside,
             );
         }
-        painter.rect_filled(rect, radius, with_alpha(fill, alpha));
-        painter.rect_stroke(
-            rect,
-            radius,
-            egui::Stroke::new(
-                REDESIGN_BORDER_WIDTH_PX,
-                with_alpha(redesign_border_strong(palette), alpha),
-            ),
-            egui::StrokeKind::Inside,
-        );
 
         let total_w = glyph_galley.size().x + gap + prose_galley.size().x;
         let start_x = rect.center().x - total_w / 2.0;

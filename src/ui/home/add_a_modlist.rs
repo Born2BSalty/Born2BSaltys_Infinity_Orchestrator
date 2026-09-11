@@ -12,7 +12,7 @@ use crate::ui::shared::redesign_tokens::redesign_accent_deep;
 pub enum AddAModlistAction {
     #[default]
     None,
-    PasteImportCode,
+    InstallAModlist,
     CreateYourOwn,
 }
 
@@ -27,17 +27,16 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &OrchestratorApp) -> AddAModlistA
             if redesign_btn(
                 ui,
                 palette,
-                "paste import code",
+                "install a modlist",
                 BtnOpts {
                     primary: true,
                     block: true,
-                    no_shadow: true,
                     ..Default::default()
                 },
             )
             .clicked()
             {
-                action = AddAModlistAction::PasteImportCode;
+                action = AddAModlistAction::InstallAModlist;
             }
 
             if redesign_btn(

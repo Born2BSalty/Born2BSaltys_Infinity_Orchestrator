@@ -3,10 +3,13 @@
 
 use eframe::egui;
 
+use crate::app::state::{Step5State, WizardState};
+use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::registry::operations;
 use crate::ui::install::state_install::InstallStage;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::page_router;
 use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
@@ -23,6 +26,7 @@ pub enum StageInstallingOutcome {
     #[default]
     Stay,
     Back(InstallStage),
+    BackAfterCompletedInstall,
     Nav(NavDestination),
 }
 
@@ -39,31 +43,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         .unwrap_or(FALLBACK_NAME)
         .to_string();
 
-    let back_target = if orchestrator.install_screen_state.preview_cached {
-        InstallStage::Preview
-    } else {
-        InstallStage::Paste
-    };
-
-    let mut outcome = StageInstallingOutcome::Stay;
-    let sub = format!("{name} \u{00B7} live install console");
-    ui.horizontal_top(|ui| {
-        let back_btn_w = 130.0;
-        let title_w = (ui.available_width() - back_btn_w).max(160.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(title_w, ui.available_height()),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                render_screen_title(ui, palette, "Installing modlist", Some(&sub));
-            },
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            ui.add_space(0.0);
-            if back_to_import_btn(ui, palette).clicked() {
-                outcome = StageInstallingOutcome::Back(back_target);
-            }
-        });
-    });
+    let mut outcome = render_header(ui, orchestrator, palette, &name);
     ui.add_space(10.0);
 
     let dest = orchestrator
@@ -118,6 +98,24 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         }
     }
 
+    if !orchestrator.install_screen_state.auto_start_fired() {
+        orchestrator.install_screen_state.set_auto_start_fired(true);
+        let armed = orchestrator.install_screen_state.pipeline_flags.armed();
+        let registered = entry.is_some();
+        let allowed = auto_start_allowed(
+            &orchestrator.wizard_state,
+            orchestrator.step5_terminal_error.as_deref(),
+            orchestrator.dev_mode,
+        );
+        if auto_start_should_fire(armed, registered, allowed) {
+            orchestrator.wizard_state.step5.start_install_requested = true;
+            tracing::info!(
+                target = "orchestrator",
+                "install console: auto-starting the install (install as provided)"
+            );
+        }
+    }
+
     match post_install_action {
         Some(PostInstallAction::ReturnToHome) => {
             outcome = StageInstallingOutcome::Nav(NavDestination::Home);
@@ -135,6 +133,78 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         None => {}
     }
 
+    outcome
+}
+
+pub(crate) fn auto_start_allowed(
+    state: &WizardState,
+    terminal_error: Option<&str>,
+    dev_mode: bool,
+) -> bool {
+    let s5 = &state.step5;
+    terminal_error.is_none()
+        && !s5.start_install_requested
+        && !s5.install_running
+        && !s5.prep_running
+        && step3_install_block_reason(state).is_none()
+        && (!dev_mode || crate::ui::step5::menus_step5::diagnostics_ready_for_dev(state))
+        && !(s5.has_run_once && !s5.resume_available && s5.last_exit_code == Some(0))
+}
+
+#[must_use]
+pub(crate) const fn auto_start_should_fire(armed: bool, registered: bool, allowed: bool) -> bool {
+    armed && registered && allowed
+}
+
+#[must_use]
+pub(crate) const fn back_link_available(s5: &Step5State) -> bool {
+    !(s5.start_install_requested || s5.prep_running || s5.install_running)
+}
+
+fn render_header(
+    ui: &mut egui::Ui,
+    orchestrator: &OrchestratorApp,
+    palette: ThemePalette,
+    name: &str,
+) -> StageInstallingOutcome {
+    let back_target = if orchestrator.install_screen_state.preview_cached {
+        InstallStage::Details
+    } else {
+        InstallStage::Gallery
+    };
+    let reset_due = page_router::completed_install_reset_due(orchestrator);
+    let back_label = if reset_due || back_target == InstallStage::Gallery {
+        "back to gallery"
+    } else {
+        "back to import"
+    };
+    let show_back = back_link_available(&orchestrator.wizard_state.step5);
+
+    let mut outcome = StageInstallingOutcome::Stay;
+    let sub = format!("{name} \u{00B7} live install console");
+    ui.horizontal_top(|ui| {
+        let back_btn_w = 145.0;
+        let title_w = (ui.available_width() - back_btn_w).max(160.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(title_w, ui.available_height()),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                render_screen_title(ui, palette, "Installing modlist", Some(&sub));
+            },
+        );
+        if show_back {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.add_space(0.0);
+                if back_to_import_btn(ui, palette, back_label).clicked() {
+                    outcome = if reset_due {
+                        StageInstallingOutcome::BackAfterCompletedInstall
+                    } else {
+                        StageInstallingOutcome::Back(back_target)
+                    };
+                }
+            });
+        }
+    });
     outcome
 }
 
@@ -172,7 +242,7 @@ fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui:
     ui.allocate_rect(rect, egui::Sense::hover());
 }
 
-fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response {
+fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette, label: &str) -> egui::Response {
     let pad_x = 10.0;
     let pad_y = 4.0;
     let font_size = 12.0;
@@ -190,7 +260,7 @@ fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respons
             .layout_no_wrap("\u{2190}".to_string(), glyph_font.clone(), text_color);
     let prose_galley =
         ui.painter()
-            .layout_no_wrap("back to import".to_string(), prose_font.clone(), text_color);
+            .layout_no_wrap(label.to_string(), prose_font.clone(), text_color);
 
     let content_w = glyph_galley.size().x + gap + prose_galley.size().x;
     let content_h = glyph_galley.size().y.max(prose_galley.size().y);
@@ -227,7 +297,7 @@ fn back_to_import_btn(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respons
         painter.text(
             egui::pos2(start_x + glyph_galley.size().x + gap, cy),
             egui::Align2::LEFT_CENTER,
-            "back to import",
+            label,
             prose_font,
             text_color,
         );
@@ -254,22 +324,106 @@ mod tests {
     }
 
     #[test]
-    fn back_target_is_preview_when_cached_else_paste() {
+    fn auto_start_allowed_on_a_fresh_console() {
+        let state = WizardState::default();
+        assert!(auto_start_allowed(&state, None, false));
+    }
+
+    #[test]
+    fn auto_start_blocked_while_in_flight() {
+        let mut state = WizardState::default();
+        state.step5.start_install_requested = true;
+        assert!(!auto_start_allowed(&state, None, false));
+
+        let mut state = WizardState::default();
+        state.step5.install_running = true;
+        assert!(!auto_start_allowed(&state, None, false));
+
+        let mut state = WizardState::default();
+        state.step5.prep_running = true;
+        assert!(!auto_start_allowed(&state, None, false));
+    }
+
+    #[test]
+    fn auto_start_blocked_after_a_clean_install() {
+        let mut state = WizardState::default();
+        state.step5.has_run_once = true;
+        state.step5.resume_available = false;
+        state.step5.last_exit_code = Some(0);
+        assert!(!auto_start_allowed(&state, None, false));
+
+        state.step5.last_exit_code = Some(1);
+        assert!(auto_start_allowed(&state, None, false));
+    }
+
+    #[test]
+    fn auto_start_blocked_by_a_terminal_error() {
+        let state = WizardState::default();
+        assert!(!auto_start_allowed(&state, Some("boom"), false));
+    }
+
+    #[test]
+    fn auto_start_requires_an_armed_pipeline() {
+        assert!(!auto_start_should_fire(false, true, true));
+        assert!(auto_start_should_fire(true, true, true));
+        assert!(!auto_start_should_fire(false, true, false));
+        assert!(!auto_start_should_fire(true, true, false));
+    }
+
+    #[test]
+    fn auto_start_requires_a_registered_destination() {
+        assert!(!auto_start_should_fire(true, false, true));
+        assert!(auto_start_should_fire(true, true, true));
+        assert!(!auto_start_should_fire(false, false, true));
+        assert!(!auto_start_should_fire(true, false, false));
+    }
+
+    #[test]
+    fn back_link_hidden_while_an_attempt_is_underway() {
+        let mut s5 = Step5State::default();
+        assert!(back_link_available(&s5));
+
+        s5.start_install_requested = true;
+        assert!(!back_link_available(&s5));
+
+        let s5 = Step5State {
+            prep_running: true,
+            ..Default::default()
+        };
+        assert!(!back_link_available(&s5));
+
+        let s5 = Step5State {
+            install_running: true,
+            ..Default::default()
+        };
+        assert!(!back_link_available(&s5));
+    }
+
+    #[test]
+    fn back_target_is_details_when_cached_else_gallery() {
         use crate::ui::install::state_install::InstallScreenState;
         let mut st = InstallScreenState::default();
         assert!(!st.preview_cached);
         let t = if st.preview_cached {
-            InstallStage::Preview
+            InstallStage::Details
         } else {
-            InstallStage::Paste
+            InstallStage::Gallery
         };
-        assert_eq!(t, InstallStage::Paste, "no cached preview ⇒ Back to Paste");
+        assert_eq!(
+            t,
+            InstallStage::Gallery,
+            "no cached preview means Back returns to the gallery"
+        );
         st.preview_cached = true;
         let t = if st.preview_cached {
-            InstallStage::Preview
+            InstallStage::Details
         } else {
-            InstallStage::Paste
+            InstallStage::Gallery
         };
-        assert_eq!(t, InstallStage::Preview, "cached preview ⇒ Back to Preview");
+        assert_eq!(
+            t,
+            InstallStage::Details,
+            "a cached preview means Back returns to Details"
+        );
     }
 }

@@ -5,6 +5,7 @@ use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binar
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step1State<Flag = bool> {
+    pub(crate) dlc_source_check: crate::app::compat_dlc_source::DlcSourceCheck,
     pub game_install: String,
     pub install_mode: String,
     pub have_weidu_logs: Flag,
@@ -104,6 +105,16 @@ impl Step1State {
     }
 
     #[must_use]
+    pub fn install_mode_label(value: &str) -> &'static str {
+        match value {
+            Self::INSTALL_MODE_EXACT_WEIDU_LOGS => "Install exactly from WeiDU logs",
+            Self::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT => "Start from WeiDU logs, then review/edit",
+            Self::INSTALL_MODE_IMPORT_MODLIST => "Import Modlist",
+            _ => "Build from scanned mods",
+        }
+    }
+
+    #[must_use]
     pub fn uses_source_weidu_logs(&self) -> bool {
         matches!(
             self.install_mode.as_str(),
@@ -135,6 +146,7 @@ impl Step1State {
 impl Default for Step1State {
     fn default() -> Self {
         Self {
+            dlc_source_check: crate::app::compat_dlc_source::DlcSourceCheck::default(),
             game_install: "BGEE".to_string(),
             install_mode: Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string(),
             have_weidu_logs: false,
@@ -199,5 +211,34 @@ impl Default for Step1State {
             casefold: false,
             backup_targets_before_eet_copy: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn install_mode_labels_are_verbatim() {
+        assert_eq!(
+            Step1State::install_mode_label(Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS),
+            "Install exactly from WeiDU logs"
+        );
+        assert_eq!(
+            Step1State::install_mode_label(Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT),
+            "Start from WeiDU logs, then review/edit"
+        );
+        assert_eq!(
+            Step1State::install_mode_label(Step1State::INSTALL_MODE_IMPORT_MODLIST),
+            "Import Modlist"
+        );
+        assert_eq!(
+            Step1State::install_mode_label(Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS),
+            "Build from scanned mods"
+        );
+        assert_eq!(
+            Step1State::install_mode_label("unknown"),
+            "Build from scanned mods"
+        );
     }
 }

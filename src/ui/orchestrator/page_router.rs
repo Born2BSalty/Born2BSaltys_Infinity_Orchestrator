@@ -7,7 +7,6 @@ use tracing::warn;
 use crate::registry::model::ModlistEntry;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
-use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::page_home;
 use crate::ui::install::page_install;
 use crate::ui::orchestrator::nav_destination::NavDestination;
@@ -235,11 +234,6 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
     if matches!(orchestrator.nav, NavDestination::Install) {
         return;
     }
-    if matches!(orchestrator.nav, NavDestination::Create)
-        && orchestrator.create_screen_state.stage == CreateStage::ForkDownload
-    {
-        return;
-    }
     if orchestrator.wizard_state.step5.install_running
         || orchestrator.wizard_state.step5.start_install_requested
         || orchestrator.wizard_state.step5.prep_running
@@ -266,8 +260,7 @@ fn clear_pending_reinstall_on_nav_away_from_install(orchestrator: &mut Orchestra
 
 fn invalidate_destination_prep_on_route_change(orchestrator: &mut OrchestratorApp) {
     if orchestrator.create_destination_prep_rx.is_some()
-        && (!matches!(orchestrator.nav, NavDestination::Create)
-            || orchestrator.create_screen_state.stage != CreateStage::Choose)
+        && !matches!(orchestrator.nav, NavDestination::Create)
     {
         orchestrator.abandon_create_destination_prep();
     }
@@ -290,15 +283,13 @@ fn invalidate_destination_prep_on_route_change(orchestrator: &mut OrchestratorAp
     }
 }
 
-fn install_destination_prep_route_matches(
+const fn install_destination_prep_route_matches(
     orchestrator: &OrchestratorApp,
     pending: &PendingInstallDestinationPrep,
 ) -> bool {
     match pending.token.flow {
-        DestinationPrepFlow::InstallPipeline => matches!(orchestrator.nav, NavDestination::Install),
-        DestinationPrepFlow::CreateForkDownload => {
-            matches!(orchestrator.nav, NavDestination::Create)
-                && orchestrator.create_screen_state.stage == CreateStage::ForkDownload
+        DestinationPrepFlow::InstallPipeline | DestinationPrepFlow::CreateForkDownload => {
+            matches!(orchestrator.nav, NavDestination::Install)
         }
         DestinationPrepFlow::CreateScratch | DestinationPrepFlow::WorkspaceStep5 => false,
     }
@@ -346,7 +337,15 @@ fn reset_completed_install_route_on_enter_install(
     reset_completed_install_runtime(orchestrator);
 }
 
-fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
+pub(crate) const fn completed_install_reset_due(orchestrator: &OrchestratorApp) -> bool {
+    should_reset_completed_install_route(
+        orchestrator.post_install_reset_gate.is_pending(),
+        &orchestrator.wizard_state,
+        orchestrator.step5_prep_rx.is_some() || orchestrator.step5_pending_start.is_some(),
+    )
+}
+
+pub(crate) fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
     orchestrator.post_install_reset_gate =
         crate::ui::orchestrator::orchestrator_app::PostInstallResetGate::Idle;
     if let Some(term) = orchestrator.step5_terminal.as_mut() {
@@ -363,7 +362,7 @@ fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp) {
     orchestrator.install_running_since = None;
     orchestrator.pending_reinstall_id = None;
     orchestrator.active_install_modlist_id = None;
-    orchestrator.install_screen_state.reset_to_paste();
+    orchestrator.install_screen_state.reset_to_gallery();
     orchestrator.wizard_state.reset_workflow_keep_step1();
     crate::install_runtime::settings_sanitizer::sanitize_step1_for_settings_persistence(
         &mut orchestrator.wizard_state.step1,
@@ -716,7 +715,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Workspace {
             modlist_id: Some("WS-AMBIENT-A".to_string()),
         };
@@ -738,7 +737,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Create;
         app.active_install_modlist_id = None;
 
@@ -757,7 +756,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Create;
         app.active_install_modlist_id = Some("FORK-PIPELINE-ID".to_string());
 
@@ -781,7 +780,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        let mut app = OrchestratorApp::new(false);
+        let mut app = OrchestratorApp::new_isolated_for_test("routertest");
         app.nav = NavDestination::Workspace {
             modlist_id: Some("OPEN-WS".to_string()),
         };

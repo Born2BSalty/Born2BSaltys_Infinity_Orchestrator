@@ -47,6 +47,7 @@ pub(crate) fn collect_step3_compat_markers(
     tab: &str,
     mods: &[Step2ModState],
     items: &[Step3ItemState],
+    bgee_items: &[Step3ItemState],
 ) -> HashMap<String, Step3CompatMarker> {
     let cache_key = step3_compat_cache_key(step1, tab, mods, items);
     let cached = step3_compat_cache()
@@ -54,7 +55,8 @@ pub(crate) fn collect_step3_compat_markers(
         .expect("step3 compat cache lock poisoned")
         .get(&cache_key)
         .cloned();
-    if let Some(cached) = cached {
+    if let Some(mut cached) = cached {
+        super::compat_dlc_source::apply_step3(step1, tab, items, bgee_items, &mut cached);
         return cached;
     }
 
@@ -66,6 +68,9 @@ pub(crate) fn collect_step3_compat_markers(
         cache.clear();
     }
     cache.insert(cache_key, markers.clone());
+    drop(cache);
+    let mut markers = markers;
+    super::compat_dlc_source::apply_step3(step1, tab, items, bgee_items, &mut markers);
     markers
 }
 

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -332,15 +333,19 @@ pub(crate) fn save_user_mod_download_source_block(
     fs::write(&path, updated).map_err(|err| err.to_string())
 }
 
-/// Loads sources from the app-default and global-user tiers only, with no per-modlist overlay.
-/// This is the seed used when the editor destination is "My default", so saving that
-/// destination never promotes a modlist pin into the global file.
 pub(crate) fn load_two_tier_sources() -> ModDownloadsLoad {
     let default_path = mod_downloads_default_path();
     let user_path = mod_downloads_user_path();
-    let mut by_source = BTreeMap::<String, ModDownloadSource>::new();
     let default_load = load_source_overlays_from_path(&default_path);
     let user_load = load_source_overlays_from_path(&user_path);
+    two_tier_from_overlays(default_load, user_load)
+}
+
+fn two_tier_from_overlays(
+    default_load: ModDownloadsOverlayLoad,
+    user_load: ModDownloadsOverlayLoad,
+) -> ModDownloadsLoad {
+    let mut by_source = BTreeMap::<String, ModDownloadSource>::new();
 
     for overlay in default_load.sources {
         let key = overlay_source_key(&overlay);
@@ -383,60 +388,160 @@ pub(crate) fn load_two_tier_sources() -> ModDownloadsLoad {
     ModDownloadsLoad { sources, error }
 }
 
-/// Loads sources applying all three tiers: app-default → global-user → per-modlist override.
-/// When no modlist is active the result equals `load_two_tier_sources()`.
 pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
     let mut result = load_two_tier_sources();
 
-    // Per-modlist overlay (additive; skipped when ambient is unset or file absent).
     if let Some(per_modlist_path) = active_modlist_downloads_path().filter(|p| p.exists()) {
-        {
-            let per_load = load_source_overlays_from_path(&per_modlist_path);
-            // Rebuild by_source map with the same key format used in the two-tier passes.
-            let mut by_source: BTreeMap<String, ModDownloadSource> = result
-                .sources
-                .drain(..)
-                .map(|s| {
-                    let key = format!(
-                        "{}|{}",
-                        normalize_mod_download_tp2(&s.tp2),
-                        normalize_source_id(&s.source_id)
-                    );
-                    (key, s)
-                })
-                .collect();
-            for mut overlay in per_load.sources {
-                let key = overlay_source_key(&overlay);
-                if key.is_empty() {
-                    continue;
-                }
-                let per_default_tp2 = overlay
-                    .source_default_explicit
-                    .then(|| overlay_tp2_key(&overlay));
-                if !overlay.source_default_explicit {
-                    overlay.source_default = false;
-                }
-                let mut source = by_source.remove(&key).unwrap_or_default();
-                if overlay_has_version_selector(&overlay) {
-                    clear_source_version_selectors(&mut source);
-                }
-                apply_source_overlay(&mut source, overlay);
-                normalize_source(&mut source);
-                if !source_is_valid(&source) {
-                    continue;
-                }
-                if let Some(tp2_key) = per_default_tp2.as_deref() {
-                    clear_other_source_defaults(&mut by_source, &key, tp2_key);
-                }
-                by_source.insert(key, source);
-            }
-            result.sources = by_source.into_values().collect();
-            sort_sources(&mut result.sources);
-            result.error = merge_load_errors(result.error, per_load.error);
-        }
+        let per_load = load_source_overlays_from_path(&per_modlist_path);
+        apply_modlist_overlay(&mut result, per_load);
     }
 
     result
+}
+
+fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOverlayLoad) {
+    let mut by_source: BTreeMap<String, ModDownloadSource> = result
+        .sources
+        .drain(..)
+        .map(|s| {
+            let key = format!(
+                "{}|{}",
+                normalize_mod_download_tp2(&s.tp2),
+                normalize_source_id(&s.source_id)
+            );
+            (key, s)
+        })
+        .collect();
+    for mut overlay in per_load.sources {
+        let key = overlay_source_key(&overlay);
+        if key.is_empty() {
+            continue;
+        }
+        let per_default_tp2 = overlay
+            .source_default_explicit
+            .then(|| overlay_tp2_key(&overlay));
+        if !overlay.source_default_explicit {
+            overlay.source_default = false;
+        }
+        let mut source = by_source.remove(&key).unwrap_or_default();
+        if overlay_has_version_selector(&overlay) {
+            clear_source_version_selectors(&mut source);
+        }
+        apply_source_overlay(&mut source, overlay);
+        normalize_source(&mut source);
+        if !source_is_valid(&source) {
+            continue;
+        }
+        if let Some(tp2_key) = per_default_tp2.as_deref() {
+            clear_other_source_defaults(&mut by_source, &key, tp2_key);
+        }
+        by_source.insert(key, source);
+    }
+    result.sources = by_source.into_values().collect();
+    sort_sources(&mut result.sources);
+    result.error = merge_load_errors(result.error.take(), per_load.error);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SourceTier {
+    Default,
+    User,
+    Modlist,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SourceTiers {
+    resolved: ModDownloadsLoad,
+    user_keys: BTreeSet<String>,
+    modlist_keys: BTreeSet<String>,
+}
+
+impl SourceTiers {
+    pub(crate) fn resolve(&self, tp2: &str) -> Option<(ModDownloadSource, SourceTier)> {
+        let source = self.resolved.resolve_source(tp2, None)?;
+        let key = format!(
+            "{}|{}",
+            normalize_mod_download_tp2(&source.tp2),
+            normalize_source_id(&source.source_id)
+        );
+        let tier = if self.modlist_keys.contains(&key) {
+            SourceTier::Modlist
+        } else if self.user_keys.contains(&key) {
+            SourceTier::User
+        } else {
+            SourceTier::Default
+        };
+        Some((source, tier))
+    }
+}
+
+fn overlay_keys(overlays: &[ModDownloadSourceOverlay]) -> BTreeSet<String> {
+    overlays
+        .iter()
+        .map(overlay_source_key)
+        .filter(|key| !key.is_empty())
+        .collect()
+}
+
+pub(crate) fn source_tiers_from_texts(
+    default_text: &str,
+    user_text: &str,
+    modlist_text: &str,
+) -> SourceTiers {
+    let default_load = load_source_overlays_from_str(default_text, "default");
+    let user_load = load_source_overlays_from_str(user_text, "user");
+    let user_keys = overlay_keys(&user_load.sources);
+    let mut resolved = two_tier_from_overlays(default_load, user_load);
+
+    let modlist_keys = if modlist_text.trim().is_empty() {
+        BTreeSet::new()
+    } else {
+        let modlist_load = load_source_overlays_from_str(modlist_text, "modlist");
+        let modlist_keys = overlay_keys(&modlist_load.sources);
+        apply_modlist_overlay(&mut resolved, modlist_load);
+        modlist_keys
+    };
+
+    SourceTiers {
+        resolved,
+        user_keys,
+        modlist_keys,
+    }
+}
+
+pub(crate) fn load_source_tiers(modlist_text: &str) -> SourceTiers {
+    let default_text = fs::read_to_string(mod_downloads_default_path()).unwrap_or_default();
+    let user_text = fs::read_to_string(mod_downloads_user_path()).unwrap_or_default();
+    source_tiers_from_texts(&default_text, &user_text, modlist_text)
+}
+
+pub(crate) fn source_open_url(source: &ModDownloadSource) -> Option<String> {
+    let url = source.url.trim();
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return Some(url.to_string());
+    }
+    let github = source.github.as_deref()?.trim();
+    if github.starts_with("http://") || github.starts_with("https://") {
+        return Some(github.to_string());
+    }
+    let repo = github.trim_matches('/');
+    let mut parts = repo.split('/');
+    if matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty()
+    ) {
+        return Some(format!("https://github.com/{repo}"));
+    }
+    None
+}
+
+pub(crate) fn source_link_label(url: &str) -> String {
+    let trimmed = url.trim();
+    let trimmed = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .unwrap_or(trimmed);
+    trimmed.strip_suffix('/').unwrap_or(trimmed).to_string()
 }
 
 fn find_mod_block(content: &str, tp2: &str) -> Option<String> {
@@ -1114,15 +1219,16 @@ fn load_source_overlays_from_path(path: &Path) -> ModDownloadsOverlayLoad {
             };
         }
     };
-    let parsed = match toml::from_str::<ModDownloadsFile>(&content) {
+    load_source_overlays_from_str(&content, &path.display().to_string())
+}
+
+fn load_source_overlays_from_str(content: &str, origin: &str) -> ModDownloadsOverlayLoad {
+    let parsed = match toml::from_str::<ModDownloadsFile>(content) {
         Ok(value) => value,
         Err(err) => {
             return ModDownloadsOverlayLoad {
                 sources: Vec::new(),
-                error: Some(format!(
-                    "mod downloads parse failed for {}: {err}",
-                    path.display()
-                )),
+                error: Some(format!("mod downloads parse failed for {origin}: {err}")),
             };
         }
     };
@@ -2189,5 +2295,116 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    fn overlay_source_toml(tp2: &str, source_id: &str, url: &str) -> String {
+        format!(
+            "[[mods]]\nname = \"Test\"\ntp2 = \"{tp2}\"\n\n  [[mods.sources]]\n  id = \"{source_id}\"\n  label = \"Test\"\n  type = \"github\"\n  url = \"{url}\"\n"
+        )
+    }
+
+    #[test]
+    fn overlay_text_parses_like_a_file() {
+        let text = overlay_source_toml("testmod", "main", "https://github.com/A/B");
+        let from_str = load_source_overlays_from_str(&text, "inline");
+
+        let tmp_dir = unique_tmp_dir("overlay_text");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        let path = tmp_dir.join("mod_downloads.toml");
+        std::fs::write(&path, &text).unwrap();
+        let from_path = load_source_overlays_from_path(&path);
+
+        assert_eq!(from_str.sources.len(), from_path.sources.len());
+        assert_eq!(
+            from_str.sources[0].tp2.as_deref(),
+            from_path.sources[0].tp2.as_deref()
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn tiers_report_default_when_only_the_default_file_names_the_source() {
+        let default_text = overlay_source_toml("testmod", "main", "https://github.com/A/B");
+        let tiers = source_tiers_from_texts(&default_text, "", "");
+        let (source, tier) = tiers.resolve("testmod").expect("resolves");
+        assert_eq!(tier, SourceTier::Default);
+        assert_eq!(source.url, "https://github.com/A/B");
+    }
+
+    #[test]
+    fn tiers_report_user_when_the_user_file_overrides_the_same_source() {
+        let default_text = overlay_source_toml("testmod", "main", "https://github.com/A/B");
+        let user_text = overlay_source_toml("testmod", "main", "https://github.com/A/Fork");
+        let tiers = source_tiers_from_texts(&default_text, &user_text, "");
+        let (source, tier) = tiers.resolve("testmod").expect("resolves");
+        assert_eq!(tier, SourceTier::User);
+        assert_eq!(source.url, "https://github.com/A/Fork");
+    }
+
+    #[test]
+    fn tiers_report_modlist_when_the_code_overrides_the_source() {
+        let default_text = overlay_source_toml("testmod", "main", "https://github.com/A/B");
+        let modlist_text = overlay_source_toml("testmod", "main", "https://github.com/A/Pin");
+        let tiers = source_tiers_from_texts(&default_text, "", &modlist_text);
+        let (source, tier) = tiers.resolve("testmod").expect("resolves");
+        assert_eq!(tier, SourceTier::Modlist);
+        assert_eq!(source.url, "https://github.com/A/Pin");
+    }
+
+    #[test]
+    fn tiers_resolve_none_for_an_unknown_tp2() {
+        let default_text = overlay_source_toml("testmod", "main", "https://github.com/A/B");
+        let tiers = source_tiers_from_texts(&default_text, "", "");
+        assert!(tiers.resolve("othermod").is_none());
+    }
+
+    #[test]
+    fn empty_modlist_text_adds_no_keys() {
+        let default_text = overlay_source_toml("testmod", "main", "https://github.com/A/B");
+        let with_empty = source_tiers_from_texts(&default_text, "", "");
+        let with_whitespace = source_tiers_from_texts(&default_text, "", "   \n");
+        let (source_a, tier_a) = with_empty.resolve("testmod").expect("resolves");
+        let (source_b, tier_b) = with_whitespace.resolve("testmod").expect("resolves");
+        assert_eq!(tier_a, SourceTier::Default);
+        assert_eq!(tier_b, SourceTier::Default);
+        assert_eq!(source_a.url, source_b.url);
+    }
+
+    #[test]
+    fn source_open_url_prefers_the_url_then_the_github_slug() {
+        let with_url = ModDownloadSource {
+            url: "https://example.com/mod".to_string(),
+            github: Some("Owner/Repo".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            source_open_url(&with_url).as_deref(),
+            Some("https://example.com/mod")
+        );
+
+        let slug_only = ModDownloadSource {
+            github: Some("Owner/Repo".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            source_open_url(&slug_only).as_deref(),
+            Some("https://github.com/Owner/Repo")
+        );
+
+        let neither = ModDownloadSource::default();
+        assert!(source_open_url(&neither).is_none());
+    }
+
+    #[test]
+    fn source_link_label_strips_the_scheme() {
+        assert_eq!(
+            source_link_label("https://github.com/Owner/Repo/"),
+            "github.com/Owner/Repo"
+        );
+        assert_eq!(
+            source_link_label("http://example.com/mod"),
+            "example.com/mod"
+        );
     }
 }

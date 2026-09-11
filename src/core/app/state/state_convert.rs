@@ -28,6 +28,7 @@ mod step1_settings_to_state {
             let tick = u64_or_default(value.tick, 500);
             let lookback = usize_or_default(value.lookback, 10);
             Self {
+                dlc_source_check: crate::app::compat_dlc_source::DlcSourceCheck::default(),
                 game_install: value.game_install,
                 install_mode,
                 have_weidu_logs,

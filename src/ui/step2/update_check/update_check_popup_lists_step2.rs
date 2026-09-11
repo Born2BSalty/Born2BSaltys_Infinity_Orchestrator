@@ -550,7 +550,7 @@ pub(super) fn collect_source_choices(
                     .map(String::as_str),
             )
             .unwrap_or_else(|| sources[0].clone());
-        let selected_source_url = source_open_url(&selected_source);
+        let selected_source_url = mod_downloads::source_open_url(&selected_source);
         let selected_source_repo = selected_source.github.clone();
         let update_locked = state
             .step2
@@ -578,26 +578,6 @@ pub(super) fn collect_source_choices(
     }
     rows.sort_by_key(|row| row.label.to_ascii_lowercase());
     rows
-}
-
-fn source_open_url(source: &mod_downloads::ModDownloadSource) -> Option<String> {
-    let url = source.url.trim();
-    if url.starts_with("http://") || url.starts_with("https://") {
-        return Some(url.to_string());
-    }
-    let github = source.github.as_deref()?.trim();
-    if github.starts_with("http://") || github.starts_with("https://") {
-        return Some(github.to_string());
-    }
-    let repo = github.trim_matches('/');
-    let mut parts = repo.split('/');
-    if matches!(
-        (parts.next(), parts.next(), parts.next()),
-        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty()
-    ) {
-        return Some(format!("https://github.com/{repo}"));
-    }
-    None
 }
 
 pub(super) fn single_mod_popup_target(state: &WizardState) -> Option<(String, String)> {

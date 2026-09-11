@@ -8,8 +8,7 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 use tracing::warn;
 
-use crate::app::modlist_share::preview_modlist_share_code;
-use crate::install_runtime::{destination_prep, fork_pipeline_arm, per_install_dirs};
+use crate::install_runtime::{destination_prep, per_install_dirs};
 use crate::registry::model::Game;
 use crate::registry::operations::{
     self, DestinationOwnership, classify_destination, remove_entry_keep_folder,
@@ -20,10 +19,6 @@ use crate::registry::workspace_model::{ModlistWorkspaceState, ModsSource};
 use crate::ui::create::destination_default::default_destination;
 use crate::ui::create::load_draft_dialog::{self, LoadDraftOutcome};
 use crate::ui::create::stage_choose::{self, ChooseOutcome};
-use crate::ui::create::stage_fork_download::{self, ForkDownloadOutcome};
-use crate::ui::create::stage_fork_paste::{self, ForkPasteOutcome};
-use crate::ui::create::stage_fork_preview::{self, ForkPreviewOutcome};
-use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::confirm_delete;
 use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::nav_destination::NavDestination;
@@ -38,13 +33,6 @@ const COPY_CONFIRM_MS: u64 = 1600;
 
 enum CreateRequest {
     StartScratch,
-    GoForkPaste,
-    ForkPasteBack,
-    ForkPastePreview,
-    ForkPreviewBack,
-    ForkBeginImport,
-    ForkDownloadCancel,
-    ForkExtractCompleteRouteToWorkspace(String),
     OpenLoadDraft,
     CloseLoadDraft,
     ResumeWorkspace(String),
@@ -64,7 +52,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
         orchestrator.create_screen_state.load_draft_copied_until = None;
     }
 
-    let mut request = collect_stage_request(ui, palette, ctx, orchestrator);
+    let mut request = collect_stage_request(ui, palette, orchestrator);
 
     if orchestrator.create_screen_state.load_draft_open {
         request = collect_load_draft_request(ctx, palette, orchestrator).or(request);
@@ -80,50 +68,19 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 fn collect_stage_request(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    ctx: &egui::Context,
     orchestrator: &mut OrchestratorApp,
 ) -> Option<CreateRequest> {
-    match orchestrator.create_screen_state.stage {
-        CreateStage::Choose => {
-            match stage_choose::render(
-                ui,
-                palette,
-                &mut orchestrator.create_screen_state,
-                orchestrator.create_destination_prep_rx.is_some(),
-                &orchestrator.registry,
-                orchestrator.active_install_modlist_id.as_deref(),
-            ) {
-                ChooseOutcome::StartScratch => Some(CreateRequest::StartScratch),
-                ChooseOutcome::GoForkPaste => Some(CreateRequest::GoForkPaste),
-                ChooseOutcome::OpenLoadDraft => Some(CreateRequest::OpenLoadDraft),
-                ChooseOutcome::Stay => None,
-            }
-        }
-        CreateStage::ForkPaste => {
-            match stage_fork_paste::render(ui, palette, &mut orchestrator.create_screen_state) {
-                ForkPasteOutcome::Back => Some(CreateRequest::ForkPasteBack),
-                ForkPasteOutcome::Preview => Some(CreateRequest::ForkPastePreview),
-                ForkPasteOutcome::Stay => None,
-            }
-        }
-        CreateStage::ForkPreview => match stage_fork_preview::render(
-            ui,
-            palette,
-            ctx,
-            &mut orchestrator.create_screen_state,
-        ) {
-            ForkPreviewOutcome::Back => Some(CreateRequest::ForkPreviewBack),
-            ForkPreviewOutcome::BeginImport => Some(CreateRequest::ForkBeginImport),
-            ForkPreviewOutcome::Stay => None,
-        },
-        CreateStage::ForkDownload => match stage_fork_download::render_live(ui, orchestrator) {
-            ForkDownloadOutcome::Cancel => Some(CreateRequest::ForkDownloadCancel),
-            ForkDownloadOutcome::Import => orchestrator
-                .active_install_modlist_id
-                .clone()
-                .map(CreateRequest::ForkExtractCompleteRouteToWorkspace),
-            ForkDownloadOutcome::Stay => None,
-        },
+    match stage_choose::render(
+        ui,
+        palette,
+        &mut orchestrator.create_screen_state,
+        orchestrator.create_destination_prep_rx.is_some(),
+        &orchestrator.registry,
+        orchestrator.active_install_modlist_id.as_deref(),
+    ) {
+        ChooseOutcome::StartScratch => Some(CreateRequest::StartScratch),
+        ChooseOutcome::OpenLoadDraft => Some(CreateRequest::OpenLoadDraft),
+        ChooseOutcome::Stay => None,
     }
 }
 
@@ -152,43 +109,6 @@ fn handle_create_request(
 ) {
     match request {
         CreateRequest::StartScratch => start_scratch(orchestrator),
-        CreateRequest::GoForkPaste => {
-            orchestrator.create_screen_state.fork_code.clear();
-            orchestrator.create_screen_state.clear_fork_preview();
-            orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
-        }
-        CreateRequest::ForkPasteBack => {
-            orchestrator.create_screen_state.clear_fork_preview();
-            orchestrator.create_screen_state.stage = CreateStage::Choose;
-        }
-        CreateRequest::ForkPastePreview => {
-            run_fork_preview_parse(&mut orchestrator.create_screen_state);
-            orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
-        }
-        CreateRequest::ForkPreviewBack => {
-            orchestrator.create_screen_state.clear_fork_preview();
-            orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
-        }
-        CreateRequest::ForkBeginImport => {
-            if !ensure_creator_name(orchestrator) {
-                return;
-            }
-            match fork_pipeline_arm::mint_and_arm(orchestrator) {
-                Ok(_) => {
-                    orchestrator.create_screen_state.stage = CreateStage::ForkDownload;
-                }
-                Err(err) => {
-                    warn!(
-                        target = "orchestrator",
-                        "Create fork: mint_and_arm failed: {err}"
-                    );
-                }
-            }
-        }
-        CreateRequest::ForkDownloadCancel => fork_download_cancel(orchestrator),
-        CreateRequest::ForkExtractCompleteRouteToWorkspace(id) => {
-            fork_extract_complete_route_to_workspace(orchestrator, id);
-        }
         CreateRequest::OpenLoadDraft => {
             orchestrator.create_screen_state.load_draft_open = true;
         }
@@ -296,7 +216,7 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
         );
         return;
     }
-    if !ensure_creator_name(orchestrator) {
+    if !orchestrator.ensure_creator_name() {
         return;
     }
     let game = orchestrator.create_screen_state.game;
@@ -327,16 +247,6 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     }
 
     finish_start_scratch(orchestrator, &name, game, &dest);
-}
-
-fn ensure_creator_name(orchestrator: &mut OrchestratorApp) -> bool {
-    if !orchestrator.redesign_settings.user_name.trim().is_empty() {
-        return true;
-    }
-    orchestrator
-        .notification_manager
-        .error("Set your name in Settings > General before creating or sharing a modlist.");
-    false
 }
 
 fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
@@ -407,9 +317,7 @@ fn pending_create_matches_current(
     orchestrator: &OrchestratorApp,
     pending: &PendingCreateStart,
 ) -> bool {
-    if !matches!(orchestrator.nav, NavDestination::Create)
-        || orchestrator.create_screen_state.stage != CreateStage::Choose
-    {
+    if !matches!(orchestrator.nav, NavDestination::Create) {
         return false;
     }
 
@@ -589,72 +497,15 @@ fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id:
         Some(Instant::now() + Duration::from_millis(COPY_CONFIRM_MS));
 }
 
-fn run_fork_preview_parse(state: &mut crate::ui::create::state_create::CreateScreenState) {
-    state.clear_fork_preview();
-    match preview_modlist_share_code(state.fork_code.trim()) {
-        Ok(preview) => {
-            state.fork_preview = Some(preview);
-            state.fork_active_preview_tab =
-                crate::ui::install::state_install::PreviewTab::default();
-        }
-        Err(msg) => {
-            state.fork_preview_parse_error = Some(msg);
-        }
-    }
-}
-
-fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
-    orchestrator.reset_install_screen_to_paste();
-    orchestrator.create_screen_state.fork_download_progress =
-        crate::ui::install::stage_downloading::DownloadProgress::default();
-    orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
-}
-
-fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, id: String) {
-    let name = orchestrator
-        .registry
-        .find(&id)
-        .map_or_else(|| "modlist".to_string(), |e| e.name.clone());
-    orchestrator
-        .notification_manager
-        .success(format!("Imported \"{name}\" \u{2014} ready to edit"));
-
-    orchestrator.reset_install_screen_to_paste();
-    orchestrator.create_screen_state.fork_code.clear();
-    orchestrator.create_screen_state.clear_fork_preview();
-    orchestrator.create_screen_state.fork_download_progress =
-        crate::ui::install::stage_downloading::DownloadProgress::default();
-    orchestrator.create_screen_state.stage = CreateStage::Choose;
-    orchestrator.create_screen_state.modlist_name.clear();
-    orchestrator.create_screen_state.destination.clear();
-    orchestrator.create_screen_state.destination_choice = None;
-    orchestrator.create_screen_state.resumed_build_id = Some(id.clone());
-    orchestrator.nav = NavDestination::Workspace {
-        modlist_id: Some(id),
-    };
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
-    use crate::registry::store::RegistryStore;
+    use crate::registry::model::{Game, ModlistEntry, ModlistState};
     use egui_toast::ToastKind;
 
-    static CREATETEST_TMP: AtomicU64 = AtomicU64::new(0);
-
     fn orch_for_create_test() -> OrchestratorApp {
-        let mut app = OrchestratorApp::new(false);
-        let tmp = std::env::temp_dir().join(format!(
-            "bio_createtest_{}_{}.json",
-            std::process::id(),
-            CREATETEST_TMP.fetch_add(1, Ordering::Relaxed)
-        ));
-        app.registry_store = RegistryStore::new_with_path(tmp);
-        app.registry = ModlistRegistry::default();
-        app
+        OrchestratorApp::new_isolated_for_test("createtest")
     }
 
     #[test]
@@ -690,7 +541,10 @@ mod tests {
             ..Default::default()
         });
 
-        fork_extract_complete_route_to_workspace(&mut app, "FORKTEST00000".to_string());
+        crate::install_runtime::fork_route::extract_complete_route_to_workspace(
+            &mut app,
+            "FORKTEST00000".to_string(),
+        );
 
         let history = app.notification_manager.history();
         assert_eq!(

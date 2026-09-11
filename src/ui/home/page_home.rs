@@ -12,6 +12,7 @@ use crate::ui::home::modlist_card::ModlistCardActions;
 use crate::ui::home::reinstall_route_wire;
 use crate::ui::home::state_home::{HomeFilter, empty_filter_message};
 use crate::ui::home::{filter_chip, first_launch_setup_card, modlist_card};
+use crate::ui::install::state_install::install_stage_is_idle;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::orchestrator_app::PendingFolderDelete;
@@ -119,7 +120,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             |ui| {
                 ui.set_width(right_w);
                 match add_a_modlist::render(ui, orchestrator) {
-                    AddAModlistAction::PasteImportCode => {
+                    AddAModlistAction::InstallAModlist => {
                         nav_request = Some(NavRequest::Install);
                     }
                     AddAModlistAction::CreateYourOwn => {
@@ -154,7 +155,13 @@ fn apply_nav_request(orchestrator: &mut OrchestratorApp, req: NavRequest) {
             orchestrator.settings_screen_state.active_tab = tab;
             orchestrator.nav = NavDestination::Settings;
         }
-        NavRequest::Install => orchestrator.nav = NavDestination::Install,
+        NavRequest::Install => {
+            if install_stage_is_idle(orchestrator.install_screen_state.stage) {
+                orchestrator.install_screen_state.reset_to_gallery();
+                orchestrator.pending_reinstall_id = None;
+            }
+            orchestrator.nav = NavDestination::Install;
+        }
         NavRequest::Create => orchestrator.nav = NavDestination::Create,
         NavRequest::Workspace { modlist_id } => {
             orchestrator.nav = NavDestination::Workspace {
@@ -487,4 +494,65 @@ fn render_card_list(
         }
     });
     (nav, intent)
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::ui::install::state_install::InstallStage;
+
+    fn orch_for_home_test() -> OrchestratorApp {
+        OrchestratorApp::new_isolated_for_test("hometest")
+    }
+
+    #[test]
+    fn install_a_modlist_cta_navigates_to_the_install_screen() {
+        let mut app = orch_for_home_test();
+        assert_eq!(app.nav, NavDestination::Home);
+
+        apply_nav_request(&mut app, NavRequest::Install);
+
+        assert_eq!(app.nav, NavDestination::Install);
+        assert_eq!(
+            app.install_screen_state.stage,
+            InstallStage::Gallery,
+            "the install screen opens on the gallery"
+        );
+    }
+
+    #[test]
+    fn install_cta_resets_a_stale_review_to_the_gallery() {
+        let mut app = orch_for_home_test();
+        app.install_screen_state.stage = InstallStage::Details;
+        app.pending_reinstall_id = Some("REINSTALL0001".to_string());
+
+        apply_nav_request(&mut app, NavRequest::Install);
+
+        assert_eq!(app.install_screen_state.stage, InstallStage::Gallery);
+        assert_eq!(app.nav, NavDestination::Install);
+        assert!(app.pending_reinstall_id.is_none());
+    }
+
+    #[test]
+    fn install_cta_leaves_a_live_download_alone() {
+        let mut app = orch_for_home_test();
+        app.install_screen_state.stage = InstallStage::Downloading;
+        app.install_screen_state.destination = "D:\\eet install".to_string();
+
+        apply_nav_request(&mut app, NavRequest::Install);
+
+        assert_eq!(app.install_screen_state.stage, InstallStage::Downloading);
+        assert_eq!(app.install_screen_state.destination, "D:\\eet install");
+        assert_eq!(app.nav, NavDestination::Install);
+    }
+
+    #[test]
+    fn create_your_own_cta_navigates_to_the_create_screen() {
+        let mut app = orch_for_home_test();
+
+        apply_nav_request(&mut app, NavRequest::Create);
+
+        assert_eq!(app.nav, NavDestination::Create);
+    }
 }

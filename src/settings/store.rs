@@ -20,6 +20,11 @@ impl SettingsStore {
         Self { path }
     }
 
+    #[must_use]
+    pub fn new_with_path(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
     pub fn load(&self) -> Result<AppSettings> {
         let raw = std::fs::read_to_string(&self.path)
             .with_context(|| format!("failed reading settings file {}", self.path.display()))?;

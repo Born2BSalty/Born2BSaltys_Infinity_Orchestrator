@@ -47,14 +47,19 @@ pub fn step3_install_block_reason(state: &WizardState) -> Option<String> {
         if !show {
             continue;
         }
-        let count =
-            compat_step3_rules::collect_step3_compat_markers(&state.step1, tab, mods, items)
-                .values()
-                .filter(|marker| {
-                    marker.kind.eq_ignore_ascii_case("missing_dep")
-                        || marker.kind.eq_ignore_ascii_case("order_block")
-                })
-                .count();
+        let count = compat_step3_rules::collect_step3_compat_markers(
+            &state.step1,
+            tab,
+            mods,
+            items,
+            &state.step3.bgee_items,
+        )
+        .values()
+        .filter(|marker| {
+            marker.kind.eq_ignore_ascii_case("missing_dep")
+                || marker.kind.eq_ignore_ascii_case("order_block")
+        })
+        .count();
         if count > 0 {
             blocked_tabs.push(format!("{tab}: {count}"));
         }
