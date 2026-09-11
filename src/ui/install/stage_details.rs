@@ -50,6 +50,7 @@ pub(crate) struct FactRow {
 }
 
 pub(crate) struct DetailsHeader {
+    pub(crate) source_compat_issue: Option<&'static str>,
     pub(crate) name: String,
     pub(crate) author: Option<String>,
     pub(crate) version: Option<String>,
@@ -78,6 +79,7 @@ impl DetailsHeader {
             built_with: non_empty(&preview.bio_version),
             lineage: preview.forked_from.clone(),
             back_label: "All modlists",
+            source_compat_issue: None,
         }
     }
 
@@ -119,6 +121,7 @@ impl DetailsHeader {
             sample: false,
             requirements: requirements_for(game).to_string(),
             built_with: non_empty(&preview.bio_version),
+            source_compat_issue: None,
             lineage: preview.forked_from.clone(),
             back_label: if matches!(origin, ReviewOrigin::Paste) {
                 "Back"
@@ -181,6 +184,15 @@ pub(crate) fn render(
 
                 header_row(ui, palette, header, fork_info_open);
                 ui.add_space(20.0);
+                if let Some(issue) = header.source_compat_issue {
+                    crate::ui::install::stage_review::render_source_warning(
+                        ui,
+                        palette,
+                        issue,
+                        availability == ModifyAvailability::OnlyInstall,
+                    );
+                    ui.add_space(16.0);
+                }
                 if let Some(click) = body_columns(ui, palette, header, counts, availability) {
                     outcome = click;
                 }

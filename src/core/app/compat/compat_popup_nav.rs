@@ -309,8 +309,13 @@ fn collect_step3_targets(
     } else {
         (&state.step2.bg2ee_mods, &state.step3.bg2ee_items)
     };
-    let markers =
-        compat_step3_rules::collect_step3_compat_markers(&state.step1, game_tab, mods, items);
+    let markers = compat_step3_rules::collect_step3_compat_markers(
+        &state.step1,
+        game_tab,
+        mods,
+        items,
+        &state.step3.bgee_items,
+    );
     let mut out = Vec::<PopupCompatTarget>::new();
     for item in items.iter().filter(|item| !item.is_parent) {
         let key = compat_step3_rules::marker_key(item);

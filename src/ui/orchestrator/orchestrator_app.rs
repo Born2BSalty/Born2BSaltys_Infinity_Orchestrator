@@ -376,12 +376,13 @@ impl OrchestratorApp {
     pub fn new(dev_mode: bool) -> Self {
         let bootstrap = app_bootstrap_init::initialize(dev_mode);
 
-        let wizard_state = WizardState {
+        let mut wizard_state = WizardState {
             step1: bootstrap.step1.clone(),
             github_auth_login: bootstrap.github_auth_login,
             ..Default::default()
         };
 
+        crate::app::compat_dlc_source::refresh_source_check(&mut wizard_state.step1);
         let path_validation = compute_path_validation_summary(&wizard_state);
 
         let registry_store = RegistryStore::new_default();
@@ -1444,12 +1445,24 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     *active_install_modlist_id = None;
 }
 
+fn refresh_source_compatibility(state: &mut WizardState) {
+    if crate::app::compat_dlc_source::refresh_source_check(&mut state.step1) {
+        state.last_step2_sync_signature = None;
+        let _ = crate::app::compat_logic::apply_step2_compat_rules(
+            &state.step1,
+            &mut state.step2.bgee_mods,
+            &mut state.step2.bg2ee_mods,
+        );
+    }
+}
+
 impl eframe::App for OrchestratorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let palette = self.theme_palette;
         ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
 
         validate_debounce::tick(self, Instant::now());
+        refresh_source_compatibility(&mut self.wizard_state);
         if let Some(next_due_in) = next_debounce_due_in(self) {
             ctx.request_repaint_after(next_due_in);
         }

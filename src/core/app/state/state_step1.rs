@@ -5,6 +5,7 @@ use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binar
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step1State<Flag = bool> {
+    pub(crate) dlc_source_check: crate::app::compat_dlc_source::DlcSourceCheck,
     pub game_install: String,
     pub install_mode: String,
     pub have_weidu_logs: Flag,
@@ -145,6 +146,7 @@ impl Step1State {
 impl Default for Step1State {
     fn default() -> Self {
         Self {
+            dlc_source_check: crate::app::compat_dlc_source::DlcSourceCheck::default(),
             game_install: "BGEE".to_string(),
             install_mode: Self::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string(),
             have_weidu_logs: false,

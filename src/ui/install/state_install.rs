@@ -272,6 +272,7 @@ impl InstallPipelineFlags {
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallScreenState {
+    pub(crate) source_compat_issue: Option<&'static str>,
     pub stage: InstallStage,
     pub pipeline_kind: PipelineKind,
     pub(crate) gallery: GalleryScreenState,
@@ -348,6 +349,7 @@ impl InstallScreenState {
     }
 
     pub fn clear_preview(&mut self) {
+        self.source_compat_issue = None;
         self.parsed_preview = None;
         self.preview_parse_error = None;
         self.inside = None;

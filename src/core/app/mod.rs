@@ -60,6 +60,8 @@ pub mod compat_dependency_parse;
 pub mod compat_dependency_runtime;
 #[path = "compat/compat_deprecated_scan.rs"]
 pub mod compat_deprecated_scan;
+#[path = "compat/compat_dlc_source.rs"]
+pub mod compat_dlc_source;
 #[path = "compat/compat_issue.rs"]
 pub mod compat_issue;
 #[path = "compat/compat_issue_text.rs"]
