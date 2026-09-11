@@ -294,7 +294,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
         if !ctx.items[idx].is_parent {
             child_counter += 1;
             let right = render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w, false);
-            measured = measured.max(right - list_left_x);
+            measured = measured.max(right - list_left_x + SCROLLBAR_RESERVE);
             pos += 1;
             continue;
         }
@@ -311,7 +311,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
         let bg_shape_id = ui.painter().add(egui::Shape::Noop);
 
         let scope_resp = ui.scope(|ui| {
-            ui.set_min_width(group_w);
+            ui.set_min_width(group_w + SCROLLBAR_RESERVE);
             ui.add_space(HEADER_BAR_VPAD_TOP);
             ui.horizontal(|ui| {
                 ui.add_space(6.0);
@@ -365,7 +365,7 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
                 lineno_w,
                 is_last_in_group,
             );
-            measured = measured.max(right - list_left_x);
+            measured = measured.max(right - list_left_x + SCROLLBAR_RESERVE);
             pos += 1;
         }
 
