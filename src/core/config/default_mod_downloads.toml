@@ -7071,7 +7071,7 @@ tp2 = "randomrolls"
 
 [[mods]]
 name = "HPS Portraits Project"
-tp2 = "hps_portrait_project"
+tp2 = "hps_portraits_project"
 
   [[mods.sources]]
   id = "holdenbg"
