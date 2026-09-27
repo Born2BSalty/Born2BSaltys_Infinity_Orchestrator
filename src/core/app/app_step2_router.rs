@@ -39,7 +39,6 @@ pub(crate) fn handle_step2_action(
             super::app_step2_scan::cancel_step2_scan(state, step2_cancel.as_ref());
         }
         Step2Action::OpenUpdatePopup => open_update_popup(state),
-        Step2Action::CheckExactLogModList => check_exact_log_mod_list(state),
         Step2Action::DownloadUpdates => {
             super::app_step2_update_download::start_step2_update_download_scoped(
                 state,
@@ -73,10 +72,6 @@ pub(crate) fn handle_step2_action(
         }
         Step2Action::PreviewUpdateSelectedMod => {
             let target = super::app_step2_update_preview::selected_mod_target(state);
-            preview_update_target_mod(state, step2_update_check_rx, target);
-        }
-        Step2Action::PreviewUpdatePopupMod => {
-            let target = super::app_step2_update_preview::popup_mod_target(state);
             preview_update_target_mod(state, step2_update_check_rx, target);
         }
         Step2Action::SetSelectedModUpdateLocked(locked) => {
@@ -116,43 +111,8 @@ fn handle_step2_download_source_action(
                 discover_mod_download_forks(state, tp2, label, &repo);
             }
         }
-        Step2Action::AddDiscoveredModDownloadFork {
-            tp2,
-            label,
-            full_name,
-            owner_login,
-            default_branch,
-        } => add_discovered_mod_download_fork(
-            state,
-            tp2,
-            label,
-            &full_name,
-            &owner_login,
-            &default_branch,
-        ),
         Step2Action::OpenModDownloadsUserSource => open_mod_downloads_user_source(state),
         Step2Action::ReloadModDownloadSources => reload_mod_download_sources(state),
-        Step2Action::OpenModDownloadSourceEditor {
-            tp2,
-            label,
-            source_id,
-            allow_source_id_change,
-            destination,
-        } => open_mod_download_source_editor(
-            state,
-            tp2,
-            label,
-            source_id,
-            allow_source_id_change,
-            destination,
-        ),
-        Step2Action::SaveModDownloadSourceEditor => {
-            if crate::app::state::update_pipeline_busy(&state.step2) {
-                state.step2.scan_status = "Wait for the current check to finish".to_string();
-            } else {
-                save_mod_download_source_editor(state, step2_update_check_rx);
-            }
-        }
         Step2Action::SaveSourceForm => {
             if crate::app::state::update_pipeline_busy(&state.step2) {
                 state.step2.scan_status = "Wait for the current check to finish".to_string();
@@ -222,11 +182,6 @@ fn open_update_popup(state: &mut WizardState) {
     state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
     state.step2.versions_ui.auto_check_pending = auto_check_pending;
     state.step2.update_selected_popup_open = true;
-}
-
-fn check_exact_log_mod_list(state: &mut WizardState) {
-    let active_game_tab = state.step2.active_game_tab.clone();
-    super::app_step2_saved_log_flow::queue_exact_log_update_preview(state, &active_game_tab, false);
 }
 
 fn accept_latest_for_exact_version_misses(
@@ -305,37 +260,6 @@ fn discover_mod_download_forks(state: &mut WizardState, tp2: String, label: Stri
     }
 }
 
-fn add_discovered_mod_download_fork(
-    state: &mut WizardState,
-    tp2: String,
-    label: String,
-    full_name: &str,
-    owner_login: &str,
-    default_branch: &str,
-) {
-    let display_name = source_editor_display_name(state, &tp2, &label);
-    let source_id = owner_login.trim().to_ascii_lowercase();
-    let source_block = format!(
-        "[[mods.sources]]\nid = \"{}\"\nlabel = \"{}\"\ntype = \"github\"\nurl = \"https://github.com/{}\"\nrepo = \"{}\"\nbranch = \"{}\"",
-        source_id,
-        owner_login.trim(),
-        full_name.trim(),
-        full_name.trim(),
-        default_branch.trim()
-    );
-    state.step2.mod_download_source_editor_open = true;
-    state.step2.mod_download_source_editor_tp2 = tp2;
-    state.step2.mod_download_source_editor_label = label;
-    state.step2.mod_download_source_editor_display_name = display_name;
-    state.step2.mod_download_source_editor_source_id = source_id;
-    state
-        .step2
-        .mod_download_source_editor_allow_source_id_change = true;
-    state.step2.mod_download_source_editor_text = source_block;
-    state.step2.mod_download_source_editor_error = None;
-    state.step2.scan_status = format!("Review fork source {full_name}");
-}
-
 fn open_mod_downloads_user_source(state: &mut WizardState) {
     if let Err(err) = mod_downloads::ensure_mod_downloads_files() {
         state.step2.scan_status = format!("Open failed: {err}");
@@ -358,97 +282,6 @@ fn reload_mod_download_sources(state: &mut WizardState) {
     } else {
         state.step2.scan_status =
             format!("Reloaded mod download sources: {}", loaded.sources.len());
-    }
-}
-
-fn open_mod_download_source_editor(
-    state: &mut WizardState,
-    tp2: String,
-    label: String,
-    source_id: String,
-    allow_source_id_change: bool,
-    destination: ModSourceEditDestination,
-) {
-    use crate::app::mod_downloads::SeedScope;
-
-    let display_name = source_editor_display_name(state, &tp2, &label);
-    let (target_path, seed_scope) = match destination {
-        ModSourceEditDestination::GlobalDefault => (None, SeedScope::GlobalOnly),
-        ModSourceEditDestination::ThisModlist => (
-            mod_downloads::active_modlist_downloads_path(),
-            SeedScope::Resolved,
-        ),
-    };
-
-    match mod_downloads::load_user_mod_download_source_block(
-        &tp2,
-        &label,
-        &source_id,
-        allow_source_id_change,
-        target_path.as_deref(),
-        seed_scope,
-    ) {
-        Ok(text) => {
-            state.step2.mod_download_source_editor_open = true;
-            state.step2.mod_download_source_editor_tp2 = tp2;
-            state.step2.mod_download_source_editor_label = label;
-            state.step2.mod_download_source_editor_display_name = display_name;
-            state.step2.mod_download_source_editor_source_id = source_id;
-            state
-                .step2
-                .mod_download_source_editor_allow_source_id_change = allow_source_id_change;
-            state.step2.mod_download_source_editor_text = text;
-            state.step2.mod_download_source_editor_error = None;
-            state.step2.mod_download_source_editor_destination = destination;
-        }
-        Err(err) => {
-            state.step2.scan_status = format!("Open source editor failed: {err}");
-        }
-    }
-}
-
-fn save_mod_download_source_editor(
-    state: &mut WizardState,
-    step2_update_check_rx: &mut Option<
-        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
-    >,
-) {
-    let tp2 = state.step2.mod_download_source_editor_tp2.clone();
-    let label = state.step2.mod_download_source_editor_label.clone();
-    let source_id = state.step2.mod_download_source_editor_source_id.clone();
-    let allow_source_id_change = state
-        .step2
-        .mod_download_source_editor_allow_source_id_change;
-    let text = state.step2.mod_download_source_editor_text.clone();
-    let destination = state.step2.mod_download_source_editor_destination;
-
-    let target_path = match destination {
-        ModSourceEditDestination::GlobalDefault => None,
-        ModSourceEditDestination::ThisModlist => mod_downloads::active_modlist_downloads_path(),
-    };
-
-    let request = SourceSaveRequest {
-        tp2: &tp2,
-        name: &label,
-        source_id: &source_id,
-        allow_id_change: allow_source_id_change,
-        text: &text,
-        target_path: target_path.as_deref(),
-        new_source: None,
-    };
-    match save_source_block_recording_history(
-        state,
-        &request,
-        destination,
-        destination_label(destination),
-    ) {
-        Ok(()) => {
-            finish_saving_mod_download_source_editor(state, step2_update_check_rx, &tp2);
-        }
-        Err(err) => {
-            state.step2.mod_download_source_editor_error = Some(err.clone());
-            state.step2.scan_status = format!("Save source entry failed: {err}");
-        }
     }
 }
 
@@ -1034,10 +867,6 @@ fn refresh_update_result_for_tp2(
     true
 }
 
-fn source_editor_display_name(state: &WizardState, tp2: &str, label: &str) -> String {
-    update_target_for_tp2(state, tp2).map_or_else(|| label.to_string(), |(_, tp_file)| tp_file)
-}
-
 fn update_target_for_tp2(state: &WizardState, tp2: &str) -> Option<(String, String)> {
     let target = mod_downloads::normalize_mod_download_tp2(tp2);
     if target.is_empty() {
@@ -1275,20 +1104,6 @@ mod tests {
     }
 
     #[test]
-    fn source_editor_display_name_is_the_mods_tp2_file() {
-        let mut state = WizardState::default();
-        state
-            .step2
-            .bgee_mods
-            .push(make_mod_state("setup-buffbot.tp2"));
-
-        assert_eq!(
-            super::source_editor_display_name(&state, "buffbot", "buffbot"),
-            "setup-buffbot.tp2"
-        );
-    }
-
-    #[test]
     fn update_target_misses_an_alias_key() {
         let mut state = WizardState::default();
         state
@@ -1397,27 +1212,6 @@ mod tests {
     }
 
     #[test]
-    fn source_editor_display_name_finds_a_pending_log_download() {
-        use crate::app::state::Step2LogPendingDownload;
-
-        let mut state = WizardState::default();
-        state
-            .step2
-            .log_pending_downloads
-            .push(Step2LogPendingDownload {
-                game_tab: "BGEE".to_string(),
-                tp_file: "setup-buffbot.tp2".to_string(),
-                label: "buffbot".to_string(),
-                requested_version: None,
-            });
-
-        assert_eq!(
-            super::source_editor_display_name(&state, "buffbot", "buffbot"),
-            "setup-buffbot.tp2"
-        );
-    }
-
-    #[test]
     fn open_update_popup_arms_auto_check_only_when_stale() {
         let mut state = WizardState::default();
 
@@ -1521,16 +1315,6 @@ mod tests {
         assert_eq!(
             state.step2.scan_status,
             "Wait for the current check to finish"
-        );
-    }
-
-    #[test]
-    fn source_editor_display_name_falls_back_to_the_label() {
-        let state = WizardState::default();
-
-        assert_eq!(
-            super::source_editor_display_name(&state, "newmod", "New Mod"),
-            "New Mod"
         );
     }
 
@@ -1803,29 +1587,27 @@ mod tests {
         )
         .unwrap();
 
+        let text = "[[mods.sources]]\nid = \"different\"\nlabel = \"SCS\"\ntype = \"github\"\nurl = \"https://github.com/Gibberlings3/SwordCoastStratagems\"\nrepo = \"Gibberlings3/SwordCoastStratagems\"\nbranch = \"main\"\n";
+        let request = super::SourceSaveRequest {
+            tp2: "stratagems",
+            name: "SCS",
+            source_id: "gibberlings3",
+            allow_id_change: false,
+            text,
+            target_path: None,
+            new_source: None,
+        };
+        let destination = crate::app::step2_action::ModSourceEditDestination::GlobalDefault;
+
         let mut state = WizardState::default();
-        state.step2.mod_download_source_editor_tp2 = "stratagems".to_string();
-        state.step2.mod_download_source_editor_label = "SCS".to_string();
-        state.step2.mod_download_source_editor_source_id = "gibberlings3".to_string();
-        state
-            .step2
-            .mod_download_source_editor_allow_source_id_change = false;
-        state.step2.mod_download_source_editor_text = "[[mods.sources]]\nid = \"different\"\nlabel = \"SCS\"\ntype = \"github\"\nurl = \"https://github.com/Gibberlings3/SwordCoastStratagems\"\nrepo = \"Gibberlings3/SwordCoastStratagems\"\nbranch = \"main\"\n".to_string();
-        state.step2.mod_download_source_editor_destination =
-            crate::app::step2_action::ModSourceEditDestination::GlobalDefault;
-
-        let mut rx = None;
-        super::save_mod_download_source_editor(&mut state, &mut rx);
-
-        assert!(
-            state
-                .step2
-                .scan_status
-                .starts_with("Save source entry failed"),
-            "{}",
-            state.step2.scan_status
+        let result = super::save_source_block_recording_history(
+            &mut state,
+            &request,
+            destination,
+            super::destination_label(destination),
         );
 
+        assert!(result.is_err(), "{result:?}");
         let store = crate::app::mod_source_history::load_store();
         assert!(store.history.is_empty());
     }

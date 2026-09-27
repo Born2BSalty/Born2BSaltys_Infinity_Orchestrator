@@ -337,15 +337,14 @@ fn apply_mods_source(
     settings_store: &SettingsStore,
     wizard_state: &mut WizardState,
 ) {
+    wizard_state.step1.install_mode = Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
+    wizard_state.step1.sync_install_mode_flags();
     match workspace.mods_source {
         ModsSource::GlobalModsFolder => {
             if let Ok(settings) = settings_store.load() {
                 let folder = settings.step1.effective_global_mods_folder().to_string();
                 if !folder.trim().is_empty() {
                     wizard_state.step1.mods_folder = folder;
-                    wizard_state.step1.install_mode =
-                        Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
-                    wizard_state.step1.sync_install_mode_flags();
                     return;
                 }
             }
@@ -362,8 +361,6 @@ fn apply_mods_source(
     };
 
     wizard_state.step1.mods_folder = folder.to_string();
-    wizard_state.step1.install_mode = Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
-    wizard_state.step1.sync_install_mode_flags();
 }
 
 #[cfg(test)]
@@ -607,6 +604,26 @@ mod tests {
             ws.step1.mods_folder, r"D:\scratch\mods",
             "default source (InstallationFolder) must use scratch folder"
         );
+    }
+
+    #[test]
+    fn apply_mods_source_always_resets_a_leaked_install_mode() {
+        use crate::registry::workspace_model::ModsSource;
+        let workspace = ModlistWorkspaceState {
+            mods_source: ModsSource::InstallationFolder,
+            scratch_mods_folder: None,
+            ..Default::default()
+        };
+        let mut ws = WizardState::default();
+        ws.step1.install_mode = Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        ws.step1.mods_folder = "C:\\keep".to_string();
+        apply_mods_source(&workspace, &SettingsStore::new_default(), &mut ws);
+        assert_eq!(
+            ws.step1.install_mode,
+            Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS
+        );
+        assert!(!ws.step1.installs_exactly_from_weidu_logs());
+        assert_eq!(ws.step1.mods_folder, "C:\\keep");
     }
 
     #[test]

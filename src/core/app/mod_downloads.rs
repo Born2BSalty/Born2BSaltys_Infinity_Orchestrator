@@ -235,44 +235,6 @@ pub(crate) fn ensure_mod_downloads_files() -> io::Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum SeedScope {
-    #[default]
-    Resolved,
-    GlobalOnly,
-}
-
-pub(crate) fn load_user_mod_download_source_block(
-    tp2: &str,
-    label: &str,
-    source_id: &str,
-    allow_source_id_change: bool,
-    target_path: Option<&Path>,
-    seed_scope: SeedScope,
-) -> Result<String, String> {
-    ensure_mod_downloads_files().map_err(|err| err.to_string())?;
-    let path = target_path.map_or_else(mod_downloads_user_path, Path::to_path_buf);
-    let content = fs::read_to_string(&path).unwrap_or_default();
-    let existing_user_block =
-        find_mod_block(&content, tp2).and_then(|block| find_source_block(&block, source_id));
-    let merged_source = (!allow_source_id_change)
-        .then(|| {
-            let sources = match seed_scope {
-                SeedScope::GlobalOnly => load_two_tier_sources(),
-                SeedScope::Resolved => load_mod_download_sources(),
-            };
-            sources.resolve_source(tp2, Some(source_id))
-        })
-        .flatten();
-    Ok(editor_block_for_source(
-        label,
-        source_id,
-        allow_source_id_change,
-        existing_user_block,
-        merged_source,
-    ))
-}
-
 pub(crate) fn save_user_mod_download_source_block(
     tp2: &str,
     label: &str,
@@ -565,17 +527,6 @@ fn find_mod_block(content: &str, tp2: &str) -> Option<String> {
         let block = &content[start..end];
         if block_tp2_matches(block, &target) {
             return Some(block.trim().to_string());
-        }
-    }
-    None
-}
-
-fn find_source_block(mod_block: &str, source_id: &str) -> Option<String> {
-    let target = normalize_source_id(source_id);
-    for (start, end) in source_block_ranges(mod_block) {
-        let block = &mod_block[start..end];
-        if source_block_id_matches(block, &target) {
-            return Some(normalize_source_block_for_editor(block));
         }
     }
     None
@@ -947,26 +898,6 @@ fn normalize_source_block_indent(block: &str) -> String {
     cleaned
 }
 
-fn normalize_source_block_for_editor(block: &str) -> String {
-    normalize_source_block_indent(block)
-}
-
-fn editor_block_for_source(
-    label: &str,
-    source_id: &str,
-    allow_source_id_change: bool,
-    existing_user_block: Option<String>,
-    merged_source: Option<ModDownloadSource>,
-) -> String {
-    if allow_source_id_change {
-        return existing_user_block.unwrap_or_else(|| template_source_block(label, source_id));
-    }
-    merged_source.map_or_else(
-        || existing_user_block.unwrap_or_else(|| template_source_block(label, source_id)),
-        |source| complete_source_block(&source),
-    )
-}
-
 const SOURCE_BLOCK_FIELD_ORDER: &[&str] = &[
     "id",
     "label",
@@ -1129,13 +1060,6 @@ pub(crate) fn complete_source_block(source: &ModDownloadSource) -> String {
     ));
     lines.push(format!("default = {}", source.source_default));
     normalize_source_block_indent(&lines.join("\n"))
-}
-
-fn template_source_block(_label: &str, source_id: &str) -> String {
-    format!(
-        "  [[mods.sources]]\n  id = \"{}\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/OWNER/REPO\"\n  repo = \"OWNER/REPO\"\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  channel = \"\"\n  asset = \"\"\n  default = true",
-        escape_toml_string(source_id.trim())
-    )
 }
 
 fn escape_toml_string(value: &str) -> String {
@@ -2013,44 +1937,6 @@ mod tests {
                 overlay.tp2
             );
         }
-    }
-
-    #[test]
-    fn source_editor_prefers_merged_source_over_partial_user_override() {
-        let partial_user_block = Some(
-            "  [[mods.sources]]\n  id = \"argent77\"\n  pkg_windows = \"wzp,zip\"".to_string(),
-        );
-
-        let block = editor_block_for_source(
-            "Improved Archer",
-            "argent77",
-            false,
-            partial_user_block,
-            Some(argent77_source()),
-        );
-
-        assert!(
-            block.contains("repo = \"Argent77/A7-ImprovedArcher\""),
-            "the normal Edit Source popup should show the merged effective source"
-        );
-        assert!(
-            block.contains("commit = \"\""),
-            "empty selector fields stay visible/editable"
-        );
-    }
-
-    #[test]
-    fn source_id_change_editor_keeps_existing_user_block() {
-        let existing = "  [[mods.sources]]\n  id = \"fork\"\n  branch = \"main\"".to_string();
-        let block = editor_block_for_source(
-            "Fork",
-            "fork",
-            true,
-            Some(existing.clone()),
-            Some(argent77_source()),
-        );
-
-        assert_eq!(block, existing);
     }
 
     struct AmbientGuard(Option<PathBuf>);

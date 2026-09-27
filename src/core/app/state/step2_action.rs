@@ -15,10 +15,8 @@ pub enum Step2Action {
     SelectBgeeViaLog,
     SelectBg2eeViaLog,
     OpenUpdatePopup,
-    CheckExactLogModList,
     PreviewUpdateSelected,
     PreviewUpdateSelectedMod,
-    PreviewUpdatePopupMod,
     DownloadUpdates,
     DownloadUpdateFor {
         tp2: String,
@@ -31,26 +29,11 @@ pub enum Step2Action {
     OpenSelectedIni(String),
     OpenModDownloadsUserSource,
     ReloadModDownloadSources,
-    OpenModDownloadSourceEditor {
-        tp2: String,
-        label: String,
-        source_id: String,
-        allow_source_id_change: bool,
-        destination: ModSourceEditDestination,
-    },
     DiscoverModDownloadForks {
         tp2: String,
         label: String,
         repo: String,
     },
-    AddDiscoveredModDownloadFork {
-        tp2: String,
-        label: String,
-        full_name: String,
-        owner_login: String,
-        default_branch: String,
-    },
-    SaveModDownloadSourceEditor,
     SaveSourceForm,
     RequestReleaseList {
         repo: String,

@@ -434,18 +434,7 @@ fn render_popups(
         orchestrator.wizard_state.step2.versions_ui.sheet = None;
     }
 
-    let exact_log = orchestrator
-        .wizard_state
-        .step1
-        .installs_exactly_from_weidu_logs();
-    if exact_log {
-        crate::ui::step2::update_check_popup_step2::render(
-            ctx,
-            &mut orchestrator.wizard_state,
-            action,
-            palette,
-        );
-    } else if orchestrator.wizard_state.step2.update_selected_popup_open {
+    if orchestrator.wizard_state.step2.update_selected_popup_open {
         crate::ui::workspace::versions::versions_drawer::render(ctx, orchestrator, action, palette);
     }
 }

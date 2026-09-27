@@ -377,13 +377,6 @@ pub(crate) fn selected_mod_target(state: &WizardState) -> Option<(String, String
     }
 }
 
-#[must_use]
-pub(crate) fn popup_mod_target(state: &WizardState) -> Option<(String, String)> {
-    let game_tab = state.step2.update_selected_target_game_tab.clone()?;
-    let tp_file = state.step2.update_selected_target_tp_file.clone()?;
-    Some((game_tab, tp_file))
-}
-
 fn collect_target_update_preview(
     state: &mut WizardState,
     sources: &ModDownloadsLoad,
@@ -935,39 +928,6 @@ mod tests {
             Some(("BG2EE".to_string(), "modB/modB.tp2".to_string())),
             "the sticky fields must no longer act as a fallback over the live selection"
         );
-    }
-
-    #[test]
-    fn popup_mod_target_reads_the_popup_record() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_target_game_tab: Some("BGEE".to_string()),
-                update_selected_target_tp_file: Some("modA/modA.tp2".to_string()),
-                selected: Some(Step2Selection::Mod {
-                    game_tab: "BG2EE".to_string(),
-                    tp_file: "modB/modB.tp2".to_string(),
-                }),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert_eq!(
-            popup_mod_target(&state),
-            Some(("BGEE".to_string(), "modA/modA.tp2".to_string()))
-        );
-    }
-
-    #[test]
-    fn popup_mod_target_none_when_record_incomplete() {
-        let state = WizardState {
-            step2: crate::app::state::Step2State {
-                update_selected_target_game_tab: Some("BGEE".to_string()),
-                update_selected_target_tp_file: None,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert_eq!(popup_mod_target(&state), None);
     }
 
     #[test]

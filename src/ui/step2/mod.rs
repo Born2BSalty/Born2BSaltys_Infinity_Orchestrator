@@ -64,11 +64,5 @@ pub mod tree_parent_step2;
 pub mod tree_render_step2;
 #[path = "tree/tree_selection_rules_step2.rs"]
 pub mod tree_selection_rules_step2;
-#[path = "update_check/update_check_popup_lists_step2.rs"]
-pub mod update_check_popup_lists_step2;
 #[path = "update_check/update_check_popup_report_step2.rs"]
 pub mod update_check_popup_report_step2;
-#[path = "update_check/update_check_popup_source_editor_step2.rs"]
-pub mod update_check_popup_source_editor_step2;
-#[path = "update_check/update_check_popup_step2.rs"]
-pub mod update_check_popup_step2;
