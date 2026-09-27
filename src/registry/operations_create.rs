@@ -555,8 +555,34 @@ mod tests {
         format!("{SHARE_PREFIX}{}", b64url_encode(&zlib_deflate(&re_json)))
     }
 
+    struct ConfigDirGuard(PathBuf);
+
+    impl ConfigDirGuard {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_operations_create_config_dir_test_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(path.clone()));
+            Self(path)
+        }
+    }
+
+    impl Drop for ConfigDirGuard {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn mint_emits_a_bio_decodable_forked_provenance_code() {
+        let _config_guard = ConfigDirGuard::new("mint_provenance");
         let lineage = vec![
             ForkAncestor {
                 name: "Born2BSalty's EET Basics".to_string(),

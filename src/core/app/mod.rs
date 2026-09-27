@@ -94,6 +94,7 @@ pub mod controller;
 pub mod game_authority;
 pub mod game_version;
 pub mod mod_downloads;
+pub mod mod_downloads_migrate;
 #[path = "step2/update/mod_update_locks.rs"]
 pub mod mod_update_locks;
 pub mod modlist_biolist;

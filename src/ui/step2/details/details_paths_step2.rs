@@ -207,7 +207,7 @@ fn render_package_source_buttons(ui: &mut egui::Ui, action: &mut Option<Step2Act
         }
         if ui
             .button("Reload Sources")
-            .on_hover_text("Reload mod_downloads_default.toml and mod_downloads_user.toml")
+            .on_hover_text("Reload download sources")
             .clicked()
         {
             *action = Some(Step2Action::ReloadModDownloadSources);

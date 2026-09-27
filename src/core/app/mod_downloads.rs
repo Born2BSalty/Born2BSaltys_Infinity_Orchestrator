@@ -19,15 +19,12 @@ fn active_modlist_dir_mutex() -> &'static Mutex<Option<PathBuf>> {
     ACTIVE_MODLIST_DIR.get_or_init(|| Mutex::new(None))
 }
 
-/// Sets the active-modlist data dir for the ambient resolver.
-/// Call with `Some(dir)` when a modlist becomes active, `None` when none is.
 pub(crate) fn set_active_modlist_dir(dir: Option<PathBuf>) {
     if let Ok(mut guard) = active_modlist_dir_mutex().lock() {
         *guard = dir;
     }
 }
 
-/// Returns the active-modlist data dir, if any is set.
 pub(crate) fn active_modlist_dir() -> Option<PathBuf> {
     active_modlist_dir_mutex()
         .lock()
@@ -35,16 +32,16 @@ pub(crate) fn active_modlist_dir() -> Option<PathBuf> {
         .and_then(|g| g.clone())
 }
 
-/// Returns the per-modlist `mod_downloads_user.toml` path when a modlist is active.
 pub(crate) fn active_modlist_downloads_path() -> Option<PathBuf> {
     active_modlist_dir().map(|d| d.join("mod_downloads_user.toml"))
 }
 
 const MOD_DOWNLOADS_USER_FILE_NAME: &str = "mod_downloads_user.toml";
-const MOD_DOWNLOADS_DEFAULT_FILE_NAME: &str = "mod_downloads_default.toml";
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct ModDownloadsFile {
+    #[serde(default)]
+    pub(crate) format: Option<u32>,
     #[serde(default)]
     mods: Vec<ModDownloadModOverlay>,
 }
@@ -58,7 +55,7 @@ struct ModDownloadModOverlay {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-struct ModDownloadSourceOverlay {
+pub(crate) struct ModDownloadSourceOverlay {
     pub(crate) name: Option<String>,
     pub(crate) tp2: Option<String>,
     pub(crate) aliases: Option<Vec<String>>,
@@ -73,10 +70,13 @@ struct ModDownloadSourceOverlay {
     pub(crate) url: Option<String>,
     pub(crate) github: Option<String>,
     pub(crate) exact_github: Option<Vec<String>>,
+    #[serde(default, rename = "type")]
+    pub(crate) kind: Option<String>,
     pub(crate) channel: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) commit: Option<String>,
     pub(crate) branch: Option<String>,
+    pub(crate) release: Option<String>,
     pub(crate) asset: Option<String>,
     pub(crate) subdir_require: Option<String>,
     pub(crate) pkg_windows: Option<String>,
@@ -96,10 +96,13 @@ struct ModDownloadSourceVariantOverlay {
     pub(crate) url: Option<String>,
     pub(crate) repo: Option<String>,
     pub(crate) exact_github: Option<Vec<String>>,
+    #[serde(default, rename = "type")]
+    pub(crate) kind: Option<String>,
     pub(crate) channel: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) commit: Option<String>,
     pub(crate) branch: Option<String>,
+    pub(crate) release: Option<String>,
     pub(crate) asset: Option<String>,
     pub(crate) subdir_require: Option<String>,
     pub(crate) pkg_windows: Option<String>,
@@ -138,6 +141,8 @@ pub(crate) struct ModDownloadSource {
     #[serde(default)]
     pub(crate) exact_github: Vec<String>,
     #[serde(default)]
+    pub(crate) kind: Option<String>,
+    #[serde(default)]
     pub(crate) channel: Option<String>,
     #[serde(default)]
     pub(crate) tag: Option<String>,
@@ -145,6 +150,8 @@ pub(crate) struct ModDownloadSource {
     pub(crate) commit: Option<String>,
     #[serde(default)]
     pub(crate) branch: Option<String>,
+    #[serde(default)]
+    pub(crate) release: Option<String>,
     #[serde(default)]
     pub(crate) asset: Option<String>,
     #[serde(default)]
@@ -164,9 +171,9 @@ pub(crate) struct ModDownloadsLoad {
 }
 
 #[derive(Debug, Clone, Default)]
-struct ModDownloadsOverlayLoad {
-    sources: Vec<ModDownloadSourceOverlay>,
-    error: Option<String>,
+pub(crate) struct ModDownloadsOverlayLoad {
+    pub(crate) sources: Vec<ModDownloadSourceOverlay>,
+    pub(crate) error: Option<String>,
 }
 
 impl ModDownloadsLoad {
@@ -214,19 +221,12 @@ pub(crate) fn mod_downloads_user_path() -> PathBuf {
     app_config_file(MOD_DOWNLOADS_USER_FILE_NAME, "config")
 }
 
-pub(crate) fn mod_downloads_default_path() -> PathBuf {
-    app_config_file(MOD_DOWNLOADS_DEFAULT_FILE_NAME, "config")
-}
-
 pub(crate) fn ensure_mod_downloads_files() -> io::Result<()> {
-    let default_path = mod_downloads_default_path();
     let user_path = mod_downloads_user_path();
 
-    if let Some(parent) = default_path.parent() {
+    if let Some(parent) = user_path.parent() {
         fs::create_dir_all(parent)?;
     }
-
-    write_if_changed(&default_path, default_mod_downloads_content())?;
 
     if !user_path.exists() {
         fs::write(&user_path, user_mod_downloads_content())?;
@@ -235,15 +235,10 @@ pub(crate) fn ensure_mod_downloads_files() -> io::Result<()> {
     Ok(())
 }
 
-/// Controls which resolution tier pre-fills the source editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum SeedScope {
-    /// Pre-fill from the full three-tier resolution (used when editing "For this modlist").
     #[default]
     Resolved,
-    /// Pre-fill from only the two-tier (global + app-default) resolution, ignoring any
-    /// per-modlist overlay. Used when editing "My default" so saving never promotes a
-    /// modlist pin into the global file.
     GlobalOnly,
 }
 
@@ -334,14 +329,13 @@ pub(crate) fn save_user_mod_download_source_block(
 }
 
 pub(crate) fn load_two_tier_sources() -> ModDownloadsLoad {
-    let default_path = mod_downloads_default_path();
     let user_path = mod_downloads_user_path();
-    let default_load = load_source_overlays_from_path(&default_path);
+    let default_load = load_source_overlays_from_str(default_mod_downloads_content(), "default");
     let user_load = load_source_overlays_from_path(&user_path);
     two_tier_from_overlays(default_load, user_load)
 }
 
-fn two_tier_from_overlays(
+pub(crate) fn two_tier_from_overlays(
     default_load: ModDownloadsOverlayLoad,
     user_load: ModDownloadsOverlayLoad,
 ) -> ModDownloadsLoad {
@@ -370,7 +364,7 @@ fn two_tier_from_overlays(
         if !overlay.source_default_explicit {
             overlay.source_default = false;
         }
-        let mut source = by_source.remove(&key).unwrap_or_default();
+        let mut source = ModDownloadSource::default();
         apply_source_overlay(&mut source, overlay);
         normalize_source(&mut source);
         if !source_is_valid(&source) {
@@ -440,10 +434,7 @@ fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOv
         if !overlay.source_default_explicit {
             overlay.source_default = false;
         }
-        let mut source = by_source.remove(&key).unwrap_or_default();
-        if overlay_has_version_selector(&overlay) {
-            clear_source_version_selectors(&mut source);
-        }
+        let mut source = ModDownloadSource::default();
         apply_source_overlay(&mut source, overlay);
         normalize_source(&mut source);
         if !source_is_valid(&source) {
@@ -527,9 +518,8 @@ pub(crate) fn source_tiers_from_texts(
 }
 
 pub(crate) fn load_source_tiers(modlist_text: &str) -> SourceTiers {
-    let default_text = fs::read_to_string(mod_downloads_default_path()).unwrap_or_default();
     let user_text = fs::read_to_string(mod_downloads_user_path()).unwrap_or_default();
-    source_tiers_from_texts(&default_text, &user_text, modlist_text)
+    source_tiers_from_texts(default_mod_downloads_content(), &user_text, modlist_text)
 }
 
 pub(crate) fn source_open_url(source: &ModDownloadSource) -> Option<String> {
@@ -600,7 +590,6 @@ fn replace_or_append_source_block(
         .copied();
 
     let Some(first) = first_match else {
-        // No existing block: append a new one, preserving the whole file as-is.
         let mut updated = content.trim_end().to_string();
         if !updated.is_empty() {
             updated.push_str("\n\n");
@@ -615,15 +604,12 @@ fn replace_or_append_source_block(
     let first_block = &content[first.0..first.1];
     let updated_first = replace_or_append_source_in_mod_block(first_block, source_id, source_block);
 
-    // Preserve any file preamble (text before the first [[mods]] block).
     let preamble = if ranges.is_empty() {
         ""
     } else {
         &content[..ranges[0].0]
     };
 
-    // Walk all block ranges: emit non-matching blocks as-is, the first matching block as
-    // its edited version, and silently drop every subsequent matching block (dedup).
     let mut out = preamble.trim_end().to_string();
     let mut first_written = false;
     for &(start, end) in &ranges {
@@ -739,21 +725,16 @@ fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
     let target = normalize_mod_download_tp2(tp2);
     let ranges = mod_block_ranges(content);
 
-    // Preserve any file preamble (text before the first [[mods]] block).
     let preamble = if ranges.is_empty() {
         ""
     } else {
         &content[..ranges[0].0]
     };
 
-    // For every block matching the target tp2, remove the target source from it (drop the
-    // whole [[mods]] block when no sources remain); non-matching blocks are kept byte-for-byte.
-    // Duplicate blocks for the same tp2 are all processed, so none shadow a re-pin.
     let mut out = preamble.trim_end().to_string();
     for (start, end) in &ranges {
         let block = &content[*start..*end];
         let maybe_text = if block_tp2_matches(block, &target) {
-            // Remove the target source; yield None when the block becomes empty (drop it).
             remove_source_from_mod_block(block, source_id).map(|b| b.trim().to_string())
         } else {
             Some(block.trim().to_string())
@@ -974,7 +955,7 @@ fn editor_block_for_source(
     }
     merged_source.map_or_else(
         || existing_user_block.unwrap_or_else(|| template_source_block(label, source_id)),
-        |source| source_to_editor_block(&source),
+        |source| complete_source_block(&source),
     )
 }
 
@@ -988,10 +969,12 @@ const SOURCE_BLOCK_FIELD_ORDER: &[&str] = &[
     "commit",
     "tag",
     "branch",
+    "release",
     "channel",
     "asset",
     "subdir_require",
     "aliases",
+    "config_files",
     "tp2_rename",
     "pkg_windows",
     "pkg_linux",
@@ -1029,7 +1012,7 @@ fn bool_value_from_assignment(line: &str, key: &str) -> Option<bool> {
     }
 }
 
-fn template_mod_header(tp2: &str, label: &str) -> String {
+pub(crate) fn template_mod_header(tp2: &str, label: &str) -> String {
     let name = if label.trim().is_empty() {
         tp2.trim()
     } else {
@@ -1042,58 +1025,79 @@ fn template_mod_header(tp2: &str, label: &str) -> String {
     )
 }
 
-fn source_to_editor_block(source: &ModDownloadSource) -> String {
+fn complete_block_type(source: &ModDownloadSource) -> String {
+    if source.github.is_some() {
+        return "github".to_string();
+    }
+    if let Some(kind) = source.kind.as_deref().filter(|value| !value.is_empty()) {
+        return kind.to_string();
+    }
+    if source_is_page_archive_url(&source.url) {
+        return "page".to_string();
+    }
+    "url".to_string()
+}
+
+fn quoted_string_list(values: &[String]) -> String {
+    values
+        .iter()
+        .map(|value| format!("\"{}\"", escape_toml_string(value)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub(crate) fn complete_source_block(source: &ModDownloadSource) -> String {
     let mut lines = vec![
         "[[mods.sources]]".to_string(),
         format!("id = \"{}\"", escape_toml_string(&source.source_id)),
         format!("label = \"{}\"", escape_toml_string(&source.source_label)),
-        "type = \"github\"".to_string(),
+        format!(
+            "type = \"{}\"",
+            escape_toml_string(&complete_block_type(source))
+        ),
         format!("url = \"{}\"", escape_toml_string(&source.url)),
-    ];
-    if let Some(github) = source.github.as_ref() {
-        lines.push(format!("repo = \"{}\"", escape_toml_string(github)));
-    }
-    for exact_github in &source.exact_github {
-        lines.push(format!(
-            "exact_github = \"{}\"",
-            escape_toml_string(exact_github)
-        ));
-    }
-    lines.push(format!(
-        "commit = \"{}\"",
-        escape_toml_string(source.commit.as_deref().unwrap_or_default())
-    ));
-    lines.push(format!(
-        "tag = \"{}\"",
-        escape_toml_string(source.tag.as_deref().unwrap_or_default())
-    ));
-    lines.push(format!(
-        "branch = \"{}\"",
-        escape_toml_string(source.branch.as_deref().unwrap_or_default())
-    ));
-    lines.push(format!(
-        "channel = \"{}\"",
-        escape_toml_string(source.channel.as_deref().unwrap_or_default())
-    ));
-    lines.push(format!(
-        "asset = \"{}\"",
-        escape_toml_string(source.asset.as_deref().unwrap_or_default())
-    ));
-    if let Some(subdir_require) = source.subdir_require.as_ref() {
-        lines.push(format!(
+        format!(
+            "repo = \"{}\"",
+            escape_toml_string(source.github.as_deref().unwrap_or_default())
+        ),
+        format!(
+            "exact_github = [{}]",
+            quoted_string_list(&source.exact_github)
+        ),
+        format!(
+            "commit = \"{}\"",
+            escape_toml_string(source.commit.as_deref().unwrap_or_default())
+        ),
+        format!(
+            "tag = \"{}\"",
+            escape_toml_string(source.tag.as_deref().unwrap_or_default())
+        ),
+        format!(
+            "branch = \"{}\"",
+            escape_toml_string(source.branch.as_deref().unwrap_or_default())
+        ),
+        format!(
+            "release = \"{}\"",
+            escape_toml_string(source.release.as_deref().unwrap_or_default())
+        ),
+        format!(
+            "channel = \"{}\"",
+            escape_toml_string(source.channel.as_deref().unwrap_or_default())
+        ),
+        format!(
+            "asset = \"{}\"",
+            escape_toml_string(source.asset.as_deref().unwrap_or_default())
+        ),
+        format!(
             "subdir_require = \"{}\"",
-            escape_toml_string(subdir_require)
-        ));
-    }
-    if !source.aliases.is_empty() {
+            escape_toml_string(source.subdir_require.as_deref().unwrap_or_default())
+        ),
+        format!("aliases = [{}]", quoted_string_list(&source.aliases)),
+    ];
+    if !source.config_files.is_empty() {
         lines.push(format!(
-            "aliases = [{}]",
-            source
-                .aliases
-                .iter()
-                .map(|alias| format!("\"{}\"", escape_toml_string(alias)))
-                .collect::<Vec<_>>()
-                .join(", ")
+            "config_files = [{}]",
+            quoted_string_list(&source.config_files)
         ));
     }
     if let Some(tp2_rename) = source.tp2_rename.as_ref() {
@@ -1103,18 +1107,19 @@ fn source_to_editor_block(source: &ModDownloadSource) -> String {
             escape_toml_string(&tp2_rename.to)
         ));
     }
-    if let Some(pkg_windows) = source.pkg_windows.as_ref() {
-        lines.push(format!(
-            "pkg_windows = \"{}\"",
-            escape_toml_string(pkg_windows)
-        ));
-    }
-    if let Some(pkg_linux) = source.pkg_linux.as_ref() {
-        lines.push(format!("pkg_linux = \"{}\"", escape_toml_string(pkg_linux)));
-    }
-    if let Some(pkg_macos) = source.pkg_macos.as_ref() {
-        lines.push(format!("pkg_macos = \"{}\"", escape_toml_string(pkg_macos)));
-    }
+    lines.push(format!(
+        "pkg_windows = \"{}\"",
+        escape_toml_string(source.pkg_windows.as_deref().unwrap_or_default())
+    ));
+    lines.push(format!(
+        "pkg_linux = \"{}\"",
+        escape_toml_string(source.pkg_linux.as_deref().unwrap_or_default())
+    ));
+    lines.push(format!(
+        "pkg_macos = \"{}\"",
+        escape_toml_string(source.pkg_macos.as_deref().unwrap_or_default())
+    ));
+    lines.push(format!("default = {}", source.source_default));
     normalize_source_block_indent(&lines.join("\n"))
 }
 
@@ -1186,23 +1191,30 @@ pub(crate) fn source_is_sentrizeal_download_url(url: &str) -> bool {
         || lower.starts_with("http://sentrizeal.com/downloaditm")
 }
 
-fn write_if_changed(path: &Path, content: &str) -> io::Result<()> {
-    match fs::read_to_string(path) {
-        Ok(existing) if existing == content => Ok(()),
-        _ => fs::write(path, content),
-    }
-}
-
-/// Shared mutex serializing all ambient-touching tests across modules.
 #[cfg(test)]
 pub(crate) static AMBIENT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-const fn default_mod_downloads_content() -> &'static str {
+pub(crate) const fn default_mod_downloads_content() -> &'static str {
     include_str!("../config/default_mod_downloads.toml")
 }
 
 const fn user_mod_downloads_content() -> &'static str {
     include_str!("../config/user_mod_downloads.toml")
+}
+
+pub(crate) fn user_template_cheat_sheet() -> &'static str {
+    let template = user_mod_downloads_content();
+    template
+        .find("# BIO download cheat sheet")
+        .map_or("", |start| template[start..].trim_end())
+}
+
+pub(crate) fn user_template_migrated_header() -> &'static str {
+    let template = user_mod_downloads_content();
+    template
+        .find("format = 2")
+        .map_or(template, |start| &template[..start])
+        .trim()
 }
 
 pub(crate) fn source_is_weaselmods_page_url(url: &str) -> bool {
@@ -1239,7 +1251,10 @@ fn load_source_overlays_from_path(path: &Path) -> ModDownloadsOverlayLoad {
     load_source_overlays_from_str(&content, &path.display().to_string())
 }
 
-fn load_source_overlays_from_str(content: &str, origin: &str) -> ModDownloadsOverlayLoad {
+pub(crate) fn load_source_overlays_from_str(
+    content: &str,
+    origin: &str,
+) -> ModDownloadsOverlayLoad {
     let parsed = match toml::from_str::<ModDownloadsFile>(content) {
         Ok(value) => value,
         Err(err) => {
@@ -1259,7 +1274,7 @@ fn load_source_overlays_from_str(content: &str, origin: &str) -> ModDownloadsOve
     }
 }
 
-fn overlay_tp2_key(source: &ModDownloadSourceOverlay) -> String {
+pub(crate) fn overlay_tp2_key(source: &ModDownloadSourceOverlay) -> String {
     source
         .tp2
         .as_deref()
@@ -1267,7 +1282,7 @@ fn overlay_tp2_key(source: &ModDownloadSourceOverlay) -> String {
         .unwrap_or_default()
 }
 
-fn overlay_source_key(source: &ModDownloadSourceOverlay) -> String {
+pub(crate) fn overlay_source_key(source: &ModDownloadSourceOverlay) -> String {
     let tp2 = overlay_tp2_key(source);
     if tp2.is_empty() {
         return String::new();
@@ -1276,25 +1291,10 @@ fn overlay_source_key(source: &ModDownloadSourceOverlay) -> String {
     format!("{tp2}|{source_id}")
 }
 
-/// Returns true when the overlay specifies at least one version selector field.
-const fn overlay_has_version_selector(overlay: &ModDownloadSourceOverlay) -> bool {
-    overlay.commit.is_some()
-        || overlay.tag.is_some()
-        || overlay.branch.is_some()
-        || overlay.channel.is_some()
-        || overlay.asset.is_some()
-}
-
-/// Clears all version selector fields on a source so a per-modlist overlay can replace them.
-fn clear_source_version_selectors(source: &mut ModDownloadSource) {
-    source.commit = None;
-    source.tag = None;
-    source.branch = None;
-    source.channel = None;
-    source.asset = None;
-}
-
-fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSourceOverlay) {
+pub(crate) fn apply_source_overlay(
+    target: &mut ModDownloadSource,
+    overlay: ModDownloadSourceOverlay,
+) {
     if let Some(name) = overlay.name {
         target.name = name;
     }
@@ -1328,6 +1328,9 @@ fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSour
     if let Some(exact_github) = overlay.exact_github {
         target.exact_github = exact_github;
     }
+    if let Some(kind) = overlay.kind {
+        target.kind = Some(kind);
+    }
     if let Some(channel) = overlay.channel {
         target.channel = Some(channel);
     }
@@ -1339,6 +1342,9 @@ fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSour
     }
     if let Some(branch) = overlay.branch {
         target.branch = Some(branch);
+    }
+    if let Some(release) = overlay.release {
+        target.release = Some(release);
     }
     if let Some(asset) = overlay.asset {
         target.asset = Some(asset);
@@ -1357,7 +1363,7 @@ fn apply_source_overlay(target: &mut ModDownloadSource, overlay: ModDownloadSour
     }
 }
 
-fn clear_other_source_defaults(
+pub(crate) fn clear_other_source_defaults(
     sources: &mut BTreeMap<String, ModDownloadSource>,
     selected_key: &str,
     normalized_tp2: &str,
@@ -1428,10 +1434,12 @@ fn apply_source_variant_overlay(
         url,
         repo,
         exact_github,
+        kind,
         channel,
         tag,
         commit,
         branch,
+        release,
         asset,
         subdir_require,
         pkg_windows,
@@ -1462,7 +1470,9 @@ fn apply_source_variant_overlay(
     }
     if let Some(repo) = repo {
         let trimmed = repo.trim().to_string();
-        if !trimmed.is_empty() {
+        if trimmed.is_empty() {
+            target.github = None;
+        } else {
             target.github = Some(trimmed.clone());
             let current_url = target.url.as_deref().map(str::trim).unwrap_or_default();
             if current_url.is_empty() {
@@ -1472,6 +1482,9 @@ fn apply_source_variant_overlay(
     }
     if let Some(exact_github) = exact_github {
         target.exact_github = Some(exact_github);
+    }
+    if let Some(kind) = kind {
+        target.kind = Some(kind);
     }
     if let Some(channel) = channel {
         target.channel = Some(channel);
@@ -1484,6 +1497,9 @@ fn apply_source_variant_overlay(
     }
     if let Some(branch) = branch {
         target.branch = Some(branch);
+    }
+    if let Some(release) = release {
+        target.release = Some(release);
     }
     if let Some(asset) = asset {
         target.asset = Some(asset);
@@ -1502,7 +1518,7 @@ fn apply_source_variant_overlay(
     }
 }
 
-fn normalize_source(source: &mut ModDownloadSource) {
+pub(crate) fn normalize_source(source: &mut ModDownloadSource) {
     normalize_source_identity(source);
     normalize_source_location(source);
     if normalize_source_selector_fields(source) {
@@ -1536,6 +1552,8 @@ fn normalize_source_identity(source: &mut ModDownloadSource) {
 fn normalize_source_location(source: &mut ModDownloadSource) {
     source.url = source.url.trim().to_string();
     source.github = normalize_optional_string(source.github.take());
+    source.kind =
+        normalize_optional_string(source.kind.take()).map(|value| value.to_ascii_lowercase());
     source.exact_github = normalized_string_list(&source.exact_github);
     if let Some(primary) = source.github.as_deref() {
         source
@@ -1550,6 +1568,7 @@ fn normalize_source_selector_fields(source: &mut ModDownloadSource) -> bool {
     source.tag = normalize_optional_string(source.tag.take());
     source.commit = normalize_optional_string(source.commit.take());
     source.branch = normalize_optional_string(source.branch.take());
+    source.release = normalize_optional_string(source.release.take());
     source.asset = normalize_optional_string(source.asset.take());
     if source.commit.is_some() {
         clear_commit_source_conflicts(source);
@@ -1563,6 +1582,10 @@ fn normalize_source_selector_fields(source: &mut ModDownloadSource) -> bool {
         clear_branch_source_conflicts(source);
         return false;
     }
+    if source.release.is_some() {
+        clear_release_source_conflicts(source);
+        return true;
+    }
     true
 }
 
@@ -1570,6 +1593,7 @@ fn clear_commit_source_conflicts(source: &mut ModDownloadSource) {
     source.channel = None;
     source.tag = None;
     source.branch = None;
+    source.release = None;
     source.asset = None;
     clear_source_packages(source);
 }
@@ -1577,14 +1601,23 @@ fn clear_commit_source_conflicts(source: &mut ModDownloadSource) {
 fn clear_tag_source_conflicts(source: &mut ModDownloadSource) {
     source.channel = None;
     source.branch = None;
+    source.release = None;
     source.asset = None;
     clear_source_packages(source);
 }
 
 fn clear_branch_source_conflicts(source: &mut ModDownloadSource) {
     source.channel = None;
+    source.release = None;
     source.asset = None;
     clear_source_packages(source);
+}
+
+fn clear_release_source_conflicts(source: &mut ModDownloadSource) {
+    source.channel = None;
+    source.tag = None;
+    source.branch = None;
+    source.commit = None;
 }
 
 fn clear_source_packages(source: &mut ModDownloadSource) {
@@ -1615,15 +1648,15 @@ fn normalize_optional_string(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn source_is_valid(source: &ModDownloadSource) -> bool {
+pub(crate) fn source_is_valid(source: &ModDownloadSource) -> bool {
     !normalize_mod_download_tp2(&source.tp2).is_empty() && !source.url.is_empty()
 }
 
-fn normalize_source_id(value: &str) -> String {
+pub(crate) fn normalize_source_id(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
-fn sort_sources(sources: &mut [ModDownloadSource]) {
+pub(crate) fn sort_sources(sources: &mut [ModDownloadSource]) {
     sources.sort_by(|left, right| {
         normalize_mod_download_tp2(&left.tp2)
             .cmp(&normalize_mod_download_tp2(&right.tp2))
@@ -1633,7 +1666,7 @@ fn sort_sources(sources: &mut [ModDownloadSource]) {
     });
 }
 
-fn merge_load_errors(left: Option<String>, right: Option<String>) -> Option<String> {
+pub(crate) fn merge_load_errors(left: Option<String>, right: Option<String>) -> Option<String> {
     match (left, right) {
         (Some(left), Some(right)) => Some(format!("{left} | {right}")),
         (Some(left), None) => Some(left),
@@ -1662,13 +1695,316 @@ mod tests {
     }
 
     #[test]
-    fn source_editor_block_includes_empty_selector_fields_and_indented_shape() {
-        let block = source_to_editor_block(&argent77_source());
+    fn complete_source_block_includes_every_field_and_indented_shape() {
+        let block = complete_source_block(&argent77_source());
 
         assert_eq!(
             block,
-            "  [[mods.sources]]\n  id = \"argent77\"\n  label = \"Argent77\"\n  type = \"github\"\n  url = \"https://github.com/Argent77/A7-ImprovedArcher\"\n  repo = \"Argent77/A7-ImprovedArcher\"\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  channel = \"\"\n  asset = \"\"\n  pkg_windows = \"wzp,zip\"\n  pkg_linux = \"lin,zip\"\n  pkg_macos = \"mac,zip\""
+            "  [[mods.sources]]\n  id = \"argent77\"\n  label = \"Argent77\"\n  type = \"github\"\n  url = \"https://github.com/Argent77/A7-ImprovedArcher\"\n  repo = \"Argent77/A7-ImprovedArcher\"\n  exact_github = []\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  release = \"\"\n  channel = \"\"\n  asset = \"\"\n  subdir_require = \"\"\n  aliases = []\n  pkg_windows = \"wzp,zip\"\n  pkg_linux = \"lin,zip\"\n  pkg_macos = \"mac,zip\"\n  default = false"
         );
+    }
+
+    #[test]
+    fn complete_block_writes_exact_github_as_array() {
+        let source = ModDownloadSource {
+            name: "Fork Picker".to_string(),
+            tp2: "forkpicker".to_string(),
+            source_id: "main".to_string(),
+            source_label: "Main".to_string(),
+            url: "https://github.com/A/B".to_string(),
+            github: Some("A/B".to_string()),
+            exact_github: vec!["A/B".to_string(), "C/D".to_string()],
+            ..Default::default()
+        };
+        let block = complete_source_block(&source);
+
+        assert!(
+            block.contains("exact_github = [\"A/B\", \"C/D\"]"),
+            "exact_github must be a TOML array, not repeated string lines; got:\n{block}"
+        );
+        let mod_block = format!(
+            "{}\n\n{block}\n",
+            template_mod_header(&source.tp2, &source.name)
+        );
+        toml::from_str::<ModDownloadsFile>(&mod_block)
+            .expect("exact_github as an array must parse");
+    }
+
+    #[test]
+    fn complete_block_round_trips() {
+        let sources = [
+            ModDownloadSource {
+                name: "GitHub Mod".to_string(),
+                tp2: "githubmod".to_string(),
+                source_id: "argent77".to_string(),
+                source_label: "Argent77".to_string(),
+                url: "https://github.com/Argent77/GitHubMod".to_string(),
+                github: Some("Argent77/GitHubMod".to_string()),
+                kind: Some("github".to_string()),
+                exact_github: vec!["Fork/GitHubMod".to_string()],
+                release: Some("v1.2.3".to_string()),
+                asset: Some("GitHubMod-v1.2.3.zip".to_string()),
+                aliases: vec!["oldname".to_string()],
+                config_files: vec!["mod.ini".to_string()],
+                tp2_rename: Some(ModDownloadTp2Rename {
+                    from: "setup-old.tp2".to_string(),
+                    to: "githubmod.tp2".to_string(),
+                }),
+                pkg_windows: Some("wzp,zip".to_string()),
+                pkg_linux: Some("lin,zip".to_string()),
+                pkg_macos: Some("mac,zip".to_string()),
+                source_default: true,
+                ..Default::default()
+            },
+            ModDownloadSource {
+                name: "URL Mod".to_string(),
+                tp2: "urlmod".to_string(),
+                source_id: "direct".to_string(),
+                source_label: "Direct".to_string(),
+                url: "https://example.com/urlmod.zip".to_string(),
+                kind: Some("url".to_string()),
+                subdir_require: Some("v2".to_string()),
+                source_default: true,
+                ..Default::default()
+            },
+            ModDownloadSource {
+                name: "Page Mod".to_string(),
+                tp2: "pagemod".to_string(),
+                source_id: "weaselmods".to_string(),
+                source_label: "Weasel Mods".to_string(),
+                url: "https://downloads.weaselmods.net/download/pagemod".to_string(),
+                kind: Some("page".to_string()),
+                release: Some("v1.1".to_string()),
+                asset: Some("PageMod-v1.1.zip".to_string()),
+                source_default: true,
+                ..Default::default()
+            },
+        ];
+
+        for source in sources {
+            let block = complete_source_block(&source);
+            let mod_block = format!(
+                "{}\n\n{block}\n",
+                template_mod_header(&source.tp2, &source.name)
+            );
+            let parsed = toml::from_str::<ModDownloadsFile>(&mod_block)
+                .unwrap_or_else(|err| panic!("round-trip parse failed for {}: {err}", source.tp2));
+            let overlay =
+                flatten_mod_overlay_entries(parsed.mods.into_iter().next().expect("one mod block"))
+                    .into_iter()
+                    .next()
+                    .expect("one source overlay");
+            let mut round_tripped = ModDownloadSource::default();
+            apply_source_overlay(&mut round_tripped, overlay);
+            normalize_source(&mut round_tripped);
+
+            assert_eq!(round_tripped.name, source.name);
+            assert_eq!(round_tripped.tp2, source.tp2);
+            assert_eq!(round_tripped.source_id, source.source_id);
+            assert_eq!(round_tripped.source_label, source.source_label);
+            assert_eq!(round_tripped.url, source.url);
+            assert_eq!(round_tripped.github, source.github);
+            assert_eq!(round_tripped.kind, source.kind);
+            assert_eq!(round_tripped.exact_github, source.exact_github);
+            assert_eq!(round_tripped.commit, source.commit);
+            assert_eq!(round_tripped.tag, source.tag);
+            assert_eq!(round_tripped.branch, source.branch);
+            assert_eq!(round_tripped.release, source.release);
+            assert_eq!(round_tripped.channel, source.channel);
+            assert_eq!(round_tripped.asset, source.asset);
+            assert_eq!(round_tripped.subdir_require, source.subdir_require);
+            assert_eq!(round_tripped.aliases, source.aliases);
+            assert_eq!(round_tripped.config_files, source.config_files);
+            assert_eq!(
+                round_tripped.tp2_rename.is_some(),
+                source.tp2_rename.is_some()
+            );
+            assert_eq!(round_tripped.pkg_windows, source.pkg_windows);
+            assert_eq!(round_tripped.pkg_linux, source.pkg_linux);
+            assert_eq!(round_tripped.pkg_macos, source.pkg_macos);
+            assert_eq!(round_tripped.source_default, source.source_default);
+        }
+    }
+
+    #[test]
+    fn template_example_block_is_complete() {
+        let template = user_mod_downloads_content();
+        let parsed = toml::from_str::<ModDownloadsFile>(template).expect("template parses");
+        let mod_overlay = parsed.mods.into_iter().next().expect("example mod block");
+        let overlay = flatten_mod_overlay_entries(mod_overlay)
+            .into_iter()
+            .next()
+            .expect("example source overlay");
+        let mut source = ModDownloadSource::default();
+        apply_source_overlay(&mut source, overlay);
+        normalize_source(&mut source);
+
+        let expected = complete_source_block(&source);
+        let example_start = template
+            .find("  [[mods.sources]]")
+            .expect("example source block");
+        let example_end = template
+            .find("# BIO download cheat sheet")
+            .expect("example block ends before the cheat sheet");
+        let example_block = template[example_start..example_end]
+            .replace("\r\n", "\n")
+            .trim_end()
+            .to_string();
+
+        assert_eq!(
+            example_block, expected,
+            "the template's example block must be a complete block"
+        );
+    }
+
+    #[test]
+    fn higher_layer_block_replaces_lower_whole() {
+        let default_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"\n  aliases = [\"oldname\"]\n";
+        let user_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/Fork\"\n  repo = \"A/Fork\"\n";
+
+        let load = load_mod_download_sources_from_texts(default_text, user_text, "");
+        let source = load.resolve_source("testmod", None).expect("resolves");
+
+        assert!(
+            source.aliases.is_empty(),
+            "a higher block must replace the lower block whole, not merge its aliases in"
+        );
+        assert_eq!(source.url, "https://github.com/A/Fork");
+    }
+
+    #[test]
+    fn missing_line_means_blank() {
+        let default_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"\n  channel = \"preonly\"\n  subdir_require = \"v2\"\n  pkg_windows = \"win.zip\"\n";
+        let modlist_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"\n  commit = \"deadbeef\"\n";
+
+        let load = load_mod_download_sources_from_texts(default_text, "", modlist_text);
+        let source = load.resolve_source("testmod", None).expect("resolves");
+
+        assert_eq!(source.commit.as_deref(), Some("deadbeef"));
+        assert!(
+            source.pkg_windows.is_none(),
+            "a missing pkg_windows line means blank"
+        );
+        assert!(
+            source.channel.is_none(),
+            "a missing channel line means blank"
+        );
+        assert!(
+            source.subdir_require.is_none(),
+            "a missing subdir_require line means blank"
+        );
+    }
+
+    #[test]
+    fn blank_repo_clears_github() {
+        let overlay = ModDownloadSourceVariantOverlay {
+            repo: Some(String::new()),
+            ..Default::default()
+        };
+        let mut target = ModDownloadSourceOverlay {
+            github: Some("Owner/Repo".to_string()),
+            ..Default::default()
+        };
+
+        apply_source_variant_overlay(&mut target, overlay);
+
+        assert!(
+            target.github.is_none(),
+            "a blank repo line must clear github, not leave it inherited"
+        );
+    }
+
+    #[test]
+    fn release_beats_channel_and_keeps_asset_and_packages() {
+        let mut source = ModDownloadSource {
+            channel: Some("preonly".to_string()),
+            release: Some("  v35.17  ".to_string()),
+            asset: Some("win-stratagems-v35.17.exe".to_string()),
+            pkg_windows: Some("wzp,zip".to_string()),
+            ..Default::default()
+        };
+
+        normalize_source(&mut source);
+
+        assert!(source.channel.is_none(), "release must beat channel");
+        assert_eq!(source.release.as_deref(), Some("v35.17"));
+        assert_eq!(
+            source.asset.as_deref(),
+            Some("win-stratagems-v35.17.exe"),
+            "release keeps asset"
+        );
+        assert_eq!(
+            source.pkg_windows.as_deref(),
+            Some("wzp,zip"),
+            "release keeps the package lines"
+        );
+    }
+
+    #[test]
+    fn tag_clears_release() {
+        let mut source = ModDownloadSource {
+            tag: Some("v1.1".to_string()),
+            release: Some("v1.2".to_string()),
+            ..Default::default()
+        };
+
+        normalize_source(&mut source);
+
+        assert_eq!(source.tag.as_deref(), Some("v1.1"));
+        assert!(source.release.is_none(), "tag must clear release");
+    }
+
+    #[test]
+    fn every_embedded_default_block_type_matches_its_url_shape() {
+        let load = load_source_overlays_from_str(default_mod_downloads_content(), "default");
+        for overlay in load.sources {
+            let mut source = ModDownloadSource::default();
+            apply_source_overlay(&mut source, overlay);
+            normalize_source(&mut source);
+            if !source_is_valid(&source) {
+                continue;
+            }
+            let expected = if source.github.is_some() {
+                "github"
+            } else if source_is_page_archive_url(&source.url) {
+                "page"
+            } else {
+                "url"
+            };
+            assert_eq!(
+                source.kind.as_deref(),
+                Some(expected),
+                "{} ({}) declares a type that does not match its url shape",
+                source.tp2,
+                source.source_id
+            );
+        }
+    }
+
+    #[test]
+    fn embedded_defaults_have_no_retired_channel_words() {
+        let load = load_source_overlays_from_str(default_mod_downloads_content(), "default");
+        for overlay in &load.sources {
+            let Some(channel) = overlay.channel.as_deref() else {
+                continue;
+            };
+            let normalized = channel.trim().to_ascii_lowercase();
+            assert_ne!(
+                normalized, "pre-release",
+                "{:?} still uses pre-release",
+                overlay.tp2
+            );
+            assert_ne!(
+                normalized, "release",
+                "{:?} still uses release",
+                overlay.tp2
+            );
+            assert_ne!(
+                normalized, "releases",
+                "{:?} still uses releases",
+                overlay.tp2
+            );
+        }
     }
 
     #[test]
@@ -1709,9 +2045,6 @@ mod tests {
         assert_eq!(block, existing);
     }
 
-    // ── Per-modlist ambient tests ──────────────────────────────
-
-    /// RAII drop-guard: restores the ambient to its prior value on drop (including panic).
     struct AmbientGuard(Option<PathBuf>);
 
     impl AmbientGuard {
@@ -1723,6 +2056,31 @@ mod tests {
     impl Drop for AmbientGuard {
         fn drop(&mut self) {
             set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    struct ConfigDirGuard(PathBuf);
+
+    impl ConfigDirGuard {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_mod_downloads_config_dir_test_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(path.clone()));
+            Self(path)
+        }
+    }
+
+    impl Drop for ConfigDirGuard {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -1760,7 +2118,6 @@ mod tests {
         let two_tier = load_two_tier_sources();
         let three_tier = load_mod_download_sources();
 
-        // With no ambient set, both loaders produce the same source count.
         assert_eq!(
             two_tier.sources.len(),
             three_tier.sources.len(),
@@ -1812,6 +2169,7 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
+        let _config_guard = ConfigDirGuard::new("writer_isolates");
         set_active_modlist_dir(None);
 
         let tmp_global_dir = unique_tmp_dir("global");
@@ -1822,12 +2180,9 @@ mod tests {
         let global_path = tmp_global_dir.join("mod_downloads_user.toml");
         let per_path = tmp_per_dir.join("mod_downloads_user.toml");
 
-        // Write sentinel content to the global file.
         std::fs::write(&global_path, "# global sentinel\n").unwrap();
 
-        // Ensure the default file exists (ensure_mod_downloads_files may write it).
         let source_block = "  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"";
-        // Write to the per-modlist path explicitly.
         let result = save_user_mod_download_source_block(
             "testmod",
             "TestMod",
@@ -1836,10 +2191,8 @@ mod tests {
             source_block,
             Some(&per_path),
         );
-        // May succeed or fail depending on test environment; what matters is global unchanged.
         drop(result);
 
-        // The global file must not have been touched.
         let global_content = std::fs::read_to_string(&global_path).unwrap();
         assert_eq!(
             global_content, "# global sentinel\n",
@@ -1857,19 +2210,13 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
 
-        // Set up a per-modlist dir with a tag pin.
         let tmp_dir = unique_tmp_dir("seed");
         write_toml_source(&tmp_dir, "v16");
         set_active_modlist_dir(Some(tmp_dir.clone()));
 
-        // GlobalOnly seed must NOT see v16 (the per-modlist pin).
-        // We can verify this by checking the two-tier result has no "v16" tag override
-        // for a source that only has a v16 in the per-modlist file.
         let two_tier = load_two_tier_sources();
         let three_tier = load_mod_download_sources();
 
-        // The two-tier result should NOT have a "testmod" source with tag v16
-        // (since v16 is only in the per-modlist file, not the global).
         let two_tier_testmod_tag = two_tier
             .sources
             .iter()
@@ -1881,7 +2228,6 @@ mod tests {
             .find(|s| s.tp2 == "testmod")
             .and_then(|s| s.tag.clone());
 
-        // The per-modlist pin should show in three-tier but not two-tier.
         if three_tier_testmod_tag.as_deref() == Some("v16") {
             assert_ne!(
                 two_tier_testmod_tag.as_deref(),
@@ -1892,47 +2238,6 @@ mod tests {
 
         set_active_modlist_dir(None);
         let _ = std::fs::remove_dir_all(&tmp_dir);
-    }
-
-    // ── Version-selector replacement tests (per-modlist overrides a different selector) ──
-
-    fn base_source_with_tag(tag: &str) -> ModDownloadSource {
-        ModDownloadSource {
-            name: "TestMod".to_string(),
-            tp2: "testmod".to_string(),
-            source_id: "main".to_string(),
-            source_label: "Main".to_string(),
-            url: "https://github.com/Test/Mod".to_string(),
-            github: Some("Test/Mod".to_string()),
-            tag: Some(tag.to_string()),
-            ..Default::default()
-        }
-    }
-
-    fn base_source_with_commit(commit: &str) -> ModDownloadSource {
-        ModDownloadSource {
-            name: "TestMod".to_string(),
-            tp2: "testmod".to_string(),
-            source_id: "main".to_string(),
-            source_label: "Main".to_string(),
-            url: "https://github.com/Test/Mod".to_string(),
-            github: Some("Test/Mod".to_string()),
-            commit: Some(commit.to_string()),
-            ..Default::default()
-        }
-    }
-
-    fn base_source_with_channel(channel: &str) -> ModDownloadSource {
-        ModDownloadSource {
-            name: "TestMod".to_string(),
-            tp2: "testmod".to_string(),
-            source_id: "main".to_string(),
-            source_label: "Main".to_string(),
-            url: "https://github.com/Test/Mod".to_string(),
-            github: Some("Test/Mod".to_string()),
-            channel: Some(channel.to_string()),
-            ..Default::default()
-        }
     }
 
     fn overlay_with_branch(branch: &str) -> ModDownloadSourceOverlay {
@@ -1964,15 +2269,8 @@ mod tests {
 
     #[test]
     fn per_modlist_branch_replaces_global_tag() {
-        // Base: global resolves to tag=v18. Per-modlist says branch=master.
-        // Expected: branch=master wins; tag is gone.
-        let mut source = base_source_with_tag("v18");
-        let overlay = overlay_with_branch("master");
-
-        if overlay_has_version_selector(&overlay) {
-            clear_source_version_selectors(&mut source);
-        }
-        apply_source_overlay(&mut source, overlay);
+        let mut source = ModDownloadSource::default();
+        apply_source_overlay(&mut source, overlay_with_branch("master"));
         normalize_source(&mut source);
 
         assert_eq!(
@@ -1980,21 +2278,17 @@ mod tests {
             Some("master"),
             "per-modlist branch=master must win"
         );
-        assert!(source.tag.is_none(), "global tag=v18 must be cleared");
+        assert!(
+            source.tag.is_none(),
+            "no tag survives a whole-block replace"
+        );
         assert!(source.commit.is_none(), "commit must remain clear");
     }
 
     #[test]
     fn per_modlist_tag_replaces_global_commit() {
-        // Base: global resolves to commit=abc123. Per-modlist says tag=v1.0.0.
-        // Expected: tag=v1.0.0 wins; commit is gone.
-        let mut source = base_source_with_commit("abc123def456abc123def456abc123def456abc1");
-        let overlay = overlay_with_tag("v1.0.0");
-
-        if overlay_has_version_selector(&overlay) {
-            clear_source_version_selectors(&mut source);
-        }
-        apply_source_overlay(&mut source, overlay);
+        let mut source = ModDownloadSource::default();
+        apply_source_overlay(&mut source, overlay_with_tag("v1.0.0"));
         normalize_source(&mut source);
 
         assert_eq!(
@@ -2002,19 +2296,17 @@ mod tests {
             Some("v1.0.0"),
             "per-modlist tag=v1.0.0 must win"
         );
-        assert!(source.commit.is_none(), "global commit must be cleared");
+        assert!(
+            source.commit.is_none(),
+            "no commit survives a whole-block replace"
+        );
         assert!(source.branch.is_none(), "branch must remain clear");
     }
 
     #[test]
     fn per_modlist_tag_replaces_global_channel() {
-        let mut source = base_source_with_channel("release");
-        let overlay = overlay_with_tag("v1.2.0");
-
-        if overlay_has_version_selector(&overlay) {
-            clear_source_version_selectors(&mut source);
-        }
-        apply_source_overlay(&mut source, overlay);
+        let mut source = ModDownloadSource::default();
+        apply_source_overlay(&mut source, overlay_with_tag("v1.2.0"));
         normalize_source(&mut source);
 
         assert_eq!(
@@ -2022,32 +2314,27 @@ mod tests {
             Some("v1.2.0"),
             "per-modlist tag=v1.2.0 must win"
         );
-        assert!(source.channel.is_none(), "global channel must be cleared");
+        assert!(
+            source.channel.is_none(),
+            "no channel survives a whole-block replace"
+        );
         assert!(source.branch.is_none(), "branch must remain clear");
         assert!(source.commit.is_none(), "commit must remain clear");
     }
 
     #[test]
-    fn per_modlist_overlay_without_selector_inherits_global_selector() {
-        // Base: global resolves to tag=v18. Per-modlist overlay has no selector (only url).
-        // Expected: tag=v18 is preserved (additive overlay).
-        let mut source = base_source_with_tag("v18");
-        let overlay = overlay_with_no_selector();
-
-        if overlay_has_version_selector(&overlay) {
-            clear_source_version_selectors(&mut source);
-        }
-        apply_source_overlay(&mut source, overlay);
+    fn per_modlist_overlay_without_selector_leaves_selector_blank() {
+        let mut source = ModDownloadSource::default();
+        apply_source_overlay(&mut source, overlay_with_no_selector());
         normalize_source(&mut source);
 
-        assert_eq!(
-            source.tag.as_deref(),
-            Some("v18"),
-            "global tag=v18 must be preserved when per-modlist has no selector"
+        assert!(
+            source.tag.is_none(),
+            "a whole-block replace never inherits a lower tier's tag"
         );
         assert_eq!(
             source.url, "https://github.com/Test/Fork",
-            "non-selector field from per-modlist overlay must be applied"
+            "the field the per-modlist overlay does list must still apply"
         );
     }
 
@@ -2066,7 +2353,6 @@ mod tests {
 
     #[test]
     fn ambient_unset_resolution_unchanged_by_selector_fix() {
-        // Resolution is inert when no ambient modlist is set.
         let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -2085,8 +2371,6 @@ mod tests {
 
     #[test]
     fn per_modlist_branch_pin_applied_via_ambient() {
-        // End-to-end: per-modlist file pins an otherwise-absent source to branch=next.
-        // Verifies the full ambient path produces branch=next (not the default selector).
         let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -2118,10 +2402,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
-    // ── Save-dedup tests ────────────
-
-    /// Builds a doubled TOML string: the same tp2 appears in two [[mods]] blocks,
-    /// the first with commit=abc, the second with branch=master.
     fn doubled_toml() -> String {
         concat!(
             "[[mods]]\nname = \"cdtweaks\"\ntp2 = \"cdtweaks\"\n\n",
@@ -2150,13 +2430,13 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
+        let _config_guard = ConfigDirGuard::new("save_dedup_replace");
 
         let tmp_dir = unique_tmp_dir("save_dedup_replace");
         std::fs::create_dir_all(&tmp_dir).unwrap();
         let tmp_path = tmp_dir.join("mod_downloads_user.toml");
         std::fs::write(&tmp_path, doubled_toml()).unwrap();
 
-        // Pin to a new commit via the save path.
         let new_source = "  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/Gibberlings3/cdtweaks\"\n  repo = \"Gibberlings3/cdtweaks\"\n  commit = \"newcommit999\"";
         let result = save_user_mod_download_source_block(
             "cdtweaks",
@@ -2170,13 +2450,11 @@ mod tests {
 
         let saved = std::fs::read_to_string(&tmp_path).unwrap();
 
-        // After save, exactly one [[mods]] block for cdtweaks.
         assert_eq!(
             count_mod_blocks_for_tp2(&saved, "cdtweaks"),
             1,
             "save must collapse duplicate blocks into one; got:\n{saved}"
         );
-        // The surviving block must carry the new pin, not the stale branch=master.
         assert!(
             saved.contains("newcommit999"),
             "new commit pin must be present; got:\n{saved}"
@@ -2199,13 +2477,13 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
+        let _config_guard = ConfigDirGuard::new("save_dedup_remove");
 
         let tmp_dir = unique_tmp_dir("save_dedup_remove");
         std::fs::create_dir_all(&tmp_dir).unwrap();
         let tmp_path = tmp_dir.join("mod_downloads_user.toml");
         std::fs::write(&tmp_path, doubled_toml()).unwrap();
 
-        // Removal path: empty source_block removes the source from all matching blocks.
         let result = save_user_mod_download_source_block(
             "cdtweaks",
             "cdtweaks",
@@ -2218,7 +2496,6 @@ mod tests {
 
         let saved = std::fs::read_to_string(&tmp_path).unwrap();
 
-        // All matching cdtweaks blocks must be gone (no sources left in either).
         assert_eq!(
             count_mod_blocks_for_tp2(&saved, "cdtweaks"),
             0,
@@ -2234,12 +2511,12 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
+        let _config_guard = ConfigDirGuard::new("save_dedup_others");
 
         let tmp_dir = unique_tmp_dir("save_dedup_others");
         std::fs::create_dir_all(&tmp_dir).unwrap();
         let tmp_path = tmp_dir.join("mod_downloads_user.toml");
 
-        // File has a doubled cdtweaks block AND a separate unrelated mod.
         let content = concat!(
             "[[mods]]\nname = \"othermod\"\ntp2 = \"othermod\"\n\n",
             "  [[mods.sources]]\n  id = \"other\"\n  label = \"Other\"\n",
@@ -2269,7 +2546,6 @@ mod tests {
 
         let saved = std::fs::read_to_string(&tmp_path).unwrap();
 
-        // cdtweaks: exactly one block with the new pin.
         assert_eq!(
             count_mod_blocks_for_tp2(&saved, "cdtweaks"),
             1,
@@ -2280,7 +2556,6 @@ mod tests {
             "new tag pin must be present; got:\n{saved}"
         );
 
-        // othermod must be present and untouched.
         assert_eq!(
             count_mod_blocks_for_tp2(&saved, "othermod"),
             1,
@@ -2300,12 +2575,12 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = AmbientGuard::acquire();
+        let _config_guard = ConfigDirGuard::new("save_dedup_clean");
 
         let tmp_dir = unique_tmp_dir("save_dedup_clean");
         std::fs::create_dir_all(&tmp_dir).unwrap();
         let tmp_path = tmp_dir.join("mod_downloads_user.toml");
 
-        // Single (clean, non-doubled) block.
         let single = concat!(
             "[[mods]]\nname = \"testmod\"\ntp2 = \"testmod\"\n\n",
             "  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n",

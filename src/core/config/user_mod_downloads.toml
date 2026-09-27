@@ -4,6 +4,8 @@
 # You can use it to add a new mod, add another source/fork, or replace a broken source.
 # Only edit values inside quotes unless you know what the field does.
 
+format = 2
+
 [[mods]]
 name = "Example Mod"
 tp2 = "examplemod"
@@ -14,11 +16,15 @@ tp2 = "examplemod"
   type = "github"
   url = "https://github.com/ExampleUser/ExampleMod"
   repo = "ExampleUser/ExampleMod"
+  exact_github = []
   commit = ""
   tag = ""
   branch = ""
-  channel = "releases"
+  release = ""
+  channel = ""
   asset = ""
+  subdir_require = ""
+  aliases = []
   pkg_windows = "wzp,zip"
   pkg_linux = "lin,zip"
   pkg_macos = "mac,zip"
@@ -32,8 +38,9 @@ tp2 = "examplemod"
 # Source code (zip)
 # Source code (tar.gz)
 
-# channel = "releases"    # Use normal releases
-# channel = "pre-release" # Use prereleases only
+# channel = ""            # Newest normal release
+# channel = "pre-release" # Newest release, pre-releases included
+# channel = "preonly"     # Newest pre-release only
 
 # asset = "ModName-v1.0.zip" # Pick this exact uploaded release asset
 
@@ -44,9 +51,13 @@ tp2 = "examplemod"
 # pkg_windows = "w64zip,w32zip"     # Pick 64-bit Windows zip first, then 32-bit
 # pkg_macos = "macarmzip,macx64zip" # Pick Apple Silicon mac zip first, then Intel mac zip
 
+# Release mode (one fixed release):
+# release = "v1.1"                                # That release: the file below, else the best file for your OS (pkg_*), else its source zip
+# release = "v1.1" + asset = "ModName-v1.1.zip"   # That exact uploaded file
+
 # Source tag mode:
 # Use tag when you want source code from one fixed GitHub tag.
-# tag overrides branch/channel/pkg_*/asset.
+# tag overrides branch/release/channel/pkg_*/asset and always gives the source zip.
 
 # tag = "v1.1" # Use source from exact tag v1.1
 
@@ -93,8 +104,9 @@ tp2 = "examplemod"
 # Renaming folders can break mods because TP2 files often contain hardcoded folder paths.
 
 # Priority:
-# 1. tag
-# 2. branch
-# 3. asset
-# 4. pkg_windows/pkg_linux/pkg_macos
+# 1. commit
+# 2. tag
+# 3. branch
+# 4. release
 # 5. channel
+# asset and pkg_windows/pkg_linux/pkg_macos apply to release and channel

@@ -177,6 +177,7 @@ fn accept_latest_for_exact_version_misses(
                 tag: request.tag.clone(),
                 commit: request.commit.clone(),
                 branch: request.branch.clone(),
+                release: None,
                 asset: request.asset.clone(),
                 pkg: request.pkg.clone(),
                 requested_version: None,

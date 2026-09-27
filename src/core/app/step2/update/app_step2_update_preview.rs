@@ -656,6 +656,7 @@ fn queue_source_request(
             tag: source.tag.clone(),
             commit: source.commit.clone(),
             branch: source.branch.clone(),
+            release: source.release.clone(),
             asset: if source.commit.is_none() && source.tag.is_none() && source.branch.is_none() {
                 source.asset.clone()
             } else {
@@ -684,6 +685,7 @@ fn queue_source_request(
             tag: None,
             commit: None,
             branch: None,
+            release: None,
             asset: None,
             pkg: None,
             requested_version: requested_version
@@ -704,6 +706,7 @@ fn queue_source_request(
             tag: None,
             commit: None,
             branch: None,
+            release: None,
             asset: None,
             pkg: None,
             requested_version: requested_version
@@ -724,6 +727,7 @@ fn queue_source_request(
             tag: None,
             commit: None,
             branch: None,
+            release: None,
             asset: None,
             pkg: None,
             requested_version: requested_version

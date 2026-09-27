@@ -245,7 +245,8 @@ pub(crate) fn import_modlist_share_code(
                 std::fs::create_dir_all(parent)
                     .map_err(|err| format!("create per-modlist dir failed: {err}"))?;
             }
-            write_text_file(pin_path, text)?;
+            let migrated_text = migrate_share_import_text(text)?;
+            write_text_file(pin_path, &migrated_text)?;
         } else {
             warn!(
                 target = "share",
@@ -272,6 +273,22 @@ pub(crate) fn import_modlist_share_code(
     state.step5.last_status_text = "Imported modlist share code".to_string();
     warn_on_unresolved_mods(&preview);
     Ok(preview)
+}
+
+fn migrate_share_import_text(text: &str) -> Result<String, String> {
+    let default_text = crate::app::mod_downloads::default_mod_downloads_content();
+    let user_text = fs::read_to_string(crate::app::mod_downloads::mod_downloads_user_path())
+        .unwrap_or_default();
+    match crate::app::mod_downloads_migrate::migrate_source_text(
+        text,
+        default_text,
+        &user_text,
+        crate::app::mod_downloads_migrate::MigrateTier::Modlist,
+    ) {
+        crate::app::mod_downloads_migrate::MigrateResult::Rewritten(rewritten) => Ok(rewritten),
+        crate::app::mod_downloads_migrate::MigrateResult::Unchanged => Ok(text.to_string()),
+        crate::app::mod_downloads_migrate::MigrateResult::Unparseable(err) => Err(err),
+    }
 }
 
 fn warn_on_unresolved_mods(preview: &ModlistSharePreview) {
@@ -999,8 +1016,7 @@ pub(crate) struct ResolvedSources {
 }
 
 fn build_resolved_source_overrides(state: &WizardState) -> Result<ResolvedSources, String> {
-    let default_text = fs::read_to_string(crate::app::mod_downloads::mod_downloads_default_path())
-        .unwrap_or_default();
+    let default_text = crate::app::mod_downloads::default_mod_downloads_content();
     let user_text = fs::read_to_string(crate::app::mod_downloads::mod_downloads_user_path())
         .unwrap_or_default();
     let modlist_text = crate::app::mod_downloads::active_modlist_downloads_path()
@@ -1011,7 +1027,7 @@ fn build_resolved_source_overrides(state: &WizardState) -> Result<ResolvedSource
             .unwrap_or_default();
     build_resolved_source_overrides_from_texts(
         state,
-        &default_text,
+        default_text,
         &user_text,
         &modlist_text,
         &refs_text,
@@ -1076,10 +1092,11 @@ pub(crate) fn build_resolved_source_overrides_from_texts(
     let toml = if toml_out.is_empty() {
         None
     } else {
-        toml::from_str::<crate::app::mod_downloads::ModDownloadsFile>(&toml_out).map_err(
+        let full_text = format!("format = 2\n\n{toml_out}");
+        toml::from_str::<crate::app::mod_downloads::ModDownloadsFile>(&full_text).map_err(
             |err| format!("resolved source overrides failed round-trip validation: {err}"),
         )?;
-        Some(toml_out)
+        Some(full_text)
     };
 
     Ok(ResolvedSources { toml, unresolved })
@@ -1109,66 +1126,12 @@ fn serialize_resolved_mod(
         escape_for_toml(name),
         escape_for_toml(tp2.trim()),
     );
-    let source_block = serialize_resolved_source_block(source);
+    let source_block = crate::app::mod_downloads::complete_source_block(source);
     format!("{header}\n\n{source_block}")
 }
 
 fn escape_for_toml(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn serialize_resolved_source_block(
-    source: &crate::app::mod_downloads::ModDownloadSource,
-) -> String {
-    let mut lines = vec![
-        "[[mods.sources]]".to_string(),
-        format!("id = \"{}\"", escape_for_toml(&source.source_id)),
-        format!("label = \"{}\"", escape_for_toml(&source.source_label)),
-    ];
-
-    if let Some(github) = source.github.as_ref() {
-        lines.push("type = \"github\"".to_string());
-        lines.push(format!("url = \"{}\"", escape_for_toml(&source.url)));
-        lines.push(format!("repo = \"{}\"", escape_for_toml(github)));
-    } else if !source.url.is_empty() {
-        lines.push("type = \"url\"".to_string());
-        lines.push(format!("url = \"{}\"", escape_for_toml(&source.url)));
-    }
-
-    if !source.exact_github.is_empty() {
-        let items = source
-            .exact_github
-            .iter()
-            .map(|s| format!("\"{}\"", escape_for_toml(s)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        lines.push(format!("exact_github = [{items}]"));
-    }
-    if let Some(tag) = source.tag.as_ref().filter(|s| !s.is_empty()) {
-        lines.push(format!("tag = \"{}\"", escape_for_toml(tag)));
-    }
-    if let Some(commit) = source.commit.as_ref().filter(|s| !s.is_empty()) {
-        lines.push(format!("commit = \"{}\"", escape_for_toml(commit)));
-    }
-    if let Some(branch) = source.branch.as_ref().filter(|s| !s.is_empty()) {
-        lines.push(format!("branch = \"{}\"", escape_for_toml(branch)));
-    }
-    if let Some(channel) = source.channel.as_ref().filter(|s| !s.is_empty()) {
-        lines.push(format!("channel = \"{}\"", escape_for_toml(channel)));
-    }
-
-    lines
-        .iter()
-        .enumerate()
-        .map(|(i, line)| {
-            if i == 0 {
-                line.clone()
-            } else {
-                format!("  {line}")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 fn build_per_modlist_installed_refs(state: &WizardState) -> Option<String> {
@@ -1387,6 +1350,10 @@ mod tests {
 
     #[test]
     fn export_share_code_bakes_current_modlist_provenance() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = ConfigDirGuard::new("provenance");
         let mut state = state_with_one_bgee_component();
         state.set_modlist_share_provenance(
             Some("  Tactical EET 2026  ".to_string()),
@@ -1577,6 +1544,29 @@ mod tests {
         }
     }
 
+    struct ConfigDirGuard(std::path::PathBuf);
+    impl ConfigDirGuard {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_modlist_share_config_dir_test_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(path.clone()));
+            Self(path)
+        }
+    }
+    impl Drop for ConfigDirGuard {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     fn github_source_multi_exact() -> crate::app::mod_downloads::ModDownloadSource {
         crate::app::mod_downloads::ModDownloadSource {
             name: "TestMod".to_string(),
@@ -1612,7 +1602,7 @@ mod tests {
         let _guard = AmbientGuard::acquire();
 
         let source = github_source_multi_exact();
-        let block = serialize_resolved_source_block(&source);
+        let block = crate::app::mod_downloads::complete_source_block(&source);
 
         assert!(
             block.contains("exact_github = ["),
@@ -1640,12 +1630,12 @@ mod tests {
         let _guard = AmbientGuard::acquire();
 
         let source = url_source();
-        let block = serialize_resolved_source_block(&source);
+        let block = crate::app::mod_downloads::complete_source_block(&source);
 
         assert!(block.contains("url = \""), "url source must emit url field");
         assert!(
-            !block.contains("repo = \""),
-            "url source must not emit repo field"
+            block.contains("repo = \"\""),
+            "a complete block still lists repo, blank when there is none"
         );
 
         let wrapped = format!("[[mods]]\nname = \"U\"\ntp2 = \"u\"\n\n{block}");
@@ -1985,9 +1975,12 @@ mod tests {
             &mut source,
             Some("master@7649ced6cd25865874d787ec1a9abbc67b068729"),
         );
-        let block = serialize_resolved_source_block(&source);
+        let block = crate::app::mod_downloads::complete_source_block(&source);
         assert!(block.contains("commit = \"7649ced6cd25865874d787ec1a9abbc67b068729\""));
-        assert!(!block.contains("branch = "));
+        assert!(
+            block.contains("branch = \"\""),
+            "a pinned commit clears branch to blank"
+        );
     }
 
     #[test]
@@ -2150,6 +2143,10 @@ mod tests {
 
     #[test]
     fn iwdee_export_writes_the_iwdee_key() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = ConfigDirGuard::new("iwdee");
         let mut state = state_with_one_bgee_component();
         state.step1.game_install = "IWDEE".to_string();
 
@@ -2222,6 +2219,10 @@ mod tests {
 
     #[test]
     fn bgee_bg2ee_eet_weidu_logs_json_is_unchanged() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = ConfigDirGuard::new("bgee_bg2ee_eet");
         for game in ["BGEE", "BG2EE", "EET"] {
             let mut state = state_with_one_bgee_component();
             state.step1.game_install = game.to_string();
@@ -2257,5 +2258,107 @@ mod tests {
                 "bg2ee text for {game}"
             );
         }
+    }
+
+    #[test]
+    fn share_export_writes_marker_and_complete_blocks() {
+        let mut state = state_with_one_bgee_component();
+        state.step2.bgee_mods = vec![make_step2_mod("moda", "ModA")];
+
+        let default_text = "[[mods]]\nname = \"ModA\"\ntp2 = \"moda\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/ModA\"\n  repo = \"Owner/ModA\"\n";
+
+        let resolved = build_resolved_source_overrides_from_texts(&state, default_text, "", "", "")
+            .expect("resolves");
+        let toml = resolved.toml.expect("a resolved mod produces text");
+
+        assert!(
+            toml.starts_with("format = 2"),
+            "the exported text must start with the format marker; got:\n{toml}"
+        );
+        assert!(
+            toml.contains("[[mods.sources]]") && toml.contains("default = true"),
+            "the exported text must carry a complete block; got:\n{toml}"
+        );
+    }
+
+    struct ShareImportTestRoot {
+        root: std::path::PathBuf,
+        config_dir: std::path::PathBuf,
+        modlist_dir: std::path::PathBuf,
+    }
+
+    impl ShareImportTestRoot {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "bio_modlist_share_import_migrate_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            let config_dir = root.join("config");
+            let modlist_dir = root.join("modlist");
+            std::fs::create_dir_all(&config_dir).unwrap();
+            std::fs::create_dir_all(&modlist_dir).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(config_dir.clone()));
+            crate::app::mod_downloads::set_active_modlist_dir(Some(modlist_dir.clone()));
+            Self {
+                root,
+                config_dir,
+                modlist_dir,
+            }
+        }
+    }
+
+    impl Drop for ShareImportTestRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.config_dir);
+            crate::app::mod_downloads::set_active_modlist_dir(None);
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn share_import_migrates_codes_without_marker() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = ShareImportTestRoot::new("marker");
+        std::fs::write(
+            root.config_dir.join("mod_downloads_user.toml"),
+            "format = 2\n\n",
+        )
+        .unwrap();
+
+        let mut state = state_with_one_bgee_component();
+        state.step2.bgee_mods = vec![make_step2_mod("moda", "ModA")];
+        state.step1.bgee_log_folder = root.modlist_dir.to_string_lossy().to_string();
+
+        let payload_json = serde_json::json!({
+            "format_version": 1,
+            "bio_version": "0.1.0-test",
+            "game_install": "BGEE",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": { "bgee": "~MOD/MOD.TP2~ #0 #0 // A component: 1.0" },
+            "source_overrides": {
+                "mod_downloads_user_toml": "[[mods]]\nname = \"ModA\"\ntp2 = \"moda\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/ModA\"\n  repo = \"Owner/ModA\"\n  channel = \"pre-release\"\n"
+            }
+        });
+        let code =
+            encode_share_payload_text(&payload_json.to_string()).expect("encode fixture code");
+
+        import_modlist_share_code(&mut state, &code).expect("import");
+
+        let written =
+            std::fs::read_to_string(root.modlist_dir.join("mod_downloads_user.toml")).unwrap();
+        assert!(
+            written.starts_with("# BIO mod download user file"),
+            "an imported code without the marker must be migrated on the way in; got:\n{written}"
+        );
+        assert!(
+            written.contains("channel = \"preonly\""),
+            "pre-release must map to preonly on import; got:\n{written}"
+        );
     }
 }

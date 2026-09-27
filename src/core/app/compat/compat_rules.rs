@@ -13,7 +13,7 @@ use crate::platform_defaults::app_config_file;
 
 const COMPAT_RULES_LEGACY_USER_FILE_NAME: &str = "step2_compat_rules.toml";
 const COMPAT_RULES_USER_FILE_NAME: &str = "step2_compat_rules_user.toml";
-const COMPAT_RULES_DEFAULT_FILE_NAME: &str = "step2_compat_rules_default.toml";
+pub(crate) const BUILT_IN_RULES_LABEL: &str = "BIO default (built in)";
 
 #[derive(Debug, Clone)]
 pub(crate) struct CompatRulesFileInventory {
@@ -50,20 +50,13 @@ pub(crate) fn compat_rules_legacy_user_path() -> PathBuf {
     app_config_file(COMPAT_RULES_LEGACY_USER_FILE_NAME, "config")
 }
 
-pub(crate) fn compat_rules_default_path() -> PathBuf {
-    app_config_file(COMPAT_RULES_DEFAULT_FILE_NAME, "config")
-}
-
 pub(crate) fn ensure_compat_rules_files() -> std::io::Result<()> {
-    let default_path = compat_rules_default_path();
     let user_path = compat_rules_user_path();
     let legacy_user_path = compat_rules_legacy_user_path();
 
-    if let Some(parent) = default_path.parent() {
+    if let Some(parent) = user_path.parent() {
         fs::create_dir_all(parent)?;
     }
-
-    write_if_changed(&default_path, default_step2_rules_content())?;
 
     if !user_path.exists() && legacy_user_path.exists() {
         fs::copy(&legacy_user_path, &user_path)?;
@@ -90,46 +83,37 @@ pub(crate) fn effective_compat_rules_user_path() -> PathBuf {
 }
 
 pub(crate) fn rules_files_signature() -> String {
-    let default_path = compat_rules_default_path();
     let user_path = effective_compat_rules_user_path();
     format!(
-        "{}|{}|{}|{}",
-        default_path.display(),
-        cache_stamp_signature(&default_path),
+        "builtin|{}|{}",
         user_path.display(),
         cache_stamp_signature(&user_path)
     )
 }
 
 pub(crate) fn load_rules() -> CompatRulesLoad {
-    let default_path = compat_rules_default_path();
     let user_path = effective_compat_rules_user_path();
-    let default_stamp = cache_stamp(&default_path);
     let user_stamp = cache_stamp(&user_path);
     let cache = rules_cache();
     let mut cache = cache.lock().expect("compat rules cache lock poisoned");
 
     if let Some(entry) = cache.as_ref()
-        && entry.default_path == default_path
         && entry.user_path == user_path
-        && entry.default_stamp == default_stamp
         && entry.user_stamp == user_stamp
     {
         return entry.load.clone();
     }
 
-    let default_load = load_rules_from_path(&default_path);
+    let built_in = built_in_rules_load();
     let user_load = load_rules_from_path(&user_path);
-    let mut rules = default_load.rules;
+    let mut rules = built_in.rules.clone();
     rules.extend(user_load.rules);
     let load = CompatRulesLoad {
         rules,
-        error: merge_load_errors(default_load.error, user_load.error),
+        error: merge_load_errors(built_in.error.clone(), user_load.error),
     };
     *cache = Some(CachedRules {
-        default_path,
         user_path,
-        default_stamp,
         user_stamp,
         load: load.clone(),
     });
@@ -137,26 +121,29 @@ pub(crate) fn load_rules() -> CompatRulesLoad {
 }
 
 pub(crate) fn inspect_compat_rules_inventory() -> CompatRulesInventory {
-    let default_path = compat_rules_default_path();
     let user_path = effective_compat_rules_user_path();
     let loaded_rules = load_rules();
 
     CompatRulesInventory {
-        default_path: default_path.display().to_string(),
+        default_path: BUILT_IN_RULES_LABEL.to_string(),
         user_path: user_path.display().to_string(),
         total_loaded_rules: loaded_rules.rules.len(),
         files: vec![
-            inspect_rules_file("default", &default_path),
+            inspect_rules_content(
+                "default",
+                BUILT_IN_RULES_LABEL.to_string(),
+                default_step2_rules_content(),
+            ),
             inspect_rules_file("user", &user_path),
         ],
     }
 }
 
-fn write_if_changed(path: &std::path::Path, content: &str) -> std::io::Result<()> {
-    match fs::read_to_string(path) {
-        Ok(existing) if existing == content => Ok(()),
-        _ => fs::write(path, content),
-    }
+fn built_in_rules_load() -> &'static CompatRulesLoad {
+    static BUILT_IN: OnceLock<CompatRulesLoad> = OnceLock::new();
+    BUILT_IN.get_or_init(|| {
+        load_rules_from_content(default_step2_rules_content(), BUILT_IN_RULES_LABEL)
+    })
 }
 
 const fn default_step2_rules_content() -> &'static str {
@@ -175,9 +162,7 @@ struct FileCacheStamp {
 
 #[derive(Debug, Clone)]
 struct CachedRules {
-    default_path: PathBuf,
     user_path: PathBuf,
-    default_stamp: FileCacheStamp,
     user_stamp: FileCacheStamp,
     load: CompatRulesLoad,
 }
@@ -223,14 +208,17 @@ fn load_rules_from_path(path: &PathBuf) -> CompatRulesLoad {
             };
         }
     };
-    let parsed = match toml::from_str::<CompatRulesFile>(&content) {
+    load_rules_from_content(&content, &path.to_string_lossy())
+}
+
+fn load_rules_from_content(content: &str, loaded_from: &str) -> CompatRulesLoad {
+    let parsed = match toml::from_str::<CompatRulesFile>(content) {
         Ok(value) => value,
         Err(err) => {
             return CompatRulesLoad {
                 rules: Vec::new(),
                 error: Some(format!(
-                    "compat rules parse failed for {}: {err}",
-                    path.display()
+                    "compat rules parse failed for {loaded_from}: {err}"
                 )),
             };
         }
@@ -249,7 +237,7 @@ fn load_rules_from_path(path: &PathBuf) -> CompatRulesLoad {
                     && !rule.kind.trim().is_empty()
             })
             .map(|mut rule| {
-                rule.loaded_from = Some(path.to_string_lossy().to_string());
+                rule.loaded_from = Some(loaded_from.to_string());
                 rule
             })
             .collect(),
@@ -293,11 +281,10 @@ pub(crate) fn compat_rule_source_bucket(rule: &CompatRule) -> String {
     let Some(loaded_from) = rule.loaded_from.as_deref() else {
         return "unknown".to_string();
     };
-    let loaded_from = normalize_path_key(loaded_from);
-    let default_path = normalize_path_key(&compat_rules_default_path().display().to_string());
-    if loaded_from == default_path {
+    if loaded_from == BUILT_IN_RULES_LABEL {
         return "default".to_string();
     }
+    let loaded_from = normalize_path_key(loaded_from);
     let user_path = normalize_path_key(&effective_compat_rules_user_path().display().to_string());
     if loaded_from == user_path {
         return "user".to_string();
@@ -307,29 +294,51 @@ pub(crate) fn compat_rule_source_bucket(rule: &CompatRule) -> String {
 
 fn inspect_rules_file(role: &str, path: &PathBuf) -> CompatRulesFileInventory {
     let exists = path.is_file();
+    if !exists {
+        return CompatRulesFileInventory {
+            role: role.to_string(),
+            path: path.display().to_string(),
+            exists,
+            parse_status: "missing".to_string(),
+            schema_version: None,
+            total_rules: 0,
+            enabled_rules: 0,
+            loaded_rules: 0,
+            error: None,
+        };
+    }
+    let content = match fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(err) => {
+            return CompatRulesFileInventory {
+                role: role.to_string(),
+                path: path.display().to_string(),
+                exists,
+                parse_status: "read_error".to_string(),
+                schema_version: None,
+                total_rules: 0,
+                enabled_rules: 0,
+                loaded_rules: 0,
+                error: Some(err.to_string()),
+            };
+        }
+    };
+    inspect_rules_content(role, path.display().to_string(), &content)
+}
+
+fn inspect_rules_content(role: &str, path: String, content: &str) -> CompatRulesFileInventory {
     let mut inventory = CompatRulesFileInventory {
         role: role.to_string(),
-        path: path.display().to_string(),
-        exists,
-        parse_status: if exists { "unknown" } else { "missing" }.to_string(),
+        path,
+        exists: true,
+        parse_status: "unknown".to_string(),
         schema_version: None,
         total_rules: 0,
         enabled_rules: 0,
         loaded_rules: 0,
         error: None,
     };
-    if !exists {
-        return inventory;
-    }
-    let content = match fs::read_to_string(path) {
-        Ok(value) => value,
-        Err(err) => {
-            inventory.parse_status = "read_error".to_string();
-            inventory.error = Some(err.to_string());
-            return inventory;
-        }
-    };
-    let parsed = match toml::from_str::<CompatRulesFile>(&content) {
+    let parsed = match toml::from_str::<CompatRulesFile>(content) {
         Ok(value) => value,
         Err(err) => {
             inventory.parse_status = "parse_error".to_string();
@@ -353,4 +362,76 @@ fn inspect_rules_file(role: &str, path: &PathBuf) -> CompatRulesFileInventory {
 
 fn normalize_path_key(value: &str) -> String {
     value.trim().replace('\\', "/").to_ascii_lowercase()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::platform_defaults::{clear_config_dir_override_if, set_config_dir_override};
+
+    struct TempRootGuard(PathBuf);
+
+    impl Drop for TempRootGuard {
+        fn drop(&mut self) {
+            clear_config_dir_override_if(&self.0);
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn temp_root(tag: &str) -> TempRootGuard {
+        let root = std::env::temp_dir().join(format!(
+            "bio_compat_rules_{tag}_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|value| value.as_nanos())
+                .unwrap_or_default()
+        ));
+        fs::create_dir_all(&root).expect("temp root");
+        set_config_dir_override(Some(root.clone()));
+        TempRootGuard(root)
+    }
+
+    #[test]
+    fn built_in_rules_load_without_a_default_file() {
+        let guard = temp_root("no_default");
+        assert!(!guard.0.join("step2_compat_rules_default.toml").exists());
+        let expected = load_rules_from_content(default_step2_rules_content(), BUILT_IN_RULES_LABEL);
+        assert!(!expected.rules.is_empty());
+        let loaded = load_rules();
+        let built_in_count = loaded
+            .rules
+            .iter()
+            .filter(|rule| rule.loaded_from.as_deref() == Some(BUILT_IN_RULES_LABEL))
+            .count();
+        assert_eq!(built_in_count, expected.rules.len());
+    }
+
+    #[test]
+    fn built_in_rules_are_bucketed_default() {
+        let guard = temp_root("bucket");
+        assert!(!guard.0.join("step2_compat_rules_default.toml").exists());
+        let loaded = load_rules();
+        let rule = loaded
+            .rules
+            .iter()
+            .find(|rule| rule.loaded_from.as_deref() == Some(BUILT_IN_RULES_LABEL))
+            .expect("at least one built-in rule loaded");
+        assert_eq!(compat_rule_source_bucket(rule), "default");
+    }
+
+    #[test]
+    fn signature_ignores_missing_default_file() {
+        let guard = temp_root("signature");
+        assert!(!guard.0.join("step2_compat_rules_default.toml").exists());
+        let signature = rules_files_signature();
+        assert!(signature.starts_with("builtin|"));
+        assert!(
+            !signature
+                .to_ascii_lowercase()
+                .contains("step2_compat_rules_default")
+        );
+    }
 }

@@ -81,6 +81,8 @@ fn main() -> Result<()> {
         ),
     }
 
+    bio::app::mod_downloads_migrate::migrate_source_files_at_launch();
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
