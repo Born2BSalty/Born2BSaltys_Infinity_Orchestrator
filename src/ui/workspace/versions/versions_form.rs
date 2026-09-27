@@ -290,7 +290,7 @@ fn text_field(
         palette,
         InputOpts {
             edit: egui::TextEdit::singleline(value)
-                .hint_text(placeholder)
+                .hint_text(egui::RichText::new(placeholder).color(redesign_text_faint(palette)))
                 .text_color(redesign_text_primary(palette))
                 .background_color(redesign_input_bg(palette))
                 .margin(FIELD_MARGIN)
@@ -393,7 +393,7 @@ fn render_source_kind_dropdown(
     }
     let pos = egui::pos2(rect.left(), rect.bottom() + 2.0);
     let area = egui::Area::new(id.with("popup"))
-        .order(egui::Order::Foreground)
+        .order(egui::Order::Tooltip)
         .fixed_pos(pos)
         .show(ctx, |ui| {
             popup_frame(palette).show(ui, |ui| {
@@ -406,6 +406,7 @@ fn render_source_kind_dropdown(
                 }
             });
         });
+    ui.ctx().set_sublayer(ui.layer_id(), area.response.layer_id);
     let should_close = ctx.input(|i| i.key_pressed(egui::Key::Escape))
         || (response.clicked_elsewhere() && area.response.clicked_elsewhere());
     if should_close {
@@ -605,7 +606,7 @@ fn render_release_control(
     let pos = egui::pos2(rect.left(), rect.bottom() + 2.0);
     let popup_w = width.max(280.0);
     let area = egui::Area::new(id.with("popup"))
-        .order(egui::Order::Foreground)
+        .order(egui::Order::Tooltip)
         .fixed_pos(pos)
         .show(ctx, |ui| {
             popup_frame(palette)
@@ -615,6 +616,7 @@ fn render_release_control(
                 })
                 .inner
         });
+    ui.ctx().set_sublayer(ui.layer_id(), area.response.layer_id);
     let selected = area.inner;
     let should_close = selected
         || ctx.input(|i| i.key_pressed(egui::Key::Escape))
@@ -631,7 +633,9 @@ fn render_release_search_box(ui: &mut egui::Ui, palette: ThemePalette, query: &m
         palette,
         InputOpts {
             edit: egui::TextEdit::singleline(query)
-                .hint_text("Search releases")
+                .hint_text(
+                    egui::RichText::new("Search releases").color(redesign_text_faint(palette)),
+                )
                 .text_color(redesign_text_primary(palette))
                 .background_color(redesign_input_bg(palette))
                 .margin(egui::Margin::symmetric(8, 4))
@@ -928,7 +932,7 @@ fn render_asset_dropdown(
     let assets = current_release_assets(form, env).to_vec();
     let pos = egui::pos2(rect.left(), rect.bottom() + 2.0);
     let area = egui::Area::new(id.with("popup"))
-        .order(egui::Order::Foreground)
+        .order(egui::Order::Tooltip)
         .fixed_pos(pos)
         .show(ctx, |ui| {
             popup_frame(palette).show(ui, |ui| {
@@ -961,6 +965,7 @@ fn render_asset_dropdown(
                 }
             });
         });
+    ui.ctx().set_sublayer(ui.layer_id(), area.response.layer_id);
     let should_close = ctx.input(|i| i.key_pressed(egui::Key::Escape))
         || (response.clicked_elsewhere() && area.response.clicked_elsewhere());
     if should_close {

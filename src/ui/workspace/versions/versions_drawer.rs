@@ -8,8 +8,8 @@ use eframe::egui;
 
 use crate::app::mod_downloads;
 use crate::app::state::{
-    VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, exact_log_ready_to_install,
-    update_pipeline_busy,
+    Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
+    exact_log_ready_to_install, update_pipeline_busy,
 };
 use crate::app::step2_action::Step2Action;
 use crate::app::versions_view::{self, VersionCard, VersionsView};
@@ -112,12 +112,20 @@ fn build_header_ctx(orchestrator: &OrchestratorApp) -> HeaderCtx {
         busy,
         fetching,
         suppress_escape,
-        check_sources_label: if busy {
-            "Checking\u{2026}"
-        } else {
-            "Check sources"
-        },
+        check_sources_label: header_button_label(&orchestrator.wizard_state.step2),
         retry_count,
+    }
+}
+
+const fn header_button_label(step2: &Step2State) -> &'static str {
+    if step2.is_scanning {
+        "Scanning\u{2026}"
+    } else if step2.update_selected_check_running {
+        "Checking\u{2026}"
+    } else if step2.update_selected_download_running || step2.update_selected_extract_running {
+        "Fetching\u{2026}"
+    } else {
+        "Check sources"
     }
 }
 
@@ -171,9 +179,66 @@ fn note_who(orchestrator: &OrchestratorApp) -> String {
 
 struct RenderPrep {
     tiers: Arc<mod_downloads::SourceTiers>,
-    view: VersionsView,
+    view: Arc<VersionsView>,
     subtitle: String,
     header: HeaderCtx,
+}
+
+fn scan_stable_view(
+    orchestrator: &mut OrchestratorApp,
+    tiers: &mod_downloads::SourceTiers,
+) -> Arc<VersionsView> {
+    let state = &orchestrator.wizard_state;
+    if state.step2.is_scanning
+        && let Some(cached) = state.step2.versions_ui.scan_view_cache.as_deref()
+    {
+        let mut view = cached.clone();
+        versions_view::refresh_fetch_phase(&mut view, state);
+        return Arc::new(view);
+    }
+    let view = Arc::new(versions_view::build_versions_view(
+        state,
+        tiers,
+        state.step2.versions_ui.known.as_ref(),
+    ));
+    if !state.step2.is_scanning {
+        orchestrator.wizard_state.step2.versions_ui.scan_view_cache = Some(Arc::clone(&view));
+    }
+    view
+}
+
+fn clear_idle_fetching_tp2(step2: &mut Step2State) {
+    if !update_pipeline_busy(step2) {
+        step2.versions_ui.fetching_tp2 = None;
+    }
+}
+
+fn next_queued_fetch(versions_ui: &mut VersionsDrawerUi, view: &VersionsView) -> Option<String> {
+    while let Some(tp2) = versions_ui.pop_queued() {
+        if view
+            .cards
+            .iter()
+            .any(|card| card.tp2 == tp2 && card.can_fetch && !card.locked)
+        {
+            return Some(tp2);
+        }
+    }
+    None
+}
+
+fn maybe_emit_queued_fetch(
+    orchestrator: &mut OrchestratorApp,
+    view: &VersionsView,
+    action: &mut Option<Step2Action>,
+) {
+    let step2 = &mut orchestrator.wizard_state.step2;
+    if action.is_some() || update_pipeline_busy(step2) {
+        return;
+    }
+    if let Some(tp2) = next_queued_fetch(&mut step2.versions_ui, view) {
+        step2.versions_ui.fetching_tp2 = Some(tp2.clone());
+        *action = Some(Step2Action::DownloadUpdateFor { tp2 });
+    }
 }
 
 fn prepare_render(
@@ -192,12 +257,9 @@ fn prepare_render(
     }
 
     ensure_known_extras(orchestrator);
+    clear_idle_fetching_tp2(&mut orchestrator.wizard_state.step2);
     let tiers = cached_source_tiers(ctx);
-    let view = versions_view::build_versions_view(
-        &orchestrator.wizard_state,
-        &tiers,
-        orchestrator.wizard_state.step2.versions_ui.known.as_ref(),
-    );
+    let view = scan_stable_view(orchestrator, &tiers);
 
     maybe_emit_auto_check(orchestrator, action);
 
@@ -238,6 +300,7 @@ pub(crate) fn render(
         header_button: Some(drawer::HeaderButton {
             label: header.check_sources_label,
             enabled: !busy,
+            primary: true,
         }),
         suppress_escape: header.suppress_escape,
     };
@@ -319,6 +382,7 @@ pub(crate) fn render(
         action,
         anchor_for_menu,
     );
+    maybe_emit_queued_fetch(orchestrator, &view, action);
 }
 
 fn handle_header_click(orchestrator: &mut OrchestratorApp, view: &VersionsView) -> Step2Action {
@@ -622,7 +686,9 @@ fn render_search_box(ui: &mut egui::Ui, palette: ThemePalette, search: &mut Stri
             palette,
             InputOpts {
                 edit: egui::TextEdit::singleline(search)
-                    .hint_text("Search mods")
+                    .hint_text(
+                        egui::RichText::new("Search mods").color(redesign_text_faint(palette)),
+                    )
                     .text_color(redesign_text_primary(palette))
                     .background_color(redesign_input_bg(palette))
                     .margin(margin)
@@ -830,10 +896,8 @@ fn render_one_card(
     }
     ui.add_space(6.0);
 
-    if let Some(action) = event.action
-        && ctx.body_action.is_none()
-    {
-        *ctx.body_action = Some(action);
+    if let Some(action) = event.action {
+        route_card_action(ui, orchestrator, action, ctx);
     }
 
     let selector_clicked = event.selector_response.clicked();
@@ -844,6 +908,7 @@ fn render_one_card(
             orchestrator.wizard_state.step2.versions_ui.menu = Some(VersionsMenu::Sources {
                 tp2: card.tp2.clone(),
             });
+            ui.ctx().request_repaint();
         } else {
             let this_modlist_name = active_modlist_display_name(orchestrator);
             let form = versions_sheets::seed_source_form_for_card(
@@ -867,6 +932,7 @@ fn render_one_card(
             tp2: card.tp2.clone(),
             bookmark_label,
         });
+        ui.ctx().request_repaint();
     }
 
     let is_open_sources =
@@ -885,6 +951,28 @@ fn render_one_card(
             rect: event.kebab_rect,
             response: event.kebab_response.clone(),
         });
+    }
+}
+
+fn route_card_action(
+    ui: &egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+    action: Step2Action,
+    ctx: &mut ListRenderCtx<'_>,
+) {
+    let versions_ui = &mut orchestrator.wizard_state.step2.versions_ui;
+    if let Step2Action::DownloadUpdateFor { tp2 } = &action {
+        if ctx.busy {
+            versions_ui.toggle_queued(tp2);
+            ui.ctx().request_repaint();
+            return;
+        }
+        if ctx.body_action.is_none() {
+            versions_ui.fetching_tp2 = Some(tp2.clone());
+        }
+    }
+    if ctx.body_action.is_none() {
+        *ctx.body_action = Some(action);
     }
 }
 
@@ -1012,6 +1100,9 @@ fn render_open_menu(
         }
     };
     if outcome.action.is_some() && action.is_none() {
+        if let Some(Step2Action::DownloadUpdateFor { tp2 }) = &outcome.action {
+            orchestrator.wizard_state.step2.versions_ui.fetching_tp2 = Some(tp2.clone());
+        }
         *action = outcome.action;
     }
     if outcome.open_sheet == Some(VersionsSheet::EditSource) {
@@ -1139,5 +1230,78 @@ fn render_open_sheet(
     } else if outcome.close {
         orchestrator.wizard_state.step2.versions_ui.sheet = None;
         orchestrator.wizard_state.step2.versions_ui.sheet_tp2 = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_button_label_prefers_scanning_then_checking_then_fetching() {
+        let mut step2 = Step2State::default();
+        assert_eq!(header_button_label(&step2), "Check sources");
+
+        step2.update_selected_extract_running = true;
+        assert_eq!(header_button_label(&step2), "Fetching\u{2026}");
+
+        step2.update_selected_extract_running = false;
+        step2.update_selected_download_running = true;
+        assert_eq!(header_button_label(&step2), "Fetching\u{2026}");
+
+        step2.update_selected_extract_running = true;
+        step2.update_selected_check_running = true;
+        assert_eq!(header_button_label(&step2), "Checking\u{2026}");
+
+        step2.is_scanning = true;
+        assert_eq!(header_button_label(&step2), "Scanning\u{2026}");
+    }
+
+    fn queue_test_card(tp2: &str, can_fetch: bool, locked: bool) -> VersionCard {
+        VersionCard {
+            tp2: tp2.to_string(),
+            name: tp2.to_string(),
+            status: versions_view::CardStatus::Fetch,
+            dot: versions_view::CardDot::Update,
+            status_line: String::new(),
+            target: None,
+            locked,
+            can_fetch,
+            layer: "",
+            rule_words: String::new(),
+            open_url: None,
+            repo: None,
+            source_id: None,
+            sources: Vec::new(),
+            fetching: None,
+            queued: false,
+        }
+    }
+
+    #[test]
+    fn next_queued_fetch_skips_unfetchable_and_pops_in_order() {
+        let view = VersionsView {
+            cards: vec![
+                queue_test_card("x", true, false),
+                queue_test_card("y", true, true),
+                queue_test_card("z", false, false),
+            ],
+            fetch_count: 0,
+            attention_count: 0,
+            locked_count: 0,
+            log_missing_count: 0,
+        };
+        let mut versions_ui = VersionsDrawerUi {
+            fetch_queue: ["y", "z", "x", "x"].map(str::to_string).to_vec(),
+            ..VersionsDrawerUi::default()
+        };
+        assert_eq!(
+            next_queued_fetch(&mut versions_ui, &view).as_deref(),
+            Some("x")
+        );
+        assert_eq!(versions_ui.fetch_queue, vec!["x".to_string()]);
+
+        versions_ui.fetch_queue.clear();
+        assert_eq!(next_queued_fetch(&mut versions_ui, &view), None);
     }
 }

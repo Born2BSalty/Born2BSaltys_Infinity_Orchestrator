@@ -4,11 +4,11 @@
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::fs;
-use std::io;
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::app::mod_downloads;
 use crate::app::state::{Step2UpdateAsset, WizardState};
@@ -21,8 +21,12 @@ pub(crate) struct Step2UpdateDownloadResult {
 
 pub(crate) enum Step2UpdateDownloadEvent {
     Progress { completed: usize, total: usize },
+    Bytes { done: u64, total: Option<u64> },
     Finished(Step2UpdateDownloadResult),
 }
+
+const BYTES_EVENT_INTERVAL: Duration = Duration::from_millis(250);
+const BYTES_EVENT_STEP: u64 = 1024 * 1024;
 
 pub(crate) fn start_step2_update_download(
     state: &mut WizardState,
@@ -64,6 +68,7 @@ pub(crate) fn start_step2_update_download_scoped(
     let (tx, rx) = mpsc::channel::<Step2UpdateDownloadEvent>();
     *step2_update_download_rx = Some(rx);
     state.step2.update_selected_download_running = true;
+    state.step2.update_selected_download_bytes = None;
     state.step2.update_selected_extract_running = false;
     state.step2.update_selected_download_scope = scope_tp2;
     state.step2.scan_status = format!("Downloading updates: 0/{}", assets.len());
@@ -148,15 +153,22 @@ pub(crate) fn poll_step2_update_download(
     let Some(rx) = step2_update_download_rx.as_ref() else {
         return;
     };
-    let event = match rx.try_recv() {
-        Ok(event) => Some(event),
-        Err(TryRecvError::Empty) => None,
-        Err(TryRecvError::Disconnected) => {
-            state.step2.update_selected_download_running = false;
-            state.step2.update_selected_download_scope = None;
-            state.step2.scan_status = "Download updates failed: worker disconnected".to_string();
-            *step2_update_download_rx = None;
-            return;
+    let event = loop {
+        match rx.try_recv() {
+            Ok(Step2UpdateDownloadEvent::Bytes { done, total }) => {
+                state.step2.update_selected_download_bytes = Some((done, total));
+            }
+            Ok(event) => break Some(event),
+            Err(TryRecvError::Empty) => break None,
+            Err(TryRecvError::Disconnected) => {
+                state.step2.update_selected_download_running = false;
+                state.step2.update_selected_download_bytes = None;
+                state.step2.update_selected_download_scope = None;
+                state.step2.scan_status =
+                    "Download updates failed: worker disconnected".to_string();
+                *step2_update_download_rx = None;
+                return;
+            }
         }
     };
     let Some(event) = event else {
@@ -171,6 +183,7 @@ pub(crate) fn poll_step2_update_download(
 
     *step2_update_download_rx = None;
     state.step2.update_selected_download_running = false;
+    state.step2.update_selected_download_bytes = None;
     if state.step2.update_selected_download_scope.is_some() {
         state
             .step2
@@ -218,7 +231,7 @@ fn download_update_assets(
         let download_result = match cached_results.entry(cache_key) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
-                let result = download_one_asset(&agent, asset, &destination);
+                let result = download_one_asset(&agent, asset, &destination, tx);
                 entry.insert(result.clone());
                 result
             }
@@ -243,16 +256,36 @@ fn download_one_asset(
     agent: &ureq::Agent,
     asset: &Step2UpdateAsset,
     destination: &Path,
+    tx: &Sender<Step2UpdateDownloadEvent>,
 ) -> Result<(), String> {
     let response = agent
         .get(&asset.asset_url)
         .set("User-Agent", "BIO-update-download")
         .call()
         .map_err(|err| err.to_string())?;
+    let total = response
+        .header("Content-Length")
+        .and_then(|value| value.trim().parse::<u64>().ok());
     let mut reader = response.into_reader();
     let mut file = fs::File::create(destination).map_err(|err| err.to_string())?;
-    io::copy(&mut reader, &mut file).map_err(|err| err.to_string())?;
-    Ok(())
+    let _ = tx.send(Step2UpdateDownloadEvent::Bytes { done: 0, total });
+    let (mut done, mut sent_done, mut sent_at) = (0_u64, 0_u64, Instant::now());
+    let mut buffer = vec![0_u8; 64 * 1024];
+    loop {
+        let read = match reader.read(&mut buffer) {
+            Ok(0) => return Ok(()),
+            Ok(read) => read,
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err.to_string()),
+        };
+        file.write_all(&buffer[..read])
+            .map_err(|err| err.to_string())?;
+        done = done.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+        if done - sent_done >= BYTES_EVENT_STEP || sent_at.elapsed() >= BYTES_EVENT_INTERVAL {
+            let _ = tx.send(Step2UpdateDownloadEvent::Bytes { done, total });
+            (sent_done, sent_at) = (done, Instant::now());
+        }
+    }
 }
 
 pub(crate) fn archive_file_name(asset: &Step2UpdateAsset) -> String {

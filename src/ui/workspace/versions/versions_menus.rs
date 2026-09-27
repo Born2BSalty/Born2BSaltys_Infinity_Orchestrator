@@ -105,9 +105,11 @@ fn sources_menu_pos(
     bounds: egui::Rect,
 ) -> egui::Pos2 {
     let width = SOURCES_MENU_W + popup_frame(palette).total_margin().sum().x;
-    let height = ctx
-        .memory(|m| m.area_rect(sources_menu_id()))
-        .map_or(0.0, |rect| rect.height());
+    let remembered = ctx.memory(|m| m.area_rect(sources_menu_id()));
+    if remembered.is_none() {
+        ctx.request_repaint();
+    }
+    let height = remembered.map_or(0.0, |rect| rect.height());
     let inner = bounds.shrink(MENU_INSET);
     let x = (anchor_rect.right() - width)
         .min(inner.right() - width)
@@ -128,7 +130,7 @@ pub(crate) fn render_sources_menu(
     let mut outcome = MenuOutcome::default();
     let pos = sources_menu_pos(ctx, palette, anchor_rect, env.bounds);
     let response = egui::Area::new(sources_menu_id())
-        .order(egui::Order::Foreground)
+        .order(egui::Order::Tooltip)
         .fixed_pos(pos)
         .show(ctx, |ui| {
             popup_frame(palette).show(ui, |ui| {
@@ -551,7 +553,7 @@ pub(crate) fn render_kebab_menu(
         anchor_rect.bottom() + 4.0,
     );
     let response = egui::Area::new(egui::Id::new("versions_kebab_menu"))
-        .order(egui::Order::Foreground)
+        .order(egui::Order::Tooltip)
         .fixed_pos(pos)
         .show(ctx, |ui| {
             popup_frame(palette).show(ui, |ui| {
@@ -572,12 +574,18 @@ fn menu_item(ui: &mut egui::Ui, palette: ThemePalette, label: &str, disabled: bo
     } else {
         redesign_text_primary(palette)
     };
-    let pad_x = 10.0;
+    let pad_x = 10.0_f32;
     let pad_y = 6.0;
     let row_width = ui.available_width();
+    let shown = versions_icons::elide(
+        ui.painter(),
+        label,
+        &font,
+        pad_x.mul_add(-2.0, row_width).max(0.0),
+    );
     let galley = ui
         .painter()
-        .layout_no_wrap(label.to_string(), font.clone(), text_color);
+        .layout_no_wrap(shown.clone(), font.clone(), text_color);
     let row_height = galley.size().y + pad_y * 2.0;
     let sense = if disabled {
         egui::Sense::hover()
@@ -596,7 +604,7 @@ fn menu_item(ui: &mut egui::Ui, palette: ThemePalette, label: &str, disabled: bo
         ui.painter().text(
             egui::pos2(rect.left() + pad_x, rect.center().y),
             egui::Align2::LEFT_CENTER,
-            label,
+            shown,
             font,
             text_color,
         );

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::Duration;
 
@@ -17,6 +18,8 @@ const RELEASE_LIST_QUERY: &str = "query($owner: String!, $repo: String!) {\n  re
 
 const RELEASE_CACHE_FILE_NAME: &str = "github_release_cache.json";
 const RELEASE_CACHE_FRESH_SECONDS: u64 = 24 * 60 * 60;
+
+static CACHE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct CachedAsset {
@@ -72,30 +75,47 @@ pub(crate) fn spawn_release_list_fetch(
     rx
 }
 
-pub(crate) fn poll_release_list(
-    state: &mut WizardState,
-    rx: &mut Option<Receiver<ReleaseListEvent>>,
-) {
-    if rx.is_none() && state.step2.versions_ui.release_list.status == ReleaseListStatus::Loading {
-        let repo = state.step2.versions_ui.release_list.repo.clone();
-        *rx = Some(spawn_release_list_fetch(repo, false));
+pub(crate) struct ReleaseListFetch {
+    pub(crate) repo: String,
+    rx: Receiver<ReleaseListEvent>,
+}
+
+pub(crate) fn fetch_is_stale(fetch: &ReleaseListFetch, wanted: &str) -> bool {
+    fetch.repo != wanted
+}
+
+pub(crate) fn poll_release_list(state: &mut WizardState, fetch: &mut Option<ReleaseListFetch>) {
+    let release_list = &state.step2.versions_ui.release_list;
+    if release_list.status == ReleaseListStatus::Loading
+        && fetch
+            .as_ref()
+            .is_none_or(|in_flight| fetch_is_stale(in_flight, &release_list.repo))
+    {
+        let repo = release_list.repo.clone();
+        *fetch = Some(ReleaseListFetch {
+            rx: spawn_release_list_fetch(repo.clone(), false),
+            repo,
+        });
         return;
     }
-    let Some(receiver) = rx.as_ref() else {
+    let Some(in_flight) = fetch.as_ref() else {
         return;
     };
-    match receiver.try_recv() {
+    match in_flight.rx.try_recv() {
         Ok(ReleaseListEvent::Finished { repo, result }) => {
+            let finished_in_flight = repo == in_flight.repo;
             if state.step2.versions_ui.release_list.repo == repo {
                 state.step2.versions_ui.release_list.status = match result {
                     Ok(releases) => ReleaseListStatus::Ready(releases),
                     Err(err) => ReleaseListStatus::Failed(err),
                 };
             }
-            *rx = None;
+            if finished_in_flight {
+                *fetch = None;
+            }
         }
         Err(TryRecvError::Empty) => {}
-        Err(TryRecvError::Disconnected) => *rx = None,
+        Err(TryRecvError::Disconnected) => *fetch = None,
     }
 }
 
@@ -286,6 +306,7 @@ fn load_cache_entry(owner_repo: &str) -> Option<ReleaseCacheEntry> {
 }
 
 fn store_cache_entry(owner_repo: &str, releases: &[CachedRelease]) {
+    let _held = CACHE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let mut cache = load_release_cache();
     cache.entries.insert(
         normalize_repo_key(owner_repo),
@@ -298,6 +319,7 @@ fn store_cache_entry(owner_repo: &str, releases: &[CachedRelease]) {
 }
 
 pub(crate) fn drop_cached_release_lists(repos: &[String]) {
+    let _held = CACHE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let mut cache = load_release_cache();
     let mut changed = false;
     for repo in repos {
@@ -368,6 +390,17 @@ mod tests {
                 download_url: format!("https://example.test/{tag}.zip"),
             }],
         }
+    }
+
+    #[test]
+    fn fetch_is_stale_when_repo_differs() {
+        let (_tx, rx) = mpsc::channel::<ReleaseListEvent>();
+        let fetch = ReleaseListFetch {
+            repo: "owner/first".to_string(),
+            rx,
+        };
+        assert!(!fetch_is_stale(&fetch, "owner/first"));
+        assert!(fetch_is_stale(&fetch, "owner/second"));
     }
 
     #[test]

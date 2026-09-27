@@ -292,7 +292,7 @@ pub struct OrchestratorApp {
         Option<Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent>>,
     pub(crate) step2_update_extract_rx:
         Option<Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>>,
-    pub(crate) release_list_rx: Option<Receiver<crate::app::github_release_list::ReleaseListEvent>>,
+    pub(crate) release_list_rx: Option<crate::app::github_release_list::ReleaseListFetch>,
     pub(crate) stream_download_rx:
         Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
 

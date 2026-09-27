@@ -83,6 +83,7 @@ pub(crate) fn drive_explicit_resolve(
         state,
         step2_update_check_rx,
         &loaded,
+        crate::app::app_step2_update_preview::UpdateCheckScope::Selection,
     );
 }
 

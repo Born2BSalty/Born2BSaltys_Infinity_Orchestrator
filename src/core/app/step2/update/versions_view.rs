@@ -151,7 +151,14 @@ pub(crate) fn load_known_extras(
     index_known_extras(other_lists, mod_source_history::load_store())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum FetchPhase {
+    Downloading(Option<f32>),
+    Extracting,
+    Rescanning,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct VersionCard {
     pub(crate) tp2: String,
     pub(crate) name: String,
@@ -167,9 +174,11 @@ pub(crate) struct VersionCard {
     pub(crate) repo: Option<String>,
     pub(crate) source_id: Option<String>,
     pub(crate) sources: Vec<CardSourceOption>,
+    pub(crate) fetching: Option<FetchPhase>,
+    pub(crate) queued: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct VersionsView {
     pub(crate) cards: Vec<VersionCard>,
     pub(crate) fetch_count: usize,
@@ -205,13 +214,51 @@ pub(crate) fn build_versions_view(
         .count();
     let locked_count = cards.iter().filter(|card| card.locked).count();
     let log_missing_count = state.step2.log_pending_downloads.len();
-    VersionsView {
+    let mut view = VersionsView {
         cards,
         fetch_count,
         attention_count,
         locked_count,
         log_missing_count,
+    };
+    refresh_fetch_phase(&mut view, state);
+    view
+}
+
+pub(crate) fn refresh_fetch_phase(view: &mut VersionsView, state: &WizardState) {
+    for card in &mut view.cards {
+        card.fetching = fetch_phase_for(state, &card.tp2);
+        card.queued = state.step2.versions_ui.fetch_queue.contains(&card.tp2);
     }
+}
+
+pub(crate) fn fetch_phase_for(state: &WizardState, tp2_key: &str) -> Option<FetchPhase> {
+    let fetching_key = state
+        .step2
+        .update_selected_download_scope
+        .as_deref()
+        .or(state.step2.versions_ui.fetching_tp2.as_deref())
+        .map(mod_downloads::normalize_mod_download_tp2)?;
+    if fetching_key.is_empty() || fetching_key != tp2_key {
+        return None;
+    }
+    if state.step2.update_selected_download_running {
+        Some(FetchPhase::Downloading(fetch_fraction(state)))
+    } else if state.step2.update_selected_extract_running {
+        Some(FetchPhase::Extracting)
+    } else if state.step2.is_scanning {
+        Some(FetchPhase::Rescanning)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn fetch_fraction(state: &WizardState) -> Option<f32> {
+    let (done, total) = state.step2.update_selected_download_bytes?;
+    let total = total.filter(|total| *total > 0)?;
+    let basis_points = u128::from(done.min(total)) * 10_000 / u128::from(total);
+    let basis_points = u16::try_from(basis_points).unwrap_or(10_000);
+    Some(f32::from(basis_points) / 10_000.0)
 }
 
 fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
@@ -224,9 +271,6 @@ fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
         .iter()
         .chain(state.step2.bg2ee_mods.iter())
     {
-        if !mod_is_selected(mod_state) {
-            continue;
-        }
         let tp2_key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
         if tp2_key.is_empty() || !seen.insert(tp2_key.clone()) {
             continue;
@@ -263,14 +307,6 @@ fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
             .cmp(&b.name.to_ascii_lowercase())
     });
     result
-}
-
-fn mod_is_selected(mod_state: &Step2ModState) -> bool {
-    mod_state.checked
-        || mod_state
-            .components
-            .iter()
-            .any(|component| component.checked)
 }
 
 fn mod_display_name(mod_state: &Step2ModState) -> String {
@@ -351,6 +387,23 @@ fn display_version(target: &str) -> &str {
     }
 }
 
+fn is_hex(value: &str) -> bool {
+    value.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+fn short_target(tag: &str) -> String {
+    if tag.len() == 40 && is_hex(tag) {
+        return tag[..7].to_string();
+    }
+    if let Some((reference, hex)) = tag.rsplit_once('@')
+        && hex.len() >= 12
+        && is_hex(hex)
+    {
+        return format!("{reference}@{}", &hex[..7]);
+    }
+    tag.to_string()
+}
+
 fn arrow_status_line(version: &str, target: &str) -> String {
     let target = display_version(target);
     if version.is_empty() {
@@ -393,8 +446,8 @@ fn card_outcome(
         return CardOutcome {
             status: CardStatus::Fetch,
             dot: CardDot::Update,
-            status_line: arrow_status_line(version, &asset.tag),
-            target: Some(asset.tag.clone()),
+            status_line: arrow_status_line(version, &short_target(&asset.tag)),
+            target: Some(short_target(&asset.tag)),
         };
     }
     if let Some(error) = facts.check_failed.as_ref() {
@@ -433,8 +486,8 @@ fn card_outcome(
         return CardOutcome {
             status: CardStatus::InSync,
             dot: CardDot::Neutral,
-            status_line: locked_available_status_line(version, &asset.tag),
-            target: Some(asset.tag.clone()),
+            status_line: locked_available_status_line(version, &short_target(&asset.tag)),
+            target: Some(short_target(&asset.tag)),
         };
     }
     if facts.just_fetched {
@@ -790,6 +843,8 @@ fn build_card(
         repo,
         source_id,
         sources,
+        fetching: None,
+        queued: false,
     }
 }
 
@@ -913,6 +968,60 @@ mod tests {
 
     fn empty_tiers() -> SourceTiers {
         mod_downloads::source_tiers_from_texts("", "", "")
+    }
+
+    #[test]
+    fn fetch_phase_follows_scope_and_flags() {
+        let mut state = WizardState::default();
+        let key = mod_downloads::normalize_mod_download_tp2("setup-mod.tp2");
+        assert_eq!(fetch_phase_for(&state, &key), None);
+
+        state.step2.update_selected_download_scope = Some("SETUP-MOD.TP2".to_string());
+        state.step2.update_selected_download_running = true;
+        assert_eq!(
+            fetch_phase_for(&state, &key),
+            Some(FetchPhase::Downloading(None))
+        );
+        state.step2.update_selected_download_bytes = Some((25, Some(100)));
+        assert_eq!(
+            fetch_phase_for(&state, &key),
+            Some(FetchPhase::Downloading(Some(0.25)))
+        );
+        state.step2.update_selected_download_bytes = Some((25, None));
+        assert_eq!(
+            fetch_phase_for(&state, &key),
+            Some(FetchPhase::Downloading(None))
+        );
+        assert_eq!(fetch_phase_for(&state, "other"), None);
+
+        state.step2.update_selected_download_running = false;
+        state.step2.update_selected_extract_running = true;
+        assert_eq!(fetch_phase_for(&state, &key), Some(FetchPhase::Extracting));
+
+        state.step2.update_selected_extract_running = false;
+        state.step2.is_scanning = true;
+        assert_eq!(fetch_phase_for(&state, &key), Some(FetchPhase::Rescanning));
+
+        state.step2.update_selected_download_scope = None;
+        assert_eq!(fetch_phase_for(&state, &key), None);
+        state.step2.versions_ui.fetching_tp2 = Some(key.clone());
+        assert_eq!(fetch_phase_for(&state, &key), Some(FetchPhase::Rescanning));
+
+        state.step2.is_scanning = false;
+        assert_eq!(fetch_phase_for(&state, &key), None);
+    }
+
+    #[test]
+    fn short_target_cuts_a_commit_to_seven_and_keeps_tags() {
+        assert_eq!(
+            short_target("master@6c1f42b8184877d02226a1b2c3d4e5f6a7b8c9d0"),
+            "master@6c1f42b"
+        );
+        assert_eq!(
+            short_target("6c1f42b8184877d02226a1b2c3d4e5f6a7b8c9d0"),
+            "6c1f42b"
+        );
+        assert_eq!(short_target("v35.17"), "v35.17");
     }
 
     #[test]
@@ -1200,6 +1309,28 @@ mod tests {
         assert_eq!(view.cards.len(), 2);
         assert_eq!(view.cards[0].name, "Alpha");
         assert_eq!(view.cards[1].name, "Zeta");
+    }
+
+    #[test]
+    fn every_scanned_mod_gets_a_card() {
+        let mut state = WizardState::default();
+        assert!(
+            build_versions_view(&state, &empty_tiers(), None)
+                .cards
+                .is_empty()
+        );
+
+        let mut unticked = mod_state("mod.tp2", "Mod", "~mod.tp2~ #0 #0 // 1.0");
+        unticked.checked = false;
+        for component in &mut unticked.components {
+            component.checked = false;
+            component.selected_order = None;
+        }
+        state.step2.bg2ee_mods.push(unticked);
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(view.cards.len(), 1);
+        assert_eq!(view.cards[0].name, "Mod");
     }
 
     #[test]

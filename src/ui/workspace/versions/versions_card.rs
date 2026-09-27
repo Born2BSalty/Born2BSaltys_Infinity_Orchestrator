@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::app::step2_action::Step2Action;
-use crate::app::versions_view::{CardDot, VersionCard};
+use crate::app::versions_view::{CardDot, FetchPhase, VersionCard};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
     redesign_border_soft, redesign_border_strong, redesign_chrome_bg, redesign_error,
@@ -20,6 +20,11 @@ const ICON_SIZE: f32 = 30.0;
 const ICON_GAP: f32 = 2.0;
 const COLUMN_GAP: f32 = 16.0;
 const DOT_SIZE: f32 = 8.0;
+const FETCH_BAR_H: f32 = 3.0;
+const FETCH_BAR_GAP: f32 = 3.0;
+const FETCH_ROW_EXTRA_H: f32 = 10.0;
+const SELECTOR_TEXT_GAP: f32 = 8.0;
+const FETCH_BAR_RADIUS: u8 = 2;
 
 pub(crate) struct CardEvent {
     pub(crate) rect: egui::Rect,
@@ -77,8 +82,14 @@ fn render_row(
     busy: bool,
 ) -> CardRow {
     let row_width = ui.available_width();
-    let (row_rect, _) =
-        ui.allocate_exact_size(egui::vec2(row_width, CARD_ROW_H), egui::Sense::hover());
+    let allocated_h = if card.fetching.is_some() {
+        CARD_ROW_H + FETCH_ROW_EXTRA_H
+    } else {
+        CARD_ROW_H
+    };
+    let (allocated_rect, _) =
+        ui.allocate_exact_size(egui::vec2(row_width, allocated_h), egui::Sense::hover());
+    let row_rect = egui::Rect::from_min_size(allocated_rect.min, egui::vec2(row_width, CARD_ROW_H));
 
     let icons_w = 4.0_f32.mul_add(ICON_SIZE, 3.0 * ICON_GAP);
     let icons_left = row_rect.right() - icons_w;
@@ -103,20 +114,25 @@ fn render_row(
     );
 
     render_dot(ui, palette, dot_rect, card.dot);
-    render_main(ui, palette, name_rect, card);
+    let status_rect = render_main(ui, palette, name_rect, card);
+    if let Some(phase) = card.fetching {
+        let bar_rect = egui::Rect::from_min_size(
+            egui::pos2(name_rect.left(), status_rect.bottom() + FETCH_BAR_GAP),
+            egui::vec2(name_rect.width(), FETCH_BAR_H),
+        );
+        paint_fetch_bar(ui, palette, bar_rect, phase);
+    }
     let selector_response = render_selector(ui, palette, selector_rect, card);
 
     let mut action = None;
 
-    if card.can_fetch && !busy {
+    if card.can_fetch && card.fetching.is_none() {
         let response = render_fetch_icon(ui, palette, fetch_rect, card);
         if response.clicked() {
             action = Some(Step2Action::DownloadUpdateFor {
                 tp2: card.tp2.clone(),
             });
         }
-    } else if card.can_fetch {
-        render_disabled_fetch_icon(ui, palette, fetch_rect);
     }
 
     let lock_response =
@@ -175,7 +191,12 @@ fn render_dot(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect, dot: CardD
     ui.painter().circle_filled(rect.center(), 4.0, color);
 }
 
-fn render_main(ui: &mut egui::Ui, palette: ThemePalette, rect: egui::Rect, card: &VersionCard) {
+fn render_main(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    rect: egui::Rect,
+    card: &VersionCard,
+) -> egui::Rect {
     let mut child = ui.new_child(
         egui::UiBuilder::new()
             .max_rect(rect)
@@ -191,19 +212,58 @@ fn render_main(ui: &mut egui::Ui, palette: ThemePalette, rect: egui::Rect, card:
         )
         .truncate(),
     );
-    child.add(
-        egui::Label::new(
-            egui::RichText::new(&card.status_line)
-                .size(12.0)
-                .family(egui::FontFamily::Name("poppins_light".into()))
-                .color(redesign_text_muted(palette)),
+    child
+        .add(
+            egui::Label::new(
+                egui::RichText::new(status_text(card))
+                    .size(12.0)
+                    .family(egui::FontFamily::Name("poppins_light".into()))
+                    .color(redesign_text_muted(palette)),
+            )
+            .truncate(),
         )
-        .truncate(),
-    );
+        .rect
+}
+
+fn status_text(card: &VersionCard) -> String {
+    match card.fetching {
+        Some(FetchPhase::Downloading(Some(fraction))) => {
+            format!("Fetching\u{2026} {}%", percent_floor(fraction))
+        }
+        Some(FetchPhase::Downloading(None)) => "Fetching\u{2026}".to_string(),
+        Some(FetchPhase::Extracting) => "Extracting\u{2026}".to_string(),
+        Some(FetchPhase::Rescanning) => "Rescanning\u{2026}".to_string(),
+        None if card.queued => "Queued for fetch".to_string(),
+        None => card.status_line.clone(),
+    }
+}
+
+fn percent_floor(fraction: f32) -> u8 {
+    (0_u8..=100)
+        .rev()
+        .find(|pct| f32::from(*pct) <= fraction.clamp(0.0, 1.0) * 100.0)
+        .unwrap_or(0)
+}
+
+fn paint_fetch_bar(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect, phase: FetchPhase) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let radius = egui::CornerRadius::same(FETCH_BAR_RADIUS);
+    ui.painter()
+        .rect_filled(rect, radius, redesign_border_soft(palette));
+    if let FetchPhase::Downloading(Some(fraction)) = phase {
+        let fill = egui::Rect::from_min_size(
+            rect.min,
+            egui::vec2(rect.width() * fraction.clamp(0.0, 1.0), rect.height()),
+        );
+        ui.painter()
+            .rect_filled(fill, radius, redesign_accent(palette));
+    }
 }
 
 fn render_selector(
-    ui: &mut egui::Ui,
+    ui: &egui::Ui,
     palette: ThemePalette,
     rect: egui::Rect,
     card: &VersionCard,
@@ -234,44 +294,51 @@ fn render_selector(
             rect.min + egui::vec2(10.0, 0.0),
             egui::pos2(caret_center.x - 8.0, rect.max.y),
         );
-        let mut child = ui.new_child(
-            egui::UiBuilder::new()
-                .max_rect(text_rect)
-                .layout(egui::Layout::left_to_right(egui::Align::Center)),
-        );
-        if card.source_id.is_some() {
-            child.spacing_mut().item_spacing.x = 8.0;
-            child.add(
-                egui::Label::new(
-                    egui::RichText::new(card.layer)
-                        .size(12.0)
-                        .family(egui::FontFamily::Name("poppins_light".into()))
-                        .color(redesign_text_faint(palette)),
-                )
-                .truncate(),
-            );
-            child.add(
-                egui::Label::new(
-                    egui::RichText::new(&card.rule_words)
-                        .size(13.0)
-                        .family(egui::FontFamily::Name("poppins_light".into()))
-                        .color(redesign_text_primary(palette)),
-                )
-                .truncate(),
-            );
-        } else {
-            child.add(
-                egui::Label::new(
-                    egui::RichText::new("Click to add a source")
-                        .size(13.0)
-                        .family(egui::FontFamily::Name("poppins_light".into()))
-                        .color(redesign_text_muted(palette)),
-                )
-                .truncate(),
-            );
-        }
+        paint_selector_texts(ui, palette, text_rect, card);
     }
     response
+}
+
+fn paint_selector_texts(
+    ui: &egui::Ui,
+    palette: ThemePalette,
+    text_rect: egui::Rect,
+    card: &VersionCard,
+) {
+    let light = egui::FontFamily::Name("poppins_light".into());
+    let texts = if card.source_id.is_some() {
+        vec![
+            egui::RichText::new(card.layer)
+                .size(12.0)
+                .family(light.clone())
+                .color(redesign_text_faint(palette)),
+            egui::RichText::new(&card.rule_words)
+                .size(13.0)
+                .family(light)
+                .color(redesign_text_primary(palette)),
+        ]
+    } else {
+        vec![
+            egui::RichText::new("Click to add a source")
+                .size(13.0)
+                .family(light)
+                .color(redesign_text_muted(palette)),
+        ]
+    };
+    let mut x = text_rect.left();
+    for text in texts {
+        let galley = egui::WidgetText::from(text).into_galley(
+            ui,
+            Some(egui::TextWrapMode::Truncate),
+            (text_rect.right() - x).max(0.0),
+            egui::FontSelection::Default,
+        );
+        let size = galley.size();
+        let pos = egui::pos2(x, size.y.mul_add(-0.5, text_rect.center().y));
+        ui.painter()
+            .galley(pos, galley, redesign_text_primary(palette));
+        x += size.x + SELECTOR_TEXT_GAP;
+    }
 }
 
 fn icon_button_at(
@@ -320,14 +387,6 @@ fn render_fetch_icon(
         Some(redesign_accent(palette)),
     )
     .on_hover_text(tip)
-}
-
-fn render_disabled_fetch_icon(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect) {
-    if !ui.is_rect_visible(rect) {
-        return;
-    }
-    let color = redesign_accent(palette).gamma_multiply(0.35);
-    versions_icons::paint_down_arrow(ui.painter(), rect.center(), color);
 }
 
 fn render_lock_icon(

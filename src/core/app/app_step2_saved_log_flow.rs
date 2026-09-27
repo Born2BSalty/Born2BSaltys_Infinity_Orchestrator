@@ -78,6 +78,7 @@ pub(crate) fn advance_pending_saved_log_flow(
                 state,
                 step2_update_check_rx,
                 &loaded,
+                super::app_step2_update_preview::UpdateCheckScope::Selection,
             );
         }
     }

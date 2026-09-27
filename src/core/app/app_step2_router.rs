@@ -68,6 +68,7 @@ pub(crate) fn handle_step2_action(
                 state,
                 step2_update_check_rx,
                 &loaded,
+                super::app_step2_update_preview::UpdateCheckScope::WholeFolder,
             );
         }
         Step2Action::PreviewUpdateSelectedMod => {

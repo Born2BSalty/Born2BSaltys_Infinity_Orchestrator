@@ -42,6 +42,7 @@ pub(crate) fn drawer_width(window_w: f32, width: DrawerWidth) -> f32 {
 pub(crate) struct HeaderButton<'a> {
     pub(crate) label: &'a str,
     pub(crate) enabled: bool,
+    pub(crate) primary: bool,
 }
 
 pub(crate) struct DrawerSpec<'a> {
@@ -252,6 +253,7 @@ fn render_head(
                             palette,
                             header_button.label,
                             BtnOpts {
+                                primary: header_button.primary,
                                 small: true,
                                 disabled: !header_button.enabled,
                                 ..Default::default()

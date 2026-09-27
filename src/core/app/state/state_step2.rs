@@ -2,11 +2,12 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::app::github_release_list::ReleaseListState;
 use crate::app::source_form::SourceForm;
 use crate::app::step2_action::ModSourceEditDestination;
-use crate::app::versions_view::KnownExtras;
+use crate::app::versions_view::{KnownExtras, VersionsView};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptPopupMode {
@@ -72,7 +73,7 @@ pub enum VersionsMenu {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct VersionsDrawerUi {
     pub(crate) search: String,
     pub(crate) chip: VersionsChip,
@@ -88,6 +89,9 @@ pub struct VersionsDrawerUi {
     pub(crate) sheet_error: Option<String>,
     pub(crate) focused_tp2: Option<String>,
     pub(crate) focus_scroll_pending: bool,
+    pub(crate) fetch_queue: Vec<String>,
+    pub(crate) fetching_tp2: Option<String>,
+    pub(crate) scan_view_cache: Option<Arc<VersionsView>>,
 }
 
 impl VersionsDrawerUi {
@@ -101,6 +105,22 @@ impl VersionsDrawerUi {
     pub(crate) fn focus_card(&mut self, tp2_key: String) {
         self.focused_tp2 = Some(tp2_key);
         self.focus_scroll_pending = true;
+    }
+
+    pub(crate) fn toggle_queued(&mut self, tp2: &str) {
+        if let Some(index) = self.fetch_queue.iter().position(|queued| queued == tp2) {
+            self.fetch_queue.remove(index);
+        } else {
+            self.fetch_queue.push(tp2.to_string());
+        }
+    }
+
+    pub(crate) fn pop_queued(&mut self) -> Option<String> {
+        if self.fetch_queue.is_empty() {
+            None
+        } else {
+            Some(self.fetch_queue.remove(0))
+        }
     }
 }
 
@@ -187,6 +207,7 @@ pub struct Step2State<Flag = bool> {
     pub update_selected_manual_downloads: Vec<ManualDownloadRequest>,
     pub skipped_manual_downloads: Vec<String>,
     pub update_selected_download_scope: Option<String>,
+    pub update_selected_download_bytes: Option<(u64, Option<u64>)>,
     pub(crate) update_selected_last_checked_at: Option<String>,
     pub(crate) versions_ui: VersionsDrawerUi,
 }
@@ -275,6 +296,7 @@ impl Default for Step2State {
             update_selected_manual_downloads: Vec::new(),
             skipped_manual_downloads: Vec::new(),
             update_selected_download_scope: None,
+            update_selected_download_bytes: None,
             update_selected_last_checked_at: None,
             versions_ui: VersionsDrawerUi::default(),
         }
@@ -503,15 +525,98 @@ pub fn exact_log_ready_to_install(state: &crate::app::state::WizardState) -> boo
 
 fn collect_update_selection_signature(tag: &str, mods: &[Step2ModState], out: &mut Vec<String>) {
     for mod_state in mods {
-        let tp_file = mod_state.tp_file.to_ascii_uppercase();
-        for component in &mod_state.components {
-            if component.checked {
-                out.push(format!(
-                    "{tag}|{tp_file}|{}|{}",
-                    component.component_id,
-                    component.selected_order.unwrap_or(usize::MAX)
-                ));
-            }
+        out.push(format!("{tag}|{}", mod_state.tp_file.to_ascii_uppercase()));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fetch_queue_toggles_and_pops_in_order() {
+        let mut ui = VersionsDrawerUi::default();
+        assert_eq!(ui.pop_queued(), None);
+        ui.toggle_queued("alpha");
+        ui.toggle_queued("beta");
+        ui.toggle_queued("gamma");
+        ui.toggle_queued("beta");
+        assert_eq!(
+            ui.fetch_queue,
+            vec!["alpha".to_string(), "gamma".to_string()]
+        );
+        ui.toggle_queued("beta");
+        assert_eq!(ui.pop_queued().as_deref(), Some("alpha"));
+        assert_eq!(ui.pop_queued().as_deref(), Some("gamma"));
+        assert_eq!(ui.pop_queued().as_deref(), Some("beta"));
+        assert_eq!(ui.pop_queued(), None);
+    }
+
+    fn scanned_mod(tp_file: &str) -> Step2ModState {
+        Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: vec![Step2ComponentState {
+                component_id: "0".to_string(),
+                label: "0".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: false,
+                selected_order: None,
+            }],
         }
+    }
+
+    #[test]
+    fn signature_follows_folder_and_sources_not_ticks() {
+        let mut step2 = Step2State::default();
+        step2.bgee_mods.push(scanned_mod("alpha/setup-alpha.tp2"));
+        let base = update_selection_signature(&step2);
+        assert!(base.contains("BGEE|ALPHA/SETUP-ALPHA.TP2"));
+
+        step2.bgee_mods[0].checked = true;
+        step2.bgee_mods[0].components[0].checked = true;
+        step2.bgee_mods[0].components[0].selected_order = Some(3);
+        assert_eq!(update_selection_signature(&step2), base);
+
+        step2.bg2ee_mods.push(scanned_mod("beta/setup-beta.tp2"));
+        let with_beta = update_selection_signature(&step2);
+        assert_ne!(with_beta, base);
+        assert!(with_beta.contains("BG2EE|BETA/SETUP-BETA.TP2"));
+
+        step2
+            .selected_source_ids
+            .insert("alpha/setup-alpha.tp2".to_string(), "primary".to_string());
+        let with_source = update_selection_signature(&step2);
+        assert_ne!(with_source, with_beta);
+        step2
+            .selected_source_ids
+            .insert("alpha/setup-alpha.tp2".to_string(), "mirror".to_string());
+        assert_ne!(update_selection_signature(&step2), with_source);
     }
 }

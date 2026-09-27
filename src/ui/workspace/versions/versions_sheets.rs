@@ -82,17 +82,43 @@ fn panel_rect(drawer_rect: egui::Rect) -> egui::Rect {
     )
 }
 
-fn render_scrim(ctx: &egui::Context, id_salt: &str, drawer_rect: egui::Rect) -> bool {
-    egui::Area::new(egui::Id::new(("versions_sheet_scrim", id_salt)))
-        .order(egui::Order::Foreground)
+fn render_sheet_shell(
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    id_salt: &'static str,
+    drawer_rect: egui::Rect,
+    body: impl FnOnce(&mut egui::Ui, &mut SheetOutcome),
+) -> SheetOutcome {
+    let mut outcome = SheetOutcome::default();
+    let panel = panel_rect(drawer_rect);
+    egui::Area::new(egui::Id::new(id_salt))
+        .order(egui::Order::Tooltip)
         .fixed_pos(drawer_rect.min)
+        .interactable(true)
         .show(ctx, |ui| {
-            let response = ui.allocate_rect(drawer_rect, egui::Sense::click());
+            let backdrop = ui.allocate_rect(drawer_rect, egui::Sense::click());
             ui.painter()
                 .rect_filled(drawer_rect, 0.0, egui::Color32::from_black_alpha(89));
-            response.clicked()
-        })
-        .inner
+            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(panel), |ui| {
+                egui::Frame::default()
+                    .fill(redesign_shell_bg(palette))
+                    .shadow(redesign_overlay_shadow(palette))
+                    .inner_margin(egui::Margin::ZERO)
+                    .show(ui, |ui| {
+                        ui.set_min_size(panel.size());
+                        ui.set_max_size(panel.size());
+                        body(ui, &mut outcome);
+                    });
+            });
+            let clicked_outside = backdrop.clicked()
+                && ctx
+                    .pointer_interact_pos()
+                    .is_some_and(|pos| !panel.contains(pos));
+            if clicked_outside {
+                outcome.close = true;
+            }
+        });
+    outcome
 }
 
 fn render_header(
@@ -248,64 +274,55 @@ pub(crate) fn render_edit_source_unready(
     step2: &mut Step2State,
     escape_active: bool,
 ) -> SheetOutcome {
-    let mut outcome = SheetOutcome::default();
-    if render_scrim(ctx, "edit", drawer_rect) {
-        outcome.close = true;
-    }
-    if escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-        outcome.close = true;
-    }
-    let panel = panel_rect(drawer_rect);
-    egui::Area::new(egui::Id::new("versions_sheet_panel_edit"))
-        .order(egui::Order::Foreground)
-        .fixed_pos(panel.min)
-        .show(ctx, |ui| {
+    let escape_close = escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape));
+    let mut outcome = render_sheet_shell(
+        ctx,
+        palette,
+        "versions_sheet_edit",
+        drawer_rect,
+        |ui, outcome| {
             egui::Frame::default()
-                .fill(redesign_shell_bg(palette))
-                .shadow(redesign_overlay_shadow(palette))
-                .inner_margin(egui::Margin::ZERO)
+                .inner_margin(egui::Margin::symmetric(22, 18))
                 .show(ui, |ui| {
-                    ui.set_min_size(panel.size());
-                    ui.set_max_size(panel.size());
-                    egui::Frame::default()
-                        .inner_margin(egui::Margin::symmetric(22, 18))
-                        .show(ui, |ui| {
-                            render_header(ui, palette, "Download source", "", &mut outcome);
-                            ui.add_space(12.0);
-                            ui.label(
-                                egui::RichText::new("Could not open this source")
-                                    .color(redesign_error(palette)),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                if redesign_btn(
-                                    ui,
-                                    palette,
-                                    "Cancel",
-                                    BtnOpts {
-                                        small: true,
-                                        ..Default::default()
-                                    },
-                                )
-                                .clicked()
-                                {
-                                    outcome.close = true;
-                                }
-                                redesign_btn(
-                                    ui,
-                                    palette,
-                                    "Save",
-                                    BtnOpts {
-                                        primary: true,
-                                        small: true,
-                                        disabled: true,
-                                        ..Default::default()
-                                    },
-                                );
-                            });
-                        });
+                    render_header(ui, palette, "Download source", "", outcome);
+                    ui.add_space(12.0);
+                    ui.label(
+                        egui::RichText::new("Could not open this source")
+                            .color(redesign_error(palette)),
+                    );
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        if redesign_btn(
+                            ui,
+                            palette,
+                            "Cancel",
+                            BtnOpts {
+                                small: true,
+                                ..Default::default()
+                            },
+                        )
+                        .clicked()
+                        {
+                            outcome.close = true;
+                        }
+                        redesign_btn(
+                            ui,
+                            palette,
+                            "Save",
+                            BtnOpts {
+                                primary: true,
+                                small: true,
+                                disabled: true,
+                                ..Default::default()
+                            },
+                        );
+                    });
                 });
-        });
+        },
+    );
+    if escape_close {
+        outcome.close = true;
+    }
     if outcome.close {
         clear_editor_state(step2);
     }
@@ -320,19 +337,13 @@ pub(crate) fn render_edit_source(
     env: &EditSourceEnv,
     escape_active: bool,
 ) -> SheetOutcome {
-    let mut outcome = SheetOutcome::default();
-    if render_scrim(ctx, "edit", drawer_rect) {
-        outcome.close = true;
-    }
     let popover_open = step2
         .versions_ui
         .source_form
         .as_ref()
         .is_some_and(|form| versions_form::any_popover_open(ctx, &form.card_key));
-    if escape_active && !popover_open && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-        outcome.close = true;
-    }
-    let panel = panel_rect(drawer_rect);
+    let escape_close =
+        escape_active && !popover_open && ctx.input(|i| i.key_pressed(egui::Key::Escape));
     let mod_name = step2
         .versions_ui
         .source_form
@@ -344,52 +355,44 @@ pub(crate) fn render_edit_source(
                 form.name.clone()
             }
         });
-    egui::Area::new(egui::Id::new("versions_sheet_panel_edit"))
-        .order(egui::Order::Foreground)
-        .fixed_pos(panel.min)
-        .show(ctx, |ui| {
+    let mut outcome = render_sheet_shell(
+        ctx,
+        palette,
+        "versions_sheet_edit",
+        drawer_rect,
+        |ui, outcome| {
             egui::Frame::default()
-                .fill(redesign_shell_bg(palette))
-                .shadow(redesign_overlay_shadow(palette))
-                .inner_margin(egui::Margin::ZERO)
+                .inner_margin(egui::Margin::symmetric(22, 18))
                 .show(ui, |ui| {
-                    ui.set_min_size(panel.size());
-                    ui.set_max_size(panel.size());
-                    egui::Frame::default()
-                        .inner_margin(egui::Margin::symmetric(22, 18))
+                    render_header(ui, palette, "Download source", &mod_name, outcome);
+                    ui.add_space(12.0);
+                    let footer_reserve = ui
+                        .spacing()
+                        .item_spacing
+                        .y
+                        .mul_add(2.0, redesign_btn_height(ui, true) + 12.0);
+                    let body_h = (ui.available_height() - footer_reserve).max(0.0);
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .max_height(body_h)
                         .show(ui, |ui| {
-                            render_header(ui, palette, "Download source", &mod_name, &mut outcome);
-                            ui.add_space(12.0);
-                            let footer_reserve = ui
-                                .spacing()
-                                .item_spacing
-                                .y
-                                .mul_add(2.0, redesign_btn_height(ui, true) + 12.0);
-                            let body_h = (ui.available_height() - footer_reserve).max(0.0);
-                            egui::ScrollArea::vertical()
-                                .auto_shrink([false, false])
-                                .max_height(body_h)
-                                .show(ui, |ui| {
-                                    if let Some(action) =
-                                        render_edit_source_body(ctx, ui, palette, step2, env)
-                                        && outcome.action.is_none()
-                                    {
-                                        outcome.action = Some(action);
-                                    }
-                                });
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                render_edit_source_footer(
-                                    ui,
-                                    palette,
-                                    step2,
-                                    env.busy,
-                                    &mut outcome,
-                                );
-                            });
+                            if let Some(action) =
+                                render_edit_source_body(ctx, ui, palette, step2, env)
+                                && outcome.action.is_none()
+                            {
+                                outcome.action = Some(action);
+                            }
                         });
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        render_edit_source_footer(ui, palette, step2, env.busy, outcome);
+                    });
                 });
-        });
+        },
+    );
+    if escape_close {
+        outcome.close = true;
+    }
     if outcome.close {
         clear_editor_state(step2);
     }
@@ -492,57 +495,48 @@ pub(crate) fn render_forks(
     step2: &Step2State,
     escape_active: bool,
 ) -> SheetOutcome {
-    let mut outcome = SheetOutcome::default();
-    if render_scrim(ctx, "forks", drawer_rect) {
-        outcome.close = true;
-    }
-    if escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-        outcome.close = true;
-    }
-    let panel = panel_rect(drawer_rect);
-    egui::Area::new(egui::Id::new("versions_sheet_panel_forks"))
-        .order(egui::Order::Foreground)
-        .fixed_pos(panel.min)
-        .show(ctx, |ui| {
+    let escape_close = escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape));
+    let mut outcome = render_sheet_shell(
+        ctx,
+        palette,
+        "versions_sheet_forks",
+        drawer_rect,
+        |ui, outcome| {
             egui::Frame::default()
-                .fill(redesign_shell_bg(palette))
-                .shadow(redesign_overlay_shadow(palette))
-                .inner_margin(egui::Margin::ZERO)
+                .inner_margin(egui::Margin::symmetric(22, 18))
                 .show(ui, |ui| {
-                    ui.set_min_size(panel.size());
-                    ui.set_max_size(panel.size());
-                    egui::Frame::default()
-                        .inner_margin(egui::Margin::symmetric(22, 18))
+                    render_header(
+                        ui,
+                        palette,
+                        "Forks",
+                        &step2.mod_download_forks_popup_label,
+                        outcome,
+                    );
+                    ui.add_space(12.0);
+                    if let Some(err) = step2.mod_download_forks_popup_error.as_ref() {
+                        ui.label(egui::RichText::new(err).color(redesign_error(palette)));
+                        ui.add_space(8.0);
+                    }
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
                         .show(ui, |ui| {
-                            render_header(
-                                ui,
-                                palette,
-                                "Forks",
-                                &step2.mod_download_forks_popup_label,
-                                &mut outcome,
-                            );
-                            ui.add_space(12.0);
-                            if let Some(err) = step2.mod_download_forks_popup_error.as_ref() {
-                                ui.label(egui::RichText::new(err).color(redesign_error(palette)));
-                                ui.add_space(8.0);
+                            for fork in &step2.mod_download_forks {
+                                render_fork_row(
+                                    ui,
+                                    palette,
+                                    fork,
+                                    &step2.mod_download_forks_popup_tp2,
+                                    &step2.mod_download_forks_popup_label,
+                                    outcome,
+                                );
                             }
-                            egui::ScrollArea::vertical()
-                                .auto_shrink([false, false])
-                                .show(ui, |ui| {
-                                    for fork in &step2.mod_download_forks {
-                                        render_fork_row(
-                                            ui,
-                                            palette,
-                                            fork,
-                                            &step2.mod_download_forks_popup_tp2,
-                                            &step2.mod_download_forks_popup_label,
-                                            &mut outcome,
-                                        );
-                                    }
-                                });
                         });
                 });
-        });
+        },
+    );
+    if escape_close {
+        outcome.close = true;
+    }
     outcome
 }
 
@@ -628,58 +622,47 @@ pub(crate) fn render_note(
     escape_active: bool,
     env: &NoteEnv<'_>,
 ) -> SheetOutcome {
-    let mut outcome = SheetOutcome::default();
     let mut state = ctx
         .data(|d| d.get_temp::<NoteSheetState>(note_state_id()))
         .unwrap_or_default();
-    if render_scrim(ctx, "note", drawer_rect) {
-        outcome.close = true;
-    }
-    if escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-        outcome.close = true;
-    }
-    let panel = panel_rect(drawer_rect);
-    egui::Area::new(egui::Id::new("versions_sheet_panel_note"))
-        .order(egui::Order::Foreground)
-        .fixed_pos(panel.min)
-        .show(ctx, |ui| {
+    let escape_close = escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape));
+    let mut outcome = render_sheet_shell(
+        ctx,
+        palette,
+        "versions_sheet_note",
+        drawer_rect,
+        |ui, outcome| {
             egui::Frame::default()
-                .fill(redesign_shell_bg(palette))
-                .shadow(redesign_overlay_shadow(palette))
-                .inner_margin(egui::Margin::ZERO)
+                .inner_margin(egui::Margin::symmetric(22, 18))
                 .show(ui, |ui| {
-                    ui.set_min_size(panel.size());
-                    ui.set_max_size(panel.size());
-                    egui::Frame::default()
-                        .inner_margin(egui::Margin::symmetric(22, 18))
-                        .show(ui, |ui| {
-                            render_header(ui, palette, "Note", &state.mod_name, &mut outcome);
-                            ui.add_space(12.0);
-                            render_note_subtitle(ui, palette, &state);
-                            ui.add_space(12.0);
-                            render_note_text_area(ui, palette, &mut state);
-                            ui.add_space(8.0);
-                            if let Some(error) = env.sheet_error {
-                                ui.label(
-                                    egui::RichText::new(error).color(redesign_error(palette)),
-                                );
-                            } else {
-                                ui.label(
-                                    egui::RichText::new(
-                                        "Shown when you hover this source in the Known sources menu.",
-                                    )
-                                    .size(12.0)
-                                    .family(egui::FontFamily::Name("poppins_light".into()))
-                                    .color(redesign_text_faint(palette)),
-                                );
-                            }
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                render_note_footer(ui, palette, &state, &mut outcome);
-                            });
-                        });
+                    render_header(ui, palette, "Note", &state.mod_name, outcome);
+                    ui.add_space(12.0);
+                    render_note_subtitle(ui, palette, &state);
+                    ui.add_space(12.0);
+                    render_note_text_area(ui, palette, &mut state);
+                    ui.add_space(8.0);
+                    if let Some(error) = env.sheet_error {
+                        ui.label(egui::RichText::new(error).color(redesign_error(palette)));
+                    } else {
+                        ui.label(
+                            egui::RichText::new(
+                                "Shown when you hover this source in the Known sources menu.",
+                            )
+                            .size(12.0)
+                            .family(egui::FontFamily::Name("poppins_light".into()))
+                            .color(redesign_text_faint(palette)),
+                        );
+                    }
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        render_note_footer(ui, palette, &state, outcome);
+                    });
                 });
-        });
+        },
+    );
+    if escape_close {
+        outcome.close = true;
+    }
     ctx.data_mut(|d| d.insert_temp(note_state_id(), state));
     outcome
 }
@@ -723,7 +706,10 @@ fn render_note_text_area(ui: &mut egui::Ui, palette: ThemePalette, state: &mut N
                         egui::vec2(ui.available_width(), NOTE_TEXT_AREA_H),
                         egui::TextEdit::multiline(&mut state.text)
                             .frame(false)
-                            .hint_text("Why this version?")
+                            .hint_text(
+                                egui::RichText::new("Why this version?")
+                                    .color(redesign_text_faint(palette)),
+                            )
                             .text_color(redesign_text_primary(palette))
                             .margin(margin)
                             .font(egui::FontId::new(
