@@ -110,7 +110,7 @@ struct ModDownloadSourceVariantOverlay {
     pub(crate) pkg_macos: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub(crate) struct ModDownloadTp2Rename {
     pub(crate) from: String,
     pub(crate) to: String,

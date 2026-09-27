@@ -292,6 +292,7 @@ pub struct OrchestratorApp {
         Option<Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent>>,
     pub(crate) step2_update_extract_rx:
         Option<Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>>,
+    pub(crate) release_list_rx: Option<Receiver<crate::app::github_release_list::ReleaseListEvent>>,
     pub(crate) stream_download_rx:
         Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
 
@@ -438,6 +439,7 @@ impl OrchestratorApp {
             step2_update_check_rx: None,
             step2_update_download_rx: None,
             step2_update_extract_rx: None,
+            release_list_rx: None,
             stream_download_rx: None,
             extract_progress: Arc::new(std::sync::Mutex::new(None)),
             extract_parallel_rx: None,
@@ -727,6 +729,10 @@ impl OrchestratorApp {
             &mut self.step2_scan_rx,
             &mut self.step2_cancel,
             &mut self.step2_progress_queue,
+        );
+        crate::app::github_release_list::poll_release_list(
+            &mut self.wizard_state,
+            &mut self.release_list_rx,
         );
         Self::drain_archive_skip_events(
             &mut self.wizard_state,
@@ -1223,8 +1229,13 @@ impl OrchestratorApp {
             || self.archive_skip_rx.is_some()
             || self.create_destination_prep_rx.is_some()
             || self.install_destination_prep_rx.is_some()
+            || self.release_list_rx.is_some()
             || self.wizard_state.modlist_auto_build_active
             || !self.step2_progress_queue.is_empty()
+            || matches!(
+                self.wizard_state.step2.versions_ui.release_list.status,
+                crate::app::github_release_list::ReleaseListStatus::Loading
+            )
     }
 
     fn sync_active_workspace_if_dirty(&mut self) {

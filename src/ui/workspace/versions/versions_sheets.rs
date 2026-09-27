@@ -3,24 +3,36 @@
 
 use eframe::egui;
 
-use crate::app::mod_downloads;
+use crate::app::github_release_list::ReleaseListState;
+use crate::app::mod_downloads::{self, ModDownloadSource};
+use crate::app::source_form::{self, SourceForm, SourceFormIdentity, SourceKind};
 use crate::app::state::{Step2DiscoveredFork, Step2State, VersionsSheet};
 use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
+use crate::app::versions_view::VersionCard;
 use crate::ui::orchestrator::widgets::icon_button::{self, ButtonIcon};
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_height};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft, redesign_error,
     redesign_shell_bg, redesign_text_muted, redesign_text_primary,
 };
 use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
+use super::versions_form;
+
 const SHEET_W: f32 = 600.0;
+
+pub(crate) struct EditSourceEnv {
+    pub(crate) busy: bool,
+    pub(crate) logged_in: bool,
+    pub(crate) release_list: ReleaseListState,
+}
 
 #[derive(Default)]
 pub(crate) struct SheetOutcome {
     pub(crate) action: Option<Step2Action>,
     pub(crate) open_sheet: Option<VersionsSheet>,
     pub(crate) close: bool,
+    pub(crate) seed_form: Option<SourceForm>,
 }
 
 fn panel_rect(drawer_rect: egui::Rect) -> egui::Rect {
@@ -78,15 +90,94 @@ fn render_header(
 }
 
 pub(crate) fn clear_editor_state(step2: &mut Step2State) {
-    step2.mod_download_source_editor_open = false;
-    step2.mod_download_source_editor_text.clear();
-    step2.mod_download_source_editor_error = None;
+    step2.versions_ui.source_form = None;
 }
 
 pub(crate) fn editor_ready_for(step2: &Step2State) -> bool {
-    step2.mod_download_source_editor_open
-        && step2.versions_ui.sheet_tp2.as_deref()
-            == Some(step2.mod_download_source_editor_tp2.as_str())
+    step2
+        .versions_ui
+        .source_form
+        .as_ref()
+        .is_some_and(|form| step2.versions_ui.sheet_tp2.as_deref() == Some(form.card_key.as_str()))
+}
+
+pub(crate) fn seed_source_form_for_card(
+    tiers: &mod_downloads::SourceTiers,
+    card: &VersionCard,
+) -> SourceForm {
+    let Some(source_id) = card.source_id.as_deref() else {
+        return blank_source_form(card);
+    };
+    let sources = tiers.find_sources(&card.tp2);
+    let key = mod_downloads::normalize_source_id(source_id);
+    let resolved = sources
+        .iter()
+        .find(|source| mod_downloads::normalize_source_id(&source.source_id) == key)
+        .cloned()
+        .or_else(|| sources.into_iter().next());
+    resolved.map_or_else(
+        || blank_source_form(card),
+        |source| {
+            source_form::from_source(
+                &source,
+                SourceFormIdentity::default(),
+                card_destination(card),
+                &card.tp2,
+            )
+        },
+    )
+}
+
+fn blank_source_form(card: &VersionCard) -> SourceForm {
+    let seed = ModDownloadSource {
+        tp2: card.tp2.clone(),
+        name: card.name.clone(),
+        source_id: "new-source".to_string(),
+        github: Some(String::new()),
+        ..ModDownloadSource::default()
+    };
+    source_form::from_source(
+        &seed,
+        SourceFormIdentity {
+            may_change_id: true,
+            is_new_mod: true,
+        },
+        ModSourceEditDestination::GlobalDefault,
+        &card.tp2,
+    )
+}
+
+fn card_destination(card: &VersionCard) -> ModSourceEditDestination {
+    if card.layer == "This modlist" {
+        ModSourceEditDestination::ThisModlist
+    } else {
+        ModSourceEditDestination::GlobalDefault
+    }
+}
+
+pub(crate) fn seed_source_form_from_fork(
+    tp2: &str,
+    name: &str,
+    fork: &Step2DiscoveredFork,
+) -> SourceForm {
+    let seed = ModDownloadSource {
+        tp2: tp2.to_string(),
+        name: name.to_string(),
+        source_id: fork.owner_login.clone(),
+        source_label: fork.owner_login.clone(),
+        github: Some(fork.full_name.clone()),
+        branch: Some(fork.default_branch.clone()),
+        ..ModDownloadSource::default()
+    };
+    source_form::from_source(
+        &seed,
+        SourceFormIdentity {
+            may_change_id: true,
+            is_new_mod: false,
+        },
+        ModSourceEditDestination::GlobalDefault,
+        tp2,
+    )
 }
 
 pub(crate) fn render_edit_source_unready(
@@ -118,19 +209,12 @@ pub(crate) fn render_edit_source_unready(
                     egui::Frame::default()
                         .inner_margin(egui::Margin::symmetric(22, 18))
                         .show(ui, |ui| {
-                            render_header(
-                                ui,
-                                palette,
-                                "Download source",
-                                &step2.mod_download_source_editor_display_name,
-                                &mut outcome,
-                            );
+                            render_header(ui, palette, "Download source", "", &mut outcome);
                             ui.add_space(12.0);
-                            let message = step2
-                                .mod_download_source_editor_error
-                                .clone()
-                                .unwrap_or_else(|| "Could not open this source".to_string());
-                            ui.label(egui::RichText::new(message).color(redesign_error(palette)));
+                            ui.label(
+                                egui::RichText::new("Could not open this source")
+                                    .color(redesign_error(palette)),
+                            );
                             ui.add_space(12.0);
                             ui.horizontal(|ui| {
                                 if redesign_btn(
@@ -172,17 +256,33 @@ pub(crate) fn render_edit_source(
     palette: ThemePalette,
     drawer_rect: egui::Rect,
     step2: &mut Step2State,
-    busy: bool,
+    env: &EditSourceEnv,
     escape_active: bool,
 ) -> SheetOutcome {
     let mut outcome = SheetOutcome::default();
     if render_scrim(ctx, "edit", drawer_rect) {
         outcome.close = true;
     }
-    if escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+    let popover_open = step2
+        .versions_ui
+        .source_form
+        .as_ref()
+        .is_some_and(|form| versions_form::any_popover_open(ctx, &form.card_key));
+    if escape_active && !popover_open && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         outcome.close = true;
     }
     let panel = panel_rect(drawer_rect);
+    let mod_name = step2
+        .versions_ui
+        .source_form
+        .as_ref()
+        .map_or_else(String::new, |form| {
+            if form.name.trim().is_empty() {
+                form.tp2.clone()
+            } else {
+                form.name.clone()
+            }
+        });
     egui::Area::new(egui::Id::new("versions_sheet_panel_edit"))
         .order(egui::Order::Foreground)
         .fixed_pos(panel.min)
@@ -197,18 +297,34 @@ pub(crate) fn render_edit_source(
                     egui::Frame::default()
                         .inner_margin(egui::Margin::symmetric(22, 18))
                         .show(ui, |ui| {
-                            render_header(
-                                ui,
-                                palette,
-                                "Download source",
-                                &step2.mod_download_source_editor_display_name,
-                                &mut outcome,
-                            );
+                            render_header(ui, palette, "Download source", &mod_name, &mut outcome);
                             ui.add_space(12.0);
-                            render_edit_source_body(ui, palette, step2, busy);
+                            let footer_reserve = ui
+                                .spacing()
+                                .item_spacing
+                                .y
+                                .mul_add(2.0, redesign_btn_height(ui, true) + 12.0);
+                            let body_h = (ui.available_height() - footer_reserve).max(0.0);
+                            egui::ScrollArea::vertical()
+                                .auto_shrink([false, false])
+                                .max_height(body_h)
+                                .show(ui, |ui| {
+                                    if let Some(action) =
+                                        render_edit_source_body(ctx, ui, palette, step2, env)
+                                        && outcome.action.is_none()
+                                    {
+                                        outcome.action = Some(action);
+                                    }
+                                });
                             ui.add_space(12.0);
                             ui.horizontal(|ui| {
-                                render_edit_source_footer(ui, palette, step2, busy, &mut outcome);
+                                render_edit_source_footer(
+                                    ui,
+                                    palette,
+                                    step2,
+                                    env.busy,
+                                    &mut outcome,
+                                );
                             });
                         });
                 });
@@ -220,76 +336,48 @@ pub(crate) fn render_edit_source(
 }
 
 fn render_edit_source_body(
+    ctx: &egui::Context,
     ui: &mut egui::Ui,
     palette: ThemePalette,
     step2: &mut Step2State,
-    busy: bool,
-) {
+    env: &EditSourceEnv,
+) -> Option<Step2Action> {
     let has_modlist_destination = mod_downloads::active_modlist_downloads_path().is_some();
-    ui.horizontal(|ui| {
-        if has_modlist_destination
-            && destination_chip(
-                ui,
-                palette,
-                "This modlist",
-                step2.mod_download_source_editor_destination
-                    == ModSourceEditDestination::ThisModlist,
-                busy,
-            )
-        {
-            step2.mod_download_source_editor_destination = ModSourceEditDestination::ThisModlist;
-        }
-        if destination_chip(
-            ui,
-            palette,
-            "My default",
-            step2.mod_download_source_editor_destination == ModSourceEditDestination::GlobalDefault,
-            busy,
-        ) {
-            step2.mod_download_source_editor_destination = ModSourceEditDestination::GlobalDefault;
-        }
-    });
-    ui.add_space(8.0);
-    if let Some(err) = step2.mod_download_source_editor_error.clone() {
-        ui.label(egui::RichText::new(err).color(redesign_error(palette)));
-        ui.add_space(4.0);
+    let form = step2.versions_ui.source_form.as_mut()?;
+    if let Some(error) = form.error.clone() {
+        ui.label(egui::RichText::new(error).color(redesign_error(palette)));
+        ui.add_space(8.0);
     }
-    ui.add_enabled(
-        !busy,
-        egui::TextEdit::multiline(&mut step2.mod_download_source_editor_text)
-            .desired_rows(16)
-            .desired_width(f32::INFINITY)
-            .font(egui::TextStyle::Monospace),
-    );
+    let form_env = versions_form::FormEnv {
+        has_modlist_destination,
+        logged_in: env.logged_in,
+        release_list: &env.release_list,
+    };
+    let outcome = versions_form::render(ctx, ui, palette, form, &form_env);
+    outcome
+        .request_release_list
+        .map(|repo| Step2Action::RequestReleaseList { repo })
 }
 
-fn destination_chip(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    label: &str,
-    selected: bool,
-    busy: bool,
-) -> bool {
-    redesign_btn(
-        ui,
-        palette,
-        label,
-        BtnOpts {
-            small: true,
-            primary: selected,
-            disabled: busy,
-            ..Default::default()
-        },
-    )
-    .clicked()
-        && !selected
-        && !busy
+fn missing_field_message(form: &SourceForm) -> Option<String> {
+    match form.kind {
+        SourceKind::GitHub => form
+            .repo
+            .trim()
+            .is_empty()
+            .then(|| "Add a repository first".to_string()),
+        SourceKind::WeaselMods | SourceKind::MorpheusMart | SourceKind::DirectLink => form
+            .link
+            .trim()
+            .is_empty()
+            .then(|| "Paste a link first".to_string()),
+    }
 }
 
 fn render_edit_source_footer(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    step2: &Step2State,
+    step2: &mut Step2State,
     busy: bool,
     outcome: &mut SheetOutcome,
 ) {
@@ -306,7 +394,10 @@ fn render_edit_source_footer(
     {
         outcome.close = true;
     }
-    let save_label = match step2.mod_download_source_editor_destination {
+    let Some(form) = step2.versions_ui.source_form.as_mut() else {
+        return;
+    };
+    let save_label = match form.save_to {
         ModSourceEditDestination::ThisModlist => "Save to this modlist",
         ModSourceEditDestination::GlobalDefault => "Save to My default",
     };
@@ -324,7 +415,12 @@ fn render_edit_source_footer(
     .clicked()
         && !busy
     {
-        outcome.action = Some(Step2Action::SaveModDownloadSourceEditor);
+        if let Some(message) = missing_field_message(form) {
+            form.error = Some(message);
+        } else if outcome.action.is_none() {
+            form.error = None;
+            outcome.action = Some(Step2Action::SaveSourceForm);
+        }
     }
 }
 
@@ -430,13 +526,7 @@ fn render_fork_row(
             )
             .clicked()
             {
-                outcome.action = Some(Step2Action::AddDiscoveredModDownloadFork {
-                    tp2: tp2.to_string(),
-                    label: label.to_string(),
-                    full_name: fork.full_name.clone(),
-                    owner_login: fork.owner_login.clone(),
-                    default_branch: fork.default_branch.clone(),
-                });
+                outcome.seed_form = Some(seed_source_form_from_fork(tp2, label, fork));
                 outcome.open_sheet = Some(VersionsSheet::EditSource);
             }
             if redesign_btn(
@@ -460,4 +550,32 @@ fn render_fork_row(
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette)),
     );
     ui.add_space(6.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn readiness_and_recheck_use_the_card_key_for_mixed_case_tp2() {
+        let source = ModDownloadSource {
+            tp2: "BG1NPC".to_string(),
+            name: "BG1 NPC".to_string(),
+            source_id: "primary".to_string(),
+            github: Some("owner/repo".to_string()),
+            ..ModDownloadSource::default()
+        };
+        let form = source_form::from_source(
+            &source,
+            SourceFormIdentity::default(),
+            ModSourceEditDestination::ThisModlist,
+            "bg1npcmusic",
+        );
+
+        let mut step2 = Step2State::default();
+        step2.versions_ui.sheet_tp2 = Some("bg1npcmusic".to_string());
+        step2.versions_ui.source_form = Some(form);
+
+        assert!(editor_ready_for(&step2));
+    }
 }

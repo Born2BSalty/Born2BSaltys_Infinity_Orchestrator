@@ -151,6 +151,14 @@ fn handle_step2_download_source_action(
                 save_mod_download_source_editor(state, step2_update_check_rx);
             }
         }
+        Step2Action::SaveSourceForm => {
+            if crate::app::state::update_pipeline_busy(&state.step2) {
+                state.step2.scan_status = "Wait for the current check to finish".to_string();
+            } else {
+                save_source_form(state, step2_update_check_rx);
+            }
+        }
+        Step2Action::RequestReleaseList { repo } => request_release_list(state, &repo),
         Step2Action::SetModDownloadSource { tp2, source_id } => {
             if crate::app::state::update_pipeline_busy(&state.step2) {
                 state.step2.scan_status = "Wait for the current check to finish".to_string();
@@ -412,6 +420,57 @@ fn save_mod_download_source_editor(
             state.step2.scan_status = format!("Save source entry failed: {err}");
         }
     }
+}
+
+fn save_source_form(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+) {
+    let Some(form) = state.step2.versions_ui.source_form.clone() else {
+        return;
+    };
+    let full_text = super::source_form::source_form_save_text(&form);
+    let target_path = match form.save_to {
+        crate::app::step2_action::ModSourceEditDestination::GlobalDefault => None,
+        crate::app::step2_action::ModSourceEditDestination::ThisModlist => {
+            mod_downloads::active_modlist_downloads_path()
+        }
+    };
+    let card_key = form.card_key.clone();
+
+    match mod_downloads::save_user_mod_download_source_block(
+        &form.tp2,
+        &form.label,
+        &form.source_id,
+        form.identity.may_change_id,
+        &full_text,
+        target_path.as_deref(),
+    ) {
+        Ok(()) => {
+            state.step2.versions_ui.sheet = None;
+            state.step2.versions_ui.source_form = None;
+            finish_saving_mod_download_source_editor(state, step2_update_check_rx, &card_key);
+        }
+        Err(err) => {
+            if let Some(form) = state.step2.versions_ui.source_form.as_mut() {
+                form.error = Some(err.clone());
+            }
+            state.step2.scan_status = format!("Save source entry failed: {err}");
+        }
+    }
+}
+
+fn request_release_list(state: &mut WizardState, repo: &str) {
+    let repo = repo.trim();
+    if repo.is_empty() || state.github_auth_login.trim().is_empty() {
+        return;
+    }
+    state.step2.versions_ui.release_list = super::github_release_list::ReleaseListState {
+        repo: repo.to_string(),
+        status: super::github_release_list::ReleaseListStatus::Loading,
+    };
 }
 
 fn finish_saving_mod_download_source_editor(
@@ -915,6 +974,111 @@ mod tests {
         assert_eq!(
             super::source_editor_display_name(&state, "buffbot", "buffbot"),
             "setup-buffbot.tp2"
+        );
+    }
+
+    #[test]
+    fn update_target_misses_an_alias_key() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(make_mod_state("setup-bg1npcmusic.tp2"));
+
+        assert!(super::update_target_for_tp2(&state, "bg1npcmusic").is_some());
+        assert!(super::update_target_for_tp2(&state, "BG1NPC").is_none());
+    }
+
+    struct SourceFormConfigDirGuard(PathBuf);
+
+    impl SourceFormConfigDirGuard {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_router_source_form_config_dir_test_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(path.clone()));
+            Self(path)
+        }
+    }
+
+    impl Drop for SourceFormConfigDirGuard {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    struct TargetDirGuard(PathBuf);
+
+    impl TargetDirGuard {
+        fn create(label: &str) -> Self {
+            let path = unique_tmp_dir(label);
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TargetDirGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn first_save_of_an_existing_mod_keeps_its_name() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let _config_guard = SourceFormConfigDirGuard::new("first_save_keeps_name");
+        let target_guard = TargetDirGuard::create("first_save_target");
+        let target_dir = target_guard.0.clone();
+        crate::app::mod_downloads::set_active_modlist_dir(Some(target_dir.clone()));
+
+        let source = crate::app::mod_downloads::ModDownloadSource {
+            tp2: "scs".to_string(),
+            name: "SCS Mod".to_string(),
+            source_id: "primary".to_string(),
+            source_label: "GitHub".to_string(),
+            github: Some("owner/scs".to_string()),
+            ..crate::app::mod_downloads::ModDownloadSource::default()
+        };
+        let form = crate::app::source_form::from_source(
+            &source,
+            crate::app::source_form::SourceFormIdentity {
+                may_change_id: false,
+                is_new_mod: false,
+            },
+            crate::app::step2_action::ModSourceEditDestination::ThisModlist,
+            "scs",
+        );
+
+        let mut state = WizardState::default();
+        state.step2.versions_ui.source_form = Some(form);
+        let mut step2_update_check_rx = None;
+
+        super::save_source_form(&mut state, &mut step2_update_check_rx);
+
+        assert!(
+            state.step2.mod_download_source_editor_error.is_none(),
+            "save must not fail: {:?}",
+            state.step2.mod_download_source_editor_error
+        );
+
+        let written = std::fs::read_to_string(target_dir.join("mod_downloads_user.toml")).unwrap();
+        assert!(
+            written.contains("name = \"SCS Mod\""),
+            "written file must keep the mod's own name:\n{written}"
+        );
+        assert!(
+            !written.contains("name = \"GitHub\""),
+            "written file must not use the source label as the mod name:\n{written}"
         );
     }
 

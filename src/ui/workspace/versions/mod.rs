@@ -3,6 +3,7 @@
 
 pub mod versions_card;
 pub mod versions_drawer;
+pub mod versions_form;
 pub mod versions_icons;
 pub mod versions_menus;
 pub mod versions_sheets;

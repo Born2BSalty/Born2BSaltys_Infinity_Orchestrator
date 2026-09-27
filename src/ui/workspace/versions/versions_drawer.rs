@@ -11,7 +11,7 @@ use crate::app::state::{
     VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, exact_log_ready_to_install,
     update_pipeline_busy,
 };
-use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
+use crate::app::step2_action::Step2Action;
 use crate::app::versions_view::{self, VersionCard, VersionsView};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::drawer::{self, DrawerSpec, DrawerWidth};
@@ -25,7 +25,7 @@ use crate::ui::shared::redesign_tokens::{
 };
 use crate::ui::step2::update_check_popup_report_step2::build_popup_report;
 
-use super::{versions_card, versions_icons, versions_menus, versions_sheets};
+use super::{versions_card, versions_form, versions_icons, versions_menus, versions_sheets};
 
 type FileStamp = (u64, u128);
 type TiersCacheKey = (Option<PathBuf>, FileStamp, FileStamp);
@@ -131,8 +131,6 @@ pub(crate) fn render(
         return;
     }
 
-    apply_editor_closed_transition(orchestrator);
-
     let tiers = cached_source_tiers(ctx);
     let view = versions_view::build_versions_view(&orchestrator.wizard_state, &tiers);
 
@@ -179,12 +177,16 @@ pub(crate) fn render(
                 );
             }
             render_filter_row(ui, orchestrator, palette, &view);
+            let list_env = CardListEnv {
+                view: &view,
+                tiers: &tiers,
+                busy,
+            };
             render_card_list(
                 ui,
                 orchestrator,
                 palette,
-                &view,
-                busy,
+                &list_env,
                 &mut body_action,
                 &mut anchor_for_menu,
             );
@@ -203,7 +205,7 @@ pub(crate) fn render(
     );
 
     if response.header_clicked && !busy && body_action.is_none() {
-        body_action = Some(Step2Action::PreviewUpdateSelected);
+        body_action = Some(handle_header_click(orchestrator, &view));
     }
 
     if let Some(a) = body_action.or(footer_action) {
@@ -211,47 +213,64 @@ pub(crate) fn render(
     }
 
     if response.close_requested || close_clicked {
-        orchestrator.wizard_state.step2.update_selected_popup_open = false;
-        orchestrator.wizard_state.step2.versions_ui = VersionsDrawerUi::default();
-        orchestrator
-            .wizard_state
-            .step2
-            .update_selected_confirm_latest_fallback_open = false;
-        versions_sheets::clear_editor_state(&mut orchestrator.wizard_state.step2);
+        close_drawer(orchestrator);
         return;
     }
 
+    let list_env = CardListEnv {
+        view: &view,
+        tiers: &tiers,
+        busy,
+    };
     finish_render(
         ctx,
         orchestrator,
         palette,
-        &view,
-        busy,
+        &list_env,
         action,
         anchor_for_menu,
     );
+}
+
+fn handle_header_click(orchestrator: &mut OrchestratorApp, view: &VersionsView) -> Step2Action {
+    let repos: Vec<String> = view
+        .cards
+        .iter()
+        .filter_map(|card| card.repo.clone())
+        .collect();
+    crate::app::github_release_list::drop_cached_release_lists(&repos);
+    orchestrator.wizard_state.step2.versions_ui.release_list =
+        crate::app::github_release_list::ReleaseListState::default();
+    Step2Action::PreviewUpdateSelected
+}
+
+fn close_drawer(orchestrator: &mut OrchestratorApp) {
+    orchestrator.wizard_state.step2.update_selected_popup_open = false;
+    orchestrator.wizard_state.step2.versions_ui = VersionsDrawerUi::default();
+    orchestrator
+        .wizard_state
+        .step2
+        .update_selected_confirm_latest_fallback_open = false;
+    versions_sheets::clear_editor_state(&mut orchestrator.wizard_state.step2);
+}
+
+struct CardListEnv<'a> {
+    view: &'a VersionsView,
+    tiers: &'a mod_downloads::SourceTiers,
+    busy: bool,
 }
 
 fn finish_render(
     ctx: &egui::Context,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
-    view: &VersionsView,
-    busy: bool,
+    env: &CardListEnv<'_>,
     action: &mut Option<Step2Action>,
     anchor_for_menu: Option<AnchorInfo>,
 ) {
     let drawer_rect = drawer_rect(ctx);
     let menu_open_before = orchestrator.wizard_state.step2.versions_ui.menu.is_some();
-    render_open_menu(
-        ctx,
-        orchestrator,
-        palette,
-        view,
-        busy,
-        action,
-        anchor_for_menu,
-    );
+    render_open_menu(ctx, orchestrator, palette, env, action, anchor_for_menu);
     let escape_active_for_sheet =
         !menu_open_before && orchestrator.wizard_state.step2.versions_ui.menu.is_none();
     render_open_sheet(
@@ -259,33 +278,10 @@ fn finish_render(
         orchestrator,
         palette,
         drawer_rect,
-        busy,
+        env.busy,
         escape_active_for_sheet,
         action,
     );
-    update_pipeline_editor_flag(orchestrator);
-}
-
-fn apply_editor_closed_transition(orchestrator: &mut OrchestratorApp) {
-    let editor_open_now = orchestrator
-        .wizard_state
-        .step2
-        .mod_download_source_editor_open;
-    let step2 = &mut orchestrator.wizard_state.step2;
-    if step2.versions_ui.editor_was_open
-        && !editor_open_now
-        && step2.versions_ui.sheet == Some(VersionsSheet::EditSource)
-    {
-        step2.versions_ui.sheet = None;
-        step2.versions_ui.sheet_tp2 = None;
-    }
-}
-
-const fn update_pipeline_editor_flag(orchestrator: &mut OrchestratorApp) {
-    orchestrator.wizard_state.step2.versions_ui.editor_was_open = orchestrator
-        .wizard_state
-        .step2
-        .mod_download_source_editor_open;
 }
 
 struct AnchorInfo {
@@ -608,11 +604,13 @@ fn render_card_list(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
-    view: &VersionsView,
-    busy: bool,
+    env: &CardListEnv<'_>,
     body_action: &mut Option<Step2Action>,
     anchor_for_menu: &mut Option<AnchorInfo>,
 ) {
+    let view = env.view;
+    let tiers = env.tiers;
+    let busy = env.busy;
     let search = orchestrator
         .wizard_state
         .step2
@@ -658,6 +656,7 @@ fn render_card_list(
     let mut ctx = ListRenderCtx {
         palette,
         selector_width,
+        tiers,
         busy,
         body_action,
         anchor_for_menu,
@@ -692,6 +691,7 @@ fn render_card_list(
 struct ListRenderCtx<'a> {
     palette: ThemePalette,
     selector_width: f32,
+    tiers: &'a mod_downloads::SourceTiers,
     busy: bool,
     body_action: &'a mut Option<Step2Action>,
     anchor_for_menu: &'a mut Option<AnchorInfo>,
@@ -745,14 +745,14 @@ fn render_one_card(
                 tp2: card.tp2.clone(),
             });
         } else {
+            let form = versions_sheets::seed_source_form_for_card(ctx.tiers, card);
+            orchestrator.wizard_state.step2.versions_ui.source_form = Some(form);
+            versions_form::reset_dropdown_state(ui.ctx(), &card.tp2);
             orchestrator
                 .wizard_state
                 .step2
                 .versions_ui
                 .open_sheet(VersionsSheet::EditSource, card.tp2.clone());
-            if ctx.body_action.is_none() {
-                *ctx.body_action = Some(new_source_action(card));
-            }
         }
     }
     if kebab_clicked {
@@ -777,16 +777,6 @@ fn render_one_card(
             rect: event.kebab_rect,
             response: event.kebab_response.clone(),
         });
-    }
-}
-
-fn new_source_action(card: &VersionCard) -> Step2Action {
-    Step2Action::OpenModDownloadSourceEditor {
-        tp2: card.tp2.clone(),
-        label: card.name.clone(),
-        source_id: "new-source".to_string(),
-        allow_source_id_change: true,
-        destination: ModSourceEditDestination::GlobalDefault,
     }
 }
 
@@ -862,8 +852,7 @@ fn render_open_menu(
     ctx: &egui::Context,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
-    view: &VersionsView,
-    busy: bool,
+    env: &CardListEnv<'_>,
     action: &mut Option<Step2Action>,
     anchor: Option<AnchorInfo>,
 ) {
@@ -877,7 +866,7 @@ fn render_open_menu(
     let tp2 = match &menu {
         VersionsMenu::Sources { tp2 } | VersionsMenu::Kebab { tp2 } => tp2.clone(),
     };
-    let Some(card) = view.cards.iter().find(|c| c.tp2 == tp2) else {
+    let Some(card) = env.view.cards.iter().find(|c| c.tp2 == tp2) else {
         orchestrator.wizard_state.step2.versions_ui.menu = None;
         return;
     };
@@ -888,7 +877,7 @@ fn render_open_menu(
             anchor.rect,
             &anchor.response,
             card,
-            busy,
+            env.busy,
         ),
         VersionsMenu::Kebab { .. } => versions_menus::render_kebab_menu(
             ctx,
@@ -896,13 +885,18 @@ fn render_open_menu(
             anchor.rect,
             &anchor.response,
             card,
-            busy,
+            env.busy,
         ),
     };
     if outcome.action.is_some() && action.is_none() {
         *action = outcome.action;
     }
+    if outcome.open_sheet == Some(VersionsSheet::EditSource) {
+        let form = versions_sheets::seed_source_form_for_card(env.tiers, card);
+        orchestrator.wizard_state.step2.versions_ui.source_form = Some(form);
+    }
     if let Some(sheet) = outcome.open_sheet {
+        versions_form::reset_dropdown_state(ctx, &tp2);
         orchestrator
             .wizard_state
             .step2
@@ -944,14 +938,27 @@ fn render_open_sheet(
         VersionsSheet::EditSource => {
             let ready = versions_sheets::editor_ready_for(&orchestrator.wizard_state.step2);
             if ready {
-                versions_sheets::render_edit_source(
+                let release_list =
+                    std::mem::take(&mut orchestrator.wizard_state.step2.versions_ui.release_list);
+                let env = versions_sheets::EditSourceEnv {
+                    busy,
+                    logged_in: !orchestrator
+                        .wizard_state
+                        .github_auth_login
+                        .trim()
+                        .is_empty(),
+                    release_list,
+                };
+                let result = versions_sheets::render_edit_source(
                     ctx,
                     palette,
                     drawer_rect,
                     &mut orchestrator.wizard_state.step2,
-                    busy,
+                    &env,
                     escape_active,
-                )
+                );
+                orchestrator.wizard_state.step2.versions_ui.release_list = env.release_list;
+                result
             } else if just_opened {
                 return;
             } else {
@@ -975,7 +982,11 @@ fn render_open_sheet(
     if outcome.action.is_some() && action.is_none() {
         *action = outcome.action;
     }
+    if let Some(form) = outcome.seed_form {
+        orchestrator.wizard_state.step2.versions_ui.source_form = Some(form);
+    }
     if let Some(new_sheet) = outcome.open_sheet {
+        versions_form::reset_dropdown_state(ctx, &current_tp2);
         orchestrator
             .wizard_state
             .step2

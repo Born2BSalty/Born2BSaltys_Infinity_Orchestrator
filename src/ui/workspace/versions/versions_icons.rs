@@ -185,6 +185,28 @@ pub(crate) fn elide(
     "\u{2026}".to_string()
 }
 
+pub(crate) fn paint_chevron_right(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    color: egui::Color32,
+) {
+    let stroke = egui::Stroke::new(1.7_f32, color);
+    painter.line_segment(
+        [
+            center + egui::vec2(-2.0, -4.0),
+            center + egui::vec2(2.0, 0.0),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            center + egui::vec2(2.0, 0.0),
+            center + egui::vec2(-2.0, 4.0),
+        ],
+        stroke,
+    );
+}
+
 pub(crate) fn paint_search(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
     let stroke = icon_stroke(color);
     let lens_center = center + egui::vec2(-1.5, -1.5);

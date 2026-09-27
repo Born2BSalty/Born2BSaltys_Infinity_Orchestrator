@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::app::github_release_list::ReleaseListState;
+use crate::app::source_form::SourceForm;
 use crate::app::step2_action::ModSourceEditDestination;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,9 +72,10 @@ pub struct VersionsDrawerUi {
     pub(crate) sheet: Option<VersionsSheet>,
     pub(crate) sheet_tp2: Option<String>,
     pub(crate) sheet_just_opened: bool,
-    pub(crate) editor_was_open: bool,
     pub(crate) menu: Option<VersionsMenu>,
     pub(crate) auto_check_pending: bool,
+    pub(crate) source_form: Option<SourceForm>,
+    pub(crate) release_list: ReleaseListState,
 }
 
 impl VersionsDrawerUi {

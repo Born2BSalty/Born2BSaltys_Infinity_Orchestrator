@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::app::state::VersionsSheet;
-use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
+use crate::app::step2_action::Step2Action;
 use crate::app::versions_view::{CardSourceOption, VersionCard};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
@@ -35,27 +35,6 @@ fn popup_frame(palette: ThemePalette) -> egui::Frame {
         ))
         .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
         .inner_margin(egui::Margin::same(6))
-}
-
-fn edit_source_action(card: &VersionCard) -> Step2Action {
-    Step2Action::OpenModDownloadSourceEditor {
-        tp2: card.tp2.clone(),
-        label: card.name.clone(),
-        source_id: card
-            .source_id
-            .clone()
-            .unwrap_or_else(|| "new-source".to_string()),
-        allow_source_id_change: card.source_id.is_none(),
-        destination: card_destination(card),
-    }
-}
-
-fn card_destination(card: &VersionCard) -> ModSourceEditDestination {
-    if card.layer == "This modlist" {
-        ModSourceEditDestination::ThisModlist
-    } else {
-        ModSourceEditDestination::GlobalDefault
-    }
 }
 
 fn find_forks_action(card: &VersionCard) -> Step2Action {
@@ -132,7 +111,6 @@ fn render_known_sources_body(
         .clicked()
             && !busy
         {
-            outcome.action = Some(edit_source_action(card));
             outcome.open_sheet = Some(VersionsSheet::EditSource);
             outcome.close = true;
         }
@@ -270,7 +248,6 @@ pub(crate) fn render_kebab_menu(
                     "Add source\u{2026}"
                 };
                 if menu_item(ui, palette, edit_label, busy) {
-                    outcome.action = Some(edit_source_action(card));
                     outcome.open_sheet = Some(VersionsSheet::EditSource);
                     outcome.close = true;
                 }

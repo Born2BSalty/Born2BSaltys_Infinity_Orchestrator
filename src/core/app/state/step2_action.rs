@@ -51,6 +51,10 @@ pub enum Step2Action {
         default_branch: String,
     },
     SaveModDownloadSourceEditor,
+    SaveSourceForm,
+    RequestReleaseList {
+        repo: String,
+    },
     SetModDownloadSource {
         tp2: String,
         source_id: String,

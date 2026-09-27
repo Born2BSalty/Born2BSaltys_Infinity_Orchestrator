@@ -93,6 +93,8 @@ pub mod component_details;
 pub mod controller;
 pub mod game_authority;
 pub mod game_version;
+#[path = "step2/update/github_release_list.rs"]
+pub mod github_release_list;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
 #[path = "step2/update/mod_update_locks.rs"]
@@ -115,6 +117,8 @@ pub mod selected_details;
 pub mod selection_jump;
 pub mod selection_refs;
 pub mod source_check;
+#[path = "step2/update/source_form.rs"]
+pub mod source_form;
 pub mod state;
 #[path = "state/state_convert.rs"]
 pub mod state_convert;
