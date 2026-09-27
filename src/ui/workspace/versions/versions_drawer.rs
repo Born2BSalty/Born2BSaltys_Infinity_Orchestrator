@@ -121,6 +121,97 @@ fn build_header_ctx(orchestrator: &OrchestratorApp) -> HeaderCtx {
     }
 }
 
+fn active_modlist_id(orchestrator: &OrchestratorApp) -> Option<String> {
+    let id = orchestrator.workspace_view.modlist_id.trim();
+    (!id.is_empty()).then(|| id.to_string())
+}
+
+fn active_modlist_display_name(orchestrator: &OrchestratorApp) -> String {
+    let Some(id) = active_modlist_id(orchestrator) else {
+        return orchestrator.workspace_view.modlist_name.clone();
+    };
+    orchestrator
+        .registry
+        .entries
+        .iter()
+        .find(|entry| entry.id == id)
+        .map_or_else(
+            || orchestrator.workspace_view.modlist_name.clone(),
+            |entry| entry.name.clone(),
+        )
+}
+
+fn ensure_known_extras(orchestrator: &mut OrchestratorApp) {
+    if orchestrator.wizard_state.step2.versions_ui.known.is_some() {
+        return;
+    }
+    let active_id = active_modlist_id(orchestrator);
+    let lists: Vec<(String, String)> = orchestrator
+        .registry
+        .entries
+        .iter()
+        .map(|entry| (entry.id.clone(), entry.name.clone()))
+        .collect();
+    let extras = versions_view::load_known_extras(active_id.as_deref(), &lists);
+    orchestrator.wizard_state.step2.versions_ui.known = Some(extras);
+}
+
+fn note_who(orchestrator: &OrchestratorApp) -> String {
+    if mod_downloads::active_modlist_downloads_path().is_some() {
+        let name = orchestrator.workspace_view.modlist_name.trim();
+        if name.is_empty() {
+            "My default".to_string()
+        } else {
+            name.to_string()
+        }
+    } else {
+        "My default".to_string()
+    }
+}
+
+struct RenderPrep {
+    tiers: Arc<mod_downloads::SourceTiers>,
+    view: VersionsView,
+    subtitle: String,
+    header: HeaderCtx,
+}
+
+fn prepare_render(
+    ctx: &egui::Context,
+    orchestrator: &mut OrchestratorApp,
+    action: &mut Option<Step2Action>,
+) -> RenderPrep {
+    if let Some(toast) = orchestrator
+        .wizard_state
+        .step2
+        .versions_ui
+        .pending_toast
+        .take()
+    {
+        orchestrator.notification_manager.success(toast);
+    }
+
+    ensure_known_extras(orchestrator);
+    let tiers = cached_source_tiers(ctx);
+    let view = versions_view::build_versions_view(
+        &orchestrator.wizard_state,
+        &tiers,
+        orchestrator.wizard_state.step2.versions_ui.known.as_ref(),
+    );
+
+    maybe_emit_auto_check(orchestrator, action);
+
+    let modlist_name = orchestrator.workspace_view.modlist_name.clone();
+    let subtitle = subtitle_text(orchestrator, &modlist_name, view.cards.len());
+    let header = build_header_ctx(orchestrator);
+    RenderPrep {
+        tiers,
+        view,
+        subtitle,
+        header,
+    }
+}
+
 pub(crate) fn render(
     ctx: &egui::Context,
     orchestrator: &mut OrchestratorApp,
@@ -131,14 +222,12 @@ pub(crate) fn render(
         return;
     }
 
-    let tiers = cached_source_tiers(ctx);
-    let view = versions_view::build_versions_view(&orchestrator.wizard_state, &tiers);
-
-    maybe_emit_auto_check(orchestrator, action);
-
-    let modlist_name = orchestrator.workspace_view.modlist_name.clone();
-    let subtitle = subtitle_text(orchestrator, &modlist_name, view.cards.len());
-    let header = build_header_ctx(orchestrator);
+    let RenderPrep {
+        tiers,
+        view,
+        subtitle,
+        header,
+    } = prepare_render(ctx, orchestrator, action);
     let busy = header.busy;
 
     let spec = DrawerSpec {
@@ -745,7 +834,13 @@ fn render_one_card(
                 tp2: card.tp2.clone(),
             });
         } else {
-            let form = versions_sheets::seed_source_form_for_card(ctx.tiers, card);
+            let this_modlist_name = active_modlist_display_name(orchestrator);
+            let form = versions_sheets::seed_source_form_for_card(
+                ctx.tiers,
+                card,
+                None,
+                &this_modlist_name,
+            );
             orchestrator.wizard_state.step2.versions_ui.source_form = Some(form);
             versions_form::reset_dropdown_state(ui.ctx(), &card.tp2);
             orchestrator
@@ -756,15 +851,17 @@ fn render_one_card(
         }
     }
     if kebab_clicked {
+        let bookmark_label = versions_view::bookmark_label(&orchestrator.wizard_state, &card.tp2);
         orchestrator.wizard_state.step2.versions_ui.menu = Some(VersionsMenu::Kebab {
             tp2: card.tp2.clone(),
+            bookmark_label,
         });
     }
 
     let is_open_sources =
         matches!(ctx.open_menu, Some(VersionsMenu::Sources { tp2 }) if tp2 == &card.tp2);
     let is_open_kebab =
-        matches!(ctx.open_menu, Some(VersionsMenu::Kebab { tp2 }) if tp2 == &card.tp2);
+        matches!(ctx.open_menu, Some(VersionsMenu::Kebab { tp2, .. }) if tp2 == &card.tp2);
 
     if is_open_sources || (selector_clicked && card.source_id.is_some()) {
         *ctx.anchor_for_menu = Some(AnchorInfo {
@@ -864,36 +961,60 @@ fn render_open_menu(
         return;
     };
     let tp2 = match &menu {
-        VersionsMenu::Sources { tp2 } | VersionsMenu::Kebab { tp2 } => tp2.clone(),
+        VersionsMenu::Sources { tp2 } | VersionsMenu::Kebab { tp2, .. } => tp2.clone(),
     };
     let Some(card) = env.view.cards.iter().find(|c| c.tp2 == tp2) else {
         orchestrator.wizard_state.step2.versions_ui.menu = None;
         return;
     };
-    let outcome = match menu {
-        VersionsMenu::Sources { .. } => versions_menus::render_sources_menu(
-            ctx,
-            palette,
-            anchor.rect,
-            &anchor.response,
-            card,
-            env.busy,
-        ),
-        VersionsMenu::Kebab { .. } => versions_menus::render_kebab_menu(
-            ctx,
-            palette,
-            anchor.rect,
-            &anchor.response,
-            card,
-            env.busy,
-        ),
+    let mut outcome = match menu {
+        VersionsMenu::Sources { .. } => {
+            let who = note_who(orchestrator);
+            let sources_env = versions_menus::SourcesMenuEnv {
+                card,
+                busy: env.busy,
+                who: &who,
+                bounds: drawer_rect(ctx),
+            };
+            versions_menus::render_sources_menu(
+                ctx,
+                palette,
+                anchor.rect,
+                &anchor.response,
+                &sources_env,
+            )
+        }
+        VersionsMenu::Kebab { bookmark_label, .. } => {
+            let kebab_env = versions_menus::KebabEnv {
+                card,
+                tiers: env.tiers,
+                bookmark_label: bookmark_label.as_deref(),
+            };
+            versions_menus::render_kebab_menu(
+                ctx,
+                palette,
+                anchor.rect,
+                &anchor.response,
+                &kebab_env,
+                env.busy,
+            )
+        }
     };
     if outcome.action.is_some() && action.is_none() {
         *action = outcome.action;
     }
     if outcome.open_sheet == Some(VersionsSheet::EditSource) {
-        let form = versions_sheets::seed_source_form_for_card(env.tiers, card);
+        let this_modlist_name = active_modlist_display_name(orchestrator);
+        let known = orchestrator.wizard_state.step2.versions_ui.known.as_ref();
+        let form =
+            versions_sheets::seed_source_form_for_card(env.tiers, card, known, &this_modlist_name);
         orchestrator.wizard_state.step2.versions_ui.source_form = Some(form);
+    }
+    if outcome.open_sheet == Some(VersionsSheet::Note)
+        && let Some(seed) = outcome.note_seed.take()
+    {
+        let who = note_who(orchestrator);
+        versions_sheets::seed_note_sheet(ctx, &tp2, seed, who);
     }
     if let Some(sheet) = outcome.open_sheet {
         versions_form::reset_dropdown_state(ctx, &tp2);
@@ -918,6 +1039,7 @@ fn render_open_sheet(
     action: &mut Option<Step2Action>,
 ) {
     let Some(sheet) = orchestrator.wizard_state.step2.versions_ui.sheet else {
+        versions_sheets::clear_note_sheet(ctx);
         return;
     };
     let just_opened = std::mem::take(
@@ -978,6 +1100,17 @@ fn render_open_sheet(
             &orchestrator.wizard_state.step2,
             escape_active,
         ),
+        VersionsSheet::Note => {
+            let note_env = versions_sheets::NoteEnv {
+                sheet_error: orchestrator
+                    .wizard_state
+                    .step2
+                    .versions_ui
+                    .sheet_error
+                    .as_deref(),
+            };
+            versions_sheets::render_note(ctx, palette, drawer_rect, escape_active, &note_env)
+        }
     };
     if outcome.action.is_some() && action.is_none() {
         *action = outcome.action;

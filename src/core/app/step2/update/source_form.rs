@@ -77,6 +77,9 @@ pub(crate) struct SourceForm {
     pub(crate) notice: Option<String>,
     pub(crate) error: Option<String>,
     pub(crate) kept: KeptFields,
+    pub(crate) note: String,
+    pub(crate) note_seed: String,
+    pub(crate) note_who: String,
 }
 
 const PREONLY_NOTICE: &str =
@@ -198,6 +201,9 @@ pub(crate) fn from_source(
         release_query: String::new(),
         notice: details.notice,
         error: None,
+        note: String::new(),
+        note_seed: String::new(),
+        note_who: String::new(),
         kept: KeptFields {
             exact_github: source.exact_github.clone(),
             tp2_rename: source.tp2_rename.clone(),
@@ -461,6 +467,9 @@ mod tests {
             release_query: String::new(),
             notice: None,
             error: None,
+            note: String::new(),
+            note_seed: String::new(),
+            note_who: String::new(),
             kept: KeptFields {
                 source_default: true,
                 ..KeptFields::default()

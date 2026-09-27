@@ -993,20 +993,26 @@ fn weidu_log_text(lines: &[String]) -> String {
     out.join("\n")
 }
 
+pub(crate) fn commit_sha_from_installed_ref(installed_ref: &str) -> Option<String> {
+    let trimmed = installed_ref.trim();
+    let (_, sha) = trimmed.rsplit_once('@')?;
+    if sha.len() < 7 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(sha.to_string())
+}
+
 pub(crate) fn pin_source_to_installed_ref(
     source: &mut crate::app::mod_downloads::ModDownloadSource,
     installed_ref: Option<&str>,
 ) {
-    let Some(installed_ref) = installed_ref.map(str::trim) else {
+    let Some(installed_ref) = installed_ref else {
         return;
     };
-    let Some((_, sha)) = installed_ref.rsplit_once('@') else {
+    let Some(sha) = commit_sha_from_installed_ref(installed_ref) else {
         return;
     };
-    if sha.len() < 7 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
-        return;
-    }
-    source.commit = Some(sha.to_string());
+    source.commit = Some(sha);
     source.branch = None;
 }
 

@@ -207,6 +207,31 @@ pub(crate) fn paint_chevron_right(
     );
 }
 
+pub(crate) fn paint_note(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
+    let stroke = egui::Stroke::new(1.4_f32, color);
+    let page = egui::Rect::from_center_size(center, egui::vec2(10.0, 8.0));
+    painter.rect_filled(
+        page,
+        egui::CornerRadius::same(1),
+        color.gamma_multiply(0.18),
+    );
+    painter.rect_stroke(
+        page,
+        egui::CornerRadius::same(1),
+        stroke,
+        egui::StrokeKind::Inside,
+    );
+    for dy in [-1.5_f32, 1.5] {
+        painter.line_segment(
+            [
+                egui::pos2(page.left() + 2.0, center.y + dy),
+                egui::pos2(page.right() - 2.0, center.y + dy),
+            ],
+            egui::Stroke::new(1.0_f32, color),
+        );
+    }
+}
+
 pub(crate) fn paint_search(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
     let stroke = icon_stroke(color);
     let lens_center = center + egui::vec2(-1.5, -1.5);

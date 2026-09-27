@@ -116,7 +116,7 @@ pub(crate) struct ModDownloadTp2Rename {
     pub(crate) to: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub(crate) struct ModDownloadSource {
     #[serde(default)]
     pub(crate) name: String,

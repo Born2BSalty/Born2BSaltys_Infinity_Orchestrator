@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use crate::app::github_release_list::ReleaseListState;
 use crate::app::source_form::SourceForm;
 use crate::app::step2_action::ModSourceEditDestination;
+use crate::app::versions_view::KnownExtras;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptPopupMode {
@@ -57,12 +58,18 @@ pub enum VersionsChip {
 pub enum VersionsSheet {
     EditSource,
     Forks,
+    Note,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VersionsMenu {
-    Sources { tp2: String },
-    Kebab { tp2: String },
+    Sources {
+        tp2: String,
+    },
+    Kebab {
+        tp2: String,
+        bookmark_label: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -76,6 +83,9 @@ pub struct VersionsDrawerUi {
     pub(crate) auto_check_pending: bool,
     pub(crate) source_form: Option<SourceForm>,
     pub(crate) release_list: ReleaseListState,
+    pub(crate) known: Option<KnownExtras>,
+    pub(crate) pending_toast: Option<String>,
+    pub(crate) sheet_error: Option<String>,
 }
 
 impl VersionsDrawerUi {
@@ -83,6 +93,7 @@ impl VersionsDrawerUi {
         self.sheet = Some(sheet);
         self.sheet_tp2 = Some(tp2);
         self.sheet_just_opened = true;
+        self.sheet_error = None;
     }
 }
 

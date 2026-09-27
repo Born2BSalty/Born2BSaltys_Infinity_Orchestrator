@@ -68,7 +68,7 @@ pub(crate) fn render(
         ui.add_space(ROW_GAP);
     }
 
-    render_note_row(ui, palette);
+    render_note_row(ui, palette, form);
     ui.add_space(ROW_GAP);
     render_advanced(ui, palette, form);
     ui.add_space(ROW_GAP);
@@ -1005,20 +1005,17 @@ fn render_asset_logged_out(ui: &mut egui::Ui, palette: ThemePalette, form: &mut 
     }
 }
 
-fn render_note_row(ui: &mut egui::Ui, palette: ThemePalette) {
+fn render_note_row(ui: &mut egui::Ui, palette: ThemePalette, form: &mut SourceForm) {
     field_label(ui, palette, "Note");
     let width = ui.available_width();
-    ui.add_enabled_ui(false, |ui| {
-        let mut text = String::new();
-        text_field(
-            ui,
-            palette,
-            &mut text,
-            "notes arrive in a later build",
-            false,
-            width,
-        );
-    });
+    text_field(
+        ui,
+        palette,
+        &mut form.note,
+        "optional, shown on hover",
+        false,
+        width,
+    );
 }
 
 fn render_notice(ui: &mut egui::Ui, palette: ThemePalette, notice: &str) {

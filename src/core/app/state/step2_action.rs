@@ -55,6 +55,23 @@ pub enum Step2Action {
     RequestReleaseList {
         repo: String,
     },
+    UseKnownSource {
+        tp2: String,
+        card_key: String,
+        block: String,
+        save_to: ModSourceEditDestination,
+        who: String,
+    },
+    SaveSourceNote {
+        tp2: String,
+        signature: String,
+        text: String,
+        who: String,
+    },
+    BookmarkOnDisk {
+        tp2: String,
+        card_key: String,
+    },
     SetModDownloadSource {
         tp2: String,
         source_id: String,

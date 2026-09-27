@@ -97,6 +97,7 @@ pub mod game_version;
 pub mod github_release_list;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
+pub mod mod_source_history;
 #[path = "step2/update/mod_update_locks.rs"]
 pub mod mod_update_locks;
 pub mod modlist_biolist;

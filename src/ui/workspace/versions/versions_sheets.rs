@@ -5,15 +5,17 @@ use eframe::egui;
 
 use crate::app::github_release_list::ReleaseListState;
 use crate::app::mod_downloads::{self, ModDownloadSource};
+use crate::app::mod_source_history;
 use crate::app::source_form::{self, SourceForm, SourceFormIdentity, SourceKind};
 use crate::app::state::{Step2DiscoveredFork, Step2State, VersionsSheet};
 use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
-use crate::app::versions_view::VersionCard;
+use crate::app::versions_view::{KnownExtras, VersionCard};
 use crate::ui::orchestrator::widgets::icon_button::{self, ButtonIcon};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_height};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft, redesign_error,
-    redesign_shell_bg, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_soft,
+    redesign_border_strong, redesign_error, redesign_input_bg, redesign_shell_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
@@ -33,6 +35,43 @@ pub(crate) struct SheetOutcome {
     pub(crate) open_sheet: Option<VersionsSheet>,
     pub(crate) close: bool,
     pub(crate) seed_form: Option<SourceForm>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct NoteSeed {
+    pub(crate) mod_name: String,
+    pub(crate) rule_words: String,
+    pub(crate) location: String,
+    pub(crate) note_text: String,
+    pub(crate) signature: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct NoteSheetState {
+    tp2: String,
+    mod_name: String,
+    rule_words: String,
+    location: String,
+    signature: String,
+    who: String,
+    text: String,
+}
+
+fn note_state_id() -> egui::Id {
+    egui::Id::new("versions_note_sheet_state")
+}
+
+pub(crate) fn seed_note_sheet(ctx: &egui::Context, tp2: &str, seed: NoteSeed, who: String) {
+    let state = NoteSheetState {
+        tp2: tp2.to_string(),
+        mod_name: seed.mod_name,
+        rule_words: seed.rule_words,
+        location: seed.location,
+        signature: seed.signature,
+        who,
+        text: seed.note_text,
+    };
+    ctx.data_mut(|d| d.insert_temp(note_state_id(), state));
 }
 
 fn panel_rect(drawer_rect: egui::Rect) -> egui::Rect {
@@ -101,31 +140,49 @@ pub(crate) fn editor_ready_for(step2: &Step2State) -> bool {
         .is_some_and(|form| step2.versions_ui.sheet_tp2.as_deref() == Some(form.card_key.as_str()))
 }
 
-pub(crate) fn seed_source_form_for_card(
+pub(crate) fn resolve_current_source(
     tiers: &mod_downloads::SourceTiers,
     card: &VersionCard,
-) -> SourceForm {
-    let Some(source_id) = card.source_id.as_deref() else {
-        return blank_source_form(card);
-    };
+) -> Option<ModDownloadSource> {
+    let source_id = card.source_id.as_deref()?;
     let sources = tiers.find_sources(&card.tp2);
     let key = mod_downloads::normalize_source_id(source_id);
-    let resolved = sources
+    sources
         .iter()
         .find(|source| mod_downloads::normalize_source_id(&source.source_id) == key)
         .cloned()
-        .or_else(|| sources.into_iter().next());
-    resolved.map_or_else(
-        || blank_source_form(card),
-        |source| {
-            source_form::from_source(
-                &source,
-                SourceFormIdentity::default(),
-                card_destination(card),
-                &card.tp2,
-            )
-        },
-    )
+        .or_else(|| sources.into_iter().next())
+}
+
+pub(crate) fn seed_source_form_for_card(
+    tiers: &mod_downloads::SourceTiers,
+    card: &VersionCard,
+    known: Option<&KnownExtras>,
+    this_modlist_name: &str,
+) -> SourceForm {
+    let Some(source) = resolve_current_source(tiers, card) else {
+        return blank_source_form(card);
+    };
+    let destination = card_destination(card);
+    let mut form = source_form::from_source(
+        &source,
+        SourceFormIdentity::default(),
+        destination,
+        &card.tp2,
+    );
+    if let Some(known) = known {
+        let signature = mod_source_history::rule_signature(&source);
+        let key = mod_source_history::note_key(&card.tp2, &signature);
+        if let Some(note) = known.store.notes.get(&key) {
+            form.note.clone_from(&note.text);
+        }
+    }
+    form.note_seed.clone_from(&form.note);
+    form.note_who = match destination {
+        ModSourceEditDestination::ThisModlist => this_modlist_name.to_string(),
+        ModSourceEditDestination::GlobalDefault => "My default".to_string(),
+    };
+    form
 }
 
 fn blank_source_form(card: &VersionCard) -> SourceForm {
@@ -136,7 +193,7 @@ fn blank_source_form(card: &VersionCard) -> SourceForm {
         github: Some(String::new()),
         ..ModDownloadSource::default()
     };
-    source_form::from_source(
+    let mut form = source_form::from_source(
         &seed,
         SourceFormIdentity {
             may_change_id: true,
@@ -144,7 +201,9 @@ fn blank_source_form(card: &VersionCard) -> SourceForm {
         },
         ModSourceEditDestination::GlobalDefault,
         &card.tp2,
-    )
+    );
+    form.note_who = "My default".to_string();
+    form
 }
 
 fn card_destination(card: &VersionCard) -> ModSourceEditDestination {
@@ -158,18 +217,18 @@ fn card_destination(card: &VersionCard) -> ModSourceEditDestination {
 pub(crate) fn seed_source_form_from_fork(
     tp2: &str,
     name: &str,
-    fork: &Step2DiscoveredFork,
+    source_fork: &Step2DiscoveredFork,
 ) -> SourceForm {
     let seed = ModDownloadSource {
         tp2: tp2.to_string(),
         name: name.to_string(),
-        source_id: fork.owner_login.clone(),
-        source_label: fork.owner_login.clone(),
-        github: Some(fork.full_name.clone()),
-        branch: Some(fork.default_branch.clone()),
+        source_id: source_fork.owner_login.clone(),
+        source_label: source_fork.owner_login.clone(),
+        github: Some(source_fork.full_name.clone()),
+        branch: Some(source_fork.default_branch.clone()),
         ..ModDownloadSource::default()
     };
-    source_form::from_source(
+    let mut seeded = source_form::from_source(
         &seed,
         SourceFormIdentity {
             may_change_id: true,
@@ -177,7 +236,9 @@ pub(crate) fn seed_source_form_from_fork(
         },
         ModSourceEditDestination::GlobalDefault,
         tp2,
-    )
+    );
+    seeded.note_who = "My default".to_string();
+    seeded
 }
 
 pub(crate) fn render_edit_source_unready(
@@ -550,6 +611,168 @@ fn render_fork_row(
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette)),
     );
     ui.add_space(6.0);
+}
+
+pub(crate) struct NoteEnv<'a> {
+    pub(crate) sheet_error: Option<&'a str>,
+}
+
+pub(crate) fn clear_note_sheet(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove_temp::<NoteSheetState>(note_state_id()));
+}
+
+pub(crate) fn render_note(
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    drawer_rect: egui::Rect,
+    escape_active: bool,
+    env: &NoteEnv<'_>,
+) -> SheetOutcome {
+    let mut outcome = SheetOutcome::default();
+    let mut state = ctx
+        .data(|d| d.get_temp::<NoteSheetState>(note_state_id()))
+        .unwrap_or_default();
+    if render_scrim(ctx, "note", drawer_rect) {
+        outcome.close = true;
+    }
+    if escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        outcome.close = true;
+    }
+    let panel = panel_rect(drawer_rect);
+    egui::Area::new(egui::Id::new("versions_sheet_panel_note"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(panel.min)
+        .show(ctx, |ui| {
+            egui::Frame::default()
+                .fill(redesign_shell_bg(palette))
+                .shadow(redesign_overlay_shadow(palette))
+                .inner_margin(egui::Margin::ZERO)
+                .show(ui, |ui| {
+                    ui.set_min_size(panel.size());
+                    ui.set_max_size(panel.size());
+                    egui::Frame::default()
+                        .inner_margin(egui::Margin::symmetric(22, 18))
+                        .show(ui, |ui| {
+                            render_header(ui, palette, "Note", &state.mod_name, &mut outcome);
+                            ui.add_space(12.0);
+                            render_note_subtitle(ui, palette, &state);
+                            ui.add_space(12.0);
+                            render_note_text_area(ui, palette, &mut state);
+                            ui.add_space(8.0);
+                            if let Some(error) = env.sheet_error {
+                                ui.label(
+                                    egui::RichText::new(error).color(redesign_error(palette)),
+                                );
+                            } else {
+                                ui.label(
+                                    egui::RichText::new(
+                                        "Shown when you hover this source in the Known sources menu.",
+                                    )
+                                    .size(12.0)
+                                    .family(egui::FontFamily::Name("poppins_light".into()))
+                                    .color(redesign_text_faint(palette)),
+                                );
+                            }
+                            ui.add_space(12.0);
+                            ui.horizontal(|ui| {
+                                render_note_footer(ui, palette, &state, &mut outcome);
+                            });
+                        });
+                });
+        });
+    ctx.data_mut(|d| d.insert_temp(note_state_id(), state));
+    outcome
+}
+
+fn render_note_subtitle(ui: &mut egui::Ui, palette: ThemePalette, state: &NoteSheetState) {
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(format!("{} \u{b7}", state.rule_words))
+                .size(13.0)
+                .family(egui::FontFamily::Name("poppins_light".into()))
+                .color(redesign_text_muted(palette)),
+        );
+        ui.label(
+            egui::RichText::new(&state.location)
+                .font(egui::FontId::monospace(13.0))
+                .color(redesign_text_muted(palette)),
+        );
+    });
+}
+
+const NOTE_TEXT_AREA_H: f32 = 120.0;
+
+fn render_note_text_area(ui: &mut egui::Ui, palette: ThemePalette, state: &mut NoteSheetState) {
+    let margin = egui::Margin::symmetric(10, 8);
+    egui::Frame::default()
+        .fill(redesign_input_bg(palette))
+        .stroke(egui::Stroke::new(
+            REDESIGN_BORDER_WIDTH_PX,
+            redesign_border_strong(palette),
+        ))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .inner_margin(egui::Margin::ZERO)
+        .show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("versions_note_text_scroll")
+                .max_height(NOTE_TEXT_AREA_H)
+                .min_scrolled_height(NOTE_TEXT_AREA_H)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.add_sized(
+                        egui::vec2(ui.available_width(), NOTE_TEXT_AREA_H),
+                        egui::TextEdit::multiline(&mut state.text)
+                            .frame(false)
+                            .hint_text("Why this version?")
+                            .text_color(redesign_text_primary(palette))
+                            .margin(margin)
+                            .font(egui::FontId::new(
+                                13.0,
+                                egui::FontFamily::Name("poppins_light".into()),
+                            )),
+                    );
+                });
+        });
+}
+
+fn render_note_footer(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &NoteSheetState,
+    outcome: &mut SheetOutcome,
+) {
+    if redesign_btn(
+        ui,
+        palette,
+        "Cancel",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked()
+    {
+        outcome.close = true;
+    }
+    if redesign_btn(
+        ui,
+        palette,
+        "Save note",
+        BtnOpts {
+            primary: true,
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked()
+    {
+        outcome.action = Some(Step2Action::SaveSourceNote {
+            tp2: state.tp2.clone(),
+            signature: state.signature.clone(),
+            text: state.text.clone(),
+            who: state.who.clone(),
+        });
+    }
 }
 
 #[cfg(test)]
