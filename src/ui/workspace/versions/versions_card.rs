@@ -22,6 +22,7 @@ const COLUMN_GAP: f32 = 16.0;
 const DOT_SIZE: f32 = 8.0;
 
 pub(crate) struct CardEvent {
+    pub(crate) rect: egui::Rect,
     pub(crate) action: Option<Step2Action>,
     pub(crate) selector_rect: egui::Rect,
     pub(crate) selector_response: egui::Response,
@@ -43,16 +44,23 @@ pub(crate) fn render(
     card: &VersionCard,
     selector_width: f32,
     busy: bool,
+    focused: bool,
 ) -> CardEvent {
-    let row = egui::Frame::default()
+    let stroke_color = if focused {
+        redesign_accent(palette)
+    } else {
+        redesign_border_soft(palette)
+    };
+    let frame = egui::Frame::default()
         .fill(redesign_chrome_bg(palette))
-        .stroke(egui::Stroke::new(1.0_f32, redesign_border_soft(palette)))
+        .stroke(egui::Stroke::new(1.0_f32, stroke_color))
         .corner_radius(egui::CornerRadius::same(CARD_RADIUS))
         .inner_margin(egui::Margin::symmetric(16, 9))
-        .show(ui, |ui| render_row(ui, palette, card, selector_width, busy))
-        .inner;
+        .show(ui, |ui| render_row(ui, palette, card, selector_width, busy));
+    let row = frame.inner;
 
     CardEvent {
+        rect: frame.response.rect,
         action: row.action,
         selector_rect: row.selector_rect,
         selector_response: row.selector_response,

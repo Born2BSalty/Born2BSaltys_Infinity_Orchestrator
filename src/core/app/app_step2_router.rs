@@ -71,7 +71,7 @@ pub(crate) fn handle_step2_action(
             );
         }
         Step2Action::PreviewUpdateSelectedMod => {
-            let target = super::app_step2_update_preview::selected_mod_target(state);
+            let target = open_drawer_focused_on_selected_mod(state);
             preview_update_target_mod(state, step2_update_check_rx, target);
         }
         Step2Action::SetSelectedModUpdateLocked(locked) => {
@@ -182,6 +182,17 @@ fn open_update_popup(state: &mut WizardState) {
     state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
     state.step2.versions_ui.auto_check_pending = auto_check_pending;
     state.step2.update_selected_popup_open = true;
+}
+
+fn open_drawer_focused_on_selected_mod(state: &mut WizardState) -> Option<(String, String)> {
+    let target = super::app_step2_update_preview::selected_mod_target(state)?;
+    open_update_popup(state);
+    state.step2.versions_ui.auto_check_pending = false;
+    state
+        .step2
+        .versions_ui
+        .focus_card(mod_downloads::normalize_mod_download_tp2(&target.1));
+    Some(target)
 }
 
 fn accept_latest_for_exact_version_misses(
@@ -1233,6 +1244,49 @@ mod tests {
 
         super::open_update_popup(&mut state);
         assert!(state.step2.versions_ui.auto_check_pending);
+    }
+
+    #[test]
+    fn check_this_mod_focuses_the_selected_mods_card() {
+        use crate::app::state::VersionsChip;
+
+        let mut state = WizardState::default();
+        state.step2.selected = Some(Step2Selection::Mod {
+            game_tab: "BGEE".to_string(),
+            tp_file: "Setup-Ascension.tp2".to_string(),
+        });
+        state.step2.versions_ui.search = "zzz".to_string();
+        state.step2.versions_ui.chip = VersionsChip::Fetch;
+        state.step2.update_selected_has_run = false;
+
+        let target = super::open_drawer_focused_on_selected_mod(&mut state);
+
+        assert_eq!(
+            target,
+            Some(("BGEE".to_string(), "Setup-Ascension.tp2".to_string()))
+        );
+        assert_eq!(
+            state.step2.versions_ui.focused_tp2.as_deref(),
+            Some("ascension")
+        );
+        assert!(state.step2.versions_ui.focus_scroll_pending);
+        assert!(!state.step2.versions_ui.auto_check_pending);
+        assert_eq!(state.step2.versions_ui.chip, VersionsChip::All);
+        assert!(state.step2.versions_ui.search.is_empty());
+        assert!(state.step2.update_selected_popup_open);
+    }
+
+    #[test]
+    fn check_this_mod_with_no_selection_changes_nothing() {
+        let mut state = WizardState::default();
+        state.step2.selected = None;
+        state.step2.update_selected_popup_open = false;
+
+        let target = super::open_drawer_focused_on_selected_mod(&mut state);
+
+        assert_eq!(target, None);
+        assert!(!state.step2.update_selected_popup_open);
+        assert_eq!(state.step2.versions_ui.focused_tp2, None);
     }
 
     #[test]

@@ -816,7 +816,18 @@ fn render_one_card(
     card: &VersionCard,
     ctx: &mut ListRenderCtx<'_>,
 ) {
-    let event = versions_card::render(ui, ctx.palette, card, ctx.selector_width, ctx.busy);
+    let versions_ui = &orchestrator.wizard_state.step2.versions_ui;
+    let focused = versions_ui.focused_tp2.as_deref() == Some(card.tp2.as_str());
+    let scroll_to_focus = focused && versions_ui.focus_scroll_pending;
+    let event = versions_card::render(ui, ctx.palette, card, ctx.selector_width, ctx.busy, focused);
+    if scroll_to_focus {
+        ui.scroll_to_rect(event.rect, Some(egui::Align::Center));
+        orchestrator
+            .wizard_state
+            .step2
+            .versions_ui
+            .focus_scroll_pending = false;
+    }
     ui.add_space(6.0);
 
     if let Some(action) = event.action

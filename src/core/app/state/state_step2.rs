@@ -86,6 +86,8 @@ pub struct VersionsDrawerUi {
     pub(crate) known: Option<KnownExtras>,
     pub(crate) pending_toast: Option<String>,
     pub(crate) sheet_error: Option<String>,
+    pub(crate) focused_tp2: Option<String>,
+    pub(crate) focus_scroll_pending: bool,
 }
 
 impl VersionsDrawerUi {
@@ -94,6 +96,11 @@ impl VersionsDrawerUi {
         self.sheet_tp2 = Some(tp2);
         self.sheet_just_opened = true;
         self.sheet_error = None;
+    }
+
+    pub(crate) fn focus_card(&mut self, tp2_key: String) {
+        self.focused_tp2 = Some(tp2_key);
+        self.focus_scroll_pending = true;
     }
 }
 
