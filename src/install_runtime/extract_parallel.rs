@@ -55,7 +55,7 @@ pub fn start_parallel_extract(
         );
         return None;
     }
-    let jobs = build_extract_jobs(state, &archive_dir, install_ctx_installed_refs_path);
+    let jobs = build_extract_jobs(state, &archive_dir, install_ctx_installed_refs_path, None);
     if jobs.is_empty() {
         let failed = state.step2.update_selected_extract_failed_sources.len();
         if failed > 0 {
@@ -422,5 +422,80 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&archive_dir);
         let _ = std::fs::remove_dir_all(&mods_folder);
+    }
+
+    struct ExtractTestRoot(PathBuf);
+
+    impl ExtractTestRoot {
+        fn new(label: &str) -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_extract_par_root_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(path.clone()));
+            Self(path)
+        }
+
+        fn subdir(&self, name: &str) -> PathBuf {
+            let dir = self.0.join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+    }
+
+    impl Drop for ExtractTestRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn unscoped_extract_plan_holds_every_asset_despite_a_leftover_scope() {
+        use crate::app::app_step2_update_download::archive_file_name;
+        use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
+        use crate::app::state::Step2UpdateAsset;
+
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = ExtractTestRoot::new("install_extract_scope");
+        let archive_dir = root.subdir("archives");
+        let mods_folder = root.subdir("mods");
+
+        let mut state = WizardState::default();
+        state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        state.step1.mods_folder = mods_folder.to_string_lossy().into_owned();
+        state.step2.update_selected_download_scope = Some("mod0".to_string());
+
+        let assets: Vec<Step2UpdateAsset> = (0..2)
+            .map(|i| Step2UpdateAsset {
+                game_tab: "BGEE".to_string(),
+                tp_file: format!("MOD{i}/MOD{i}.TP2"),
+                label: format!("MOD{i}"),
+                source_id: "github".to_string(),
+                tag: "v1".to_string(),
+                asset_name: format!("MOD{i}-v1.zip"),
+                asset_url: format!("https://example/MOD{i}-v1.zip"),
+                installed_source_ref: None,
+            })
+            .collect();
+        for asset in &assets {
+            let name = archive_file_name(asset);
+            std::fs::write(archive_dir.join(&name), b"fake-archive-body").unwrap();
+        }
+        state.step2.update_selected_update_assets = assets;
+
+        let jobs = build_extract_jobs(&mut state, &archive_dir, None, None);
+
+        assert_eq!(
+            jobs.len(),
+            2,
+            "install extract must plan both assets, ignoring the leftover Step 2 scope"
+        );
     }
 }

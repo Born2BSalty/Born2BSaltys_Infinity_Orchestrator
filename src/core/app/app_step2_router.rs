@@ -39,13 +39,27 @@ pub(crate) fn handle_step2_action(
         Step2Action::OpenUpdatePopup => open_update_popup(state),
         Step2Action::CheckExactLogModList => check_exact_log_mod_list(state),
         Step2Action::DownloadUpdates => {
-            super::app_step2_update_download::start_step2_update_download(
+            super::app_step2_update_download::start_step2_update_download_scoped(
                 state,
                 step2_update_download_rx,
+                None,
             );
         }
+        Step2Action::DownloadUpdateFor { tp2 } => {
+            if !crate::app::state::update_pipeline_busy(&state.step2) {
+                super::app_step2_update_download::start_step2_update_download_scoped(
+                    state,
+                    step2_update_download_rx,
+                    Some(tp2),
+                );
+            }
+        }
         Step2Action::AcceptLatestForExactVersionMisses => {
-            accept_latest_for_exact_version_misses(state, step2_update_check_rx);
+            if crate::app::state::update_pipeline_busy(&state.step2) {
+                state.step2.scan_status = "Wait for the current check to finish".to_string();
+            } else {
+                accept_latest_for_exact_version_misses(state, step2_update_check_rx);
+            }
         }
         Step2Action::PreviewUpdateSelected => {
             let loaded = mod_downloads::load_mod_download_sources();
@@ -74,8 +88,31 @@ pub(crate) fn handle_step2_action(
         | Step2Action::OpenSelectedTp2(path)
         | Step2Action::OpenSelectedIni(path)
         | Step2Action::OpenSelectedWeb(path) => open_selected_path(state, &path),
+        Step2Action::OpenCompatForComponent {
+            game_tab,
+            tp_file,
+            component_id,
+            component_key,
+        } => open_compat_for_component(state, game_tab, tp_file, component_id, component_key),
+        Step2Action::SelectBgeeViaLog | Step2Action::SelectBg2eeViaLog => {}
+        other => handle_step2_download_source_action(state, step2_update_check_rx, other),
+    }
+}
+
+fn handle_step2_download_source_action(
+    state: &mut WizardState,
+    step2_update_check_rx: &mut Option<
+        Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+    >,
+    action: Step2Action,
+) {
+    match action {
         Step2Action::DiscoverModDownloadForks { tp2, label, repo } => {
-            discover_mod_download_forks(state, tp2, label, &repo);
+            if crate::app::state::update_pipeline_busy(&state.step2) {
+                state.step2.scan_status = "Wait for the current check to finish".to_string();
+            } else {
+                discover_mod_download_forks(state, tp2, label, &repo);
+            }
         }
         Step2Action::AddDiscoveredModDownloadFork {
             tp2,
@@ -108,18 +145,20 @@ pub(crate) fn handle_step2_action(
             destination,
         ),
         Step2Action::SaveModDownloadSourceEditor => {
-            save_mod_download_source_editor(state, step2_update_check_rx);
+            if crate::app::state::update_pipeline_busy(&state.step2) {
+                state.step2.scan_status = "Wait for the current check to finish".to_string();
+            } else {
+                save_mod_download_source_editor(state, step2_update_check_rx);
+            }
         }
         Step2Action::SetModDownloadSource { tp2, source_id } => {
-            set_mod_download_source(state, step2_update_check_rx, &tp2, &source_id);
+            if crate::app::state::update_pipeline_busy(&state.step2) {
+                state.step2.scan_status = "Wait for the current check to finish".to_string();
+            } else {
+                set_mod_download_source(state, step2_update_check_rx, &tp2, &source_id);
+            }
         }
-        Step2Action::OpenCompatForComponent {
-            game_tab,
-            tp_file,
-            component_id,
-            component_key,
-        } => open_compat_for_component(state, game_tab, tp_file, component_id, component_key),
-        Step2Action::SelectBgeeViaLog | Step2Action::SelectBg2eeViaLog => {}
+        _ => {}
     }
 }
 
@@ -146,6 +185,10 @@ fn open_update_popup(state: &mut WizardState) {
     state.step2.update_selected_target_tp_file = None;
     state.step2.update_selected_refresh_target_game_tab = None;
     state.step2.update_selected_refresh_target_tp_file = None;
+    let auto_check_pending = !state.step2.update_selected_has_run
+        || crate::app::state::update_selection_stale(&state.step2);
+    state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
+    state.step2.versions_ui.auto_check_pending = auto_check_pending;
     state.step2.update_selected_popup_open = true;
 }
 
@@ -893,6 +936,113 @@ mod tests {
         assert_eq!(
             super::source_editor_display_name(&state, "buffbot", "buffbot"),
             "setup-buffbot.tp2"
+        );
+    }
+
+    #[test]
+    fn open_update_popup_arms_auto_check_only_when_stale() {
+        let mut state = WizardState::default();
+
+        super::open_update_popup(&mut state);
+        assert!(state.step2.versions_ui.auto_check_pending);
+
+        state.step2.update_selected_has_run = true;
+        state.step2.update_selected_last_was_full_selection = true;
+        state.step2.update_selected_last_selection_signature =
+            Some(crate::app::state::update_selection_signature(&state.step2));
+
+        super::open_update_popup(&mut state);
+        assert!(!state.step2.versions_ui.auto_check_pending);
+
+        state
+            .step2
+            .selected_source_ids
+            .insert("mod".to_string(), "primary".to_string());
+
+        super::open_update_popup(&mut state);
+        assert!(state.step2.versions_ui.auto_check_pending);
+    }
+
+    #[test]
+    fn source_switch_is_refused_while_a_check_runs() {
+        use crate::app::step2_action::Step2Action;
+
+        let mut state = WizardState::default();
+        state
+            .step2
+            .selected_source_ids
+            .insert("mod".to_string(), "old".to_string());
+        state.step2.update_selected_check_running = true;
+        let mut rx = None;
+
+        super::handle_step2_download_source_action(
+            &mut state,
+            &mut rx,
+            Step2Action::SetModDownloadSource {
+                tp2: "mod".to_string(),
+                source_id: "new".to_string(),
+            },
+        );
+
+        assert_eq!(
+            state
+                .step2
+                .selected_source_ids
+                .get("mod")
+                .map(String::as_str),
+            Some("old")
+        );
+        assert_eq!(
+            state.step2.scan_status,
+            "Wait for the current check to finish"
+        );
+    }
+
+    #[test]
+    fn accept_latest_is_refused_while_a_check_runs() {
+        use crate::app::step2_action::Step2Action;
+
+        let mut state = WizardState::default();
+        state
+            .step2
+            .update_selected_exact_version_retry_requests
+            .push(crate::app::state::Step2UpdateRetryRequest {
+                game_tab: "BGEE".to_string(),
+                tp_file: "setup-buffbot.tp2".to_string(),
+                label: "buffbot".to_string(),
+                source_id: "primary".to_string(),
+                repo: String::new(),
+                source_url: String::new(),
+                channel: None,
+                tag: None,
+                commit: None,
+                branch: None,
+                asset: None,
+                pkg: None,
+            });
+        state.step2.update_selected_check_running = true;
+        let mut rx = None;
+
+        super::handle_step2_action(
+            &mut state,
+            &mut None,
+            &mut None,
+            &mut std::collections::VecDeque::new(),
+            &mut rx,
+            &mut None,
+            Step2Action::AcceptLatestForExactVersionMisses,
+        );
+
+        assert_eq!(
+            state
+                .step2
+                .update_selected_exact_version_retry_requests
+                .len(),
+            1
+        );
+        assert_eq!(
+            state.step2.scan_status,
+            "Wait for the current check to finish"
         );
     }
 

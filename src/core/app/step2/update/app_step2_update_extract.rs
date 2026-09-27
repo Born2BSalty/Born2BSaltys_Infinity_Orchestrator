@@ -36,11 +36,14 @@ pub(crate) fn start_step2_update_extract(
     }
     let archive_dir = PathBuf::from(state.step1.mods_archive_folder.trim());
     if archive_dir.as_os_str().is_empty() {
+        state.step2.update_selected_download_scope = None;
         return;
     }
 
-    let jobs = plan::build_extract_jobs(state, &archive_dir, None);
+    let scope = state.step2.update_selected_download_scope.clone();
+    let jobs = plan::build_extract_jobs(state, &archive_dir, None, scope.as_deref());
     if jobs.is_empty() {
+        state.step2.update_selected_download_scope = None;
         let failed = state.step2.update_selected_extract_failed_sources.len();
         if failed > 0 {
             state.step2.scan_status =
@@ -75,6 +78,7 @@ pub(crate) fn poll_step2_update_extract(
         Err(TryRecvError::Empty) => None,
         Err(TryRecvError::Disconnected) => {
             state.step2.update_selected_extract_running = false;
+            state.step2.update_selected_download_scope = None;
             state.step2.scan_status = "Extract updates failed: worker disconnected".to_string();
             *step2_update_extract_rx = None;
             return;
@@ -92,12 +96,20 @@ pub(crate) fn poll_step2_update_extract(
 
     *step2_update_extract_rx = None;
     state.step2.update_selected_extract_running = false;
-    state.step2.update_selected_extracted_sources = result.extracted;
+    if state.step2.update_selected_download_scope.is_some() {
+        state
+            .step2
+            .update_selected_extracted_sources
+            .extend(result.extracted);
+    } else {
+        state.step2.update_selected_extracted_sources = result.extracted;
+    }
     remove_extracted_update_entries(state);
     state
         .step2
         .update_selected_extract_failed_sources
         .extend(result.failed);
+    state.step2.update_selected_download_scope = None;
 
     let extracted = state.step2.update_selected_extracted_sources.len();
     let failed = state.step2.update_selected_extract_failed_sources.len();
@@ -143,4 +155,21 @@ fn remove_extracted_update_entries(state: &mut WizardState) {
         .step2
         .update_selected_update_assets
         .retain(|asset| !extracted_labels.contains(&asset.label));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scope_clears_when_the_extract_has_no_jobs() {
+        let mut state = WizardState::default();
+        state.step1.mods_archive_folder = std::env::temp_dir().to_string_lossy().to_string();
+        state.step2.update_selected_download_scope = Some("alpha".to_string());
+
+        let mut rx = None;
+        start_step2_update_extract(&mut state, &mut rx);
+
+        assert!(state.step2.update_selected_download_scope.is_none());
+    }
 }

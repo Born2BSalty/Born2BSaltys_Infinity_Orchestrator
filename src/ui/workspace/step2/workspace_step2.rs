@@ -428,12 +428,26 @@ fn render_popups(
         crate::ui::step2::compat_window_step2::render(ui, &mut orchestrator.wizard_state, palette);
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, &mut orchestrator.wizard_state);
     crate::ui::workspace::related_jump::apply_related_jump_outcome(orchestrator, outcome);
-    crate::ui::step2::update_check_popup_step2::render(
-        ctx,
-        &mut orchestrator.wizard_state,
-        action,
-        palette,
-    );
+
+    if !orchestrator.wizard_state.step2.update_selected_popup_open {
+        orchestrator.wizard_state.step2.versions_ui.menu = None;
+        orchestrator.wizard_state.step2.versions_ui.sheet = None;
+    }
+
+    let exact_log = orchestrator
+        .wizard_state
+        .step1
+        .installs_exactly_from_weidu_logs();
+    if exact_log {
+        crate::ui::step2::update_check_popup_step2::render(
+            ctx,
+            &mut orchestrator.wizard_state,
+            action,
+            palette,
+        );
+    } else if orchestrator.wizard_state.step2.update_selected_popup_open {
+        crate::ui::workspace::versions::versions_drawer::render(ctx, orchestrator, action, palette);
+    }
 }
 
 fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {

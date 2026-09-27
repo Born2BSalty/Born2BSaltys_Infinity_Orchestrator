@@ -17,6 +17,9 @@ const CONTENT_MAX_PX: f32 = 920.0;
 const FORM_FRACTION: f32 = 0.42;
 const FORM_MIN_PX: f32 = 380.0;
 const FORM_MAX_PX: f32 = 540.0;
+const WIDE_FRACTION: f32 = 0.86;
+const WIDE_MIN_PX: f32 = 640.0;
+const WIDE_MAX_PX: f32 = 1024.0;
 const FOOTER_MIN_HEIGHT_PX: f32 = 40.0;
 const FOOTER_MAX_HEIGHT_PX: f32 = 64.0;
 
@@ -24,6 +27,7 @@ const FOOTER_MAX_HEIGHT_PX: f32 = 64.0;
 pub(crate) enum DrawerWidth {
     Content,
     Form,
+    Wide,
 }
 
 #[must_use]
@@ -31,7 +35,13 @@ pub(crate) fn drawer_width(window_w: f32, width: DrawerWidth) -> f32 {
     match width {
         DrawerWidth::Content => (window_w * CONTENT_FRACTION).clamp(CONTENT_MIN_PX, CONTENT_MAX_PX),
         DrawerWidth::Form => (window_w * FORM_FRACTION).clamp(FORM_MIN_PX, FORM_MAX_PX),
+        DrawerWidth::Wide => (window_w * WIDE_FRACTION).clamp(WIDE_MIN_PX, WIDE_MAX_PX),
     }
+}
+
+pub(crate) struct HeaderButton<'a> {
+    pub(crate) label: &'a str,
+    pub(crate) enabled: bool,
 }
 
 pub(crate) struct DrawerSpec<'a> {
@@ -39,10 +49,13 @@ pub(crate) struct DrawerSpec<'a> {
     pub(crate) title: &'a str,
     pub(crate) subtitle: &'a str,
     pub(crate) width: DrawerWidth,
+    pub(crate) header_button: Option<HeaderButton<'a>>,
+    pub(crate) suppress_escape: bool,
 }
 
 pub(crate) struct DrawerResponse<F> {
     pub(crate) close_requested: bool,
+    pub(crate) header_clicked: bool,
     pub(crate) footer: F,
 }
 
@@ -79,6 +92,7 @@ pub(crate) fn render<F>(
         .inner;
 
     let mut head_close_clicked = false;
+    let mut head_button_clicked = false;
     let mut footer_out: Option<F> = None;
 
     let drawer_id = Id::new(("drawer", spec.id_salt));
@@ -103,7 +117,9 @@ pub(crate) fn render<F>(
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 0.0;
                         ui.visuals_mut().clip_rect_margin = 0.0;
-                        head_close_clicked = render_head(ui, palette, spec);
+                        let head = render_head(ui, palette, spec);
+                        head_close_clicked = head.close_clicked;
+                        head_button_clicked = head.button_clicked;
 
                         let body_h = (ui.available_height() - footer_h).max(0.0);
                         ScrollArea::vertical()
@@ -122,48 +138,76 @@ pub(crate) fn render<F>(
                             egui::Stroke::new(1.0_f32, redesign_border_soft(palette)),
                         );
 
-                        let footer_output = ScrollArea::vertical()
-                            .id_salt(("drawer_footer", spec.id_salt))
-                            .auto_shrink([false, false])
-                            .min_scrolled_height(footer_h)
-                            .max_height(footer_h)
-                            .scroll_bar_visibility(
-                                egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
-                            )
-                            .show(ui, |ui| {
-                                Frame::default()
-                                    .inner_margin(Margin {
-                                        left: 22,
-                                        right: 22,
-                                        top: 12,
-                                        bottom: 12,
-                                    })
-                                    .show(ui, |ui| ui.horizontal(footer).inner)
-                                    .inner
-                            });
-                        let wanted_h = footer_output
-                            .content_size
-                            .y
-                            .clamp(FOOTER_MIN_HEIGHT_PX, FOOTER_MAX_HEIGHT_PX);
-                        if (wanted_h - footer_h).abs() > 0.5 {
-                            ctx.data_mut(|d| d.insert_temp(footer_h_id, wanted_h));
-                            ctx.request_repaint();
-                        }
-                        footer_out = Some(footer_output.inner);
+                        footer_out = Some(render_footer_area(
+                            ui,
+                            ctx,
+                            spec,
+                            footer_h,
+                            footer_h_id,
+                            footer,
+                        ));
                     });
                 });
         });
 
-    let escape_closes = ctx.input(|i| i.key_pressed(Key::Escape)) && !popup_was_open;
+    let escape_closes =
+        ctx.input(|i| i.key_pressed(Key::Escape)) && !popup_was_open && !spec.suppress_escape;
 
     DrawerResponse {
         close_requested: scrim_clicked || head_close_clicked || escape_closes,
+        header_clicked: head_button_clicked,
         footer: footer_out.expect("drawer footer renders every frame"),
     }
 }
 
-fn render_head(ui: &mut egui::Ui, palette: ThemePalette, spec: &DrawerSpec<'_>) -> bool {
+fn render_footer_area<F>(
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    spec: &DrawerSpec<'_>,
+    footer_h: f32,
+    footer_h_id: Id,
+    footer: impl FnOnce(&mut egui::Ui) -> F,
+) -> F {
+    let footer_output = ScrollArea::vertical()
+        .id_salt(("drawer_footer", spec.id_salt))
+        .auto_shrink([false, false])
+        .min_scrolled_height(footer_h)
+        .max_height(footer_h)
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+        .show(ui, |ui| {
+            Frame::default()
+                .inner_margin(Margin {
+                    left: 22,
+                    right: 22,
+                    top: 12,
+                    bottom: 12,
+                })
+                .show(ui, |ui| ui.horizontal(footer).inner)
+                .inner
+        });
+    let wanted_h = footer_output
+        .content_size
+        .y
+        .clamp(FOOTER_MIN_HEIGHT_PX, FOOTER_MAX_HEIGHT_PX);
+    if (wanted_h - footer_h).abs() > 0.5 {
+        ctx.data_mut(|d| d.insert_temp(footer_h_id, wanted_h));
+        ctx.request_repaint();
+    }
+    footer_output.inner
+}
+
+struct DrawerHeadResponse {
+    close_clicked: bool,
+    button_clicked: bool,
+}
+
+fn render_head(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    spec: &DrawerSpec<'_>,
+) -> DrawerHeadResponse {
     let mut close_clicked = false;
+    let mut button_clicked = false;
     Frame::default()
         .inner_margin(Margin {
             left: 22,
@@ -201,6 +245,23 @@ fn render_head(ui: &mut egui::Ui, palette: ThemePalette, spec: &DrawerSpec<'_>) 
                     {
                         close_clicked = true;
                     }
+                    if let Some(header_button) = spec.header_button.as_ref() {
+                        ui.add_space(8.0);
+                        if redesign_btn(
+                            ui,
+                            palette,
+                            header_button.label,
+                            BtnOpts {
+                                small: true,
+                                disabled: !header_button.enabled,
+                                ..Default::default()
+                            },
+                        )
+                        .clicked()
+                        {
+                            button_clicked = true;
+                        }
+                    }
                 });
             });
         });
@@ -209,7 +270,10 @@ fn render_head(ui: &mut egui::Ui, palette: ThemePalette, spec: &DrawerSpec<'_>) 
         ui.cursor().top(),
         egui::Stroke::new(1.0_f32, redesign_border_soft(palette)),
     );
-    close_clicked
+    DrawerHeadResponse {
+        close_clicked,
+        button_clicked,
+    }
 }
 
 #[cfg(test)]
@@ -228,5 +292,12 @@ mod tests {
         assert!((drawer_width(1024.0, DrawerWidth::Form) - 430.08).abs() < 0.01);
         assert!((drawer_width(2000.0, DrawerWidth::Form) - 540.0).abs() < 0.01);
         assert!((drawer_width(600.0, DrawerWidth::Form) - 380.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn wide_width_is_eighty_six_percent_clamped_to_640_and_1024() {
+        assert!((drawer_width(1280.0, DrawerWidth::Wide) - 1024.0).abs() < 0.01);
+        assert!((drawer_width(2000.0, DrawerWidth::Wide) - 1024.0).abs() < 0.01);
+        assert!((drawer_width(600.0, DrawerWidth::Wide) - 640.0).abs() < 0.01);
     }
 }

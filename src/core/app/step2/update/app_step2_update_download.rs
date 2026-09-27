@@ -10,6 +10,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
+use crate::app::mod_downloads;
 use crate::app::state::{Step2UpdateAsset, WizardState};
 
 #[derive(Debug, Clone)]
@@ -27,39 +28,114 @@ pub(crate) fn start_step2_update_download(
     state: &mut WizardState,
     step2_update_download_rx: &mut Option<Receiver<Step2UpdateDownloadEvent>>,
 ) {
+    start_step2_update_download_scoped(state, step2_update_download_rx, None);
+}
+
+pub(crate) fn start_step2_update_download_scoped(
+    state: &mut WizardState,
+    step2_update_download_rx: &mut Option<Receiver<Step2UpdateDownloadEvent>>,
+    scope_tp2: Option<String>,
+) {
     if state.step2.update_selected_download_running {
         return;
     }
     if !state.step1.download_archive {
+        state.step2.update_selected_download_scope = None;
         state.step2.scan_status = "Download Archive is disabled in Step 1".to_string();
         return;
     }
-    let archive_dir = state.step1.mods_archive_folder.trim();
+    let archive_dir = state.step1.mods_archive_folder.trim().to_string();
     if archive_dir.is_empty() {
+        state.step2.update_selected_download_scope = None;
         state.step2.scan_status = "Mods Archive folder is empty".to_string();
         return;
     }
-    let assets = state.step2.update_selected_update_assets.clone();
+    let assets = scoped_assets(state, scope_tp2.as_deref());
     if assets.is_empty() {
+        state.step2.update_selected_download_scope = None;
         state.step2.scan_status = "No update archives to download".to_string();
         return;
     }
+
+    let scoped_labels = scope_tp2.as_deref().map(|_| deduped_labels(&assets));
+    clear_download_result_buckets(state, scoped_labels.as_deref());
 
     let archive_dir = PathBuf::from(archive_dir);
     let (tx, rx) = mpsc::channel::<Step2UpdateDownloadEvent>();
     *step2_update_download_rx = Some(rx);
     state.step2.update_selected_download_running = true;
     state.step2.update_selected_extract_running = false;
-    state.step2.update_selected_downloaded_sources.clear();
-    state.step2.update_selected_download_failed_sources.clear();
-    state.step2.update_selected_extracted_sources.clear();
-    state.step2.update_selected_extract_failed_sources.clear();
+    state.step2.update_selected_download_scope = scope_tp2;
     state.step2.scan_status = format!("Downloading updates: 0/{}", assets.len());
 
     thread::spawn(move || {
         let result = download_update_assets(&archive_dir, &assets, &tx);
         let _ = tx.send(Step2UpdateDownloadEvent::Finished(result));
     });
+}
+
+fn scoped_assets(state: &WizardState, scope_tp2: Option<&str>) -> Vec<Step2UpdateAsset> {
+    let Some(scope_tp2) = scope_tp2 else {
+        return state.step2.update_selected_update_assets.clone();
+    };
+    state
+        .step2
+        .update_selected_update_assets
+        .iter()
+        .filter(|asset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) == scope_tp2)
+        .cloned()
+        .collect()
+}
+
+fn deduped_labels(assets: &[Step2UpdateAsset]) -> Vec<String> {
+    let mut labels = assets
+        .iter()
+        .map(|asset| asset.label.clone())
+        .collect::<Vec<_>>();
+    labels.dedup();
+    labels
+}
+
+fn clear_download_result_buckets(state: &mut WizardState, scoped_labels: Option<&[String]>) {
+    let Some(labels) = scoped_labels else {
+        state.step2.update_selected_downloaded_sources.clear();
+        state.step2.update_selected_download_failed_sources.clear();
+        state.step2.update_selected_extracted_sources.clear();
+        state.step2.update_selected_extract_failed_sources.clear();
+        return;
+    };
+    state
+        .step2
+        .update_selected_downloaded_sources
+        .retain(|entry| {
+            !labels
+                .iter()
+                .any(|label| entry.starts_with(&format!("{label} -> ")))
+        });
+    state
+        .step2
+        .update_selected_download_failed_sources
+        .retain(|entry| {
+            !labels
+                .iter()
+                .any(|label| entry.starts_with(&format!("{label}: ")))
+        });
+    state
+        .step2
+        .update_selected_extracted_sources
+        .retain(|entry| {
+            !labels
+                .iter()
+                .any(|label| entry.starts_with(&format!("{label} -> ")))
+        });
+    state
+        .step2
+        .update_selected_extract_failed_sources
+        .retain(|entry| {
+            !labels
+                .iter()
+                .any(|label| entry.starts_with(&format!("{label}: ")))
+        });
 }
 
 pub(crate) fn poll_step2_update_download(
@@ -77,6 +153,7 @@ pub(crate) fn poll_step2_update_download(
         Err(TryRecvError::Empty) => None,
         Err(TryRecvError::Disconnected) => {
             state.step2.update_selected_download_running = false;
+            state.step2.update_selected_download_scope = None;
             state.step2.scan_status = "Download updates failed: worker disconnected".to_string();
             *step2_update_download_rx = None;
             return;
@@ -94,8 +171,19 @@ pub(crate) fn poll_step2_update_download(
 
     *step2_update_download_rx = None;
     state.step2.update_selected_download_running = false;
-    state.step2.update_selected_downloaded_sources = result.downloaded;
-    state.step2.update_selected_download_failed_sources = result.failed;
+    if state.step2.update_selected_download_scope.is_some() {
+        state
+            .step2
+            .update_selected_downloaded_sources
+            .extend(result.downloaded);
+        state
+            .step2
+            .update_selected_download_failed_sources
+            .extend(result.failed);
+    } else {
+        state.step2.update_selected_downloaded_sources = result.downloaded;
+        state.step2.update_selected_download_failed_sources = result.failed;
+    }
     let downloaded = state.step2.update_selected_downloaded_sources.len();
     let failed = state.step2.update_selected_download_failed_sources.len();
     state.step2.scan_status =
@@ -210,5 +298,91 @@ pub(crate) fn safe_archive_segment(value: &str) -> String {
         "unknown".to_string()
     } else {
         sanitized.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scoped_download_keeps_other_mods_results() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_downloaded_sources =
+            vec!["Alpha -> C:\\a".to_string(), "Beta -> C:\\b".to_string()];
+        state.step2.update_selected_download_failed_sources = vec!["Alpha: err".to_string()];
+        state.step2.update_selected_extracted_sources = vec!["Alpha -> C:\\a2".to_string()];
+        state.step2.update_selected_extract_failed_sources = vec!["Alpha: err2".to_string()];
+
+        clear_download_result_buckets(&mut state, Some(&["Alpha".to_string()]));
+
+        assert_eq!(
+            state.step2.update_selected_downloaded_sources,
+            vec!["Beta -> C:\\b".to_string()]
+        );
+        assert!(
+            state
+                .step2
+                .update_selected_download_failed_sources
+                .is_empty()
+        );
+        assert!(state.step2.update_selected_extracted_sources.is_empty());
+        assert!(
+            state
+                .step2
+                .update_selected_extract_failed_sources
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn full_download_still_clears_every_result_bucket() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_downloaded_sources = vec!["Alpha -> C:\\a".to_string()];
+        state.step2.update_selected_download_failed_sources = vec!["Beta: err".to_string()];
+        state.step2.update_selected_extracted_sources = vec!["Gamma -> C:\\g".to_string()];
+        state.step2.update_selected_extract_failed_sources = vec!["Delta: err".to_string()];
+
+        clear_download_result_buckets(&mut state, None);
+
+        assert!(state.step2.update_selected_downloaded_sources.is_empty());
+        assert!(
+            state
+                .step2
+                .update_selected_download_failed_sources
+                .is_empty()
+        );
+        assert!(state.step2.update_selected_extracted_sources.is_empty());
+        assert!(
+            state
+                .step2
+                .update_selected_extract_failed_sources
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn scoped_download_completion_appends_results() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_download_scope = Some("alpha".to_string());
+        state.step2.update_selected_downloaded_sources = vec!["Beta -> C:\\b".to_string()];
+
+        let (tx, rx) = mpsc::channel::<Step2UpdateDownloadEvent>();
+        tx.send(Step2UpdateDownloadEvent::Finished(
+            Step2UpdateDownloadResult {
+                downloaded: vec!["Alpha -> C:\\a".to_string()],
+                failed: Vec::new(),
+            },
+        ))
+        .unwrap();
+        let mut download_rx = Some(rx);
+        let mut extract_rx = None;
+
+        poll_step2_update_download(&mut state, &mut download_rx, &mut extract_rx);
+
+        assert_eq!(
+            state.step2.update_selected_downloaded_sources,
+            vec!["Beta -> C:\\b".to_string(), "Alpha -> C:\\a".to_string()]
+        );
     }
 }

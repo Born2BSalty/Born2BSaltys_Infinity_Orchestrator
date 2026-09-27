@@ -42,6 +42,47 @@ pub fn push_manual_download_request(
     list.push(request);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VersionsChip {
+    #[default]
+    All,
+    Fetch,
+    Attention,
+    Locked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VersionsSheet {
+    EditSource,
+    Forks,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VersionsMenu {
+    Sources { tp2: String },
+    Kebab { tp2: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct VersionsDrawerUi {
+    pub(crate) search: String,
+    pub(crate) chip: VersionsChip,
+    pub(crate) sheet: Option<VersionsSheet>,
+    pub(crate) sheet_tp2: Option<String>,
+    pub(crate) sheet_just_opened: bool,
+    pub(crate) editor_was_open: bool,
+    pub(crate) menu: Option<VersionsMenu>,
+    pub(crate) auto_check_pending: bool,
+}
+
+impl VersionsDrawerUi {
+    pub(crate) fn open_sheet(&mut self, sheet: VersionsSheet, tp2: String) {
+        self.sheet = Some(sheet);
+        self.sheet_tp2 = Some(tp2);
+        self.sheet_just_opened = true;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Step2State<Flag = bool> {
     pub search_query: String,
@@ -124,6 +165,9 @@ pub struct Step2State<Flag = bool> {
     pub last_scan_report: Option<Step2ScanReport>,
     pub update_selected_manual_downloads: Vec<ManualDownloadRequest>,
     pub skipped_manual_downloads: Vec<String>,
+    pub update_selected_download_scope: Option<String>,
+    pub(crate) update_selected_last_checked_at: Option<String>,
+    pub(crate) versions_ui: VersionsDrawerUi,
 }
 
 impl Default for Step2State {
@@ -209,6 +253,9 @@ impl Default for Step2State {
             last_scan_report: None,
             update_selected_manual_downloads: Vec::new(),
             skipped_manual_downloads: Vec::new(),
+            update_selected_download_scope: None,
+            update_selected_last_checked_at: None,
+            versions_ui: VersionsDrawerUi::default(),
         }
     }
 }
@@ -397,6 +444,22 @@ pub fn update_selection_signature(step2: &Step2State) -> String {
     }
     entries.sort_unstable();
     entries.join(";")
+}
+
+#[must_use]
+pub fn update_selection_stale(step2: &Step2State) -> bool {
+    step2.update_selected_has_run
+        && (!step2.update_selected_last_was_full_selection
+            || step2.update_selected_last_selection_signature.as_deref()
+                != Some(update_selection_signature(step2).as_str()))
+}
+
+#[must_use]
+pub const fn update_pipeline_busy(step2: &Step2State) -> bool {
+    step2.is_scanning
+        || step2.update_selected_check_running
+        || step2.update_selected_download_running
+        || step2.update_selected_extract_running
 }
 
 #[must_use]

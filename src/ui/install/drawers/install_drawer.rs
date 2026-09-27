@@ -93,6 +93,8 @@ pub(crate) fn render(
         title: &title,
         subtitle,
         width: DrawerWidth::Form,
+        header_button: None,
+        suppress_escape: false,
     };
 
     let disabled = stage_review::begin_disabled_for(state, &checks);

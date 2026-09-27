@@ -142,3 +142,5 @@ pub mod step5;
 pub mod step5_runtime_status;
 pub mod terminal;
 pub mod tp2_component_begin;
+#[path = "step2/update/versions_view.rs"]
+pub mod versions_view;

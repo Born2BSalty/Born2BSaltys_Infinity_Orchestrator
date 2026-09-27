@@ -4,7 +4,9 @@
 use eframe::egui;
 
 use crate::app::mod_downloads;
-use crate::app::state::{WizardState, exact_log_ready_to_install, update_selection_signature};
+use crate::app::state::{
+    WizardState, exact_log_ready_to_install, update_pipeline_busy, update_selection_stale,
+};
 use crate::ui::orchestrator::widgets::{
     BtnOpts, clipboard, redesign_btn, redesign_section_header, redesign_window_title,
 };
@@ -78,17 +80,8 @@ fn popup_modes(state: &WizardState, has_single_mod_target: bool) -> PopupModes {
     let review_edit = state.step1.bootstraps_from_weidu_logs() || pending_missing;
     let scanned_mods = !state.step1.uses_source_weidu_logs();
     let hybrid_missing = pending_missing;
-    let current_selection_signature =
-        scanned_mods.then(|| update_selection_signature(&state.step2));
-    let selection_stale = scanned_mods
-        && !has_single_mod_target
-        && state.step2.update_selected_has_run
-        && (!state.step2.update_selected_last_was_full_selection
-            || state
-                .step2
-                .update_selected_last_selection_signature
-                .as_deref()
-                != current_selection_signature.as_deref());
+    let selection_stale =
+        scanned_mods && !has_single_mod_target && update_selection_stale(&state.step2);
     PopupModes {
         exact_log,
         review_edit,
@@ -109,17 +102,11 @@ const fn can_retry_latest(state: &WizardState, exact_log: bool) -> bool {
             .step2
             .update_selected_exact_version_retry_requests
             .is_empty()
-        && !update_pipeline_busy(state)
+        && !update_pipeline_busy(&state.step2)
 }
 
 const fn popup_busy(state: &WizardState) -> bool {
-    state.step2.is_scanning || update_pipeline_busy(state)
-}
-
-const fn update_pipeline_busy(state: &WizardState) -> bool {
-    state.step2.update_selected_check_running
-        || state.step2.update_selected_download_running
-        || state.step2.update_selected_extract_running
+    update_pipeline_busy(&state.step2)
 }
 
 fn render_main_popup(
@@ -268,7 +255,7 @@ fn render_summary(ui: &mut egui::Ui, state: &WizardState, modes: PopupModes) {
         render_hybrid_summary(ui, state);
     } else if modes.scanned_mods
         && !state.step2.update_selected_has_run
-        && !update_pipeline_busy(state)
+        && !update_pipeline_busy(&state.step2)
     {
         ui.add_space(4.0);
         ui.label("No version comparison run yet.");
@@ -753,7 +740,7 @@ fn render_download_button(
 }
 
 const fn can_download_updates(state: &WizardState) -> bool {
-    !state.step2.update_selected_update_assets.is_empty() && !update_pipeline_busy(state)
+    !state.step2.update_selected_update_assets.is_empty() && !update_pipeline_busy(&state.step2)
 }
 
 const fn download_button_label(state: &WizardState, modes: PopupModes) -> &'static str {
@@ -820,7 +807,7 @@ fn render_close_button(ui: &mut egui::Ui, palette: ThemePalette, state: &mut Wiz
     }
 }
 
-fn render_latest_fallback_confirm(
+pub(crate) fn render_latest_fallback_confirm(
     ctx: &egui::Context,
     state: &mut WizardState,
     action: &mut Option<Step2Action>,

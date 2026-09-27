@@ -467,19 +467,27 @@ pub(crate) struct SourceTiers {
 impl SourceTiers {
     pub(crate) fn resolve(&self, tp2: &str) -> Option<(ModDownloadSource, SourceTier)> {
         let source = self.resolved.resolve_source(tp2, None)?;
+        let tier = self.tier_of(&source.tp2, &source.source_id);
+        Some((source, tier))
+    }
+
+    pub(crate) fn tier_of(&self, tp2: &str, source_id: &str) -> SourceTier {
         let key = format!(
             "{}|{}",
-            normalize_mod_download_tp2(&source.tp2),
-            normalize_source_id(&source.source_id)
+            normalize_mod_download_tp2(tp2),
+            normalize_source_id(source_id)
         );
-        let tier = if self.modlist_keys.contains(&key) {
+        if self.modlist_keys.contains(&key) {
             SourceTier::Modlist
         } else if self.user_keys.contains(&key) {
             SourceTier::User
         } else {
             SourceTier::Default
-        };
-        Some((source, tier))
+        }
+    }
+
+    pub(crate) fn find_sources(&self, tp2: &str) -> Vec<ModDownloadSource> {
+        self.resolved.find_sources(tp2)
     }
 }
 

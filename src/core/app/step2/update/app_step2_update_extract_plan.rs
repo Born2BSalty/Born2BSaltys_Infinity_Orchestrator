@@ -30,6 +30,7 @@ pub(crate) fn build_extract_jobs(
     state: &mut WizardState,
     archive_dir: &Path,
     install_ctx_installed_refs_path: Option<&Path>,
+    scope: Option<&str>,
 ) -> Vec<Step2UpdateExtractJob> {
     let mut jobs = Vec::new();
     let mods_root = PathBuf::from(state.step1.mods_folder.trim());
@@ -54,6 +55,10 @@ pub(crate) fn build_extract_jobs(
     );
 
     for asset in &state.step2.update_selected_update_assets {
+        if scope.is_some_and(|tp2| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) != tp2)
+        {
+            continue;
+        }
         let archive_path = archive_dir.join(app_step2_update_download::archive_file_name(asset));
         if !archive_path.exists() {
             continue;
@@ -169,4 +174,86 @@ fn is_single_child_wrapper(parent: &Path, child: &Path) -> bool {
         }
     }
     dir_count == 1
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::*;
+    use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
+
+    struct TestRoot(PathBuf);
+
+    impl TestRoot {
+        fn new(label: &str) -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_extract_plan_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            fs::create_dir_all(&path).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(path.clone()));
+            Self(path)
+        }
+
+        fn archive_dir(&self) -> PathBuf {
+            let dir = self.0.join("archives");
+            fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+    }
+
+    impl Drop for TestRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn asset(tp_file: &str, label: &str, tag: &str) -> Step2UpdateAsset {
+        Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+            label: label.to_string(),
+            source_id: "primary".to_string(),
+            tag: tag.to_string(),
+            asset_name: "asset.zip".to_string(),
+            asset_url: "https://example.test/asset.zip".to_string(),
+            installed_source_ref: None,
+        }
+    }
+
+    #[test]
+    fn scoped_extract_plan_only_holds_the_scoped_assets() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = TestRoot::new("scoped_extract_plan");
+        let archive_dir = root.archive_dir();
+
+        let mut state = WizardState::default();
+        state.step1.mods_folder = archive_dir.to_string_lossy().to_string();
+        let asset_a = asset("alpha.tp2", "Alpha", "1.0");
+        let asset_b = asset("beta.tp2", "Beta", "1.0");
+        fs::write(
+            archive_dir.join(app_step2_update_download::archive_file_name(&asset_a)),
+            b"x",
+        )
+        .unwrap();
+        fs::write(
+            archive_dir.join(app_step2_update_download::archive_file_name(&asset_b)),
+            b"x",
+        )
+        .unwrap();
+        state.step2.update_selected_update_assets = vec![asset_a, asset_b];
+
+        let refs_path = archive_dir.join("refs.json");
+        let jobs = build_extract_jobs(&mut state, &archive_dir, Some(&refs_path), Some("alpha"));
+
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].tp_file, "alpha.tp2");
+    }
 }

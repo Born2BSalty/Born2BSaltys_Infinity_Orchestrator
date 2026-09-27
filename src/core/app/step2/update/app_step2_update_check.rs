@@ -2,6 +2,8 @@
 // Copyright (c) 2026 Born2BSalty
 use std::sync::mpsc::{Receiver, TryRecvError};
 
+use chrono::Local;
+
 use crate::app::app_step2_update_policy::{
     mark_update_available, mod_has_current_version, source_ref_is_update, source_ref_matches,
     version_is_update,
@@ -175,6 +177,7 @@ fn finish_update_check(
 
     state.step2.update_selected_check_requests.clear();
     state.step2.update_selected_merge_latest_fallback = false;
+    state.step2.update_selected_last_checked_at = Some(Local::now().format("%H:%M").to_string());
     state.step2.scan_status =
         update_check_finished_status(state, merge_latest_fallback, existing_actionable);
 }
@@ -714,6 +717,50 @@ mod tests {
             vec!["ISNF (6.5.5 -> 6.5.6)"],
             "override warning must use compact format: label (pinned -> served)"
         );
+    }
+
+    struct ConfigDirGuard(std::path::PathBuf);
+
+    impl ConfigDirGuard {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_update_check_{}_{}_{label}",
+                std::process::id(),
+                id
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(path.clone()));
+            Self(path)
+        }
+    }
+
+    impl Drop for ConfigDirGuard {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn finished_check_records_the_time() {
+        let _config_guard = ConfigDirGuard::new("finished_check_records_the_time");
+        let mut state = WizardState::<bool>::default();
+        assert!(state.step2.update_selected_last_checked_at.is_none());
+        let mut rx: Option<
+            Receiver<super::super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
+        > = None;
+
+        finish_update_check(&mut state, &mut rx, &[], false);
+
+        let recorded = state
+            .step2
+            .update_selected_last_checked_at
+            .expect("timestamp recorded after a finished check");
+        assert_eq!(recorded.len(), 5);
+        assert_eq!(recorded.as_bytes()[2], b':');
     }
 
     #[test]

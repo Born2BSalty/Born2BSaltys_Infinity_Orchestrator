@@ -63,6 +63,8 @@ pub(crate) fn render(
         title: "Included mods",
         subtitle: &subtitle,
         width: DrawerWidth::Content,
+        header_button: None,
+        suppress_escape: false,
     };
 
     let response = drawer::render(

@@ -20,6 +20,9 @@ pub enum Step2Action {
     PreviewUpdateSelectedMod,
     PreviewUpdatePopupMod,
     DownloadUpdates,
+    DownloadUpdateFor {
+        tp2: String,
+    },
     AcceptLatestForExactVersionMisses,
     OpenSelectedReadme(String),
     OpenSelectedWeb(String),

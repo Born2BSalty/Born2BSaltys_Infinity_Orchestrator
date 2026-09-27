@@ -13,7 +13,7 @@ struct PopupReportModes<Flag = bool> {
     hybrid_source_pending: Flag,
 }
 
-pub(super) fn build_popup_report(
+pub(crate) fn build_popup_report(
     state: &WizardState,
     exact_log_mode: bool,
     exact_log_good_to_go: bool,
