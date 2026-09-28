@@ -354,6 +354,43 @@ pub fn build_archive_meta_from_install_lock(
     out
 }
 
+#[must_use]
+pub(crate) fn build_archive_meta_from_installed_refs(
+    wizard_state: &WizardState,
+    refs_file: &crate::app::app_step2_update_source_refs::ModSourceRefsFile,
+) -> Vec<ArchiveMeta> {
+    let checked_tp2s = wizard_state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(wizard_state.step2.bg2ee_mods.iter())
+        .filter(|mod_state| {
+            mod_state
+                .components
+                .iter()
+                .any(|component| component.checked)
+        })
+        .map(|mod_state| crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file))
+        .collect::<std::collections::BTreeSet<_>>();
+    refs_file
+        .archives
+        .iter()
+        .filter(|(tp2, _)| checked_tp2s.contains(*tp2))
+        .map(|(_, record)| ArchiveMeta {
+            name: record.name.clone(),
+            size: record.size,
+            hash: record.hash.clone(),
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn archive_meta_for_draft(wizard_state: &WizardState) -> Vec<ArchiveMeta> {
+    use crate::app::app_step2_update_source_refs::{installed_source_refs_path, load_refs_file_at};
+    let refs_file = load_refs_file_at(&installed_source_refs_path());
+    build_archive_meta_from_installed_refs(wizard_state, &refs_file)
+}
+
 fn zlib_compress(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
     encoder
@@ -1074,5 +1111,80 @@ mod tests {
              addressed store uses (one hashing path, zero drift)"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn step2_mod(tp_file: &str, checked: bool) -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: format!("{tp_file}/{tp_file}.tp2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked,
+            hidden_components: Vec::new(),
+            components: vec![crate::app::state::Step2ComponentState {
+                component_id: "0".to_string(),
+                label: "0".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked,
+                selected_order: checked.then_some(1),
+            }],
+        }
+    }
+
+    #[test]
+    fn archive_meta_from_installed_refs_covers_checked_mods_only() {
+        use crate::app::app_step2_update_source_refs::{InstalledArchiveRecord, ModSourceRefsFile};
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![step2_mod("alpha", true), step2_mod("beta", false)];
+        let mut refs_file = ModSourceRefsFile::default();
+        refs_file.archives.insert(
+            "alpha".to_string(),
+            InstalledArchiveRecord {
+                name: "alpha__primary__v19.zip".to_string(),
+                size: 17,
+                hash: "deadbeef00000000deadbeef00000000".to_string(),
+            },
+        );
+        refs_file.archives.insert(
+            "beta".to_string(),
+            InstalledArchiveRecord {
+                name: "beta__primary__v2.zip".to_string(),
+                size: 29,
+                hash: "0123456789abcdef0123456789abcdef".to_string(),
+            },
+        );
+
+        let metas = build_archive_meta_from_installed_refs(&state, &refs_file);
+
+        assert_eq!(
+            metas,
+            vec![am(
+                "alpha__primary__v19.zip",
+                17,
+                "deadbeef00000000deadbeef00000000"
+            )]
+        );
     }
 }

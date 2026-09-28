@@ -82,9 +82,8 @@ fn build_and_export_share_code(
     {
         build_per_modlist_installed_refs(state)
     } else {
-        read_optional_file_text(
+        installed_refs_copy_without_archives(
             &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
-            |_| false,
         )
     };
 
@@ -898,16 +897,6 @@ fn read_exact_source_weidu_log(
     Ok(Some(text))
 }
 
-fn read_optional_file_text(
-    path: &std::path::Path,
-    should_omit: impl FnOnce(&str) -> bool,
-) -> Option<String> {
-    fs::read_to_string(path)
-        .ok()
-        .filter(|text| !text.trim().is_empty())
-        .filter(|text| !should_omit(text))
-}
-
 fn export_mod_config_files(
     state: &WizardState,
 ) -> Result<(Vec<ModlistShareConfigFile>, Vec<String>), String> {
@@ -1093,11 +1082,21 @@ pub(crate) fn commit_sha_from_installed_ref(installed_ref: &str) -> Option<Strin
 
 pub(crate) fn pin_source_to_installed_ref(
     source: &mut crate::app::mod_downloads::ModDownloadSource,
+    installed_source_id: Option<&str>,
     installed_ref: Option<&str>,
 ) {
     let Some(installed_ref) = installed_ref else {
         return;
     };
+    if source.github.is_some() {
+        let id = installed_source_id.unwrap_or(&source.source_id);
+        if let Some((pinned, _)) =
+            crate::app::mod_source_history::bookmark_block(&*source, Some(id), Some(installed_ref))
+        {
+            *source = pinned;
+        }
+        return;
+    }
     let Some(sha) = commit_sha_from_installed_ref(installed_ref) else {
         return;
     };
@@ -1176,7 +1175,11 @@ pub(crate) fn build_resolved_source_overrides_from_texts(
             continue;
         };
         let installed_ref = refs_file.refs.get(&normalized_tp2);
-        pin_source_to_installed_ref(&mut source, installed_ref.map(String::as_str));
+        pin_source_to_installed_ref(
+            &mut source,
+            installed_ids.get(&normalized_tp2).map(String::as_str),
+            installed_ref.map(String::as_str),
+        );
         let block = serialize_resolved_mod(&mod_state.tp_file, &mod_state.name, &source);
         if !toml_out.is_empty() {
             toml_out.push_str("\n\n");
@@ -1236,13 +1239,25 @@ fn build_per_modlist_installed_refs(state: &WizardState) -> Option<String> {
     let refs_file = load_refs_file_at(&path);
     let sources = state.step2.selected_source_ids.clone();
 
-    if refs_file.refs.is_empty() && sources.is_empty() {
+    refs_copy_text(refs_file.refs, sources)
+}
+
+fn installed_refs_copy_without_archives(path: &std::path::Path) -> Option<String> {
+    let refs_file = crate::app::app_step2_update_source_refs::load_refs_file_at(path);
+    refs_copy_text(refs_file.refs, refs_file.sources)
+}
+
+fn refs_copy_text(
+    refs: std::collections::BTreeMap<String, String>,
+    sources: std::collections::BTreeMap<String, String>,
+) -> Option<String> {
+    if refs.is_empty() && sources.is_empty() {
         return None;
     }
-
     let combined = crate::app::app_step2_update_source_refs::ModSourceRefsFile {
-        refs: refs_file.refs,
+        refs,
         sources,
+        archives: std::collections::BTreeMap::new(),
     };
     toml::to_string_pretty(&combined)
         .ok()
@@ -1998,6 +2013,7 @@ mod tests {
         };
         pin_source_to_installed_ref(
             &mut source,
+            None,
             Some("master@7649ced6cd25865874d787ec1a9abbc67b068729"),
         );
         assert_eq!(
@@ -2012,6 +2028,7 @@ mod tests {
         let mut source = crate::app::mod_downloads::ModDownloadSource::default();
         pin_source_to_installed_ref(
             &mut source,
+            None,
             Some("commit@bfd167f7a52dfa6c9e694955a074a85991b0c358"),
         );
         assert_eq!(
@@ -2027,7 +2044,7 @@ mod tests {
             tag: Some("v1.2.0".to_string()),
             ..Default::default()
         };
-        pin_source_to_installed_ref(&mut source, Some("v1.2.0"));
+        pin_source_to_installed_ref(&mut source, None, Some("v1.2.0"));
         assert_eq!(source.tag.as_deref(), Some("v1.2.0"));
         assert_eq!(source.commit, None);
         assert_eq!(source.branch, None);
@@ -2039,7 +2056,7 @@ mod tests {
             tag: Some("mymod@1.0".to_string()),
             ..Default::default()
         };
-        pin_source_to_installed_ref(&mut source, Some("mymod@1.0"));
+        pin_source_to_installed_ref(&mut source, None, Some("mymod@1.0"));
         assert_eq!(source.tag.as_deref(), Some("mymod@1.0"));
         assert_eq!(source.commit, None);
         assert_eq!(source.branch, None);
@@ -2051,9 +2068,46 @@ mod tests {
             branch: Some("master".to_string()),
             ..Default::default()
         };
-        pin_source_to_installed_ref(&mut source, None);
+        pin_source_to_installed_ref(&mut source, None, None);
         assert_eq!(source.branch.as_deref(), Some("master"));
         assert_eq!(source.commit, None);
+    }
+
+    struct RefsCopyRoot(std::path::PathBuf);
+
+    impl Drop for RefsCopyRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn global_refs_copy_never_carries_archive_records() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let root = RefsCopyRoot(std::env::temp_dir().join(format!(
+            "bio_refs_copy_test_{}_{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        )));
+        fs::create_dir_all(&root.0).unwrap();
+        let path = root.0.join("mod_installed_refs.toml");
+        fs::write(
+            &path,
+            "[refs]\ncdtweaks = \"v19\"\n\n[sources]\ncdtweaks = \"gibberlings3\"\n\n\
+             [archives.cdtweaks]\nname = \"cdtweaks__gibberlings3__v19.zip\"\nsize = 12\n\
+             hash = \"abc\"\n",
+        )
+        .unwrap();
+
+        let copy = installed_refs_copy_without_archives(&path).expect("refs copy");
+        assert!(copy.contains("cdtweaks = \"v19\""));
+        assert!(copy.contains("cdtweaks = \"gibberlings3\""));
+        assert!(!copy.contains("archives"), "got: {copy}");
+        assert_eq!(
+            installed_refs_copy_without_archives(&root.0.join("none.toml")),
+            None
+        );
     }
 
     #[test]
@@ -2068,6 +2122,7 @@ mod tests {
         };
         pin_source_to_installed_ref(
             &mut source,
+            None,
             Some("master@7649ced6cd25865874d787ec1a9abbc67b068729"),
         );
         let block = crate::app::mod_downloads::complete_source_block(&source);
@@ -2075,6 +2130,124 @@ mod tests {
         assert!(
             block.contains("branch = \"\""),
             "a pinned commit clears branch to blank"
+        );
+    }
+
+    fn github_pin_source() -> crate::app::mod_downloads::ModDownloadSource {
+        crate::app::mod_downloads::ModDownloadSource {
+            github: Some("owner/repo".into()),
+            source_id: "primary".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn channel_source_pins_the_installed_release() {
+        let mut source = github_pin_source();
+        pin_source_to_installed_ref(&mut source, None, Some("v19"));
+        assert_eq!(source.release.as_deref(), Some("v19"));
+        assert_eq!(source.channel, None);
+        assert_eq!(source.tag, None);
+        assert_eq!(source.branch, None);
+        assert_eq!(source.commit, None);
+    }
+
+    #[test]
+    fn pre_release_channel_pins_the_installed_release_keeping_asset() {
+        let mut source = crate::app::mod_downloads::ModDownloadSource {
+            channel: Some("pre-release".into()),
+            asset: Some("mod-win.zip".into()),
+            ..github_pin_source()
+        };
+        pin_source_to_installed_ref(&mut source, None, Some("v3.1"));
+        assert_eq!(source.release.as_deref(), Some("v3.1"));
+        assert_eq!(source.asset.as_deref(), Some("mod-win.zip"));
+        assert_eq!(source.channel, None);
+    }
+
+    #[test]
+    fn release_source_pins_the_installed_release() {
+        let mut source = crate::app::mod_downloads::ModDownloadSource {
+            release: Some("v18".into()),
+            ..github_pin_source()
+        };
+        pin_source_to_installed_ref(&mut source, None, Some("v19"));
+        assert_eq!(source.release.as_deref(), Some("v19"));
+    }
+
+    #[test]
+    fn github_branch_ref_becomes_a_commit_pin_and_drops_the_asset() {
+        let mut source = crate::app::mod_downloads::ModDownloadSource {
+            branch: Some("master".into()),
+            asset: Some("x.zip".into()),
+            ..github_pin_source()
+        };
+        pin_source_to_installed_ref(
+            &mut source,
+            None,
+            Some("master@7649ced6cd25865874d787ec1a9abbc67b068729"),
+        );
+        assert_eq!(
+            source.commit.as_deref(),
+            Some("7649ced6cd25865874d787ec1a9abbc67b068729")
+        );
+        assert_eq!(source.branch, None);
+        assert_eq!(source.asset, None);
+    }
+
+    #[test]
+    fn github_tag_source_keeps_a_tag() {
+        let mut source = crate::app::mod_downloads::ModDownloadSource {
+            tag: Some("v1.2.0".into()),
+            ..github_pin_source()
+        };
+        pin_source_to_installed_ref(&mut source, None, Some("v1.2.0"));
+        assert_eq!(source.tag.as_deref(), Some("v1.2.0"));
+        assert_eq!(source.release, None);
+    }
+
+    #[test]
+    fn page_archive_source_with_a_bare_tag_stays_unpinned() {
+        let original = crate::app::mod_downloads::ModDownloadSource {
+            source_id: "weasel".into(),
+            url: "https://example.test/mod.zip".into(),
+            ..Default::default()
+        };
+        let mut source = original.clone();
+        pin_source_to_installed_ref(&mut source, None, Some("1.2"));
+        assert_eq!(source, original);
+    }
+
+    #[test]
+    fn mismatched_source_id_leaves_the_source_untouched() {
+        let original = github_pin_source();
+        let mut source = original.clone();
+        pin_source_to_installed_ref(&mut source, Some("other"), Some("v19"));
+        assert_eq!(source, original);
+    }
+
+    #[test]
+    fn missing_source_id_assumes_the_current_source() {
+        let mut source = github_pin_source();
+        pin_source_to_installed_ref(&mut source, None, Some("v19"));
+        assert_eq!(source.release.as_deref(), Some("v19"));
+    }
+
+    #[test]
+    fn serialized_block_carries_the_pinned_release_and_no_channel() {
+        let mut source = crate::app::mod_downloads::ModDownloadSource {
+            url: "https://github.com/owner/repo".into(),
+            ..github_pin_source()
+        };
+        pin_source_to_installed_ref(&mut source, None, Some("v19"));
+        let block = crate::app::mod_downloads::complete_source_block(&source);
+        assert!(block.contains("release = \"v19\""), "{block}");
+        assert!(
+            block
+                .lines()
+                .filter(|line| line.trim_start().starts_with("channel"))
+                .all(|line| line.trim_end().ends_with("\"\"")),
+            "{block}"
         );
     }
 

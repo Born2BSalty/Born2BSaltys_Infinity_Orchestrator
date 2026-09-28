@@ -112,6 +112,9 @@ fn extract_source_ref(
     source: Option<&mod_downloads::ModDownloadSource>,
 ) -> Option<String> {
     asset.installed_source_ref.clone().or_else(|| {
+        if source.is_some_and(|source| source.github.is_some()) {
+            return Some(asset.tag.clone());
+        }
         if source
             .and_then(|source| source.asset.as_ref())
             .is_some_and(|value| !value.trim().is_empty())
@@ -255,5 +258,55 @@ mod tests {
 
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].tp_file, "alpha.tp2");
+    }
+
+    fn named_asset(asset_name: &str, tag: &str) -> Step2UpdateAsset {
+        Step2UpdateAsset {
+            asset_name: asset_name.to_string(),
+            ..asset("mod.tp2", "Mod", tag)
+        }
+    }
+
+    fn github_source() -> mod_downloads::ModDownloadSource {
+        mod_downloads::ModDownloadSource {
+            github: Some("owner/repo".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn github_release_asset_records_its_tag_as_the_installed_ref() {
+        let asset = named_asset("mod-win.zip", "v19");
+        assert_eq!(
+            extract_source_ref(&asset, Some(&github_source())).as_deref(),
+            Some("v19")
+        );
+    }
+
+    #[test]
+    fn page_archive_asset_keeps_the_old_recording_rule() {
+        let page_source = mod_downloads::ModDownloadSource::default();
+        assert_eq!(
+            extract_source_ref(&named_asset("mod.zip", "1.2"), Some(&page_source)),
+            None
+        );
+        assert_eq!(
+            extract_source_ref(&named_asset("mod-source.zip", "1.2"), Some(&page_source))
+                .as_deref(),
+            Some("1.2")
+        );
+    }
+
+    #[test]
+    fn preset_installed_ref_wins() {
+        let preset = "commit@7649ced6cd25865874d787ec1a9abbc67b068729";
+        let asset = Step2UpdateAsset {
+            installed_source_ref: Some(preset.to_string()),
+            ..named_asset("mod-win.zip", "v19")
+        };
+        assert_eq!(
+            extract_source_ref(&asset, Some(&github_source())).as_deref(),
+            Some(preset)
+        );
     }
 }

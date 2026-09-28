@@ -19,6 +19,40 @@ pub(crate) struct ModSourceRefsFile {
     pub(crate) refs: BTreeMap<String, String>,
     #[serde(default)]
     pub(crate) sources: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) archives: BTreeMap<String, InstalledArchiveRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct InstalledArchiveRecord {
+    pub(crate) name: String,
+    pub(crate) size: u64,
+    pub(crate) hash: String,
+}
+
+pub(crate) fn installed_archive_record(archive_path: &Path) -> io::Result<InstalledArchiveRecord> {
+    let name = archive_path
+        .file_name()
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let size = fs::metadata(archive_path)?.len();
+    let hash = crate::install_runtime::archive_store::hash_file(archive_path)?;
+    Ok(InstalledArchiveRecord { name, size, hash })
+}
+
+pub(super) fn save_installed_archive_record(
+    tp2: &str,
+    record: InstalledArchiveRecord,
+    target: &Path,
+) -> io::Result<()> {
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut refs = load_refs_file_at(target);
+    refs.archives
+        .insert(normalize_mod_download_tp2(tp2), record);
+    let content = toml::to_string_pretty(&refs).map_err(io::Error::other)?;
+    fs::write(target, content)
 }
 
 pub(crate) fn installed_source_refs_path() -> std::path::PathBuf {
@@ -136,8 +170,11 @@ where
     refs.refs.retain(|tp2, _| present_tp2s.contains(tp2));
     let before_sources = refs.sources.len();
     refs.sources.retain(|tp2, _| present_tp2s.contains(tp2));
-    let removed =
-        before.saturating_sub(refs.refs.len()) + before_sources.saturating_sub(refs.sources.len());
+    let before_archives = refs.archives.len();
+    refs.archives.retain(|tp2, _| present_tp2s.contains(tp2));
+    let removed = before.saturating_sub(refs.refs.len())
+        + before_sources.saturating_sub(refs.sources.len())
+        + before_archives.saturating_sub(refs.archives.len());
     if removed == 0 {
         return Ok(0);
     }
@@ -176,6 +213,112 @@ mod tests {
             std::process::id(),
             N.fetch_add(1, Ordering::Relaxed)
         ))
+    }
+
+    struct TempRoot(PathBuf);
+
+    impl TempRoot {
+        fn new(label: &str) -> Self {
+            let path = unique_tmp_dir(label);
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn record(name: &str, size: u64, hash: &str) -> InstalledArchiveRecord {
+        InstalledArchiveRecord {
+            name: name.to_string(),
+            size,
+            hash: hash.to_string(),
+        }
+    }
+
+    #[test]
+    fn archive_record_round_trips_through_the_refs_file() {
+        let root = TempRoot::new("archive_round_trip");
+        let path = root.0.join("mod_installed_refs.toml");
+        save_installed_source_ref("Alpha/Alpha.tp2", "v19", &path).unwrap();
+        save_installed_source_id("Alpha/Alpha.tp2", "primary", &path).unwrap();
+        let saved = record(
+            "alpha__primary__v19.zip",
+            42,
+            "00ff00ff00ff00ff00ff00ff00ff00ff",
+        );
+
+        save_installed_archive_record("Alpha/Alpha.tp2", saved.clone(), &path).unwrap();
+
+        let loaded = load_refs_file_at(&path);
+        let key = normalize_mod_download_tp2("Alpha/Alpha.tp2");
+        assert_eq!(loaded.archives.get(&key), Some(&saved));
+        assert_eq!(loaded.archives.len(), 1);
+        assert_eq!(loaded.refs.get(&key).map(String::as_str), Some("v19"));
+        assert_eq!(loaded.refs.len(), 1);
+        assert_eq!(
+            loaded.sources.get(&key).map(String::as_str),
+            Some("primary")
+        );
+        assert_eq!(loaded.sources.len(), 1);
+    }
+
+    #[test]
+    fn refs_file_without_archives_serialises_as_before() {
+        let text = "[refs]\nalpha = \"v19\"\n\n[sources]\nalpha = \"primary\"\n";
+        let parsed = parse_refs_file_text(text);
+        assert!(parsed.archives.is_empty());
+
+        let serialised = toml::to_string_pretty(&parsed).unwrap();
+        assert!(!serialised.contains("archives"), "{serialised}");
+
+        let reparsed = parse_refs_file_text(&serialised);
+        assert_eq!(reparsed.refs, parsed.refs);
+        assert_eq!(reparsed.sources, parsed.sources);
+        assert!(reparsed.archives.is_empty());
+    }
+
+    #[test]
+    fn installed_archive_record_hashes_with_the_store_hasher() {
+        let root = TempRoot::new("archive_hash");
+        let archive = root.0.join("alpha__primary__v19.zip");
+        let bytes = b"ARCHIVE-BYTES-FOR-THE-RECORD";
+        std::fs::write(&archive, bytes).unwrap();
+
+        let made = installed_archive_record(&archive).unwrap();
+
+        assert_eq!(made.name, "alpha__primary__v19.zip");
+        assert_eq!(made.size, u64::try_from(bytes.len()).unwrap());
+        assert_eq!(
+            made.hash,
+            crate::install_runtime::archive_store::hash_file(&archive).unwrap()
+        );
+    }
+
+    #[test]
+    fn prune_drops_archive_records_of_absent_mods() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        let root = TempRoot::new("archive_prune");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(root.0.clone()));
+        let path = installed_source_refs_path();
+        save_installed_archive_record("alpha", record("a.zip", 1, "aa"), &path).unwrap();
+        save_installed_archive_record("beta", record("b.zip", 2, "bb"), &path).unwrap();
+
+        let removed = prune_installed_source_refs(["alpha"]).unwrap();
+
+        assert_eq!(removed, 1);
+        let loaded = load_refs_file_at(&path);
+        assert_eq!(loaded.archives.len(), 1);
+        assert_eq!(
+            loaded.archives.get("alpha"),
+            Some(&record("a.zip", 1, "aa"))
+        );
     }
 
     #[test]

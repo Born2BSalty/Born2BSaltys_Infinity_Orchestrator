@@ -97,11 +97,27 @@ pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf
             )
             .map_err(|err| err.to_string())?;
         }
+        record_installed_archive(job, refs_target);
         Ok(target_root)
     })();
 
     let _ = fs::remove_dir_all(&temp_root);
     result
+}
+
+fn record_installed_archive(job: &Step2UpdateExtractJob, refs_target: &Path) {
+    use super::super::app_step2_update_source_refs::{
+        installed_archive_record, save_installed_archive_record,
+    };
+    let saved = installed_archive_record(&job.archive_path)
+        .and_then(|record| save_installed_archive_record(&job.tp_file, record, refs_target));
+    if let Err(err) = saved {
+        tracing::warn!(
+            target = "orchestrator",
+            "record archive for {}: {err} (share codes carry no hash for it until the next fetch)",
+            job.tp_file
+        );
+    }
 }
 
 fn resolve_target_root(

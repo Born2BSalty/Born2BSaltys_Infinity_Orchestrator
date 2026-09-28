@@ -69,7 +69,8 @@ pub fn write_install_start_artifacts(
         .find(modlist_id)
         .ok_or_else(|| format!("modlist {modlist_id} not in registry at install start"))?;
     let destination = entry.destination_folder.trim().to_string();
-    let meta = ShareMeta::from_entry(entry, false);
+    let meta = ShareMeta::from_entry(entry, false)
+        .with_archive_meta(share_export::archive_meta_for_draft(wizard_state));
 
     let share_code = share_export::pack_meta(wizard_state, &meta)?;
 

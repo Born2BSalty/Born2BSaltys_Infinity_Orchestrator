@@ -90,7 +90,32 @@ pub(crate) fn validate_relative_config_path(relative_path: &str) -> Result<PathB
             "mod config path contains traversal: {relative_path}"
         ));
     }
+    if let Some(reason) = normalized.split('/').find_map(segment_refusal) {
+        return Err(format!("mod config path {reason}: {relative_path}"));
+    }
     Ok(PathBuf::from(normalized))
+}
+
+fn segment_refusal(segment: &str) -> Option<&'static str> {
+    if segment.is_empty() {
+        return Some("has an empty segment");
+    }
+    if segment.chars().all(|ch| ch == '.') {
+        return Some("has a dot-only segment");
+    }
+    if segment
+        .chars()
+        .any(|ch| matches!(ch, '<' | '>' | ':' | '"' | '|' | '?' | '*') || ch < '\u{20}')
+    {
+        return Some("uses a character Windows refuses");
+    }
+    if segment.ends_with('.') || segment.ends_with(' ') {
+        return Some("has a segment ending in a dot or space");
+    }
+    if is_windows_reserved_name(segment) {
+        return Some("uses a reserved Windows name");
+    }
+    None
 }
 
 pub(crate) fn restore_pending_mod_configs_for_mod(
@@ -182,6 +207,21 @@ fn safe_config_destination(target_root: &Path, relative_path: &Path) -> Result<P
 fn has_drive_prefix(path: &str) -> bool {
     let mut chars = path.chars();
     chars.next().is_some_and(|ch| ch.is_ascii_alphabetic()) && chars.next() == Some(':')
+}
+
+fn is_windows_reserved_name(segment: &str) -> bool {
+    let stem = segment
+        .split_once('.')
+        .map_or(segment, |(stem, _)| stem)
+        .trim()
+        .to_ascii_uppercase();
+    match stem.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" => true,
+        _ => ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix)
+                .is_some_and(|digit| matches!(digit.as_bytes(), [b'1'..=b'9']))
+        }),
+    }
 }
 
 fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
@@ -318,5 +358,106 @@ mod tests {
             })
             .collect();
         assert!(offenders.is_empty(), "{offenders:?}");
+    }
+
+    fn assert_refused_with(paths: &[&str], expected: &str) {
+        for path in paths {
+            let error = validate_relative_config_path(path).expect_err(path);
+            assert!(error.contains(expected), "{path:?}: {error}");
+            assert!(error.ends_with(&format!(": {path}")), "{path:?}: {error}");
+        }
+    }
+
+    #[test]
+    fn dot_only_segments_are_refused() {
+        assert_refused_with(
+            &[".../test.ini", "..../a.ini", "./a.ini", "a/.../b.ini"],
+            "dot-only",
+        );
+    }
+
+    #[test]
+    fn empty_segments_are_refused() {
+        assert_refused_with(&["a//b.ini", "a/"], "empty segment");
+    }
+
+    #[test]
+    fn windows_refused_characters_are_refused() {
+        for path in [
+            "a<b.ini",
+            "a:b.ini",
+            "a|b.ini",
+            "a?.ini",
+            "a*.ini",
+            "\"a\".ini",
+            "a\u{7}.ini",
+        ] {
+            assert!(validate_relative_config_path(path).is_err(), "{path:?}");
+        }
+        assert_refused_with(
+            &[
+                "a<b.ini",
+                "sub/a:b.ini",
+                "a|b.ini",
+                "a?.ini",
+                "a*.ini",
+                "\"a\".ini",
+                "a\u{7}.ini",
+            ],
+            "character Windows refuses",
+        );
+    }
+
+    #[test]
+    fn segments_ending_in_dot_or_space_are_refused() {
+        assert_refused_with(
+            &["a./b.ini", "a /b.ini", "b.ini."],
+            "ending in a dot or space",
+        );
+    }
+
+    #[test]
+    fn windows_reserved_names_are_refused() {
+        assert_refused_with(
+            &[
+                "CON",
+                "con.ini",
+                "sub/NUL.txt",
+                "com1.ini",
+                "LPT9",
+                "Aux.cfg",
+            ],
+            "reserved Windows name",
+        );
+    }
+
+    #[test]
+    fn ordinary_names_still_pass() {
+        for (path, normalized) in [
+            ("a.ini", "a.ini"),
+            ("sub/b.ini", "sub/b.ini"),
+            ("sub\\c.ini", "sub/c.ini"),
+            ("weird name (1).ini", "weird name (1).ini"),
+            ("x.y.z.ini", "x.y.z.ini"),
+            (".hidden.ini", ".hidden.ini"),
+            ("console.ini", "console.ini"),
+            ("communist.ini", "communist.ini"),
+            ("com10.ini", "com10.ini"),
+            ("lpt.ini", "lpt.ini"),
+        ] {
+            assert_eq!(
+                validate_relative_config_path(path),
+                Ok(PathBuf::from(normalized)),
+                "{path:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn traversal_keeps_its_own_message() {
+        assert_eq!(
+            validate_relative_config_path("../x.ini"),
+            Err("mod config path contains traversal: ../x.ini".to_string())
+        );
     }
 }

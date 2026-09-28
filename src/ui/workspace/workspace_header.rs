@@ -364,7 +364,9 @@ fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &s
     let Some(entry) = orchestrator.registry.find(id) else {
         return;
     };
-    let meta = ShareMeta::from_entry(entry, false);
+    let meta = ShareMeta::from_entry(entry, false).with_archive_meta(
+        share_export::archive_meta_for_draft(&orchestrator.wizard_state),
+    );
     match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
         Ok(code) => {
             if let Some(entry_mut) = orchestrator.registry.find_mut(id) {
@@ -826,6 +828,78 @@ mod tests {
                 selected_order: Some(1),
             }],
         }
+    }
+
+    struct AmbientRestore(Option<std::path::PathBuf>);
+
+    impl Drop for AmbientRestore {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    #[test]
+    fn save_draft_rebake_carries_the_recorded_archive_hashes() {
+        use crate::app::app_step2_update_source_refs::{
+            InstalledArchiveRecord, ModSourceRefsFile, installed_source_refs_path,
+        };
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient = AmbientRestore(crate::app::mod_downloads::active_modlist_dir());
+        let mut app = orch_with_entry("hashes");
+        crate::install_runtime::active_modlist_source_path::set_ambient_for_modlist("HDRTEST00000");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![counted_mod("alpha")];
+        app.wizard_state.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "ALPHA/ALPHA.TP2".to_string(),
+            component_id: "0".to_string(),
+            mod_name: "alpha".to_string(),
+            component_label: "0".to_string(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 1,
+            block_id: String::new(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+        let record = InstalledArchiveRecord {
+            name: "alpha__primary__v19.zip".to_string(),
+            size: 1234,
+            hash: "0123456789abcdef0123456789abcdef".to_string(),
+        };
+        let mut refs_file = ModSourceRefsFile::default();
+        refs_file
+            .archives
+            .insert("alpha".to_string(), record.clone());
+        let refs_path = installed_source_refs_path();
+        assert!(
+            refs_path.starts_with(app.isolated_test_config_root.as_ref().unwrap()),
+            "the refs file must sit under the isolated config root: {}",
+            refs_path.display()
+        );
+        std::fs::create_dir_all(refs_path.parent().unwrap()).unwrap();
+        std::fs::write(&refs_path, toml::to_string_pretty(&refs_file).unwrap()).unwrap();
+
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+
+        let code = app
+            .registry
+            .find("HDRTEST00000")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("the rebake must mint a share code");
+        let metas = share_export::decode_archive_meta(&code).unwrap();
+        assert_eq!(
+            metas,
+            vec![share_export::ArchiveMeta {
+                name: record.name,
+                size: record.size,
+                hash: record.hash,
+            }]
+        );
     }
 
     fn counts_of(app: &OrchestratorApp) -> (u32, u32) {

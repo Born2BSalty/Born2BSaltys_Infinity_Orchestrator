@@ -984,6 +984,10 @@ mod tests {
         let error = config_files_error(&bad).expect("a bad entry is refused");
         assert!(error.starts_with("Config files: "), "got: {error}");
 
+        let dot_only = base_form_with(|f| f.config_files = rows(&["a.ini", ".../x.ini"]));
+        let error = config_files_error(&dot_only).expect("a dot-only segment is refused");
+        assert!(error.starts_with("Config files: "), "got: {error}");
+
         let good = base_form_with(|f| f.config_files = rows(&["a.ini"]));
         assert_eq!(config_files_error(&good), None);
 
