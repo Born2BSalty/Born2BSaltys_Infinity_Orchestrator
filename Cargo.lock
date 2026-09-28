@@ -687,7 +687,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "crc32fast",
  "eframe",
  "egui-toast",
  "egui_kittest",

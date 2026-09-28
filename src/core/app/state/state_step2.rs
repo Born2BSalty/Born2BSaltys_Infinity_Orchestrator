@@ -6,9 +6,8 @@ use std::sync::Arc;
 
 use crate::app::github_forks_list::ForksListState;
 use crate::app::github_release_list::ReleaseListState;
-use crate::app::modlist_config_discovery::{ConfigDiscovery, ConfigFileReason};
 use crate::app::source_form::SourceForm;
-use crate::app::step2_action::{ModSourceEditDestination, TravelFilesState};
+use crate::app::step2_action::ModSourceEditDestination;
 use crate::app::versions_view::{KnownExtras, VersionsView};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +61,6 @@ pub enum VersionsSheet {
     EditSource,
     Forks,
     Note,
-    TravelFiles,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +93,6 @@ pub struct VersionsDrawerUi {
     pub(crate) fetch_queue: Vec<String>,
     pub(crate) fetching_tp2: Option<String>,
     pub(crate) scan_view_cache: Option<Arc<VersionsView>>,
-    pub(crate) travel_files: Option<TravelFilesState>,
 }
 
 impl VersionsDrawerUi {
@@ -104,37 +101,6 @@ impl VersionsDrawerUi {
         self.sheet_tp2 = Some(tp2);
         self.sheet_just_opened = true;
         self.sheet_error = None;
-    }
-
-    pub(crate) fn show_travel_files(&mut self, mod_name: String, discovery: ConfigDiscovery) {
-        let rows = discovery
-            .files
-            .into_iter()
-            .map(|file| {
-                let reason = match file.reason {
-                    ConfigFileReason::Changed => "changed from the archive",
-                    ConfigFileReason::Catalog => "named by the catalog",
-                };
-                (file.relative_path, reason)
-            })
-            .collect();
-        self.travel_files = Some(TravelFilesState {
-            mod_name,
-            compared_against: discovery.compared_against,
-            rows,
-            truncated: discovery.truncated,
-            missing: discovery.missing_catalog_files,
-            invalid: discovery.invalid_catalog_names,
-            error: None,
-        });
-    }
-
-    pub(crate) fn show_travel_files_error(&mut self, mod_name: String, error: String) {
-        self.travel_files = Some(TravelFilesState {
-            mod_name,
-            error: Some(error),
-            ..TravelFilesState::default()
-        });
     }
 
     pub(crate) fn focus_card(&mut self, tp2_key: String) {

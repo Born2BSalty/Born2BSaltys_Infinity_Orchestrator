@@ -91,13 +91,13 @@ fn step3_conflicts_resolved(state: &WizardState) -> bool {
         && (!game_authority::has_slot(game, GameSlot::Second) || !state.step3.bg2ee_has_conflict)
 }
 
-fn step3_has_no_real_items(state: &WizardState) -> bool {
+pub(crate) fn step3_has_no_real_items(state: &WizardState) -> bool {
     let bgee_has = state.step3.bgee_items.iter().any(|i| !i.is_parent);
     let bg2_has = state.step3.bg2ee_items.iter().any(|i| !i.is_parent);
     !(bgee_has || bg2_has)
 }
 
-fn step2_selection_signature(state: &WizardState) -> String {
+pub(crate) fn step2_selection_signature(state: &WizardState) -> String {
     let mut entries: Vec<String> = Vec::new();
     let mut collect = |tag: &str, mods: &[Step2ModState]| {
         for m in mods {

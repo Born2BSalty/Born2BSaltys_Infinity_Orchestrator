@@ -38,7 +38,7 @@ pub fn prepare_install_dirs_and_maybe_import(
     }
 
     import_modlist_share_code(wizard_state, share_code.trim())
-        .map_err(|err| format!("import_modlist_share_code failed: {err}"))?;
+        .map_err(|err| format!("Could not import the share code: {err}"))?;
 
     arm_explicit_reproduce(wizard_state);
 

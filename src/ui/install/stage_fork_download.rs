@@ -16,8 +16,8 @@ use crate::ui::workspace::workspace_state_loader;
 
 const fn fork_download_copy() -> DownloadScreenCopy {
     DownloadScreenCopy {
-        title: "Downloading fork",
-        sub: "fetching the parent's mods \u{2014} Step 2 opens automatically when ready",
+        title: "Downloading mods",
+        sub: "fetching this modlist's mods \u{2014} Step 2 opens automatically when ready",
         hint: Some(
             "after download: components auto-selected \u{00B7} order applied \u{00B7} lands on Step 2",
         ),
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn fork_copy_is_spec_5_3_verbatim() {
         let c = fork_download_copy();
-        assert_eq!(c.title, "Downloading fork");
+        assert_eq!(c.title, "Downloading mods");
         assert_eq!(
             c.hint,
             Some(

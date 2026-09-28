@@ -186,15 +186,18 @@ fn collapsed_blocks_for_tab(workspace: &ModlistWorkspaceState, tab: &str) -> Vec
 }
 
 pub fn sync_step3_from_step2_if_changed(wizard_state: &mut WizardState) {
-    use crate::app::app_nav::{NextAction, decide_next_action};
+    use crate::app::app_nav::{step2_selection_signature, step3_has_no_real_items};
     use crate::app::app_step3_sync_flow::sync_step3_from_step2;
 
-    let saved_step = wizard_state.current_step;
-    wizard_state.current_step = 1;
-    let action = decide_next_action(wizard_state);
-    wizard_state.current_step = saved_step;
-
-    if let NextAction::SyncStep3AndAdvance { signature } = action {
+    if wizard_state.step2.is_scanning || wizard_state.step1.installs_exactly_from_weidu_logs() {
+        return;
+    }
+    let signature = step2_selection_signature(wizard_state);
+    let changed = wizard_state
+        .last_step2_sync_signature
+        .as_deref()
+        .is_none_or(|existing| existing != signature);
+    if step3_has_no_real_items(wizard_state) || changed {
         sync_step3_from_step2(wizard_state);
         wizard_state.set_last_step2_sync_signature(signature);
     }
@@ -714,6 +717,81 @@ mod tests {
              unchecked-in-place)"
         );
         assert!(ws.step3.bgee_items.is_empty());
+    }
+
+    #[test]
+    fn save_sync_rebuilds_step3_to_empty_when_nothing_is_ticked() {
+        let mut ws = WizardState::default();
+        ws.step1.game_install = "BGEE".to_string();
+        ws.step2.bgee_mods = vec![
+            mod_state(
+                "EEFixPack",
+                "EEFIXPACK/EEFIXPACK.TP2",
+                vec![comp("0", "Core Fixes")],
+            ),
+            mod_state("Tweaks", "TWEAKS/TWEAKS.TP2", vec![comp("1", "Tweak")]),
+        ];
+        for (order, scanned) in ws.step2.bgee_mods.iter_mut().enumerate() {
+            scanned.checked = true;
+            scanned.components[0].checked = true;
+            scanned.components[0].selected_order = Some(order + 1);
+        }
+
+        sync_step3_from_step2_if_changed(&mut ws);
+        let leaves = ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count();
+        assert_eq!(leaves, 2);
+
+        for scanned in &mut ws.step2.bgee_mods {
+            scanned.checked = false;
+            scanned.components[0].checked = false;
+            scanned.components[0].selected_order = None;
+        }
+
+        sync_step3_from_step2_if_changed(&mut ws);
+        assert!(ws.step3.bgee_items.iter().all(|i| i.is_parent));
+        let empty_signature = crate::app::app_nav::step2_selection_signature(&ws);
+        assert_eq!(
+            ws.last_step2_sync_signature.as_deref(),
+            Some(empty_signature.as_str())
+        );
+    }
+
+    #[test]
+    fn save_sync_never_rebuilds_step3_while_a_scan_runs() {
+        let mut ws = WizardState::default();
+        ws.step1.game_install = "BGEE".to_string();
+        ws.step2.bgee_mods = vec![mod_state(
+            "EEFixPack",
+            "EEFIXPACK/EEFIXPACK.TP2",
+            vec![comp("0", "Core Fixes")],
+        )];
+        ws.step2.bgee_mods[0].checked = true;
+        ws.step2.bgee_mods[0].components[0].checked = true;
+        ws.step2.bgee_mods[0].components[0].selected_order = Some(1);
+        sync_step3_from_step2_if_changed(&mut ws);
+        assert_eq!(
+            ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
+            1
+        );
+
+        ws.step2.is_scanning = true;
+        ws.step2.bgee_mods.clear();
+        sync_step3_from_step2_if_changed(&mut ws);
+
+        assert_eq!(
+            ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
+            1
+        );
+
+        ws.step2.is_scanning = false;
+        ws.step1.install_mode =
+            crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        sync_step3_from_step2_if_changed(&mut ws);
+
+        assert_eq!(
+            ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
+            1
+        );
     }
 
     use crate::registry::store_workspace::WorkspaceStore;

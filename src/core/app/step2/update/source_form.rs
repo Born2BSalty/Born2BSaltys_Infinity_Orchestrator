@@ -32,7 +32,6 @@ pub(crate) enum AssetPick {
 pub(crate) struct KeptFields {
     pub(crate) exact_github: Vec<String>,
     pub(crate) tp2_rename: Option<ModDownloadTp2Rename>,
-    pub(crate) config_files: Vec<String>,
     pub(crate) source_default: bool,
     pub(crate) pkg_windows: Option<String>,
     pub(crate) pkg_linux: Option<String>,
@@ -70,6 +69,8 @@ pub(crate) struct SourceForm {
     pub(crate) pkg_macos: String,
     pub(crate) aliases_text: String,
     pub(crate) subdir_require: String,
+    pub(crate) config_files: Vec<String>,
+    pub(crate) config_files_focus_pending: Option<usize>,
     pub(crate) save_to: ModSourceEditDestination,
     pub(crate) advanced_open: bool,
     pub(crate) release_query: String,
@@ -195,6 +196,8 @@ pub(crate) fn from_source(
         pkg_macos: source.pkg_macos.clone().unwrap_or_default(),
         aliases_text: source.aliases.join(", "),
         subdir_require: source.subdir_require.clone().unwrap_or_default(),
+        config_files: source.config_files.clone(),
+        config_files_focus_pending: None,
         save_to,
         advanced_open: false,
         release_query: String::new(),
@@ -206,7 +209,6 @@ pub(crate) fn from_source(
         kept: KeptFields {
             exact_github: source.exact_github.clone(),
             tp2_rename: source.tp2_rename.clone(),
-            config_files: source.config_files.clone(),
             source_default: source.source_default,
             pkg_windows: source.pkg_windows.clone(),
             pkg_linux: source.pkg_linux.clone(),
@@ -226,7 +228,7 @@ pub(crate) fn to_source(form: &SourceForm) -> ModDownloadSource {
         source_default: form.identity.is_new_mod || form.kept.source_default,
         exact_github: form.kept.exact_github.clone(),
         tp2_rename: form.kept.tp2_rename.clone(),
-        config_files: form.kept.config_files.clone(),
+        config_files: normalised_config_files(&form.config_files),
         aliases: parse_aliases(&form.aliases_text),
         subdir_require: non_empty_owned(&form.subdir_require),
         ..ModDownloadSource::default()
@@ -419,6 +421,30 @@ fn parse_aliases(text: &str) -> Vec<String> {
         .collect()
 }
 
+fn normalised_config_files(rows: &[String]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for name in rows
+        .iter()
+        .map(|row| row.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.replace('\\', "/"))
+    {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+pub(crate) fn config_files_error(form: &SourceForm) -> Option<String> {
+    normalised_config_files(&form.config_files)
+        .iter()
+        .find_map(|entry| {
+            crate::app::modlist_config_files::validate_relative_config_path(entry).err()
+        })
+        .map(|err| format!("Config files: {err}"))
+}
+
 fn non_empty(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
 }
@@ -471,6 +497,8 @@ mod tests {
             pkg_macos: String::new(),
             aliases_text: "alt1, alt2".to_string(),
             subdir_require: "core".to_string(),
+            config_files: Vec::new(),
+            config_files_focus_pending: None,
             save_to: ModSourceEditDestination::ThisModlist,
             advanced_open: false,
             release_query: String::new(),
@@ -905,7 +933,6 @@ mod tests {
                 from: "old.tp2".to_string(),
                 to: "new.tp2".to_string(),
             });
-            f.kept.config_files = vec!["config.ini".to_string()];
         });
         let source = to_source(&form);
         assert_eq!(source.exact_github, vec!["owner/other".to_string()]);
@@ -916,6 +943,54 @@ mod tests {
                 to: "new.tp2".to_string(),
             })
         );
-        assert_eq!(source.config_files, vec!["config.ini".to_string()]);
+    }
+
+    #[test]
+    fn config_files_round_trip_through_the_rows() {
+        let seed = vec!["a.ini".to_string(), "sub/b.ini".to_string()];
+        let source = ModDownloadSource {
+            github: Some("owner/repo".to_string()),
+            config_files: seed.clone(),
+            ..ModDownloadSource::default()
+        };
+        let form = from_source(
+            &source,
+            SourceFormIdentity::default(),
+            ModSourceEditDestination::ThisModlist,
+            "repo",
+        );
+        assert_eq!(form.config_files, seed);
+        assert_eq!(to_source(&form).config_files, seed);
+    }
+
+    fn rows(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_string()).collect()
+    }
+
+    #[test]
+    fn config_files_rows_are_trimmed_deduped_and_slash_normalised() {
+        let form = base_form_with(|f| {
+            f.config_files = rows(&[" a.ini ", "sub\\b.ini", "", "a.ini"]);
+        });
+        assert_eq!(
+            to_source(&form).config_files,
+            vec!["a.ini".to_string(), "sub/b.ini".to_string()]
+        );
+    }
+
+    #[test]
+    fn config_files_error_names_the_bad_entry() {
+        let bad = base_form_with(|f| f.config_files = rows(&["a.ini", "../x.ini"]));
+        let error = config_files_error(&bad).expect("a bad entry is refused");
+        assert!(error.starts_with("Config files: "), "got: {error}");
+
+        let good = base_form_with(|f| f.config_files = rows(&["a.ini"]));
+        assert_eq!(config_files_error(&good), None);
+
+        let empty = base_form_with(|f| f.config_files.clear());
+        assert_eq!(config_files_error(&empty), None);
+
+        let blank = base_form_with(|f| f.config_files = vec![String::new()]);
+        assert_eq!(config_files_error(&blank), None);
     }
 }

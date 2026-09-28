@@ -436,10 +436,6 @@ fn render_edit_source_body(
 ) -> Option<Step2Action> {
     let has_modlist_destination = mod_downloads::active_modlist_downloads_path().is_some();
     let form = step2.versions_ui.source_form.as_mut()?;
-    if let Some(error) = form.error.clone() {
-        ui.label(egui::RichText::new(error).color(redesign_error(palette)));
-        ui.add_space(8.0);
-    }
     let form_env = versions_form::FormEnv {
         has_modlist_destination,
         logged_in: env.logged_in,
@@ -509,11 +505,31 @@ fn render_edit_source_footer(
     {
         if let Some(message) = missing_field_message(form) {
             form.error = Some(message);
+        } else if let Some(message) = source_form::config_files_error(form) {
+            form.error = Some(message);
         } else if outcome.action.is_none() {
             form.error = None;
             outcome.action = Some(Step2Action::SaveSourceForm);
         }
     }
+    if let Some(error) = form.error.as_deref() {
+        render_footer_error(ui, palette, error);
+    }
+}
+
+fn render_footer_error(ui: &mut egui::Ui, palette: ThemePalette, error: &str) {
+    ui.add_space(4.0);
+    ui.add(
+        egui::Label::new(
+            egui::RichText::new(error)
+                .font(egui::FontId::new(
+                    12.0,
+                    egui::FontFamily::Name("poppins_light".into()),
+                ))
+                .color(redesign_error(palette)),
+        )
+        .wrap_mode(egui::TextWrapMode::Truncate),
+    );
 }
 
 pub(crate) fn render_forks(
@@ -686,169 +702,6 @@ fn render_fork_row(
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette)),
     );
     ui.add_space(6.0);
-}
-
-pub(crate) fn render_travel_files(
-    ctx: &egui::Context,
-    palette: ThemePalette,
-    drawer_rect: egui::Rect,
-    step2: &Step2State,
-    escape_active: bool,
-) -> SheetOutcome {
-    let escape_close = escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape));
-    let mod_name = step2
-        .versions_ui
-        .travel_files
-        .as_ref()
-        .map_or("", |travel| travel.mod_name.as_str());
-    let mut outcome = render_sheet_shell(
-        ctx,
-        palette,
-        "versions_sheet_travel_files",
-        drawer_rect,
-        |ui, outcome| {
-            egui::Frame::default()
-                .inner_margin(egui::Margin::symmetric(22, 18))
-                .show(ui, |ui| {
-                    render_header(ui, palette, "Files that travel", mod_name, outcome);
-                    ui.add_space(12.0);
-                    let footer_h = redesign_btn_height(ui, true) + 12.0;
-                    let body_h = (ui.available_height() - footer_h).max(0.0);
-                    egui::ScrollArea::vertical()
-                        .id_salt("versions_travel_files_scroll")
-                        .auto_shrink([false, false])
-                        .max_height(body_h)
-                        .show(ui, |ui| render_travel_files_body(ui, palette, step2));
-                    ui.add_space(12.0);
-                    ui.horizontal(|ui| render_travel_files_footer(ui, palette, outcome));
-                });
-        },
-    );
-    if escape_close {
-        outcome.close = true;
-    }
-    outcome
-}
-
-fn render_travel_files_footer(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    outcome: &mut SheetOutcome,
-) {
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        if redesign_btn(
-            ui,
-            palette,
-            "Close",
-            BtnOpts {
-                small: true,
-                ..Default::default()
-            },
-        )
-        .clicked()
-        {
-            outcome.close = true;
-        }
-    });
-}
-
-fn travel_note(ui: &mut egui::Ui, palette: ThemePalette, text: &str) {
-    ui.label(
-        egui::RichText::new(text)
-            .size(12.0)
-            .family(egui::FontFamily::Name("poppins_light".into()))
-            .color(redesign_text_muted(palette)),
-    );
-}
-
-fn render_travel_files_body(ui: &mut egui::Ui, palette: ThemePalette, step2: &Step2State) {
-    let Some(travel) = step2.versions_ui.travel_files.as_ref() else {
-        return;
-    };
-    if let Some(error) = travel.error.as_deref() {
-        ui.label(egui::RichText::new(error).color(redesign_error(palette)));
-        return;
-    }
-    match travel.compared_against.as_deref() {
-        Some(archive) => {
-            let file_name = std::path::Path::new(archive).file_name().map_or_else(
-                || archive.to_string(),
-                |name| name.to_string_lossy().into_owned(),
-            );
-            travel_note(ui, palette, &format!("Compared with {file_name}"));
-        }
-        None => travel_note(
-            ui,
-            palette,
-            "No fetched archive to compare with; catalog names only",
-        ),
-    }
-    ui.add_space(10.0);
-    if travel.rows.is_empty() {
-        ui.label(
-            egui::RichText::new("Nothing beyond the mod as fetched will travel.")
-                .size(13.0)
-                .family(egui::FontFamily::Name("poppins_light".into()))
-                .color(redesign_text_primary(palette)),
-        );
-    }
-    for (path, reason) in &travel.rows {
-        render_travel_row(ui, palette, path, reason);
-    }
-    if travel.truncated {
-        ui.add_space(8.0);
-        travel_note(
-            ui,
-            palette,
-            "Some files were left out: the share carries at most 2 MB of config files per mod.",
-        );
-    }
-    render_travel_name_list(ui, palette, "Missing on disk", &travel.missing);
-    render_travel_name_list(ui, palette, "Ignored (invalid name)", &travel.invalid);
-}
-
-fn render_travel_row(ui: &mut egui::Ui, palette: ThemePalette, path: &str, reason: &str) {
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(path)
-                .font(egui::FontId::monospace(13.0))
-                .color(redesign_text_primary(palette)),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(
-                egui::RichText::new(reason)
-                    .size(12.0)
-                    .family(egui::FontFamily::Name("poppins_light".into()))
-                    .color(redesign_text_muted(palette)),
-            );
-        });
-    });
-    ui.painter().hline(
-        ui.max_rect().x_range(),
-        ui.cursor().top(),
-        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette)),
-    );
-    ui.add_space(6.0);
-}
-
-fn render_travel_name_list(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    label: &str,
-    names: &[String],
-) {
-    if names.is_empty() {
-        return;
-    }
-    ui.add_space(12.0);
-    travel_note(ui, palette, label);
-    for name in names {
-        ui.label(
-            egui::RichText::new(name)
-                .font(egui::FontId::monospace(13.0))
-                .color(redesign_error(palette)),
-        );
-    }
 }
 
 pub(crate) struct NoteEnv<'a> {

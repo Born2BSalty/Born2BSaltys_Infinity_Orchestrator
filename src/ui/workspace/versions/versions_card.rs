@@ -388,7 +388,11 @@ fn render_selector(
         );
         paint_selector_texts(ui, palette, text_rect, card);
     }
-    response
+    if card.source_id.is_some() {
+        response.on_hover_text(card.selector_hover.clone())
+    } else {
+        response
+    }
 }
 
 fn paint_selector_texts(
@@ -401,7 +405,7 @@ fn paint_selector_texts(
     let texts = if card.source_id.is_some() {
         vec![
             egui::RichText::new(card.layer)
-                .size(12.0)
+                .size(10.0)
                 .family(light.clone())
                 .color(redesign_text_faint(palette)),
             egui::RichText::new(&card.rule_words)

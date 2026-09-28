@@ -4,6 +4,7 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,34 @@ use crate::app::state::WizardState;
 use crate::app::step5::diagnostics::build_weidu_export_lines;
 
 const SHARE_CODE_PREFIX: &str = "BIO-MODLIST-V1:";
+
+static PENDING_WARNINGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static LAST_WARNINGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+pub(crate) fn push_pending_warnings(warnings: Vec<String>) {
+    let mut last = LAST_WARNINGS.lock().unwrap_or_else(PoisonError::into_inner);
+    if *last == warnings {
+        return;
+    }
+    last.clone_from(&warnings);
+    drop(last);
+    if warnings.is_empty() {
+        return;
+    }
+    PENDING_WARNINGS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .extend(warnings);
+}
+
+#[must_use]
+pub(crate) fn take_pending_warnings() -> Vec<String> {
+    std::mem::take(
+        &mut *PENDING_WARNINGS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+    )
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum ExportLogSource {
@@ -87,7 +116,7 @@ pub(crate) fn export_modlist_share_code_with(
     for config_warning in &config_warnings {
         warn!("{config_warning}");
     }
-    crate::app::modlist_config_discovery::push_pending_warnings(config_warnings);
+    push_pending_warnings(config_warnings);
     let mut payload = json!({
         "format_version": 1,
         "bio_version": env!("CARGO_PKG_VERSION"),
@@ -484,14 +513,19 @@ fn write_imported_weidu_logs(
 ) -> Result<(), String> {
     match step1.game_install.as_str() {
         "EET" => {
-            write_imported_log(
+            let rewritten_bg2ee =
+                rewrite_imported_eet_bg2ee_wlb_paths(step1, payload.weidu_logs.bg2ee.as_deref())?;
+            if count_weidu_entries(payload.weidu_logs.bgee.as_deref()) == 0
+                && count_weidu_entries(rewritten_bg2ee.as_deref()) == 0
+            {
+                return Err("Imported WeiDU logs have no entries.".to_string());
+            }
+            write_imported_log_allow_empty(
                 "BGEE",
                 payload.weidu_logs.bgee.as_deref(),
                 &import_log_target_path(step1, true)?,
             )?;
-            let rewritten_bg2ee =
-                rewrite_imported_eet_bg2ee_wlb_paths(step1, payload.weidu_logs.bg2ee.as_deref())?;
-            write_imported_log(
+            write_imported_log_allow_empty(
                 "BG2EE",
                 rewritten_bg2ee.as_deref(),
                 &import_log_target_path(step1, false)?,
@@ -632,6 +666,18 @@ fn write_imported_log(label: &str, text: Option<&str>, path: &Path) -> Result<()
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
     fs::write(path, text).map_err(|err| format!("Write {label} WeiDU log failed: {err}"))
+}
+
+fn write_imported_log_allow_empty(
+    label: &str,
+    text: Option<&str>,
+    path: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::write(path, text.unwrap_or_default())
+        .map_err(|err| format!("Write {label} WeiDU log failed: {err}"))
 }
 
 fn write_text_file(path: PathBuf, text: &str) -> Result<(), String> {
@@ -868,11 +914,6 @@ fn export_mod_config_files(
     let sources = crate::app::mod_downloads::load_mod_download_sources();
     let installed_source_ids =
         crate::app::app_step2_update_source_refs::load_installed_source_ids();
-    let installed_refs = crate::app::app_step2_update_source_refs::load_refs_file_at(
-        &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
-    )
-    .refs;
-    let archive_dir = state.step1.mods_archive_folder.trim();
     let mut exported = Vec::new();
     let mut warnings = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
@@ -884,6 +925,13 @@ fn export_mod_config_files(
         .iter()
         .chain(state.step2.bg2ee_mods.iter())
     {
+        if mod_state
+            .components
+            .iter()
+            .all(|component| !component.checked)
+        {
+            continue;
+        }
         if !walked_tp2_paths.insert(normalized_tp2_path(&mod_state.tp2_path)) {
             continue;
         }
@@ -895,99 +943,63 @@ fn export_mod_config_files(
         let Some(mod_root) = mod_config_root(&mod_state.tp2_path) else {
             continue;
         };
-        let tp2_key = crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
-        let archive = (!archive_dir.is_empty())
-            .then(|| {
-                crate::app::modlist_config_discovery::find_fetched_archive(
-                    Path::new(archive_dir),
-                    &mod_state.tp_file,
-                    &source.source_id,
-                    installed_refs.get(&tp2_key).map(String::as_str),
-                )
-            })
-            .flatten();
-        let discovery = crate::app::modlist_config_discovery::discover_config_files(
-            &mod_root,
-            archive.as_deref(),
-            &mod_state.tp_file,
-            &source.aliases,
-            source.subdir_require.as_deref(),
-            &sources.config_files_for(&mod_state.tp_file),
-        )?;
-        if let Some(warning) = missing_catalog_warning(&mod_state.name, &discovery) {
-            warnings.push(warning);
+        let tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&source.tp2);
+        let mut missing = Vec::new();
+        let mut invalid = Vec::new();
+        for name in &source.config_files {
+            let Ok(relative_path) =
+                crate::app::modlist_config_files::validate_relative_config_path(name)
+            else {
+                invalid.push(name.clone());
+                continue;
+            };
+            if crate::app::modlist_config_files::is_os_artifact_file(&relative_path) {
+                continue;
+            }
+            let path = mod_root.join(&relative_path);
+            if !path.is_file() {
+                missing.push(name.clone());
+                continue;
+            }
+            let bytes = fs::read(&path)
+                .map_err(|err| format!("Read mod config failed ({}): {err}", path.display()))?;
+            let relative_path = relative_path.to_string_lossy().replace('\\', "/");
+            let key = (
+                tp2.clone(),
+                source.source_id.trim().to_ascii_lowercase(),
+                relative_path.clone(),
+            );
+            if seen.insert(key) {
+                exported.push(ModlistShareConfigFile {
+                    tp2: tp2.clone(),
+                    source_id: source.source_id.clone(),
+                    relative_path,
+                    base64_data: base64url_encode(&bytes),
+                });
+            }
         }
-        if let Some(warning) = invalid_catalog_warning(&mod_state.name, &discovery) {
-            warnings.push(warning);
+        if !missing.is_empty() {
+            warnings.push(format!(
+                "{}: {} config file(s) named by its source are missing on disk: {}",
+                mod_state.name,
+                missing.len(),
+                missing.join(", ")
+            ));
         }
-        push_discovered_config_files(&mut exported, &mut seen, &source, discovery);
+        if !invalid.is_empty() {
+            warnings.push(format!(
+                "{}: {} config file name(s) are invalid and were skipped: {}",
+                mod_state.name,
+                invalid.len(),
+                invalid.join(", ")
+            ));
+        }
     }
     Ok((exported, warnings))
 }
 
-fn missing_catalog_warning(
-    mod_name: &str,
-    discovery: &crate::app::modlist_config_discovery::ConfigDiscovery,
-) -> Option<String> {
-    if discovery.compared_against.is_some() || discovery.missing_catalog_files.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "{mod_name}: {} config file(s) named by the catalog are missing on disk: {}",
-        discovery.missing_catalog_files.len(),
-        discovery.missing_catalog_files.join(", ")
-    ))
-}
-
-fn invalid_catalog_warning(
-    mod_name: &str,
-    discovery: &crate::app::modlist_config_discovery::ConfigDiscovery,
-) -> Option<String> {
-    if discovery.invalid_catalog_names.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "{mod_name}: {} config file name(s) in the catalog are invalid and were skipped: {}",
-        discovery.invalid_catalog_names.len(),
-        discovery.invalid_catalog_names.join(", ")
-    ))
-}
-
 fn normalized_tp2_path(tp2_path: &str) -> String {
     tp2_path.trim().replace('\\', "/").to_ascii_lowercase()
-}
-
-fn push_discovered_config_files(
-    exported: &mut Vec<ModlistShareConfigFile>,
-    seen: &mut std::collections::BTreeSet<(String, String, String)>,
-    source: &crate::app::mod_downloads::ModDownloadSource,
-    discovery: crate::app::modlist_config_discovery::ConfigDiscovery,
-) {
-    let tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&source.tp2);
-    if discovery.truncated {
-        warn!("{tp2}: config files over the per-mod share limit were left out");
-    }
-    for file in discovery.files {
-        let key = (
-            tp2.clone(),
-            source.source_id.trim().to_ascii_lowercase(),
-            file.relative_path.clone(),
-        );
-        if !seen.insert(key) {
-            continue;
-        }
-        tracing::debug!(
-            "{tp2}: config file {} travels ({:?})",
-            file.relative_path,
-            file.reason
-        );
-        exported.push(ModlistShareConfigFile {
-            tp2: tp2.clone(),
-            source_id: source.source_id.clone(),
-            relative_path: file.relative_path,
-            base64_data: base64url_encode(&file.bytes),
-        });
-    }
 }
 
 fn resolve_mod_config_source(
@@ -2442,6 +2454,183 @@ mod tests {
         assert!(
             written.contains("channel = \"preonly\""),
             "pre-release must map to preonly on import; got:\n{written}"
+        );
+    }
+
+    fn per_modlist_source_toml_with_config(tp2: &str, config_files: &[&str]) -> String {
+        let names = config_files
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "[[mods]]\nname = \"{tp2}\"\ntp2 = \"{tp2}\"\n\n  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  url = \"https://github.com/T/M\"\n  repo = \"T/M\"\n  tag = \"v1\"\n  default = true\n  config_files = [{names}]\n"
+        )
+    }
+
+    fn config_fixture_mod(
+        root: &std::path::Path,
+        tp2: &str,
+        checked: bool,
+    ) -> crate::app::state::Step2ModState {
+        let mod_dir = root.join("mods").join(tp2);
+        std::fs::create_dir_all(&mod_dir).expect("create mod dir");
+        std::fs::write(mod_dir.join(format!("{tp2}.tp2")), "BACKUP ~x~\n").expect("write tp2");
+        std::fs::write(mod_dir.join(format!("{tp2}.ini")), "value=edited\n").expect("write ini");
+        crate::app::state::Step2ModState {
+            tp2_path: mod_dir
+                .join(format!("{tp2}.tp2"))
+                .to_string_lossy()
+                .to_string(),
+            components: vec![crate::app::state::Step2ComponentState {
+                checked,
+                ..checked_component("0")
+            }],
+            ..make_step2_mod(tp2, tp2)
+        }
+    }
+
+    #[test]
+    fn config_files_export_skips_unchecked_mods() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = ShareImportTestRoot::new("config_export_unchecked");
+        std::fs::write(
+            root.modlist_dir.join("mod_downloads_user.toml"),
+            format!(
+                "{}\n{}",
+                per_modlist_source_toml_with_config("biocfgchecked", &["biocfgchecked.ini"]),
+                per_modlist_source_toml_with_config("biocfgunchecked", &["biocfgunchecked.ini"])
+            ),
+        )
+        .expect("write modlist sources");
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![
+            config_fixture_mod(&root.root, "biocfgchecked", true),
+            config_fixture_mod(&root.root, "biocfgunchecked", false),
+        ];
+
+        let (exported, _warnings) = export_mod_config_files(&state).expect("export runs");
+
+        let exported = exported
+            .iter()
+            .map(|file| (file.tp2.as_str(), file.relative_path.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(exported, vec![("biocfgchecked", "biocfgchecked.ini")]);
+    }
+
+    #[test]
+    fn config_files_export_warns_about_missing_and_invalid_names() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = ShareImportTestRoot::new("config_export_warnings");
+        std::fs::write(
+            root.modlist_dir.join("mod_downloads_user.toml"),
+            per_modlist_source_toml_with_config(
+                "biocfgwarn",
+                &["present.ini", "absent.ini", "../escape.ini"],
+            ),
+        )
+        .expect("write modlist sources");
+        let fixture = config_fixture_mod(&root.root, "biocfgwarn", true);
+        let mod_dir = root.root.join("mods").join("biocfgwarn");
+        std::fs::write(mod_dir.join("present.ini"), "value=1\n").expect("write present ini");
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![fixture];
+
+        let (exported, warnings) = export_mod_config_files(&state).expect("export runs");
+
+        let exported = exported
+            .iter()
+            .map(|file| file.relative_path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(exported, vec!["present.ini"]);
+        assert_eq!(
+            warnings,
+            vec![
+                "biocfgwarn: 1 config file(s) named by its source are missing on disk: absent.ini"
+                    .to_string(),
+                "biocfgwarn: 1 config file name(s) are invalid and were skipped: ../escape.ini"
+                    .to_string(),
+            ]
+        );
+    }
+
+    struct ImportLogRoot(std::path::PathBuf);
+
+    impl ImportLogRoot {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_modlist_share_import_logs_{}_{id}_{label}",
+                std::process::id()
+            )));
+            std::fs::create_dir_all(&root.0).expect("create temp root");
+            root
+        }
+
+        fn eet_step1(&self) -> crate::app::state::Step1State {
+            crate::app::state::Step1State {
+                game_install: "EET".to_string(),
+                eet_bgee_log_folder: self.0.join("bgee").to_string_lossy().to_string(),
+                eet_bg2ee_log_folder: self.0.join("bg2ee").to_string_lossy().to_string(),
+                ..crate::app::state::Step1State::default()
+            }
+        }
+    }
+
+    impl Drop for ImportLogRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const EET_LOG_HEADER: &str =
+        "// Log of Currently Installed WeiDU Mods\n// The top of the file is the 'oldest' mod\n";
+
+    fn eet_payload(first_side: &str, second_side: &str) -> ModlistSharePayload {
+        serde_json::from_value(serde_json::json!({
+            "format_version": 1,
+            "game_install": "EET",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": { "bgee": first_side, "bg2ee": second_side }
+        }))
+        .expect("payload parses")
+    }
+
+    #[test]
+    fn eet_import_accepts_one_empty_side() {
+        let root = ImportLogRoot::new("eet_one_side");
+        let step1 = root.eet_step1();
+        let entries_log = format!("{EET_LOG_HEADER}~MOD/MOD.TP2~ #0 #0 // A component: 1.0\n");
+        let payload = eet_payload(&entries_log, EET_LOG_HEADER);
+
+        let result = write_imported_weidu_logs(&step1, &payload);
+
+        assert_eq!(result, Ok(()));
+        let first_written =
+            std::fs::read_to_string(root.0.join("bgee").join("weidu.log")).expect("bgee log");
+        let second_written =
+            std::fs::read_to_string(root.0.join("bg2ee").join("weidu.log")).expect("bg2ee log");
+        assert_eq!(first_written, entries_log);
+        assert_eq!(second_written, EET_LOG_HEADER);
+    }
+
+    #[test]
+    fn eet_import_refuses_both_sides_empty() {
+        let root = ImportLogRoot::new("eet_both_empty");
+        let step1 = root.eet_step1();
+        let payload = eet_payload(EET_LOG_HEADER, EET_LOG_HEADER);
+
+        let result = write_imported_weidu_logs(&step1, &payload);
+
+        assert_eq!(
+            result,
+            Err("Imported WeiDU logs have no entries.".to_string())
         );
     }
 }

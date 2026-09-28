@@ -1718,7 +1718,7 @@ impl OrchestratorApp {
         for msg in clipboard::take_pending_toasts(ctx) {
             self.notification_manager.success(msg);
         }
-        for warning in crate::app::modlist_config_discovery::take_pending_warnings() {
+        for warning in crate::app::modlist_share::take_pending_warnings() {
             self.notification_manager.warn(warning);
         }
         if help_button::take_export_request(ctx) {

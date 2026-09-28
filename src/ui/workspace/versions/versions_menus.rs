@@ -417,7 +417,6 @@ pub(crate) struct KebabEnv<'a> {
     pub(crate) card: &'a VersionCard,
     pub(crate) tiers: &'a mod_downloads::SourceTiers,
     pub(crate) bookmark_label: Option<&'a str>,
-    pub(crate) on_disk: bool,
 }
 
 fn render_fetch_kebab_item(
@@ -541,13 +540,6 @@ fn render_kebab_body(
         outcome.close = true;
     }
     render_note_kebab_item(ui, palette, env.card, env.tiers, busy, outcome);
-    if env.on_disk && menu_item(ui, palette, "Files that travel\u{2026}", busy) {
-        outcome.action = Some(Step2Action::ShowTravelFiles {
-            tp2: env.card.tp2.clone(),
-        });
-        outcome.open_sheet = Some(VersionsSheet::TravelFiles);
-        outcome.close = true;
-    }
 }
 
 pub(crate) fn render_kebab_menu(

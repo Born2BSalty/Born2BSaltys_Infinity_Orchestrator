@@ -11,8 +11,7 @@ use crate::app::controller::util::open_in_shell;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
 use crate::app::mod_source_history;
-use crate::app::modlist_config_discovery;
-use crate::app::state::{Step2ModState, Step2Selection, WizardState};
+use crate::app::state::{Step2Selection, WizardState};
 use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
 use crate::app::step2_worker::Step2ScanEvent;
 
@@ -152,7 +151,6 @@ fn handle_step2_download_source_action(
             who,
         } => save_source_note(state, &tp2, &signature, &text, &who),
         Step2Action::BookmarkOnDisk { tp2, card_key } => bookmark_on_disk(state, &tp2, &card_key),
-        Step2Action::ShowTravelFiles { tp2 } => show_travel_files(state, &tp2),
         _ => {}
     }
 }
@@ -332,7 +330,7 @@ fn save_source_form(
     };
     let saved_to = history_saved_to(form.save_to, &form.note_who);
 
-    match save_source_block_recording_history(state, &request, form.save_to, saved_to) {
+    match save_source_block_recording_history(state, &request, form.save_to, saved_to, None) {
         Ok(()) => {
             state.step2.versions_ui.sheet = None;
             state.step2.versions_ui.source_form = None;
@@ -531,8 +529,11 @@ fn save_source_block_recording_history(
     request: &SourceSaveRequest<'_>,
     destination: ModSourceEditDestination,
     saved_to: &str,
+    replaced: Option<&mod_downloads::ModDownloadSource>,
 ) -> Result<(), String> {
-    let old_source = read_replaced_user_source(request.tp2, request.source_id, destination);
+    let old_source = replaced
+        .cloned()
+        .or_else(|| read_replaced_user_source(request.tp2, request.source_id, destination));
     mod_downloads::save_user_mod_download_source_block(
         request.tp2,
         request.name,
@@ -653,6 +654,7 @@ fn use_known_source(
         &request,
         save_to,
         history_saved_to(save_to, who),
+        Some(&current),
     ) {
         Ok(()) => {
             let toast = format!(
@@ -731,82 +733,6 @@ fn bookmark_on_disk(state: &mut WizardState, tp2: &str, card_key: &str) {
         Err(()) => {
             state.step2.scan_status = "Source history file is unreadable; not saved".to_string();
         }
-    }
-}
-
-fn find_mod_on_disk<'a>(state: &'a WizardState, tp2: &str) -> Option<&'a Step2ModState> {
-    let key = mod_downloads::normalize_mod_download_tp2(tp2);
-    state
-        .step2
-        .bgee_mods
-        .iter()
-        .chain(state.step2.bg2ee_mods.iter())
-        .find(|mod_state| {
-            !mod_state.tp2_path.trim().is_empty()
-                && mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == key
-        })
-}
-
-fn discover_travel_files(
-    state: &WizardState,
-    mod_state: &Step2ModState,
-) -> Result<modlist_config_discovery::ConfigDiscovery, String> {
-    let mod_root = Path::new(mod_state.tp2_path.trim())
-        .parent()
-        .ok_or_else(|| "The mod folder could not be found.".to_string())?;
-    let loaded = mod_downloads::load_mod_download_sources();
-    let refs_file = super::app_step2_update_source_refs::load_refs_file_at(
-        &super::app_step2_update_source_refs::installed_source_refs_path(),
-    );
-    let key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
-    let selected_source_id = refs_file
-        .sources
-        .get(&key)
-        .or_else(|| state.step2.selected_source_ids.get(&key))
-        .cloned();
-    let Some(source) = loaded.resolve_source(&mod_state.tp_file, selected_source_id.as_deref())
-    else {
-        return Err("This mod has no download source, so none of its files travel.".to_string());
-    };
-    let archive_dir = state.step1.mods_archive_folder.trim();
-    let archive = if archive_dir.is_empty() {
-        None
-    } else {
-        modlist_config_discovery::find_fetched_archive(
-            Path::new(archive_dir),
-            &mod_state.tp_file,
-            &source.source_id,
-            refs_file.refs.get(&key).map(String::as_str),
-        )
-    };
-    modlist_config_discovery::discover_config_files(
-        mod_root,
-        archive.as_deref(),
-        &mod_state.tp_file,
-        &source.aliases,
-        source.subdir_require.as_deref(),
-        &loaded.config_files_for(&mod_state.tp_file),
-    )
-}
-
-fn show_travel_files(state: &mut WizardState, tp2: &str) {
-    let Some(mod_state) = find_mod_on_disk(state, tp2) else {
-        state
-            .step2
-            .versions_ui
-            .show_travel_files_error(tp2.to_string(), "This mod is not on disk.".to_string());
-        return;
-    };
-    let mod_name = mod_state.name.clone();
-    match discover_travel_files(state, mod_state) {
-        Ok(discovery) => state
-            .step2
-            .versions_ui
-            .show_travel_files(mod_name, discovery),
-        Err(error) => state
-            .step2
-            .versions_ui
-            .show_travel_files_error(mod_name, error),
     }
 }
 
@@ -1852,6 +1778,7 @@ mod tests {
             &request,
             destination,
             super::destination_label(destination),
+            None,
         );
 
         assert!(result.is_err(), "{result:?}");
@@ -2131,6 +2058,72 @@ mod tests {
         assert_eq!(store.history[0].saved_to, "Speedrun EET");
     }
 
+    #[test]
+    fn use_known_source_records_the_rule_in_effect_across_layers() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let _config_guard = SourceFormConfigDirGuard::new("use_known_source_across_layers");
+        let target_guard = TargetDirGuard::create("use_known_source_across_layers_target");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
+
+        let current = crate::app::mod_downloads::ModDownloadSource {
+            tp2: "widget".to_string(),
+            name: "Widget".to_string(),
+            source_id: "primary".to_string(),
+            source_label: "Primary".to_string(),
+            github: Some("owner/widget".to_string()),
+            branch: Some("main".to_string()),
+            source_default: true,
+            ..crate::app::mod_downloads::ModDownloadSource::default()
+        };
+        let header = crate::app::mod_downloads::template_mod_header("widget", "Widget");
+        let block = crate::app::mod_downloads::complete_source_block(&current);
+        let global_path = crate::app::mod_downloads::mod_downloads_user_path();
+        let global_text = format!("{header}\n\n{block}\n");
+        std::fs::write(&global_path, &global_text).unwrap();
+
+        let mut bookmark = current;
+        bookmark.branch = None;
+        bookmark.tag = Some("v2.0".to_string());
+        let known_block = crate::app::mod_downloads::complete_source_block(&bookmark);
+
+        let mut state = WizardState::default();
+        let mut rx = None;
+        super::handle_step2_download_source_action(
+            &mut state,
+            &mut rx,
+            crate::app::step2_action::Step2Action::UseKnownSource {
+                tp2: "widget".to_string(),
+                card_key: "widget".to_string(),
+                block: known_block,
+                save_to: crate::app::step2_action::ModSourceEditDestination::ThisModlist,
+                who: "Speedrun EET".to_string(),
+            },
+        );
+
+        let store = crate::app::mod_source_history::load_store();
+        assert_eq!(store.history.len(), 1, "{}", state.step2.scan_status);
+        assert_eq!(store.history[0].saved_to, "Speedrun EET");
+        assert!(
+            store.history[0].block.contains("branch = \"main\""),
+            "{}",
+            store.history[0].block
+        );
+        let modlist_text =
+            std::fs::read_to_string(target_guard.0.join("mod_downloads_user.toml")).unwrap();
+        assert!(
+            modlist_text.contains("tag = \"v2.0\""),
+            "the pick must land in the modlist file; got:\n{modlist_text}"
+        );
+        assert!(
+            !modlist_text.contains("branch = \"main\""),
+            "{modlist_text}"
+        );
+        assert_eq!(std::fs::read_to_string(&global_path).unwrap(), global_text);
+    }
+
     fn note_sheet_state() -> WizardState {
         let mut state = WizardState::default();
         state
@@ -2400,54 +2393,5 @@ mod tests {
             ("BGEE".to_string(), "gadget.tp2".to_string()),
         );
         assert!(!state.step2.whole_folder_check_active);
-    }
-
-    #[test]
-    fn show_travel_files_reports_a_missing_mod() {
-        let mut state = WizardState::default();
-
-        super::show_travel_files(&mut state, "unknown.tp2");
-        let travel = state.step2.versions_ui.travel_files.as_ref().unwrap();
-        assert_eq!(travel.error.as_deref(), Some("This mod is not on disk."));
-        assert!(travel.rows.is_empty());
-    }
-
-    #[test]
-    fn travel_files_rows_use_the_reason_words() {
-        use crate::app::modlist_config_discovery::{
-            ConfigDiscovery, ConfigFileReason, DiscoveredConfigFile,
-        };
-
-        let discovery = ConfigDiscovery {
-            files: vec![
-                DiscoveredConfigFile {
-                    relative_path: "a7-multikits.ini".to_string(),
-                    reason: ConfigFileReason::Changed,
-                    bytes: b"x".to_vec(),
-                },
-                DiscoveredConfigFile {
-                    relative_path: "cdtweaks.ini".to_string(),
-                    reason: ConfigFileReason::Catalog,
-                    bytes: b"y".to_vec(),
-                },
-            ],
-            compared_against: Some("a7__argent77__v1.zip".to_string()),
-            truncated: false,
-            missing_catalog_files: vec!["gone.ini".to_string()],
-            invalid_catalog_names: Vec::new(),
-        };
-        let mut versions_ui = crate::app::state::VersionsDrawerUi::default();
-        versions_ui.show_travel_files("A7".to_string(), discovery);
-
-        let travel = versions_ui.travel_files.as_ref().unwrap();
-        assert_eq!(
-            travel.rows,
-            vec![
-                ("a7-multikits.ini".to_string(), "changed from the archive"),
-                ("cdtweaks.ini".to_string(), "named by the catalog"),
-            ]
-        );
-        assert_eq!(travel.missing, vec!["gone.ini".to_string()]);
-        assert_eq!(travel.error, None);
     }
 }

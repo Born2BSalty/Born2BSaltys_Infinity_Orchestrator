@@ -170,6 +170,7 @@ pub(crate) struct VersionCard {
     pub(crate) can_fetch: bool,
     pub(crate) layer: &'static str,
     pub(crate) rule_words: String,
+    pub(crate) selector_hover: String,
     pub(crate) open_url: Option<String>,
     pub(crate) repo: Option<String>,
     pub(crate) source_id: Option<String>,
@@ -245,7 +246,33 @@ pub(crate) fn refresh_fetch_phase(view: &mut VersionsView, state: &WizardState) 
         let waiting_in_batch =
             downloading && batch_keys.contains(&card.tp2) && !is_current && !finished;
         card.queued = waiting_in_batch || state.step2.versions_ui.fetch_queue.contains(&card.tp2);
+        if state.step2.is_scanning && extracted_just_now(state, &card.name) {
+            card.status = CardStatus::InSync;
+            card.dot = CardDot::Neutral;
+            card.status_line = "Rescanning\u{2026}".to_string();
+            card.can_fetch = false;
+            card.target = None;
+        }
     }
+    view.fetch_count = view
+        .cards
+        .iter()
+        .filter(|card| card.status == CardStatus::Fetch)
+        .count();
+    view.attention_count = view
+        .cards
+        .iter()
+        .filter(|card| card.status == CardStatus::Attention)
+        .count();
+}
+
+fn extracted_just_now(state: &WizardState, name: &str) -> bool {
+    let prefix = format!("{name} -> ");
+    state
+        .step2
+        .update_selected_extracted_sources
+        .iter()
+        .any(|entry| entry.starts_with(&prefix))
 }
 
 fn running_batch_keys(state: &WizardState) -> BTreeSet<String> {
@@ -398,11 +425,7 @@ fn status_facts(state: &WizardState, basis: &CardBasis) -> StatusFacts {
         .iter()
         .find(|asset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) == basis.tp2_key)
         .cloned();
-    let just_fetched = state
-        .step2
-        .update_selected_extracted_sources
-        .iter()
-        .any(|entry| entry.starts_with(&format!("{name} -> ")));
+    let just_fetched = extracted_just_now(state, name);
     StatusFacts {
         fetch_asset,
         check_failed,
@@ -853,12 +876,13 @@ fn build_card(
 
     let outcome = card_outcome(state, &basis, &facts, has_source, source.as_ref(), &version);
 
-    let (layer, rule_words_value) = source.as_ref().map_or_else(
-        || ("", String::new()),
+    let (layer, rule_words_value, selector_hover_value) = source.as_ref().map_or_else(
+        || ("", String::new(), String::new()),
         |source| {
             (
                 layer_name(tiers.tier_of(&source.tp2, &source.source_id)),
                 selector_words(source),
+                selector_hover(source),
             )
         },
     );
@@ -887,6 +911,7 @@ fn build_card(
         can_fetch,
         layer,
         rule_words: rule_words_value,
+        selector_hover: selector_hover_value,
         open_url,
         repo,
         source_id,
@@ -897,6 +922,14 @@ fn build_card(
 }
 
 pub(crate) fn rule_words(source: &ModDownloadSource) -> String {
+    rule_words_with(source, true)
+}
+
+fn rule_words_without_asset(source: &ModDownloadSource) -> String {
+    rule_words_with(source, false)
+}
+
+fn rule_words_with(source: &ModDownloadSource, include_asset: bool) -> String {
     if let Some(commit) = non_empty(source.commit.as_deref()) {
         return format!("Commit {}", commit.chars().take(7).collect::<String>());
     }
@@ -907,10 +940,12 @@ pub(crate) fn rule_words(source: &ModDownloadSource) -> String {
         return format!("Branch {branch}");
     }
     if let Some(release) = non_empty(source.release.as_deref()) {
-        return non_empty(source.asset.as_deref()).map_or_else(
-            || format!("Release {release}"),
-            |asset| format!("Release {release} \u{b7} {asset}"),
-        );
+        return non_empty(source.asset.as_deref())
+            .filter(|_| include_asset)
+            .map_or_else(
+                || format!("Release {release}"),
+                |asset| format!("Release {release} \u{b7} {asset}"),
+            );
     }
     if source.github.is_some() {
         return match source.channel.as_deref().map(str::trim) {
@@ -934,6 +969,14 @@ pub(crate) fn rule_words(source: &ModDownloadSource) -> String {
 }
 
 pub(crate) fn selector_words(source: &ModDownloadSource) -> String {
+    let rule = rule_words_without_asset(source);
+    match non_empty(source.github.as_deref()) {
+        Some(repo) => format!("{repo} \u{b7} {rule}"),
+        None => rule,
+    }
+}
+
+pub(crate) fn selector_hover(source: &ModDownloadSource) -> String {
     let rule = rule_words(source);
     match non_empty(source.github.as_deref()) {
         Some(repo) => format!("{rule} \u{b7} {repo}"),
@@ -1185,6 +1228,10 @@ mod tests {
     fn unscoped_rescan_shows_no_fetch_phase() {
         let mut state = batch_state(&["a", "b"]);
         state.step2.is_scanning = true;
+        state
+            .step2
+            .update_selected_extracted_sources
+            .push("a -> C:/mods/a".to_string());
 
         let view = build_versions_view(&state, &empty_tiers(), None);
         for tp_file in ["a.tp2", "b.tp2"] {
@@ -1192,6 +1239,17 @@ mod tests {
             assert_eq!(card.fetching, None);
             assert!(!card.queued);
         }
+        let extracted = card_named(&view, "a.tp2");
+        assert_eq!(extracted.status, CardStatus::InSync);
+        assert_eq!(extracted.status_line, "Rescanning\u{2026}");
+        assert!(!extracted.can_fetch);
+        assert_eq!(extracted.target, None);
+        assert_eq!(card_named(&view, "b.tp2").status, CardStatus::Fetch);
+        assert_eq!(view.fetch_count, 1);
+
+        state.step2.is_scanning = false;
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_ne!(card_named(&view, "a.tp2").status_line, "Rescanning\u{2026}");
     }
 
     #[test]
@@ -1490,22 +1548,34 @@ mod tests {
     }
 
     #[test]
-    fn selector_words_names_the_repo_after_the_rule() {
+    fn selector_words_names_the_repo_first_without_the_asset() {
+        let release = ModDownloadSource {
+            github: Some("owner/repo".to_string()),
+            release: Some("v4.9.1".to_string()),
+            asset: Some("lefreuts-enhanced-ui.zip".to_string()),
+            ..ModDownloadSource::default()
+        };
+        assert_eq!(selector_words(&release), "owner/repo \u{b7} Release v4.9.1");
+
         let branch = ModDownloadSource {
-            github: Some("Gibberlings3/Tweaks-Anthology".to_string()),
             branch: Some("master".to_string()),
             ..ModDownloadSource::default()
         };
-        assert_eq!(
-            selector_words(&branch),
-            "Branch master \u{b7} Gibberlings3/Tweaks-Anthology"
-        );
+        assert_eq!(selector_words(&branch), "Branch master");
+    }
 
-        let archive = ModDownloadSource {
-            url: "https://example.test/file.zip".to_string(),
+    #[test]
+    fn selector_hover_keeps_the_asset() {
+        let release = ModDownloadSource {
+            github: Some("owner/repo".to_string()),
+            release: Some("v4.9.1".to_string()),
+            asset: Some("lefreuts-enhanced-ui.zip".to_string()),
             ..ModDownloadSource::default()
         };
-        assert_eq!(selector_words(&archive), "Direct archive");
+        assert_eq!(
+            selector_hover(&release),
+            "Release v4.9.1 \u{b7} lefreuts-enhanced-ui.zip \u{b7} owner/repo"
+        );
     }
 
     #[test]

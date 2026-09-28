@@ -773,7 +773,7 @@ fn render_card_list(
     let chip = orchestrator.wizard_state.step2.versions_ui.chip;
     let open_menu = orchestrator.wizard_state.step2.versions_ui.menu.clone();
     let card_inner_width = (ui.available_width() - 32.0).max(0.0);
-    let selector_width = (card_inner_width * 0.38).clamp(220.0, 380.0);
+    let selector_width = (card_inner_width * 0.46).clamp(260.0, 460.0);
 
     let matches_chip = |card: &VersionCard| match chip {
         VersionsChip::All => true,
@@ -1115,7 +1115,6 @@ fn render_open_menu(
                 card,
                 tiers: env.tiers,
                 bookmark_label: bookmark_label.as_deref(),
-                on_disk: card_on_disk(&orchestrator.wizard_state.step2, &card.tp2),
             };
             versions_menus::render_kebab_menu(
                 ctx,
@@ -1145,9 +1144,6 @@ fn render_open_menu(
     {
         let who = note_who(orchestrator);
         versions_sheets::seed_note_sheet(ctx, &tp2, seed, who);
-    }
-    if outcome.open_sheet == Some(VersionsSheet::TravelFiles) {
-        orchestrator.wizard_state.step2.versions_ui.travel_files = None;
     }
     if let Some(sheet) = outcome.open_sheet {
         versions_form::reset_dropdown_state(ctx, &tp2);
@@ -1244,13 +1240,6 @@ fn render_open_sheet(
             };
             versions_sheets::render_note(ctx, palette, drawer_rect, escape_active, &note_env)
         }
-        VersionsSheet::TravelFiles => versions_sheets::render_travel_files(
-            ctx,
-            palette,
-            drawer_rect,
-            &orchestrator.wizard_state.step2,
-            escape_active,
-        ),
     };
     apply_sheet_outcome(ctx, orchestrator, outcome, current_tp2, action);
 }
@@ -1278,20 +1267,7 @@ fn apply_sheet_outcome(
     } else if outcome.close {
         orchestrator.wizard_state.step2.versions_ui.sheet = None;
         orchestrator.wizard_state.step2.versions_ui.sheet_tp2 = None;
-        orchestrator.wizard_state.step2.versions_ui.travel_files = None;
     }
-}
-
-fn card_on_disk(step2: &Step2State, tp2: &str) -> bool {
-    let key = mod_downloads::normalize_mod_download_tp2(tp2);
-    step2
-        .bgee_mods
-        .iter()
-        .chain(step2.bg2ee_mods.iter())
-        .any(|mod_state| {
-            !mod_state.tp2_path.trim().is_empty()
-                && mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == key
-        })
 }
 
 #[cfg(test)]
@@ -1330,6 +1306,7 @@ mod tests {
             can_fetch,
             layer: "",
             rule_words: String::new(),
+            selector_hover: String::new(),
             open_url: None,
             repo: None,
             source_id: None,

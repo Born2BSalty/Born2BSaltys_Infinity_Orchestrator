@@ -1119,6 +1119,98 @@ fn render_advanced(ui: &mut egui::Ui, palette: ThemePalette, form: &mut SourceFo
             width,
         );
     });
+    ui.add_space(8.0);
+    field_label(ui, palette, "Config files");
+    render_config_files_rows(ui, palette, form);
+    if redesign_btn(
+        ui,
+        palette,
+        "Add file",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked()
+    {
+        form.config_files.push(String::new());
+        form.config_files_focus_pending = Some(form.config_files.len() - 1);
+    }
+}
+
+const CONFIG_FILE_REMOVE_SIZE: f32 = 20.0;
+const CONFIG_FILE_ROW_RESERVE: f32 = 44.0;
+
+fn render_config_files_rows(ui: &mut egui::Ui, palette: ThemePalette, form: &mut SourceForm) {
+    let mut remove: Option<usize> = None;
+    for index in 0..form.config_files.len() {
+        ui.push_id(("config_file_row", index), |ui| {
+            ui.horizontal(|ui| {
+                let width = ui.available_width() - CONFIG_FILE_ROW_RESERVE;
+                let response = text_field(
+                    ui,
+                    palette,
+                    &mut form.config_files[index],
+                    "path inside the mod folder",
+                    true,
+                    width,
+                );
+                if form.config_files_focus_pending == Some(index) {
+                    response.request_focus();
+                    form.config_files_focus_pending = None;
+                }
+                if config_file_remove_button(ui, palette).clicked() {
+                    remove = Some(index);
+                }
+            });
+        });
+        ui.add_space(6.0);
+    }
+    if let Some(index) = remove {
+        form.config_files.remove(index);
+    }
+}
+
+fn config_file_remove_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response {
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(CONFIG_FILE_REMOVE_SIZE, CONFIG_FILE_REMOVE_SIZE),
+        egui::Sense::hover(),
+    );
+    let response = ui
+        .interact(
+            rect,
+            ui.id().with("config_file_remove"),
+            egui::Sense::click(),
+        )
+        .on_hover_text("Remove");
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        if response.hovered() {
+            painter.rect_filled(
+                rect,
+                egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
+                redesign_hover_overlay(palette),
+            );
+        }
+        let stroke = egui::Stroke::new(1.4_f32, redesign_text_muted(palette));
+        let center = rect.center();
+        let half = 4.0_f32;
+        painter.line_segment(
+            [
+                center + egui::vec2(-half, -half),
+                center + egui::vec2(half, half),
+            ],
+            stroke,
+        );
+        painter.line_segment(
+            [
+                center + egui::vec2(-half, half),
+                center + egui::vec2(half, -half),
+            ],
+            stroke,
+        );
+    }
+    response
 }
 
 fn render_will_fetch(ui: &mut egui::Ui, palette: ThemePalette, form: &SourceForm) {

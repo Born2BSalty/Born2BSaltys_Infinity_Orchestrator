@@ -333,12 +333,31 @@ fn save_draft(orchestrator: &mut OrchestratorApp) {
                 .insert(id.clone(), extracted);
             orchestrator.workspace_view.save_draft_flash_until =
                 Some(Instant::now() + Duration::from_millis(SAVE_FLASH_MS));
+            write_selection_counts(orchestrator, &id);
             rebake_share_code_after_save_draft(orchestrator, &id);
         }
         Err(err) => {
             warn!(target = "orchestrator", "save draft for {id} failed: {err}");
         }
     }
+}
+
+fn write_selection_counts(orchestrator: &mut OrchestratorApp, id: &str) {
+    let step2 = &orchestrator.wizard_state.step2;
+    if step2.is_scanning || (step2.bgee_mods.is_empty() && step2.bg2ee_mods.is_empty()) {
+        return;
+    }
+    let (mods, components) = crate::install_runtime::registry_transition::count_mods_and_components(
+        &orchestrator.wizard_state,
+    );
+    let Some(entry) = orchestrator.registry.find_mut(id) else {
+        return;
+    };
+    entry.mod_count = mods;
+    entry.component_count = components;
+    orchestrator
+        .persistence_cycle
+        .mark_registry_dirty(Instant::now());
 }
 
 fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &str) {
@@ -767,5 +786,95 @@ mod tests {
             Some("BIO-MODLIST-V1:NOTOUCH"),
             "a rebake for a missing id must not affect other entries"
         );
+    }
+
+    fn counted_mod(tp_file: &str) -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: format!("{tp_file}/{tp_file}.tp2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: vec![crate::app::state::Step2ComponentState {
+                component_id: "0".to_string(),
+                label: "0".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: true,
+                selected_order: Some(1),
+            }],
+        }
+    }
+
+    fn counts_of(app: &OrchestratorApp) -> (u32, u32) {
+        let entry = app.registry.find("HDRTEST00000").unwrap();
+        (entry.mod_count, entry.component_count)
+    }
+
+    #[test]
+    fn save_draft_writes_the_selection_counts() {
+        let mut app = orch_with_entry("counts");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![counted_mod("alpha"), counted_mod("beta")];
+
+        save_draft(&mut app);
+
+        let store_path = app.workspace_stores["HDRTEST00000"].path().to_path_buf();
+        assert!(
+            store_path.starts_with(std::env::temp_dir()),
+            "the workspace store must live under the isolated temp root: {}",
+            store_path.display()
+        );
+        assert!(
+            store_path.is_file(),
+            "save draft must write the workspace file"
+        );
+        assert_eq!(counts_of(&app), (2, 2));
+
+        app.wizard_state.step2.bgee_mods[1].components[0].checked = false;
+        save_draft(&mut app);
+
+        assert_eq!(counts_of(&app), (1, 1));
+    }
+
+    #[test]
+    fn save_draft_keeps_the_counts_while_the_tree_is_not_loaded() {
+        let mut app = orch_with_entry("counts_hold");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![counted_mod("alpha"), counted_mod("beta")];
+        save_draft(&mut app);
+        assert_eq!(counts_of(&app), (2, 2));
+
+        app.wizard_state.step2.is_scanning = true;
+        app.wizard_state.step3.bgee_items.clear();
+        save_draft(&mut app);
+        assert_eq!(counts_of(&app), (2, 2));
+
+        app.wizard_state.step2.is_scanning = false;
+        app.wizard_state.step2.bgee_mods.clear();
+        save_draft(&mut app);
+        assert_eq!(counts_of(&app), (2, 2));
     }
 }
