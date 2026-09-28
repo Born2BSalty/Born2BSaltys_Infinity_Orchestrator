@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
 use flate2::read::GzDecoder;
@@ -29,8 +28,7 @@ pub(crate) const TEXT_SNIFF_BYTES: usize = 8 * 1024;
 
 const ARCHIVE_SUFFIXES: [&str; 5] = [".zip", ".7z", ".rar", ".tar.gz", ".tgz"];
 const SKIPPED_DIR_NAMES: [&str; 2] = ["backup", "__macosx"];
-const SKIPPED_EXTENSIONS: [&str; 2] = ["debug", "exe"];
-const SKIPPED_FILE_NAMES: [&str; 1] = ["weidu.log"];
+const CONFIG_EXTENSIONS: [&str; 8] = ["ini", "cfg", "conf", "txt", "toml", "json", "yaml", "yml"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ConfigFileReason {
@@ -90,7 +88,6 @@ struct WalkedFile {
     relative_path: String,
     path: PathBuf,
     size: u64,
-    modified: Option<SystemTime>,
 }
 
 struct WalkedTree {
@@ -99,30 +96,6 @@ struct WalkedTree {
     files: Vec<WalkedFile>,
 }
 
-type FileStamp = (u64, Option<SystemTime>);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MetadataSnapshot {
-    walk_root: Option<PathBuf>,
-    walked: BTreeMap<String, FileStamp>,
-    catalog: BTreeMap<PathBuf, Option<FileStamp>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct CacheKey {
-    mod_root: String,
-    archive: String,
-    archive_modified: Option<SystemTime>,
-    inputs: u64,
-}
-
-struct CacheEntry {
-    key: CacheKey,
-    snapshot: MetadataSnapshot,
-    discovery: ConfigDiscovery,
-}
-
-static CACHE: OnceLock<Mutex<HashMap<String, CacheEntry>>> = OnceLock::new();
 static PENDING_WARNINGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static LAST_WARNINGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -151,18 +124,6 @@ pub(crate) fn take_pending_warnings() -> Vec<String> {
     )
 }
 
-#[cfg(test)]
-pub(crate) fn clear_discovery_cache() {
-    discovery_cache()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clear();
-}
-
-fn discovery_cache() -> &'static Mutex<HashMap<String, CacheEntry>> {
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
 pub(crate) fn discover_config_files(
     mod_root: &Path,
     archive: Option<&Path>,
@@ -180,58 +141,7 @@ pub(crate) fn discover_config_files(
         catalog_files,
     };
     let walk = walk_tree(&request);
-    let snapshot = metadata_snapshot(&request, walk.as_ref());
-    let key = cache_key(&request);
-    if let Some(cached) = cached_discovery(&key, &snapshot) {
-        return Ok(cached);
-    }
-    let discovery = compute_discovery(&request, walk.as_ref())?;
-    discovery_cache()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(
-            key.mod_root.clone(),
-            CacheEntry {
-                key,
-                snapshot,
-                discovery: discovery.clone(),
-            },
-        );
-    Ok(discovery)
-}
-
-fn cached_discovery(key: &CacheKey, snapshot: &MetadataSnapshot) -> Option<ConfigDiscovery> {
-    let cache = discovery_cache()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    let hit = cache
-        .get(&key.mod_root)
-        .filter(|entry| entry.key == *key && entry.snapshot == *snapshot)
-        .map(|entry| entry.discovery.clone());
-    drop(cache);
-    hit
-}
-
-fn cache_key(request: &DiscoveryRequest<'_>) -> CacheKey {
-    let archive_modified = request.archive.and_then(|archive| {
-        fs::metadata(archive)
-            .and_then(|metadata| metadata.modified())
-            .ok()
-    });
-    let mut hasher = DefaultHasher::new();
-    request.tp_file.hash(&mut hasher);
-    request.aliases.hash(&mut hasher);
-    request.subdir_require.hash(&mut hasher);
-    request.catalog_files.hash(&mut hasher);
-    CacheKey {
-        mod_root: request.mod_root.to_string_lossy().to_lowercase(),
-        archive: request
-            .archive
-            .map(|archive| archive.to_string_lossy().to_string())
-            .unwrap_or_default(),
-        archive_modified,
-        inputs: hasher.finish(),
-    }
+    compute_discovery(&request, walk.as_ref())
 }
 
 fn walk_tree(request: &DiscoveryRequest<'_>) -> Option<WalkedTree> {
@@ -267,40 +177,6 @@ fn matching_child_dir_on_disk(parent: &Path, accepted: &[String]) -> Option<Path
         matches.pop()
     } else {
         None
-    }
-}
-
-fn metadata_snapshot(
-    request: &DiscoveryRequest<'_>,
-    walk: Option<&WalkedTree>,
-) -> MetadataSnapshot {
-    let walked = walk
-        .map(|walk| {
-            walk.files
-                .iter()
-                .map(|file| (file.relative_path.clone(), (file.size, file.modified)))
-                .collect()
-        })
-        .unwrap_or_default();
-    let mut catalog = BTreeMap::new();
-    let roots = std::iter::once(request.mod_root).chain(walk.map(|walk| walk.root.as_path()));
-    for root in roots {
-        for name in request.catalog_files {
-            let Ok(relative) = validate_relative_config_path(name) else {
-                continue;
-            };
-            let path = root.join(relative);
-            let stamp = fs::metadata(&path)
-                .ok()
-                .filter(fs::Metadata::is_file)
-                .map(|metadata| (metadata.len(), metadata.modified().ok()));
-            catalog.insert(path, stamp);
-        }
-    }
-    MetadataSnapshot {
-        walk_root: walk.map(|walk| walk.root.clone()),
-        walked,
-        catalog,
     }
 }
 
@@ -553,7 +429,6 @@ fn walk_files(root: &Path) -> Vec<WalkedFile> {
             relative_path,
             path: entry.path().to_path_buf(),
             size: metadata.len(),
-            modified: metadata.modified().ok(),
         });
     }
     files
@@ -572,23 +447,14 @@ fn is_skipped_file(relative: &Path) -> bool {
     if is_os_artifact_file(relative) {
         return true;
     }
-    let extension_skipped = relative
+    !relative
         .extension()
         .and_then(|value| value.to_str())
         .is_some_and(|extension| {
-            SKIPPED_EXTENSIONS
+            CONFIG_EXTENSIONS
                 .iter()
-                .any(|skipped| extension.eq_ignore_ascii_case(skipped))
-        });
-    let name_skipped = relative
-        .file_name()
-        .and_then(|value| value.to_str())
-        .is_some_and(|name| {
-            SKIPPED_FILE_NAMES
-                .iter()
-                .any(|skipped| name.eq_ignore_ascii_case(skipped))
-        });
-    extension_skipped || name_skipped
+                .any(|config| extension.eq_ignore_ascii_case(config))
+        })
 }
 
 fn looks_binary(bytes: &[u8]) -> bool {
@@ -997,20 +863,12 @@ fn crc32_of_reader(reader: &mut impl Read) -> Result<u32, String> {
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::sync::MutexGuard;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Duration;
 
     static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
-    static SERIAL: Mutex<()> = Mutex::new(());
 
     const TP2_TEXT: &[u8] = b"BACKUP ~mymod/backup~\nAUTHOR ~someone~\n";
-
-    fn isolated() -> MutexGuard<'static, ()> {
-        let guard = SERIAL.lock().unwrap_or_else(PoisonError::into_inner);
-        clear_discovery_cache();
-        guard
-    }
 
     struct TempRoot(PathBuf);
 
@@ -1104,7 +962,6 @@ mod tests {
 
     #[test]
     fn changed_text_file_is_discovered() {
-        let _serial = isolated();
         let fixture = fixture(
             "changed",
             &[("MyMod/mymod.ini", b"kits=1\n")],
@@ -1126,7 +983,6 @@ mod tests {
 
     #[test]
     fn file_absent_from_the_archive_is_ignored() {
-        let _serial = isolated();
         let fixture = fixture("absent", &[], &[("sub/custom.ini", b"extra=1\n")]);
 
         let discovery = discover(&fixture);
@@ -1137,7 +993,6 @@ mod tests {
 
     #[test]
     fn catalog_named_file_travels_even_when_the_archive_matches() {
-        let _serial = isolated();
         let fixture = fixture(
             "catalogmatch",
             &[
@@ -1164,7 +1019,6 @@ mod tests {
 
     #[test]
     fn identical_file_is_skipped() {
-        let _serial = isolated();
         let fixture = fixture(
             "identical",
             &[("MyMod/mymod.ini", b"kits=1\n")],
@@ -1179,7 +1033,6 @@ mod tests {
 
     #[test]
     fn crlf_only_difference_is_skipped() {
-        let _serial = isolated();
         let fixture = fixture(
             "crlf",
             &[("MyMod/mymod.ini", b"kits=1\nmore=2\n")],
@@ -1193,13 +1046,12 @@ mod tests {
 
     #[test]
     fn binary_file_is_skipped() {
-        let _serial = isolated();
         let fixture = fixture(
             "binary",
-            &[("MyMod/data.bam", b"BAM \0\x01\x02")],
+            &[("MyMod/data.txt", b"BAM \0\x01\x02")],
             &[
-                ("data.bam", b"BAM \0\x09\x09\x09"),
-                ("new.bif", b"BIFF\0\0\0\0"),
+                ("data.txt", b"BAM \0\x09\x09\x09"),
+                ("new.json", b"BIFF\0\0\0\0"),
             ],
         );
 
@@ -1210,7 +1062,6 @@ mod tests {
 
     #[test]
     fn oversize_file_is_skipped() {
-        let _serial = isolated();
         let big = vec![b'a'; usize::try_from(MAX_CONFIG_FILE_BYTES).expect("fits") + 1];
         let fixture = fixture(
             "oversize",
@@ -1225,16 +1076,17 @@ mod tests {
 
     #[test]
     fn backup_and_debug_are_skipped() {
-        let _serial = isolated();
         let fixture = fixture(
             "skipped",
             &[
                 ("MyMod/backup/0/UNINSTALL.0", b"old\n"),
                 ("MyMod/setup-mymod.debug", b"old\n"),
                 ("MyMod/WeiDU.log", b"old\n"),
+                ("MyMod/desktop.ini", b"[.ShellClassInfo]\n"),
             ],
             &[
                 ("backup/0/UNINSTALL.0", b"uninstall\n"),
+                ("desktop.ini", b"[.ShellClassInfo]\nIconResource=x\n"),
                 ("sub/Backup/list.txt", b"list\n"),
                 ("__MACOSX/mymod.ini", b"mac\n"),
                 ("setup-mymod.debug", b"debug\n"),
@@ -1251,7 +1103,6 @@ mod tests {
 
     #[test]
     fn no_archive_uses_catalog_names_and_reports_missing() {
-        let _serial = isolated();
         let root = TempRoot::new("catalog");
         let mod_root = root.0.join("mymod");
         write_file(&mod_root, "mymod.tp2", TP2_TEXT);
@@ -1281,7 +1132,6 @@ mod tests {
 
     #[test]
     fn invalid_catalog_name_is_skipped_not_fatal() {
-        let _serial = isolated();
         let root = TempRoot::new("invalid");
         let mod_root = root.0.join("mymod");
         write_file(&mod_root, "mymod.tp2", TP2_TEXT);
@@ -1309,7 +1159,6 @@ mod tests {
 
     #[test]
     fn subdir_require_picks_the_required_variant() {
-        let _serial = isolated();
         let root = TempRoot::new("subdir");
         let mod_root = root.0.join("mods").join("x");
         write_file(&mod_root, "setup-x.tp2", TP2_TEXT);
@@ -1349,7 +1198,6 @@ mod tests {
 
     #[test]
     fn root_level_tp2_layout_walks_only_the_mod_folder() {
-        let _serial = isolated();
         let root = TempRoot::new("rootlevel");
         let mods_root = root.0.join("mods");
         write_file(&mods_root, "setup-foo.tp2", TP2_TEXT);
@@ -1376,51 +1224,63 @@ mod tests {
     }
 
     #[test]
-    fn cache_hit_reads_no_files() {
-        let _serial = isolated();
+    fn non_config_extension_never_travels() {
         let fixture = fixture(
-            "cache",
-            &[("MyMod/mymod.ini", b"kits=1\n")],
-            &[("mymod.ini", b"kits=1\ncustom=7\n")],
+            "nonconfig",
+            &[
+                ("MyMod/mymod.tpa", b"BEGIN ~a~\n"),
+                ("MyMod/x.d", b"BEGIN x\n"),
+                ("MyMod/y.baf", b"IF True() THEN END\n"),
+                ("MyMod/README", b"read me\n"),
+            ],
+            &[
+                ("mymod.tpa", b"BEGIN ~b~\nCHANGED\n"),
+                ("x.d", b"BEGIN y\nCHANGED\n"),
+                ("y.baf", b"IF False() THEN END\n"),
+                ("README", b"read me twice\n"),
+            ],
         );
-        let catalog = vec!["mymod.ini".to_string()];
-        let first = discover_with(&fixture, &catalog);
+
+        let discovery = discover(&fixture);
+
+        assert!(discovery.files.is_empty(), "{:?}", discovery.files);
+        assert!(discovery.compared_against.is_some());
+    }
+
+    #[test]
+    fn extension_match_is_case_insensitive() {
+        let fixture = fixture(
+            "caseext",
+            &[("MyMod/Kits.INI", b"kits=1\n")],
+            &[("Kits.INI", b"kits=1\ncustom=7\n")],
+        );
+
+        let discovery = discover(&fixture);
+
         assert_eq!(
-            paths_and_reasons(&first),
-            vec![("mymod.ini".to_string(), ConfigFileReason::Changed)]
+            paths_and_reasons(&discovery),
+            vec![("Kits.INI".to_string(), ConfigFileReason::Changed)]
         );
-        let archive_modified = fs::metadata(&fixture.archive)
-            .and_then(|metadata| metadata.modified())
-            .expect("archive modified time");
-        fs::write(&fixture.archive, b"not an archive").expect("break archive");
-        fs::File::options()
-            .write(true)
-            .open(&fixture.archive)
-            .expect("open archive")
-            .set_modified(archive_modified)
-            .expect("keep archive modified time");
+    }
 
-        let cached = discover_with(&fixture, &catalog);
-
-        assert_eq!(cached, first);
-
-        write_file(
-            &fixture.mod_root,
-            "mymod.ini",
-            b"kits=1\ncustom=7\nmore=8\n",
+    #[test]
+    fn catalog_name_travels_whatever_its_extension() {
+        let fixture = fixture(
+            "catalogext",
+            &[("MyMod/mymod.tpa", b"BEGIN ~x~\n")],
+            &[("mymod.tpa", b"BEGIN ~x~\n")],
         );
-        let recomputed = discover_with(&fixture, &catalog);
+
+        let discovery = discover_with(&fixture, &["mymod.tpa".to_string()]);
 
         assert_eq!(
-            paths_and_reasons(&recomputed),
-            vec![("mymod.ini".to_string(), ConfigFileReason::Catalog)]
+            paths_and_reasons(&discovery),
+            vec![("mymod.tpa".to_string(), ConfigFileReason::Catalog)]
         );
-        assert!(recomputed.compared_against.is_none());
     }
 
     #[test]
     fn seven_zip_index_reads_crc() {
-        let _serial = isolated();
         let root = TempRoot::new("sevenzip");
         let archive = root.0.join("mymod__someone__v1.7z");
         let ini = b"kits=1\ncustom=7\n";
@@ -1446,7 +1306,6 @@ mod tests {
 
     #[test]
     fn archive_chosen_by_installed_sha() {
-        let _serial = isolated();
         let root = TempRoot::new("choose");
         let older = root.0.join("mymod__someone__commit-1111111.zip");
         let newer = root.0.join("mymod__someone__commit-2222222.zip");
