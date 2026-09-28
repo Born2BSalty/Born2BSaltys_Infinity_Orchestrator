@@ -359,11 +359,7 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
         .notification_manager
         .success(format!("Created \"{}\"", entry.name));
 
-    let global_non_empty = orchestrator
-        .settings_store
-        .load()
-        .is_ok_and(|s| !s.step1.effective_global_mods_folder().trim().is_empty());
-    let source = default_scratch_mods_source(global_non_empty);
+    let source = ModsSource::GlobalModsFolder;
 
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
     let workspace_state = ModlistWorkspaceState {
@@ -412,15 +408,6 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
     };
 }
 
-#[must_use]
-const fn default_scratch_mods_source(global_folder_non_empty: bool) -> ModsSource {
-    if global_folder_non_empty {
-        ModsSource::GlobalModsFolder
-    } else {
-        ModsSource::InstallationFolder
-    }
-}
-
 fn create_scratch_mods_folder(destination: &str, game: Game) -> Result<String, String> {
     let dirs = per_install_dirs::resolve(destination, game);
     std::fs::create_dir_all(&dirs.mods_folder)
@@ -444,14 +431,33 @@ mod tests {
     }
 
     #[test]
-    fn scratch_mods_source_defaults_to_global_when_folder_configured() {
+    fn created_list_starts_on_the_global_mods_folder_even_when_none_is_set() {
+        let dest = TempDestGuard::new("globaldefault");
+        let mut app = orch_for_create_test();
+        app.redesign_settings.user_name = "@tester".to_string();
+        let global = app
+            .settings_store
+            .load()
+            .map(|s| s.step1.effective_global_mods_folder().to_string())
+            .unwrap_or_default();
+        assert!(global.trim().is_empty(), "isolated app has no mods folder");
+
+        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string());
+
+        let fresh = app
+            .registry
+            .entries
+            .iter()
+            .find(|e| e.name == "Fresh")
+            .expect("the list is created");
+        let workspace = app
+            .workspace_state
+            .get(&fresh.id)
+            .expect("the workspace state is seeded");
+        assert_eq!(workspace.mods_source, ModsSource::GlobalModsFolder);
         assert_eq!(
-            default_scratch_mods_source(true),
+            workspace.last_rescanned_mods_source,
             ModsSource::GlobalModsFolder
-        );
-        assert_eq!(
-            default_scratch_mods_source(false),
-            ModsSource::InstallationFolder
         );
     }
 
