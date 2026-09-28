@@ -83,7 +83,11 @@ pub(crate) fn export_modlist_share_code_with(
     let mod_downloads_user = sources.mod_downloads_user.clone();
     let mod_installed_refs = sources.mod_installed_refs.clone();
 
-    let mod_configs = export_mod_config_files(state)?;
+    let (mod_configs, config_warnings) = export_mod_config_files(state)?;
+    for config_warning in &config_warnings {
+        warn!("{config_warning}");
+    }
+    crate::app::modlist_config_discovery::push_pending_warnings(config_warnings);
     let mut payload = json!({
         "format_version": 1,
         "bio_version": env!("CARGO_PKG_VERSION"),
@@ -858,12 +862,21 @@ fn read_optional_file_text(
         .filter(|text| !should_omit(text))
 }
 
-fn export_mod_config_files(state: &WizardState) -> Result<Vec<ModlistShareConfigFile>, String> {
+fn export_mod_config_files(
+    state: &WizardState,
+) -> Result<(Vec<ModlistShareConfigFile>, Vec<String>), String> {
     let sources = crate::app::mod_downloads::load_mod_download_sources();
     let installed_source_ids =
         crate::app::app_step2_update_source_refs::load_installed_source_ids();
+    let installed_refs = crate::app::app_step2_update_source_refs::load_refs_file_at(
+        &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
+    )
+    .refs;
+    let archive_dir = state.step1.mods_archive_folder.trim();
     let mut exported = Vec::new();
+    let mut warnings = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
+    let mut walked_tp2_paths = std::collections::BTreeSet::new();
 
     for mod_state in state
         .step2
@@ -871,46 +884,110 @@ fn export_mod_config_files(state: &WizardState) -> Result<Vec<ModlistShareConfig
         .iter()
         .chain(state.step2.bg2ee_mods.iter())
     {
+        if !walked_tp2_paths.insert(normalized_tp2_path(&mod_state.tp2_path)) {
+            continue;
+        }
         let Some(source) =
             resolve_mod_config_source(state, &sources, &installed_source_ids, &mod_state.tp_file)
         else {
             continue;
         };
-        if source.config_files.is_empty() {
-            continue;
-        }
         let Some(mod_root) = mod_config_root(&mod_state.tp2_path) else {
             continue;
         };
-        for relative_path in &source.config_files {
-            let relative_path =
-                crate::app::modlist_config_files::validate_relative_config_path(relative_path)?;
-            if crate::app::modlist_config_files::is_os_artifact_file(&relative_path) {
-                continue;
-            }
-            let path = mod_root.join(&relative_path);
-            if !path.is_file() {
-                continue;
-            }
-            let bytes = fs::read(&path)
-                .map_err(|err| format!("Read mod config failed ({}): {err}", path.display()))?;
-            let relative_path = relative_path.to_string_lossy().replace('\\', "/");
-            let key = (
-                crate::app::mod_downloads::normalize_mod_download_tp2(&source.tp2),
-                source.source_id.trim().to_ascii_lowercase(),
-                relative_path.clone(),
-            );
-            if seen.insert(key) {
-                exported.push(ModlistShareConfigFile {
-                    tp2: crate::app::mod_downloads::normalize_mod_download_tp2(&source.tp2),
-                    source_id: source.source_id.clone(),
-                    relative_path,
-                    base64_data: base64url_encode(&bytes),
-                });
-            }
+        let tp2_key = crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
+        let archive = (!archive_dir.is_empty())
+            .then(|| {
+                crate::app::modlist_config_discovery::find_fetched_archive(
+                    Path::new(archive_dir),
+                    &mod_state.tp_file,
+                    &source.source_id,
+                    installed_refs.get(&tp2_key).map(String::as_str),
+                )
+            })
+            .flatten();
+        let discovery = crate::app::modlist_config_discovery::discover_config_files(
+            &mod_root,
+            archive.as_deref(),
+            &mod_state.tp_file,
+            &source.aliases,
+            source.subdir_require.as_deref(),
+            &sources.config_files_for(&mod_state.tp_file),
+        )?;
+        if let Some(warning) = missing_catalog_warning(&mod_state.name, &discovery) {
+            warnings.push(warning);
         }
+        if let Some(warning) = invalid_catalog_warning(&mod_state.name, &discovery) {
+            warnings.push(warning);
+        }
+        push_discovered_config_files(&mut exported, &mut seen, &source, discovery);
     }
-    Ok(exported)
+    Ok((exported, warnings))
+}
+
+fn missing_catalog_warning(
+    mod_name: &str,
+    discovery: &crate::app::modlist_config_discovery::ConfigDiscovery,
+) -> Option<String> {
+    if discovery.compared_against.is_some() || discovery.missing_catalog_files.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{mod_name}: {} config file(s) named by the catalog are missing on disk: {}",
+        discovery.missing_catalog_files.len(),
+        discovery.missing_catalog_files.join(", ")
+    ))
+}
+
+fn invalid_catalog_warning(
+    mod_name: &str,
+    discovery: &crate::app::modlist_config_discovery::ConfigDiscovery,
+) -> Option<String> {
+    if discovery.invalid_catalog_names.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{mod_name}: {} config file name(s) in the catalog are invalid and were skipped: {}",
+        discovery.invalid_catalog_names.len(),
+        discovery.invalid_catalog_names.join(", ")
+    ))
+}
+
+fn normalized_tp2_path(tp2_path: &str) -> String {
+    tp2_path.trim().replace('\\', "/").to_ascii_lowercase()
+}
+
+fn push_discovered_config_files(
+    exported: &mut Vec<ModlistShareConfigFile>,
+    seen: &mut std::collections::BTreeSet<(String, String, String)>,
+    source: &crate::app::mod_downloads::ModDownloadSource,
+    discovery: crate::app::modlist_config_discovery::ConfigDiscovery,
+) {
+    let tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&source.tp2);
+    if discovery.truncated {
+        warn!("{tp2}: config files over the per-mod share limit were left out");
+    }
+    for file in discovery.files {
+        let key = (
+            tp2.clone(),
+            source.source_id.trim().to_ascii_lowercase(),
+            file.relative_path.clone(),
+        );
+        if !seen.insert(key) {
+            continue;
+        }
+        tracing::debug!(
+            "{tp2}: config file {} travels ({:?})",
+            file.relative_path,
+            file.reason
+        );
+        exported.push(ModlistShareConfigFile {
+            tp2: tp2.clone(),
+            source_id: source.source_id.clone(),
+            relative_path: file.relative_path,
+            base64_data: base64url_encode(&file.bytes),
+        });
+    }
 }
 
 fn resolve_mod_config_source(

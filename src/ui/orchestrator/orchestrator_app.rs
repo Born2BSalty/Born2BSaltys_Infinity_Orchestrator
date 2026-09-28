@@ -293,6 +293,8 @@ pub struct OrchestratorApp {
     pub(crate) step2_update_extract_rx:
         Option<Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>>,
     pub(crate) release_list_rx: Option<crate::app::github_release_list::ReleaseListFetch>,
+    pub(crate) forks_rx: Option<crate::app::github_forks_list::ForksFetch>,
+    pub(crate) added_mods_seeded_for: Option<String>,
     pub(crate) stream_download_rx:
         Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
 
@@ -348,6 +350,12 @@ fn load_registry(registry_store: &RegistryStore) -> RegistryLoad {
             }
         }
     }
+}
+
+#[derive(Clone, Copy)]
+struct AddedModSeedWatch {
+    scan_live: bool,
+    log_apply_pending: bool,
 }
 
 impl OrchestratorApp {
@@ -440,6 +448,8 @@ impl OrchestratorApp {
             step2_update_download_rx: None,
             step2_update_extract_rx: None,
             release_list_rx: None,
+            forks_rx: None,
+            added_mods_seeded_for: None,
             stream_download_rx: None,
             extract_progress: Arc::new(std::sync::Mutex::new(None)),
             extract_parallel_rx: None,
@@ -708,6 +718,10 @@ impl OrchestratorApp {
     }
 
     fn poll_step2_channels(&mut self) {
+        let seed_watch = AddedModSeedWatch {
+            scan_live: self.step2_scan_rx.is_some(),
+            log_apply_pending: self.wizard_state.step2.pending_saved_log_apply,
+        };
         app_step2_scan::poll_step2_scan_events(
             &mut self.wizard_state,
             &mut self.step2_scan_rx,
@@ -734,6 +748,7 @@ impl OrchestratorApp {
             &mut self.wizard_state,
             &mut self.release_list_rx,
         );
+        crate::app::github_forks_list::poll_forks_sheet(&mut self.wizard_state, &mut self.forks_rx);
         Self::drain_archive_skip_events(
             &mut self.wizard_state,
             &mut self.archive_skip_rx,
@@ -773,6 +788,32 @@ impl OrchestratorApp {
             &mut self.step2_update_check_rx,
             &mut self.step2_update_download_rx,
         );
+        self.reseed_added_mods_when_settled(seed_watch);
+    }
+
+    fn reseed_added_mods_when_settled(&mut self, watch: AddedModSeedWatch) {
+        let pending_rebuilt = (watch.scan_live && self.step2_scan_rx.is_none())
+            || (watch.log_apply_pending && !self.wizard_state.step2.pending_saved_log_apply);
+        if pending_rebuilt {
+            self.added_mods_seeded_for = None;
+        }
+        let NavDestination::Workspace {
+            modlist_id: Some(id),
+        } = &self.nav
+        else {
+            return;
+        };
+        let settled =
+            self.step2_scan_rx.is_none() && !self.wizard_state.step2.pending_saved_log_apply;
+        if !settled
+            || self.workspace_view.loaded_workspace_id.as_deref() != Some(id.as_str())
+            || self.added_mods_seeded_for.as_deref() == Some(id.as_str())
+        {
+            return;
+        }
+        let id = id.clone();
+        crate::app::app_step2_log::reseed_added_mod_pending_downloads(&mut self.wizard_state);
+        self.added_mods_seeded_for = Some(id);
     }
 
     fn kick_parallel_extract(
@@ -914,6 +955,8 @@ impl OrchestratorApp {
                 Err(TryRecvError::Disconnected) => {
                     *stream_download_rx = None;
                     wizard_state.step2.update_selected_download_running = false;
+                    wizard_state.step2.update_selected_download_current = None;
+                    wizard_state.step2.update_selected_download_finished.clear();
                     wizard_state.step2.scan_status =
                         "Download updates failed: worker disconnected".to_string();
                     return;
@@ -1230,11 +1273,16 @@ impl OrchestratorApp {
             || self.create_destination_prep_rx.is_some()
             || self.install_destination_prep_rx.is_some()
             || self.release_list_rx.is_some()
+            || self.forks_rx.is_some()
             || self.wizard_state.modlist_auto_build_active
             || !self.step2_progress_queue.is_empty()
             || matches!(
                 self.wizard_state.step2.versions_ui.release_list.status,
                 crate::app::github_release_list::ReleaseListStatus::Loading
+            )
+            || matches!(
+                self.wizard_state.step2.forks_list.status,
+                crate::app::github_forks_list::ForksStatus::Loading
             )
     }
 
@@ -1442,6 +1490,8 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     wizard_state.step2.pending_saved_log_update_preview = false;
     wizard_state.step2.pending_saved_log_download = false;
     wizard_state.step2.update_selected_download_running = false;
+    wizard_state.step2.update_selected_download_current = None;
+    wizard_state.step2.update_selected_download_finished.clear();
     wizard_state.step2.update_selected_extract_running = false;
 
     install_screen_state.clear_preview();
@@ -1667,6 +1717,9 @@ impl OrchestratorApp {
     ) {
         for msg in clipboard::take_pending_toasts(ctx) {
             self.notification_manager.success(msg);
+        }
+        for warning in crate::app::modlist_config_discovery::take_pending_warnings() {
+            self.notification_manager.warn(warning);
         }
         if help_button::take_export_request(ctx) {
             self.export_diagnostics_from_help();

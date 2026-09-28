@@ -30,6 +30,7 @@ pub(crate) fn preview_update_selected(
     let selected_source_ids = state.step2.selected_source_ids.clone();
     state.step2.update_selected_target_game_tab = None;
     state.step2.update_selected_target_tp_file = None;
+    state.step2.whole_folder_check_active = scope == UpdateCheckScope::WholeFolder;
 
     let FullUpdatePreviewCollection {
         mut known,
@@ -81,6 +82,7 @@ pub(crate) fn preview_update_selected_mod(
     target: (String, String),
 ) {
     let (game_tab, tp_file) = target;
+    state.step2.whole_folder_check_active = target_is_pending_download(state, &game_tab, &tp_file);
     state.step2.update_selected_target_game_tab = Some(game_tab.clone());
     state.step2.update_selected_target_tp_file = Some(tp_file.clone());
     let selected_source_ids = state.step2.selected_source_ids.clone();
@@ -97,6 +99,23 @@ pub(crate) fn preview_update_selected_mod(
         );
     }
     apply_target_update_preview(state, &game_tab, &tp_file, preview, step2_update_check_rx);
+}
+
+fn target_is_pending_download(state: &WizardState, game_tab: &str, tp_file: &str) -> bool {
+    let target_tp2 = mod_downloads::normalize_mod_download_tp2(tp_file);
+    let scanned = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .any(|mod_state| {
+            mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == target_tp2
+        });
+    !scanned
+        && state.step2.log_pending_downloads.iter().any(|pending| {
+            pending.game_tab == game_tab
+                && mod_downloads::normalize_mod_download_tp2(&pending.tp_file) == target_tp2
+        })
 }
 
 struct FullUpdatePreviewCollection {

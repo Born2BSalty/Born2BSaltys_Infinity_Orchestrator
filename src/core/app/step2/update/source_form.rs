@@ -17,7 +17,6 @@ pub(crate) enum Follow {
     Commit,
     Tag,
     Branch,
-    LatestCode,
     Release,
 }
 
@@ -122,7 +121,7 @@ fn compute_follow(source: &ModDownloadSource, details: &mut FollowDetails) -> Fo
     let lower_channel = raw_channel.map(str::to_ascii_lowercase);
     let follow = match lower_channel.as_deref() {
         None => Follow::Release,
-        Some("master") => Follow::LatestCode,
+        Some("master") => Follow::Branch,
         Some("preonly") => {
             details.allow_pre = true;
             details.notice = Some(PREONLY_NOTICE.to_string());
@@ -141,7 +140,7 @@ fn compute_follow(source: &ModDownloadSource, details: &mut FollowDetails) -> Fo
             details.notice = Some(format!(
                 "This source uses a setting the form cannot show ({original}); saving replaces it."
             ));
-            Follow::LatestCode
+            Follow::Release
         }
     };
     if follow == Follow::Release
@@ -257,8 +256,12 @@ fn apply_follow(source: &mut ModDownloadSource, form: &SourceForm) {
     match form.follow {
         Follow::Commit => source.commit = non_empty_owned(&form.commit),
         Follow::Tag => source.tag = non_empty_owned(&form.tag),
-        Follow::Branch => source.branch = non_empty_owned(&form.branch),
-        Follow::LatestCode => source.channel = Some("master".to_string()),
+        Follow::Branch => {
+            source.branch = non_empty_owned(&form.branch);
+            if source.branch.is_none() {
+                source.channel = Some("master".to_string());
+            }
+        }
         Follow::Release => apply_release(source, form),
     }
 }
@@ -323,8 +326,14 @@ fn will_fetch_github(form: &SourceForm) -> String {
             short_commit(&form.commit)
         ),
         Follow::Tag => format!("source zip of tag {} from {repo}", form.tag.trim()),
-        Follow::Branch => format!("source zip of branch {} from {repo}", form.branch.trim()),
-        Follow::LatestCode => format!("source zip of the default branch of {repo}"),
+        Follow::Branch => {
+            let branch = form.branch.trim();
+            if branch.is_empty() {
+                format!("source zip of the default branch of {repo}")
+            } else {
+                format!("source zip of branch {branch} from {repo}")
+            }
+        }
         Follow::Release => will_fetch_release(form, repo),
     }
 }
@@ -502,8 +511,8 @@ mod tests {
         });
         assert_eq!(round_trip(&branch_form), branch_form);
 
-        let latest_form = base_form_with(|f| f.follow = Follow::LatestCode);
-        assert_eq!(round_trip(&latest_form), latest_form);
+        let default_branch_form = base_form_with(|f| f.follow = Follow::Branch);
+        assert_eq!(round_trip(&default_branch_form), default_branch_form);
 
         let newest_off = base_form_with(|f| {
             f.follow = Follow::Release;
@@ -605,10 +614,43 @@ mod tests {
     }
 
     #[test]
-    fn latest_code_writes_master_channel() {
-        let form = base_form_with(|f| f.follow = Follow::LatestCode);
+    fn latest_code_block_opens_as_branch_blank() {
+        let source = ModDownloadSource {
+            github: Some("owner/repo".to_string()),
+            channel: Some("master".to_string()),
+            ..ModDownloadSource::default()
+        };
+        let form = from_source(
+            &source,
+            SourceFormIdentity::default(),
+            ModSourceEditDestination::ThisModlist,
+            "repo",
+        );
+        assert_eq!(form.follow, Follow::Branch);
+        assert!(form.branch.is_empty());
+        assert!(form.notice.is_none());
+    }
+
+    #[test]
+    fn blank_branch_saves_as_master_channel() {
+        let form = base_form_with(|f| {
+            f.follow = Follow::Branch;
+            f.branch = "   ".to_string();
+        });
         let source = to_source(&form);
         assert_eq!(source.channel.as_deref(), Some("master"));
+        assert!(source.branch.is_none());
+    }
+
+    #[test]
+    fn named_branch_saves_as_branch() {
+        let form = base_form_with(|f| {
+            f.follow = Follow::Branch;
+            f.branch = " develop ".to_string();
+        });
+        let source = to_source(&form);
+        assert_eq!(source.branch.as_deref(), Some("develop"));
+        assert!(source.channel.is_none());
     }
 
     #[test]
@@ -642,7 +684,7 @@ mod tests {
             ModSourceEditDestination::ThisModlist,
             "repo",
         );
-        assert_eq!(form.follow, Follow::LatestCode);
+        assert_eq!(form.follow, Follow::Release);
         assert_eq!(
             form.notice.as_deref(),
             Some(
@@ -675,7 +717,7 @@ mod tests {
             "source zip of branch main from owner/repo"
         );
         assert_eq!(
-            will_fetch(&base_form_with(|f| f.follow = Follow::LatestCode)),
+            will_fetch(&base_form_with(|f| f.follow = Follow::Branch)),
             "source zip of the default branch of owner/repo"
         );
         assert_eq!(
@@ -837,7 +879,8 @@ mod tests {
             ModSourceEditDestination::ThisModlist,
             "repo",
         );
-        assert_eq!(form2.follow, Follow::LatestCode);
+        assert_eq!(form2.follow, Follow::Branch);
+        assert!(form2.branch.is_empty());
     }
 
     #[test]

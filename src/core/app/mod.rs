@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+pub mod added_mods;
 pub mod app_bootstrap_init;
 #[path = "navigation/app_nav.rs"]
 pub mod app_nav;
@@ -93,6 +94,8 @@ pub mod component_details;
 pub mod controller;
 pub mod game_authority;
 pub mod game_version;
+#[path = "step2/update/github_forks_list.rs"]
+pub mod github_forks_list;
 #[path = "step2/update/github_release_list.rs"]
 pub mod github_release_list;
 pub mod mod_downloads;
@@ -101,6 +104,7 @@ pub mod mod_source_history;
 #[path = "step2/update/mod_update_locks.rs"]
 pub mod mod_update_locks;
 pub mod modlist_biolist;
+pub mod modlist_config_discovery;
 pub mod modlist_config_files;
 pub mod modlist_share;
 #[path = "step2/update/platform_asset_target.rs"]

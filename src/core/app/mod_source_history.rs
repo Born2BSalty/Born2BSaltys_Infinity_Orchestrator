@@ -255,6 +255,15 @@ pub(crate) fn bookmark_block(
     if installed_ref.contains('@') {
         return None;
     }
+    if follows_releases(source) {
+        let mut pinned = source.clone();
+        pinned.release = Some(installed_ref.to_string());
+        pinned.tag = None;
+        pinned.branch = None;
+        pinned.commit = None;
+        pinned.channel = None;
+        return Some((pinned, installed_ref.to_string()));
+    }
     let mut pinned = source.clone();
     pinned.tag = Some(installed_ref.to_string());
     pinned.commit = None;
@@ -263,6 +272,15 @@ pub(crate) fn bookmark_block(
     pinned.channel = None;
     pinned.asset = None;
     Some((pinned, installed_ref.to_string()))
+}
+
+fn follows_releases(source: &ModDownloadSource) -> bool {
+    let has_release = !trimmed(source.release.as_deref()).is_empty();
+    let channel_based = source.github.is_some()
+        && trimmed(source.commit.as_deref()).is_empty()
+        && trimmed(source.tag.as_deref()).is_empty()
+        && trimmed(source.branch.as_deref()).is_empty();
+    has_release || channel_based
 }
 
 pub(crate) fn add_bookmark(
@@ -381,16 +399,70 @@ mod tests {
         assert!(pinned.tag.is_none());
         assert_eq!(label, "abcdef1");
 
+        let mut tagged = source.clone();
+        tagged.tag = Some("v1.0".to_string());
         let (tag_pinned, tag_label) =
-            bookmark_block(&source, Some("primary"), Some("v2.0")).unwrap();
+            bookmark_block(&tagged, Some("primary"), Some("v2.0")).unwrap();
         assert_eq!(tag_pinned.tag.as_deref(), Some("v2.0"));
         assert!(tag_pinned.commit.is_none());
         assert_eq!(tag_label, "v2.0");
+
+        let (bare_pinned, bare_label) =
+            bookmark_block(&source, Some("primary"), Some("v2.0")).unwrap();
+        assert_eq!(bare_pinned.release.as_deref(), Some("v2.0"));
+        assert!(bare_pinned.tag.is_none());
+        assert_eq!(bare_label, "v2.0");
 
         assert!(bookmark_block(&source, Some("primary"), Some("weird@nothex")).is_none());
         assert!(bookmark_block(&source, Some("other"), Some("v2.0")).is_none());
         assert!(bookmark_block(&source, None, Some("v2.0")).is_none());
         assert!(bookmark_block(&source, Some("primary"), None).is_none());
+    }
+
+    #[test]
+    fn release_source_bookmarks_the_release() {
+        let mut source = github_source("owner/repo");
+        source.release = Some("v1.0".to_string());
+        source.asset = Some("win.zip".to_string());
+
+        let (pinned, label) = bookmark_block(&source, Some("primary"), Some("v2.0")).unwrap();
+        assert_eq!(pinned.release.as_deref(), Some("v2.0"));
+        assert_eq!(pinned.asset.as_deref(), Some("win.zip"));
+        assert!(pinned.tag.is_none());
+        assert!(pinned.branch.is_none());
+        assert!(pinned.commit.is_none());
+        assert!(pinned.channel.is_none());
+        assert_eq!(label, "v2.0");
+    }
+
+    #[test]
+    fn channel_source_bookmarks_the_release_keeping_asset() {
+        let mut source = github_source("owner/repo");
+        source.channel = Some("pre-release".to_string());
+        source.asset = Some("mod-win.zip".to_string());
+        source.pkg_windows = Some("mod-win.zip".to_string());
+
+        let (pinned, label) = bookmark_block(&source, Some("primary"), Some("v3.1")).unwrap();
+        assert_eq!(pinned.release.as_deref(), Some("v3.1"));
+        assert_eq!(pinned.asset.as_deref(), Some("mod-win.zip"));
+        assert_eq!(pinned.pkg_windows.as_deref(), Some("mod-win.zip"));
+        assert!(pinned.channel.is_none());
+        assert!(pinned.tag.is_none());
+        assert_eq!(label, "v3.1");
+    }
+
+    #[test]
+    fn tag_source_bookmarks_the_tag() {
+        let mut source = github_source("owner/repo");
+        source.tag = Some("v1.0".to_string());
+        source.asset = Some("win.zip".to_string());
+
+        let (pinned, label) = bookmark_block(&source, Some("primary"), Some("v1.5")).unwrap();
+        assert_eq!(pinned.tag.as_deref(), Some("v1.5"));
+        assert!(pinned.release.is_none());
+        assert!(pinned.asset.is_none());
+        assert!(pinned.commit.is_none());
+        assert_eq!(label, "v1.5");
     }
 
     #[test]

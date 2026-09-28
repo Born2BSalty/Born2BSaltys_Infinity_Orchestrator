@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
 
+use crate::app::added_mods;
 use crate::app::controller::log_apply::{apply_log_to_mods, normalize_path_key};
 use crate::app::game_authority::{self, GameSlot};
+use crate::app::mod_downloads::{self, ModDownloadsLoad, SourceTier, SourceTiers};
 use crate::app::state::{Step1State, Step2LogPendingDownload, WizardState};
 use crate::mods::component::Component;
 use crate::mods::log_file::LogFile;
@@ -126,6 +128,79 @@ pub(crate) fn apply_weidu_log_selection_from_path(
         ),
     );
     state.clear_last_step2_sync_signature();
+}
+
+pub(crate) fn reseed_added_mod_pending_downloads(state: &mut WizardState) {
+    let Some(path) = mod_downloads::active_modlist_downloads_path() else {
+        return;
+    };
+    let modlist_text = std::fs::read_to_string(path).unwrap_or_default();
+    if modlist_text.trim().is_empty() {
+        return;
+    }
+    let added = added_mods::load_added_mods();
+    if added.is_empty() {
+        return;
+    }
+    let tiers = mod_downloads::load_source_tiers(&modlist_text);
+    let sources = mod_downloads::load_mod_download_sources();
+    seed_added_mod_pending_downloads(state, &sources, &tiers, &added);
+}
+
+pub(crate) fn seed_added_mod_pending_downloads(
+    state: &mut WizardState,
+    sources: &ModDownloadsLoad,
+    tiers: &SourceTiers,
+    added: &BTreeSet<String>,
+) {
+    let scanned: HashSet<String> = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .map(|mod_state| mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file))
+        .filter(|key| !key.is_empty())
+        .collect();
+    let mut listed: HashSet<String> = state
+        .step2
+        .log_pending_downloads
+        .iter()
+        .map(|pending| mod_downloads::normalize_mod_download_tp2(&pending.tp_file))
+        .collect();
+    let game_tab = state.step2.active_game_tab.clone();
+    for source in &sources.sources {
+        if tiers.tier_of(&source.tp2, &source.source_id) != SourceTier::Modlist {
+            continue;
+        }
+        let tp2 = mod_downloads::normalize_mod_download_tp2(&source.tp2);
+        if !added.contains(&tp2) {
+            continue;
+        }
+        let scanned_under_alias = source
+            .aliases
+            .iter()
+            .any(|alias| scanned.contains(&mod_downloads::normalize_mod_download_tp2(alias)));
+        if tp2.is_empty() || scanned.contains(&tp2) || scanned_under_alias {
+            continue;
+        }
+        if !listed.insert(tp2.clone()) {
+            continue;
+        }
+        let label = if source.name.trim().is_empty() {
+            tp2.clone()
+        } else {
+            source.name.trim().to_string()
+        };
+        state
+            .step2
+            .log_pending_downloads
+            .push(Step2LogPendingDownload {
+                game_tab: game_tab.clone(),
+                tp_file: format!("{tp2}.tp2"),
+                label,
+                requested_version: None,
+            });
+    }
 }
 
 fn build_log_pending_downloads(
@@ -315,6 +390,109 @@ mod tests {
                 .starts_with("IWDEE selected from log"),
             "unexpected status: {}",
             state.step2.scan_status
+        );
+    }
+
+    fn github_block(tp2: &str, name: &str) -> String {
+        format!(
+            "[[mods]]\nname = \"{name}\"\ntp2 = \"{tp2}\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  label = \"Primary\"\n  type = \"github\"\n  url = \"https://github.com/owner/{tp2}\"\n  repo = \"owner/{tp2}\"\n  default = true\n"
+        )
+    }
+
+    fn scanned_mod(tp_file: &str) -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: tp_file.to_string(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    fn seed_from_texts(
+        state: &mut WizardState,
+        user_text: &str,
+        modlist_text: &str,
+        added: &[&str],
+    ) {
+        let sources =
+            mod_downloads::load_mod_download_sources_from_texts("", user_text, modlist_text);
+        let tiers = mod_downloads::source_tiers_from_texts("", user_text, modlist_text);
+        let added: BTreeSet<String> = added.iter().map(ToString::to_string).collect();
+        seed_added_mod_pending_downloads(state, &sources, &tiers, &added);
+    }
+
+    #[test]
+    fn reseed_ignores_modlist_blocks_not_in_the_added_list() {
+        let modlist_text = github_block("widget", "Widget");
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BG2EE".to_string();
+
+        seed_from_texts(&mut state, "", &modlist_text, &[]);
+        assert!(
+            state.step2.log_pending_downloads.is_empty(),
+            "{:?}",
+            state.step2.log_pending_downloads
+        );
+
+        seed_from_texts(&mut state, "", &modlist_text, &["widget"]);
+        assert_eq!(state.step2.log_pending_downloads.len(), 1);
+    }
+
+    #[test]
+    fn reseed_adds_a_card_for_a_saved_unscanned_mod() {
+        let modlist_text = format!(
+            "{}\n{}",
+            github_block("widget", "Widget"),
+            github_block("widget", "Widget").replace("id = \"primary\"", "id = \"fork\"")
+        );
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BG2EE".to_string();
+
+        seed_from_texts(&mut state, "", &modlist_text, &["widget"]);
+
+        assert_eq!(
+            state.step2.log_pending_downloads,
+            vec![Step2LogPendingDownload {
+                game_tab: "BG2EE".to_string(),
+                tp_file: "widget.tp2".to_string(),
+                label: "Widget".to_string(),
+                requested_version: None,
+            }]
+        );
+
+        seed_from_texts(&mut state, "", &modlist_text, &["widget"]);
+        assert_eq!(state.step2.log_pending_downloads.len(), 1);
+    }
+
+    #[test]
+    fn reseed_skips_scanned_and_my_default_mods() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(scanned_mod("widget/setup-widget.tp2"));
+
+        seed_from_texts(
+            &mut state,
+            &github_block("gadget", "Gadget"),
+            &github_block("widget", "Widget"),
+            &["widget", "gadget"],
+        );
+
+        assert!(
+            state.step2.log_pending_downloads.is_empty(),
+            "{:?}",
+            state.step2.log_pending_downloads
         );
     }
 

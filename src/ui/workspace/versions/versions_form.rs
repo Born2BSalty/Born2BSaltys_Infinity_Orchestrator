@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::app_step2_router::is_new_mod_form;
 use crate::app::github_release_list::{
     CachedAsset, CachedRelease, ReleaseListState, ReleaseListStatus,
 };
@@ -27,7 +28,9 @@ const FIELD_MARGIN: egui::Margin = egui::Margin {
 };
 const SOURCE_KIND_W: f32 = 170.0;
 const ROW_GAP: f32 = 16.0;
-const TOGGLE_ROW_OFFSET: f32 = 24.0;
+const FIELD_LABEL_GAP: f32 = 6.0;
+const TOGGLE_TRACK_W: f32 = 32.0;
+const TOGGLE_TRACK_H: f32 = 18.0;
 
 pub(crate) struct FormEnv<'a> {
     pub(crate) has_modlist_destination: bool,
@@ -49,7 +52,13 @@ pub(crate) fn render(
 ) -> FormOutcome {
     let mut outcome = FormOutcome::default();
 
-    if env.has_modlist_destination {
+    let new_mod_form = is_new_mod_form(form);
+    if new_mod_form {
+        render_mod_name_row(ui, palette, form);
+        ui.add_space(ROW_GAP);
+    }
+
+    if env.has_modlist_destination && !new_mod_form {
         render_save_to(ui, palette, form);
         ui.add_space(ROW_GAP);
     }
@@ -126,14 +135,30 @@ fn section_label(ui: &mut egui::Ui, palette: ThemePalette, text: &str) {
     ui.add_space(6.0);
 }
 
+fn field_label_font() -> egui::FontId {
+    egui::FontId::new(12.0, egui::FontFamily::Name("poppins_light".into()))
+}
+
 fn field_label(ui: &mut egui::Ui, palette: ThemePalette, text: &str) {
     ui.label(
         egui::RichText::new(text)
-            .size(12.0)
-            .family(egui::FontFamily::Name("poppins_light".into()))
+            .font(field_label_font())
             .color(redesign_text_muted(palette)),
     );
-    ui.add_space(6.0);
+    ui.add_space(FIELD_LABEL_GAP);
+}
+
+fn field_label_row_height(ui: &egui::Ui, palette: ThemePalette, text: &str) -> f32 {
+    let galley_h = ui
+        .painter()
+        .layout_no_wrap(
+            text.to_string(),
+            field_label_font(),
+            redesign_text_muted(palette),
+        )
+        .size()
+        .y;
+    galley_h + ui.spacing().item_spacing.y + FIELD_LABEL_GAP
 }
 
 fn chip_button(ui: &mut egui::Ui, palette: ThemePalette, label: &str, selected: bool) -> bool {
@@ -330,6 +355,14 @@ fn labeled_text_field_inline(
     });
 }
 
+fn render_mod_name_row(ui: &mut egui::Ui, palette: ThemePalette, form: &mut SourceForm) {
+    field_label(ui, palette, "Mod (TP2 name)");
+    let width = ui.available_width();
+    if text_field(ui, palette, &mut form.tp2, "e.g. cdtweaks", true, width).changed() {
+        form.error = None;
+    }
+}
+
 fn render_save_to(ui: &mut egui::Ui, palette: ThemePalette, form: &mut SourceForm) {
     section_label(ui, palette, "Save to");
     ui.horizontal(|ui| {
@@ -452,11 +485,10 @@ fn render_source_row(
     });
 }
 
-const FOLLOWS: [(Follow, &str); 5] = [
+const FOLLOWS: [(Follow, &str); 4] = [
     (Follow::Commit, "Commit"),
     (Follow::Tag, "Tag"),
     (Follow::Branch, "Branch"),
-    (Follow::LatestCode, "Latest code"),
     (Follow::Release, "Release"),
 ];
 
@@ -484,32 +516,10 @@ fn render_follow_body(
     match form.follow {
         Follow::Commit => labeled_text_row(ui, palette, "Commit", &mut form.commit, "commit hash"),
         Follow::Tag => labeled_text_row(ui, palette, "Tag", &mut form.tag, "tag name"),
-        Follow::Branch => labeled_text_row(ui, palette, "Branch", &mut form.branch, "branch name"),
-        Follow::LatestCode => render_latest_code_readonly(ui, palette),
+        Follow::Branch => {
+            labeled_text_row(ui, palette, "Branch", &mut form.branch, "default branch");
+        }
         Follow::Release => render_release_body(ctx, ui, palette, form, env, outcome),
-    }
-}
-
-fn render_latest_code_readonly(ui: &mut egui::Ui, palette: ThemePalette) {
-    field_label(ui, palette, "Default branch");
-    let (rect, _) = ui.allocate_exact_size(
-        egui::vec2(ui.available_width(), FIELD_H),
-        egui::Sense::hover(),
-    );
-    if ui.is_rect_visible(rect) {
-        ui.painter().rect_stroke(
-            rect,
-            egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
-            egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
-            egui::StrokeKind::Inside,
-        );
-        ui.painter().text(
-            egui::pos2(rect.left() + 10.0, rect.center().y),
-            egui::Align2::LEFT_CENTER,
-            "The repository's default branch",
-            egui::FontId::new(13.0, egui::FontFamily::Monospace),
-            redesign_text_muted(palette),
-        );
     }
 }
 
@@ -555,6 +565,8 @@ fn render_release_body(
     env: &FormEnv<'_>,
     outcome: &mut FormOutcome,
 ) {
+    let toggle_offset =
+        field_label_row_height(ui, palette, "Release") + (FIELD_H - TOGGLE_TRACK_H) / 2.0;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 16.0;
         let toggle_w = 190.0;
@@ -569,7 +581,7 @@ fn render_release_body(
             }
         });
         ui.vertical(|ui| {
-            ui.add_space(TOGGLE_ROW_OFFSET);
+            ui.add_space(toggle_offset);
             render_toggle_track(ui, palette, &mut form.allow_pre, "Allow pre-releases");
         });
     });
@@ -809,7 +821,10 @@ fn render_release_row(
 fn render_toggle_track(ui: &mut egui::Ui, palette: ThemePalette, on: &mut bool, label: &str) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
-        let (rect, response) = ui.allocate_exact_size(egui::vec2(32.0, 18.0), egui::Sense::click());
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(TOGGLE_TRACK_W, TOGGLE_TRACK_H),
+            egui::Sense::click(),
+        );
         if ui.is_rect_visible(rect) {
             let painter = ui.painter();
             let radius = egui::CornerRadius::same(9);

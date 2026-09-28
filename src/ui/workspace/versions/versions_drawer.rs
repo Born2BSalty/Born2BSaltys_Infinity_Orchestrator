@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use eframe::egui;
 
+use crate::app::app_step2_router::NEW_MOD_CARD_KEY;
 use crate::app::mod_downloads;
 use crate::app::state::{
     Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
@@ -307,8 +308,12 @@ pub(crate) fn render(
 
     let mut body_action: Option<Step2Action> = None;
     let mut anchor_for_menu: Option<AnchorInfo> = None;
-    let mut footer_action: Option<Step2Action> = None;
-    let mut close_clicked = false;
+    let mut footer = FooterOutcome::default();
+    let list_env = CardListEnv {
+        view: &view,
+        tiers: &tiers,
+        busy,
+    };
 
     let response = drawer::render(
         ctx,
@@ -329,11 +334,6 @@ pub(crate) fn render(
                 );
             }
             render_filter_row(ui, orchestrator, palette, &view);
-            let list_env = CardListEnv {
-                view: &view,
-                tiers: &tiers,
-                busy,
-            };
             render_card_list(
                 ui,
                 orchestrator,
@@ -349,8 +349,7 @@ pub(crate) fn render(
                 busy,
                 fetching: header.fetching,
                 report_text: &header.report_text,
-                footer_action: &mut footer_action,
-                close_clicked: &mut close_clicked,
+                outcome: &mut footer,
             };
             render_footer(ui, palette, &mut footer_ctx);
         },
@@ -360,20 +359,18 @@ pub(crate) fn render(
         body_action = Some(handle_header_click(orchestrator, &view));
     }
 
-    if let Some(a) = body_action.or(footer_action) {
+    if let Some(a) = body_action.or(footer.action) {
         *action = Some(a);
     }
 
-    if response.close_requested || close_clicked {
+    if response.close_requested || footer.close {
         close_drawer(orchestrator);
         return;
     }
 
-    let list_env = CardListEnv {
-        view: &view,
-        tiers: &tiers,
-        busy,
-    };
+    if footer.add_source {
+        open_new_mod_sheet(ctx, orchestrator);
+    }
     finish_render(
         ctx,
         orchestrator,
@@ -596,7 +593,7 @@ fn render_log_strip(ui: &mut egui::Ui, palette: ThemePalette, n: usize) {
     let word = if n == 1 { "mod" } else { "mods" };
     let verb = if n == 1 { "is" } else { "are" };
     ui.label(
-        egui::RichText::new(format!("{n} {word} from the WeiDU log {verb} not on disk"))
+        egui::RichText::new(format!("{n} {word} {verb} not on disk yet"))
             .size(12.0)
             .family(egui::FontFamily::Name("poppins_light".into()))
             .color(redesign_text_muted(palette)),
@@ -976,13 +973,28 @@ fn route_card_action(
     }
 }
 
+#[derive(Default)]
+struct FooterOutcome {
+    action: Option<Step2Action>,
+    close: bool,
+    add_source: bool,
+}
+
 struct FooterCtx<'a> {
     fetch_count: usize,
     busy: bool,
     fetching: bool,
     report_text: &'a str,
-    footer_action: &'a mut Option<Step2Action>,
-    close_clicked: &'a mut bool,
+    outcome: &'a mut FooterOutcome,
+}
+
+fn open_new_mod_sheet(ctx: &egui::Context, orchestrator: &mut OrchestratorApp) {
+    let this_modlist_name = active_modlist_display_name(orchestrator);
+    let versions_ui = &mut orchestrator.wizard_state.step2.versions_ui;
+    versions_ui.menu = None;
+    versions_ui.source_form = Some(versions_sheets::seed_new_mod_form(&this_modlist_name));
+    versions_form::reset_dropdown_state(ctx, NEW_MOD_CARD_KEY);
+    versions_ui.open_sheet(VersionsSheet::EditSource, NEW_MOD_CARD_KEY.to_string());
 }
 
 fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCtx<'_>) {
@@ -1012,7 +1024,7 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
     .clicked()
         && !primary_disabled
     {
-        *footer.footer_action = Some(Step2Action::DownloadUpdates);
+        footer.outcome.action = Some(Step2Action::DownloadUpdates);
     }
     if redesign_btn(
         ui,
@@ -1027,6 +1039,21 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
     {
         clipboard::copy(ui.ctx(), footer.report_text.to_string());
     }
+    if redesign_btn(
+        ui,
+        palette,
+        "Add source",
+        BtnOpts {
+            small: true,
+            disabled: footer.busy,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && !footer.busy
+    {
+        footer.outcome.add_source = true;
+    }
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         if redesign_btn(
             ui,
@@ -1039,7 +1066,7 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
         )
         .clicked()
         {
-            *footer.close_clicked = true;
+            footer.outcome.close = true;
         }
     });
 }
@@ -1088,6 +1115,7 @@ fn render_open_menu(
                 card,
                 tiers: env.tiers,
                 bookmark_label: bookmark_label.as_deref(),
+                on_disk: card_on_disk(&orchestrator.wizard_state.step2, &card.tp2),
             };
             versions_menus::render_kebab_menu(
                 ctx,
@@ -1117,6 +1145,9 @@ fn render_open_menu(
     {
         let who = note_who(orchestrator);
         versions_sheets::seed_note_sheet(ctx, &tp2, seed, who);
+    }
+    if outcome.open_sheet == Some(VersionsSheet::TravelFiles) {
+        orchestrator.wizard_state.step2.versions_ui.travel_files = None;
     }
     if let Some(sheet) = outcome.open_sheet {
         versions_form::reset_dropdown_state(ctx, &tp2);
@@ -1213,7 +1244,24 @@ fn render_open_sheet(
             };
             versions_sheets::render_note(ctx, palette, drawer_rect, escape_active, &note_env)
         }
+        VersionsSheet::TravelFiles => versions_sheets::render_travel_files(
+            ctx,
+            palette,
+            drawer_rect,
+            &orchestrator.wizard_state.step2,
+            escape_active,
+        ),
     };
+    apply_sheet_outcome(ctx, orchestrator, outcome, current_tp2, action);
+}
+
+fn apply_sheet_outcome(
+    ctx: &egui::Context,
+    orchestrator: &mut OrchestratorApp,
+    outcome: versions_sheets::SheetOutcome,
+    current_tp2: String,
+    action: &mut Option<Step2Action>,
+) {
     if outcome.action.is_some() && action.is_none() {
         *action = outcome.action;
     }
@@ -1230,7 +1278,20 @@ fn render_open_sheet(
     } else if outcome.close {
         orchestrator.wizard_state.step2.versions_ui.sheet = None;
         orchestrator.wizard_state.step2.versions_ui.sheet_tp2 = None;
+        orchestrator.wizard_state.step2.versions_ui.travel_files = None;
     }
+}
+
+fn card_on_disk(step2: &Step2State, tp2: &str) -> bool {
+    let key = mod_downloads::normalize_mod_download_tp2(tp2);
+    step2
+        .bgee_mods
+        .iter()
+        .chain(step2.bg2ee_mods.iter())
+        .any(|mod_state| {
+            !mod_state.tp2_path.trim().is_empty()
+                && mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == key
+        })
 }
 
 #[cfg(test)]

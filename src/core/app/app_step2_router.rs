@@ -11,7 +11,8 @@ use crate::app::controller::util::open_in_shell;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
 use crate::app::mod_source_history;
-use crate::app::state::{Step2Selection, WizardState};
+use crate::app::modlist_config_discovery;
+use crate::app::state::{Step2ModState, Step2Selection, WizardState};
 use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
 use crate::app::step2_worker::Step2ScanEvent;
 
@@ -151,6 +152,7 @@ fn handle_step2_download_source_action(
             who,
         } => save_source_note(state, &tp2, &signature, &text, &who),
         Step2Action::BookmarkOnDisk { tp2, card_key } => bookmark_on_disk(state, &tp2, &card_key),
+        Step2Action::ShowTravelFiles { tp2 } => show_travel_files(state, &tp2),
         _ => {}
     }
 }
@@ -256,20 +258,11 @@ fn discover_mod_download_forks(state: &mut WizardState, tp2: String, label: Stri
     state.step2.mod_download_forks_popup_tp2 = tp2;
     state.step2.mod_download_forks_popup_label = label;
     state.step2.mod_download_forks.clear();
-    match super::app_step2_update_github_forks::fetch_github_forks(repo) {
-        Ok(forks) => {
-            state.step2.mod_download_forks_popup_error = None;
-            state.step2.mod_download_forks = forks;
-            state.step2.scan_status = format!(
-                "Found {} fork(s) for {repo}",
-                state.step2.mod_download_forks.len()
-            );
-        }
-        Err(err) => {
-            state.step2.mod_download_forks_popup_error = Some(err.clone());
-            state.step2.scan_status = format!("Discover forks failed: {err}");
-        }
-    }
+    state.step2.mod_download_forks_popup_error = None;
+    state.step2.forks_list = super::github_forks_list::ForksListState {
+        repo: repo.to_string(),
+        status: super::github_forks_list::ForksStatus::Loading,
+    };
 }
 
 fn open_mod_downloads_user_source(state: &mut WizardState) {
@@ -303,15 +296,29 @@ fn save_source_form(
         Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
     >,
 ) {
-    let Some(form) = state.step2.versions_ui.source_form.clone() else {
+    let Some(mut form) = state.step2.versions_ui.source_form.clone() else {
         return;
     };
+    let adding_new_mod = is_new_mod_form(&form);
+    if adding_new_mod && !apply_new_mod_tp2(&mut form) {
+        if let Some(open_form) = state.step2.versions_ui.source_form.as_mut() {
+            open_form.error = Some("Enter the mod's TP2 name first".to_string());
+        }
+        return;
+    }
+    if adding_new_mod && !route_new_mod_to_this_modlist(state, &mut form) {
+        return;
+    }
     let full_text = super::source_form::source_form_save_text(&form);
     let target_path = match form.save_to {
         ModSourceEditDestination::GlobalDefault => None,
         ModSourceEditDestination::ThisModlist => mod_downloads::active_modlist_downloads_path(),
     };
-    let card_key = form.card_key.clone();
+    let card_key = if adding_new_mod {
+        mod_downloads::normalize_mod_download_tp2(&form.tp2)
+    } else {
+        form.card_key.clone()
+    };
     let new_source =
         mod_source_history::normalize_source(&form.tp2, &super::source_form::to_source(&form));
     let request = SourceSaveRequest {
@@ -330,7 +337,17 @@ fn save_source_form(
             state.step2.versions_ui.sheet = None;
             state.step2.versions_ui.source_form = None;
             save_form_note(state, &form, &new_source);
+            let added_list_error = if adding_new_mod {
+                push_new_mod_pending_download(state, &form).err()
+            } else {
+                None
+            };
             finish_saving_mod_download_source_editor(state, step2_update_check_rx, &card_key);
+            if let Some(err) = added_list_error {
+                state.step2.scan_status = format!(
+                    "Saved source entry for {card_key}, but the added-mods list was not updated: {err}"
+                );
+            }
         }
         Err(err) => {
             if let Some(form) = state.step2.versions_ui.source_form.as_mut() {
@@ -339,6 +356,105 @@ fn save_source_form(
             state.step2.scan_status = format!("Save source entry failed: {err}");
         }
     }
+}
+
+pub(crate) const NEW_MOD_CARD_KEY: &str = "new-mod";
+
+pub(crate) fn is_new_mod_form(form: &super::source_form::SourceForm) -> bool {
+    form.identity.is_new_mod && form.card_key == NEW_MOD_CARD_KEY
+}
+
+fn strip_suffix_ignore_case<'a>(value: &'a str, suffix: &str) -> &'a str {
+    value
+        .len()
+        .checked_sub(suffix.len())
+        .and_then(|at| {
+            value
+                .get(at..)
+                .filter(|tail| tail.eq_ignore_ascii_case(suffix))
+                .and_then(|_| value.get(..at))
+        })
+        .unwrap_or(value)
+}
+
+fn strip_prefix_ignore_case<'a>(value: &'a str, prefix: &str) -> &'a str {
+    value
+        .get(..prefix.len())
+        .filter(|head| head.eq_ignore_ascii_case(prefix))
+        .and_then(|_| value.get(prefix.len()..))
+        .unwrap_or(value)
+}
+
+fn clean_new_mod_tp2(raw: &str) -> Option<String> {
+    let without_ext = strip_suffix_ignore_case(raw.trim(), ".tp2");
+    let name = strip_prefix_ignore_case(without_ext, "setup-");
+    let unsafe_char = |c: char| {
+        c.is_whitespace() || matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+    };
+    (!name.is_empty() && !name.chars().any(unsafe_char)).then(|| name.to_string())
+}
+
+fn apply_new_mod_tp2(form: &mut super::source_form::SourceForm) -> bool {
+    let Some(tp2) = clean_new_mod_tp2(&form.tp2) else {
+        return false;
+    };
+    if form.label.trim().is_empty() {
+        form.label.clone_from(&tp2);
+    }
+    form.tp2 = tp2;
+    true
+}
+
+fn route_new_mod_to_this_modlist(
+    state: &mut WizardState,
+    form: &mut super::source_form::SourceForm,
+) -> bool {
+    if mod_downloads::active_modlist_downloads_path().is_none() {
+        if let Some(open_form) = state.step2.versions_ui.source_form.as_mut() {
+            open_form.error = Some("Open a modlist first".to_string());
+        }
+        return false;
+    }
+    form.save_to = ModSourceEditDestination::ThisModlist;
+    true
+}
+
+fn push_new_mod_pending_download(
+    state: &mut WizardState,
+    form: &super::source_form::SourceForm,
+) -> Result<(), String> {
+    let key = mod_downloads::normalize_mod_download_tp2(&form.tp2);
+    let step2 = &mut state.step2;
+    let scanned = step2
+        .bgee_mods
+        .iter()
+        .chain(step2.bg2ee_mods.iter())
+        .any(|mod_state| mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == key);
+    if scanned {
+        return Ok(());
+    }
+    let recorded = super::added_mods::record_added_mod(&key);
+    let already_pending = step2
+        .log_pending_downloads
+        .iter()
+        .any(|pending| mod_downloads::normalize_mod_download_tp2(&pending.tp_file) == key);
+    if already_pending {
+        return recorded;
+    }
+    let label = if form.name.trim().is_empty() {
+        form.tp2.clone()
+    } else {
+        form.name.trim().to_string()
+    };
+    step2
+        .log_pending_downloads
+        .push(crate::app::state::Step2LogPendingDownload {
+            game_tab: step2.active_game_tab.clone(),
+            tp_file: format!("{}.tp2", form.tp2),
+            label,
+            requested_version: None,
+        });
+    recorded
 }
 
 fn save_form_note(
@@ -615,6 +731,82 @@ fn bookmark_on_disk(state: &mut WizardState, tp2: &str, card_key: &str) {
         Err(()) => {
             state.step2.scan_status = "Source history file is unreadable; not saved".to_string();
         }
+    }
+}
+
+fn find_mod_on_disk<'a>(state: &'a WizardState, tp2: &str) -> Option<&'a Step2ModState> {
+    let key = mod_downloads::normalize_mod_download_tp2(tp2);
+    state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .find(|mod_state| {
+            !mod_state.tp2_path.trim().is_empty()
+                && mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == key
+        })
+}
+
+fn discover_travel_files(
+    state: &WizardState,
+    mod_state: &Step2ModState,
+) -> Result<modlist_config_discovery::ConfigDiscovery, String> {
+    let mod_root = Path::new(mod_state.tp2_path.trim())
+        .parent()
+        .ok_or_else(|| "The mod folder could not be found.".to_string())?;
+    let loaded = mod_downloads::load_mod_download_sources();
+    let refs_file = super::app_step2_update_source_refs::load_refs_file_at(
+        &super::app_step2_update_source_refs::installed_source_refs_path(),
+    );
+    let key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
+    let selected_source_id = refs_file
+        .sources
+        .get(&key)
+        .or_else(|| state.step2.selected_source_ids.get(&key))
+        .cloned();
+    let Some(source) = loaded.resolve_source(&mod_state.tp_file, selected_source_id.as_deref())
+    else {
+        return Err("This mod has no download source, so none of its files travel.".to_string());
+    };
+    let archive_dir = state.step1.mods_archive_folder.trim();
+    let archive = if archive_dir.is_empty() {
+        None
+    } else {
+        modlist_config_discovery::find_fetched_archive(
+            Path::new(archive_dir),
+            &mod_state.tp_file,
+            &source.source_id,
+            refs_file.refs.get(&key).map(String::as_str),
+        )
+    };
+    modlist_config_discovery::discover_config_files(
+        mod_root,
+        archive.as_deref(),
+        &mod_state.tp_file,
+        &source.aliases,
+        source.subdir_require.as_deref(),
+        &loaded.config_files_for(&mod_state.tp_file),
+    )
+}
+
+fn show_travel_files(state: &mut WizardState, tp2: &str) {
+    let Some(mod_state) = find_mod_on_disk(state, tp2) else {
+        state
+            .step2
+            .versions_ui
+            .show_travel_files_error(tp2.to_string(), "This mod is not on disk.".to_string());
+        return;
+    };
+    let mod_name = mod_state.name.clone();
+    match discover_travel_files(state, mod_state) {
+        Ok(discovery) => state
+            .step2
+            .versions_ui
+            .show_travel_files(mod_name, discovery),
+        Err(error) => state
+            .step2
+            .versions_ui
+            .show_travel_files_error(mod_name, error),
     }
 }
 
@@ -1998,5 +2190,264 @@ mod tests {
             Some("Source history file is unreadable; not saved")
         );
         assert_eq!(state.step2.versions_ui.pending_toast, None);
+    }
+
+    fn new_mod_state(typed_tp2: &str) -> WizardState {
+        let seed = crate::app::mod_downloads::ModDownloadSource {
+            source_id: "primary".to_string(),
+            source_label: "Primary".to_string(),
+            github: Some("owner/widget".to_string()),
+            ..crate::app::mod_downloads::ModDownloadSource::default()
+        };
+        let mut form = crate::app::source_form::from_source(
+            &seed,
+            crate::app::source_form::SourceFormIdentity {
+                may_change_id: true,
+                is_new_mod: true,
+            },
+            crate::app::step2_action::ModSourceEditDestination::GlobalDefault,
+            super::NEW_MOD_CARD_KEY,
+        );
+        form.tp2 = typed_tp2.to_string();
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BG2EE".to_string();
+        state.step2.versions_ui.open_sheet(
+            crate::app::state::VersionsSheet::EditSource,
+            super::NEW_MOD_CARD_KEY.to_string(),
+        );
+        state.step2.versions_ui.source_form = Some(form);
+        state
+    }
+
+    #[test]
+    fn new_mod_save_pushes_a_pending_download() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let _config_guard = SourceFormConfigDirGuard::new("new_mod_pushes_pending");
+        let target_guard = TargetDirGuard::create("new_mod_pushes_pending_target");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
+
+        let mut state = new_mod_state(" Setup-Widget.TP2 ");
+        let mut rx = None;
+        super::save_source_form(&mut state, &mut rx);
+
+        assert!(
+            state.step2.versions_ui.source_form.is_none(),
+            "{}",
+            state.step2.scan_status
+        );
+        assert_eq!(
+            state.step2.log_pending_downloads,
+            vec![crate::app::state::Step2LogPendingDownload {
+                game_tab: "BG2EE".to_string(),
+                tp_file: "Widget.tp2".to_string(),
+                label: "Widget".to_string(),
+                requested_version: None,
+            }]
+        );
+        let written =
+            std::fs::read_to_string(target_guard.0.join("mod_downloads_user.toml")).unwrap();
+        assert!(written.contains("tp2 = \"Widget\""), "{written}");
+        assert!(written.contains("owner/widget"), "{written}");
+        assert_eq!(
+            crate::app::added_mods::load_added_mods(),
+            std::collections::BTreeSet::from(["widget".to_string()])
+        );
+        assert!(target_guard.0.join("added_mods.json").exists());
+
+        let mut again = new_mod_state("widget");
+        again.step2.log_pending_downloads = state.step2.log_pending_downloads.clone();
+        super::save_source_form(&mut again, &mut rx);
+        assert_eq!(again.step2.log_pending_downloads.len(), 1);
+    }
+
+    #[test]
+    fn new_mod_save_skips_the_pending_entry_for_a_scanned_mod() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let _config_guard = SourceFormConfigDirGuard::new("new_mod_scanned");
+        let target_guard = TargetDirGuard::create("new_mod_scanned_target");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
+
+        let mut state = new_mod_state("widget");
+        state
+            .step2
+            .bgee_mods
+            .push(make_mod_state("widget/setup-widget.tp2"));
+        let mut rx = None;
+        super::save_source_form(&mut state, &mut rx);
+
+        assert!(
+            state.step2.versions_ui.source_form.is_none(),
+            "{}",
+            state.step2.scan_status
+        );
+        assert!(state.step2.log_pending_downloads.is_empty());
+    }
+
+    #[test]
+    fn new_mod_save_refuses_a_blank_tp2() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let _config_guard = SourceFormConfigDirGuard::new("new_mod_refuses_blank");
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+
+        for typed in ["", "   ", "setup-.tp2", "my mod", "mods/widget", "wid*get"] {
+            let mut state = new_mod_state(typed);
+            let mut rx = None;
+            super::save_source_form(&mut state, &mut rx);
+
+            let form = state
+                .step2
+                .versions_ui
+                .source_form
+                .as_ref()
+                .expect("form stays open");
+            assert_eq!(
+                form.error.as_deref(),
+                Some("Enter the mod's TP2 name first"),
+                "{typed:?}"
+            );
+            assert!(state.step2.log_pending_downloads.is_empty(), "{typed:?}");
+        }
+        assert!(!crate::app::mod_downloads::mod_downloads_user_path().exists());
+    }
+
+    #[test]
+    fn new_mod_save_forces_this_modlist() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let _config_guard = SourceFormConfigDirGuard::new("new_mod_forces_modlist");
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+
+        let mut without_modlist = new_mod_state("widget");
+        let mut rx = None;
+        super::save_source_form(&mut without_modlist, &mut rx);
+        assert_eq!(
+            without_modlist
+                .step2
+                .versions_ui
+                .source_form
+                .as_ref()
+                .and_then(|form| form.error.as_deref()),
+            Some("Open a modlist first")
+        );
+
+        let target_guard = TargetDirGuard::create("new_mod_forces_modlist_target");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
+        let mut state = new_mod_state("widget");
+        assert_eq!(
+            state
+                .step2
+                .versions_ui
+                .source_form
+                .as_ref()
+                .map(|f| f.save_to),
+            Some(crate::app::step2_action::ModSourceEditDestination::GlobalDefault)
+        );
+        super::save_source_form(&mut state, &mut rx);
+
+        assert!(
+            state.step2.versions_ui.source_form.is_none(),
+            "{}",
+            state.step2.scan_status
+        );
+        let written =
+            std::fs::read_to_string(target_guard.0.join("mod_downloads_user.toml")).unwrap();
+        assert!(written.contains("tp2 = \"widget\""), "{written}");
+        let user_default =
+            std::fs::read_to_string(crate::app::mod_downloads::mod_downloads_user_path())
+                .unwrap_or_default();
+        assert!(!user_default.contains("widget"), "{user_default}");
+    }
+
+    #[test]
+    fn single_mod_check_of_a_pending_entry_sets_the_whole_folder_flag() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .log_pending_downloads
+            .push(crate::app::state::Step2LogPendingDownload {
+                game_tab: "BGEE".to_string(),
+                tp_file: "widget.tp2".to_string(),
+                label: "Widget".to_string(),
+                requested_version: None,
+            });
+        state.step2.bgee_mods.push(make_mod_state("gadget.tp2"));
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        let mut rx = None;
+
+        crate::app::app_step2_update_preview::preview_update_selected_mod(
+            &mut state,
+            &mut rx,
+            &sources,
+            ("BGEE".to_string(), "widget.tp2".to_string()),
+        );
+        assert!(state.step2.whole_folder_check_active);
+
+        crate::app::app_step2_update_preview::preview_update_selected_mod(
+            &mut state,
+            &mut rx,
+            &sources,
+            ("BGEE".to_string(), "gadget.tp2".to_string()),
+        );
+        assert!(!state.step2.whole_folder_check_active);
+    }
+
+    #[test]
+    fn show_travel_files_reports_a_missing_mod() {
+        let mut state = WizardState::default();
+
+        super::show_travel_files(&mut state, "unknown.tp2");
+        let travel = state.step2.versions_ui.travel_files.as_ref().unwrap();
+        assert_eq!(travel.error.as_deref(), Some("This mod is not on disk."));
+        assert!(travel.rows.is_empty());
+    }
+
+    #[test]
+    fn travel_files_rows_use_the_reason_words() {
+        use crate::app::modlist_config_discovery::{
+            ConfigDiscovery, ConfigFileReason, DiscoveredConfigFile,
+        };
+
+        let discovery = ConfigDiscovery {
+            files: vec![
+                DiscoveredConfigFile {
+                    relative_path: "a7-multikits.ini".to_string(),
+                    reason: ConfigFileReason::Changed,
+                    bytes: b"x".to_vec(),
+                },
+                DiscoveredConfigFile {
+                    relative_path: "cdtweaks.ini".to_string(),
+                    reason: ConfigFileReason::Catalog,
+                    bytes: b"y".to_vec(),
+                },
+            ],
+            compared_against: Some("a7__argent77__v1.zip".to_string()),
+            truncated: false,
+            missing_catalog_files: vec!["gone.ini".to_string()],
+            invalid_catalog_names: Vec::new(),
+        };
+        let mut versions_ui = crate::app::state::VersionsDrawerUi::default();
+        versions_ui.show_travel_files("A7".to_string(), discovery);
+
+        let travel = versions_ui.travel_files.as_ref().unwrap();
+        assert_eq!(
+            travel.rows,
+            vec![
+                ("a7-multikits.ini".to_string(), "changed from the archive"),
+                ("cdtweaks.ini".to_string(), "named by the catalog"),
+            ]
+        );
+        assert_eq!(travel.missing, vec!["gone.ini".to_string()]);
+        assert_eq!(travel.error, None);
     }
 }

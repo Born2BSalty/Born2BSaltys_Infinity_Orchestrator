@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::app::step2_action::Step2Action;
-use crate::app::versions_view::{CardDot, FetchPhase, VersionCard};
+use crate::app::versions_view::{CardDot, FetchPhase, SourceRowKind, VersionCard};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
     redesign_border_soft, redesign_border_strong, redesign_chrome_bg, redesign_error,
@@ -25,6 +25,10 @@ const FETCH_BAR_GAP: f32 = 3.0;
 const FETCH_ROW_EXTRA_H: f32 = 10.0;
 const SELECTOR_TEXT_GAP: f32 = 8.0;
 const FETCH_BAR_RADIUS: u8 = 2;
+const NOTE_SLOT_W: f32 = 16.0;
+const NAME_FONT_SIZE: f32 = 14.0;
+const STATUS_FONT_SIZE: f32 = 12.0;
+const STACK_GAP: f32 = 1.0;
 
 pub(crate) struct CardEvent {
     pub(crate) rect: egui::Rect,
@@ -106,24 +110,88 @@ fn render_row(
 
     let dot_rect =
         egui::Rect::from_min_size(row_rect.left_top(), egui::vec2(DOT_SIZE, row_rect.height()));
+    let note = current_note(card);
+    let note_w = if note.is_some() { NOTE_SLOT_W } else { 0.0 };
     let name_left = dot_rect.right() + COLUMN_GAP;
-    let name_right = selector_rect.left() - COLUMN_GAP;
+    let name_right = selector_rect.left() - COLUMN_GAP - note_w;
     let name_rect = egui::Rect::from_min_size(
         egui::pos2(name_left, row_rect.top()),
         egui::vec2((name_right - name_left).max(0.0), row_rect.height()),
     );
 
     render_dot(ui, palette, dot_rect, card.dot);
-    let status_rect = render_main(ui, palette, name_rect, card);
+    let anchor_rect = render_main(ui, palette, name_rect, card);
     if let Some(phase) = card.fetching {
         let bar_rect = egui::Rect::from_min_size(
-            egui::pos2(name_rect.left(), status_rect.bottom() + FETCH_BAR_GAP),
+            egui::pos2(name_rect.left(), anchor_rect.bottom() + FETCH_BAR_GAP),
             egui::vec2(name_rect.width(), FETCH_BAR_H),
         );
         paint_fetch_bar(ui, palette, bar_rect, phase);
     }
+    if let Some((text, who)) = note {
+        let slot_rect = egui::Rect::from_min_size(
+            egui::pos2(selector_rect.left() - NOTE_SLOT_W, row_rect.top()),
+            egui::vec2(NOTE_SLOT_W, row_rect.height()),
+        );
+        render_note_slot(ui, palette, slot_rect, card, text, who);
+    }
     let selector_response = render_selector(ui, palette, selector_rect, card);
 
+    let (action, kebab_response) = render_icons(
+        ui,
+        palette,
+        card,
+        busy,
+        [fetch_rect, lock_rect, open_rect, kebab_rect],
+    );
+
+    CardRow {
+        action,
+        selector_rect,
+        selector_response,
+        kebab_rect,
+        kebab_response,
+    }
+}
+
+fn current_note(card: &VersionCard) -> Option<(&str, &str)> {
+    card.sources
+        .iter()
+        .find(|option| option.kind == SourceRowKind::Current)
+        .and_then(|option| option.note.as_ref())
+        .map(|(text, who)| (text.as_str(), who.as_str()))
+}
+
+fn render_note_slot(
+    ui: &egui::Ui,
+    palette: ThemePalette,
+    slot_rect: egui::Rect,
+    card: &VersionCard,
+    text: &str,
+    who: &str,
+) {
+    if ui.is_rect_visible(slot_rect) {
+        versions_icons::paint_note(
+            ui.painter(),
+            slot_rect.center(),
+            redesign_text_muted(palette),
+        );
+    }
+    ui.interact(
+        slot_rect,
+        ui.id().with(("versions_card_note", &card.tp2)),
+        egui::Sense::hover(),
+    )
+    .on_hover_text(format!("{text}\n\u{2014} {who}"));
+}
+
+fn render_icons(
+    ui: &egui::Ui,
+    palette: ThemePalette,
+    card: &VersionCard,
+    busy: bool,
+    [fetch_rect, lock_rect, open_rect, kebab_rect]: [egui::Rect; 4],
+) -> (Option<Step2Action>, egui::Response) {
     let mut action = None;
 
     if card.can_fetch && card.fetching.is_none() {
@@ -161,13 +229,7 @@ fn render_row(
         None,
     );
 
-    CardRow {
-        action,
-        selector_rect,
-        selector_response,
-        kebab_rect,
-        kebab_response,
-    }
+    (action, kebab_response)
 }
 
 fn icon_slot_rect(icons_left: f32, row_rect: egui::Rect, index: u8) -> egui::Rect {
@@ -197,32 +259,62 @@ fn render_main(
     rect: egui::Rect,
     card: &VersionCard,
 ) -> egui::Rect {
+    let name_font = egui::FontId::new(
+        NAME_FONT_SIZE,
+        egui::FontFamily::Name("poppins_medium".into()),
+    );
+    let status_font = egui::FontId::new(
+        STATUS_FONT_SIZE,
+        egui::FontFamily::Name("poppins_light".into()),
+    );
+    let status = status_text(card);
+    let name_h = text_height(ui, &card.name, &name_font);
+    let stack_h = if status.is_empty() {
+        name_h
+    } else {
+        name_h + STACK_GAP + text_height(ui, &status, &status_font)
+    };
+    let offset = (rect.height() - stack_h) / 2.0;
+    let stack_rect = egui::Rect::from_min_size(
+        rect.min + egui::vec2(0.0, offset),
+        egui::vec2(rect.width(), stack_h),
+    );
     let mut child = ui.new_child(
         egui::UiBuilder::new()
-            .max_rect(rect)
+            .max_rect(stack_rect)
             .layout(egui::Layout::top_down(egui::Align::Min)),
     );
-    child.spacing_mut().item_spacing.y = 1.0;
-    child.add(
-        egui::Label::new(
-            egui::RichText::new(&card.name)
-                .size(14.0)
-                .family(egui::FontFamily::Name("poppins_medium".into()))
-                .color(redesign_text_primary(palette)),
+    child.spacing_mut().item_spacing.y = STACK_GAP;
+    let name_rect = child
+        .add(
+            egui::Label::new(
+                egui::RichText::new(&card.name)
+                    .font(name_font)
+                    .color(redesign_text_primary(palette)),
+            )
+            .truncate(),
         )
-        .truncate(),
-    );
+        .rect;
+    if status.is_empty() {
+        return name_rect;
+    }
     child
         .add(
             egui::Label::new(
-                egui::RichText::new(status_text(card))
-                    .size(12.0)
-                    .family(egui::FontFamily::Name("poppins_light".into()))
+                egui::RichText::new(status)
+                    .font(status_font)
                     .color(redesign_text_muted(palette)),
             )
             .truncate(),
         )
         .rect
+}
+
+fn text_height(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
+    ui.painter()
+        .layout_no_wrap(text.to_string(), font.clone(), egui::Color32::WHITE)
+        .size()
+        .y
 }
 
 fn status_text(card: &VersionCard) -> String {

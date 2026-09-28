@@ -20,8 +20,17 @@ pub(crate) struct Step2UpdateDownloadResult {
 }
 
 pub(crate) enum Step2UpdateDownloadEvent {
-    Progress { completed: usize, total: usize },
-    Bytes { done: u64, total: Option<u64> },
+    Progress {
+        tp_file: String,
+        ok: bool,
+        completed: usize,
+        total: usize,
+    },
+    Bytes {
+        tp_file: String,
+        done: u64,
+        total: Option<u64>,
+    },
     Finished(Step2UpdateDownloadResult),
 }
 
@@ -69,6 +78,8 @@ pub(crate) fn start_step2_update_download_scoped(
     *step2_update_download_rx = Some(rx);
     state.step2.update_selected_download_running = true;
     state.step2.update_selected_download_bytes = None;
+    state.step2.update_selected_download_current = None;
+    state.step2.update_selected_download_finished.clear();
     state.step2.update_selected_extract_running = false;
     state.step2.update_selected_download_scope = scope_tp2;
     state.step2.scan_status = format!("Downloading updates: 0/{}", assets.len());
@@ -155,14 +166,21 @@ pub(crate) fn poll_step2_update_download(
     };
     let event = loop {
         match rx.try_recv() {
-            Ok(Step2UpdateDownloadEvent::Bytes { done, total }) => {
+            Ok(Step2UpdateDownloadEvent::Bytes {
+                tp_file,
+                done,
+                total,
+            }) => {
                 state.step2.update_selected_download_bytes = Some((done, total));
+                state.step2.update_selected_download_current = Some(tp_file);
             }
             Ok(event) => break Some(event),
             Err(TryRecvError::Empty) => break None,
             Err(TryRecvError::Disconnected) => {
                 state.step2.update_selected_download_running = false;
                 state.step2.update_selected_download_bytes = None;
+                state.step2.update_selected_download_current = None;
+                state.step2.update_selected_download_finished.clear();
                 state.step2.update_selected_download_scope = None;
                 state.step2.scan_status =
                     "Download updates failed: worker disconnected".to_string();
@@ -175,7 +193,16 @@ pub(crate) fn poll_step2_update_download(
         return;
     };
     let Step2UpdateDownloadEvent::Finished(result) = event else {
-        if let Step2UpdateDownloadEvent::Progress { completed, total } = event {
+        if let Step2UpdateDownloadEvent::Progress {
+            tp_file,
+            ok,
+            completed,
+            total,
+        } = event
+        {
+            if ok {
+                record_finished_asset(state, &tp_file);
+            }
             state.step2.scan_status = format!("Downloading updates: {completed}/{total}");
         }
         return;
@@ -184,6 +211,8 @@ pub(crate) fn poll_step2_update_download(
     *step2_update_download_rx = None;
     state.step2.update_selected_download_running = false;
     state.step2.update_selected_download_bytes = None;
+    state.step2.update_selected_download_current = None;
+    state.step2.update_selected_download_finished.clear();
     if state.step2.update_selected_download_scope.is_some() {
         state
             .step2
@@ -202,6 +231,14 @@ pub(crate) fn poll_step2_update_download(
     state.step2.scan_status =
         format!("Download updates finished: {downloaded} downloaded, {failed} failed");
     super::app_step2_update_extract::start_step2_update_extract(state, step2_update_extract_rx);
+}
+
+fn record_finished_asset(state: &mut WizardState, tp_file: &str) {
+    let key = mod_downloads::normalize_mod_download_tp2(tp_file);
+    let finished = &mut state.step2.update_selected_download_finished;
+    if !key.is_empty() && !finished.contains(&key) {
+        finished.push(key);
+    }
 }
 
 fn download_update_assets(
@@ -236,6 +273,7 @@ fn download_update_assets(
                 result
             }
         };
+        let ok = download_result.is_ok();
         match download_result {
             Ok(()) => {
                 result
@@ -245,6 +283,8 @@ fn download_update_assets(
             Err(err) => result.failed.push(format!("{}: {err}", asset.label)),
         }
         let _ = tx.send(Step2UpdateDownloadEvent::Progress {
+            tp_file: asset.tp_file.clone(),
+            ok,
             completed: index + 1,
             total,
         });
@@ -268,7 +308,11 @@ fn download_one_asset(
         .and_then(|value| value.trim().parse::<u64>().ok());
     let mut reader = response.into_reader();
     let mut file = fs::File::create(destination).map_err(|err| err.to_string())?;
-    let _ = tx.send(Step2UpdateDownloadEvent::Bytes { done: 0, total });
+    let _ = tx.send(Step2UpdateDownloadEvent::Bytes {
+        tp_file: asset.tp_file.clone(),
+        done: 0,
+        total,
+    });
     let (mut done, mut sent_done, mut sent_at) = (0_u64, 0_u64, Instant::now());
     let mut buffer = vec![0_u8; 64 * 1024];
     loop {
@@ -282,7 +326,11 @@ fn download_one_asset(
             .map_err(|err| err.to_string())?;
         done = done.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
         if done - sent_done >= BYTES_EVENT_STEP || sent_at.elapsed() >= BYTES_EVENT_INTERVAL {
-            let _ = tx.send(Step2UpdateDownloadEvent::Bytes { done, total });
+            let _ = tx.send(Step2UpdateDownloadEvent::Bytes {
+                tp_file: asset.tp_file.clone(),
+                done,
+                total,
+            });
             (sent_done, sent_at) = (done, Instant::now());
         }
     }
@@ -391,6 +439,30 @@ mod tests {
                 .step2
                 .update_selected_extract_failed_sources
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn failed_asset_is_not_recorded_as_finished() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_download_running = true;
+        let (tx, rx) = mpsc::channel::<Step2UpdateDownloadEvent>();
+        let mut download_rx = Some(rx);
+        let mut extract_rx = None;
+        for (tp_file, ok) in [("a.tp2", false), ("b.tp2", true)] {
+            tx.send(Step2UpdateDownloadEvent::Progress {
+                tp_file: tp_file.to_string(),
+                ok,
+                completed: 1,
+                total: 2,
+            })
+            .unwrap();
+            poll_step2_update_download(&mut state, &mut download_rx, &mut extract_rx);
+        }
+
+        assert_eq!(
+            state.step2.update_selected_download_finished,
+            vec!["b".to_string()]
         );
     }
 

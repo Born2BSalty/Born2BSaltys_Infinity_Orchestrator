@@ -215,6 +215,15 @@ impl ModDownloadsLoad {
         }
         sources.into_iter().next()
     }
+
+    pub(crate) fn config_files_for(&self, tp_file: &str) -> Vec<String> {
+        self.find_sources(tp_file)
+            .into_iter()
+            .flat_map(|source| source.config_files)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
 }
 
 pub(crate) fn mod_downloads_user_path() -> PathBuf {
@@ -302,6 +311,7 @@ pub(crate) fn two_tier_from_overlays(
     user_load: ModDownloadsOverlayLoad,
 ) -> ModDownloadsLoad {
     let mut by_source = BTreeMap::<String, ModDownloadSource>::new();
+    let mut config_files_union = ConfigFilesUnion::new();
 
     for overlay in default_load.sources {
         let key = overlay_source_key(&overlay);
@@ -312,6 +322,7 @@ pub(crate) fn two_tier_from_overlays(
             if !source_is_valid(&source) {
                 continue;
             }
+            record_config_files(&mut config_files_union, &source);
             by_source.insert(key, source);
         }
     }
@@ -335,9 +346,11 @@ pub(crate) fn two_tier_from_overlays(
         if let Some(tp2_key) = user_default_tp2.as_deref() {
             clear_other_source_defaults(&mut by_source, &key, tp2_key);
         }
+        record_config_files(&mut config_files_union, &source);
         by_source.insert(key, source);
     }
 
+    apply_config_files_union(by_source.values_mut(), &config_files_union);
     let mut sources = by_source.into_values().collect::<Vec<_>>();
     sort_sources(&mut sources);
     let error = merge_load_errors(default_load.error, user_load.error);
@@ -385,6 +398,10 @@ fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOv
             (key, s)
         })
         .collect();
+    let mut config_files_union = ConfigFilesUnion::new();
+    for source in by_source.values() {
+        record_config_files(&mut config_files_union, source);
+    }
     for mut overlay in per_load.sources {
         let key = overlay_source_key(&overlay);
         if key.is_empty() {
@@ -405,11 +422,33 @@ fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOv
         if let Some(tp2_key) = per_default_tp2.as_deref() {
             clear_other_source_defaults(&mut by_source, &key, tp2_key);
         }
+        record_config_files(&mut config_files_union, &source);
         by_source.insert(key, source);
     }
+    apply_config_files_union(by_source.values_mut(), &config_files_union);
     result.sources = by_source.into_values().collect();
     sort_sources(&mut result.sources);
     result.error = merge_load_errors(result.error.take(), per_load.error);
+}
+
+type ConfigFilesUnion = BTreeMap<String, BTreeSet<String>>;
+
+fn record_config_files(union: &mut ConfigFilesUnion, source: &ModDownloadSource) {
+    union
+        .entry(normalize_mod_download_tp2(&source.tp2))
+        .or_default()
+        .extend(source.config_files.iter().cloned());
+}
+
+fn apply_config_files_union<'a>(
+    sources: impl Iterator<Item = &'a mut ModDownloadSource>,
+    union: &ConfigFilesUnion,
+) {
+    for source in sources {
+        if let Some(names) = union.get(&normalize_mod_download_tp2(&source.tp2)) {
+            source.config_files = names.iter().cloned().collect();
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1032,13 +1071,11 @@ pub(crate) fn complete_source_block(source: &ModDownloadSource) -> String {
             escape_toml_string(source.subdir_require.as_deref().unwrap_or_default())
         ),
         format!("aliases = [{}]", quoted_string_list(&source.aliases)),
-    ];
-    if !source.config_files.is_empty() {
-        lines.push(format!(
+        format!(
             "config_files = [{}]",
             quoted_string_list(&source.config_files)
-        ));
-    }
+        ),
+    ];
     if let Some(tp2_rename) = source.tp2_rename.as_ref() {
         lines.push(format!(
             "tp2_rename = {{ from = \"{}\", to = \"{}\" }}",
@@ -1632,7 +1669,7 @@ mod tests {
 
         assert_eq!(
             block,
-            "  [[mods.sources]]\n  id = \"argent77\"\n  label = \"Argent77\"\n  type = \"github\"\n  url = \"https://github.com/Argent77/A7-ImprovedArcher\"\n  repo = \"Argent77/A7-ImprovedArcher\"\n  exact_github = []\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  release = \"\"\n  channel = \"\"\n  asset = \"\"\n  subdir_require = \"\"\n  aliases = []\n  pkg_windows = \"wzp,zip\"\n  pkg_linux = \"lin,zip\"\n  pkg_macos = \"mac,zip\"\n  default = false"
+            "  [[mods.sources]]\n  id = \"argent77\"\n  label = \"Argent77\"\n  type = \"github\"\n  url = \"https://github.com/Argent77/A7-ImprovedArcher\"\n  repo = \"Argent77/A7-ImprovedArcher\"\n  exact_github = []\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  release = \"\"\n  channel = \"\"\n  asset = \"\"\n  subdir_require = \"\"\n  aliases = []\n  config_files = []\n  pkg_windows = \"wzp,zip\"\n  pkg_linux = \"lin,zip\"\n  pkg_macos = \"mac,zip\"\n  default = false"
         );
     }
 
@@ -1802,6 +1839,38 @@ mod tests {
             "a higher block must replace the lower block whole, not merge its aliases in"
         );
         assert_eq!(source.url, "https://github.com/A/Fork");
+    }
+
+    #[test]
+    fn config_files_union_across_layers() {
+        let default_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"\n  config_files = [\"a.ini\"]\n";
+        let user_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"other\"\n  label = \"Other\"\n  type = \"github\"\n  url = \"https://github.com/C/D\"\n  repo = \"C/D\"\n  config_files = [\"b.ini\"]\n";
+        let modlist_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Me/B\"\n  repo = \"Me/B\"\n";
+
+        let load = load_mod_download_sources_from_texts(default_text, user_text, modlist_text);
+        let source = load
+            .resolve_source("testmod", Some("main"))
+            .expect("resolves");
+
+        assert_eq!(source.url, "https://github.com/Me/B");
+        assert_eq!(
+            source.config_files,
+            vec!["a.ini".to_string(), "b.ini".to_string()]
+        );
+        assert_eq!(
+            load.config_files_for("setup-testmod.tp2"),
+            vec!["a.ini".to_string(), "b.ini".to_string()]
+        );
+    }
+
+    #[test]
+    fn empty_config_files_writes_an_empty_list() {
+        let block = complete_source_block(&argent77_source());
+
+        assert!(
+            block.lines().any(|line| line.trim() == "config_files = []"),
+            "an empty config_files list must still be written; got:\n{block}"
+        );
     }
 
     #[test]

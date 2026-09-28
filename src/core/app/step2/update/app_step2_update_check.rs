@@ -511,7 +511,8 @@ fn exact_log_missing_download_requested(
 }
 
 fn log_missing_downloads_enabled(state: &WizardState) -> bool {
-    state.step1.installs_exactly_from_weidu_logs()
+    state.step2.whole_folder_check_active
+        || state.step1.installs_exactly_from_weidu_logs()
         || state.step1.bootstraps_from_weidu_logs()
         || ((state.step2.review_edit_bgee_log_applied || state.step2.review_edit_bg2ee_log_applied)
             && !state.step2.log_pending_downloads.is_empty())

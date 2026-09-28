@@ -255,6 +255,11 @@ fn prune_stale_installed_refs(state: &WizardState) -> Option<String> {
         }
     }
 
+    if let Err(err) =
+        crate::app::added_mods::forget_added_mods_present(present_tp2s.iter().map(String::as_str))
+    {
+        tracing::warn!("{err}");
+    }
     crate::app::app_step2_update_source_refs::prune_installed_source_refs(present_tp2s)
         .err()
         .map(|err| err.to_string())

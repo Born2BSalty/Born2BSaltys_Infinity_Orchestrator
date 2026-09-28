@@ -80,7 +80,7 @@ fn format_date(iso: &str) -> String {
 
 fn who_label(option: &CardSourceOption) -> String {
     match option.kind {
-        SourceRowKind::Bookmark => format!("bookmarked {}", format_date(&option.who)),
+        SourceRowKind::Bookmark => format!("Bookmark \u{b7} {}", format_date(&option.who)),
         SourceRowKind::Past => format!("saved {}", format_date(&option.who)),
         SourceRowKind::Fork => "fork".to_string(),
         SourceRowKind::Current | SourceRowKind::Layer | SourceRowKind::Pin => option.who.clone(),
@@ -417,6 +417,7 @@ pub(crate) struct KebabEnv<'a> {
     pub(crate) card: &'a VersionCard,
     pub(crate) tiers: &'a mod_downloads::SourceTiers,
     pub(crate) bookmark_label: Option<&'a str>,
+    pub(crate) on_disk: bool,
 }
 
 fn render_fetch_kebab_item(
@@ -496,9 +497,12 @@ fn render_note_kebab_item(
     let location = current_option(card)
         .map(|option| option.location.clone())
         .unwrap_or_default();
+    let rule_words = current_option(card)
+        .map(|option| option.rule_words.clone())
+        .unwrap_or_default();
     outcome.note_seed = Some(NoteSeed {
         mod_name: card.name.clone(),
-        rule_words: card.rule_words.clone(),
+        rule_words,
         location,
         note_text,
         signature,
@@ -537,6 +541,13 @@ fn render_kebab_body(
         outcome.close = true;
     }
     render_note_kebab_item(ui, palette, env.card, env.tiers, busy, outcome);
+    if env.on_disk && menu_item(ui, palette, "Files that travel\u{2026}", busy) {
+        outcome.action = Some(Step2Action::ShowTravelFiles {
+            tp2: env.card.tp2.clone(),
+        });
+        outcome.open_sheet = Some(VersionsSheet::TravelFiles);
+        outcome.close = true;
+    }
 }
 
 pub(crate) fn render_kebab_menu(

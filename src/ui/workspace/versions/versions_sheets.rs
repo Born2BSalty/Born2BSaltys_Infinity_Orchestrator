@@ -3,6 +3,8 @@
 
 use eframe::egui;
 
+use crate::app::app_step2_router::NEW_MOD_CARD_KEY;
+use crate::app::github_forks_list::ForksStatus;
 use crate::app::github_release_list::ReleaseListState;
 use crate::app::mod_downloads::{self, ModDownloadSource};
 use crate::app::mod_source_history;
@@ -19,7 +21,7 @@ use crate::ui::shared::redesign_tokens::{
 };
 use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
-use super::versions_form;
+use super::{versions_form, versions_icons};
 
 const SHEET_W: f32 = 600.0;
 
@@ -267,6 +269,38 @@ pub(crate) fn seed_source_form_from_fork(
     seeded
 }
 
+pub(crate) fn seed_new_mod_form(this_modlist_name: &str) -> SourceForm {
+    let seed = ModDownloadSource {
+        tp2: String::new(),
+        name: String::new(),
+        source_id: "primary".to_string(),
+        source_label: "Primary".to_string(),
+        github: Some(String::new()),
+        ..ModDownloadSource::default()
+    };
+    let mut form = source_form::from_source(
+        &seed,
+        SourceFormIdentity {
+            may_change_id: true,
+            is_new_mod: true,
+        },
+        ModSourceEditDestination::ThisModlist,
+        NEW_MOD_CARD_KEY,
+    );
+    form.note_who = this_modlist_name.to_string();
+    form
+}
+
+fn sheet_mod_name(form: &SourceForm) -> String {
+    if !form.name.trim().is_empty() {
+        form.name.clone()
+    } else if !form.tp2.trim().is_empty() {
+        form.tp2.clone()
+    } else {
+        "New mod".to_string()
+    }
+}
+
 pub(crate) fn render_edit_source_unready(
     ctx: &egui::Context,
     palette: ThemePalette,
@@ -348,13 +382,7 @@ pub(crate) fn render_edit_source(
         .versions_ui
         .source_form
         .as_ref()
-        .map_or_else(String::new, |form| {
-            if form.name.trim().is_empty() {
-                form.tp2.clone()
-            } else {
-                form.name.clone()
-            }
-        });
+        .map_or_else(String::new, sheet_mod_name);
     let mut outcome = render_sheet_shell(
         ctx,
         palette,
@@ -513,24 +541,7 @@ pub(crate) fn render_forks(
                         outcome,
                     );
                     ui.add_space(12.0);
-                    if let Some(err) = step2.mod_download_forks_popup_error.as_ref() {
-                        ui.label(egui::RichText::new(err).color(redesign_error(palette)));
-                        ui.add_space(8.0);
-                    }
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            for fork in &step2.mod_download_forks {
-                                render_fork_row(
-                                    ui,
-                                    palette,
-                                    fork,
-                                    &step2.mod_download_forks_popup_tp2,
-                                    &step2.mod_download_forks_popup_label,
-                                    outcome,
-                                );
-                            }
-                        });
+                    render_forks_list(ui, palette, step2, outcome);
                 });
         },
     );
@@ -538,6 +549,86 @@ pub(crate) fn render_forks(
         outcome.close = true;
     }
     outcome
+}
+
+const FORK_ICON_SLOT: f32 = 30.0;
+const FORK_HINT_H: f32 = 18.0;
+
+fn render_fork_open_icon(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    full_name: &str,
+) -> egui::Response {
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(FORK_ICON_SLOT, FORK_ICON_SLOT),
+        egui::Sense::hover(),
+    );
+    let response = ui.interact(
+        rect,
+        ui.id().with(("fork_open", full_name)),
+        egui::Sense::click(),
+    );
+    if ui.is_rect_visible(rect) {
+        let color = if response.hovered() {
+            redesign_text_primary(palette)
+        } else {
+            redesign_text_muted(palette)
+        };
+        versions_icons::paint_external_link(ui.painter(), rect.center(), color);
+    }
+    response.on_hover_text("Open on GitHub")
+}
+
+fn forks_note(ui: &mut egui::Ui, palette: ThemePalette, text: &str, size: f32) {
+    ui.label(
+        egui::RichText::new(text)
+            .size(size)
+            .family(egui::FontFamily::Name("poppins_light".into()))
+            .color(redesign_text_muted(palette)),
+    );
+}
+
+fn render_forks_list(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    step2: &Step2State,
+    outcome: &mut SheetOutcome,
+) {
+    let loading = step2.forks_list.status == ForksStatus::Loading;
+    if loading {
+        forks_note(ui, palette, "Looking for forks\u{2026}", 13.0);
+        ui.add_space(8.0);
+    } else if let Some(err) = step2.mod_download_forks_popup_error.as_ref() {
+        ui.label(egui::RichText::new(err).color(redesign_error(palette)));
+        ui.add_space(8.0);
+    } else if step2.mod_download_forks.is_empty() {
+        forks_note(ui, palette, "No forks found.", 13.0);
+        ui.add_space(8.0);
+    }
+    let hint_reserve = ui.spacing().item_spacing.y.mul_add(2.0, FORK_HINT_H + 8.0);
+    let list_h = (ui.available_height() - hint_reserve).max(0.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(list_h)
+        .show(ui, |ui| {
+            for fork in &step2.mod_download_forks {
+                render_fork_row(
+                    ui,
+                    palette,
+                    fork,
+                    &step2.mod_download_forks_popup_tp2,
+                    &step2.mod_download_forks_popup_label,
+                    outcome,
+                );
+            }
+        });
+    ui.add_space(8.0);
+    forks_note(
+        ui,
+        palette,
+        "GitHub lists direct forks only. Add a fork it misses as a new source.",
+        12.0,
+    );
 }
 
 fn render_fork_row(
@@ -573,7 +664,7 @@ fn render_fork_row(
             if redesign_btn(
                 ui,
                 palette,
-                "Use",
+                "Use as new source",
                 BtnOpts {
                     small: true,
                     ..Default::default()
@@ -584,17 +675,7 @@ fn render_fork_row(
                 outcome.seed_form = Some(seed_source_form_from_fork(tp2, label, fork));
                 outcome.open_sheet = Some(VersionsSheet::EditSource);
             }
-            if redesign_btn(
-                ui,
-                palette,
-                "Open",
-                BtnOpts {
-                    small: true,
-                    ..Default::default()
-                },
-            )
-            .clicked()
-            {
+            if render_fork_open_icon(ui, palette, &fork.full_name).clicked() {
                 outcome.action = Some(Step2Action::OpenSelectedWeb(fork.html_url.clone()));
             }
         });
@@ -605,6 +686,169 @@ fn render_fork_row(
         egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette)),
     );
     ui.add_space(6.0);
+}
+
+pub(crate) fn render_travel_files(
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    drawer_rect: egui::Rect,
+    step2: &Step2State,
+    escape_active: bool,
+) -> SheetOutcome {
+    let escape_close = escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape));
+    let mod_name = step2
+        .versions_ui
+        .travel_files
+        .as_ref()
+        .map_or("", |travel| travel.mod_name.as_str());
+    let mut outcome = render_sheet_shell(
+        ctx,
+        palette,
+        "versions_sheet_travel_files",
+        drawer_rect,
+        |ui, outcome| {
+            egui::Frame::default()
+                .inner_margin(egui::Margin::symmetric(22, 18))
+                .show(ui, |ui| {
+                    render_header(ui, palette, "Files that travel", mod_name, outcome);
+                    ui.add_space(12.0);
+                    let footer_h = redesign_btn_height(ui, true) + 12.0;
+                    let body_h = (ui.available_height() - footer_h).max(0.0);
+                    egui::ScrollArea::vertical()
+                        .id_salt("versions_travel_files_scroll")
+                        .auto_shrink([false, false])
+                        .max_height(body_h)
+                        .show(ui, |ui| render_travel_files_body(ui, palette, step2));
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| render_travel_files_footer(ui, palette, outcome));
+                });
+        },
+    );
+    if escape_close {
+        outcome.close = true;
+    }
+    outcome
+}
+
+fn render_travel_files_footer(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    outcome: &mut SheetOutcome,
+) {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if redesign_btn(
+            ui,
+            palette,
+            "Close",
+            BtnOpts {
+                small: true,
+                ..Default::default()
+            },
+        )
+        .clicked()
+        {
+            outcome.close = true;
+        }
+    });
+}
+
+fn travel_note(ui: &mut egui::Ui, palette: ThemePalette, text: &str) {
+    ui.label(
+        egui::RichText::new(text)
+            .size(12.0)
+            .family(egui::FontFamily::Name("poppins_light".into()))
+            .color(redesign_text_muted(palette)),
+    );
+}
+
+fn render_travel_files_body(ui: &mut egui::Ui, palette: ThemePalette, step2: &Step2State) {
+    let Some(travel) = step2.versions_ui.travel_files.as_ref() else {
+        return;
+    };
+    if let Some(error) = travel.error.as_deref() {
+        ui.label(egui::RichText::new(error).color(redesign_error(palette)));
+        return;
+    }
+    match travel.compared_against.as_deref() {
+        Some(archive) => {
+            let file_name = std::path::Path::new(archive).file_name().map_or_else(
+                || archive.to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+            travel_note(ui, palette, &format!("Compared with {file_name}"));
+        }
+        None => travel_note(
+            ui,
+            palette,
+            "No fetched archive to compare with; catalog names only",
+        ),
+    }
+    ui.add_space(10.0);
+    if travel.rows.is_empty() {
+        ui.label(
+            egui::RichText::new("Nothing beyond the mod as fetched will travel.")
+                .size(13.0)
+                .family(egui::FontFamily::Name("poppins_light".into()))
+                .color(redesign_text_primary(palette)),
+        );
+    }
+    for (path, reason) in &travel.rows {
+        render_travel_row(ui, palette, path, reason);
+    }
+    if travel.truncated {
+        ui.add_space(8.0);
+        travel_note(
+            ui,
+            palette,
+            "Some files were left out: the share carries at most 2 MB of config files per mod.",
+        );
+    }
+    render_travel_name_list(ui, palette, "Missing on disk", &travel.missing);
+    render_travel_name_list(ui, palette, "Ignored (invalid name)", &travel.invalid);
+}
+
+fn render_travel_row(ui: &mut egui::Ui, palette: ThemePalette, path: &str, reason: &str) {
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(path)
+                .font(egui::FontId::monospace(13.0))
+                .color(redesign_text_primary(palette)),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(
+                egui::RichText::new(reason)
+                    .size(12.0)
+                    .family(egui::FontFamily::Name("poppins_light".into()))
+                    .color(redesign_text_muted(palette)),
+            );
+        });
+    });
+    ui.painter().hline(
+        ui.max_rect().x_range(),
+        ui.cursor().top(),
+        egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_soft(palette)),
+    );
+    ui.add_space(6.0);
+}
+
+fn render_travel_name_list(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    label: &str,
+    names: &[String],
+) {
+    if names.is_empty() {
+        return;
+    }
+    ui.add_space(12.0);
+    travel_note(ui, palette, label);
+    for name in names {
+        ui.label(
+            egui::RichText::new(name)
+                .font(egui::FontId::monospace(13.0))
+                .color(redesign_error(palette)),
+        );
+    }
 }
 
 pub(crate) struct NoteEnv<'a> {
@@ -785,6 +1029,25 @@ mod tests {
         step2.versions_ui.sheet_tp2 = Some("bg1npcmusic".to_string());
         step2.versions_ui.source_form = Some(form);
 
+        assert!(editor_ready_for(&step2));
+    }
+
+    #[test]
+    fn new_mod_form_opens_under_its_card_key_as_a_new_mod() {
+        let form = seed_new_mod_form("Speedrun EET");
+        assert!(form.identity.is_new_mod);
+        assert!(form.identity.may_change_id);
+        assert!(form.tp2.is_empty());
+        assert_eq!(form.source_id, "primary");
+        assert_eq!(sheet_mod_name(&form), "New mod");
+        assert_eq!(form.save_to, ModSourceEditDestination::ThisModlist);
+        assert_eq!(form.note_who, "Speedrun EET");
+
+        let mut step2 = Step2State::default();
+        step2
+            .versions_ui
+            .open_sheet(VersionsSheet::EditSource, NEW_MOD_CARD_KEY.to_string());
+        step2.versions_ui.source_form = Some(form);
         assert!(editor_ready_for(&step2));
     }
 }

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::game_authority::{self, GameSlot};
+use crate::app::modlist_share::commit_sha_from_installed_ref;
 use crate::app::state::WizardState;
 use crate::parser::weidu_version::{normalize_version_text, parse_version};
 
@@ -25,7 +26,7 @@ pub(crate) fn source_ref_is_update(tp_file: &str, source_id: &str, latest_ref: &
     super::app_step2_update_source_refs::load_installed_source_id_and_ref(tp_file).is_some_and(
         |(installed_source_id, installed_ref)| {
             installed_source_id.trim().to_ascii_lowercase() == source_id
-                && installed_ref.trim() != latest_ref.trim()
+                && !refs_equal(&installed_ref, latest_ref)
         },
     )
 }
@@ -35,9 +36,32 @@ pub(crate) fn source_ref_matches(tp_file: &str, source_id: &str, latest_ref: &st
     super::app_step2_update_source_refs::load_installed_source_id_and_ref(tp_file).is_some_and(
         |(installed_source_id, installed_ref)| {
             installed_source_id.trim().to_ascii_lowercase() == source_id
-                && installed_ref.trim() == latest_ref.trim()
+                && refs_equal(&installed_ref, latest_ref)
         },
     )
+}
+
+pub(crate) fn refs_equal(installed: &str, latest: &str) -> bool {
+    let installed = installed.trim();
+    let latest = latest.trim();
+    match (
+        commit_sha_from_installed_ref(installed),
+        commit_sha_from_installed_ref(latest),
+    ) {
+        (Some(left), Some(right)) => shas_equal(&left, &right),
+        _ => installed == latest,
+    }
+}
+
+fn shas_equal(left: &str, right: &str) -> bool {
+    let left = left.to_ascii_lowercase();
+    let right = right.to_ascii_lowercase();
+    let (shorter, longer) = if left.len() <= right.len() {
+        (&left, &right)
+    } else {
+        (&right, &left)
+    };
+    shorter == longer || (shorter.len() >= 7 && longer.starts_with(shorter.as_str()))
 }
 
 pub(crate) fn mod_has_current_version(state: &WizardState, game_tab: &str, tp_file: &str) -> bool {
@@ -111,5 +135,48 @@ mod tests {
         mark_update_available(&mut state, "IWDEE", "mod.tp2");
         assert_eq!(state.step2.bgee_mods[0].package_marker, Some('+'));
         assert!(state.step2.bg2ee_mods.is_empty());
+    }
+
+    #[test]
+    fn master_at_sha_equals_commit_at_same_sha() {
+        assert!(refs_equal(
+            "master@3da1d81f96ce96dd052bfeb241fbb477e686289e",
+            "commit@3da1d81f96ce96dd052bfeb241fbb477e686289e",
+        ));
+        assert!(refs_equal(
+            " master@3DA1D81F96CE96DD052BFEB241FBB477E686289E ",
+            "commit@3da1d81f96ce96dd052bfeb241fbb477e686289e",
+        ));
+    }
+
+    #[test]
+    fn different_shas_are_an_update() {
+        assert!(!refs_equal(
+            "master@3da1d81f96ce96dd052bfeb241fbb477e686289e",
+            "commit@0123456789abcdef0123456789abcdef01234567",
+        ));
+    }
+
+    #[test]
+    fn tag_refs_compare_whole() {
+        assert!(!refs_equal("v35.17", "v35.18"));
+        assert!(refs_equal("v35.17", "v35.17"));
+        assert!(!refs_equal("abcdef12", "commit@abcdef12"));
+    }
+
+    #[test]
+    fn short_sha_prefix_matches_full() {
+        assert!(refs_equal(
+            "commit@3da1d81",
+            "master@3da1d81f96ce96dd052bfeb241fbb477e686289e",
+        ));
+        assert!(refs_equal(
+            "master@3da1d81f96ce96dd052bfeb241fbb477e686289e",
+            "commit@3da1d81",
+        ));
+        assert!(!refs_equal(
+            "commit@3da1d82",
+            "master@3da1d81f96ce96dd052bfeb241fbb477e686289e",
+        ));
     }
 }

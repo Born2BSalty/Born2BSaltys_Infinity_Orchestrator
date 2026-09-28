@@ -56,40 +56,57 @@ pub(crate) fn paint_lock(
         egui::StrokeKind::Inside,
     );
 
-    let shackle_r = 4.0_f32;
-    let left_leg_x = body.left() + 2.5;
-    let right_leg_x = if locked {
-        body.right() - 2.5
+    if locked {
+        paint_closed_shackle(painter, body, stroke);
     } else {
-        body.right() - 0.5
-    };
-    let shackle_center_x = left_leg_x.midpoint(right_leg_x);
-    let shackle_center_y = body.top();
+        paint_open_shackle(painter, body, stroke);
+    }
+}
 
-    let arc_points: Vec<egui::Pos2> = (0_u8..=12)
+const SHACKLE_R: f32 = 4.0;
+const SHACKLE_LEG_INSET: f32 = 2.5;
+const SHACKLE_ARC_STEPS: u8 = 12;
+const OPEN_SHACKLE_ARC_END: u8 = 9;
+const OPEN_SHACKLE_SHIFT: egui::Vec2 = egui::vec2(-1.5, -1.5);
+
+fn shackle_arc(center: egui::Pos2, last_step: u8) -> Vec<egui::Pos2> {
+    (0_u8..=last_step)
         .map(|i| {
-            let t = std::f32::consts::PI * (1.0 - f32::from(i) / 12.0);
+            let t = std::f32::consts::PI * (1.0 - f32::from(i) / f32::from(SHACKLE_ARC_STEPS));
             egui::pos2(
-                t.cos().mul_add(shackle_r, shackle_center_x),
-                t.sin().mul_add(-shackle_r, shackle_center_y),
+                t.cos().mul_add(SHACKLE_R, center.x),
+                t.sin().mul_add(-SHACKLE_R, center.y),
             )
         })
-        .collect();
-    painter.line(arc_points, stroke);
-    painter.line_segment(
-        [
-            egui::pos2(left_leg_x, shackle_center_y),
-            egui::pos2(left_leg_x, body.top()),
-        ],
-        stroke,
-    );
-    painter.line_segment(
-        [
-            egui::pos2(right_leg_x, shackle_center_y),
-            egui::pos2(right_leg_x, body.top()),
-        ],
-        stroke,
-    );
+        .collect()
+}
+
+fn shackle_center(body: egui::Rect) -> egui::Pos2 {
+    let left_leg_x = body.left() + SHACKLE_LEG_INSET;
+    let right_leg_x = body.right() - SHACKLE_LEG_INSET;
+    egui::pos2(left_leg_x.midpoint(right_leg_x), body.top())
+}
+
+fn paint_closed_shackle(painter: &egui::Painter, body: egui::Rect, stroke: egui::Stroke) {
+    let center = shackle_center(body);
+    painter.line(shackle_arc(center, SHACKLE_ARC_STEPS), stroke);
+    for leg_x in [
+        body.left() + SHACKLE_LEG_INSET,
+        body.right() - SHACKLE_LEG_INSET,
+    ] {
+        painter.line_segment(
+            [egui::pos2(leg_x, center.y), egui::pos2(leg_x, body.top())],
+            stroke,
+        );
+    }
+}
+
+fn paint_open_shackle(painter: &egui::Painter, body: egui::Rect, stroke: egui::Stroke) {
+    let center = shackle_center(body) + OPEN_SHACKLE_SHIFT;
+    let arc = shackle_arc(center, OPEN_SHACKLE_ARC_END);
+    let leg_top = arc[0];
+    painter.line(arc, stroke);
+    painter.line_segment([leg_top, egui::pos2(leg_top.x, body.top())], stroke);
 }
 
 pub(crate) fn paint_external_link(

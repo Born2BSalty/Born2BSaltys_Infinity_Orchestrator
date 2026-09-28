@@ -226,21 +226,69 @@ pub(crate) fn build_versions_view(
 }
 
 pub(crate) fn refresh_fetch_phase(view: &mut VersionsView, state: &WizardState) {
+    let batch_keys = running_batch_keys(state);
+    let fetching_key = fetching_key(state);
+    let downloading = state.step2.update_selected_download_running;
     for card in &mut view.cards {
-        card.fetching = fetch_phase_for(state, &card.tp2);
-        card.queued = state.step2.versions_ui.fetch_queue.contains(&card.tp2);
+        let is_current = fetching_key.as_deref() == Some(card.tp2.as_str());
+        let finished = downloading
+            && !is_current
+            && state
+                .step2
+                .update_selected_download_finished
+                .contains(&card.tp2);
+        card.fetching = if finished {
+            Some(FetchPhase::Downloading(Some(1.0)))
+        } else {
+            fetch_phase_for_with(state, &card.tp2, &batch_keys)
+        };
+        let waiting_in_batch =
+            downloading && batch_keys.contains(&card.tp2) && !is_current && !finished;
+        card.queued = waiting_in_batch || state.step2.versions_ui.fetch_queue.contains(&card.tp2);
     }
 }
 
-pub(crate) fn fetch_phase_for(state: &WizardState, tp2_key: &str) -> Option<FetchPhase> {
-    let fetching_key = state
+fn running_batch_keys(state: &WizardState) -> BTreeSet<String> {
+    let step2 = &state.step2;
+    let unscoped =
+        step2.update_selected_download_scope.is_none() && step2.versions_ui.fetching_tp2.is_none();
+    let running = step2.update_selected_download_running || step2.update_selected_extract_running;
+    if !unscoped || !running {
+        return BTreeSet::new();
+    }
+    step2
+        .update_selected_update_assets
+        .iter()
+        .map(|asset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file))
+        .filter(|key| !key.is_empty())
+        .collect()
+}
+
+fn fetching_key(state: &WizardState) -> Option<String> {
+    state
         .step2
         .update_selected_download_scope
         .as_deref()
         .or(state.step2.versions_ui.fetching_tp2.as_deref())
-        .map(mod_downloads::normalize_mod_download_tp2)?;
-    if fetching_key.is_empty() || fetching_key != tp2_key {
-        return None;
+        .or(state.step2.update_selected_download_current.as_deref())
+        .map(mod_downloads::normalize_mod_download_tp2)
+        .filter(|key| !key.is_empty())
+}
+
+#[cfg(test)]
+pub(crate) fn fetch_phase_for(state: &WizardState, tp2_key: &str) -> Option<FetchPhase> {
+    fetch_phase_for_with(state, tp2_key, &running_batch_keys(state))
+}
+
+pub(crate) fn fetch_phase_for_with(
+    state: &WizardState,
+    tp2_key: &str,
+    batch_keys: &BTreeSet<String>,
+) -> Option<FetchPhase> {
+    if fetching_key(state).as_deref() != Some(tp2_key) {
+        let extracting_in_batch =
+            state.step2.update_selected_extract_running && batch_keys.contains(tp2_key);
+        return extracting_in_batch.then_some(FetchPhase::Extracting);
     }
     if state.step2.update_selected_download_running {
         Some(FetchPhase::Downloading(fetch_fraction(state)))
@@ -810,7 +858,7 @@ fn build_card(
         |source| {
             (
                 layer_name(tiers.tier_of(&source.tp2, &source.source_id)),
-                rule_words(source),
+                selector_words(source),
             )
         },
     );
@@ -868,7 +916,7 @@ pub(crate) fn rule_words(source: &ModDownloadSource) -> String {
         return match source.channel.as_deref().map(str::trim) {
             Some("preonly") => "Newest pre-release".to_string(),
             Some("pre-release") => "Newest release + pre-releases".to_string(),
-            Some("master") => "Latest code".to_string(),
+            Some("master") => "Default branch".to_string(),
             Some("ifeellucky") => "Newest release, else latest code".to_string(),
             _ => "Newest release".to_string(),
         };
@@ -883,6 +931,14 @@ pub(crate) fn rule_words(source: &ModDownloadSource) -> String {
         return "Direct archive".to_string();
     }
     "Manual download".to_string()
+}
+
+pub(crate) fn selector_words(source: &ModDownloadSource) -> String {
+    let rule = rule_words(source);
+    match non_empty(source.github.as_deref()) {
+        Some(repo) => format!("{rule} \u{b7} {repo}"),
+        None => rule,
+    }
 }
 
 fn non_empty(value: Option<&str>) -> Option<&str> {
@@ -1009,6 +1065,157 @@ mod tests {
 
         state.step2.is_scanning = false;
         assert_eq!(fetch_phase_for(&state, &key), None);
+    }
+
+    #[test]
+    fn unscoped_fetch_marks_current_card_downloading_and_others_queued() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("a.tp2", "A", "~a.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("b.tp2", "B", "~b.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .update_selected_update_assets
+            .push(asset("a.tp2", "A", "2.0"));
+        state
+            .step2
+            .update_selected_update_assets
+            .push(asset("b.tp2", "B", "2.0"));
+        state.step2.update_selected_download_running = true;
+        state.step2.update_selected_download_current = Some("a.tp2".to_string());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let card_for = |tp2: &str| {
+            let key = mod_downloads::normalize_mod_download_tp2(tp2);
+            view.cards
+                .iter()
+                .find(|card| card.tp2 == key)
+                .expect("card present")
+        };
+        let current = card_for("a.tp2");
+        assert!(matches!(current.fetching, Some(FetchPhase::Downloading(_))));
+        assert!(!current.queued);
+        let waiting = card_for("b.tp2");
+        assert!(waiting.queued);
+        assert_eq!(waiting.fetching, None);
+    }
+
+    fn batch_state(names: &[&str]) -> WizardState {
+        let mut state = WizardState::default();
+        for name in names {
+            let tp_file = format!("{name}.tp2");
+            state.step2.bgee_mods.push(mod_state(
+                &tp_file,
+                name,
+                &format!("~{tp_file}~ #0 #0 // 1.0"),
+            ));
+            state
+                .step2
+                .update_selected_update_assets
+                .push(asset(&tp_file, name, "2.0"));
+        }
+        state
+    }
+
+    fn card_named<'a>(view: &'a VersionsView, tp_file: &str) -> &'a VersionCard {
+        let key = mod_downloads::normalize_mod_download_tp2(tp_file);
+        view.cards
+            .iter()
+            .find(|card| card.tp2 == key)
+            .expect("card present")
+    }
+
+    #[test]
+    fn finished_batch_card_reads_full_while_next_downloads_and_rest_queue() {
+        use crate::app::app_step2_update_download::{
+            Step2UpdateDownloadEvent, poll_step2_update_download,
+        };
+        let mut state = batch_state(&["a", "b", "c"]);
+        state.step2.update_selected_download_running = true;
+        let (tx, rx) = std::sync::mpsc::channel::<Step2UpdateDownloadEvent>();
+        let mut download_rx = Some(rx);
+        let mut extract_rx = None;
+        tx.send(Step2UpdateDownloadEvent::Progress {
+            tp_file: "a.tp2".to_string(),
+            ok: true,
+            completed: 1,
+            total: 3,
+        })
+        .unwrap();
+        poll_step2_update_download(&mut state, &mut download_rx, &mut extract_rx);
+        tx.send(Step2UpdateDownloadEvent::Bytes {
+            tp_file: "b.tp2".to_string(),
+            done: 10,
+            total: Some(100),
+        })
+        .unwrap();
+        poll_step2_update_download(&mut state, &mut download_rx, &mut extract_rx);
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let finished = card_named(&view, "a.tp2");
+        assert_eq!(finished.fetching, Some(FetchPhase::Downloading(Some(1.0))));
+        assert!(!finished.queued);
+        let current = card_named(&view, "b.tp2");
+        assert!(matches!(current.fetching, Some(FetchPhase::Downloading(_))));
+        assert!(!current.queued);
+        let waiting = card_named(&view, "c.tp2");
+        assert!(waiting.queued);
+        assert_eq!(waiting.fetching, None);
+    }
+
+    #[test]
+    fn unscoped_extract_marks_every_batch_card_extracting() {
+        let mut state = batch_state(&["a", "b"]);
+        state.step2.update_selected_extract_running = true;
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        for tp_file in ["a.tp2", "b.tp2"] {
+            let card = card_named(&view, tp_file);
+            assert_eq!(card.fetching, Some(FetchPhase::Extracting));
+            assert!(!card.queued);
+        }
+    }
+
+    #[test]
+    fn unscoped_rescan_shows_no_fetch_phase() {
+        let mut state = batch_state(&["a", "b"]);
+        state.step2.is_scanning = true;
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        for tp_file in ["a.tp2", "b.tp2"] {
+            let card = card_named(&view, tp_file);
+            assert_eq!(card.fetching, None);
+            assert!(!card.queued);
+        }
+    }
+
+    #[test]
+    fn scoped_fetch_leaves_other_asset_cards_unqueued() {
+        let mut state = batch_state(&["a", "b"]);
+        state.step2.update_selected_download_running = true;
+        state.step2.update_selected_download_scope = Some("a".to_string());
+        state.step2.versions_ui.fetching_tp2 = Some("a".to_string());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let scoped = card_named(&view, "a.tp2");
+        assert!(matches!(scoped.fetching, Some(FetchPhase::Downloading(_))));
+        let other = card_named(&view, "b.tp2");
+        assert_eq!(other.fetching, None);
+        assert!(!other.queued);
+
+        state.step2.update_selected_download_running = false;
+        state.step2.update_selected_extract_running = true;
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(
+            card_named(&view, "a.tp2").fetching,
+            Some(FetchPhase::Extracting)
+        );
+        assert_eq!(card_named(&view, "b.tp2").fetching, None);
     }
 
     #[test]
@@ -1258,7 +1465,7 @@ mod tests {
         assert_eq!(rule_words(&source), "Newest release + pre-releases");
 
         source.channel = Some("master".to_string());
-        assert_eq!(rule_words(&source), "Latest code");
+        assert_eq!(rule_words(&source), "Default branch");
 
         source.channel = Some("ifeellucky".to_string());
         assert_eq!(rule_words(&source), "Newest release, else latest code");
@@ -1280,6 +1487,25 @@ mod tests {
 
         weasel.url = "https://example.test/page".to_string();
         assert_eq!(rule_words(&weasel), "Manual download");
+    }
+
+    #[test]
+    fn selector_words_names_the_repo_after_the_rule() {
+        let branch = ModDownloadSource {
+            github: Some("Gibberlings3/Tweaks-Anthology".to_string()),
+            branch: Some("master".to_string()),
+            ..ModDownloadSource::default()
+        };
+        assert_eq!(
+            selector_words(&branch),
+            "Branch master \u{b7} Gibberlings3/Tweaks-Anthology"
+        );
+
+        let archive = ModDownloadSource {
+            url: "https://example.test/file.zip".to_string(),
+            ..ModDownloadSource::default()
+        };
+        assert_eq!(selector_words(&archive), "Direct archive");
     }
 
     #[test]
