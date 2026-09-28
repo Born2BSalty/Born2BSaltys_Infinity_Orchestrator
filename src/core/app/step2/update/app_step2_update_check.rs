@@ -286,8 +286,8 @@ fn apply_successful_update_check_outcome(
         );
         return;
     }
-    let allow_source_ref_update = uses_source_snapshot
-        && source_ref_is_update(&outcome.tp_file, &outcome.source_id, source_ref);
+    let allow_source_ref_update =
+        source_ref_is_update(&outcome.tp_file, &outcome.source_id, source_ref);
     let allow_snapshot_install = uses_source_snapshot
         && !has_current_version
         && state.step1.have_weidu_logs
@@ -648,6 +648,12 @@ mod tests {
         use crate::app::mod_downloads::ModDownloadsLoad;
         use crate::app::state::{Step2ComponentState, Step2ModState};
 
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient = AmbientRestore(crate::app::mod_downloads::active_modlist_dir());
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+        let _config_guard = ConfigDirGuard::new("override_outcome");
         let mut state = WizardState::<bool>::default();
         state.step2.bgee_mods = vec![Step2ModState {
             name: "ISNF".to_string(),
@@ -762,6 +768,148 @@ mod tests {
             .expect("timestamp recorded after a finished check");
         assert_eq!(recorded.len(), 5);
         assert_eq!(recorded.as_bytes()[2], b':');
+    }
+
+    struct AmbientRestore(Option<std::path::PathBuf>);
+
+    impl Drop for AmbientRestore {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    fn multikits_state() -> WizardState<bool> {
+        use crate::app::state::{Step2ComponentState, Step2ModState};
+
+        let mut state = WizardState::<bool>::default();
+        state.step2.bgee_mods = vec![Step2ModState {
+            name: "A7-MultiKits".to_string(),
+            tp_file: "A7-MultiKits.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: vec![Step2ComponentState {
+                component_id: "0".to_string(),
+                label: "A7-MultiKits".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: "~A7-MultiKits.tp2~ #0 #0 // Multi-kits: VERSION ~1.1~".to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: true,
+                selected_order: Some(1),
+            }],
+        }];
+        state
+    }
+
+    fn multikits_release_outcome() -> Step2UpdateCheckOutcome {
+        Step2UpdateCheckOutcome {
+            game_tab: "BGEE".to_string(),
+            tp_file: "A7-MultiKits.tp2".to_string(),
+            label: "A7-MultiKits".to_string(),
+            source_id: "argent77".to_string(),
+            source_url: String::new(),
+            tag: Some("v1.1".to_string()),
+            source_ref: None,
+            asset_name: Some("win-A7-MultiKits-v1.1.zip".to_string()),
+            asset_url: Some(
+                "https://example.com/argent77/A7-MultiKits/win-A7-MultiKits-v1.1.zip".to_string(),
+            ),
+            error: None,
+            package_kind: Step2PackageKind::ReleaseAsset,
+            version_pin_overridden: None,
+        }
+    }
+
+    fn check_multikits_release(label: &str, refs_file: Option<&str>) -> WizardState<bool> {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient = AmbientRestore(crate::app::mod_downloads::active_modlist_dir());
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+        let config_guard = ConfigDirGuard::new(label);
+        let refs_path = crate::app::app_step2_update_source_refs::installed_source_refs_path();
+        assert!(refs_path.starts_with(&config_guard.0));
+        if let Some(content) = refs_file {
+            std::fs::write(&refs_path, content).unwrap();
+        }
+        let mut state = multikits_state();
+        assert!(mod_has_current_version(&state, "BGEE", "A7-MultiKits.tp2"));
+        assert!(!version_is_update(
+            &state,
+            "BGEE",
+            "A7-MultiKits.tp2",
+            "v1.1"
+        ));
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        apply_update_check_outcome(&mut state, &multikits_release_outcome(), &sources, false);
+        state
+    }
+
+    #[test]
+    fn recorded_branch_ref_makes_a_matching_release_a_fetch() {
+        let state = check_multikits_release(
+            "branch_ref_release_fetch",
+            Some(
+                "[refs]\na7-multikits = \"devel@6ae6ae0bd3d2b6275a24aa9c72abc54e2122f805\"\n\n[sources]\na7-multikits = \"argent77\"\n",
+            ),
+        );
+        let assets = &state.step2.update_selected_update_assets;
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].tag, "v1.1");
+        let sources = &state.step2.update_selected_update_sources;
+        assert_eq!(sources.len(), 1);
+        assert!(sources[0].ends_with("(v1.1)"));
+        assert_eq!(state.step2.bgee_mods[0].package_marker, Some('+'));
+    }
+
+    #[test]
+    fn release_matching_the_recorded_tag_stays_in_sync() {
+        let state = check_multikits_release(
+            "release_tag_in_sync",
+            Some("[refs]\na7-multikits = \"v1.1\"\n\n[sources]\na7-multikits = \"argent77\"\n"),
+        );
+        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert!(state.step2.update_selected_update_sources.is_empty());
+    }
+
+    #[test]
+    fn no_recorded_ref_falls_back_to_the_version_comparison() {
+        let state = check_multikits_release("no_recorded_ref", None);
+        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert!(state.step2.update_selected_update_sources.is_empty());
+    }
+
+    #[test]
+    fn recorded_ref_from_another_source_is_ignored() {
+        let state = check_multikits_release(
+            "other_source_ref",
+            Some(
+                "[refs]\na7-multikits = \"devel@6ae6ae0bd3d2b6275a24aa9c72abc54e2122f805\"\n\n[sources]\na7-multikits = \"someone-else\"\n",
+            ),
+        );
+        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert!(state.step2.update_selected_update_sources.is_empty());
     }
 
     #[test]
