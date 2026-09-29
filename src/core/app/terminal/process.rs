@@ -117,6 +117,8 @@ mod lifecycle {
             self.current_component_tp2 = None;
             self.current_component_id = None;
             self.current_component_name = None;
+            self.current_batch.clear();
+            self.pending_display_patches.clear();
 
             self.log_bio_debug(&format!(
                 "start_process program=\"{}\" args_count={} env={:?}",
@@ -169,6 +171,7 @@ mod lifecycle {
                     for chunk in chunks {
                         self.append_output(&chunk);
                     }
+                    self.apply_pending_display_patches();
                     self.log_bio_debug(&format!(
                         "poll_output chunk_count={} total_bytes={}",
                         joined.len(),
@@ -190,6 +193,8 @@ mod lifecycle {
                         self.current_component_tp2 = None;
                         self.current_component_id = None;
                         self.current_component_name = None;
+                        self.current_batch.clear();
+                        self.pending_display_patches.clear();
                         self.events.saw_exit_event = true;
                         self.events.has_new_data = true;
                     }
@@ -206,6 +211,8 @@ mod lifecycle {
                         self.current_component_tp2 = None;
                         self.current_component_id = None;
                         self.current_component_name = None;
+                        self.current_batch.clear();
+                        self.pending_display_patches.clear();
                         self.events.saw_exit_event = true;
                         self.events.has_new_data = true;
                     }
@@ -308,5 +315,95 @@ mod terminate {
             self.append_marker(marker);
             self.events.has_new_data = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc::{self, Sender};
+
+    use super::super::EmbeddedTerminal;
+    use super::super::backend::OutputEvent;
+
+    const BATCH_LINE: &str = "[2026-09-29T03:30:35Z INFO  mod_installer::installers] Installing mod WeiduBatchedComponents([WeiduComponent { tp_file: \"DLCMERGER.TP2\", name: \"DlcMerger\", lang: \"0\", component: \"1\", component_name: \"Merge DLC into game\", sub_component: \"Siege of Dragonspear\", version: \"1.8\" }])\n";
+    const RAW_SUCCESS: &str = "[2026-09-29T03:31:14Z INFO  mod_installer::parser] SUCCESSFULLY INSTALLED      Merge DLC into game -> Merge \"Siege of Dragonspear\" DLC";
+    const PREFIXED_SUCCESS: &str = "[2026-09-29T03:31:14Z INFO  mod_installer::parser] SUCCESSFULLY INSTALLED      DLCMERGER #1 Merge DLC into game -> Merge \"Siege of Dragonspear\" DLC";
+
+    fn polled_terminal() -> (EmbeddedTerminal, Sender<OutputEvent>) {
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        let (tx, rx) = mpsc::channel();
+        term.output_rx = Some(rx);
+        (term, tx)
+    }
+
+    fn deliver(term: &mut EmbeddedTerminal, tx: &Sender<OutputEvent>, chunks: &[&str]) {
+        for chunk in chunks {
+            tx.send(OutputEvent::Data((*chunk).to_string()))
+                .expect("send chunk");
+        }
+        term.poll_output();
+    }
+
+    #[test]
+    fn display_buffers_carry_the_prefix_and_the_boundary_count_reads_the_raw_line() {
+        let (mut term, tx) = polled_terminal();
+        deliver(&mut term, &tx, &[BATCH_LINE]);
+        deliver(&mut term, &tx, &[RAW_SUCCESS, "\n"]);
+        assert!(term.output_text().contains(PREFIXED_SUCCESS));
+        assert!(term.installed_text().contains(PREFIXED_SUCCESS));
+        assert!(!term.output_text().contains(RAW_SUCCESS));
+        assert!(!term.installed_text().contains(RAW_SUCCESS));
+        assert_eq!(term.boundary_event_count(), 1);
+    }
+
+    #[test]
+    fn a_success_line_split_across_two_polls_is_prefixed_once() {
+        let (mut term, tx) = polled_terminal();
+        deliver(&mut term, &tx, &[BATCH_LINE]);
+        let split_at = RAW_SUCCESS.find("INSTALLED").expect("phrase");
+        deliver(&mut term, &tx, &[&RAW_SUCCESS[..split_at]]);
+        deliver(&mut term, &tx, &[&RAW_SUCCESS[split_at..], "\n"]);
+        assert_eq!(term.output_text().matches(PREFIXED_SUCCESS).count(), 1);
+        assert_eq!(term.installed_text().matches(PREFIXED_SUCCESS).count(), 1);
+        assert!(!term.output_text().contains(RAW_SUCCESS));
+        assert!(!term.installed_text().contains(RAW_SUCCESS));
+        assert_eq!(term.boundary_event_count(), 1);
+    }
+
+    #[test]
+    fn a_success_line_and_the_next_batch_line_in_one_poll_keep_their_own_prefixes() {
+        let batch = |id: &str, name: &str| {
+            format!(
+                "[2026-09-29T03:32:10Z INFO  mod_installer::installers] Installing mod WeiduBatchedComponents([WeiduComponent {{ tp_file: \"SETUP-EEFIXPACK.TP2\", name: \"EEFixPack\", lang: \"0\", component: \"{id}\", component_name: \"{name}\", sub_component: \"\", version: \"\" }}])\n"
+            )
+        };
+        let success = |name: &str| {
+            format!(
+                "[2026-09-29T03:32:10Z INFO  mod_installer::parser] SUCCESSFULLY INSTALLED      {name}\n"
+            )
+        };
+        let (mut term, tx) = polled_terminal();
+        let first_batch = batch("0", "Core Fixes");
+        let first_success = success("Core Fixes");
+        let second_batch = batch("2", "Game Text Update");
+        let second_success = success("Game Text Update");
+        deliver(
+            &mut term,
+            &tx,
+            &[&first_batch, &first_success, &second_batch, &second_success],
+        );
+        assert!(term.output_text().contains("EEFIXPACK #0 Core Fixes"));
+        assert!(term.output_text().contains("EEFIXPACK #2 Game Text Update"));
+        assert!(!term.output_text().contains("#2 Core Fixes"));
+        assert_eq!(term.boundary_event_count(), 2);
+    }
+
+    #[test]
+    fn a_success_line_without_a_known_batch_is_left_alone() {
+        let (mut term, tx) = polled_terminal();
+        deliver(&mut term, &tx, &[RAW_SUCCESS, "\n"]);
+        assert_eq!(term.output_text(), format!("{RAW_SUCCESS}\n"));
+        assert_eq!(term.installed_text(), format!("{RAW_SUCCESS}\n"));
+        assert_eq!(term.boundary_event_count(), 1);
     }
 }

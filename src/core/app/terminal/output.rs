@@ -128,6 +128,8 @@ mod buffers {
             self.important_buffer.clear();
             self.installed_buffer.clear();
             self.important_scan_tail.clear();
+            self.current_batch.clear();
+            self.pending_display_patches.clear();
             self.prompt_capture.active = false;
             self.prompt_capture.lines = 0;
             self.prompt_capture.after_send = false;
@@ -156,6 +158,23 @@ mod buffers {
                 self.output_buffer.drain(..byte_idx);
             }
             self.output_revision = self.output_revision.wrapping_add(1);
+        }
+
+        pub(in crate::app::terminal) fn apply_pending_display_patches(&mut self) {
+            let mut patched = false;
+            for (raw, display) in std::mem::take(&mut self.pending_display_patches)
+                .into_iter()
+                .rev()
+            {
+                if let Some(pos) = self.output_buffer.rfind(raw.as_str()) {
+                    self.output_buffer
+                        .replace_range(pos..pos + raw.len(), &display);
+                    patched = true;
+                }
+            }
+            if patched {
+                self.output_revision = self.output_revision.wrapping_add(1);
+            }
         }
 
         pub(in crate::app::terminal) fn push_important(&mut self, text: &str) {
@@ -203,6 +222,7 @@ mod buffers {
     }
 }
 mod capture {
+    use super::super::success_prefix::{parse_batch_line, prefixed_success_line};
     use super::super::{EmbeddedTerminal, analyze};
 
     impl EmbeddedTerminal {
@@ -228,6 +248,19 @@ mod capture {
             for line in parts {
                 let expanded = expand_escaped_newlines(line);
                 for sub in expanded.lines() {
+                    if let Some(batch) = parse_batch_line(sub) {
+                        self.current_batch = batch;
+                    }
+                    let display = if analyze::installed_line(sub) {
+                        prefixed_success_line(sub, &self.current_batch)
+                    } else {
+                        None
+                    };
+                    let shown = display.as_deref().unwrap_or(sub);
+                    if let Some(display) = display.as_ref() {
+                        self.pending_display_patches
+                            .push((sub.to_string(), display.clone()));
+                    }
                     if analyze::prompt_capture_start(sub) {
                         self.prompt_capture.active = true;
                         self.prompt_capture.lines = 0;
@@ -239,7 +272,7 @@ mod capture {
                             self.prompt_capture.lines = 0;
                             self.prompt_capture.after_send = false;
                         }
-                        self.push_important(&format!("{sub}\n"));
+                        self.push_important(&format!("{shown}\n"));
                         self.prompt_capture.lines = self.prompt_capture.lines.saturating_add(1);
                         if analyze::prompt_capture_end(sub) || self.prompt_capture.lines >= 5000 {
                             self.prompt_capture.active = false;
@@ -256,7 +289,7 @@ mod capture {
                             self.warning_capture.active = false;
                             self.warning_capture.lines = 0;
                         } else {
-                            self.push_important(&format!("{sub}\n"));
+                            self.push_important(&format!("{shown}\n"));
                             self.warning_capture.lines =
                                 self.warning_capture.lines.saturating_add(1);
                             continue;
@@ -266,10 +299,10 @@ mod capture {
                         self.prompt_capture.after_send = false;
                     }
                     if analyze::important_line(sub) {
-                        self.push_important(&format!("{sub}\n"));
+                        self.push_important(&format!("{shown}\n"));
                     }
                     if analyze::installed_line(sub) {
-                        self.push_installed(&format!("{sub}\n"));
+                        self.push_installed(&format!("{shown}\n"));
                     }
                 }
             }
@@ -333,5 +366,22 @@ mod tests {
         assert_eq!(term.important_revision(), important_before);
         assert_eq!(term.installed_revision(), installed_before);
         assert_ne!(term.output_revision(), output_before);
+    }
+
+    #[test]
+    fn clear_console_drops_the_batch_and_pending_patches() {
+        let batch_line = "[2026-09-29T03:30:35Z INFO  mod_installer::installers] Installing mod WeiduBatchedComponents([WeiduComponent { tp_file: \"DLCMERGER.TP2\", name: \"DlcMerger\", lang: \"0\", component: \"1\", component_name: \"Merge DLC into game\", sub_component: \"Siege of Dragonspear\", version: \"1.8\" }])\n";
+        let success_line = "[2026-09-29T03:31:14Z INFO  mod_installer::parser] SUCCESSFULLY INSTALLED      Merge DLC into game\n";
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        term.update_important_lines(batch_line);
+        term.update_important_lines(success_line);
+        assert!(!term.current_batch.is_empty());
+        assert!(!term.pending_display_patches.is_empty());
+        term.clear_console();
+        assert!(term.current_batch.is_empty());
+        assert!(term.pending_display_patches.is_empty());
+        term.append_output(success_line);
+        term.apply_pending_display_patches();
+        assert_eq!(term.output_text(), success_line);
     }
 }

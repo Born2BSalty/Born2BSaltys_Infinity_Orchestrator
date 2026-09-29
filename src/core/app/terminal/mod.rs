@@ -15,8 +15,10 @@ mod input;
 mod output;
 mod process;
 mod scripted_inputs;
+mod success_prefix;
 
 pub use analyze::PromptInfo;
+use success_prefix::BatchComponent;
 
 #[derive(Default)]
 struct PromptCapture {
@@ -59,6 +61,8 @@ pub struct EmbeddedTerminal {
     current_component_tp2: Option<String>,
     current_component_id: Option<String>,
     current_component_name: Option<String>,
+    current_batch: Vec<BatchComponent>,
+    pending_display_patches: Vec<(String, String)>,
     scripted_inputs_loaded_count: usize,
     raw_log_path: Option<std::path::PathBuf>,
     raw_log_file: Option<File>,
@@ -93,6 +97,8 @@ impl EmbeddedTerminal {
             current_component_tp2: None,
             current_component_id: None,
             current_component_name: None,
+            current_batch: Vec::new(),
+            pending_display_patches: Vec::new(),
             scripted_inputs_loaded_count: 0,
             raw_log_path: None,
             raw_log_file: None,
