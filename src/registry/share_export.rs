@@ -357,7 +357,7 @@ pub fn build_archive_meta_from_install_lock(
 #[must_use]
 pub(crate) fn build_archive_meta_from_installed_refs(
     wizard_state: &WizardState,
-    refs_file: &crate::app::app_step2_update_source_refs::ModSourceRefsFile,
+    lookup: &crate::app::app_step2_update_source_refs::InstalledRefLookup,
 ) -> Vec<ArchiveMeta> {
     let checked_tp2s = wizard_state
         .step2
@@ -372,11 +372,10 @@ pub(crate) fn build_archive_meta_from_installed_refs(
         })
         .map(|mod_state| crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file))
         .collect::<std::collections::BTreeSet<_>>();
-    refs_file
-        .archives
+    checked_tp2s
         .iter()
-        .filter(|(tp2, _)| checked_tp2s.contains(*tp2))
-        .map(|(_, record)| ArchiveMeta {
+        .filter_map(|tp2| lookup.archive(tp2))
+        .map(|record| ArchiveMeta {
             name: record.name.clone(),
             size: record.size,
             hash: record.hash.clone(),
@@ -386,9 +385,10 @@ pub(crate) fn build_archive_meta_from_installed_refs(
 
 #[must_use]
 pub fn archive_meta_for_draft(wizard_state: &WizardState) -> Vec<ArchiveMeta> {
-    use crate::app::app_step2_update_source_refs::{installed_source_refs_path, load_refs_file_at};
-    let refs_file = load_refs_file_at(&installed_source_refs_path());
-    build_archive_meta_from_installed_refs(wizard_state, &refs_file)
+    let lookup = crate::app::app_step2_update_source_refs::InstalledRefLookup::load(
+        wizard_state.step1.mods_folder.trim(),
+    );
+    build_archive_meta_from_installed_refs(wizard_state, &lookup)
 }
 
 fn zlib_compress(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -1155,7 +1155,9 @@ mod tests {
 
     #[test]
     fn archive_meta_from_installed_refs_covers_checked_mods_only() {
-        use crate::app::app_step2_update_source_refs::{InstalledArchiveRecord, ModSourceRefsFile};
+        use crate::app::app_step2_update_source_refs::{
+            InstalledArchiveRecord, InstalledRefLookup, ModSourceRefsFile,
+        };
         let mut state = WizardState::default();
         state.step2.bgee_mods = vec![step2_mod("alpha", true), step2_mod("beta", false)];
         let mut refs_file = ModSourceRefsFile::default();
@@ -1176,7 +1178,10 @@ mod tests {
             },
         );
 
-        let metas = build_archive_meta_from_installed_refs(&state, &refs_file);
+        let metas = build_archive_meta_from_installed_refs(
+            &state,
+            &InstalledRefLookup::from_files(None, refs_file),
+        );
 
         assert_eq!(
             metas,

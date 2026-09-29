@@ -8,6 +8,9 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
+use crate::app::app_step2_update_source_refs::{
+    InstalledRecord, RefsTargets, save_installed_records,
+};
 use crate::app::mod_downloads::normalize_mod_download_tp2;
 use crate::app::state::{DownloadOrigin, WizardState};
 use crate::app::step2_worker::Step2ScanEvent;
@@ -19,10 +22,12 @@ pub mod plan;
 
 pub const EXTRACT_POOL_SIZE: usize = 10;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Step2UpdateExtractResult {
     pub(crate) extracted: Vec<String>,
     pub(crate) failed: Vec<String>,
+    pub(crate) installed: Vec<InstalledRecord>,
+    pub(crate) refs_targets: RefsTargets,
 }
 
 pub(crate) enum Step2UpdateExtractEvent {
@@ -42,7 +47,7 @@ pub(crate) enum Step2UpdateExtractEvent {
 struct ExtractOutcome {
     index: usize,
     label: String,
-    result: Result<String, String>,
+    result: Result<(String, InstalledRecord), String>,
 }
 
 pub(crate) fn start_step2_update_extract(
@@ -63,12 +68,14 @@ pub(crate) fn start_step2_update_extract(
         DownloadOrigin::InstallPipeline => None,
         DownloadOrigin::Workspace => state.step2.update_selected_download_scope.clone(),
     };
-    let jobs = plan::build_extract_jobs(
+    let extract_plan = plan::build_extract_jobs(
         state,
         &archive_dir,
         install_ctx_installed_refs_path,
         scope.as_deref(),
     );
+    let jobs = extract_plan.jobs;
+    let refs_targets = extract_plan.refs_targets;
     if jobs.is_empty() {
         state.step2.update_selected_download_scope = None;
         let failed = state.step2.update_selected_extract_failed_sources.len();
@@ -107,12 +114,13 @@ pub(crate) fn start_step2_update_extract(
         "update extract starting"
     );
 
-    thread::spawn(move || run_parallel_extract(&jobs, &tx));
+    thread::spawn(move || run_parallel_extract(&jobs, refs_targets, &tx));
     true
 }
 
 fn run_parallel_extract(
     jobs: &[plan::Step2UpdateExtractJob],
+    refs_targets: RefsTargets,
     tx: &Sender<Step2UpdateExtractEvent>,
 ) {
     let next = AtomicUsize::new(0);
@@ -133,7 +141,10 @@ fn run_parallel_extract(
     let outcomes = outcomes
         .into_inner()
         .unwrap_or_else(PoisonError::into_inner);
-    let _ = tx.send(Step2UpdateExtractEvent::Finished(extract_result(outcomes)));
+    let _ = tx.send(Step2UpdateExtractEvent::Finished(extract_result(
+        outcomes,
+        refs_targets,
+    )));
 }
 
 fn claim_job(next: &AtomicUsize, total: usize) -> Option<usize> {
@@ -149,9 +160,10 @@ fn extract_job(
     let _ = tx.send(Step2UpdateExtractEvent::AssetStarted {
         tp_file: job.tp_file.clone(),
     });
-    let result = archive::extract_one_archive(job).map(|target| target.display().to_string());
+    let result = archive::extract_one_archive(job)
+        .map(|(target, record)| (target.display().to_string(), record));
     let (ok, target_or_err) = match &result {
-        Ok(target) => (true, target.clone()),
+        Ok((target, _)) => (true, target.clone()),
         Err(err) => (false, err.clone()),
     };
     let _ = tx.send(Step2UpdateExtractEvent::AssetDone {
@@ -168,14 +180,25 @@ fn extract_job(
     }
 }
 
-fn extract_result(mut outcomes: Vec<ExtractOutcome>) -> Step2UpdateExtractResult {
+fn extract_result(
+    mut outcomes: Vec<ExtractOutcome>,
+    refs_targets: RefsTargets,
+) -> Step2UpdateExtractResult {
     outcomes.sort_by_key(|outcome| outcome.index);
-    let mut result = Step2UpdateExtractResult::default();
+    let mut result = Step2UpdateExtractResult {
+        extracted: Vec::new(),
+        failed: Vec::new(),
+        installed: Vec::new(),
+        refs_targets,
+    };
     for outcome in outcomes {
         match outcome.result {
-            Ok(target) => result
-                .extracted
-                .push(format!("{} -> {target}", outcome.label)),
+            Ok((target, record)) => {
+                result
+                    .extracted
+                    .push(format!("{} -> {target}", outcome.label));
+                result.installed.push(record);
+            }
             Err(err) => result.failed.push(format!("{}: {err}", outcome.label)),
         }
     }
@@ -229,6 +252,7 @@ pub(crate) fn poll_step2_update_extract(
         failed = result.failed.len(),
         "update extract finished"
     );
+    save_extracted_records(state, &result.installed, &result.refs_targets);
     if state.step2.update_selected_download_scope.is_some() {
         state
             .step2
@@ -263,6 +287,22 @@ pub(crate) fn poll_step2_update_extract(
         state.step2.pending_weidu_log_reapply = false;
         state.step2.scan_status =
             format!("Extract updates finished: {extracted} updated, {failed} failed");
+    }
+}
+
+fn save_extracted_records(
+    state: &mut WizardState,
+    records: &[InstalledRecord],
+    targets: &RefsTargets,
+) {
+    if let Err(err) = save_installed_records(records, targets) {
+        tracing::warn!(
+            target = "orchestrator",
+            records = records.len(),
+            list = %targets.list.display(),
+            "installed refs not saved: {err}"
+        );
+        state.step2.scan_status = format!("Installed refs not saved: {err}");
     }
 }
 
@@ -341,6 +381,9 @@ mod tests {
     use std::time::Duration;
 
     use crate::app::app_step2_update_download::archive_file_name;
+    use crate::app::app_step2_update_source_refs::{
+        InstalledArchiveRecord, load_refs_file_at, mods_folder_refs_path,
+    };
     use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
     use crate::app::state::Step2UpdateAsset;
 
@@ -348,9 +391,13 @@ mod tests {
 
     impl ExtractEngineRoot {
         fn new() -> Self {
+            Self::named("bio_extract_engine")
+        }
+
+        fn named(prefix: &str) -> Self {
             static COUNTER: AtomicU64 = AtomicU64::new(0);
             let path = std::env::temp_dir().join(format!(
-                "bio_extract_engine_{}_{}",
+                "{prefix}_{}_{}",
                 std::process::id(),
                 COUNTER.fetch_add(1, Ordering::Relaxed)
             ));
@@ -429,7 +476,6 @@ mod tests {
             backup_version_tag: "v1".to_string(),
             installed_source_ref: None,
             installed_source_id: None,
-            installed_refs_path: root.0.join("refs.toml"),
         }
     }
 
@@ -470,11 +516,34 @@ mod tests {
         poll_step2_update_extract(state, rx, &mut scan_rx, &mut cancel, &mut progress_queue);
     }
 
+    fn unwritten_targets() -> RefsTargets {
+        RefsTargets {
+            list: PathBuf::new(),
+            folder: None,
+            folder_label: None,
+        }
+    }
+
     fn finished_with(extracted: &[&str]) -> Step2UpdateExtractEvent {
         Step2UpdateExtractEvent::Finished(Step2UpdateExtractResult {
             extracted: extracted.iter().map(ToString::to_string).collect(),
             failed: Vec::new(),
+            installed: Vec::new(),
+            refs_targets: unwritten_targets(),
         })
+    }
+
+    fn installed(label: &str, source_ref: &str) -> InstalledRecord {
+        InstalledRecord {
+            tp2: format!("{label}/{label}.TP2"),
+            source_id: Some("github".to_string()),
+            source_ref: Some(source_ref.to_string()),
+            archive: Some(InstalledArchiveRecord {
+                name: format!("{label}.zip"),
+                size: 1,
+                hash: format!("hash-{label}"),
+            }),
+        }
     }
 
     fn tally(state: &WizardState) -> Vec<(&str, (usize, usize, usize))> {
@@ -550,7 +619,7 @@ mod tests {
     fn run_parallel_extract_with_zero_total_sends_only_finished() {
         let (tx, rx) = mpsc::channel::<Step2UpdateExtractEvent>();
 
-        run_parallel_extract(&[], &tx);
+        run_parallel_extract(&[], unwritten_targets(), &tx);
 
         let events = rx.try_iter().collect::<Vec<_>>();
         assert_eq!(events.len(), 1);
@@ -570,7 +639,7 @@ mod tests {
         }
         let (tx, rx) = mpsc::channel::<Step2UpdateExtractEvent>();
 
-        run_parallel_extract(&jobs, &tx);
+        run_parallel_extract(&jobs, unwritten_targets(), &tx);
 
         let mut dones = rx
             .try_iter()
@@ -620,16 +689,16 @@ mod tests {
             ExtractOutcome {
                 index: 0,
                 label: "MyMod".to_string(),
-                result: Ok("C:\\Mods\\MyMod".to_string()),
+                result: Ok(("C:\\Mods\\MyMod".to_string(), installed("MyMod", "v1"))),
             },
             ExtractOutcome {
                 index: 1,
                 label: "Other".to_string(),
-                result: Ok("C:\\Mods\\Other".to_string()),
+                result: Ok(("C:\\Mods\\Other".to_string(), installed("Other", "v2"))),
             },
         ];
 
-        let result = extract_result(outcomes);
+        let result = extract_result(outcomes, unwritten_targets());
 
         assert_eq!(
             result.extracted,
@@ -639,6 +708,61 @@ mod tests {
             ]
         );
         assert_eq!(result.failed, vec!["BadMod: archive corrupt".to_string()]);
+        assert_eq!(
+            result.installed,
+            vec![installed("MyMod", "v1"), installed("Other", "v2")]
+        );
+    }
+
+    #[test]
+    fn finished_extract_writes_every_record_once_before_the_rescan() {
+        let _lock = ambient_lock();
+        let root = ExtractEngineRoot::named("bio_folderrefs_c_test");
+        let mut state = root.state();
+        let mods = state.step1.mods_folder.clone();
+        let targets = RefsTargets {
+            list: root.0.join("list").join("mod_installed_refs.toml"),
+            folder: mods_folder_refs_path(&mods),
+            folder_label: Some(mods.clone()),
+        };
+        let folder_path = targets.folder.clone().unwrap();
+        assert!(folder_path.starts_with(&root.0));
+        state.step1.mods_folder.clear();
+        state.step2.update_selected_extract_running = true;
+        let (tx, mut rx) = queued(vec![Step2UpdateExtractEvent::Finished(
+            Step2UpdateExtractResult {
+                extracted: vec![
+                    "ALPHA -> C:\\mods\\alpha".to_string(),
+                    "BETA -> C:\\mods\\beta".to_string(),
+                ],
+                failed: Vec::new(),
+                installed: vec![installed("ALPHA", "v1"), installed("BETA", "v2")],
+                refs_targets: targets.clone(),
+            },
+        )]);
+
+        poll(&mut state, &mut rx);
+
+        for path in [&targets.list, &folder_path] {
+            let saved = load_refs_file_at(path);
+            assert_eq!(saved.refs.get("alpha").map(String::as_str), Some("v1"));
+            assert_eq!(saved.refs.get("beta").map(String::as_str), Some("v2"));
+            assert_eq!(
+                saved.sources.get("alpha").map(String::as_str),
+                Some("github")
+            );
+            assert_eq!(
+                saved
+                    .archives
+                    .get("beta")
+                    .map(|archive| archive.hash.as_str()),
+                Some("hash-BETA")
+            );
+        }
+        assert_eq!(load_refs_file_at(&folder_path).folder, Some(mods));
+        assert_eq!(load_refs_file_at(&targets.list).folder, None);
+        assert!(state.step2.is_scanning, "the rescan starts after the write");
+        drop(tx);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use super::app_step2_update_source_refs::InstalledRefLookup;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::modlist_share::commit_sha_from_installed_ref;
 use crate::app::state::WizardState;
@@ -21,24 +22,34 @@ pub(crate) fn mark_update_available(state: &mut WizardState, game_tab: &str, tp_
     }
 }
 
-pub(crate) fn source_ref_is_update(tp_file: &str, source_id: &str, latest_ref: &str) -> bool {
+pub(crate) fn source_ref_is_update(
+    lookup: &InstalledRefLookup,
+    tp_file: &str,
+    source_id: &str,
+    latest_ref: &str,
+) -> bool {
     let source_id = source_id.trim().to_ascii_lowercase();
-    super::app_step2_update_source_refs::load_installed_source_id_and_ref(tp_file).is_some_and(
-        |(installed_source_id, installed_ref)| {
+    lookup
+        .source_id_and_ref(tp_file)
+        .is_some_and(|(installed_source_id, installed_ref)| {
             installed_source_id.trim().to_ascii_lowercase() == source_id
                 && !refs_equal(&installed_ref, latest_ref)
-        },
-    )
+        })
 }
 
-pub(crate) fn source_ref_matches(tp_file: &str, source_id: &str, latest_ref: &str) -> bool {
+pub(crate) fn source_ref_matches(
+    lookup: &InstalledRefLookup,
+    tp_file: &str,
+    source_id: &str,
+    latest_ref: &str,
+) -> bool {
     let source_id = source_id.trim().to_ascii_lowercase();
-    super::app_step2_update_source_refs::load_installed_source_id_and_ref(tp_file).is_some_and(
-        |(installed_source_id, installed_ref)| {
+    lookup
+        .source_id_and_ref(tp_file)
+        .is_some_and(|(installed_source_id, installed_ref)| {
             installed_source_id.trim().to_ascii_lowercase() == source_id
                 && refs_equal(&installed_ref, latest_ref)
-        },
-    )
+        })
 }
 
 pub(crate) fn refs_equal(installed: &str, latest: &str) -> bool {
@@ -107,6 +118,7 @@ pub(crate) fn version_is_update(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::app_step2_update_source_refs::ModSourceRefsFile;
     use crate::app::state::Step2ModState;
 
     fn mod_state(tp_file: &str) -> Step2ModState {
@@ -162,6 +174,60 @@ mod tests {
         assert!(!refs_equal("v35.17", "v35.18"));
         assert!(refs_equal("v35.17", "v35.17"));
         assert!(!refs_equal("abcdef12", "commit@abcdef12"));
+    }
+
+    fn refs_file(source_ref: &str) -> ModSourceRefsFile {
+        let mut refs = ModSourceRefsFile::default();
+        refs.refs
+            .insert("cdtweaks".to_string(), source_ref.to_string());
+        refs.sources
+            .insert("cdtweaks".to_string(), "cdtweaks-master".to_string());
+        refs
+    }
+
+    #[test]
+    fn source_ref_matches_reads_the_folder_record_first() {
+        let folder_ref = "master@aaaaaaa0123456789abcdef0123456789abcdef";
+        let list_ref = "master@bbbbbbb0123456789abcdef0123456789abcdef";
+        let both = InstalledRefLookup::from_files(Some(refs_file(folder_ref)), refs_file(list_ref));
+        assert!(source_ref_matches(
+            &both,
+            "cdtweaks.tp2",
+            "cdtweaks-master",
+            folder_ref
+        ));
+        assert!(!source_ref_matches(
+            &both,
+            "cdtweaks.tp2",
+            "cdtweaks-master",
+            list_ref
+        ));
+        assert!(!source_ref_is_update(
+            &both,
+            "cdtweaks.tp2",
+            "cdtweaks-master",
+            folder_ref
+        ));
+        assert!(source_ref_is_update(
+            &both,
+            "cdtweaks.tp2",
+            "cdtweaks-master",
+            list_ref
+        ));
+
+        let list_only = InstalledRefLookup::from_files(None, refs_file(list_ref));
+        assert!(source_ref_matches(
+            &list_only,
+            "cdtweaks.tp2",
+            "cdtweaks-master",
+            list_ref
+        ));
+        assert!(!source_ref_matches(
+            &list_only,
+            "cdtweaks.tp2",
+            "cdtweaks-master",
+            folder_ref
+        ));
     }
 
     #[test]

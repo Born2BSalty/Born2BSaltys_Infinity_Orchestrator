@@ -710,14 +710,16 @@ pub(crate) fn bookmark_label(state: &WizardState, tp2: &str) -> Option<String> {
     let selected_source_id = state.step2.selected_source_ids.get(tp2).cloned();
     let current = loaded.resolve_source(tp2, selected_source_id.as_deref())?;
     current.github.as_ref()?;
-    let refs_file = crate::app::app_step2_update_source_refs::load_refs_file_at(
-        &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
-    );
-    let normalized_tp2 = mod_downloads::normalize_mod_download_tp2(tp2);
-    let installed_source_id = refs_file.sources.get(&normalized_tp2).map(String::as_str);
-    let installed_ref = refs_file.refs.get(&normalized_tp2).map(String::as_str);
-    let (_, label) =
-        mod_source_history::bookmark_block(&current, installed_source_id, installed_ref)?;
+    let (installed_source_id, installed_ref) =
+        crate::app::app_step2_update_source_refs::InstalledRefLookup::load(
+            state.step1.mods_folder.trim(),
+        )
+        .source_id_and_ref(tp2)?;
+    let (_, label) = mod_source_history::bookmark_block(
+        &current,
+        Some(&installed_source_id),
+        Some(&installed_ref),
+    )?;
     Some(format!("Bookmark {label}"))
 }
 

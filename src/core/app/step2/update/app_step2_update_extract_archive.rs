@@ -11,6 +11,7 @@ use walkdir::WalkDir;
 
 use crate::app::mod_downloads;
 
+use super::super::app_step2_update_source_refs::{InstalledRecord, installed_archive_record};
 use super::plan::Step2UpdateExtractJob;
 
 #[path = "app_step2_update_extract_archive/rar_extract.rs"]
@@ -22,7 +23,9 @@ pub mod tar_gz_extract;
 #[path = "app_step2_update_extract_archive/zip_extract.rs"]
 pub mod zip_extract;
 
-pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
+pub(crate) fn extract_one_archive(
+    job: &Step2UpdateExtractJob,
+) -> Result<(PathBuf, InstalledRecord), String> {
     let temp_root = temp_extract_root(&job.tp_file);
     if temp_root.exists() {
         let _ = fs::remove_dir_all(&temp_root);
@@ -52,43 +55,28 @@ pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf
             &job.aliases,
             &target_root,
         )?;
-        let refs_target = &job.installed_refs_path;
-        if let Some(source_ref) = &job.installed_source_ref {
-            super::super::app_step2_update_source_refs::save_installed_source_ref(
-                &job.tp_file,
-                source_ref,
-                refs_target,
-            )
-            .map_err(|err| err.to_string())?;
-        }
-        if let Some(source_id) = &job.installed_source_id {
-            super::super::app_step2_update_source_refs::save_installed_source_id(
-                &job.tp_file,
-                source_id,
-                refs_target,
-            )
-            .map_err(|err| err.to_string())?;
-        }
-        record_installed_archive(job, refs_target);
-        Ok(target_root)
+        Ok((target_root, installed_record(job)))
     })();
 
     let _ = fs::remove_dir_all(&temp_root);
     result
 }
 
-fn record_installed_archive(job: &Step2UpdateExtractJob, refs_target: &Path) {
-    use super::super::app_step2_update_source_refs::{
-        installed_archive_record, save_installed_archive_record,
-    };
-    let saved = installed_archive_record(&job.archive_path)
-        .and_then(|record| save_installed_archive_record(&job.tp_file, record, refs_target));
-    if let Err(err) = saved {
-        tracing::warn!(
-            target = "orchestrator",
-            "record archive for {}: {err} (share codes carry no hash for it until the next fetch)",
-            job.tp_file
-        );
+fn installed_record(job: &Step2UpdateExtractJob) -> InstalledRecord {
+    let archive = installed_archive_record(&job.archive_path)
+        .inspect_err(|err| {
+            tracing::warn!(
+                target = "orchestrator",
+                "record archive for {}: {err} (share codes carry no hash for it until the next fetch)",
+                job.tp_file
+            );
+        })
+        .ok();
+    InstalledRecord {
+        tp2: job.tp_file.clone(),
+        source_id: job.installed_source_id.clone(),
+        source_ref: job.installed_source_ref.clone(),
+        archive,
     }
 }
 

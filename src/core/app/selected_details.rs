@@ -140,7 +140,12 @@ fn build_mod_details(
             &mod_state.tp_file,
         ))
         .map(String::as_str);
-    attach_package_source(&mut details, &mod_state.tp_file, selected_source_id);
+    attach_package_source(
+        &mut details,
+        state.step1.mods_folder.trim(),
+        &mod_state.tp_file,
+        selected_source_id,
+    );
     details
 }
 
@@ -203,13 +208,15 @@ fn build_component_details(
 
 fn attach_package_source(
     details: &mut SelectedDetailsData,
+    mods_folder: &str,
     tp2: &str,
     selected_source_id: Option<&str>,
 ) {
     details.package_source_status = Some("Unknown".to_string());
     let loaded = crate::app::mod_downloads::load_mod_download_sources();
     if let Some(installed_source_id) =
-        crate::app::app_step2_update_source_refs::load_installed_source_id(tp2)
+        crate::app::app_step2_update_source_refs::InstalledRefLookup::load(mods_folder)
+            .source_id(tp2)
         && let Some(source) = loaded.resolve_source(tp2, Some(&installed_source_id))
     {
         details.package_installed_source_name =

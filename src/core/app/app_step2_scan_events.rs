@@ -154,7 +154,7 @@ fn handle_finished(
     let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
     state.step2.bgee_mods = bgee_scan_mods;
     state.step2.bg2ee_mods = bg2_scan_mods;
-    let installed_refs_cleanup_error = prune_stale_installed_refs(state);
+    let installed_refs_cleanup_error = prune_stale_installed_refs(state, &report.mods_root);
     reset_scan_selection(state);
     state.step2.scan_progress_percent = 100;
     let mut finished_status = scan_finished_status(lock_load_error, compat_error);
@@ -229,7 +229,7 @@ fn scan_progress_percent(current: usize, total: usize) -> u8 {
         .map_or(0, |value| u8::try_from(value.min(100)).unwrap_or(100))
 }
 
-fn prune_stale_installed_refs(state: &WizardState) -> Option<String> {
+fn prune_stale_installed_refs(state: &WizardState, scanned_mods_root: &str) -> Option<String> {
     let sources = crate::app::mod_downloads::load_mod_download_sources();
     let mut present_tp2s = BTreeSet::new();
 
@@ -260,7 +260,10 @@ fn prune_stale_installed_refs(state: &WizardState) -> Option<String> {
     {
         tracing::warn!("{err}");
     }
-    crate::app::app_step2_update_source_refs::prune_installed_source_refs(present_tp2s)
-        .err()
-        .map(|err| err.to_string())
+    crate::app::app_step2_update_source_refs::prune_installed_source_refs(
+        scanned_mods_root.trim(),
+        present_tp2s,
+    )
+    .err()
+    .map(|err| err.to_string())
 }

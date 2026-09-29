@@ -8,6 +8,7 @@ use crate::app::app_step2_update_policy::{
     mark_update_available, mod_has_current_version, source_ref_is_update, source_ref_matches,
     version_is_update,
 };
+use crate::app::app_step2_update_source_refs::InstalledRefLookup;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
 use crate::app::state::{
@@ -170,9 +171,10 @@ fn finish_update_check(
     state.step2.update_selected_refresh_target_tp_file = None;
     state.step2.update_selected_check_done_count = state.step2.update_selected_check_total_count;
     let sources = mod_downloads::load_mod_download_sources();
+    let lookup = InstalledRefLookup::load(state.step1.mods_folder.trim());
 
     for outcome in outcomes {
-        apply_update_check_outcome(state, outcome, &sources, merge_latest_fallback);
+        apply_update_check_outcome(state, outcome, &sources, &lookup, merge_latest_fallback);
     }
 
     state.step2.update_selected_check_requests.clear();
@@ -216,10 +218,18 @@ fn apply_update_check_outcome(
     state: &mut WizardState,
     outcome: &Step2UpdateCheckOutcome,
     sources: &mod_downloads::ModDownloadsLoad,
+    lookup: &InstalledRefLookup,
     merge_latest_fallback: bool,
 ) {
     if let Some(tag) = outcome.tag.as_deref() {
-        apply_successful_update_check_outcome(state, outcome, tag, sources, merge_latest_fallback);
+        apply_successful_update_check_outcome(
+            state,
+            outcome,
+            tag,
+            sources,
+            lookup,
+            merge_latest_fallback,
+        );
     } else {
         let error = outcome.error.as_deref().unwrap_or("no release found");
         push_update_check_failure(
@@ -246,6 +256,7 @@ fn apply_successful_update_check_outcome(
     outcome: &Step2UpdateCheckOutcome,
     tag: &str,
     sources: &mod_downloads::ModDownloadsLoad,
+    lookup: &InstalledRefLookup,
     merge_latest_fallback: bool,
 ) {
     store_latest_checked_version(state, &outcome.game_tab, &outcome.tp_file, tag);
@@ -261,7 +272,7 @@ fn apply_successful_update_check_outcome(
             && log_missing_downloads_enabled(state);
     let uses_source_snapshot = matches!(outcome.package_kind, Step2PackageKind::SourceSnapshot);
     let source_ref = outcome.source_ref.as_deref().unwrap_or(tag);
-    if source_ref_matches(&outcome.tp_file, &outcome.source_id, source_ref) {
+    if source_ref_matches(lookup, &outcome.tp_file, &outcome.source_id, source_ref) {
         if reproduce_exact_gate(state) {
             push_update_asset_if_available(state, outcome, tag, source_ref, uses_source_snapshot);
             state
@@ -287,7 +298,7 @@ fn apply_successful_update_check_outcome(
         return;
     }
     let allow_source_ref_update =
-        source_ref_is_update(&outcome.tp_file, &outcome.source_id, source_ref);
+        source_ref_is_update(lookup, &outcome.tp_file, &outcome.source_id, source_ref);
     let allow_snapshot_install = uses_source_snapshot
         && !has_current_version
         && state.step1.have_weidu_logs
@@ -709,7 +720,8 @@ mod tests {
         };
 
         let sources = ModDownloadsLoad::default();
-        apply_update_check_outcome(&mut state, &outcome, &sources, false);
+        let lookup = InstalledRefLookup::load(state.step1.mods_folder.trim());
+        apply_update_check_outcome(&mut state, &outcome, &sources, &lookup, false);
 
         assert!(
             !state.step2.update_selected_update_assets.is_empty(),
@@ -862,7 +874,106 @@ mod tests {
             "v1.1"
         ));
         let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
-        apply_update_check_outcome(&mut state, &multikits_release_outcome(), &sources, false);
+        let lookup = InstalledRefLookup::load(state.step1.mods_folder.trim());
+        apply_update_check_outcome(
+            &mut state,
+            &multikits_release_outcome(),
+            &sources,
+            &lookup,
+            false,
+        );
+        state
+    }
+
+    struct FolderRefsRoot(std::path::PathBuf);
+
+    impl FolderRefsRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static N: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_folderrefs_check_test_{}_{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            )));
+            std::fs::create_dir_all(&root.0).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(root.0.clone()));
+            root
+        }
+    }
+
+    impl Drop for FolderRefsRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const CDTWEAKS_SHA: &str = "7649ced0123456789abcdef0123456789abcdef0";
+
+    fn cdtweaks_state(mods_folder: &str) -> WizardState<bool> {
+        let mut state = multikits_state();
+        let mod_state = &mut state.step2.bgee_mods[0];
+        mod_state.name = "cdtweaks".to_string();
+        mod_state.tp_file = "cdtweaks.tp2".to_string();
+        mod_state.components[0].label = "cdtweaks".to_string();
+        mod_state.components[0].raw_line = "~cdtweaks.tp2~ #0 #0 // Tweaks: v18".to_string();
+        state.step1.mods_folder = mods_folder.to_string();
+        state
+    }
+
+    fn cdtweaks_branch_outcome() -> Step2UpdateCheckOutcome {
+        let source_ref = format!("master@{CDTWEAKS_SHA}");
+        Step2UpdateCheckOutcome {
+            game_tab: "BGEE".to_string(),
+            tp_file: "cdtweaks.tp2".to_string(),
+            label: "cdtweaks".to_string(),
+            source_id: "cdtweaks-master".to_string(),
+            source_url: String::new(),
+            tag: Some(source_ref.clone()),
+            source_ref: Some(source_ref),
+            asset_name: Some("cdtweaks-master.zip".to_string()),
+            asset_url: Some("https://example.com/cdtweaks/master.zip".to_string()),
+            error: None,
+            package_kind: Step2PackageKind::SourceSnapshot,
+            version_pin_overridden: None,
+        }
+    }
+
+    fn check_cdtweaks_with_folder_record(folder_ref: &str) -> WizardState<bool> {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient = AmbientRestore(crate::app::mod_downloads::active_modlist_dir());
+        crate::app::mod_downloads::set_active_modlist_dir(None);
+        let root = FolderRefsRoot::new();
+        let mods = root.0.join("mods");
+        std::fs::create_dir_all(&mods).unwrap();
+        let mods = mods.to_string_lossy().into_owned();
+        let list_path = crate::app::app_step2_update_source_refs::installed_source_refs_path();
+        assert!(list_path.starts_with(&root.0));
+        assert!(!list_path.exists());
+        let folder_path =
+            crate::app::app_step2_update_source_refs::mods_folder_refs_path(&mods).unwrap();
+        assert!(folder_path.starts_with(&root.0));
+        std::fs::create_dir_all(folder_path.parent().unwrap()).unwrap();
+        let key = crate::app::mod_downloads::normalize_mod_download_tp2("cdtweaks.tp2");
+        std::fs::write(
+            &folder_path,
+            format!("[refs]\n{key} = \"{folder_ref}\"\n\n[sources]\n{key} = \"cdtweaks-master\"\n"),
+        )
+        .unwrap();
+        let mut state = cdtweaks_state(&mods);
+        assert!(mod_has_current_version(&state, "BGEE", "cdtweaks.tp2"));
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        let lookup = InstalledRefLookup::load(state.step1.mods_folder.trim());
+        apply_update_check_outcome(
+            &mut state,
+            &cdtweaks_branch_outcome(),
+            &sources,
+            &lookup,
+            false,
+        );
         state
     }
 
@@ -898,6 +1009,20 @@ mod tests {
         let state = check_multikits_release("no_recorded_ref", None);
         assert!(state.step2.update_selected_update_assets.is_empty());
         assert!(state.step2.update_selected_update_sources.is_empty());
+    }
+
+    #[test]
+    fn a_folder_record_makes_a_branch_source_in_sync_on_a_list_that_never_fetched_it() {
+        let in_sync = check_cdtweaks_with_folder_record(&format!("master@{CDTWEAKS_SHA}"));
+        assert!(in_sync.step2.update_selected_update_assets.is_empty());
+        assert!(in_sync.step2.update_selected_update_sources.is_empty());
+
+        let moved =
+            check_cdtweaks_with_folder_record("master@0123456789abcdef0123456789abcdef01234567");
+        let assets = &moved.step2.update_selected_update_assets;
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].tp_file, "cdtweaks.tp2");
+        assert_eq!(moved.step2.bgee_mods[0].package_marker, Some('+'));
     }
 
     #[test]

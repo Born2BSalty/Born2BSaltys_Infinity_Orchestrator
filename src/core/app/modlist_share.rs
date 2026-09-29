@@ -58,6 +58,7 @@ pub(crate) struct ShareExportSources {
     pub(crate) mod_installed_refs: Option<String>,
     pub(crate) unresolved_mods: Vec<String>,
     pub(crate) log_source: ExportLogSource,
+    pub(crate) installed_source_ids: std::collections::BTreeMap<String, String>,
 }
 
 pub(crate) fn export_modlist_share_code(state: &WizardState) -> Result<String, String> {
@@ -76,11 +77,16 @@ fn build_and_export_share_code(
 ) -> Result<String, String> {
     crate::app::mod_downloads::ensure_mod_downloads_files().map_err(|err| err.to_string())?;
 
-    let resolved = build_resolved_source_overrides(state)?;
+    let include = checked_mod_tp2s(state);
+    let lookup = crate::app::app_step2_update_source_refs::InstalledRefLookup::load(
+        state.step1.mods_folder.trim(),
+    );
+    let installed = installed_refs_for_export(&lookup, &include);
+    let resolved = build_resolved_source_overrides(state, &installed)?;
 
     let mod_installed_refs = if crate::app::mod_downloads::active_modlist_downloads_path().is_some()
     {
-        build_per_modlist_installed_refs(state)
+        build_per_modlist_installed_refs(state, &lookup, &include)
     } else {
         installed_refs_copy_without_archives(
             &crate::app::app_step2_update_source_refs::installed_source_refs_path(),
@@ -94,8 +100,28 @@ fn build_and_export_share_code(
             mod_installed_refs,
             unresolved_mods: resolved.unresolved,
             log_source,
+            installed_source_ids:
+                crate::app::app_step2_update_source_refs::installed_source_ids_from_refs_file(
+                    &installed,
+                ),
         },
     )
+}
+
+fn checked_mod_tp2s(state: &WizardState) -> std::collections::BTreeSet<String> {
+    state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .filter(|mod_state| {
+            mod_state
+                .components
+                .iter()
+                .any(|component| component.checked)
+        })
+        .map(|mod_state| crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file))
+        .collect()
 }
 
 pub(crate) fn export_modlist_share_code_with(
@@ -111,7 +137,8 @@ pub(crate) fn export_modlist_share_code_with(
     let mod_downloads_user = sources.mod_downloads_user.clone();
     let mod_installed_refs = sources.mod_installed_refs.clone();
 
-    let (mod_configs, config_warnings) = export_mod_config_files(state)?;
+    let (mod_configs, config_warnings) =
+        export_mod_config_files(state, &sources.installed_source_ids)?;
     for config_warning in &config_warnings {
         warn!("{config_warning}");
     }
@@ -899,10 +926,9 @@ fn read_exact_source_weidu_log(
 
 fn export_mod_config_files(
     state: &WizardState,
+    installed_source_ids: &std::collections::BTreeMap<String, String>,
 ) -> Result<(Vec<ModlistShareConfigFile>, Vec<String>), String> {
     let sources = crate::app::mod_downloads::load_mod_download_sources();
-    let installed_source_ids =
-        crate::app::app_step2_update_source_refs::load_installed_source_ids();
     let mut exported = Vec::new();
     let mut warnings = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
@@ -925,7 +951,7 @@ fn export_mod_config_files(
             continue;
         }
         let Some(source) =
-            resolve_mod_config_source(state, &sources, &installed_source_ids, &mod_state.tp_file)
+            resolve_mod_config_source(state, &sources, installed_source_ids, &mod_state.tp_file)
         else {
             continue;
         };
@@ -1109,23 +1135,54 @@ pub(crate) struct ResolvedSources {
     pub(crate) unresolved: Vec<String>,
 }
 
-fn build_resolved_source_overrides(state: &WizardState) -> Result<ResolvedSources, String> {
+fn build_resolved_source_overrides(
+    state: &WizardState,
+    installed: &crate::app::app_step2_update_source_refs::ModSourceRefsFile,
+) -> Result<ResolvedSources, String> {
     let default_text = crate::app::mod_downloads::default_mod_downloads_content();
     let user_text = fs::read_to_string(crate::app::mod_downloads::mod_downloads_user_path())
         .unwrap_or_default();
     let modlist_text = crate::app::mod_downloads::active_modlist_downloads_path()
         .and_then(|path| fs::read_to_string(path).ok())
         .unwrap_or_default();
-    let refs_text =
-        fs::read_to_string(crate::app::app_step2_update_source_refs::installed_source_refs_path())
-            .unwrap_or_default();
     build_resolved_source_overrides_from_texts(
         state,
         default_text,
         &user_text,
         &modlist_text,
-        &refs_text,
+        installed,
     )
+}
+
+fn installed_refs_for_export(
+    lookup: &crate::app::app_step2_update_source_refs::InstalledRefLookup,
+    include: &std::collections::BTreeSet<String>,
+) -> crate::app::app_step2_update_source_refs::ModSourceRefsFile {
+    use crate::app::app_step2_update_source_refs::{installed_source_refs_path, load_refs_file_at};
+
+    installed_refs_folder_first(
+        lookup,
+        load_refs_file_at(&installed_source_refs_path()),
+        include,
+    )
+}
+
+fn installed_refs_folder_first(
+    lookup: &crate::app::app_step2_update_source_refs::InstalledRefLookup,
+    mut list: crate::app::app_step2_update_source_refs::ModSourceRefsFile,
+    include: &std::collections::BTreeSet<String>,
+) -> crate::app::app_step2_update_source_refs::ModSourceRefsFile {
+    for tp2 in include {
+        let Some(source_id) = lookup.source_id(tp2) else {
+            continue;
+        };
+        list.sources.insert(tp2.clone(), source_id);
+        match lookup.source_id_and_ref(tp2) {
+            Some((_, source_ref)) => list.refs.insert(tp2.clone(), source_ref),
+            None => list.refs.remove(tp2),
+        };
+    }
+    list
 }
 
 pub(crate) fn build_resolved_source_overrides_from_texts(
@@ -1133,19 +1190,16 @@ pub(crate) fn build_resolved_source_overrides_from_texts(
     default_text: &str,
     user_text: &str,
     modlist_text: &str,
-    refs_text: &str,
+    refs_file: &crate::app::app_step2_update_source_refs::ModSourceRefsFile,
 ) -> Result<ResolvedSources, String> {
-    use crate::app::app_step2_update_source_refs::{
-        installed_source_ids_from_refs_file, parse_refs_file_text,
-    };
+    use crate::app::app_step2_update_source_refs::installed_source_ids_from_refs_file;
 
     let source_load = crate::app::mod_downloads::load_mod_download_sources_from_texts(
         default_text,
         user_text,
         modlist_text,
     );
-    let refs_file = parse_refs_file_text(refs_text);
-    let installed_ids = installed_source_ids_from_refs_file(&refs_file);
+    let installed_ids = installed_source_ids_from_refs_file(refs_file);
 
     let mut toml_out = String::new();
     let mut unresolved = Vec::new();
@@ -1232,14 +1286,15 @@ fn escape_for_toml(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn build_per_modlist_installed_refs(state: &WizardState) -> Option<String> {
-    use crate::app::app_step2_update_source_refs::load_refs_file_at;
-
-    let path = crate::app::app_step2_update_source_refs::installed_source_refs_path();
-    let refs_file = load_refs_file_at(&path);
-    let sources = state.step2.selected_source_ids.clone();
-
-    refs_copy_text(refs_file.refs, sources)
+fn build_per_modlist_installed_refs(
+    state: &WizardState,
+    lookup: &crate::app::app_step2_update_source_refs::InstalledRefLookup,
+    include: &std::collections::BTreeSet<String>,
+) -> Option<String> {
+    refs_copy_text(
+        lookup.refs_for_export(include),
+        state.step2.selected_source_ids.clone(),
+    )
 }
 
 fn installed_refs_copy_without_archives(path: &std::path::Path) -> Option<String> {
@@ -1255,6 +1310,7 @@ fn refs_copy_text(
         return None;
     }
     let combined = crate::app::app_step2_update_source_refs::ModSourceRefsFile {
+        folder: None,
         refs,
         sources,
         archives: std::collections::BTreeMap::new(),
@@ -1775,7 +1831,7 @@ mod tests {
         state.step2.bgee_mods = vec![make_step2_mod("testmod", "TestMod")];
 
         let resolved =
-            build_resolved_source_overrides_from_texts(&state, &default_text, "", "", "")
+            build_resolved_source_overrides_from_texts(&state, &default_text, "", "", &no_refs())
                 .expect("resolve");
         assert!(
             resolved
@@ -1793,7 +1849,7 @@ mod tests {
         let mut state = WizardState::default();
         state.step2.bgee_mods = vec![make_step2_mod("nosource", "NoSourceMod")];
 
-        let resolved = build_resolved_source_overrides_from_texts(&state, "", "", "", "")
+        let resolved = build_resolved_source_overrides_from_texts(&state, "", "", "", &no_refs())
             .expect("resolve must not error");
         assert!(
             resolved.toml.is_none(),
@@ -1812,7 +1868,7 @@ mod tests {
         ];
 
         let resolved =
-            build_resolved_source_overrides_from_texts(&state, &default_text, "", "", "")
+            build_resolved_source_overrides_from_texts(&state, &default_text, "", "", &no_refs())
                 .expect("resolve");
         let toml_out = resolved.toml.expect("checked mod produced a source block");
         assert!(
@@ -1859,7 +1915,7 @@ mod tests {
         state.step3.bgee_items = vec![];
         state.step2.bgee_mods = vec![];
 
-        let result = build_resolved_source_overrides_from_texts(&state, "", "", "", "");
+        let result = build_resolved_source_overrides_from_texts(&state, "", "", "", &no_refs());
         assert!(result.is_ok(), "empty mods list must not error");
         let resolved = result.unwrap();
         assert!(
@@ -1967,7 +2023,8 @@ mod tests {
         state.step2.bgee_mods = vec![mod_entry.clone()];
         state.step2.bg2ee_mods = vec![mod_entry];
 
-        let result = build_resolved_source_overrides_from_texts(&state, "", "", &modlist_text, "");
+        let result =
+            build_resolved_source_overrides_from_texts(&state, "", "", &modlist_text, &no_refs());
         assert!(result.is_ok(), "build must not error: {:?}", result.err());
 
         let toml_out = result
@@ -1990,7 +2047,8 @@ mod tests {
         state.step2.bgee_mods = vec![make_step2_mod("testmod", "TestMod")];
         state.step2.bg2ee_mods = vec![];
 
-        let result = build_resolved_source_overrides_from_texts(&state, "", "", &modlist_text, "");
+        let result =
+            build_resolved_source_overrides_from_texts(&state, "", "", &modlist_text, &no_refs());
         assert!(result.is_ok(), "build must not error: {:?}", result.err());
 
         let toml_out = result
@@ -2071,6 +2129,141 @@ mod tests {
         pin_source_to_installed_ref(&mut source, None, None);
         assert_eq!(source.branch.as_deref(), Some("master"));
         assert_eq!(source.commit, None);
+    }
+
+    fn no_refs() -> crate::app::app_step2_update_source_refs::ModSourceRefsFile {
+        crate::app::app_step2_update_source_refs::ModSourceRefsFile::default()
+    }
+
+    struct FolderRefsRoot(std::path::PathBuf);
+
+    impl FolderRefsRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static N: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_folderrefs_share_test_{}_{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            )));
+            fs::create_dir_all(&root.0).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(root.0.clone()));
+            root
+        }
+
+        fn dir(&self, name: &str) -> std::path::PathBuf {
+            let dir = self.0.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+    }
+
+    impl Drop for FolderRefsRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn share_pins_fall_back_to_the_folder_record() {
+        use crate::app::app_step2_update_source_refs::{
+            InstalledRefLookup, installed_source_refs_path, mods_folder_refs_path,
+        };
+        const SHA: &str = "7649ced6cd25865874d787ec1a9abbc67b068729";
+
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = AmbientGuard::acquire();
+        let root = FolderRefsRoot::new();
+        let list_dir = root.dir("list");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(list_dir.clone()));
+        fs::write(
+            list_dir.join("mod_downloads_user.toml"),
+            "[[mods]]\nname = \"ModA\"\ntp2 = \"moda\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  url = \"https://github.com/Owner/ModA\"\n  repo = \"Owner/ModA\"\n  branch = \"master\"\n  default = true\n",
+        )
+        .unwrap();
+        assert!(installed_source_refs_path().starts_with(&list_dir));
+        assert!(!installed_source_refs_path().exists());
+
+        let mods = root.dir("mods").to_string_lossy().into_owned();
+        let folder_path = mods_folder_refs_path(&mods).unwrap();
+        assert!(folder_path.starts_with(&root.0));
+        fs::create_dir_all(folder_path.parent().unwrap()).unwrap();
+        fs::write(
+            &folder_path,
+            format!("[refs]\nmoda = \"master@{SHA}\"\n\n[sources]\nmoda = \"main\"\n"),
+        )
+        .unwrap();
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![make_step2_mod("moda", "ModA")];
+
+        let include = checked_mod_tp2s(&state);
+        let unpinned = build_resolved_source_overrides(
+            &state,
+            &installed_refs_for_export(
+                &InstalledRefLookup::load(state.step1.mods_folder.trim()),
+                &include,
+            ),
+        )
+        .expect("resolve")
+        .toml
+        .expect("a resolved mod produces text");
+        assert!(!unpinned.contains(SHA), "{unpinned}");
+
+        state.step1.mods_folder = mods;
+        let lookup = InstalledRefLookup::load(state.step1.mods_folder.trim());
+        let pinned =
+            build_resolved_source_overrides(&state, &installed_refs_for_export(&lookup, &include))
+                .expect("resolve")
+                .toml
+                .expect("a resolved mod produces text");
+        assert!(pinned.contains(&format!("commit = \"{SHA}\"")), "{pinned}");
+        let refs_copy =
+            build_per_modlist_installed_refs(&state, &lookup, &include).expect("refs copy");
+        assert!(
+            refs_copy.contains(&format!("moda = \"master@{SHA}\"")),
+            "{refs_copy}"
+        );
+    }
+
+    #[test]
+    fn share_export_takes_folder_records_only_for_checked_mods() {
+        use crate::app::app_step2_update_source_refs::{InstalledRefLookup, parse_refs_file_text};
+
+        let list_text = "[refs]\nmodc = \"v3\"\n\n[sources]\nmodc = \"main\"\n";
+        let folder = parse_refs_file_text(
+            "[refs]\nmoda = \"master@aaaaaaa\"\nmodb = \"master@bbbbbbb\"\n\n[sources]\nmoda = \"main\"\nmodb = \"main\"\n",
+        );
+        let lookup = InstalledRefLookup::from_files(Some(folder), parse_refs_file_text(list_text));
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![
+            make_step2_mod("moda", "ModA"),
+            make_unchecked_step2_mod("modb", "ModB"),
+        ];
+        let include = checked_mod_tp2s(&state);
+
+        let refs_copy =
+            build_per_modlist_installed_refs(&state, &lookup, &include).expect("refs copy");
+        assert!(
+            refs_copy.contains("moda = \"master@aaaaaaa\""),
+            "{refs_copy}"
+        );
+        assert!(!refs_copy.contains("modb"), "{refs_copy}");
+        assert!(refs_copy.contains("modc = \"v3\""), "{refs_copy}");
+
+        let installed =
+            installed_refs_folder_first(&lookup, parse_refs_file_text(list_text), &include);
+        assert_eq!(
+            installed.sources.get("moda").map(String::as_str),
+            Some("main")
+        );
+        assert!(!installed.sources.contains_key("modb"));
+        assert!(!installed.refs.contains_key("modb"));
+        assert_eq!(installed.refs.get("modc").map(String::as_str), Some("v3"));
     }
 
     struct RefsCopyRoot(std::path::PathBuf);
@@ -2535,8 +2728,9 @@ mod tests {
 
         let default_text = "[[mods]]\nname = \"ModA\"\ntp2 = \"moda\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/ModA\"\n  repo = \"Owner/ModA\"\n";
 
-        let resolved = build_resolved_source_overrides_from_texts(&state, default_text, "", "", "")
-            .expect("resolves");
+        let resolved =
+            build_resolved_source_overrides_from_texts(&state, default_text, "", "", &no_refs())
+                .expect("resolves");
         let toml = resolved.toml.expect("a resolved mod produces text");
 
         assert!(
@@ -2684,7 +2878,9 @@ mod tests {
             config_fixture_mod(&root.root, "biocfgunchecked", false),
         ];
 
-        let (exported, _warnings) = export_mod_config_files(&state).expect("export runs");
+        let (exported, _warnings) =
+            export_mod_config_files(&state, &std::collections::BTreeMap::new())
+                .expect("export runs");
 
         let exported = exported
             .iter()
@@ -2713,7 +2909,9 @@ mod tests {
         let mut state = WizardState::default();
         state.step2.bgee_mods = vec![fixture];
 
-        let (exported, warnings) = export_mod_config_files(&state).expect("export runs");
+        let (exported, warnings) =
+            export_mod_config_files(&state, &std::collections::BTreeMap::new())
+                .expect("export runs");
 
         let exported = exported
             .iter()

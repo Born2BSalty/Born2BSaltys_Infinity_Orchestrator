@@ -5,6 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::app::app_step2_update_download;
+use crate::app::app_step2_update_source_refs::{
+    RefsTargets, installed_source_refs_path, mods_folder_refs_path,
+};
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
 use crate::app::state::{Step2UpdateAsset, WizardState};
@@ -23,7 +26,24 @@ pub(crate) struct Step2UpdateExtractJob {
     pub(crate) backup_version_tag: String,
     pub(crate) installed_source_ref: Option<String>,
     pub(crate) installed_source_id: Option<String>,
-    pub(crate) installed_refs_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ExtractPlan {
+    pub(crate) jobs: Vec<Step2UpdateExtractJob>,
+    pub(crate) refs_targets: RefsTargets,
+}
+
+fn resolve_refs_targets(
+    mods_folder: &str,
+    install_ctx_installed_refs_path: Option<&Path>,
+) -> RefsTargets {
+    RefsTargets {
+        list: install_ctx_installed_refs_path
+            .map_or_else(installed_source_refs_path, Path::to_path_buf),
+        folder: mods_folder_refs_path(mods_folder),
+        folder_label: Some(mods_folder.to_string()),
+    }
 }
 
 pub(crate) fn build_extract_jobs(
@@ -31,15 +51,19 @@ pub(crate) fn build_extract_jobs(
     archive_dir: &Path,
     install_ctx_installed_refs_path: Option<&Path>,
     scope: Option<&str>,
-) -> Vec<Step2UpdateExtractJob> {
-    let mut jobs = Vec::new();
-    let mods_root = PathBuf::from(state.step1.mods_folder.trim());
-    if state.step1.mods_folder.trim().is_empty() {
+) -> ExtractPlan {
+    let mods_folder = state.step1.mods_folder.trim().to_string();
+    let mut plan = ExtractPlan {
+        jobs: Vec::new(),
+        refs_targets: resolve_refs_targets(&mods_folder, install_ctx_installed_refs_path),
+    };
+    let mods_root = PathBuf::from(&mods_folder);
+    if mods_folder.is_empty() {
         state
             .step2
             .update_selected_extract_failed_sources
             .push("Mods Folder is empty".to_string());
-        return jobs;
+        return plan;
     }
     let source_load = mod_downloads::load_mod_download_sources();
     if let Some(err) = source_load.error.as_ref() {
@@ -48,11 +72,6 @@ pub(crate) fn build_extract_jobs(
             .update_selected_extract_failed_sources
             .push(err.clone());
     }
-
-    let refs_path = install_ctx_installed_refs_path.map_or_else(
-        crate::app::app_step2_update_source_refs::installed_source_refs_path,
-        Path::to_path_buf,
-    );
 
     for asset in &state.step2.update_selected_update_assets {
         if scope.is_some_and(|tp2| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) != tp2)
@@ -69,7 +88,7 @@ pub(crate) fn build_extract_jobs(
         let subdir_require = source
             .as_ref()
             .and_then(|source| source.subdir_require.clone());
-        jobs.push(Step2UpdateExtractJob {
+        plan.jobs.push(Step2UpdateExtractJob {
             label: asset.label.clone(),
             tp_file: asset.tp_file.clone(),
             aliases: source
@@ -85,10 +104,9 @@ pub(crate) fn build_extract_jobs(
             backup_version_tag: asset.tag.clone(),
             installed_source_ref: extract_source_ref(asset, source.as_ref()),
             installed_source_id,
-            installed_refs_path: refs_path.clone(),
         });
     }
-    jobs
+    plan
 }
 
 fn resolve_selected_source(
@@ -254,10 +272,62 @@ mod tests {
         state.step2.update_selected_update_assets = vec![asset_a, asset_b];
 
         let refs_path = archive_dir.join("refs.json");
-        let jobs = build_extract_jobs(&mut state, &archive_dir, Some(&refs_path), Some("alpha"));
+        let jobs =
+            build_extract_jobs(&mut state, &archive_dir, Some(&refs_path), Some("alpha")).jobs;
 
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].tp_file, "alpha.tp2");
+    }
+
+    #[test]
+    fn build_extract_jobs_resolves_both_refs_targets() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = TestRoot::new("folder_refs_path");
+        let archive_dir = root.archive_dir();
+
+        let mut state = WizardState::default();
+        state.step1.mods_folder = root.0.join("mods").to_string_lossy().into_owned();
+        let alpha = asset("alpha.tp2", "Alpha", "1.0");
+        fs::write(
+            archive_dir.join(app_step2_update_download::archive_file_name(&alpha)),
+            b"x",
+        )
+        .unwrap();
+        state.step2.update_selected_update_assets = vec![alpha];
+        let refs_path = root.0.join("refs.toml");
+
+        let mods = state.step1.mods_folder.clone();
+        let plan = build_extract_jobs(&mut state, &archive_dir, Some(&refs_path), None);
+        let expected = mods_folder_refs_path(&mods);
+        assert!(
+            expected
+                .as_ref()
+                .is_some_and(|path| path.starts_with(&root.0)),
+            "{expected:?}"
+        );
+        assert_eq!(plan.jobs.len(), 1);
+        assert_eq!(
+            plan.refs_targets,
+            RefsTargets {
+                list: refs_path.clone(),
+                folder: expected,
+                folder_label: Some(mods.clone()),
+            }
+        );
+
+        state.step1.mods_folder = format!("  {mods}  ");
+        let padded = build_extract_jobs(&mut state, &archive_dir, None, None);
+        assert_eq!(padded.refs_targets.list, installed_source_refs_path());
+        assert_eq!(padded.refs_targets.folder, plan.refs_targets.folder);
+        assert_eq!(padded.refs_targets.folder_label, Some(mods));
+
+        state.step1.mods_folder = "   ".to_string();
+        let blank = build_extract_jobs(&mut state, &archive_dir, Some(&refs_path), None);
+        assert!(blank.jobs.is_empty());
+        assert_eq!(blank.refs_targets.list, refs_path);
+        assert_eq!(blank.refs_targets.folder, None);
     }
 
     fn named_asset(asset_name: &str, tag: &str) -> Step2UpdateAsset {

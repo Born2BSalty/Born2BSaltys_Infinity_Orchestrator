@@ -724,16 +724,16 @@ fn bookmark_on_disk(state: &mut WizardState, tp2: &str, card_key: &str) {
         state.step2.scan_status = "Nothing to bookmark".to_string();
         return;
     }
-    let refs_file = super::app_step2_update_source_refs::load_refs_file_at(
-        &super::app_step2_update_source_refs::installed_source_refs_path(),
-    );
-    let normalized_tp2 = mod_downloads::normalize_mod_download_tp2(tp2);
-    let installed_source_id = refs_file.sources.get(&normalized_tp2).cloned();
-    let installed_ref = refs_file.refs.get(&normalized_tp2).cloned();
+    let installed = super::app_step2_update_source_refs::InstalledRefLookup::load(
+        state.step1.mods_folder.trim(),
+    )
+    .source_id_and_ref(tp2);
     let Some((bookmarked_source, label)) = mod_source_history::bookmark_block(
         &current,
-        installed_source_id.as_deref(),
-        installed_ref.as_deref(),
+        installed.as_ref().map(|(source_id, _)| source_id.as_str()),
+        installed
+            .as_ref()
+            .map(|(_, source_ref)| source_ref.as_str()),
     ) else {
         state.step2.scan_status = "Nothing to bookmark".to_string();
         return;
