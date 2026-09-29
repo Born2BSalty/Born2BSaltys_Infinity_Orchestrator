@@ -6,7 +6,7 @@ use eframe::egui;
 pub(crate) const GLYPH_LOCK: &str = "\u{F023}";
 pub(crate) const GLYPH_UNLOCK: &str = "\u{F09C}";
 pub(crate) const GLYPH_EXTERNAL_LINK: &str = "\u{F08E}";
-const GLYPH_FONT_SIZE: f32 = 14.0;
+const GLYPH_FONT_SIZE: f32 = 16.0;
 
 fn icon_stroke(color: egui::Color32) -> egui::Stroke {
     egui::Stroke::new(1.6_f32, color)
