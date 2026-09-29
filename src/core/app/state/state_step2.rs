@@ -164,6 +164,7 @@ pub struct Step2State<Flag = bool> {
     pub update_selected_check_total_count: usize,
     pub update_selected_download_running: Flag,
     pub update_selected_extract_running: Flag,
+    pub update_selected_extract_progress: Option<(usize, usize)>,
     pub update_selected_update_assets: Vec<Step2UpdateAsset>,
     pub update_selected_update_sources: Vec<String>,
     pub update_selected_locked_update_assets: Vec<Step2UpdateAsset>,
@@ -259,6 +260,7 @@ impl Default for Step2State {
             update_selected_check_total_count: 0,
             update_selected_download_running: false,
             update_selected_extract_running: false,
+            update_selected_extract_progress: None,
             update_selected_update_assets: Vec::new(),
             update_selected_update_sources: Vec::new(),
             update_selected_locked_update_assets: Vec::new(),
@@ -625,6 +627,7 @@ mod tests {
         assert_eq!(step2.update_selected_download_total, 0);
         assert!(step2.update_selected_download_finished.is_empty());
         assert_eq!(step2.update_selected_download_scope, None);
+        assert_eq!(step2.update_selected_extract_progress, None);
     }
 
     #[test]

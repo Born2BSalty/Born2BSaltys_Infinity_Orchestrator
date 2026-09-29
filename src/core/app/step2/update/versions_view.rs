@@ -262,6 +262,22 @@ pub(crate) fn refresh_fetch_phase(view: &mut VersionsView, state: &WizardState) 
         .iter()
         .filter(|card| card.status == CardStatus::Attention)
         .count();
+    if downloading {
+        view.cards
+            .sort_by_cached_key(|card| fetch_order_class(state, card));
+    }
+}
+
+fn fetch_order_class(state: &WizardState, card: &VersionCard) -> u8 {
+    let in_flight = matches!(card.fetching, Some(FetchPhase::Downloading(_)))
+        && !key_downloaded_ok(state, &card.tp2);
+    if in_flight {
+        0
+    } else if card.queued {
+        1
+    } else {
+        2
+    }
 }
 
 fn extracted_just_now(state: &WizardState, name: &str) -> bool {
@@ -1306,6 +1322,44 @@ mod tests {
         let waiting = card_named(&view, "c.tp2");
         assert!(waiting.queued);
         assert_eq!(waiting.fetching, None);
+    }
+
+    fn card_keys(view: &VersionsView) -> Vec<&str> {
+        view.cards.iter().map(|card| card.tp2.as_str()).collect()
+    }
+
+    fn mixed_batch_events() -> Vec<Step2UpdateDownloadEvent> {
+        vec![
+            progress(0, 0, 50),
+            asset_done(0, 50, None),
+            progress(2, 10, 100),
+            progress(4, 20, 100),
+        ]
+    }
+
+    #[test]
+    fn in_flight_cards_sort_first_then_queued_then_the_rest() {
+        let mut state = batch_state(&["a", "b", "c", "d", "e"]);
+        state.step2.update_selected_download_running = true;
+        drive_download(&mut state, mixed_batch_events());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+
+        assert_eq!(card_keys(&view), vec!["c", "e", "b", "d", "a"]);
+        assert_eq!(
+            card_named(&view, "a.tp2").fetching,
+            Some(FetchPhase::Downloading(Some(1.0)))
+        );
+    }
+
+    #[test]
+    fn cards_keep_name_order_when_no_download_runs() {
+        let mut state = batch_state(&["a", "b", "c", "d", "e"]);
+        drive_download(&mut state, mixed_batch_events());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+
+        assert_eq!(card_keys(&view), vec!["a", "b", "c", "d", "e"]);
     }
 
     #[test]

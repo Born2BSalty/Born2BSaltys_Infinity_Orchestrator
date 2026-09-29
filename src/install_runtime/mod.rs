@@ -7,7 +7,6 @@ pub mod archive_skip_async;
 pub mod archive_store;
 pub mod auto_build_driver;
 pub mod destination_prep;
-pub mod extract_parallel;
 pub mod flag_policies;
 pub mod fork_pipeline_arm;
 pub mod fork_route;

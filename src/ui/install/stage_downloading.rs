@@ -1689,6 +1689,10 @@ pub(crate) fn stage_and_kick_archive_skip_once(
             .step2
             .update_selected_download_done
             .clear();
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_extract_progress = None;
         orchestrator.install_screen_state.expected_archive_sizes = expected_sizes;
         orchestrator.install_screen_state.skip_indices = std::collections::HashSet::new();
         orchestrator
@@ -1970,7 +1974,11 @@ pub(crate) fn build_and_hold_progress(
         &prior_expected,
         hashed,
     );
-    progress.extract_progress = orchestrator.extract_progress.lock().ok().and_then(|g| *g);
+    let step2 = &orchestrator.wizard_state.step2;
+    progress.extract_progress = (step2.update_selected_download_origin
+        == DownloadOrigin::InstallPipeline)
+        .then_some(step2.update_selected_extract_progress)
+        .flatten();
     progress.hash_progress = orchestrator.hash_progress.lock().ok().and_then(|g| *g);
 
     let hold_prior_grid = progress.rows.is_empty()
@@ -3117,7 +3125,7 @@ mod tests {
                 Some((50, Some(100))),
                 Some(100),
             )],
-            extract_progress: Some((7, 10)), // a stale value
+            extract_progress: Some((7, 10)),
             ..Default::default()
         };
         assert_eq!(p.phase(), InstallPhase::Downloading);
@@ -3915,6 +3923,30 @@ mod tests {
     }
 
     #[test]
+    fn panel_reads_the_extract_counter_only_for_a_pipeline_origin_run() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-panel-extract-origin",
+            );
+        app.wizard_state.step2.update_selected_update_assets =
+            vec![test_asset("ModA", "https://example.com/a.zip")];
+        app.wizard_state.step2.update_selected_extract_progress = Some((11, 11));
+
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::Workspace;
+        assert_eq!(
+            build_and_hold_progress(&mut app).extract_progress,
+            None,
+            "a drawer fetch's counter never reaches the install panel"
+        );
+
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
+        assert_eq!(
+            build_and_hold_progress(&mut app).extract_progress,
+            Some((11, 11))
+        );
+    }
+
+    #[test]
     fn cache_check_kick_clears_stale_download_bytes_from_a_previous_run() {
         let root = ManualDlTempRoot::new("cache-clears-stale-bytes");
         let mut app =
@@ -3930,7 +3962,11 @@ mod tests {
             .step2
             .update_selected_download_bytes
             .insert(0, (50, Some(50)));
-        app.wizard_state.step2.update_selected_download_done.insert(0);
+        app.wizard_state
+            .step2
+            .update_selected_download_done
+            .insert(0);
+        app.wizard_state.step2.update_selected_extract_progress = Some((11, 11));
         let inputs = LivePipelineInputs {
             destination: "C:/dest".to_string(),
             game: crate::registry::model::Game::BGEE,
@@ -3940,6 +3976,11 @@ mod tests {
 
         stage_and_kick_archive_skip_once(&mut app, &inputs);
 
+        assert_eq!(
+            app.wizard_state.step2.update_selected_extract_progress,
+            None
+        );
+        assert_eq!(build_and_hold_progress(&mut app).extract_progress, None);
         assert!(
             app.wizard_state
                 .step2
@@ -3947,7 +3988,12 @@ mod tests {
                 .is_empty(),
             "a re-armed run starts with no bytes from the previous run"
         );
-        assert!(app.wizard_state.step2.update_selected_download_done.is_empty());
+        assert!(
+            app.wizard_state
+                .step2
+                .update_selected_download_done
+                .is_empty()
+        );
         let rows = DownloadProgress::from_wizard_state(&app.wizard_state).rows;
         assert_eq!(rows[0].per_byte, None);
         app.archive_skip_rx = None;

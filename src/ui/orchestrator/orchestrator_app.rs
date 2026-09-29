@@ -297,11 +297,6 @@ pub struct OrchestratorApp {
     pub(crate) forks_rx: Option<crate::app::github_forks_list::ForksFetch>,
     pub(crate) added_mods_seeded_for: Option<String>,
 
-    pub(crate) extract_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-
-    pub(crate) extract_parallel_rx:
-        Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>>,
-
     pub(crate) archive_skip_rx:
         Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
     pub(crate) manual_download_rx:
@@ -449,8 +444,6 @@ impl OrchestratorApp {
             release_list_rx: None,
             forks_rx: None,
             added_mods_seeded_for: None,
-            extract_progress: Arc::new(std::sync::Mutex::new(None)),
-            extract_parallel_rx: None,
             archive_skip_rx: None,
             manual_download_rx: None,
             create_destination_prep_rx: None,
@@ -549,15 +542,14 @@ impl OrchestratorApp {
     pub(crate) fn reset_install_screen_to_gallery(&mut self) {
         reset_install_pipeline_state(InstallPipelineResetSet {
             step2_update_download_rx: &mut self.step2_update_download_rx,
+            step2_update_extract_rx: &mut self.step2_update_extract_rx,
             archive_skip_rx: &mut self.archive_skip_rx,
-            extract_parallel_rx: &mut self.extract_parallel_rx,
             manual_download_rx: &mut self.manual_download_rx,
             install_destination_prep_rx: &mut self.install_destination_prep_rx,
             background_destination_prep_workers: &mut self.background_destination_prep_workers,
             wizard_state: &mut self.wizard_state,
             install_screen_state: &mut self.install_screen_state,
             hash_progress: &self.hash_progress,
-            extract_progress: &self.extract_progress,
             pending_reinstall_id: &mut self.pending_reinstall_id,
             active_install_modlist_id: &mut self.active_install_modlist_id,
         });
@@ -755,14 +747,6 @@ impl OrchestratorApp {
             &mut self.install_screen_state,
             &self.hash_progress,
         );
-        Self::drain_extract_parallel(
-            &mut self.wizard_state,
-            &mut self.extract_parallel_rx,
-            &mut self.step2_scan_rx,
-            &mut self.step2_cancel,
-            &mut self.step2_progress_queue,
-            &self.extract_progress,
-        );
         if self.nav == crate::ui::orchestrator::nav_destination::NavDestination::Install {
             crate::ui::install::stage_downloading::drain_manual_download_events(self);
         }
@@ -804,32 +788,14 @@ impl OrchestratorApp {
         self.added_mods_seeded_for = Some(id);
     }
 
-    fn kick_parallel_extract(
-        wizard_state: &mut WizardState,
-        extract_parallel_rx: &mut Option<
-            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
-        >,
-        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-        install_ctx_installed_refs_path: Option<&std::path::Path>,
-    ) {
-        use crate::install_runtime::extract_parallel::start_parallel_extract;
-
-        if let Some(rx) = start_parallel_extract(
-            wizard_state,
-            extract_progress,
-            install_ctx_installed_refs_path,
-        ) {
-            *extract_parallel_rx = Some(rx);
-            tracing::info!(
-                target = "orchestrator",
-                "parallel extract receiver installed"
-            );
-        } else {
-            tracing::info!(
-                target = "orchestrator",
-                "parallel extract receiver not installed"
-            );
-        }
+    fn start_pipeline_extract(&mut self) {
+        let install_ctx_refs_path = self.install_ctx_refs_path();
+        let started = app_step2_update_extract::start_step2_update_extract(
+            &mut self.wizard_state,
+            &mut self.step2_update_extract_rx,
+            install_ctx_refs_path.as_deref(),
+        );
+        tracing::info!(target = "orchestrator", started, "pipeline extract start");
     }
 
     fn start_deferred_extract_once(&mut self) {
@@ -843,13 +809,7 @@ impl OrchestratorApp {
         }
         self.install_screen_state.manual_downloads.extract_deferred = false;
         self.wizard_state.step2.update_selected_extract_running = false;
-        let install_ctx_refs_path = self.install_ctx_refs_path();
-        Self::kick_parallel_extract(
-            &mut self.wizard_state,
-            &mut self.extract_parallel_rx,
-            &self.extract_progress,
-            install_ctx_refs_path.as_deref(),
-        );
+        self.start_pipeline_extract();
     }
 
     fn install_ctx_refs_path(&self) -> Option<std::path::PathBuf> {
@@ -878,199 +838,17 @@ impl OrchestratorApp {
                     target = "orchestrator",
                     "download finished; starting parallel extract"
                 );
-                let install_ctx_refs_path = self.install_ctx_refs_path();
-                Self::kick_parallel_extract(
+                self.start_pipeline_extract();
+            }
+            DownloadOrigin::Workspace => {
+                let started = app_step2_update_extract::start_step2_update_extract(
                     &mut self.wizard_state,
-                    &mut self.extract_parallel_rx,
-                    &self.extract_progress,
-                    install_ctx_refs_path.as_deref(),
+                    &mut self.step2_update_extract_rx,
+                    None,
                 );
-            }
-            DownloadOrigin::Workspace => app_step2_update_extract::start_step2_update_extract(
-                &mut self.wizard_state,
-                &mut self.step2_update_extract_rx,
-            ),
-        }
-    }
-
-    fn drain_extract_parallel(
-        wizard_state: &mut WizardState,
-        extract_parallel_rx: &mut Option<
-            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
-        >,
-        step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
-        step2_cancel: &mut Option<Arc<AtomicBool>>,
-        step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
-        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-    ) {
-        use crate::install_runtime::extract_parallel::ExtractAssetEvent;
-        use std::sync::mpsc::TryRecvError;
-
-        let Some(rx) = extract_parallel_rx.as_ref() else {
-            return;
-        };
-        loop {
-            match rx.try_recv() {
-                Ok(ExtractAssetEvent::AssetDone {
-                    index,
-                    ok,
-                    label,
-                    target_or_err,
-                }) => {
-                    Self::record_extract_asset_done(
-                        index,
-                        ok,
-                        &label,
-                        &target_or_err,
-                        extract_progress,
-                    );
-                }
-                Ok(ExtractAssetEvent::Finished(result)) => {
-                    Self::handle_extract_finished(
-                        result,
-                        wizard_state,
-                        extract_parallel_rx,
-                        step2_scan_rx,
-                        step2_cancel,
-                        step2_progress_queue,
-                        extract_progress,
-                    );
-                    return;
-                }
-                Err(TryRecvError::Empty) => return,
-                Err(TryRecvError::Disconnected) => {
-                    let progress_before = extract_progress.lock().ok().and_then(|g| *g);
-                    tracing::info!(
-                        target = "orchestrator",
-                        progress_before = ?progress_before,
-                        "extract drain: channel disconnected"
-                    );
-                    *extract_parallel_rx = None;
-                    wizard_state.step2.update_selected_extract_running = false;
-                    wizard_state.step2.scan_status =
-                        "Extract updates failed: worker disconnected".to_string();
-                    return;
-                }
+                tracing::info!(target = "orchestrator", started, "workspace extract start");
             }
         }
-    }
-
-    fn handle_extract_finished(
-        result: crate::install_runtime::extract_parallel::ExtractResult,
-        wizard_state: &mut WizardState,
-        extract_parallel_rx: &mut Option<
-            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
-        >,
-        step2_scan_rx: &mut Option<Receiver<Step2ScanEvent>>,
-        step2_cancel: &mut Option<Arc<AtomicBool>>,
-        step2_progress_queue: &mut VecDeque<(usize, usize, String)>,
-        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-    ) {
-        use std::collections::HashSet;
-
-        Self::log_extract_finished(&result, extract_progress);
-        *extract_parallel_rx = None;
-        wizard_state.step2.update_selected_extract_running = false;
-        wizard_state.step2.update_selected_extracted_sources = result.extracted;
-
-        let extracted_labels: HashSet<String> = wizard_state
-            .step2
-            .update_selected_extracted_sources
-            .iter()
-            .filter_map(|e| e.split_once(" -> ").map(|(l, _)| l.trim().to_string()))
-            .filter(|l| !l.is_empty())
-            .collect();
-        if !extracted_labels.is_empty() {
-            wizard_state
-                .step2
-                .update_selected_missing_sources
-                .retain(|e| {
-                    !extracted_labels
-                        .iter()
-                        .any(|l| e.starts_with(&format!("{l} (")))
-                });
-            wizard_state
-                .step2
-                .update_selected_update_sources
-                .retain(|e| {
-                    !extracted_labels
-                        .iter()
-                        .any(|l| e.starts_with(&format!("{l} (")))
-                });
-            wizard_state
-                .step2
-                .update_selected_update_assets
-                .retain(|a| !extracted_labels.contains(&a.label));
-        }
-
-        wizard_state
-            .step2
-            .update_selected_extract_failed_sources
-            .extend(result.failed);
-
-        let extracted = wizard_state.step2.update_selected_extracted_sources.len();
-        let failed = wizard_state
-            .step2
-            .update_selected_extract_failed_sources
-            .len();
-
-        if extracted > 0 {
-            wizard_state.step1_mods_folder_has_tp2 = Some(true);
-            wizard_state.step2.log_pending_downloads.clear();
-            wizard_state.step2.scan_status =
-                format!("Extracted {extracted} updates; rescanning Mods Folder");
-            wizard_state.step2.pending_saved_log_apply = true;
-            app_step2_scan::start_step2_scan(
-                wizard_state,
-                step2_scan_rx,
-                step2_cancel,
-                step2_progress_queue,
-            );
-        } else {
-            wizard_state.step2.scan_status =
-                format!("Extract updates finished: {extracted} updated, {failed} failed");
-        }
-    }
-
-    fn record_extract_asset_done(
-        index: usize,
-        ok: bool,
-        label: &str,
-        target_or_err: &str,
-        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-    ) {
-        let mut progress_after = None;
-        let progress_lock_ok = extract_progress.lock().is_ok_and(|mut g| {
-            let (c, t) = g.unwrap_or((0, 0));
-            let next = (c + 1, t);
-            *g = Some(next);
-            progress_after = Some(next);
-            true
-        });
-        tracing::info!(
-            target = "orchestrator",
-            index,
-            ok,
-            label,
-            target_or_err,
-            progress_lock_ok,
-            progress_after = ?progress_after,
-            "extract drain: AssetDone received"
-        );
-    }
-
-    fn log_extract_finished(
-        result: &crate::install_runtime::extract_parallel::ExtractResult,
-        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-    ) {
-        let progress_before = extract_progress.lock().ok().and_then(|g| *g);
-        tracing::info!(
-            target = "orchestrator",
-            extracted_count = result.extracted.len(),
-            failed_count = result.failed.len(),
-            progress_before = ?progress_before,
-            "extract drain: Finished received"
-        );
     }
 
     fn drain_archive_skip_events(
@@ -1195,7 +973,6 @@ impl OrchestratorApp {
             || self.step2_update_check_rx.is_some()
             || self.step2_update_download_rx.is_some()
             || self.step2_update_extract_rx.is_some()
-            || self.extract_parallel_rx.is_some()
             || self.archive_skip_rx.is_some()
             || self.create_destination_prep_rx.is_some()
             || self.install_destination_prep_rx.is_some()
@@ -1368,10 +1145,10 @@ impl OrchestratorApp {
 pub struct InstallPipelineResetSet<'a> {
     pub(crate) step2_update_download_rx:
         &'a mut Option<Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent>>,
+    pub(crate) step2_update_extract_rx:
+        &'a mut Option<Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>>,
     pub archive_skip_rx:
         &'a mut Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
-    pub extract_parallel_rx:
-        &'a mut Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>>,
     pub manual_download_rx:
         &'a mut Option<Receiver<crate::install_runtime::manual_download_watcher::WatchEvent>>,
     pub install_destination_prep_rx: &'a mut Option<PendingInstallDestinationPrep>,
@@ -1379,7 +1156,6 @@ pub struct InstallPipelineResetSet<'a> {
     pub wizard_state: &'a mut WizardState,
     pub install_screen_state: &'a mut InstallScreenState,
     pub hash_progress: &'a Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-    pub extract_progress: &'a Arc<std::sync::Mutex<Option<(usize, usize)>>>,
     pub pending_reinstall_id: &'a mut Option<String>,
     pub active_install_modlist_id: &'a mut Option<String>,
 }
@@ -1387,22 +1163,23 @@ pub struct InstallPipelineResetSet<'a> {
 pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     let InstallPipelineResetSet {
         step2_update_download_rx,
+        step2_update_extract_rx,
         archive_skip_rx,
-        extract_parallel_rx,
         manual_download_rx,
         install_destination_prep_rx,
         background_destination_prep_workers,
         wizard_state,
         install_screen_state,
         hash_progress,
-        extract_progress,
         pending_reinstall_id,
         active_install_modlist_id,
     } = set;
 
-    *step2_update_download_rx = None;
+    if wizard_state.step2.update_selected_download_origin == DownloadOrigin::InstallPipeline {
+        *step2_update_download_rx = None;
+        *step2_update_extract_rx = None;
+    }
     *archive_skip_rx = None;
-    *extract_parallel_rx = None;
     *manual_download_rx = None;
     if let Some(pending) = install_destination_prep_rx.take() {
         hold_destination_prep_worker_for_shutdown(
@@ -1431,9 +1208,7 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     if let Ok(mut g) = hash_progress.lock() {
         *g = None;
     }
-    if let Ok(mut g) = extract_progress.lock() {
-        *g = None;
-    }
+    wizard_state.step2.update_selected_extract_progress = None;
 
     *pending_reinstall_id = None;
     *active_install_modlist_id = None;
@@ -1830,6 +1605,7 @@ mod tests {
             .update_selected_download_bytes
             .insert(0, (10, Some(20)));
         ws.step2.update_selected_download_done.insert(0);
+        ws.step2.update_selected_extract_progress = Some((5, 51));
         ws
     }
 
@@ -1881,7 +1657,9 @@ mod tests {
         s_sk: &std::sync::mpsc::Sender<
             crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
         >,
-        s_ex: &std::sync::mpsc::Sender<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
+        s_ex: &std::sync::mpsc::Sender<
+            crate::app::app_step2_update_extract::Step2UpdateExtractEvent,
+        >,
     ) {
         assert!(
             s_dl.send(
@@ -1901,7 +1679,7 @@ mod tests {
         );
         assert!(
             s_ex.send(
-                crate::install_runtime::extract_parallel::ExtractAssetEvent::AssetDone {
+                crate::app::app_step2_update_extract::Step2UpdateExtractEvent::AssetDone {
                     index: 0,
                     ok: true,
                     label: "MOD".to_string(),
@@ -1921,7 +1699,7 @@ mod tests {
             crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
         >();
         let (s_ex, r_ex) = std::sync::mpsc::channel::<
-            crate::install_runtime::extract_parallel::ExtractAssetEvent,
+            crate::app::app_step2_update_extract::Step2UpdateExtractEvent,
         >();
         let (destination_prep_worker, release_worker) = blocking_destination_prep_worker();
         let mut stream = Some(r_dl);
@@ -1945,30 +1723,29 @@ mod tests {
             worker: destination_prep_worker,
         });
         let mut ws = dirty_ws();
+        ws.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
         let mut iss = dirty_iss();
         let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
-        let extract_lock = Arc::new(std::sync::Mutex::new(Some((5usize, 51usize))));
         let mut pending = Some("modlist-id".to_string());
         let mut active = Some("modlist-id".to_string());
 
         reset_install_pipeline_state(InstallPipelineResetSet {
             step2_update_download_rx: &mut stream,
+            step2_update_extract_rx: &mut extract,
             archive_skip_rx: &mut skip,
-            extract_parallel_rx: &mut extract,
             manual_download_rx: &mut manual_dl,
             install_destination_prep_rx: &mut dest_prep,
             background_destination_prep_workers: &mut background_destination_prep_workers,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,
-            extract_progress: &extract_lock,
             pending_reinstall_id: &mut pending,
             active_install_modlist_id: &mut active,
         });
 
         assert!(stream.is_none(), "step2_update_download_rx dropped");
         assert!(skip.is_none(), "archive_skip_rx dropped");
-        assert!(extract.is_none(), "extract_parallel_rx dropped");
+        assert!(extract.is_none(), "step2_update_extract_rx dropped");
         assert!(dest_prep.is_none(), "install_destination_prep_rx dropped");
         assert_eq!(
             background_destination_prep_workers.len(),
@@ -2008,7 +1785,7 @@ mod tests {
             Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>,
         > = None;
         let mut extract: Option<
-            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
+            Receiver<crate::app::app_step2_update_extract::Step2UpdateExtractEvent>,
         > = None;
         let mut manual_dl: Option<
             Receiver<crate::install_runtime::manual_download_watcher::WatchEvent>,
@@ -2018,21 +1795,19 @@ mod tests {
         let mut ws = dirty_ws();
         let mut iss = dirty_iss();
         let hash = Arc::new(std::sync::Mutex::new(Some((10usize, 51usize))));
-        let extract_lock = Arc::new(std::sync::Mutex::new(Some((5usize, 51usize))));
         let mut pending: Option<String> = None;
         let mut active: Option<String> = None;
 
         reset_install_pipeline_state(InstallPipelineResetSet {
             step2_update_download_rx: &mut stream,
+            step2_update_extract_rx: &mut extract,
             archive_skip_rx: &mut skip,
-            extract_parallel_rx: &mut extract,
             manual_download_rx: &mut manual_dl,
             install_destination_prep_rx: &mut dest_prep,
             background_destination_prep_workers: &mut background_destination_prep_workers,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,
-            extract_progress: &extract_lock,
             pending_reinstall_id: &mut pending,
             active_install_modlist_id: &mut active,
         });
@@ -2056,9 +1831,9 @@ mod tests {
         );
 
         assert!(hash.lock().unwrap().is_none(), "shared hash mutex blanked");
-        assert!(
-            extract_lock.lock().unwrap().is_none(),
-            "shared extract mutex blanked"
+        assert_eq!(
+            ws.step2.update_selected_extract_progress, None,
+            "the extract progress field is blanked"
         );
     }
 
@@ -2071,7 +1846,7 @@ mod tests {
             crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
         >();
         let (s_ex, r_ex) = std::sync::mpsc::channel::<
-            crate::install_runtime::extract_parallel::ExtractAssetEvent,
+            crate::app::app_step2_update_extract::Step2UpdateExtractEvent,
         >();
         let _ = s_dl.send(
             crate::app::app_step2_update_download::Step2UpdateDownloadEvent::AssetProgress {
@@ -2086,7 +1861,7 @@ mod tests {
             },
         );
         let _ = s_ex.send(
-            crate::install_runtime::extract_parallel::ExtractAssetEvent::AssetDone {
+            crate::app::app_step2_update_extract::Step2UpdateExtractEvent::AssetDone {
                 index: 0,
                 ok: true,
                 label: "MOD".to_string(),
@@ -2102,22 +1877,21 @@ mod tests {
         let mut dest_prep: Option<PendingInstallDestinationPrep> = None;
         let mut background_destination_prep_workers = Vec::new();
         let mut ws = WizardState::default();
+        ws.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
         let mut iss = InstallScreenState::default();
         let hash = Arc::new(std::sync::Mutex::new(None));
-        let extract_lock = Arc::new(std::sync::Mutex::new(None));
         let mut pending = None;
         let mut active = None;
         reset_install_pipeline_state(InstallPipelineResetSet {
             step2_update_download_rx: &mut stream,
+            step2_update_extract_rx: &mut extract,
             archive_skip_rx: &mut skip,
-            extract_parallel_rx: &mut extract,
             manual_download_rx: &mut manual_dl,
             install_destination_prep_rx: &mut dest_prep,
             background_destination_prep_workers: &mut background_destination_prep_workers,
             wizard_state: &mut ws,
             install_screen_state: &mut iss,
             hash_progress: &hash,
-            extract_progress: &extract_lock,
             pending_reinstall_id: &mut pending,
             active_install_modlist_id: &mut active,
         });
@@ -2133,93 +1907,6 @@ mod tests {
             .is_err()
         );
         let _ = TryRecvError::Empty;
-    }
-
-    #[test]
-    fn drain_extract_parallel_finished_with_results_rearms_saved_log_apply() {
-        use crate::install_runtime::extract_parallel::{ExtractAssetEvent, ExtractResult};
-        let (s_ex, r_ex) = std::sync::mpsc::channel::<
-            crate::install_runtime::extract_parallel::ExtractAssetEvent,
-        >();
-        let mut rx: Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>> =
-            Some(r_ex);
-        let mut scan_rx: Option<Receiver<Step2ScanEvent>> = None;
-        let mut cancel: Option<Arc<AtomicBool>> = None;
-        let mut progress_queue: VecDeque<(usize, usize, String)> = VecDeque::new();
-        let extract_lock = Arc::new(std::sync::Mutex::new(None));
-
-        let mut ws = WizardState::default();
-        ws.step2.update_selected_extract_running = true;
-        ws.step2.pending_saved_log_apply = false;
-        assert!(
-            !ws.step2.pending_saved_log_apply,
-            "precondition: the first apply pass cleared this latch"
-        );
-
-        s_ex.send(ExtractAssetEvent::Finished(ExtractResult {
-            extracted: vec!["EEFIXPACK -> C:\\dest\\mods\\eefixpack".to_string()],
-            failed: Vec::new(),
-        }))
-        .expect("send Finished");
-
-        OrchestratorApp::drain_extract_parallel(
-            &mut ws,
-            &mut rx,
-            &mut scan_rx,
-            &mut cancel,
-            &mut progress_queue,
-            &extract_lock,
-        );
-
-        assert!(
-            ws.step2.pending_saved_log_apply,
-            "extracted > 0 must re-arm pending_saved_log_apply so the next \
-             advance_pending_saved_log_flow pass writes the imported log's \
-             selection onto the now-populated step2"
-        );
-        assert!(rx.is_none(), "rx is consumed on Finished");
-        drop(s_ex);
-    }
-
-    #[test]
-    fn drain_extract_parallel_finished_with_zero_extracted_does_not_rearm_apply() {
-        use crate::install_runtime::extract_parallel::{ExtractAssetEvent, ExtractResult};
-        let (s_ex, r_ex) = std::sync::mpsc::channel::<
-            crate::install_runtime::extract_parallel::ExtractAssetEvent,
-        >();
-        let mut rx: Option<Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>> =
-            Some(r_ex);
-        let mut scan_rx: Option<Receiver<Step2ScanEvent>> = None;
-        let mut cancel: Option<Arc<AtomicBool>> = None;
-        let mut progress_queue: VecDeque<(usize, usize, String)> = VecDeque::new();
-        let extract_lock = Arc::new(std::sync::Mutex::new(None));
-
-        let mut ws = WizardState::default();
-        ws.step2.update_selected_extract_running = true;
-        ws.step2.pending_saved_log_apply = false;
-
-        s_ex.send(ExtractAssetEvent::Finished(ExtractResult {
-            extracted: Vec::new(),
-            failed: Vec::new(),
-        }))
-        .expect("send Finished");
-
-        OrchestratorApp::drain_extract_parallel(
-            &mut ws,
-            &mut rx,
-            &mut scan_rx,
-            &mut cancel,
-            &mut progress_queue,
-            &extract_lock,
-        );
-
-        assert!(
-            !ws.step2.pending_saved_log_apply,
-            "zero extracted ⇒ no scan kicked ⇒ no re-arm (an empty re-arm \
-             with no scan to back it would deadlock advance_pending_saved_log_flow \
-             waiting for a scan that never starts)"
-        );
-        drop(s_ex);
     }
 
     #[test]
@@ -2420,7 +2107,7 @@ mod tests {
             "the download receiver is consumed on Finished"
         );
         assert!(
-            app.extract_parallel_rx.is_none(),
+            app.step2_update_extract_rx.is_none(),
             "extraction is not started while a manual row still waits"
         );
 
@@ -2508,7 +2195,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_origin_finish_starts_the_workspace_extract() {
+    fn workspace_origin_finish_consumes_the_scope_and_never_defers() {
         let root = EngineFinishRoot::new();
         let mut app = OrchestratorApp::new_isolated_for_test("dl-engine-workspace-finish");
         app.wizard_state.step1.mods_archive_folder =
@@ -2530,10 +2217,34 @@ mod tests {
             "the workspace origin never waits on the pipeline's manual hold"
         );
         assert!(
-            app.extract_parallel_rx.is_none(),
-            "the pipeline extractor is not started for a workspace fetch"
+            app.step2_update_extract_rx.is_none(),
+            "a blank Mods Folder plans no job, so no extractor starts"
         );
         assert!(!app.wizard_state.step2.update_selected_extract_running);
+    }
+
+    #[test]
+    fn reset_keeps_a_workspace_run_receiver() {
+        let mut app = OrchestratorApp::new_isolated_for_test("reset-keeps-workspace-rx");
+        let (_workspace_tx, workspace_rx) = std::sync::mpsc::channel::<
+            crate::app::app_step2_update_extract::Step2UpdateExtractEvent,
+        >();
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::Workspace;
+        app.step2_update_extract_rx = Some(workspace_rx);
+
+        app.reset_install_screen_to_gallery();
+
+        assert!(app.step2_update_extract_rx.is_some());
+
+        let (_pipeline_tx, pipeline_rx) = std::sync::mpsc::channel::<
+            crate::app::app_step2_update_extract::Step2UpdateExtractEvent,
+        >();
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
+        app.step2_update_extract_rx = Some(pipeline_rx);
+
+        app.reset_install_screen_to_gallery();
+
+        assert!(app.step2_update_extract_rx.is_none());
     }
 
     #[test]
@@ -2591,23 +2302,19 @@ mod tests {
                 .pipeline_flags
                 .download_phase_started()
         );
-        assert!(
-            app.step2_update_extract_rx.is_none(),
-            "the workspace extractor is not started for the pipeline"
-        );
         let extract_rx = app
-            .extract_parallel_rx
+            .step2_update_extract_rx
             .take()
             .expect("the pipeline extractor started at once");
         assert_eq!(
-            *app.extract_progress.lock().unwrap(),
+            app.wizard_state.step2.update_selected_extract_progress,
             Some((0, 1)),
             "the pipeline extract planned the cached archive"
         );
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             match extract_rx.recv_timeout(Duration::from_millis(100)) {
-                Ok(crate::install_runtime::extract_parallel::ExtractAssetEvent::Finished(_))
+                Ok(crate::app::app_step2_update_extract::Step2UpdateExtractEvent::Finished(_))
                 | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 Ok(_) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     assert!(Instant::now() < deadline, "extract did not finish in time");

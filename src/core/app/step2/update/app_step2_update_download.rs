@@ -192,6 +192,7 @@ fn reset_run_state(
     step2.update_selected_download_scope = scope_tp2;
     step2.update_selected_download_bytes.clear();
     step2.update_selected_download_done.clear();
+    step2.update_selected_extract_progress = None;
     step2.update_selected_download_finished.clear();
     step2.update_selected_download_total = pending;
     step2.update_selected_extract_running = false;
@@ -1450,6 +1451,7 @@ mod tests {
             .update_selected_download_finished
             .push("a".to_string());
         state.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
+        state.step2.update_selected_extract_progress = Some((11, 11));
         let before = state.step2.clone();
         let mut rx = None;
 
@@ -1498,6 +1500,7 @@ mod tests {
             step2.update_selected_download_origin,
             DownloadOrigin::InstallPipeline
         );
+        assert_eq!(step2.update_selected_extract_progress, Some((11, 11)));
     }
 
     #[test]
@@ -1564,6 +1567,7 @@ mod tests {
             .collect::<Vec<_>>();
         let dest = destination(&root, &assets[7]);
         let mut state = state_for(&root, assets);
+        state.step2.update_selected_extract_progress = Some((11, 11));
         let mut rx = None;
 
         start_step2_update_download_scoped(
@@ -1575,6 +1579,7 @@ mod tests {
         )
         .expect("engine starts");
         assert_eq!(state.step2.scan_status, "Downloading updates: 0/1");
+        assert_eq!(state.step2.update_selected_extract_progress, None);
         let (events, result) = collect_events(rx.as_ref());
 
         assert!(!events.is_empty());
@@ -1634,6 +1639,7 @@ mod tests {
         let a = asset("AMOD/AMOD.TP2", "AMOD", format!("{}/404/A", fixture.base));
         let mut state = state_for(&root, vec![a]);
         state.step2.update_selected_download_scope = Some("amod".to_string());
+        state.step2.update_selected_extract_progress = Some((11, 11));
         let mut rx = None;
 
         start_step2_update_download_scoped(
@@ -1645,6 +1651,7 @@ mod tests {
         )
         .expect("engine starts");
         assert_eq!(state.step2.update_selected_download_scope, None);
+        assert_eq!(state.step2.update_selected_extract_progress, None);
         assert_eq!(
             state.step2.update_selected_download_origin,
             DownloadOrigin::InstallPipeline

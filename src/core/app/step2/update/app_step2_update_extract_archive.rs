@@ -4,7 +4,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::Sender;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Local;
@@ -13,7 +12,6 @@ use walkdir::WalkDir;
 use crate::app::mod_downloads;
 
 use super::plan::Step2UpdateExtractJob;
-use super::{Step2UpdateExtractEvent, Step2UpdateExtractResult};
 
 #[path = "app_step2_update_extract_archive/rar_extract.rs"]
 pub mod rar_extract;
@@ -23,32 +21,6 @@ pub mod seven_zip_extract;
 pub mod tar_gz_extract;
 #[path = "app_step2_update_extract_archive/zip_extract.rs"]
 pub mod zip_extract;
-
-pub(super) fn extract_update_archives(
-    jobs: &[Step2UpdateExtractJob],
-    tx: &Sender<Step2UpdateExtractEvent>,
-) -> Step2UpdateExtractResult {
-    let mut result = Step2UpdateExtractResult {
-        extracted: Vec::new(),
-        failed: Vec::new(),
-    };
-    let total = jobs.len();
-    for (index, job) in jobs.iter().enumerate() {
-        match extract_one_archive(job) {
-            Ok(target_root) => {
-                result
-                    .extracted
-                    .push(format!("{} -> {}", job.label, target_root.display()));
-            }
-            Err(err) => result.failed.push(format!("{}: {err}", job.label)),
-        }
-        let _ = tx.send(Step2UpdateExtractEvent::Progress {
-            completed: index + 1,
-            total,
-        });
-    }
-    result
-}
 
 pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
     let temp_root = temp_extract_root(&job.tp_file);
