@@ -23,8 +23,8 @@ pub(super) fn parse_batch_line(line: &str) -> Option<Vec<BatchComponent>> {
     let entries: Vec<BatchComponent> = line[batch_start..]
         .split(BATCH_ENTRY_MARKER)
         .skip(1)
-        .filter_map(parse_batch_entry)
-        .collect();
+        .map(parse_batch_entry)
+        .collect::<Option<Vec<_>>>()?;
     if entries.is_empty() {
         None
     } else {
@@ -132,6 +132,14 @@ mod tests {
             parse_batch_line(&TWO_ENTRY_BATCH.replace("Installing mod", "Installed mod")),
             None
         );
+    }
+
+    #[test]
+    fn a_batch_with_an_unparsable_entry_is_not_a_batch() {
+        let broken = TWO_ENTRY_BATCH.replacen("component: \"2\"", "component: \"\"", 1);
+        assert_eq!(parse_batch_line(&broken), None);
+        let core_fixes = "[2026-09-29T03:33:00Z INFO  mod_installer::parser] SUCCESSFULLY INSTALLED      Core Fixes";
+        assert_eq!(prefixed_success_line(core_fixes, &[]), None);
     }
 
     #[test]
