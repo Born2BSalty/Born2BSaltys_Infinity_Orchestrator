@@ -1209,6 +1209,7 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
         *g = None;
     }
     wizard_state.step2.update_selected_extract_progress = None;
+    wizard_state.step2.update_selected_extract_jobs.clear();
 
     *pending_reinstall_id = None;
     *active_install_modlist_id = None;
@@ -1606,6 +1607,11 @@ mod tests {
             .insert(0, (10, Some(20)));
         ws.step2.update_selected_download_done.insert(0);
         ws.step2.update_selected_extract_progress = Some((5, 51));
+        ws.step2
+            .update_selected_extract_jobs
+            .entry("mod".to_string())
+            .or_default()
+            .done = 1;
         ws
     }
 
@@ -1683,6 +1689,7 @@ mod tests {
                     index: 0,
                     ok: true,
                     label: "MOD".to_string(),
+                    tp_file: "MOD/MOD.TP2".to_string(),
                     target_or_err: "C:/x".to_string(),
                 }
             )
@@ -1771,6 +1778,7 @@ mod tests {
         assert!(!ws.step2.update_selected_extract_running);
         assert!(ws.step2.update_selected_download_bytes.is_empty());
         assert!(ws.step2.update_selected_download_done.is_empty());
+        assert!(ws.step2.update_selected_extract_jobs.is_empty());
 
         assert!(pending.is_none());
         assert!(active.is_none());
@@ -1835,6 +1843,10 @@ mod tests {
             ws.step2.update_selected_extract_progress, None,
             "the extract progress field is blanked"
         );
+        assert!(
+            ws.step2.update_selected_extract_jobs.is_empty(),
+            "the per-mod extract tally is blanked"
+        );
     }
 
     #[test]
@@ -1865,6 +1877,7 @@ mod tests {
                 index: 0,
                 ok: true,
                 label: "MOD".to_string(),
+                tp_file: "MOD/MOD.TP2".to_string(),
                 target_or_err: "C:/x".to_string(),
             },
         );

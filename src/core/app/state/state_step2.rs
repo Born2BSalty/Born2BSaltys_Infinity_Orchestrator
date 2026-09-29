@@ -55,6 +55,13 @@ pub fn push_manual_download_request(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ExtractJobProgress {
+    pub total: usize,
+    pub started: usize,
+    pub done: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VersionsChip {
     #[default]
     All,
@@ -165,6 +172,7 @@ pub struct Step2State<Flag = bool> {
     pub update_selected_download_running: Flag,
     pub update_selected_extract_running: Flag,
     pub update_selected_extract_progress: Option<(usize, usize)>,
+    pub update_selected_extract_jobs: BTreeMap<String, ExtractJobProgress>,
     pub update_selected_update_assets: Vec<Step2UpdateAsset>,
     pub update_selected_update_sources: Vec<String>,
     pub update_selected_locked_update_assets: Vec<Step2UpdateAsset>,
@@ -261,6 +269,7 @@ impl Default for Step2State {
             update_selected_download_running: false,
             update_selected_extract_running: false,
             update_selected_extract_progress: None,
+            update_selected_extract_jobs: BTreeMap::new(),
             update_selected_update_assets: Vec::new(),
             update_selected_update_sources: Vec::new(),
             update_selected_locked_update_assets: Vec::new(),
@@ -628,6 +637,7 @@ mod tests {
         assert!(step2.update_selected_download_finished.is_empty());
         assert_eq!(step2.update_selected_download_scope, None);
         assert_eq!(step2.update_selected_extract_progress, None);
+        assert!(step2.update_selected_extract_jobs.is_empty());
     }
 
     #[test]

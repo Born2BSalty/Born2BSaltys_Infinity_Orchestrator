@@ -154,7 +154,9 @@ pub(crate) fn load_known_extras(
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum FetchPhase {
     Downloading(Option<f32>),
+    ExtractQueued,
     Extracting,
+    Extracted,
     Rescanning,
 }
 
@@ -236,7 +238,7 @@ pub(crate) fn refresh_fetch_phase(view: &mut VersionsView, state: &WizardState) 
         card.fetching = if finished {
             Some(FetchPhase::Downloading(Some(1.0)))
         } else {
-            fetch_phase_for_with(state, &card.tp2, &batch_keys, &current_keys)
+            fetch_phase_for_with(state, &card.tp2, &current_keys)
         };
         let waiting_in_batch = downloading
             && batch_keys.contains(&card.tp2)
@@ -367,34 +369,41 @@ fn key_downloaded_ok(state: &WizardState, tp2_key: &str) -> bool {
 
 #[cfg(test)]
 pub(crate) fn fetch_phase_for(state: &WizardState, tp2_key: &str) -> Option<FetchPhase> {
-    fetch_phase_for_with(
-        state,
-        tp2_key,
-        &running_batch_keys(state),
-        &current_keys(state),
-    )
+    fetch_phase_for_with(state, tp2_key, &current_keys(state))
 }
 
 pub(crate) fn fetch_phase_for_with(
     state: &WizardState,
     tp2_key: &str,
-    batch_keys: &BTreeSet<String>,
     current_keys: &BTreeSet<String>,
 ) -> Option<FetchPhase> {
+    if state.step2.update_selected_extract_running {
+        return extract_phase(state, tp2_key);
+    }
     if !current_keys.contains(tp2_key) {
-        let extracting_in_batch =
-            state.step2.update_selected_extract_running && batch_keys.contains(tp2_key);
-        return extracting_in_batch.then_some(FetchPhase::Extracting);
+        return None;
     }
     if state.step2.update_selected_download_running {
         Some(FetchPhase::Downloading(fetch_fraction(state, tp2_key)))
-    } else if state.step2.update_selected_extract_running {
-        Some(FetchPhase::Extracting)
     } else if state.step2.is_scanning {
         Some(FetchPhase::Rescanning)
     } else {
         None
     }
+}
+
+fn extract_phase(state: &WizardState, tp2_key: &str) -> Option<FetchPhase> {
+    let jobs = state.step2.update_selected_extract_jobs.get(tp2_key)?;
+    if jobs.total == 0 {
+        return None;
+    }
+    Some(if jobs.done >= jobs.total {
+        FetchPhase::Extracted
+    } else if jobs.started > 0 {
+        FetchPhase::Extracting
+    } else {
+        FetchPhase::ExtractQueued
+    })
 }
 
 pub(crate) fn fetch_fraction(state: &WizardState, tp2_key: &str) -> Option<f32> {
@@ -1187,6 +1196,8 @@ mod tests {
 
         state.step2.update_selected_download_running = false;
         state.step2.update_selected_extract_running = true;
+        assert_eq!(fetch_phase_for(&state, &key), None);
+        seed_jobs(&mut state, &key, 1, 1, 0);
         assert_eq!(fetch_phase_for(&state, &key), Some(FetchPhase::Extracting));
 
         state.step2.update_selected_extract_running = false;
@@ -1258,6 +1269,17 @@ mod tests {
                 .push(asset(&tp_file, name, "2.0"));
         }
         state
+    }
+
+    fn seed_jobs(state: &mut WizardState, key: &str, total: usize, started: usize, done: usize) {
+        let jobs = state
+            .step2
+            .update_selected_extract_jobs
+            .entry(key.to_string())
+            .or_default();
+        jobs.total = total;
+        jobs.started = started;
+        jobs.done = done;
     }
 
     fn card_named<'a>(view: &'a VersionsView, tp_file: &str) -> &'a VersionCard {
@@ -1451,12 +1473,67 @@ mod tests {
     fn unscoped_extract_marks_every_batch_card_extracting() {
         let mut state = batch_state(&["a", "b"]);
         state.step2.update_selected_extract_running = true;
+        seed_jobs(&mut state, "a", 1, 1, 0);
+        seed_jobs(&mut state, "b", 1, 1, 0);
 
         let view = build_versions_view(&state, &empty_tiers(), None);
         for tp_file in ["a.tp2", "b.tp2"] {
             let card = card_named(&view, tp_file);
             assert_eq!(card.fetching, Some(FetchPhase::Extracting));
             assert!(!card.queued);
+        }
+    }
+
+    #[test]
+    fn extract_phase_follows_the_mods_tally() {
+        let mut state = batch_state(&["a", "b", "c", "d"]);
+        state.step2.update_selected_extract_running = true;
+        seed_jobs(&mut state, "a", 2, 0, 0);
+        seed_jobs(&mut state, "b", 1, 1, 0);
+        seed_jobs(&mut state, "c", 1, 1, 1);
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(
+            card_named(&view, "a.tp2").fetching,
+            Some(FetchPhase::ExtractQueued)
+        );
+        assert_eq!(
+            card_named(&view, "b.tp2").fetching,
+            Some(FetchPhase::Extracting)
+        );
+        assert_eq!(
+            card_named(&view, "c.tp2").fetching,
+            Some(FetchPhase::Extracted)
+        );
+        let untallied = card_named(&view, "d.tp2");
+        assert_eq!(untallied.fetching, None);
+        assert!(!untallied.queued);
+
+        seed_jobs(&mut state, "a", 2, 2, 1);
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(
+            card_named(&view, "a.tp2").fetching,
+            Some(FetchPhase::Extracting),
+            "a two-archive mod reads extracted only when both are done"
+        );
+        seed_jobs(&mut state, "a", 2, 2, 2);
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(
+            card_named(&view, "a.tp2").fetching,
+            Some(FetchPhase::Extracted)
+        );
+        seed_jobs(&mut state, "d", 0, 1, 1);
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(
+            card_named(&view, "d.tp2").fetching,
+            None,
+            "a stale entry with no jobs shows no phase"
+        );
+
+        state.step2.update_selected_extract_running = false;
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        for tp_file in ["a.tp2", "b.tp2", "c.tp2", "d.tp2"] {
+            assert_eq!(card_named(&view, tp_file).fetching, None);
         }
     }
 
@@ -1504,6 +1581,7 @@ mod tests {
 
         state.step2.update_selected_download_running = false;
         state.step2.update_selected_extract_running = true;
+        seed_jobs(&mut state, "a", 1, 1, 0);
         let view = build_versions_view(&state, &empty_tiers(), None);
         assert_eq!(
             card_named(&view, "a.tp2").fetching,

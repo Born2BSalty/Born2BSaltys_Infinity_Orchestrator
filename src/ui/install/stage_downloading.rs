@@ -1693,6 +1693,11 @@ pub(crate) fn stage_and_kick_archive_skip_once(
             .wizard_state
             .step2
             .update_selected_extract_progress = None;
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_extract_jobs
+            .clear();
         orchestrator.install_screen_state.expected_archive_sizes = expected_sizes;
         orchestrator.install_screen_state.skip_indices = std::collections::HashSet::new();
         orchestrator
@@ -3967,6 +3972,12 @@ mod tests {
             .update_selected_download_done
             .insert(0);
         app.wizard_state.step2.update_selected_extract_progress = Some((11, 11));
+        app.wizard_state
+            .step2
+            .update_selected_extract_jobs
+            .entry("moda".to_string())
+            .or_default()
+            .done = 1;
         let inputs = LivePipelineInputs {
             destination: "C:/dest".to_string(),
             game: crate::registry::model::Game::BGEE,
@@ -3979,6 +3990,12 @@ mod tests {
         assert_eq!(
             app.wizard_state.step2.update_selected_extract_progress,
             None
+        );
+        assert!(
+            app.wizard_state
+                .step2
+                .update_selected_extract_jobs
+                .is_empty()
         );
         assert_eq!(build_and_hold_progress(&mut app).extract_progress, None);
         assert!(

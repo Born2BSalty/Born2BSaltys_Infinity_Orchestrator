@@ -193,6 +193,7 @@ fn reset_run_state(
     step2.update_selected_download_bytes.clear();
     step2.update_selected_download_done.clear();
     step2.update_selected_extract_progress = None;
+    step2.update_selected_extract_jobs.clear();
     step2.update_selected_download_finished.clear();
     step2.update_selected_download_total = pending;
     step2.update_selected_extract_running = false;
@@ -1452,6 +1453,12 @@ mod tests {
             .push("a".to_string());
         state.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
         state.step2.update_selected_extract_progress = Some((11, 11));
+        state
+            .step2
+            .update_selected_extract_jobs
+            .entry("a".to_string())
+            .or_default()
+            .done = 1;
         let before = state.step2.clone();
         let mut rx = None;
 
@@ -1501,6 +1508,10 @@ mod tests {
             DownloadOrigin::InstallPipeline
         );
         assert_eq!(step2.update_selected_extract_progress, Some((11, 11)));
+        assert_eq!(
+            step2.update_selected_extract_jobs,
+            before.update_selected_extract_jobs
+        );
     }
 
     #[test]
@@ -1568,6 +1579,12 @@ mod tests {
         let dest = destination(&root, &assets[7]);
         let mut state = state_for(&root, assets);
         state.step2.update_selected_extract_progress = Some((11, 11));
+        state
+            .step2
+            .update_selected_extract_jobs
+            .entry("mod7".to_string())
+            .or_default()
+            .done = 1;
         let mut rx = None;
 
         start_step2_update_download_scoped(
@@ -1580,6 +1597,7 @@ mod tests {
         .expect("engine starts");
         assert_eq!(state.step2.scan_status, "Downloading updates: 0/1");
         assert_eq!(state.step2.update_selected_extract_progress, None);
+        assert!(state.step2.update_selected_extract_jobs.is_empty());
         let (events, result) = collect_events(rx.as_ref());
 
         assert!(!events.is_empty());
@@ -1640,6 +1658,12 @@ mod tests {
         let mut state = state_for(&root, vec![a]);
         state.step2.update_selected_download_scope = Some("amod".to_string());
         state.step2.update_selected_extract_progress = Some((11, 11));
+        state
+            .step2
+            .update_selected_extract_jobs
+            .entry("amod".to_string())
+            .or_default()
+            .done = 1;
         let mut rx = None;
 
         start_step2_update_download_scoped(
@@ -1652,12 +1676,41 @@ mod tests {
         .expect("engine starts");
         assert_eq!(state.step2.update_selected_download_scope, None);
         assert_eq!(state.step2.update_selected_extract_progress, None);
+        assert!(state.step2.update_selected_extract_jobs.is_empty());
         assert_eq!(
             state.step2.update_selected_download_origin,
             DownloadOrigin::InstallPipeline
         );
         poll_until_finished(&mut state, &mut rx);
         assert_eq!(state.step2.update_selected_download_scope, None);
+    }
+
+    #[test]
+    fn reset_run_state_clears_the_extract_tally() {
+        let root = EngineTestRoot::new();
+        let fixture = serve(Vec::new());
+        let a = asset("AMOD/AMOD.TP2", "AMOD", format!("{}/404/A", fixture.base));
+        let mut state = state_for(&root, vec![a]);
+        state
+            .step2
+            .update_selected_extract_jobs
+            .entry("amod".to_string())
+            .or_default()
+            .total = 2;
+        let mut rx = None;
+
+        start_step2_update_download_scoped(
+            &mut state,
+            &mut rx,
+            Some("amod".to_string()),
+            &HashSet::new(),
+            DownloadOrigin::Workspace,
+        )
+        .expect("engine starts");
+
+        assert!(state.step2.update_selected_extract_jobs.is_empty());
+        poll_until_finished(&mut state, &mut rx);
+        assert!(state.step2.update_selected_extract_jobs.is_empty());
     }
 
     #[test]

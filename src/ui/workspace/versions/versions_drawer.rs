@@ -292,6 +292,11 @@ pub(crate) fn render(
         header,
     } = prepare_render(ctx, orchestrator, action);
     let busy = header.busy;
+    let step2 = &orchestrator.wizard_state.step2;
+    let extract_progress = step2
+        .update_selected_extract_running
+        .then_some(step2.update_selected_extract_progress)
+        .flatten();
 
     let spec = DrawerSpec {
         id_salt: "versions_drawer",
@@ -348,6 +353,7 @@ pub(crate) fn render(
                 fetch_count: view.fetch_count,
                 busy,
                 fetching: header.fetching,
+                extract_progress,
                 report_text: &header.report_text,
                 outcome: &mut footer,
             };
@@ -984,6 +990,7 @@ struct FooterCtx<'a> {
     fetch_count: usize,
     busy: bool,
     fetching: bool,
+    extract_progress: Option<(usize, usize)>,
     report_text: &'a str,
     outcome: &'a mut FooterOutcome,
 }
@@ -997,9 +1004,15 @@ fn open_new_mod_sheet(ctx: &egui::Context, orchestrator: &mut OrchestratorApp) {
     versions_ui.open_sheet(VersionsSheet::EditSource, NEW_MOD_CARD_KEY.to_string());
 }
 
-fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCtx<'_>) {
-    let fetch_count = footer.fetch_count;
-    let primary_label = if footer.fetching {
+#[must_use]
+pub(crate) fn footer_primary_label(
+    fetch_count: usize,
+    fetching: bool,
+    extract_progress: Option<(usize, usize)>,
+) -> String {
+    if let Some((done, total)) = extract_progress {
+        format!("Extracting {done} / {total}\u{2026}")
+    } else if fetching {
         "Fetching\u{2026}".to_string()
     } else if fetch_count == 0 {
         "Nothing to fetch".to_string()
@@ -1008,7 +1021,12 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
             "Fetch {fetch_count} mod{}",
             if fetch_count == 1 { "" } else { "s" }
         )
-    };
+    }
+}
+
+fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCtx<'_>) {
+    let fetch_count = footer.fetch_count;
+    let primary_label = footer_primary_label(fetch_count, footer.fetching, footer.extract_progress);
     let primary_disabled = fetch_count == 0 || footer.busy;
     if redesign_btn(
         ui,
@@ -1341,5 +1359,17 @@ mod tests {
 
         versions_ui.fetch_queue.clear();
         assert_eq!(next_queued_fetch(&mut versions_ui, &view), None);
+    }
+
+    #[test]
+    fn footer_primary_label_counts_fetches_then_downloads_then_archives() {
+        assert_eq!(footer_primary_label(3, false, None), "Fetch 3 mods");
+        assert_eq!(footer_primary_label(1, false, None), "Fetch 1 mod");
+        assert_eq!(footer_primary_label(0, false, None), "Nothing to fetch");
+        assert_eq!(footer_primary_label(3, true, None), "Fetching\u{2026}");
+        assert_eq!(
+            footer_primary_label(3, true, Some((12, 51))),
+            "Extracting 12 / 51\u{2026}"
+        );
     }
 }

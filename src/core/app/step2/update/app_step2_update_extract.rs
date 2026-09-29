@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
+use crate::app::mod_downloads::normalize_mod_download_tp2;
 use crate::app::state::{DownloadOrigin, WizardState};
 use crate::app::step2_worker::Step2ScanEvent;
 
@@ -25,10 +26,14 @@ pub(crate) struct Step2UpdateExtractResult {
 }
 
 pub(crate) enum Step2UpdateExtractEvent {
+    AssetStarted {
+        tp_file: String,
+    },
     AssetDone {
         index: usize,
         ok: bool,
         label: String,
+        tp_file: String,
         target_or_err: String,
     },
     Finished(Step2UpdateExtractResult),
@@ -81,6 +86,15 @@ pub(crate) fn start_step2_update_extract(
     }
 
     let total = jobs.len();
+    state.step2.update_selected_extract_jobs.clear();
+    for job in &jobs {
+        state
+            .step2
+            .update_selected_extract_jobs
+            .entry(normalize_mod_download_tp2(&job.tp_file))
+            .or_default()
+            .total += 1;
+    }
     let (tx, rx) = mpsc::channel::<Step2UpdateExtractEvent>();
     *step2_update_extract_rx = Some(rx);
     state.step2.update_selected_extract_progress = Some((0, total));
@@ -132,6 +146,9 @@ fn extract_job(
     job: &plan::Step2UpdateExtractJob,
     tx: &Sender<Step2UpdateExtractEvent>,
 ) -> ExtractOutcome {
+    let _ = tx.send(Step2UpdateExtractEvent::AssetStarted {
+        tp_file: job.tp_file.clone(),
+    });
     let result = archive::extract_one_archive(job).map(|target| target.display().to_string());
     let (ok, target_or_err) = match &result {
         Ok(target) => (true, target.clone()),
@@ -141,6 +158,7 @@ fn extract_job(
         index,
         ok,
         label: job.label.clone(),
+        tp_file: job.tp_file.clone(),
         target_or_err,
     });
     ExtractOutcome {
@@ -176,12 +194,21 @@ pub(crate) fn poll_step2_update_extract(
     };
     let finished = loop {
         match rx.try_recv() {
+            Ok(Step2UpdateExtractEvent::AssetStarted { tp_file }) => {
+                state
+                    .step2
+                    .update_selected_extract_jobs
+                    .entry(normalize_mod_download_tp2(&tp_file))
+                    .or_default()
+                    .started += 1;
+            }
             Ok(Step2UpdateExtractEvent::AssetDone {
                 index,
                 ok,
                 label,
+                tp_file,
                 target_or_err,
-            }) => record_asset_done(state, index, ok, &label, &target_or_err),
+            }) => record_asset_done(state, index, ok, &label, &tp_file, &target_or_err),
             Ok(Step2UpdateExtractEvent::Finished(result)) => break Some(result),
             Err(TryRecvError::Empty) => return,
             Err(TryRecvError::Disconnected) => break None,
@@ -242,6 +269,7 @@ fn record_asset_done(
     index: usize,
     ok: bool,
     label: &str,
+    tp_file: &str,
     target_or_err: &str,
 ) {
     let (completed, total) = state
@@ -250,12 +278,24 @@ fn record_asset_done(
         .unwrap_or((0, 0));
     let completed = completed + 1;
     state.step2.update_selected_extract_progress = Some((completed, total));
+    let key = normalize_mod_download_tp2(tp_file);
+    if ok {
+        state
+            .step2
+            .update_selected_extract_jobs
+            .entry(key)
+            .or_default()
+            .done += 1;
+    } else {
+        state.step2.update_selected_extract_jobs.remove(&key);
+    }
     state.step2.scan_status = format!("Extracting updates: {completed}/{total}");
     tracing::info!(
         target = "orchestrator",
         index,
         ok,
         label,
+        tp_file,
         target_or_err,
         completed,
         total,
@@ -403,6 +443,7 @@ mod tests {
             {
                 Step2UpdateExtractEvent::Finished(result) => return (events, result),
                 event @ Step2UpdateExtractEvent::AssetDone { .. } => events.push(event),
+                Step2UpdateExtractEvent::AssetStarted { .. } => {}
             }
         }
     }
@@ -432,6 +473,15 @@ mod tests {
             extracted: extracted.iter().map(ToString::to_string).collect(),
             failed: Vec::new(),
         })
+    }
+
+    fn tally(state: &WizardState) -> Vec<(&str, (usize, usize, usize))> {
+        state
+            .step2
+            .update_selected_extract_jobs
+            .iter()
+            .map(|(key, job)| (key.as_str(), (job.total, job.started, job.done)))
+            .collect()
     }
 
     #[test]
@@ -527,20 +577,32 @@ mod tests {
                     index,
                     ok,
                     label,
+                    tp_file,
                     target_or_err,
-                } => Some((index, ok, label, target_or_err)),
-                Step2UpdateExtractEvent::Finished(_) => None,
+                } => Some((index, ok, label, tp_file, target_or_err)),
+                Step2UpdateExtractEvent::AssetStarted { .. }
+                | Step2UpdateExtractEvent::Finished(_) => None,
             })
             .collect::<Vec<_>>();
         dones.sort_by_key(|(index, ..)| *index);
         assert_eq!(dones.len(), 2);
         assert_eq!(
-            (dones[0].0, dones[0].1, dones[0].2.as_str()),
-            (0, false, "ALPHA")
+            (
+                dones[0].0,
+                dones[0].1,
+                dones[0].2.as_str(),
+                dones[0].3.as_str()
+            ),
+            (0, false, "ALPHA", "ALPHA/ALPHA.tp2")
         );
         assert_eq!(
-            (dones[1].0, dones[1].1, dones[1].2.as_str()),
-            (1, false, "BETA")
+            (
+                dones[1].0,
+                dones[1].1,
+                dones[1].2.as_str(),
+                dones[1].3.as_str()
+            ),
+            (1, false, "BETA", "BETA/BETA.tp2")
         );
         assert!(dones.iter().all(|(.., err)| !err.is_empty()));
     }
@@ -630,12 +692,14 @@ mod tests {
                 index: 1,
                 ok: true,
                 label: "A".to_string(),
+                tp_file: "A/A.TP2".to_string(),
                 target_or_err: "C:\\a".to_string(),
             },
             Step2UpdateExtractEvent::AssetDone {
                 index: 0,
                 ok: false,
                 label: "B".to_string(),
+                tp_file: "B/B.TP2".to_string(),
                 target_or_err: "boom".to_string(),
             },
         ]);
@@ -645,6 +709,123 @@ mod tests {
         assert!(rx.is_some());
         assert_eq!(state.step2.update_selected_extract_progress, Some((2, 3)));
         assert_eq!(state.step2.scan_status, "Extracting updates: 2/3");
+    }
+
+    #[test]
+    fn extract_start_tallies_jobs_per_mod() {
+        let _lock = ambient_lock();
+        let root = ExtractEngineRoot::new();
+        let mut state = root.state();
+        seed_assets(&mut state, 3, 2);
+        state
+            .step2
+            .update_selected_extract_jobs
+            .entry("stale".to_string())
+            .or_default()
+            .done = 4;
+        let mut rx = None;
+
+        assert!(start_step2_update_extract(&mut state, &mut rx, None));
+
+        assert_eq!(
+            tally(&state),
+            vec![("mod0", (1, 0, 0)), ("mod1", (1, 0, 0))]
+        );
+        wait_for_finished(rx.as_ref());
+
+        state.step2.update_selected_extract_running = false;
+        let second_archive = Step2UpdateAsset {
+            game_tab: "BG2EE".to_string(),
+            tag: "v2".to_string(),
+            asset_name: "MOD0-v2.zip".to_string(),
+            ..asset(0)
+        };
+        fs::write(
+            PathBuf::from(&state.step1.mods_archive_folder)
+                .join(archive_file_name(&second_archive)),
+            b"fake-archive-body",
+        )
+        .unwrap();
+        state
+            .step2
+            .update_selected_update_assets
+            .push(second_archive);
+        let mut rx = None;
+
+        assert!(start_step2_update_extract(&mut state, &mut rx, None));
+
+        assert_eq!(
+            tally(&state),
+            vec![("mod0", (2, 0, 0)), ("mod1", (1, 0, 0))]
+        );
+        wait_for_finished(rx.as_ref());
+    }
+
+    #[test]
+    fn asset_started_and_done_advance_the_mods_tally() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_extract_running = true;
+        state.step2.update_selected_extract_progress = Some((0, 2));
+        for key in ["a", "b"] {
+            state
+                .step2
+                .update_selected_extract_jobs
+                .entry(key.to_string())
+                .or_default()
+                .total = 1;
+        }
+        let (tx, mut rx) = queued(vec![Step2UpdateExtractEvent::AssetStarted {
+            tp_file: "A\\Setup-A.TP2".to_string(),
+        }]);
+
+        poll(&mut state, &mut rx);
+
+        assert_eq!(tally(&state), vec![("a", (1, 1, 0)), ("b", (1, 0, 0))]);
+        assert_eq!(state.step2.update_selected_extract_progress, Some((0, 2)));
+
+        tx.send(Step2UpdateExtractEvent::AssetDone {
+            index: 0,
+            ok: true,
+            label: "A".to_string(),
+            tp_file: "A/A.tp2".to_string(),
+            target_or_err: "C:\\a".to_string(),
+        })
+        .unwrap();
+
+        poll(&mut state, &mut rx);
+
+        assert_eq!(tally(&state), vec![("a", (1, 1, 1)), ("b", (1, 0, 0))]);
+        assert_eq!(state.step2.update_selected_extract_progress, Some((1, 2)));
+        assert_eq!(state.step2.scan_status, "Extracting updates: 1/2");
+        assert!(rx.is_some());
+    }
+
+    #[test]
+    fn failed_unpack_drops_the_mods_tally_entry() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_extract_running = true;
+        state.step2.update_selected_extract_progress = Some((0, 2));
+        for key in ["a", "b"] {
+            let jobs = state
+                .step2
+                .update_selected_extract_jobs
+                .entry(key.to_string())
+                .or_default();
+            jobs.total = 1;
+            jobs.started = 1;
+        }
+        let (_tx, mut rx) = queued(vec![Step2UpdateExtractEvent::AssetDone {
+            index: 0,
+            ok: false,
+            label: "A".to_string(),
+            tp_file: "A/A.tp2".to_string(),
+            target_or_err: "corrupt archive".to_string(),
+        }]);
+
+        poll(&mut state, &mut rx);
+
+        assert_eq!(tally(&state), vec![("b", (1, 1, 0))]);
+        assert_eq!(state.step2.update_selected_extract_progress, Some((1, 2)));
     }
 
     #[test]

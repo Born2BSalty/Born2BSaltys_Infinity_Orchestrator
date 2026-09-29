@@ -323,7 +323,9 @@ fn status_text(card: &VersionCard) -> String {
             format!("Fetching\u{2026} {}%", percent_floor(fraction))
         }
         Some(FetchPhase::Downloading(None)) => "Fetching\u{2026}".to_string(),
+        Some(FetchPhase::ExtractQueued) => "Queued to extract".to_string(),
         Some(FetchPhase::Extracting) => "Extracting\u{2026}".to_string(),
+        Some(FetchPhase::Extracted) => "Extracted".to_string(),
         Some(FetchPhase::Rescanning) => "Rescanning\u{2026}".to_string(),
         None if card.queued => "Queued for fetch".to_string(),
         None => card.status_line.clone(),
@@ -344,13 +346,21 @@ fn paint_fetch_bar(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect, phase
     let radius = egui::CornerRadius::same(FETCH_BAR_RADIUS);
     ui.painter()
         .rect_filled(rect, radius, redesign_border_soft(palette));
-    if let FetchPhase::Downloading(Some(fraction)) = phase {
+    if let Some(fraction) = fetch_bar_fraction(phase) {
         let fill = egui::Rect::from_min_size(
             rect.min,
             egui::vec2(rect.width() * fraction.clamp(0.0, 1.0), rect.height()),
         );
         ui.painter()
             .rect_filled(fill, radius, redesign_accent(palette));
+    }
+}
+
+const fn fetch_bar_fraction(phase: FetchPhase) -> Option<f32> {
+    match phase {
+        FetchPhase::Downloading(fraction) => fraction,
+        FetchPhase::ExtractQueued | FetchPhase::Extracting | FetchPhase::Extracted => Some(1.0),
+        FetchPhase::Rescanning => None,
     }
 }
 
@@ -533,4 +543,66 @@ fn render_open_icon(
         None,
     )
     .on_hover_text("Open source in browser")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::versions_view::CardStatus;
+
+    fn card_in(phase: Option<FetchPhase>) -> VersionCard {
+        VersionCard {
+            tp2: "a".to_string(),
+            name: "A".to_string(),
+            status: CardStatus::Fetch,
+            dot: CardDot::Update,
+            status_line: "1.0 \u{2192} 2.0".to_string(),
+            target: Some("2.0".to_string()),
+            locked: false,
+            can_fetch: true,
+            layer: "BIO default",
+            rule_words: String::new(),
+            selector_hover: String::new(),
+            open_url: None,
+            repo: None,
+            source_id: None,
+            sources: Vec::new(),
+            fetching: phase,
+            queued: false,
+        }
+    }
+
+    #[test]
+    fn status_text_names_the_three_unpack_states() {
+        assert_eq!(
+            status_text(&card_in(Some(FetchPhase::ExtractQueued))),
+            "Queued to extract"
+        );
+        assert_eq!(
+            status_text(&card_in(Some(FetchPhase::Extracting))),
+            "Extracting\u{2026}"
+        );
+        assert_eq!(
+            status_text(&card_in(Some(FetchPhase::Extracted))),
+            "Extracted"
+        );
+        assert_eq!(status_text(&card_in(None)), "1.0 \u{2192} 2.0");
+    }
+
+    #[test]
+    fn fetch_bar_fill_is_full_for_every_unpack_state() {
+        for phase in [
+            FetchPhase::ExtractQueued,
+            FetchPhase::Extracting,
+            FetchPhase::Extracted,
+        ] {
+            assert_eq!(fetch_bar_fraction(phase), Some(1.0));
+        }
+        assert_eq!(
+            fetch_bar_fraction(FetchPhase::Downloading(Some(0.25))),
+            Some(0.25)
+        );
+        assert_eq!(fetch_bar_fraction(FetchPhase::Downloading(None)), None);
+        assert_eq!(fetch_bar_fraction(FetchPhase::Rescanning), None);
+    }
 }
