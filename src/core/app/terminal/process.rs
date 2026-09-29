@@ -399,6 +399,21 @@ mod tests {
     }
 
     #[test]
+    fn a_broken_batch_line_clears_the_batch_so_its_success_lines_stay_raw() {
+        let (mut term, tx) = polled_terminal();
+        let broken_batch = BATCH_LINE.replacen("component: \"1\"", "component: \"\"", 1);
+        deliver(
+            &mut term,
+            &tx,
+            &[BATCH_LINE, &broken_batch, RAW_SUCCESS, "\n"],
+        );
+        assert!(term.output_text().contains(RAW_SUCCESS));
+        assert!(!term.output_text().contains(PREFIXED_SUCCESS));
+        assert!(term.installed_text().contains(RAW_SUCCESS));
+        assert_eq!(term.boundary_event_count(), 1);
+    }
+
+    #[test]
     fn a_success_line_without_a_known_batch_is_left_alone() {
         let (mut term, tx) = polled_terminal();
         deliver(&mut term, &tx, &[RAW_SUCCESS, "\n"]);

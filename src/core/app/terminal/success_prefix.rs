@@ -13,13 +13,19 @@ pub(super) struct BatchComponent {
     pub(super) component_name: String,
 }
 
+const BATCH_MARKER: &str = "INSTALLING MOD WEIDUBATCHEDCOMPONENTS(";
+
+pub(super) fn is_batch_line(line: &str) -> bool {
+    let upper = line.to_ascii_uppercase();
+    upper.contains("MOD_INSTALLER::INSTALLERS") && upper.contains(BATCH_MARKER)
+}
+
 pub(super) fn parse_batch_line(line: &str) -> Option<Vec<BatchComponent>> {
     let upper = line.to_ascii_uppercase();
-    let batch_marker = "INSTALLING MOD WEIDUBATCHEDCOMPONENTS(";
     if !upper.contains("MOD_INSTALLER::INSTALLERS") {
         return None;
     }
-    let batch_start = upper.find(batch_marker)? + batch_marker.len();
+    let batch_start = upper.find(BATCH_MARKER)? + BATCH_MARKER.len();
     let entries: Vec<BatchComponent> = line[batch_start..]
         .split(BATCH_ENTRY_MARKER)
         .skip(1)

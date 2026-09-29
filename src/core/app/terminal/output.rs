@@ -222,7 +222,7 @@ mod buffers {
     }
 }
 mod capture {
-    use super::super::success_prefix::{parse_batch_line, prefixed_success_line};
+    use super::super::success_prefix::{is_batch_line, parse_batch_line, prefixed_success_line};
     use super::super::{EmbeddedTerminal, analyze};
 
     impl EmbeddedTerminal {
@@ -248,8 +248,8 @@ mod capture {
             for line in parts {
                 let expanded = expand_escaped_newlines(line);
                 for sub in expanded.lines() {
-                    if let Some(batch) = parse_batch_line(sub) {
-                        self.current_batch = batch;
+                    if is_batch_line(sub) {
+                        self.current_batch = parse_batch_line(sub).unwrap_or_default();
                     }
                     let display = if analyze::installed_line(sub) {
                         prefixed_success_line(sub, &self.current_batch)
