@@ -1,11 +1,74 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use super::{ComponentRequirementTarget, load_component_requirements};
 use crate::parser::compat_dependency_expr::{
     normalize_component_id, parse_mod_is_installed_dependency_targets,
     parse_negated_mod_is_installed_targets, parse_predicate_requirement_line,
     parse_requirement_line, parse_simple_mod_is_installed_predicate,
 };
+
+static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
+
+struct TestRoot(PathBuf);
+
+impl Drop for TestRoot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn test_root() -> TestRoot {
+    let root = TestRoot(std::env::temp_dir().join(format!(
+        "bio_dependency_parse_{}_{}",
+        std::process::id(),
+        NEXT_ROOT.fetch_add(1, Ordering::Relaxed)
+    )));
+    std::fs::create_dir_all(&root.0).expect("create test root");
+    root
+}
+
+#[test]
+fn a_kale_shaped_file_keys_its_requirement_under_weidus_number() {
+    let root = test_root();
+    let tp2_path = root.0.join("setup-kale.tp2");
+    let tp2_text = [
+        "BACKUP ~kale/backup~",
+        "AUTHOR ~x~",
+        "BEGIN @10",
+        "COPY ~kale/a~ ~override~",
+        "BEGIN @20",
+        "COPY ~kale/b~ ~override~",
+        "BEGIN @30",
+        "SUBCOMPONENT @54",
+        "REQUIRE_COMPONENT ~OFPATHSANDWAYS.TP2~ ~12~ ~The 3-Foot-Tall-Fury Kit must be installed.~",
+        "COPY ~kale/c~ ~override~",
+        "BEGIN @40",
+        "COPY ~kale/d~ ~override~",
+    ]
+    .join("\n");
+    std::fs::write(&tp2_path, tp2_text).expect("write tp2");
+
+    let requirements = load_component_requirements(&tp2_path.to_string_lossy());
+
+    assert_eq!(requirements.len(), 1);
+    let fury = requirements.get("2").expect("requirement keyed under 2");
+    assert_eq!(fury.len(), 1);
+    assert_eq!(
+        fury[0].targets,
+        [ComponentRequirementTarget {
+            target_mod: "ofpathsandways".to_string(),
+            target_component_id: "12".to_string(),
+        }]
+    );
+    assert_eq!(
+        fury[0].message.as_deref(),
+        Some("The 3-Foot-Tall-Fury Kit must be installed.")
+    );
+}
 
 #[test]
 fn parses_tilde_requirement_component() {

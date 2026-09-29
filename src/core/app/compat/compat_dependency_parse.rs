@@ -6,7 +6,7 @@ use std::fs;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
-use crate::parser::collect_tp2_component_blocks;
+use super::compat_tp2_blocks::collect_tp2_component_blocks;
 use crate::parser::compat_dependency_expr::{
     ParsedComponentRequirement, ParsedDependencyTarget, collect_component_requirements,
 };

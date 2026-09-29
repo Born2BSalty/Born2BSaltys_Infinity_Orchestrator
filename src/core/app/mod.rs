@@ -89,6 +89,8 @@ pub mod compat_rules_model;
 pub mod compat_setup_tra;
 #[path = "compat/compat_step3_rules.rs"]
 pub mod compat_step3_rules;
+#[path = "compat/compat_tp2_blocks.rs"]
+pub mod compat_tp2_blocks;
 pub mod component_block_preview;
 pub mod component_details;
 pub mod controller;

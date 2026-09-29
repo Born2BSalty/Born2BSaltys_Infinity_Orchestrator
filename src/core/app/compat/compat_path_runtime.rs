@@ -7,7 +7,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
 use super::compat_path_eval::{PathRequirementContext, PathTriState, evaluate_path_requirement};
-use crate::parser::collect_tp2_component_blocks;
+use super::compat_tp2_blocks::collect_tp2_component_blocks;
 use crate::parser::prompt_eval_expr_tokens::{Token, tokenize};
 
 pub(crate) type ComponentPathGuardCache = HashMap<String, HashMap<String, Vec<PathGuard>>>;
