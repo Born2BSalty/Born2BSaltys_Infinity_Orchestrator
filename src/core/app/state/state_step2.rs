@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::app::github_forks_list::ForksListState;
@@ -9,6 +9,13 @@ use crate::app::github_release_list::ReleaseListState;
 use crate::app::source_form::SourceForm;
 use crate::app::step2_action::ModSourceEditDestination;
 use crate::app::versions_view::{KnownExtras, VersionsView};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DownloadOrigin {
+    #[default]
+    Workspace,
+    InstallPipeline,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptPopupMode {
@@ -210,8 +217,10 @@ pub struct Step2State<Flag = bool> {
     pub update_selected_manual_downloads: Vec<ManualDownloadRequest>,
     pub skipped_manual_downloads: Vec<String>,
     pub update_selected_download_scope: Option<String>,
-    pub update_selected_download_bytes: Option<(u64, Option<u64>)>,
-    pub update_selected_download_current: Option<String>,
+    pub update_selected_download_bytes: BTreeMap<usize, (u64, Option<u64>)>,
+    pub update_selected_download_done: BTreeSet<usize>,
+    pub update_selected_download_total: usize,
+    pub update_selected_download_origin: DownloadOrigin,
     pub update_selected_download_finished: Vec<String>,
     pub(crate) update_selected_last_checked_at: Option<String>,
     pub(crate) versions_ui: VersionsDrawerUi,
@@ -303,8 +312,10 @@ impl Default for Step2State {
             update_selected_manual_downloads: Vec::new(),
             skipped_manual_downloads: Vec::new(),
             update_selected_download_scope: None,
-            update_selected_download_bytes: None,
-            update_selected_download_current: None,
+            update_selected_download_bytes: BTreeMap::new(),
+            update_selected_download_done: BTreeSet::new(),
+            update_selected_download_total: 0,
+            update_selected_download_origin: DownloadOrigin::Workspace,
             update_selected_download_finished: Vec::new(),
             update_selected_last_checked_at: None,
             versions_ui: VersionsDrawerUi::default(),
@@ -599,6 +610,21 @@ mod tests {
                 selected_order: None,
             }],
         }
+    }
+
+    #[test]
+    fn default_download_state_is_workspace_origin_with_empty_byte_map_and_done_set() {
+        let step2 = Step2State::default();
+        assert_eq!(
+            step2.update_selected_download_origin,
+            DownloadOrigin::Workspace
+        );
+        assert_eq!(DownloadOrigin::default(), DownloadOrigin::Workspace);
+        assert!(step2.update_selected_download_bytes.is_empty());
+        assert!(step2.update_selected_download_done.is_empty());
+        assert_eq!(step2.update_selected_download_total, 0);
+        assert!(step2.update_selected_download_finished.is_empty());
+        assert_eq!(step2.update_selected_download_scope, None);
     }
 
     #[test]

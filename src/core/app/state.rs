@@ -14,11 +14,11 @@ mod state_wizard;
 
 pub use state_step1::Step1State;
 pub use state_step2::{
-    ManualDownloadReason, ManualDownloadRequest, PromptPopupMode, Step2ComponentState,
-    Step2DiscoveredFork, Step2HiddenComponentAudit, Step2LogPendingDownload, Step2ModState,
-    Step2ScanReport, Step2Selection, Step2State, Step2Tp2ProbeReport, Step2UpdateAsset,
-    Step2UpdateRetryRequest, exact_log_ready_to_install, push_manual_download_request,
-    update_selection_signature,
+    DownloadOrigin, ManualDownloadReason, ManualDownloadRequest, PromptPopupMode,
+    Step2ComponentState, Step2DiscoveredFork, Step2HiddenComponentAudit, Step2LogPendingDownload,
+    Step2ModState, Step2ScanReport, Step2Selection, Step2State, Step2Tp2ProbeReport,
+    Step2UpdateAsset, Step2UpdateRetryRequest, exact_log_ready_to_install,
+    push_manual_download_request, update_selection_signature,
 };
 pub use state_step2::{
     VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, update_pipeline_busy,

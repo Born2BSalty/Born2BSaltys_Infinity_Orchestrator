@@ -8,8 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
+use crate::app::app_step2_update_download::{self, DownloadRefusal};
 use crate::app::state::{
-    ManualDownloadReason, ManualDownloadRequest, Step2State, Step2UpdateAsset, WizardState,
+    DownloadOrigin, ManualDownloadReason, ManualDownloadRequest, Step2State, Step2UpdateAsset,
+    WizardState,
 };
 use crate::install_runtime::archive_store;
 use crate::install_runtime::manual_archive_probe::{self, ArchiveProbe, ProbeMatch, ProbeRefusal};
@@ -194,7 +196,6 @@ pub struct DownloadProgress {
     pub rows: Vec<ModDownloadRow>,
     pub skipped: Vec<SkippedMod>,
     pub expected_sizes: std::collections::BTreeMap<usize, u64>,
-    pub asset_bytes: std::collections::BTreeMap<usize, (u64, Option<u64>)>,
     pub extract_progress: Option<(usize, usize)>,
     pub hash_progress: Option<(usize, usize)>,
 }
@@ -203,7 +204,6 @@ impl DownloadProgress {
     #[must_use]
     pub fn from_wizard_state_full(
         state: &WizardState,
-        prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
         prior_skipped: &[SkippedMod],
         prior_expected: &std::collections::BTreeMap<usize, u64>,
         hashed_indices: Option<&std::collections::HashSet<usize>>,
@@ -236,7 +236,13 @@ impl DownloadProgress {
                     } else if downloaded {
                         ModDownloadStatus::Extracting
                     } else if s2.update_selected_download_running {
-                        ModDownloadStatus::Downloading
+                        if s2.update_selected_download_bytes.contains_key(&i)
+                            && !s2.update_selected_download_done.contains(&i)
+                        {
+                            ModDownloadStatus::Downloading
+                        } else {
+                            ModDownloadStatus::Queued
+                        }
                     } else if hashed_indices.is_some_and(|h| !h.contains(&i)) {
                         ModDownloadStatus::Hashing
                     } else {
@@ -251,7 +257,7 @@ impl DownloadProgress {
                     name: a.label.clone(),
                     source: a.source_id.clone(),
                     status,
-                    per_byte: prior_bytes.get(&i).copied(),
+                    per_byte: s2.update_selected_download_bytes.get(&i).copied(),
                     expected_size,
                 }
             })
@@ -263,42 +269,14 @@ impl DownloadProgress {
             rows,
             skipped: Vec::new(),
             expected_sizes: prior_expected.clone(),
-            asset_bytes: prior_bytes.clone(),
             extract_progress: None,
             hash_progress: None,
         }
     }
 
     #[must_use]
-    pub fn from_wizard_state_with_bytes(
-        state: &WizardState,
-        prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
-    ) -> Self {
-        Self::from_wizard_state_full(
-            state,
-            prior_bytes,
-            &[],
-            &std::collections::BTreeMap::new(),
-            None,
-        )
-    }
-
-    #[must_use]
     pub fn from_wizard_state(state: &WizardState) -> Self {
-        Self::from_wizard_state_full(
-            state,
-            &std::collections::BTreeMap::new(),
-            &[],
-            &std::collections::BTreeMap::new(),
-            None,
-        )
-    }
-
-    pub fn set_asset_bytes(&mut self, index: usize, bytes: u64, total: Option<u64>) {
-        self.asset_bytes.insert(index, (bytes, total));
-        if let Some(row) = self.rows.get_mut(index) {
-            row.per_byte = Some((bytes, total));
-        }
+        Self::from_wizard_state_full(state, &[], &std::collections::BTreeMap::new(), None)
     }
 }
 
@@ -1701,6 +1679,16 @@ pub(crate) fn stage_and_kick_archive_skip_once(
             })
             .collect();
         orchestrator.install_screen_state.skipped_mods = Vec::new();
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_download_bytes
+            .clear();
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_download_done
+            .clear();
         orchestrator.install_screen_state.expected_archive_sizes = expected_sizes;
         orchestrator.install_screen_state.skip_indices = std::collections::HashSet::new();
         orchestrator
@@ -1769,12 +1757,14 @@ pub(crate) fn kick_streaming_downloader_once(orchestrator: &mut OrchestratorApp)
             .set_download_phase_started(true);
         let mut skip_indices = orchestrator.install_screen_state.skip_indices.clone();
         mark_empty_url_assets_as_cache_hits(orchestrator, &mut skip_indices);
-        if let Some(rx) = crate::install_runtime::stream_downloader::start_stream_download(
+        match app_step2_update_download::start_step2_update_download_scoped(
             &mut orchestrator.wizard_state,
+            &mut orchestrator.step2_update_download_rx,
+            None,
             &skip_indices,
+            DownloadOrigin::InstallPipeline,
         ) {
-            orchestrator.stream_download_rx = Some(rx);
-            tracing::info!(
+            Ok(()) => tracing::info!(
                 target = "orchestrator",
                 "parallel streaming downloader spawned for {} asset(s); \
                  bypasses {} skipped index/indices",
@@ -1784,7 +1774,19 @@ pub(crate) fn kick_streaming_downloader_once(orchestrator: &mut OrchestratorApp)
                     .update_selected_update_assets
                     .len(),
                 skip_indices.len()
-            );
+            ),
+            Err(DownloadRefusal::NothingToDownload) => {
+                tracing::info!(
+                    target = "orchestrator",
+                    "every asset is already on disk; finishing the download stage at once"
+                );
+                orchestrator.after_download_finished();
+            }
+            Err(refusal) => tracing::warn!(
+                target = "orchestrator",
+                ?refusal,
+                "parallel streaming downloader not started"
+            ),
         }
     }
 }
@@ -1947,11 +1949,6 @@ pub(crate) fn ingest_downloaded_archives_once(
 pub(crate) fn build_and_hold_progress(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) -> DownloadProgress {
-    let prior_bytes = orchestrator
-        .install_screen_state
-        .download_progress
-        .asset_bytes
-        .clone();
     let prior_skipped = orchestrator.install_screen_state.skipped_mods.clone();
     let prior_expected = orchestrator
         .install_screen_state
@@ -1969,7 +1966,6 @@ pub(crate) fn build_and_hold_progress(
     };
     let mut progress = DownloadProgress::from_wizard_state_full(
         &orchestrator.wizard_state,
-        &prior_bytes,
         &prior_skipped,
         &prior_expected,
         hashed,
@@ -3267,7 +3263,7 @@ mod tests {
     }
 
     #[test]
-    fn set_asset_bytes_persists_and_survives_per_frame_rebuild() {
+    fn state_bytes_drive_rows_across_rebuild() {
         use crate::app::state::Step2UpdateAsset;
         let mut st = WizardState::default();
         let mk = |label: &str, src: &str| Step2UpdateAsset {
@@ -3282,17 +3278,18 @@ mod tests {
         };
         st.step2.update_selected_update_assets = vec![mk("A", "github"), mk("B", "weasel")];
         st.step2.update_selected_download_running = true;
+        st.step2
+            .update_selected_download_bytes
+            .insert(0, (512, Some(2048)));
 
-        let mut p = DownloadProgress::from_wizard_state(&st);
-        p.set_asset_bytes(0, 512, Some(2048));
-        assert_eq!(p.asset_bytes.get(&0), Some(&(512, Some(2048))));
+        let p = DownloadProgress::from_wizard_state(&st);
+        assert_eq!(p.rows[0].name, "A");
         assert_eq!(p.rows[0].per_byte, Some((512, Some(2048))));
 
         let mut expected = BTreeMap::new();
         expected.insert(0usize, 2048u64);
         let p2 = DownloadProgress::from_wizard_state_full(
             &st,
-            &p.asset_bytes,
             &[skipped("CACHED", Some(4096))],
             &expected,
             None,
@@ -3300,19 +3297,25 @@ mod tests {
         assert_eq!(
             p2.rows[0].per_byte,
             Some((512, Some(2048))),
-            "the byte map survives the per-frame row rebuild"
+            "the state byte map drives every per-frame row rebuild"
         );
         assert_eq!(
             p2.rows[0].expected_size,
             Some(2048),
             "the share-code expected size is merged onto the row"
         );
-        assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte delta yet");
+        assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte event yet");
         assert!(
             p2.skipped.is_empty(),
             ": `skipped` is vestigial; not populated"
         );
         assert!((p2.rows[0].bar_fraction() - 0.25).abs() < 0.001);
+
+        st.step2
+            .update_selected_download_bytes
+            .insert(0, (1024, Some(2048)));
+        let p3 = DownloadProgress::from_wizard_state_full(&st, &[], &expected, None);
+        assert!((p3.rows[0].bar_fraction() - 0.5).abs() < 0.001);
     }
 
     #[test]
@@ -3340,19 +3343,19 @@ mod tests {
         ];
         st.step2.update_selected_extracted_sources = vec!["EET -> C:/m/EET".to_string()];
         st.step2.update_selected_download_running = true;
+        st.step2
+            .update_selected_download_bytes
+            .insert(3, (10, Some(100)));
 
         let sk = vec![skipped("ALREADY_HERE", Some(7777))];
-        let p = DownloadProgress::from_wizard_state_full(
-            &st,
-            &BTreeMap::new(),
-            &sk,
-            &BTreeMap::new(),
-            None,
-        );
+        let p = DownloadProgress::from_wizard_state_full(&st, &sk, &BTreeMap::new(), None);
         assert_eq!(p.rows.len(), 4);
         let statuses: Vec<_> = p.rows.iter().map(|r| r.status).collect();
+        let names: Vec<_> = p.rows.iter().map(|r| r.name.as_str()).collect();
         assert_eq!(statuses[0], ModDownloadStatus::Downloading);
-        assert_eq!(statuses[1], ModDownloadStatus::Downloading);
+        assert_eq!(names[0], "spell_rev", "the in-flight row sits on top");
+        assert_eq!(statuses[1], ModDownloadStatus::Queued);
+        assert_eq!(names[1], "stratagems", "a row with no bytes yet is queued");
         assert!(statuses[2..].iter().all(|s| s.download_complete()));
         assert_eq!(
             p.skipped.len(),
@@ -3360,6 +3363,43 @@ mod tests {
             "v3: skipped is not populated by from_wizard_state_full"
         );
         assert_eq!(p.total(), 4, "4 rows (no phantom skipped row)");
+    }
+
+    #[test]
+    fn failed_row_leaves_downloading_the_frame_its_done_lands() {
+        let mut st = WizardState::default();
+        let asset = |label: &str| crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: format!("{label}/{label}.TP2"),
+            label: label.to_string(),
+            source_id: "github".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{label}.zip"),
+            asset_url: format!("https://x/{label}.zip"),
+            installed_source_ref: None,
+        };
+        st.step2.update_selected_update_assets = vec![asset("failed"), asset("streaming")];
+        st.step2.update_selected_download_running = true;
+        st.step2
+            .update_selected_download_bytes
+            .insert(0, (100, Some(100)));
+        st.step2.update_selected_download_done.insert(0);
+        st.step2
+            .update_selected_download_failed_sources
+            .push("failed: HTTP 404".to_string());
+        st.step2
+            .update_selected_download_bytes
+            .insert(1, (10, Some(100)));
+
+        let p = DownloadProgress::from_wizard_state_full(&st, &[], &BTreeMap::new(), None);
+        let rows: Vec<_> = p.rows.iter().map(|r| (r.name.as_str(), r.status)).collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("streaming", ModDownloadStatus::Downloading),
+                ("failed", ModDownloadStatus::Queued),
+            ]
+        );
     }
 
     #[test]
@@ -3382,13 +3422,7 @@ mod tests {
         let mut hashed = std::collections::HashSet::new();
         hashed.insert(0usize);
         hashed.insert(2usize);
-        let p = DownloadProgress::from_wizard_state_full(
-            &st,
-            &BTreeMap::new(),
-            &[],
-            &BTreeMap::new(),
-            Some(&hashed),
-        );
+        let p = DownloadProgress::from_wizard_state_full(&st, &[], &BTreeMap::new(), Some(&hashed));
         assert_eq!(p.rows.len(), 4);
         let hashing_labels: Vec<&str> = p
             .rows
@@ -3430,13 +3464,7 @@ mod tests {
         };
         st.step2.update_selected_update_assets = vec![asset("A"), asset("B")];
         st.step2.update_selected_download_running = false;
-        let p = DownloadProgress::from_wizard_state_full(
-            &st,
-            &BTreeMap::new(),
-            &[],
-            &BTreeMap::new(),
-            None,
-        );
+        let p = DownloadProgress::from_wizard_state_full(&st, &[], &BTreeMap::new(), None);
         assert!(
             p.rows
                 .iter()
@@ -3884,6 +3912,45 @@ mod tests {
         if let Some(alive) = alive {
             manual_download_watcher::wait_for_thread_exit(&alive);
         }
+    }
+
+    #[test]
+    fn cache_check_kick_clears_stale_download_bytes_from_a_previous_run() {
+        let root = ManualDlTempRoot::new("cache-clears-stale-bytes");
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-cache-clears-stale-bytes",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.wizard_state.step1.mods_archive_folder =
+            root.path.join("archives").to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_update_assets =
+            vec![test_asset("ModA", "https://example.com/a.zip")];
+        app.wizard_state
+            .step2
+            .update_selected_download_bytes
+            .insert(0, (50, Some(50)));
+        app.wizard_state.step2.update_selected_download_done.insert(0);
+        let inputs = LivePipelineInputs {
+            destination: "C:/dest".to_string(),
+            game: crate::registry::model::Game::BGEE,
+            workflow: crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+            code: String::new(),
+        };
+
+        stage_and_kick_archive_skip_once(&mut app, &inputs);
+
+        assert!(
+            app.wizard_state
+                .step2
+                .update_selected_download_bytes
+                .is_empty(),
+            "a re-armed run starts with no bytes from the previous run"
+        );
+        assert!(app.wizard_state.step2.update_selected_download_done.is_empty());
+        let rows = DownloadProgress::from_wizard_state(&app.wizard_state).rows;
+        assert_eq!(rows[0].per_byte, None);
+        app.archive_skip_rx = None;
     }
 
     #[test]

@@ -12,7 +12,8 @@ use tracing::warn;
 
 use crate::app::app_bootstrap_init;
 use crate::app::app_step1_github_oauth::GitHubOAuthFlowResult;
-use crate::app::state::WizardState;
+use crate::app::app_step2_update_download::DownloadPoll;
+use crate::app::state::{DownloadOrigin, WizardState};
 use crate::app::step2_worker::Step2ScanEvent;
 use crate::app::step5::install_flow::PendingInstallStart;
 use crate::app::step5::log_files::TargetPrepResult;
@@ -295,8 +296,6 @@ pub struct OrchestratorApp {
     pub(crate) release_list_rx: Option<crate::app::github_release_list::ReleaseListFetch>,
     pub(crate) forks_rx: Option<crate::app::github_forks_list::ForksFetch>,
     pub(crate) added_mods_seeded_for: Option<String>,
-    pub(crate) stream_download_rx:
-        Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
 
     pub(crate) extract_progress: Arc<std::sync::Mutex<Option<(usize, usize)>>>,
 
@@ -450,7 +449,6 @@ impl OrchestratorApp {
             release_list_rx: None,
             forks_rx: None,
             added_mods_seeded_for: None,
-            stream_download_rx: None,
             extract_progress: Arc::new(std::sync::Mutex::new(None)),
             extract_parallel_rx: None,
             archive_skip_rx: None,
@@ -550,7 +548,7 @@ impl OrchestratorApp {
 
     pub(crate) fn reset_install_screen_to_gallery(&mut self) {
         reset_install_pipeline_state(InstallPipelineResetSet {
-            stream_download_rx: &mut self.stream_download_rx,
+            step2_update_download_rx: &mut self.step2_update_download_rx,
             archive_skip_rx: &mut self.archive_skip_rx,
             extract_parallel_rx: &mut self.extract_parallel_rx,
             manual_download_rx: &mut self.manual_download_rx,
@@ -732,11 +730,13 @@ impl OrchestratorApp {
             &mut self.wizard_state,
             &mut self.step2_update_check_rx,
         );
-        app_step2_update_download::poll_step2_update_download(
+        if app_step2_update_download::poll_step2_update_download(
             &mut self.wizard_state,
             &mut self.step2_update_download_rx,
-            &mut self.step2_update_extract_rx,
-        );
+        ) == DownloadPoll::Finished
+        {
+            self.after_download_finished();
+        }
         app_step2_update_extract::poll_step2_update_extract(
             &mut self.wizard_state,
             &mut self.step2_update_extract_rx,
@@ -754,18 +754,6 @@ impl OrchestratorApp {
             &mut self.archive_skip_rx,
             &mut self.install_screen_state,
             &self.hash_progress,
-        );
-        let install_ctx_refs_path = self.active_install_modlist_id.as_deref().map(|id| {
-            crate::registry::store_workspace::modlist_data_dir(id).join("mod_installed_refs.toml")
-        });
-        Self::drain_stream_download(
-            &mut self.wizard_state,
-            &mut self.stream_download_rx,
-            &mut self.extract_parallel_rx,
-            &mut self.install_screen_state.download_progress,
-            &self.extract_progress,
-            install_ctx_refs_path.as_deref(),
-            &mut self.install_screen_state.manual_downloads,
         );
         Self::drain_extract_parallel(
             &mut self.wizard_state,
@@ -855,9 +843,7 @@ impl OrchestratorApp {
         }
         self.install_screen_state.manual_downloads.extract_deferred = false;
         self.wizard_state.step2.update_selected_extract_running = false;
-        let install_ctx_refs_path = self.active_install_modlist_id.as_deref().map(|id| {
-            crate::registry::store_workspace::modlist_data_dir(id).join("mod_installed_refs.toml")
-        });
+        let install_ctx_refs_path = self.install_ctx_refs_path();
         Self::kick_parallel_extract(
             &mut self.wizard_state,
             &mut self.extract_parallel_rx,
@@ -866,102 +852,44 @@ impl OrchestratorApp {
         );
     }
 
-    fn drain_stream_download(
-        wizard_state: &mut WizardState,
-        stream_download_rx: &mut Option<
-            Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>,
-        >,
-        extract_parallel_rx: &mut Option<
-            Receiver<crate::install_runtime::extract_parallel::ExtractAssetEvent>,
-        >,
-        progress: &mut crate::ui::install::stage_downloading::DownloadProgress,
-        extract_progress: &Arc<std::sync::Mutex<Option<(usize, usize)>>>,
-        install_ctx_installed_refs_path: Option<&std::path::Path>,
-        manual_downloads: &mut crate::ui::install::state_install::ManualDownloadsState,
-    ) {
-        use crate::install_runtime::stream_downloader::{
-            StreamDownloadEvent, apply_result_state, deterministic_dest,
-        };
-        use std::path::PathBuf;
-        use std::sync::mpsc::TryRecvError;
+    fn install_ctx_refs_path(&self) -> Option<std::path::PathBuf> {
+        self.active_install_modlist_id.as_deref().map(|id| {
+            crate::registry::store_workspace::modlist_data_dir(id).join("mod_installed_refs.toml")
+        })
+    }
 
-        let Some(rx) = stream_download_rx.as_ref() else {
-            return;
-        };
-        loop {
-            match rx.try_recv() {
-                Ok(StreamDownloadEvent::AssetProgress {
-                    index,
-                    bytes,
-                    total,
-                }) => {
-                    progress.set_asset_bytes(index, bytes, total);
-                }
-                Ok(StreamDownloadEvent::AssetDone {
-                    index,
-                    ok,
-                    final_bytes,
-                    total: _,
-                    error,
-                }) => {
-                    progress.set_asset_bytes(index, final_bytes, Some(final_bytes));
-                    let archive_dir = PathBuf::from(wizard_state.step1.mods_archive_folder.trim());
-                    if let Some(asset) = wizard_state.step2.update_selected_update_assets.get(index)
-                    {
-                        if ok {
-                            let dest = deterministic_dest(asset, &archive_dir);
-                            wizard_state
-                                .step2
-                                .update_selected_downloaded_sources
-                                .push(format!("{} -> {}", asset.label, dest.display()));
-                        } else {
-                            let err_str = error.as_deref().unwrap_or("unknown error").to_string();
-                            wizard_state
-                                .step2
-                                .update_selected_download_failed_sources
-                                .push(format!("{}: {}", asset.label, err_str));
-                        }
-                    }
-                }
-                Ok(StreamDownloadEvent::Finished(result)) => {
-                    let downloaded = result.downloaded.len();
-                    let failed = result.failed.len();
-                    *stream_download_rx = None;
-                    apply_result_state(wizard_state, result);
-                    if manual_downloads.manual_hold_active() {
-                        manual_downloads.extract_deferred = true;
-                        wizard_state.step2.update_selected_extract_running = true;
-                        tracing::info!(
-                            target = "orchestrator",
-                            "stream download finished; extract deferred until manual downloads resolve"
-                        );
-                        return;
-                    }
-                    tracing::info!(
-                        target = "orchestrator",
-                        downloaded,
-                        failed,
-                        "stream download Finished drained; starting parallel extract"
-                    );
-                    Self::kick_parallel_extract(
-                        wizard_state,
-                        extract_parallel_rx,
-                        extract_progress,
-                        install_ctx_installed_refs_path,
-                    );
-                    return;
-                }
-                Err(TryRecvError::Empty) => return,
-                Err(TryRecvError::Disconnected) => {
-                    *stream_download_rx = None;
-                    wizard_state.step2.update_selected_download_running = false;
-                    wizard_state.step2.update_selected_download_current = None;
-                    wizard_state.step2.update_selected_download_finished.clear();
-                    wizard_state.step2.scan_status =
-                        "Download updates failed: worker disconnected".to_string();
-                    return;
-                }
+    pub(crate) fn after_download_finished(&mut self) {
+        match self.wizard_state.step2.update_selected_download_origin {
+            DownloadOrigin::InstallPipeline
+                if self
+                    .install_screen_state
+                    .manual_downloads
+                    .manual_hold_active() =>
+            {
+                self.install_screen_state.manual_downloads.extract_deferred = true;
+                self.wizard_state.step2.update_selected_extract_running = true;
+                tracing::info!(
+                    target = "orchestrator",
+                    "download finished; extract deferred until manual downloads resolve"
+                );
             }
+            DownloadOrigin::InstallPipeline => {
+                tracing::info!(
+                    target = "orchestrator",
+                    "download finished; starting parallel extract"
+                );
+                let install_ctx_refs_path = self.install_ctx_refs_path();
+                Self::kick_parallel_extract(
+                    &mut self.wizard_state,
+                    &mut self.extract_parallel_rx,
+                    &self.extract_progress,
+                    install_ctx_refs_path.as_deref(),
+                );
+            }
+            DownloadOrigin::Workspace => app_step2_update_extract::start_step2_update_extract(
+                &mut self.wizard_state,
+                &mut self.step2_update_extract_rx,
+            ),
         }
     }
 
@@ -1267,7 +1195,6 @@ impl OrchestratorApp {
             || self.step2_update_check_rx.is_some()
             || self.step2_update_download_rx.is_some()
             || self.step2_update_extract_rx.is_some()
-            || self.stream_download_rx.is_some()
             || self.extract_parallel_rx.is_some()
             || self.archive_skip_rx.is_some()
             || self.create_destination_prep_rx.is_some()
@@ -1439,8 +1366,8 @@ impl OrchestratorApp {
 }
 
 pub struct InstallPipelineResetSet<'a> {
-    pub stream_download_rx:
-        &'a mut Option<Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>>,
+    pub(crate) step2_update_download_rx:
+        &'a mut Option<Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent>>,
     pub archive_skip_rx:
         &'a mut Option<Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>>,
     pub extract_parallel_rx:
@@ -1459,7 +1386,7 @@ pub struct InstallPipelineResetSet<'a> {
 
 pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     let InstallPipelineResetSet {
-        stream_download_rx,
+        step2_update_download_rx,
         archive_skip_rx,
         extract_parallel_rx,
         manual_download_rx,
@@ -1473,7 +1400,7 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
         active_install_modlist_id,
     } = set;
 
-    *stream_download_rx = None;
+    *step2_update_download_rx = None;
     *archive_skip_rx = None;
     *extract_parallel_rx = None;
     *manual_download_rx = None;
@@ -1490,7 +1417,8 @@ pub fn reset_install_pipeline_state(set: InstallPipelineResetSet<'_>) {
     wizard_state.step2.pending_saved_log_update_preview = false;
     wizard_state.step2.pending_saved_log_download = false;
     wizard_state.step2.update_selected_download_running = false;
-    wizard_state.step2.update_selected_download_current = None;
+    wizard_state.step2.update_selected_download_bytes.clear();
+    wizard_state.step2.update_selected_download_done.clear();
     wizard_state.step2.update_selected_download_finished.clear();
     wizard_state.step2.update_selected_extract_running = false;
 
@@ -1898,6 +1826,10 @@ mod tests {
         ws.step2.pending_saved_log_download = true;
         ws.step2.update_selected_download_running = true;
         ws.step2.update_selected_extract_running = true;
+        ws.step2
+            .update_selected_download_bytes
+            .insert(0, (10, Some(20)));
+        ws.step2.update_selected_download_done.insert(0);
         ws
     }
 
@@ -1944,7 +1876,7 @@ mod tests {
 
     fn assert_pipeline_channels_closed(
         s_dl: &std::sync::mpsc::Sender<
-            crate::install_runtime::stream_downloader::StreamDownloadEvent,
+            crate::app::app_step2_update_download::Step2UpdateDownloadEvent,
         >,
         s_sk: &std::sync::mpsc::Sender<
             crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
@@ -1953,8 +1885,8 @@ mod tests {
     ) {
         assert!(
             s_dl.send(
-                crate::install_runtime::stream_downloader::StreamDownloadEvent::Finished(
-                    crate::install_runtime::stream_downloader::StreamDownloadResult::default()
+                crate::app::app_step2_update_download::Step2UpdateDownloadEvent::Finished(
+                    crate::app::app_step2_update_download::Step2UpdateDownloadResult::default()
                 )
             )
             .is_err()
@@ -1983,7 +1915,7 @@ mod tests {
     #[test]
     fn reset_install_pipeline_state_drops_all_receivers_and_clears_wizard_latches() {
         let (s_dl, r_dl) = std::sync::mpsc::channel::<
-            crate::install_runtime::stream_downloader::StreamDownloadEvent,
+            crate::app::app_step2_update_download::Step2UpdateDownloadEvent,
         >();
         let (s_sk, r_sk) = std::sync::mpsc::channel::<
             crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
@@ -2020,7 +1952,7 @@ mod tests {
         let mut active = Some("modlist-id".to_string());
 
         reset_install_pipeline_state(InstallPipelineResetSet {
-            stream_download_rx: &mut stream,
+            step2_update_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
             manual_download_rx: &mut manual_dl,
@@ -2034,7 +1966,7 @@ mod tests {
             active_install_modlist_id: &mut active,
         });
 
-        assert!(stream.is_none(), "stream_download_rx dropped");
+        assert!(stream.is_none(), "step2_update_download_rx dropped");
         assert!(skip.is_none(), "archive_skip_rx dropped");
         assert!(extract.is_none(), "extract_parallel_rx dropped");
         assert!(dest_prep.is_none(), "install_destination_prep_rx dropped");
@@ -2060,6 +1992,8 @@ mod tests {
         assert!(!ws.step2.pending_saved_log_download);
         assert!(!ws.step2.update_selected_download_running);
         assert!(!ws.step2.update_selected_extract_running);
+        assert!(ws.step2.update_selected_download_bytes.is_empty());
+        assert!(ws.step2.update_selected_download_done.is_empty());
 
         assert!(pending.is_none());
         assert!(active.is_none());
@@ -2068,7 +2002,7 @@ mod tests {
     #[test]
     fn reset_install_pipeline_state_clears_screen_state_and_shared_progress_mutexes() {
         let mut stream: Option<
-            Receiver<crate::install_runtime::stream_downloader::StreamDownloadEvent>,
+            Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent>,
         > = None;
         let mut skip: Option<
             Receiver<crate::install_runtime::archive_skip_async::ArchiveSkipEvent>,
@@ -2089,7 +2023,7 @@ mod tests {
         let mut active: Option<String> = None;
 
         reset_install_pipeline_state(InstallPipelineResetSet {
-            stream_download_rx: &mut stream,
+            step2_update_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
             manual_download_rx: &mut manual_dl,
@@ -2131,7 +2065,7 @@ mod tests {
     #[test]
     fn composed_cancel_drains_all_three_event_streams_after_reset() {
         let (s_dl, r_dl) = std::sync::mpsc::channel::<
-            crate::install_runtime::stream_downloader::StreamDownloadEvent,
+            crate::app::app_step2_update_download::Step2UpdateDownloadEvent,
         >();
         let (s_sk, r_sk) = std::sync::mpsc::channel::<
             crate::install_runtime::archive_skip_async::ArchiveSkipEvent,
@@ -2140,7 +2074,7 @@ mod tests {
             crate::install_runtime::extract_parallel::ExtractAssetEvent,
         >();
         let _ = s_dl.send(
-            crate::install_runtime::stream_downloader::StreamDownloadEvent::AssetProgress {
+            crate::app::app_step2_update_download::Step2UpdateDownloadEvent::AssetProgress {
                 index: 0,
                 bytes: 100,
                 total: Some(1000),
@@ -2174,7 +2108,7 @@ mod tests {
         let mut pending = None;
         let mut active = None;
         reset_install_pipeline_state(InstallPipelineResetSet {
-            stream_download_rx: &mut stream,
+            step2_update_download_rx: &mut stream,
             archive_skip_rx: &mut skip,
             extract_parallel_rx: &mut extract,
             manual_download_rx: &mut manual_dl,
@@ -2192,8 +2126,8 @@ mod tests {
         assert!(extract.is_none());
         assert!(
             s_dl.send(
-                crate::install_runtime::stream_downloader::StreamDownloadEvent::Finished(
-                    crate::install_runtime::stream_downloader::StreamDownloadResult::default()
+                crate::app::app_step2_update_download::Step2UpdateDownloadEvent::Finished(
+                    crate::app::app_step2_update_download::Step2UpdateDownloadResult::default()
                 )
             )
             .is_err()
@@ -2457,17 +2391,8 @@ mod tests {
                 status: crate::ui::install::state_install::ManualRowStatus::Waiting,
             }];
 
-        let (tx, rx) = std::sync::mpsc::channel::<
-            crate::install_runtime::stream_downloader::StreamDownloadEvent,
-        >();
-        tx.send(
-            crate::install_runtime::stream_downloader::StreamDownloadEvent::Finished(
-                crate::install_runtime::stream_downloader::StreamDownloadResult::default(),
-            ),
-        )
-        .expect("send Finished");
-        drop(tx);
-        app.stream_download_rx = Some(rx);
+        app.step2_update_download_rx = Some(finished_download_channel());
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
         app.wizard_state.modlist_auto_build_active = true;
         app.wizard_state.modlist_auto_build_waiting_for_install = true;
 
@@ -2491,8 +2416,8 @@ mod tests {
             "the pipeline does not route to the install step before extraction"
         );
         assert!(
-            app.stream_download_rx.is_none(),
-            "the stream receiver is consumed on Finished"
+            app.step2_update_download_rx.is_none(),
+            "the download receiver is consumed on Finished"
         );
         assert!(
             app.extract_parallel_rx.is_none(),
@@ -2522,17 +2447,8 @@ mod tests {
     fn stream_finish_without_hold_never_defers() {
         let mut app = OrchestratorApp::new_isolated_for_test("manualdl-no-hold-finish");
 
-        let (tx, rx) = std::sync::mpsc::channel::<
-            crate::install_runtime::stream_downloader::StreamDownloadEvent,
-        >();
-        tx.send(
-            crate::install_runtime::stream_downloader::StreamDownloadEvent::Finished(
-                crate::install_runtime::stream_downloader::StreamDownloadResult::default(),
-            ),
-        )
-        .expect("send Finished");
-        drop(tx);
-        app.stream_download_rx = Some(rx);
+        app.step2_update_download_rx = Some(finished_download_channel());
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
 
         app.poll_step2_channels();
 
@@ -2540,5 +2456,163 @@ mod tests {
             !app.install_screen_state.manual_downloads.extract_deferred,
             "no manual rows means no hold, so extraction is not deferred"
         );
+        assert!(app.step2_update_download_rx.is_none());
+        assert!(!app.wizard_state.step2.update_selected_extract_running);
+    }
+
+    fn finished_download_channel()
+    -> Receiver<crate::app::app_step2_update_download::Step2UpdateDownloadEvent> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(
+            crate::app::app_step2_update_download::Step2UpdateDownloadEvent::Finished(
+                crate::app::app_step2_update_download::Step2UpdateDownloadResult::default(),
+            ),
+        )
+        .expect("send Finished");
+        rx
+    }
+
+    struct EngineFinishRoot {
+        path: std::path::PathBuf,
+    }
+
+    impl EngineFinishRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let root = Self {
+                path: std::env::temp_dir().join(format!(
+                    "bio_dl_engine_{}_{}_orchfinish",
+                    std::process::id(),
+                    COUNTER.fetch_add(1, Ordering::Relaxed)
+                )),
+            };
+            std::fs::create_dir_all(&root.path).unwrap();
+            root
+        }
+    }
+
+    impl Drop for EngineFinishRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn waiting_manual_row() -> crate::ui::install::state_install::ManualDownloadRow {
+        crate::ui::install::state_install::ManualDownloadRow {
+            label: "Ascension".to_string(),
+            from: "nexusmods.com".to_string(),
+            page_url: String::new(),
+            status: crate::ui::install::state_install::ManualRowStatus::Waiting,
+        }
+    }
+
+    #[test]
+    fn workspace_origin_finish_starts_the_workspace_extract() {
+        let root = EngineFinishRoot::new();
+        let mut app = OrchestratorApp::new_isolated_for_test("dl-engine-workspace-finish");
+        app.wizard_state.step1.mods_archive_folder =
+            root.path.join("archives").to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::Workspace;
+        app.wizard_state.step2.update_selected_download_scope = Some("alpha".to_string());
+        app.install_screen_state.manual_downloads.rows = vec![waiting_manual_row()];
+        app.step2_update_download_rx = Some(finished_download_channel());
+
+        app.poll_step2_channels();
+
+        assert!(app.step2_update_download_rx.is_none());
+        assert_eq!(
+            app.wizard_state.step2.update_selected_download_scope, None,
+            "the workspace extract start consumed the drawer scope"
+        );
+        assert!(
+            !app.install_screen_state.manual_downloads.extract_deferred,
+            "the workspace origin never waits on the pipeline's manual hold"
+        );
+        assert!(
+            app.extract_parallel_rx.is_none(),
+            "the pipeline extractor is not started for a workspace fetch"
+        );
+        assert!(!app.wizard_state.step2.update_selected_extract_running);
+    }
+
+    #[test]
+    fn pipeline_nothing_to_download_refusal_kicks_the_pipeline_extract() {
+        let root = EngineFinishRoot::new();
+        let archive_dir = root.path.join("archives");
+        std::fs::create_dir_all(&archive_dir).unwrap();
+        let asset = crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: "cached/setup-cached.tp2".to_string(),
+            label: "Cached".to_string(),
+            source_id: "github".to_string(),
+            tag: "v1".to_string(),
+            asset_name: "cached.zip".to_string(),
+            asset_url: "http://127.0.0.1:9/cached.zip".to_string(),
+            installed_source_ref: None,
+        };
+        std::fs::write(
+            archive_dir.join(crate::app::app_step2_update_download::archive_file_name(
+                &asset,
+            )),
+            b"not-a-real-archive",
+        )
+        .unwrap();
+
+        let mut app = OrchestratorApp::new_isolated_for_test("dl-engine-pipeline-all-cached");
+        app.wizard_state.step1.download_archive = true;
+        app.wizard_state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        app.wizard_state.step1.mods_folder = root.path.join("mods").to_string_lossy().into_owned();
+        app.wizard_state.step1.mods_backup_folder =
+            root.path.join("backup").to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_update_assets = vec![asset];
+        app.wizard_state.step2.update_selected_download_scope = Some("leftover".to_string());
+        app.wizard_state.modlist_auto_build_active = true;
+        app.active_install_modlist_id = Some("all-cached".to_string());
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_archive_skip_completed(true);
+        app.install_screen_state.skip_indices.insert(0);
+
+        crate::ui::install::stage_downloading::kick_streaming_downloader_once(&mut app);
+
+        assert!(
+            app.step2_update_download_rx.is_none(),
+            "no download worker is spawned when every asset is skipped"
+        );
+        assert_eq!(
+            app.wizard_state.step2.update_selected_download_origin,
+            DownloadOrigin::InstallPipeline
+        );
+        assert_eq!(app.wizard_state.step2.update_selected_download_scope, None);
+        assert!(
+            app.install_screen_state
+                .pipeline_flags
+                .download_phase_started()
+        );
+        assert!(
+            app.step2_update_extract_rx.is_none(),
+            "the workspace extractor is not started for the pipeline"
+        );
+        let extract_rx = app
+            .extract_parallel_rx
+            .take()
+            .expect("the pipeline extractor started at once");
+        assert_eq!(
+            *app.extract_progress.lock().unwrap(),
+            Some((0, 1)),
+            "the pipeline extract planned the cached archive"
+        );
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            match extract_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(crate::install_runtime::extract_parallel::ExtractAssetEvent::Finished(_))
+                | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Ok(_) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    assert!(Instant::now() < deadline, "extract did not finish in time");
+                }
+            }
+        }
     }
 }

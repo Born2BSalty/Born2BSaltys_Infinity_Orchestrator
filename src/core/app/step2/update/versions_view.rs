@@ -228,23 +228,21 @@ pub(crate) fn build_versions_view(
 
 pub(crate) fn refresh_fetch_phase(view: &mut VersionsView, state: &WizardState) {
     let batch_keys = running_batch_keys(state);
-    let fetching_key = fetching_key(state);
+    let current_keys = current_keys(state);
     let downloading = state.step2.update_selected_download_running;
     for card in &mut view.cards {
-        let is_current = fetching_key.as_deref() == Some(card.tp2.as_str());
-        let finished = downloading
-            && !is_current
-            && state
-                .step2
-                .update_selected_download_finished
-                .contains(&card.tp2);
+        let is_current = current_keys.contains(&card.tp2);
+        let finished = downloading && !is_current && key_downloaded_ok(state, &card.tp2);
         card.fetching = if finished {
             Some(FetchPhase::Downloading(Some(1.0)))
         } else {
-            fetch_phase_for_with(state, &card.tp2, &batch_keys)
+            fetch_phase_for_with(state, &card.tp2, &batch_keys, &current_keys)
         };
-        let waiting_in_batch =
-            downloading && batch_keys.contains(&card.tp2) && !is_current && !finished;
+        let waiting_in_batch = downloading
+            && batch_keys.contains(&card.tp2)
+            && !is_current
+            && !finished
+            && !all_assets_done(state, &card.tp2);
         card.queued = waiting_in_batch || state.step2.versions_ui.fetch_queue.contains(&card.tp2);
         if state.step2.is_scanning && extracted_just_now(state, &card.name) {
             card.status = CardStatus::InSync;
@@ -291,34 +289,89 @@ fn running_batch_keys(state: &WizardState) -> BTreeSet<String> {
         .collect()
 }
 
-fn fetching_key(state: &WizardState) -> Option<String> {
+fn current_keys(state: &WizardState) -> BTreeSet<String> {
+    let step2 = &state.step2;
+    let mut keys = [
+        step2.update_selected_download_scope.as_deref(),
+        step2.versions_ui.fetching_tp2.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(mod_downloads::normalize_mod_download_tp2)
+    .filter(|key| !key.is_empty())
+    .collect::<BTreeSet<_>>();
+    if step2.update_selected_download_running {
+        keys.extend(
+            step2
+                .update_selected_download_bytes
+                .keys()
+                .filter(|index| !step2.update_selected_download_done.contains(index))
+                .filter_map(|index| step2.update_selected_update_assets.get(*index))
+                .map(|asset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file))
+                .filter(|key| !key.is_empty()),
+        );
+    }
+    keys
+}
+
+fn key_asset_indices<'a>(
+    state: &'a WizardState,
+    tp2_key: &'a str,
+) -> impl Iterator<Item = (usize, &'a Step2UpdateAsset)> + 'a {
     state
         .step2
-        .update_selected_download_scope
-        .as_deref()
-        .or(state.step2.versions_ui.fetching_tp2.as_deref())
-        .or(state.step2.update_selected_download_current.as_deref())
-        .map(mod_downloads::normalize_mod_download_tp2)
-        .filter(|key| !key.is_empty())
+        .update_selected_update_assets
+        .iter()
+        .enumerate()
+        .filter(move |(_, asset)| {
+            mod_downloads::normalize_mod_download_tp2(&asset.tp_file) == tp2_key
+        })
+}
+
+fn all_assets_done(state: &WizardState, tp2_key: &str) -> bool {
+    let done = &state.step2.update_selected_download_done;
+    let mut indices = key_asset_indices(state, tp2_key).peekable();
+    indices.peek().is_some() && indices.all(|(index, _)| done.contains(&index))
+}
+
+fn key_downloaded_ok(state: &WizardState, tp2_key: &str) -> bool {
+    let step2 = &state.step2;
+    let mut indices = key_asset_indices(state, tp2_key).peekable();
+    indices.peek().is_some()
+        && step2
+            .update_selected_download_finished
+            .iter()
+            .any(|key| key == tp2_key)
+        && indices.all(|(index, asset)| {
+            step2.update_selected_download_done.contains(&index)
+                && find_labelled_error(&step2.update_selected_download_failed_sources, &asset.label)
+                    .is_none()
+        })
 }
 
 #[cfg(test)]
 pub(crate) fn fetch_phase_for(state: &WizardState, tp2_key: &str) -> Option<FetchPhase> {
-    fetch_phase_for_with(state, tp2_key, &running_batch_keys(state))
+    fetch_phase_for_with(
+        state,
+        tp2_key,
+        &running_batch_keys(state),
+        &current_keys(state),
+    )
 }
 
 pub(crate) fn fetch_phase_for_with(
     state: &WizardState,
     tp2_key: &str,
     batch_keys: &BTreeSet<String>,
+    current_keys: &BTreeSet<String>,
 ) -> Option<FetchPhase> {
-    if fetching_key(state).as_deref() != Some(tp2_key) {
+    if !current_keys.contains(tp2_key) {
         let extracting_in_batch =
             state.step2.update_selected_extract_running && batch_keys.contains(tp2_key);
         return extracting_in_batch.then_some(FetchPhase::Extracting);
     }
     if state.step2.update_selected_download_running {
-        Some(FetchPhase::Downloading(fetch_fraction(state)))
+        Some(FetchPhase::Downloading(fetch_fraction(state, tp2_key)))
     } else if state.step2.update_selected_extract_running {
         Some(FetchPhase::Extracting)
     } else if state.step2.is_scanning {
@@ -328,10 +381,20 @@ pub(crate) fn fetch_phase_for_with(
     }
 }
 
-pub(crate) fn fetch_fraction(state: &WizardState) -> Option<f32> {
-    let (done, total) = state.step2.update_selected_download_bytes?;
-    let total = total.filter(|total| *total > 0)?;
-    let basis_points = u128::from(done.min(total)) * 10_000 / u128::from(total);
+pub(crate) fn fetch_fraction(state: &WizardState, tp2_key: &str) -> Option<f32> {
+    let bytes = &state.step2.update_selected_download_bytes;
+    let (mut done, mut total, mut any) = (0_u128, 0_u128, false);
+    for (index, _) in key_asset_indices(state, tp2_key) {
+        let (asset_done, asset_total) = bytes.get(&index)?;
+        let asset_total = asset_total.filter(|asset_total| *asset_total > 0)?;
+        done += u128::from((*asset_done).min(asset_total));
+        total += u128::from(asset_total);
+        any = true;
+    }
+    if !any {
+        return None;
+    }
+    let basis_points = done * 10_000 / total;
     let basis_points = u16::try_from(basis_points).unwrap_or(10_000);
     Some(f32::from(basis_points) / 10_000.0)
 }
@@ -999,6 +1062,9 @@ pub(crate) const fn layer_name(tier: SourceTier) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::app_step2_update_download::{
+        DownloadPoll, Step2UpdateDownloadEvent, poll_step2_update_download,
+    };
     use crate::app::mod_downloads;
     use crate::app::state::{Step2ComponentState, Step2LogPendingDownload};
 
@@ -1073,6 +1139,10 @@ mod tests {
     fn fetch_phase_follows_scope_and_flags() {
         let mut state = WizardState::default();
         let key = mod_downloads::normalize_mod_download_tp2("setup-mod.tp2");
+        state
+            .step2
+            .update_selected_update_assets
+            .push(asset("setup-mod.tp2", "Mod", "2.0"));
         assert_eq!(fetch_phase_for(&state, &key), None);
 
         state.step2.update_selected_download_scope = Some("SETUP-MOD.TP2".to_string());
@@ -1081,12 +1151,18 @@ mod tests {
             fetch_phase_for(&state, &key),
             Some(FetchPhase::Downloading(None))
         );
-        state.step2.update_selected_download_bytes = Some((25, Some(100)));
+        state
+            .step2
+            .update_selected_download_bytes
+            .insert(0, (25, Some(100)));
         assert_eq!(
             fetch_phase_for(&state, &key),
             Some(FetchPhase::Downloading(Some(0.25)))
         );
-        state.step2.update_selected_download_bytes = Some((25, None));
+        state
+            .step2
+            .update_selected_download_bytes
+            .insert(0, (25, None));
         assert_eq!(
             fetch_phase_for(&state, &key),
             Some(FetchPhase::Downloading(None))
@@ -1130,7 +1206,10 @@ mod tests {
             .update_selected_update_assets
             .push(asset("b.tp2", "B", "2.0"));
         state.step2.update_selected_download_running = true;
-        state.step2.update_selected_download_current = Some("a.tp2".to_string());
+        state
+            .step2
+            .update_selected_download_bytes
+            .insert(0, (0, None));
 
         let view = build_versions_view(&state, &empty_tiers(), None);
         let card_for = |tp2: &str| {
@@ -1173,42 +1252,145 @@ mod tests {
             .expect("card present")
     }
 
+    fn drive_download(state: &mut WizardState, events: Vec<Step2UpdateDownloadEvent>) {
+        let (tx, rx) = std::sync::mpsc::channel::<Step2UpdateDownloadEvent>();
+        for event in events {
+            tx.send(event).unwrap();
+        }
+        let mut download_rx = Some(rx);
+        assert_eq!(
+            poll_step2_update_download(state, &mut download_rx),
+            DownloadPoll::Idle
+        );
+        assert!(download_rx.is_some());
+    }
+
+    const fn progress(index: usize, bytes: u64, total: u64) -> Step2UpdateDownloadEvent {
+        Step2UpdateDownloadEvent::AssetProgress {
+            index,
+            bytes,
+            total: Some(total),
+        }
+    }
+
+    fn asset_done(index: usize, bytes: u64, error: Option<&str>) -> Step2UpdateDownloadEvent {
+        Step2UpdateDownloadEvent::AssetDone {
+            index,
+            ok: error.is_none(),
+            final_bytes: bytes,
+            total: Some(bytes),
+            error: error.map(str::to_string),
+        }
+    }
+
     #[test]
     fn finished_batch_card_reads_full_while_next_downloads_and_rest_queue() {
-        use crate::app::app_step2_update_download::{
-            Step2UpdateDownloadEvent, poll_step2_update_download,
-        };
         let mut state = batch_state(&["a", "b", "c"]);
         state.step2.update_selected_download_running = true;
-        let (tx, rx) = std::sync::mpsc::channel::<Step2UpdateDownloadEvent>();
-        let mut download_rx = Some(rx);
-        let mut extract_rx = None;
-        tx.send(Step2UpdateDownloadEvent::Progress {
-            tp_file: "a.tp2".to_string(),
-            ok: true,
-            completed: 1,
-            total: 3,
-        })
-        .unwrap();
-        poll_step2_update_download(&mut state, &mut download_rx, &mut extract_rx);
-        tx.send(Step2UpdateDownloadEvent::Bytes {
-            tp_file: "b.tp2".to_string(),
-            done: 10,
-            total: Some(100),
-        })
-        .unwrap();
-        poll_step2_update_download(&mut state, &mut download_rx, &mut extract_rx);
+        drive_download(
+            &mut state,
+            vec![
+                progress(0, 0, 50),
+                asset_done(0, 50, None),
+                progress(1, 10, 100),
+            ],
+        );
 
         let view = build_versions_view(&state, &empty_tiers(), None);
         let finished = card_named(&view, "a.tp2");
         assert_eq!(finished.fetching, Some(FetchPhase::Downloading(Some(1.0))));
         assert!(!finished.queued);
         let current = card_named(&view, "b.tp2");
-        assert!(matches!(current.fetching, Some(FetchPhase::Downloading(_))));
+        assert_eq!(current.fetching, Some(FetchPhase::Downloading(Some(0.1))));
         assert!(!current.queued);
         let waiting = card_named(&view, "c.tp2");
         assert!(waiting.queued);
         assert_eq!(waiting.fetching, None);
+    }
+
+    #[test]
+    fn parallel_batch_marks_every_in_flight_card_downloading_with_its_own_fraction() {
+        let mut state = batch_state(&["a", "b", "c", "d"]);
+        state.step2.update_selected_download_running = true;
+        drive_download(
+            &mut state,
+            vec![progress(0, 25, 100), progress(1, 150, 200)],
+        );
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let first = card_named(&view, "a.tp2");
+        assert_eq!(first.fetching, Some(FetchPhase::Downloading(Some(0.25))));
+        assert!(!first.queued);
+        let second = card_named(&view, "b.tp2");
+        assert_eq!(second.fetching, Some(FetchPhase::Downloading(Some(0.75))));
+        assert!(!second.queued);
+        for tp_file in ["c.tp2", "d.tp2"] {
+            let waiting = card_named(&view, tp_file);
+            assert_eq!(waiting.fetching, None);
+            assert!(waiting.queued);
+        }
+    }
+
+    #[test]
+    fn failed_card_drops_its_bar_and_is_not_queued_while_the_batch_runs() {
+        let mut state = batch_state(&["a", "b", "c"]);
+        state.step2.update_selected_download_running = true;
+        drive_download(
+            &mut state,
+            vec![
+                progress(0, 5, 100),
+                progress(1, 5, 100),
+                asset_done(0, 5, Some("HTTP 404")),
+            ],
+        );
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let failed = card_named(&view, "a.tp2");
+        assert_eq!(failed.fetching, None);
+        assert!(!failed.queued);
+        assert_eq!(
+            state.step2.update_selected_download_failed_sources,
+            vec!["a: HTTP 404".to_string()]
+        );
+        assert!(state.step2.update_selected_download_done.contains(&0));
+        let running = card_named(&view, "b.tp2");
+        assert_eq!(running.fetching, Some(FetchPhase::Downloading(Some(0.05))));
+        let waiting = card_named(&view, "c.tp2");
+        assert_eq!(waiting.fetching, None);
+        assert!(waiting.queued);
+    }
+
+    #[test]
+    fn two_asset_mod_reads_full_only_when_both_assets_are_done() {
+        let mut state = batch_state(&["a", "b"]);
+        let second_tab = Step2UpdateAsset {
+            game_tab: "BG2EE".to_string(),
+            ..asset("a.tp2", "a", "2.0")
+        };
+        state.step2.update_selected_update_assets.push(second_tab);
+        state.step2.update_selected_download_running = true;
+        drive_download(
+            &mut state,
+            vec![
+                progress(0, 0, 100),
+                asset_done(0, 100, None),
+                progress(2, 50, 100),
+                progress(1, 10, 100),
+            ],
+        );
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(
+            card_named(&view, "a.tp2").fetching,
+            Some(FetchPhase::Downloading(Some(0.75))),
+            "the first asset alone never reads full"
+        );
+
+        drive_download(&mut state, vec![asset_done(2, 100, None)]);
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let finished = card_named(&view, "a.tp2");
+        assert_eq!(finished.fetching, Some(FetchPhase::Downloading(Some(1.0))));
+        assert!(!finished.queued);
     }
 
     #[test]

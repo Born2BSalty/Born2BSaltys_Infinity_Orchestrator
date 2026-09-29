@@ -23,4 +23,3 @@ pub mod reinstall_route;
 pub mod replaced_owners;
 pub mod settings_sanitizer;
 pub mod start_hooks;
-pub mod stream_downloader;

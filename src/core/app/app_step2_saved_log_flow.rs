@@ -103,10 +103,16 @@ pub(crate) fn advance_pending_saved_log_flow(
             state.modlist_auto_build_waiting_for_install = true;
         }
         state.step2.pending_saved_log_download = false;
-        super::app_step2_update_download::start_step2_update_download(
+        if let Err(refusal) = super::app_step2_update_download::start_step2_update_download(
             state,
             step2_update_download_rx,
-        );
+        ) {
+            tracing::info!(
+                target = "orchestrator",
+                ?refusal,
+                "saved-log update download not started"
+            );
+        }
     }
 
     if state.modlist_auto_build_active

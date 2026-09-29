@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -11,7 +11,7 @@ use crate::app::controller::util::open_in_shell;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
 use crate::app::mod_source_history;
-use crate::app::state::{Step2Selection, WizardState};
+use crate::app::state::{DownloadOrigin, Step2Selection, WizardState};
 use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
 use crate::app::step2_worker::Step2ScanEvent;
 
@@ -40,19 +40,11 @@ pub(crate) fn handle_step2_action(
         }
         Step2Action::OpenUpdatePopup => open_update_popup(state),
         Step2Action::DownloadUpdates => {
-            super::app_step2_update_download::start_step2_update_download_scoped(
-                state,
-                step2_update_download_rx,
-                None,
-            );
+            start_workspace_download(state, step2_update_download_rx, None);
         }
         Step2Action::DownloadUpdateFor { tp2 } => {
             if !crate::app::state::update_pipeline_busy(&state.step2) {
-                super::app_step2_update_download::start_step2_update_download_scoped(
-                    state,
-                    step2_update_download_rx,
-                    Some(tp2),
-                );
+                start_workspace_download(state, step2_update_download_rx, Some(tp2));
             }
         }
         Step2Action::AcceptLatestForExactVersionMisses => {
@@ -94,6 +86,28 @@ pub(crate) fn handle_step2_action(
         } => open_compat_for_component(state, game_tab, tp_file, component_id, component_key),
         Step2Action::SelectBgeeViaLog | Step2Action::SelectBg2eeViaLog => {}
         other => handle_step2_download_source_action(state, step2_update_check_rx, other),
+    }
+}
+
+fn start_workspace_download(
+    state: &mut WizardState,
+    step2_update_download_rx: &mut Option<
+        Receiver<super::app_step2_update_download::Step2UpdateDownloadEvent>,
+    >,
+    scope_tp2: Option<String>,
+) {
+    if let Err(refusal) = super::app_step2_update_download::start_step2_update_download_scoped(
+        state,
+        step2_update_download_rx,
+        scope_tp2,
+        &HashSet::new(),
+        DownloadOrigin::Workspace,
+    ) {
+        tracing::info!(
+            target = "orchestrator",
+            ?refusal,
+            "workspace update download not started"
+        );
     }
 }
 
