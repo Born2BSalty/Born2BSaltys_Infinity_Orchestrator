@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::cell::Cell;
 use std::path::Path;
 
 use eframe::egui;
 
+use crate::ui::install::destination_not_empty::{
+    WARN_BORDER, WARN_INK, paint_warning_triangle, warn_fill,
+};
+use crate::ui::orchestrator::widgets::drawer::{self, DrawerSpec, DrawerWidth};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_height};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_shell_bg, redesign_text_muted, redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_text_muted,
+    redesign_text_primary,
 };
 use crate::ui::workspace::state_workspace::WeiduLogImportForm;
 use crate::ui::workspace::step2::step2_log_confirm::{
-    WeiduLogImportRow, weidu_log_import_rows, weidu_log_import_text,
+    WeiduLogImportRow, weidu_log_import_copy, weidu_log_import_rows,
 };
 use crate::ui::workspace::step2_log_glue;
 
@@ -24,16 +29,16 @@ pub enum ImportOutcome {
     Cancelled,
 }
 
-const ID_SALT: &str = "step2_import_weidu_logs";
-const MAX_WIDTH_PX: f32 = 560.0;
+const ID_SALT: &str = "weidu_log_import_drawer";
+const TITLE: &str = "Import from WeiDU logs";
 const ROW_LABEL_W: f32 = 120.0;
 const ROW_ITEM_GAP: f32 = 8.0;
 const ROW_GAP: f32 = 8.0;
-const FOOTER_H: f32 = 30.0;
 const CHOOSE_LABEL: &str = "Choose\u{2026}";
 const EMPTY_PATH_TEXT: &str = "Click Choose\u{2026} to pick the log";
 const IMPORT_LABEL: &str = "Import";
 const CANCEL_LABEL: &str = "Cancel";
+const WARNING_TITLE: &str = "Selections will be replaced";
 
 #[must_use]
 pub const fn import_enabled(form: &WeiduLogImportForm) -> bool {
@@ -48,45 +53,23 @@ pub fn render(
     form: &mut WeiduLogImportForm,
     start_paths: &WeiduLogImportForm,
 ) -> ImportOutcome {
-    let mut outcome = ImportOutcome::Pending;
-    let (title, body) = weidu_log_import_text(game_install);
+    let (subtitle, warning) = weidu_log_import_copy(game_install);
     let rows = weidu_log_import_rows(game_install);
+    let spec = DrawerSpec {
+        id_salt: ID_SALT,
+        title: TITLE,
+        subtitle: &subtitle,
+        width: DrawerWidth::Form,
+        header_button: None,
+        suppress_escape: false,
+    };
+    let enabled = Cell::new(import_enabled(form));
 
-    let frame = egui::Frame::default()
-        .fill(redesign_shell_bg(palette))
-        .stroke(egui::Stroke::new(
-            REDESIGN_BORDER_WIDTH_PX,
-            redesign_border_strong(palette),
-        ))
-        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-        .inner_margin(egui::Margin::same(18));
-
-    egui::Window::new(title.as_str())
-        .id(egui::Id::new(ID_SALT))
-        .title_bar(false)
-        .resizable(false)
-        .collapsible(false)
-        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-        .frame(frame)
-        .show(ctx, |ui| {
-            ui.set_max_width(MAX_WIDTH_PX);
-
-            ui.label(
-                egui::RichText::new(title.as_str())
-                    .size(15.0)
-                    .family(egui::FontFamily::Name("poppins_medium".into()))
-                    .color(redesign_text_primary(palette)),
-            );
-            ui.add_space(8.0);
-
-            ui.label(
-                egui::RichText::new(body.as_str())
-                    .size(13.0)
-                    .family(egui::FontFamily::Name("poppins_light".into()))
-                    .color(redesign_text_muted(palette)),
-            );
-            ui.add_space(12.0);
-
+    let response = drawer::render(
+        ctx,
+        palette,
+        &spec,
+        |ui| {
             for (index, row) in rows.iter().enumerate() {
                 if index > 0 {
                     ui.add_space(ROW_GAP);
@@ -98,12 +81,57 @@ pub fn render(
                 };
                 render_row(ui, palette, *row, form, start);
             }
+            enabled.set(import_enabled(form));
             ui.add_space(16.0);
+            render_warning_box(ui, &warning);
+        },
+        |ui| render_footer(ui, palette, enabled.get()),
+    );
 
-            outcome = render_footer(ui, palette, import_enabled(form));
+    if response.footer == ImportOutcome::Import {
+        ImportOutcome::Import
+    } else if response.footer == ImportOutcome::Cancelled || response.close_requested {
+        ImportOutcome::Cancelled
+    } else {
+        ImportOutcome::Pending
+    }
+}
+
+fn render_warning_box(ui: &mut egui::Ui, warning: &str) {
+    egui::Frame::default()
+        .fill(warn_fill())
+        .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, WARN_BORDER))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .inner_margin(egui::Margin {
+            left: 14,
+            right: 14,
+            top: 10,
+            bottom: 10,
+        })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                let (icon_rect, _) =
+                    ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
+                paint_warning_triangle(ui.painter(), icon_rect.center(), WARN_INK);
+                ui.label(
+                    egui::RichText::new(WARNING_TITLE)
+                        .size(13.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(WARN_INK),
+                );
+            });
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new(warning)
+                    .size(12.0)
+                    .family(egui::FontFamily::Name("poppins_light".into()))
+                    .color(egui::Color32::from_rgba_unmultiplied(
+                        0xff, 0xff, 0xff, 0xCC,
+                    )),
+            );
         });
-
-    outcome
 }
 
 fn render_row(
@@ -184,47 +212,40 @@ fn paint_row_path(ui: &mut egui::Ui, palette: ThemePalette, path: Option<&Path>,
 }
 
 fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, enabled: bool) -> ImportOutcome {
-    let mut outcome = ImportOutcome::Pending;
-    ui.allocate_ui_with_layout(
-        egui::vec2(ui.available_width(), FOOTER_H),
-        egui::Layout::right_to_left(egui::Align::Center),
-        |ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            if render_import_button(ui, palette, enabled) {
-                outcome = ImportOutcome::Import;
-            }
-            if redesign_btn(
+    let cancel_clicked = redesign_btn(
+        ui,
+        palette,
+        CANCEL_LABEL,
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked();
+    let import_clicked = ui
+        .with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            redesign_btn(
                 ui,
                 palette,
-                CANCEL_LABEL,
+                IMPORT_LABEL,
                 BtnOpts {
+                    primary: true,
                     small: true,
+                    disabled: !enabled,
                     ..Default::default()
                 },
             )
             .clicked()
-            {
-                outcome = ImportOutcome::Cancelled;
-            }
-        },
-    );
-    outcome
-}
-
-fn render_import_button(ui: &mut egui::Ui, palette: ThemePalette, enabled: bool) -> bool {
-    redesign_btn(
-        ui,
-        palette,
-        IMPORT_LABEL,
-        BtnOpts {
-            small: true,
-            danger: true,
-            disabled: !enabled,
-            ..Default::default()
-        },
-    )
-    .clicked()
-        && enabled
+        })
+        .inner
+        && enabled;
+    if import_clicked {
+        ImportOutcome::Import
+    } else if cancel_clicked {
+        ImportOutcome::Cancelled
+    } else {
+        ImportOutcome::Pending
+    }
 }
 
 #[cfg(test)]

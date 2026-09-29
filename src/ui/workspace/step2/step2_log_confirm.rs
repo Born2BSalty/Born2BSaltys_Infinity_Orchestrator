@@ -10,20 +10,20 @@ pub struct WeiduLogImportRow {
 }
 
 #[must_use]
-pub fn weidu_log_import_text(game_install: &str) -> (String, String) {
+pub fn weidu_log_import_copy(game_install: &str) -> (String, String) {
     match game_authority::tabs_for_install(game_install) {
         [tab] => {
-            let title = format!("Replace {tab} selections from a WeiDU log?");
-            let body = format!(
+            let subtitle = format!("{tab} weidu.log");
+            let warning = format!(
                 "This will overwrite every component selection on the {tab} bucket \
                  with the contents of the chosen weidu.log. Make sure the log was \
                  produced from the same mod versions you have downloaded — otherwise \
                  components may resolve to the wrong rows or fail to install."
             );
-            (title, body)
+            (subtitle, warning)
         }
         _ => (
-            "Replace BGEE and BG2EE selections from WeiDU logs?".to_string(),
+            "BGEE and BG2EE weidu.log".to_string(),
             "This will overwrite every component selection on the BGEE and BG2EE \
              buckets with the contents of the chosen weidu.logs. Make sure the logs \
              were produced from the same mod versions you have downloaded — \
@@ -51,29 +51,29 @@ mod tests {
 
     #[test]
     fn single_log_games_keep_todays_copy() {
-        let (title, body) = weidu_log_import_text("BGEE");
-        assert_eq!(title, "Replace BGEE selections from a WeiDU log?");
+        let (subtitle, warning) = weidu_log_import_copy("BGEE");
+        assert_eq!(subtitle, "BGEE weidu.log");
         assert_eq!(
-            body,
+            warning,
             "This will overwrite every component selection on the BGEE \
              bucket with the contents of the chosen weidu.log. Make sure \
              the log was produced from the same mod versions you have \
              downloaded — otherwise components may resolve to the wrong \
              rows or fail to install."
         );
-        let (iwd_title, iwd_body) = weidu_log_import_text("IWDEE");
-        assert_eq!(iwd_title, "Replace IWDEE selections from a WeiDU log?");
-        assert!(iwd_body.contains("on the IWDEE bucket"));
-        let (bg2_title, _) = weidu_log_import_text("BG2EE");
-        assert_eq!(bg2_title, "Replace BG2EE selections from a WeiDU log?");
+        let (iwd_subtitle, iwd_warning) = weidu_log_import_copy("IWDEE");
+        assert_eq!(iwd_subtitle, "IWDEE weidu.log");
+        assert!(iwd_warning.contains("on the IWDEE bucket"));
+        let (bg2_subtitle, _) = weidu_log_import_copy("BG2EE");
+        assert_eq!(bg2_subtitle, "BG2EE weidu.log");
     }
 
     #[test]
     fn eet_copy_names_both_tabs() {
-        let (title, body) = weidu_log_import_text("EET");
-        assert_eq!(title, "Replace BGEE and BG2EE selections from WeiDU logs?");
+        let (subtitle, warning) = weidu_log_import_copy("EET");
+        assert_eq!(subtitle, "BGEE and BG2EE weidu.log");
         assert_eq!(
-            body,
+            warning,
             "This will overwrite every component selection on the BGEE and \
              BG2EE buckets with the contents of the chosen weidu.logs. Make \
              sure the logs were produced from the same mod versions you have \

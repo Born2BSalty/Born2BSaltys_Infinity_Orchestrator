@@ -145,6 +145,35 @@ fn reapply_toast_text(selected: usize, still_missing: usize) -> String {
     }
 }
 
+#[must_use]
+pub(crate) const fn weidu_log_import_complete_without_fetch(
+    step2: &Step2State,
+    scan_rx_live: bool,
+) -> bool {
+    step2.weidu_log_import.is_some()
+        && !step2.pending_weidu_log_reapply
+        && step2.update_selected_popup_open
+        && !step2.versions_ui.auto_check_pending
+        && step2.update_selected_has_run
+        && !step2.update_selected_check_running
+        && !step2.update_selected_download_running
+        && !step2.update_selected_extract_running
+        && !step2.is_scanning
+        && !scan_rx_live
+        && step2.update_selected_update_assets.is_empty()
+        && step2.log_pending_downloads.is_empty()
+}
+
+fn finish_weidu_log_import(orchestrator: &mut OrchestratorApp) {
+    close_versions_drawer(&mut orchestrator.wizard_state.step2);
+    let step2 = &orchestrator.wizard_state.step2;
+    let toast = reapply_toast_text(
+        checked_component_count(step2),
+        step2.log_pending_downloads.len(),
+    );
+    orchestrator.notification_manager.success(toast);
+}
+
 pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
     if !matches!(
         orchestrator.nav,
@@ -156,10 +185,13 @@ pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
         orchestrator.wizard_state.step2.pending_weidu_log_reapply = false;
         return;
     }
-    if !weidu_log_reapply_ready(
-        &orchestrator.wizard_state.step2,
-        orchestrator.step2_scan_rx.is_some(),
-    ) {
+    let scan_rx_live = orchestrator.step2_scan_rx.is_some();
+    if weidu_log_import_complete_without_fetch(&orchestrator.wizard_state.step2, scan_rx_live) {
+        orchestrator.wizard_state.step2.weidu_log_import = None;
+        finish_weidu_log_import(orchestrator);
+        return;
+    }
+    if !weidu_log_reapply_ready(&orchestrator.wizard_state.step2, scan_rx_live) {
         return;
     }
     let record = orchestrator.wizard_state.step2.weidu_log_import.take();
@@ -169,13 +201,7 @@ pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
     };
     apply_recorded_logs(orchestrator, &record);
     orchestrator.mark_workspace_dirty();
-    close_versions_drawer(&mut orchestrator.wizard_state.step2);
-    let step2 = &orchestrator.wizard_state.step2;
-    let toast = reapply_toast_text(
-        checked_component_count(step2),
-        step2.log_pending_downloads.len(),
-    );
-    orchestrator.notification_manager.success(toast);
+    finish_weidu_log_import(orchestrator);
 }
 
 #[cfg(test)]
@@ -274,6 +300,46 @@ mod tests {
             "pending downloads: {:?}",
             step2.log_pending_downloads
         );
+        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
+    }
+
+    #[test]
+    fn import_with_nothing_to_fetch_closes_the_drawer_and_toasts() {
+        let mut app = OrchestratorApp::new_isolated_for_test("logimport-nofetch");
+        app.nav = NavDestination::Workspace {
+            modlist_id: Some("LOGIMPORTNOFETCH".to_string()),
+        };
+        let step2 = &mut app.wizard_state.step2;
+        step2.weidu_log_import = Some(WeiduLogImport {
+            first: Some(PathBuf::from("first.log")),
+            second: None,
+        });
+        step2.update_selected_popup_open = true;
+        step2.update_selected_has_run = true;
+        step2
+            .log_pending_downloads
+            .push(crate::app::state::Step2LogPendingDownload {
+                game_tab: "BGEE".to_string(),
+                tp_file: "SETUP-X.TP2".to_string(),
+                label: "x".to_string(),
+                requested_version: None,
+            });
+        let toasts_before = app.notification_manager.history().len();
+
+        advance_pending_weidu_log_reapply(&mut app);
+        assert!(app.wizard_state.step2.weidu_log_import.is_some());
+        assert!(app.wizard_state.step2.update_selected_popup_open);
+        assert_eq!(app.notification_manager.history().len(), toasts_before);
+
+        app.wizard_state.step2.log_pending_downloads.clear();
+        app.wizard_state.step2.versions_ui.auto_check_pending = true;
+        advance_pending_weidu_log_reapply(&mut app);
+        assert!(app.wizard_state.step2.weidu_log_import.is_some());
+
+        app.wizard_state.step2.versions_ui.auto_check_pending = false;
+        advance_pending_weidu_log_reapply(&mut app);
+        assert_eq!(app.wizard_state.step2.weidu_log_import, None);
+        assert!(!app.wizard_state.step2.update_selected_popup_open);
         assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
     }
 
