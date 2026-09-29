@@ -10,6 +10,7 @@ use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_WIDTH_PX, redesign_border_strong, redesign_text_disabled, redesign_text_primary,
 };
+use crate::ui::shared::selected_row::selectable_row;
 use crate::ui::step2::format_step2::{
     colored_component_widget_text, format_component_row_label,
     format_component_row_label_with_display,
@@ -212,7 +213,7 @@ fn render_component_label_area(
             .layout(egui::Layout::left_to_right(egui::Align::Center)),
         |ui| {
             ui.set_max_width(row_w);
-            let mut row = ui.selectable_label(view.is_selected, widget_text);
+            let mut row = selectable_row(ui, ctx.palette, view.is_selected, widget_text);
             if *ctx.jump_to_selected_requested && view.is_selected {
                 ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
                 *ctx.jump_to_selected_requested = false;

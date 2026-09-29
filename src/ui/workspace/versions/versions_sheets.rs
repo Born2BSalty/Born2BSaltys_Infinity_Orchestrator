@@ -590,7 +590,12 @@ fn render_fork_open_icon(
         } else {
             redesign_text_muted(palette)
         };
-        versions_icons::paint_external_link(ui.painter(), rect.center(), color);
+        versions_icons::paint_glyph(
+            ui.painter(),
+            rect.center(),
+            versions_icons::GLYPH_EXTERNAL_LINK,
+            color,
+        );
     }
     response.on_hover_text("Open on GitHub")
 }

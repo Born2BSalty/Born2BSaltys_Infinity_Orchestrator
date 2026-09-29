@@ -3,8 +3,31 @@
 
 use eframe::egui;
 
+pub(crate) const GLYPH_LOCK: &str = "\u{F023}";
+pub(crate) const GLYPH_UNLOCK: &str = "\u{F09C}";
+pub(crate) const GLYPH_EXTERNAL_LINK: &str = "\u{F08E}";
+const GLYPH_FONT_SIZE: f32 = 14.0;
+
 fn icon_stroke(color: egui::Color32) -> egui::Stroke {
     egui::Stroke::new(1.6_f32, color)
+}
+
+pub(crate) fn paint_glyph(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    glyph: &str,
+    color: egui::Color32,
+) {
+    painter.text(
+        center,
+        egui::Align2::CENTER_CENTER,
+        glyph,
+        egui::FontId::new(
+            GLYPH_FONT_SIZE,
+            egui::FontFamily::Name("firacode_nerd".into()),
+        ),
+        color,
+    );
 }
 
 pub(crate) fn paint_down_arrow(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
@@ -39,94 +62,6 @@ pub(crate) fn paint_down_arrow(painter: &egui::Painter, center: egui::Pos2, colo
         ],
         stroke,
     );
-}
-
-pub(crate) fn paint_lock(
-    painter: &egui::Painter,
-    center: egui::Pos2,
-    color: egui::Color32,
-    locked: bool,
-) {
-    let stroke = icon_stroke(color);
-    let body = egui::Rect::from_center_size(center + egui::vec2(0.0, 2.5), egui::vec2(11.0, 7.5));
-    painter.rect_stroke(
-        body,
-        egui::CornerRadius::same(2),
-        stroke,
-        egui::StrokeKind::Inside,
-    );
-
-    if locked {
-        paint_closed_shackle(painter, body, stroke);
-    } else {
-        paint_open_shackle(painter, body, stroke);
-    }
-}
-
-const SHACKLE_R: f32 = 4.0;
-const SHACKLE_LEG_INSET: f32 = 2.5;
-const SHACKLE_ARC_STEPS: u8 = 12;
-const OPEN_SHACKLE_ARC_END: u8 = 9;
-const OPEN_SHACKLE_SHIFT: egui::Vec2 = egui::vec2(-1.5, -1.5);
-
-fn shackle_arc(center: egui::Pos2, last_step: u8) -> Vec<egui::Pos2> {
-    (0_u8..=last_step)
-        .map(|i| {
-            let t = std::f32::consts::PI * (1.0 - f32::from(i) / f32::from(SHACKLE_ARC_STEPS));
-            egui::pos2(
-                t.cos().mul_add(SHACKLE_R, center.x),
-                t.sin().mul_add(-SHACKLE_R, center.y),
-            )
-        })
-        .collect()
-}
-
-fn shackle_center(body: egui::Rect) -> egui::Pos2 {
-    let left_leg_x = body.left() + SHACKLE_LEG_INSET;
-    let right_leg_x = body.right() - SHACKLE_LEG_INSET;
-    egui::pos2(left_leg_x.midpoint(right_leg_x), body.top())
-}
-
-fn paint_closed_shackle(painter: &egui::Painter, body: egui::Rect, stroke: egui::Stroke) {
-    let center = shackle_center(body);
-    painter.line(shackle_arc(center, SHACKLE_ARC_STEPS), stroke);
-    for leg_x in [
-        body.left() + SHACKLE_LEG_INSET,
-        body.right() - SHACKLE_LEG_INSET,
-    ] {
-        painter.line_segment(
-            [egui::pos2(leg_x, center.y), egui::pos2(leg_x, body.top())],
-            stroke,
-        );
-    }
-}
-
-fn paint_open_shackle(painter: &egui::Painter, body: egui::Rect, stroke: egui::Stroke) {
-    let center = shackle_center(body) + OPEN_SHACKLE_SHIFT;
-    let arc = shackle_arc(center, OPEN_SHACKLE_ARC_END);
-    let leg_top = arc[0];
-    painter.line(arc, stroke);
-    painter.line_segment([leg_top, egui::pos2(leg_top.x, body.top())], stroke);
-}
-
-pub(crate) fn paint_external_link(
-    painter: &egui::Painter,
-    center: egui::Pos2,
-    color: egui::Color32,
-) {
-    let stroke = icon_stroke(color);
-    let box_rect = egui::Rect::from_min_size(center + egui::vec2(-6.0, -1.0), egui::vec2(9.0, 8.0));
-    painter.rect_stroke(
-        box_rect,
-        egui::CornerRadius::same(2),
-        stroke,
-        egui::StrokeKind::Inside,
-    );
-    let arrow_from = center + egui::vec2(-1.0, 0.0);
-    let arrow_to = center + egui::vec2(6.0, -7.0);
-    painter.line_segment([arrow_from, arrow_to], stroke);
-    painter.line_segment([arrow_to, egui::pos2(arrow_to.x - 5.0, arrow_to.y)], stroke);
-    painter.line_segment([arrow_to, egui::pos2(arrow_to.x, arrow_to.y + 5.0)], stroke);
 }
 
 pub(crate) fn paint_kebab(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {

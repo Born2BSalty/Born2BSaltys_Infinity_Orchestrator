@@ -520,7 +520,16 @@ fn render_lock_icon(
         tp2,
         "lock",
         move |painter, center, resolved_color| {
-            versions_icons::paint_lock(painter, center, resolved_color, locked);
+            versions_icons::paint_glyph(
+                painter,
+                center,
+                if locked {
+                    versions_icons::GLYPH_LOCK
+                } else {
+                    versions_icons::GLYPH_UNLOCK
+                },
+                resolved_color,
+            );
         },
         color,
     )
@@ -539,7 +548,14 @@ fn render_open_icon(
         rect,
         tp2,
         "open",
-        versions_icons::paint_external_link,
+        |painter, center, color| {
+            versions_icons::paint_glyph(
+                painter,
+                center,
+                versions_icons::GLYPH_EXTERNAL_LINK,
+                color,
+            );
+        },
         None,
     )
     .on_hover_text("Open source in browser")
