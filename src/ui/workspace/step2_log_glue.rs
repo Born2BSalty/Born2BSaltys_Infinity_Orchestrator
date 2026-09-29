@@ -108,11 +108,10 @@ pub fn import_weidu_logs(orchestrator: &mut OrchestratorApp, form: WeiduLogImpor
     orchestrator.wizard_state.step2.weidu_log_import = Some(record);
     orchestrator.mark_workspace_dirty();
     handle_step2_via_bio(Step2Action::OpenUpdatePopup, orchestrator);
-    orchestrator
-        .wizard_state
-        .step2
-        .versions_ui
-        .auto_check_pending = true;
+    let step2 = &mut orchestrator.wizard_state.step2;
+    step2.versions_ui.auto_check_pending = true;
+    step2.update_selected_has_run = false;
+    step2.weidu_log_import_awaiting_check = true;
 }
 
 #[must_use]
@@ -146,11 +145,9 @@ fn reapply_toast_text(selected: usize, still_missing: usize) -> String {
 }
 
 #[must_use]
-pub(crate) const fn weidu_log_import_complete_without_fetch(
-    step2: &Step2State,
-    scan_rx_live: bool,
-) -> bool {
+pub(crate) const fn weidu_log_import_check_settled(step2: &Step2State, scan_rx_live: bool) -> bool {
     step2.weidu_log_import.is_some()
+        && step2.weidu_log_import_awaiting_check
         && !step2.pending_weidu_log_reapply
         && step2.update_selected_popup_open
         && !step2.versions_ui.auto_check_pending
@@ -160,8 +157,33 @@ pub(crate) const fn weidu_log_import_complete_without_fetch(
         && !step2.update_selected_extract_running
         && !step2.is_scanning
         && !scan_rx_live
-        && step2.update_selected_update_assets.is_empty()
-        && step2.log_pending_downloads.is_empty()
+}
+
+#[must_use]
+pub(crate) const fn weidu_log_import_check_found_nothing_to_fetch(step2: &Step2State) -> bool {
+    step2.update_selected_update_assets.is_empty()
+        && step2.update_selected_failed_sources.is_empty()
+        && step2
+            .update_selected_exact_version_failed_sources
+            .is_empty()
+}
+
+fn settle_weidu_log_import_check(orchestrator: &mut OrchestratorApp) {
+    let step2 = &mut orchestrator.wizard_state.step2;
+    step2.weidu_log_import_awaiting_check = false;
+    if !weidu_log_import_check_found_nothing_to_fetch(step2) {
+        return;
+    }
+    let Some(record) = step2.weidu_log_import.clone() else {
+        return;
+    };
+    apply_recorded_logs(orchestrator, &record);
+    orchestrator.mark_workspace_dirty();
+    let step2 = &mut orchestrator.wizard_state.step2;
+    if step2.log_pending_downloads.is_empty() {
+        step2.weidu_log_import = None;
+        finish_weidu_log_import(orchestrator);
+    }
 }
 
 fn finish_weidu_log_import(orchestrator: &mut OrchestratorApp) {
@@ -181,14 +203,15 @@ pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
             modlist_id: Some(_)
         }
     ) {
-        orchestrator.wizard_state.step2.weidu_log_import = None;
-        orchestrator.wizard_state.step2.pending_weidu_log_reapply = false;
+        let step2 = &mut orchestrator.wizard_state.step2;
+        step2.weidu_log_import = None;
+        step2.pending_weidu_log_reapply = false;
+        step2.weidu_log_import_awaiting_check = false;
         return;
     }
     let scan_rx_live = orchestrator.step2_scan_rx.is_some();
-    if weidu_log_import_complete_without_fetch(&orchestrator.wizard_state.step2, scan_rx_live) {
-        orchestrator.wizard_state.step2.weidu_log_import = None;
-        finish_weidu_log_import(orchestrator);
+    if weidu_log_import_check_settled(&orchestrator.wizard_state.step2, scan_rx_live) {
+        settle_weidu_log_import_check(orchestrator);
         return;
     }
     if !weidu_log_reapply_ready(&orchestrator.wizard_state.step2, scan_rx_live) {
@@ -303,44 +326,88 @@ mod tests {
         assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
     }
 
-    #[test]
-    fn import_with_nothing_to_fetch_closes_the_drawer_and_toasts() {
-        let mut app = OrchestratorApp::new_isolated_for_test("logimport-nofetch");
+    fn app_awaiting_the_forced_check(tag: &str, log_path: PathBuf) -> OrchestratorApp {
+        let mut app = OrchestratorApp::new_isolated_for_test(tag);
         app.nav = NavDestination::Workspace {
-            modlist_id: Some("LOGIMPORTNOFETCH".to_string()),
+            modlist_id: Some("LOGIMPORTCHECK".to_string()),
         };
         let step2 = &mut app.wizard_state.step2;
         step2.weidu_log_import = Some(WeiduLogImport {
-            first: Some(PathBuf::from("first.log")),
+            first: Some(log_path),
             second: None,
         });
+        step2.weidu_log_import_awaiting_check = true;
         step2.update_selected_popup_open = true;
         step2.update_selected_has_run = true;
-        step2
-            .log_pending_downloads
-            .push(crate::app::state::Step2LogPendingDownload {
-                game_tab: "BGEE".to_string(),
-                tp_file: "SETUP-X.TP2".to_string(),
-                label: "x".to_string(),
-                requested_version: None,
-            });
+        app
+    }
+
+    #[test]
+    fn import_with_nothing_to_fetch_reapplies_then_closes_the_drawer_and_toasts() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", "// log of current files installed\n");
+        let mut app = app_awaiting_the_forced_check("logimport-nofetch", log_path);
         let toasts_before = app.notification_manager.history().len();
 
+        app.wizard_state.step2.update_selected_has_run = false;
+        advance_pending_weidu_log_reapply(&mut app);
+        assert!(app.wizard_state.step2.weidu_log_import_awaiting_check);
+
+        app.wizard_state.step2.update_selected_has_run = true;
+        app.wizard_state.step2.versions_ui.auto_check_pending = true;
+        advance_pending_weidu_log_reapply(&mut app);
+        assert!(app.wizard_state.step2.weidu_log_import_awaiting_check);
+
+        app.wizard_state.step2.versions_ui.auto_check_pending = false;
+        advance_pending_weidu_log_reapply(&mut app);
+        let step2 = &app.wizard_state.step2;
+        assert!(!step2.weidu_log_import_awaiting_check);
+        assert_eq!(step2.weidu_log_import, None);
+        assert!(!step2.update_selected_popup_open);
+        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
+    }
+
+    #[test]
+    fn import_check_with_a_missing_mod_keeps_the_drawer_and_the_record_once() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = app_awaiting_the_forced_check("logimport-missing", log_path);
+        let toasts_before = app.notification_manager.history().len();
+
+        advance_pending_weidu_log_reapply(&mut app);
+        let step2 = &app.wizard_state.step2;
+        assert!(!step2.weidu_log_import_awaiting_check);
+        assert!(step2.weidu_log_import.is_some());
+        assert!(step2.update_selected_popup_open);
+        assert!(
+            step2
+                .log_pending_downloads
+                .iter()
+                .any(|pending| pending.tp_file.eq_ignore_ascii_case("SETUP-X.TP2"))
+        );
+        assert_eq!(app.notification_manager.history().len(), toasts_before);
+
+        app.wizard_state.step2.log_pending_downloads.clear();
         advance_pending_weidu_log_reapply(&mut app);
         assert!(app.wizard_state.step2.weidu_log_import.is_some());
         assert!(app.wizard_state.step2.update_selected_popup_open);
         assert_eq!(app.notification_manager.history().len(), toasts_before);
+    }
 
-        app.wizard_state.step2.log_pending_downloads.clear();
-        app.wizard_state.step2.versions_ui.auto_check_pending = true;
-        advance_pending_weidu_log_reapply(&mut app);
-        assert!(app.wizard_state.step2.weidu_log_import.is_some());
+    #[test]
+    fn import_check_with_failures_keeps_the_drawer_open() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", "// log of current files installed\n");
+        let mut app = app_awaiting_the_forced_check("logimport-failed", log_path);
+        app.wizard_state.step2.update_selected_failed_sources = vec!["x".to_string()];
+        let toasts_before = app.notification_manager.history().len();
 
-        app.wizard_state.step2.versions_ui.auto_check_pending = false;
         advance_pending_weidu_log_reapply(&mut app);
-        assert_eq!(app.wizard_state.step2.weidu_log_import, None);
-        assert!(!app.wizard_state.step2.update_selected_popup_open);
-        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
+        let step2 = &app.wizard_state.step2;
+        assert!(!step2.weidu_log_import_awaiting_check);
+        assert!(step2.weidu_log_import.is_some());
+        assert!(step2.update_selected_popup_open);
+        assert_eq!(app.notification_manager.history().len(), toasts_before);
     }
 
     #[test]
@@ -389,6 +456,8 @@ mod tests {
         );
 
         assert!(app.wizard_state.step2.versions_ui.auto_check_pending);
+        assert!(app.wizard_state.step2.weidu_log_import_awaiting_check);
+        assert!(!app.wizard_state.step2.update_selected_has_run);
     }
 
     #[test]

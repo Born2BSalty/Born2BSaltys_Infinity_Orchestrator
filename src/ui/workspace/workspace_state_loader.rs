@@ -22,6 +22,7 @@ pub fn populate_wizard_state_from_workspace(
     wizard_state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
     wizard_state.step2.weidu_log_import = None;
     wizard_state.step2.pending_weidu_log_reapply = false;
+    wizard_state.step2.weidu_log_import_awaiting_check = false;
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
     wizard_state.step2.active_game_tab = game_authority::normalized_tab(
         &wizard_state.step1.game_install,
