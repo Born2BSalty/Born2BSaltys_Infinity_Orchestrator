@@ -84,7 +84,10 @@ pub(crate) fn handle_step2_action(
             component_id,
             component_key,
         } => open_compat_for_component(state, game_tab, tp_file, component_id, component_key),
-        Step2Action::SelectBgeeViaLog | Step2Action::SelectBg2eeViaLog => {}
+        Step2Action::SelectBgeeViaLog
+        | Step2Action::SelectBg2eeViaLog
+        | Step2Action::ImportWeiduLogs
+        | Step2Action::DownloadUpdatesAndApplyLogs => {}
         other => handle_step2_download_source_action(state, step2_update_check_rx, other),
     }
 }

@@ -51,8 +51,8 @@ pub const STEP2_JUMP_SELECTED: &str = "Scroll to the currently selected row in t
 pub const STEP2_MODS_COMPONENTS: &str =
     "Active game tab controls which component list and log-apply action are used.";
 pub const STEP2_SELECT_BGEE_LOG: &str = "Read BGEE WeiDU log and tick matching components.";
-pub const STEP2_SELECT_IWDEE_LOG: &str = "Read IWDEE WeiDU log and tick matching components.";
 pub const STEP2_SELECT_BG2EE_LOG: &str = "Read BG2EE WeiDU log and tick matching components.";
+pub const STEP2_IMPORT_WEIDU_LOGS: &str = "Read your WeiDU logs and tick matching components.";
 
 pub const STEP3_EXPORT_DIAGNOSTICS: &str = "Export diagnostics from current state.";
 pub const STEP3_EXPAND_ALL: &str = "Expand all parent blocks.";

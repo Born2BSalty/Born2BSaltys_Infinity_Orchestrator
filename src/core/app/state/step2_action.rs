@@ -14,10 +14,12 @@ pub enum Step2Action {
     CancelScan,
     SelectBgeeViaLog,
     SelectBg2eeViaLog,
+    ImportWeiduLogs,
     OpenUpdatePopup,
     PreviewUpdateSelected,
     PreviewUpdateSelectedMod,
     DownloadUpdates,
+    DownloadUpdatesAndApplyLogs,
     DownloadUpdateFor {
         tp2: String,
     },

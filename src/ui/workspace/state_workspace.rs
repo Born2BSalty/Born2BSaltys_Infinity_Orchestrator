@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::app::state::Step2Selection;
@@ -15,9 +16,15 @@ pub struct WorkspaceStep2State {
     pub was_scanning: bool,
     pub rescan_drop_warning: Option<String>,
     pub resume_pending: bool,
-    pub pending_weidu_log_confirm: Option<bool>,
+    pub weidu_log_import_form: Option<WeiduLogImportForm>,
     pub pending_update_download_snapshot: Option<RescanSnapshot>,
     pub pending_global_mods_scan: Option<()>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WeiduLogImportForm {
+    pub first: Option<PathBuf>,
+    pub second: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

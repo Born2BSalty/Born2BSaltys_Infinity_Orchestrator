@@ -306,6 +306,7 @@ pub(crate) fn poll_step2_update_download(
     state.step2.update_selected_download_finished.clear();
     let Some(result) = finished else {
         state.step2.update_selected_download_scope = None;
+        state.step2.pending_weidu_log_reapply = false;
         state.step2.scan_status = "Download updates failed: worker disconnected".to_string();
         return DownloadPoll::Idle;
     };
@@ -1829,6 +1830,7 @@ mod tests {
     fn disconnected_worker_keeps_the_byte_map_and_clears_the_scope() {
         let mut state = WizardState::default();
         state.step2.update_selected_download_running = true;
+        state.step2.pending_weidu_log_reapply = true;
         state.step2.update_selected_download_scope = Some("a".to_string());
         let (tx, rx) = mpsc::channel();
         tx.send(Step2UpdateDownloadEvent::AssetProgress {
@@ -1847,6 +1849,7 @@ mod tests {
 
         assert!(rx.is_none());
         assert!(!state.step2.update_selected_download_running);
+        assert!(!state.step2.pending_weidu_log_reapply);
         assert_eq!(state.step2.update_selected_download_scope, None);
         assert_eq!(
             state.step2.update_selected_download_bytes.get(&0),

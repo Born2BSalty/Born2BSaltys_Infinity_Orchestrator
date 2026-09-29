@@ -20,6 +20,8 @@ pub fn populate_wizard_state_from_workspace(
 ) {
     wizard_state.step2.update_selected_popup_open = false;
     wizard_state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
+    wizard_state.step2.weidu_log_import = None;
+    wizard_state.step2.pending_weidu_log_reapply = false;
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
     wizard_state.step2.active_game_tab = game_authority::normalized_tab(
         &wizard_state.step1.game_install,
@@ -1296,10 +1298,14 @@ mod tests {
 
     impl TempRoot {
         fn new() -> Self {
+            Self::named("bio_loader_global")
+        }
+
+        fn named(prefix: &str) -> Self {
             use std::sync::atomic::{AtomicU64, Ordering};
             static N: AtomicU64 = AtomicU64::new(0);
             let root = Self(std::env::temp_dir().join(format!(
-                "bio_loader_global_{}_{}",
+                "{prefix}_{}_{}",
                 std::process::id(),
                 N.fetch_add(1, Ordering::Relaxed)
             )));
@@ -1358,6 +1364,30 @@ mod tests {
         let root = TempRoot::new();
         let ws = open_list(&root, ModsSource::GlobalModsFolder, "");
         assert_eq!(ws.step1.mods_folder, root.path_of("scratch"));
+    }
+
+    #[test]
+    fn opening_a_list_drops_a_waiting_log_import() {
+        let root = TempRoot::named("bio_loader_logimport");
+        let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let mut list = entry(Game::EET);
+        list.destination_folder = root.path_of("dest");
+        let mut ws = WizardState::default();
+        ws.step2.weidu_log_import = Some(crate::app::state::WeiduLogImport {
+            first: Some(root.0.join("weidu.log")),
+            second: None,
+        });
+        ws.step2.pending_weidu_log_reapply = true;
+
+        populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &list,
+            &store,
+            &mut ws,
+        );
+
+        assert_eq!(ws.step2.weidu_log_import, None);
+        assert!(!ws.step2.pending_weidu_log_reapply);
     }
 
     #[test]

@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::app_step2_log::{resolve_bg2_weidu_log_path, resolve_bgee_weidu_log_path};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
@@ -13,10 +14,11 @@ use crate::ui::shared::redesign_tokens::{
 };
 use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step2::action_step2::Step2Action;
+use crate::ui::workspace::state_workspace::WeiduLogImportForm;
 use crate::ui::workspace::step_action_dispatch;
+use crate::ui::workspace::step2::step2_log_import_dialog::{self, ImportOutcome};
 use crate::ui::workspace::step2::{
-    step2_global_mods_confirm, step2_log_confirm, step2_rescan_reconcile, step2_search,
-    step2_tab_row,
+    step2_global_mods_confirm, step2_rescan_reconcile, step2_search, step2_tab_row,
 };
 
 const TITLE_H: f32 = 24.0;
@@ -104,7 +106,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> Option<S
 
     let ctx = ui.ctx().clone();
     render_popups(ui, orchestrator, &ctx, &mut action, palette);
-    if let Some(a) = render_weidu_log_confirm(orchestrator, &ctx) {
+    if let Some(a) = render_weidu_log_import_form(orchestrator, &ctx) {
         action = Some(a);
     }
     if let Some(a) = render_global_mods_scan_confirm(orchestrator, &ctx) {
@@ -451,36 +453,42 @@ fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui:
     ui.allocate_rect(rect, egui::Sense::hover());
 }
 
-fn render_weidu_log_confirm(
+fn render_weidu_log_import_form(
     orchestrator: &mut OrchestratorApp,
     ctx: &egui::Context,
 ) -> Option<Step2Action> {
-    let bgee = orchestrator
+    let mut form = orchestrator
         .workspace_view
         .step2
-        .pending_weidu_log_confirm?;
+        .weidu_log_import_form
+        .clone()?;
+    let step1 = &orchestrator.wizard_state.step1;
+    let start_paths = WeiduLogImportForm {
+        first: resolve_bgee_weidu_log_path(step1),
+        second: resolve_bg2_weidu_log_path(step1),
+    };
 
-    let (title, body) = step2_log_confirm::weidu_log_dialog_text(
-        bgee,
-        &orchestrator.wizard_state.step1.game_install,
+    let outcome = step2_log_import_dialog::render(
+        ctx,
+        orchestrator.theme_palette,
+        &step1.game_install,
+        &mut form,
+        &start_paths,
     );
-    let dialog = step2_log_confirm::weidu_log_confirm(&title, &body);
-    let outcome = confirm_dialog::render(ctx, orchestrator.theme_palette, &dialog);
 
     match outcome {
-        ConfirmOutcome::Confirmed => {
-            orchestrator.workspace_view.step2.pending_weidu_log_confirm = None;
-            Some(if bgee {
-                Step2Action::SelectBgeeViaLog
-            } else {
-                Step2Action::SelectBg2eeViaLog
-            })
+        ImportOutcome::Import => {
+            orchestrator.workspace_view.step2.weidu_log_import_form = Some(form);
+            Some(Step2Action::ImportWeiduLogs)
         }
-        ConfirmOutcome::Cancelled => {
-            orchestrator.workspace_view.step2.pending_weidu_log_confirm = None;
+        ImportOutcome::Cancelled => {
+            orchestrator.workspace_view.step2.weidu_log_import_form = None;
             None
         }
-        ConfirmOutcome::Pending => None,
+        ImportOutcome::Pending => {
+            orchestrator.workspace_view.step2.weidu_log_import_form = Some(form);
+            None
+        }
     }
 }
 

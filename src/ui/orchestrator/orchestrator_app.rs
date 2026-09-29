@@ -760,6 +760,7 @@ impl OrchestratorApp {
             &mut self.step2_update_check_rx,
             &mut self.step2_update_download_rx,
         );
+        crate::ui::workspace::step2_log_glue::advance_pending_weidu_log_reapply(self);
         self.reseed_added_mods_when_settled(seed_watch);
     }
 
@@ -846,6 +847,9 @@ impl OrchestratorApp {
                     &mut self.step2_update_extract_rx,
                     None,
                 );
+                if !started {
+                    self.wizard_state.step2.pending_weidu_log_reapply = false;
+                }
                 tracing::info!(target = "orchestrator", started, "workspace extract start");
             }
         }

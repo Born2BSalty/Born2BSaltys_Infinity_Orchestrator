@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::app::github_forks_list::ForksListState;
@@ -15,6 +16,12 @@ pub enum DownloadOrigin {
     #[default]
     Workspace,
     InstallPipeline,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WeiduLogImport {
+    pub first: Option<PathBuf>,
+    pub second: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,6 +226,8 @@ pub struct Step2State<Flag = bool> {
     pub pending_saved_log_apply: Flag,
     pub pending_saved_log_update_preview: Flag,
     pub pending_saved_log_download: Flag,
+    pub weidu_log_import: Option<WeiduLogImport>,
+    pub pending_weidu_log_reapply: Flag,
     pub review_edit_bgee_log_applied: Flag,
     pub review_edit_bg2ee_log_applied: Flag,
     pub left_pane_ratio: f32,
@@ -316,6 +325,8 @@ impl Default for Step2State {
             pending_saved_log_apply: false,
             pending_saved_log_update_preview: false,
             pending_saved_log_download: false,
+            weidu_log_import: None,
+            pending_weidu_log_reapply: false,
             review_edit_bgee_log_applied: false,
             review_edit_bg2ee_log_applied: false,
             left_pane_ratio: 0.74,

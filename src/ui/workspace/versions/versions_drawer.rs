@@ -297,6 +297,7 @@ pub(crate) fn render(
         .update_selected_extract_running
         .then_some(step2.update_selected_extract_progress)
         .flatten();
+    let apply_logs = step2.weidu_log_import.is_some();
 
     let spec = DrawerSpec {
         id_salt: "versions_drawer",
@@ -354,6 +355,7 @@ pub(crate) fn render(
                 busy,
                 fetching: header.fetching,
                 extract_progress,
+                apply_logs,
                 report_text: &header.report_text,
                 outcome: &mut footer,
             };
@@ -401,13 +403,14 @@ fn handle_header_click(orchestrator: &mut OrchestratorApp, view: &VersionsView) 
 }
 
 fn close_drawer(orchestrator: &mut OrchestratorApp) {
-    orchestrator.wizard_state.step2.update_selected_popup_open = false;
-    orchestrator.wizard_state.step2.versions_ui = VersionsDrawerUi::default();
-    orchestrator
-        .wizard_state
-        .step2
-        .update_selected_confirm_latest_fallback_open = false;
-    versions_sheets::clear_editor_state(&mut orchestrator.wizard_state.step2);
+    close_versions_drawer(&mut orchestrator.wizard_state.step2);
+}
+
+pub(crate) fn close_versions_drawer(step2: &mut Step2State) {
+    step2.update_selected_popup_open = false;
+    step2.versions_ui = VersionsDrawerUi::default();
+    step2.update_selected_confirm_latest_fallback_open = false;
+    versions_sheets::clear_editor_state(step2);
 }
 
 struct CardListEnv<'a> {
@@ -991,6 +994,7 @@ struct FooterCtx<'a> {
     busy: bool,
     fetching: bool,
     extract_progress: Option<(usize, usize)>,
+    apply_logs: bool,
     report_text: &'a str,
     outcome: &'a mut FooterOutcome,
 }
@@ -1009,6 +1013,7 @@ pub(crate) fn footer_primary_label(
     fetch_count: usize,
     fetching: bool,
     extract_progress: Option<(usize, usize)>,
+    apply_logs: bool,
 ) -> String {
     if let Some((done, total)) = extract_progress {
         format!("Extracting {done} / {total}\u{2026}")
@@ -1018,15 +1023,25 @@ pub(crate) fn footer_primary_label(
         "Nothing to fetch".to_string()
     } else {
         format!(
-            "Fetch {fetch_count} mod{}",
-            if fetch_count == 1 { "" } else { "s" }
+            "Fetch {fetch_count} mod{}{}",
+            if fetch_count == 1 { "" } else { "s" },
+            if apply_logs {
+                " & apply WeiDU logs"
+            } else {
+                ""
+            }
         )
     }
 }
 
 fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCtx<'_>) {
     let fetch_count = footer.fetch_count;
-    let primary_label = footer_primary_label(fetch_count, footer.fetching, footer.extract_progress);
+    let primary_label = footer_primary_label(
+        fetch_count,
+        footer.fetching,
+        footer.extract_progress,
+        footer.apply_logs,
+    );
     let primary_disabled = fetch_count == 0 || footer.busy;
     if redesign_btn(
         ui,
@@ -1042,7 +1057,11 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
     .clicked()
         && !primary_disabled
     {
-        footer.outcome.action = Some(Step2Action::DownloadUpdates);
+        footer.outcome.action = Some(if footer.apply_logs {
+            Step2Action::DownloadUpdatesAndApplyLogs
+        } else {
+            Step2Action::DownloadUpdates
+        });
     }
     if redesign_btn(
         ui,
@@ -1363,13 +1382,40 @@ mod tests {
 
     #[test]
     fn footer_primary_label_counts_fetches_then_downloads_then_archives() {
-        assert_eq!(footer_primary_label(3, false, None), "Fetch 3 mods");
-        assert_eq!(footer_primary_label(1, false, None), "Fetch 1 mod");
-        assert_eq!(footer_primary_label(0, false, None), "Nothing to fetch");
-        assert_eq!(footer_primary_label(3, true, None), "Fetching\u{2026}");
+        assert_eq!(footer_primary_label(3, false, None, false), "Fetch 3 mods");
+        assert_eq!(footer_primary_label(1, false, None, false), "Fetch 1 mod");
         assert_eq!(
-            footer_primary_label(3, true, Some((12, 51))),
+            footer_primary_label(0, false, None, false),
+            "Nothing to fetch"
+        );
+        assert_eq!(
+            footer_primary_label(3, true, None, false),
+            "Fetching\u{2026}"
+        );
+        assert_eq!(
+            footer_primary_label(3, true, Some((12, 51)), false),
             "Extracting 12 / 51\u{2026}"
+        );
+    }
+
+    #[test]
+    fn footer_label_names_the_log_apply_only_with_a_record() {
+        assert_eq!(
+            footer_primary_label(3, false, None, true),
+            "Fetch 3 mods & apply WeiDU logs"
+        );
+        assert_eq!(
+            footer_primary_label(1, false, None, true),
+            "Fetch 1 mod & apply WeiDU logs"
+        );
+        assert_eq!(footer_primary_label(3, false, None, false), "Fetch 3 mods");
+        assert_eq!(
+            footer_primary_label(3, true, None, true),
+            "Fetching\u{2026}"
+        );
+        assert_eq!(
+            footer_primary_label(0, false, None, true),
+            "Nothing to fetch"
         );
     }
 }

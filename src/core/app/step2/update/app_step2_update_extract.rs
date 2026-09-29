@@ -219,6 +219,7 @@ pub(crate) fn poll_step2_update_extract(
     state.step2.update_selected_extract_running = false;
     let Some(result) = finished else {
         state.step2.update_selected_download_scope = None;
+        state.step2.pending_weidu_log_reapply = false;
         state.step2.scan_status = "Extract updates failed: worker disconnected".to_string();
         return;
     };
@@ -259,6 +260,7 @@ pub(crate) fn poll_step2_update_extract(
             step2_progress_queue,
         );
     } else {
+        state.step2.pending_weidu_log_reapply = false;
         state.step2.scan_status =
             format!("Extract updates finished: {extracted} updated, {failed} failed");
     }
@@ -862,6 +864,33 @@ mod tests {
             state.step2.scan_status,
             "Extract updates finished: 0 updated, 0 failed"
         );
+        drop(tx);
+    }
+
+    #[test]
+    fn an_extract_with_nothing_extracted_lowers_the_log_reapply_flag() {
+        let mut state = WizardState::default();
+        state.step2.update_selected_download_origin = DownloadOrigin::Workspace;
+        state.step2.update_selected_extract_running = true;
+        state.step2.pending_weidu_log_reapply = true;
+        let (tx, mut rx) = queued(vec![finished_with(&[])]);
+
+        poll(&mut state, &mut rx);
+
+        assert!(!state.step2.pending_weidu_log_reapply);
+        drop(tx);
+
+        let mut state = WizardState::default();
+        state.step2.update_selected_download_origin = DownloadOrigin::Workspace;
+        state.step2.update_selected_extract_running = true;
+        state.step2.pending_weidu_log_reapply = true;
+        let (tx, mut rx) = queued(vec![finished_with(&[
+            "EEFIXPACK -> C:\\dest\\mods\\eefixpack",
+        ])]);
+
+        poll(&mut state, &mut rx);
+
+        assert!(state.step2.pending_weidu_log_reapply);
         drop(tx);
     }
 

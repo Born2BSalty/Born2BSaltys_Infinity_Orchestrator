@@ -19,6 +19,7 @@ use crate::ui::step2::toolbar_actions_step2;
 use crate::ui::step2::toolbar_compat_step2::{
     active_tab_compat_summary, first_active_tab_issue_target,
 };
+use crate::ui::workspace::state_workspace::WeiduLogImportForm;
 use crate::ui::workspace::widgets::game_tab::game_tab;
 
 const TAB_GAP: f32 = 4.0;
@@ -45,7 +46,7 @@ pub fn render(
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         ui.horizontal(|ui| {
             active_tab_rect = render_game_tabs(ui, orchestrator, palette, &row);
-            render_log_buttons(ui, orchestrator, palette, &row);
+            render_import_logs_button(ui, orchestrator, palette, &row);
 
             if render_updates_button(ui, palette, &row).clicked() && row.updates.enabled {
                 action = Some(Step2Action::OpenUpdatePopup);
@@ -133,11 +134,7 @@ impl Step2TabRowState {
                 exact_log: exact_log_mode,
                 can_bootstrap_from_log,
             },
-            active_tab: ActiveTabState {
-                is_first_slot: game_authority::slot_for_tab(&active_tab) == GameSlot::First,
-                is_second_slot: game_authority::slot_for_tab(&active_tab) == GameSlot::Second,
-                name: active_tab,
-            },
+            active_tab: ActiveTabState { name: active_tab },
             issue_target: first_active_tab_issue_target(
                 active_mods(&orchestrator.wizard_state),
                 &target_filter,
@@ -172,8 +169,6 @@ struct ModeFlags {
 
 struct ActiveTabState {
     name: String,
-    is_first_slot: bool,
-    is_second_slot: bool,
 }
 
 struct UpdatesState {
@@ -270,7 +265,8 @@ const fn updates_state(input: &UpdatesInput) -> UpdatesState {
 #[cfg(test)]
 mod tests {
     use super::{
-        ScanActivity, UpdateMode, UpdateScan, UpdatesInput, log_button_label, updates_state,
+        ScanActivity, UpdateMode, UpdateScan, UpdatesInput, import_logs_button_enabled,
+        updates_state,
     };
 
     fn review_edit_input(reviewed: bool, has_pending_log_downloads: bool) -> UpdatesInput {
@@ -337,9 +333,11 @@ mod tests {
     }
 
     #[test]
-    fn log_button_label_names_the_active_tab() {
-        assert_eq!(log_button_label("IWDEE"), "Select IWDEE via WeiDU Log");
-        assert_eq!(log_button_label("BGEE"), "Select BGEE via WeiDU Log");
+    fn import_button_enabled_when_any_tab_is_scanned_or_bootstrappable() {
+        assert!(!import_logs_button_enabled(false, false, false));
+        assert!(import_logs_button_enabled(true, false, false));
+        assert!(import_logs_button_enabled(false, true, false));
+        assert!(import_logs_button_enabled(false, false, true));
     }
 }
 
@@ -382,7 +380,16 @@ fn render_game_tabs(
     active_rect
 }
 
-fn render_log_buttons(
+#[must_use]
+pub(crate) const fn import_logs_button_enabled(
+    bgee_scanned: bool,
+    bg2_scanned: bool,
+    can_bootstrap: bool,
+) -> bool {
+    bgee_scanned || bg2_scanned || can_bootstrap
+}
+
+fn render_import_logs_button(
     ui: &mut egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
@@ -391,69 +398,27 @@ fn render_log_buttons(
     if row.is_fork || row.modes.exact_log {
         return;
     }
-    if row.active_tab.is_first_slot {
-        render_log_button(
-            ui,
-            orchestrator,
-            palette,
-            &log_button_label(&row.active_tab.name),
-            true,
-            row,
-        );
-    } else if row.active_tab.is_second_slot {
-        render_log_button(
-            ui,
-            orchestrator,
-            palette,
-            "Select BG2EE via WeiDU Log",
-            false,
-            row,
-        );
-    }
-}
-
-#[must_use]
-fn log_button_label(tab: &str) -> String {
-    format!("Select {tab} via WeiDU Log")
-}
-
-fn render_log_button(
-    ui: &mut egui::Ui,
-    orchestrator: &mut OrchestratorApp,
-    palette: ThemePalette,
-    label: &str,
-    bgee: bool,
-    row: &Step2TabRowState,
-) {
-    let enabled = if bgee {
-        row.scans.bgee_scanned
-    } else {
-        row.scans.bg2_scanned
-    } || row.modes.can_bootstrap_from_log;
-    let tooltip = if bgee {
-        if row.active_tab.name == game_authority::TAB_IWDEE {
-            crate::ui::shared::tooltip_global::STEP2_SELECT_IWDEE_LOG
-        } else {
-            crate::ui::shared::tooltip_global::STEP2_SELECT_BGEE_LOG
-        }
-    } else {
-        crate::ui::shared::tooltip_global::STEP2_SELECT_BG2EE_LOG
-    };
+    let enabled = import_logs_button_enabled(
+        row.scans.bgee_scanned,
+        row.scans.bg2_scanned,
+        row.modes.can_bootstrap_from_log,
+    );
     if redesign_btn(
         ui,
         palette,
-        label,
+        "Import from WeiDU Logs\u{2026}",
         BtnOpts {
             small: true,
             disabled: !enabled,
             ..Default::default()
         },
     )
-    .on_hover_text(tooltip)
+    .on_hover_text(crate::ui::shared::tooltip_global::STEP2_IMPORT_WEIDU_LOGS)
     .clicked()
         && enabled
     {
-        orchestrator.workspace_view.step2.pending_weidu_log_confirm = Some(bgee);
+        orchestrator.workspace_view.step2.weidu_log_import_form =
+            Some(WeiduLogImportForm::default());
     }
 }
 
