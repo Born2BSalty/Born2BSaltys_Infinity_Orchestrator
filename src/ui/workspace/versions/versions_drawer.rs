@@ -408,6 +408,7 @@ fn close_drawer(orchestrator: &mut OrchestratorApp) {
 
 pub(crate) fn close_versions_drawer(step2: &mut Step2State) {
     step2.update_selected_popup_open = false;
+    step2.weidu_log_import_awaiting_check = false;
     step2.versions_ui = VersionsDrawerUi::default();
     step2.update_selected_confirm_latest_fallback_open = false;
     versions_sheets::clear_editor_state(step2);

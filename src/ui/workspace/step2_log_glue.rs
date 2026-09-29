@@ -168,6 +168,14 @@ pub(crate) const fn weidu_log_import_check_found_nothing_to_fetch(step2: &Step2S
             .is_empty()
 }
 
+fn record_logs_parse(record: &WeiduLogImport) -> bool {
+    record
+        .first
+        .iter()
+        .chain(record.second.iter())
+        .all(|path| crate::mods::log_file::LogFile::from_path(path).is_ok())
+}
+
 fn settle_weidu_log_import_check(orchestrator: &mut OrchestratorApp) {
     let step2 = &mut orchestrator.wizard_state.step2;
     step2.weidu_log_import_awaiting_check = false;
@@ -177,6 +185,9 @@ fn settle_weidu_log_import_check(orchestrator: &mut OrchestratorApp) {
     let Some(record) = step2.weidu_log_import.clone() else {
         return;
     };
+    if !record_logs_parse(&record) {
+        return;
+    }
     apply_recorded_logs(orchestrator, &record);
     orchestrator.mark_workspace_dirty();
     let step2 = &mut orchestrator.wizard_state.step2;
@@ -391,6 +402,33 @@ mod tests {
         advance_pending_weidu_log_reapply(&mut app);
         assert!(app.wizard_state.step2.weidu_log_import.is_some());
         assert!(app.wizard_state.step2.update_selected_popup_open);
+        assert_eq!(app.notification_manager.history().len(), toasts_before);
+    }
+
+    #[test]
+    fn closing_the_drawer_drops_the_awaiting_check_flag() {
+        let mut step2 = Step2State {
+            weidu_log_import_awaiting_check: true,
+            update_selected_popup_open: true,
+            ..Step2State::default()
+        };
+        close_versions_drawer(&mut step2);
+        assert!(!step2.weidu_log_import_awaiting_check);
+        assert!(!step2.update_selected_popup_open);
+    }
+
+    #[test]
+    fn import_check_with_an_unreadable_log_keeps_the_drawer_and_the_record() {
+        let root = TempRoot::new();
+        let log_path = root.path.join("missing").join("weidu.log");
+        let mut app = app_awaiting_the_forced_check("logimport-unreadable", log_path);
+        let toasts_before = app.notification_manager.history().len();
+
+        advance_pending_weidu_log_reapply(&mut app);
+        let step2 = &app.wizard_state.step2;
+        assert!(!step2.weidu_log_import_awaiting_check);
+        assert!(step2.weidu_log_import.is_some());
+        assert!(step2.update_selected_popup_open);
         assert_eq!(app.notification_manager.history().len(), toasts_before);
     }
 
