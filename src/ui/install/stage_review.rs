@@ -347,6 +347,7 @@ const SOURCE_WARNING_TITLE_ORDER_MERGER: &str = "DLC Merger required";
 const SOURCE_WARNING_TITLE_CHANGE_SOURCE: &str = "BGEE source mismatch";
 const SOURCE_WARNING_TITLE_CLEAN_SOURCE: &str = "Modded game source";
 const SOURCE_WARNING_TITLE_SET_SOURCE_FOLDER: &str = "Game folder not set";
+const SOURCE_WARNING_TITLE_SET_GLOBAL_MODS_FOLDER: &str = "Global mods folder not set";
 const SOURCE_WARNING_TITLE_WRONG_GAME_VERSION: &str = "Wrong game version";
 const SOURCE_WARNING_ACTION_REINSTALL: &str = "This list cannot be reinstalled as provided. Use Create to make a modified copy with DLC Merger first in the BGEE installation order.";
 const SOURCE_WARNING_ACTION_CHOOSE_MODIFY: &str = "Choose \"Yes, review and modify\" when you install, then put DLC Merger first in the BGEE installation order.";
@@ -364,6 +365,7 @@ pub(crate) const fn source_warning_title(remedy: SourceRemedy) -> &'static str {
         SourceRemedy::ChangeSource => SOURCE_WARNING_TITLE_CHANGE_SOURCE,
         SourceRemedy::CleanSource => SOURCE_WARNING_TITLE_CLEAN_SOURCE,
         SourceRemedy::SetSourceFolder => SOURCE_WARNING_TITLE_SET_SOURCE_FOLDER,
+        SourceRemedy::SetGlobalModsFolder => SOURCE_WARNING_TITLE_SET_GLOBAL_MODS_FOLDER,
         SourceRemedy::WrongGameVersion => SOURCE_WARNING_TITLE_WRONG_GAME_VERSION,
         SourceRemedy::None => "",
     }
@@ -395,7 +397,10 @@ pub(crate) const fn source_warning_action_text(
         }
         (SourceRemedy::CleanSource, _) => SOURCE_WARNING_ACTION_CLEAN_SOURCE,
         (
-            SourceRemedy::SetSourceFolder | SourceRemedy::WrongGameVersion | SourceRemedy::None,
+            SourceRemedy::SetSourceFolder
+            | SourceRemedy::SetGlobalModsFolder
+            | SourceRemedy::WrongGameVersion
+            | SourceRemedy::None,
             _,
         ) => "",
     }
@@ -1210,6 +1215,24 @@ mod tests {
         ] {
             assert_eq!(
                 source_warning_action_text(action, SourceRemedy::SetSourceFolder),
+                ""
+            );
+        }
+    }
+
+    #[test]
+    fn set_global_mods_folder_remedy_has_a_title_and_no_action_text() {
+        assert_eq!(
+            source_warning_title(SourceRemedy::SetGlobalModsFolder),
+            "Global mods folder not set"
+        );
+        for action in [
+            SourceWarningAction::Reinstall,
+            SourceWarningAction::ChooseModify,
+            SourceWarningAction::ModifyOn,
+        ] {
+            assert_eq!(
+                source_warning_action_text(action, SourceRemedy::SetGlobalModsFolder),
                 ""
             );
         }

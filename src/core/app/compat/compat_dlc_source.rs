@@ -135,6 +135,7 @@ pub(crate) enum SourceRemedy {
     ChangeSource,
     CleanSource,
     SetSourceFolder,
+    SetGlobalModsFolder,
     WrongGameVersion,
     None,
 }

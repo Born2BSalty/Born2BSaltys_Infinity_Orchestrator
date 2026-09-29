@@ -33,7 +33,6 @@ pub fn populate_wizard_state_from_workspace(
     .to_string();
 
     sync_paths_from_settings(settings_store, wizard_state);
-    apply_mods_source(workspace, settings_store, wizard_state);
 
     if let Err(err) = crate::install_runtime::per_install_dirs::derive_per_install_dirs(
         &mut wizard_state.step1,
@@ -45,6 +44,8 @@ pub fn populate_wizard_state_from_workspace(
             "workspace cold-load re-derive failed: {err}"
         );
     }
+
+    apply_mods_source(workspace, settings_store, wizard_state);
 
     reset_scanned_step2_set(wizard_state);
 
@@ -1289,5 +1290,84 @@ mod tests {
              got: {}",
             leaves[0].raw_line
         );
+    }
+
+    struct TempRoot(std::path::PathBuf);
+
+    impl TempRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static N: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_loader_global_{}_{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            )));
+            std::fs::create_dir_all(&root.0).expect("create temp root");
+            root
+        }
+
+        fn path_of(&self, name: &str) -> String {
+            self.0.join(name).to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn open_list(root: &TempRoot, mods_source: ModsSource, global_folder: &str) -> WizardState {
+        use crate::settings::model::{AppSettings, Step1Settings};
+        let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let settings = AppSettings {
+            step1: Step1Settings {
+                global_mods_folder: global_folder.to_string(),
+                ..Step1Settings::default()
+            },
+            ..AppSettings::default()
+        };
+        store.save(&settings).expect("save temp settings");
+        let workspace = ModlistWorkspaceState {
+            mods_source,
+            scratch_mods_folder: Some(root.path_of("scratch")),
+            ..Default::default()
+        };
+        let mut list = entry(Game::BGEE);
+        list.destination_folder = root.path_of("dest");
+        let mut ws = WizardState::default();
+        populate_wizard_state_from_workspace(&workspace, &list, &store, &mut ws);
+        ws
+    }
+
+    #[test]
+    fn open_global_list_uses_the_settings_global_folder() {
+        let root = TempRoot::new();
+        let ws = open_list(&root, ModsSource::GlobalModsFolder, &root.path_of("global"));
+        assert_eq!(ws.step1.mods_folder, root.path_of("global"));
+        assert!(
+            std::path::Path::new(&ws.step1.weidu_log_folder).starts_with(root.0.join("dest")),
+            "the per-install derive still runs: {}",
+            ws.step1.weidu_log_folder
+        );
+    }
+
+    #[test]
+    fn open_global_list_without_a_global_folder_falls_back_to_the_scratch_folder() {
+        let root = TempRoot::new();
+        let ws = open_list(&root, ModsSource::GlobalModsFolder, "");
+        assert_eq!(ws.step1.mods_folder, root.path_of("scratch"));
+    }
+
+    #[test]
+    fn open_installation_list_ignores_the_global_folder() {
+        let root = TempRoot::new();
+        let ws = open_list(
+            &root,
+            ModsSource::InstallationFolder,
+            &root.path_of("global"),
+        );
+        assert_eq!(ws.step1.mods_folder, root.path_of("scratch"));
     }
 }

@@ -10,6 +10,7 @@ use crate::registry::destination_claim::{
     ClaimContext, DestinationClaim, resolve_destination_claim,
 };
 use crate::registry::model::{Game, ModlistRegistry};
+use crate::settings::model::Step1Settings;
 use crate::ui::create::state_create::CreateScreenState;
 use crate::ui::install::stage_review::{self, SourceWarningAction};
 use crate::ui::install::sub_flow_footer::{self, PrimaryBtn};
@@ -46,10 +47,13 @@ const FORM_INPUT_MARGIN: egui::Margin = egui::Margin {
 
 const FORM_ROW_GAP_PX: f32 = 8.0;
 
-struct ChooseCtx<'a> {
-    registry: &'a ModlistRegistry,
-    active_install_id: Option<&'a str>,
-    step1: &'a Step1State,
+const GLOBAL_MODS_FOLDER_MISSING_MESSAGE: &str = "New lists work from the Global mods folder. Set one in Settings > Paths > Mods folder. Until then this list works from the mods folder inside its installation folder.";
+
+pub struct ChooseCtx<'a> {
+    pub registry: &'a ModlistRegistry,
+    pub active_install_id: Option<&'a str>,
+    pub step1: &'a Step1State,
+    pub saved_step1: &'a Step1Settings,
 }
 
 pub fn render(
@@ -57,24 +61,17 @@ pub fn render(
     palette: ThemePalette,
     state: &mut CreateScreenState,
     destination_prep_running: bool,
-    registry: &ModlistRegistry,
-    active_install_id: Option<&str>,
-    step1: &Step1State,
+    ctx: &ChooseCtx<'_>,
 ) -> ChooseOutcome {
     let mut outcome = ChooseOutcome::Stay;
     let mut claim = DestinationClaim::Free;
-    let ctx = ChooseCtx {
-        registry,
-        active_install_id,
-        step1,
-    };
 
     let body_h = (ui.available_height() - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0);
     ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                render_body(ui, palette, state, &mut outcome, &ctx, &mut claim);
+                render_body(ui, palette, state, &mut outcome, ctx, &mut claim);
             });
     });
 
@@ -218,6 +215,7 @@ fn render_setup_box(
             .inner;
 
         render_missing_source_notice(ui, palette, ctx.step1, state.game.to_legacy_string());
+        render_global_mods_folder_notice(ui, palette, ctx.saved_step1);
 
         *claim = resolve_destination_claim(
             ctx.registry,
@@ -274,6 +272,37 @@ fn render_missing_source_notice(
             severity: SourceNoticeSeverity::Warning,
             text: msg,
             remedy: SourceRemedy::SetSourceFolder,
+        },
+        SourceWarningAction::ChooseModify,
+    );
+}
+
+#[must_use]
+pub(crate) fn global_mods_folder_missing_message(
+    saved_step1: &Step1Settings,
+) -> Option<&'static str> {
+    saved_step1
+        .effective_global_mods_folder()
+        .trim()
+        .is_empty()
+        .then_some(GLOBAL_MODS_FOLDER_MISSING_MESSAGE)
+}
+
+fn render_global_mods_folder_notice(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    saved_step1: &Step1Settings,
+) {
+    let Some(msg) = global_mods_folder_missing_message(saved_step1) else {
+        return;
+    };
+    stage_review::render_source_notice(
+        ui,
+        palette,
+        &SourceNotice {
+            severity: SourceNoticeSeverity::Warning,
+            text: msg.to_string(),
+            remedy: SourceRemedy::SetGlobalModsFolder,
         },
         SourceWarningAction::ChooseModify,
     );
@@ -475,6 +504,32 @@ mod tests {
         std::fs::write(dir.join("f.txt"), b"x").unwrap();
         assert!(destination_is_non_empty(dir.to_str().unwrap()));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn global_notice_shows_only_while_the_effective_global_folder_is_blank() {
+        let saved = |global: &str, legacy: &str| Step1Settings {
+            global_mods_folder: global.to_string(),
+            mods_folder: legacy.to_string(),
+            ..Step1Settings::default()
+        };
+        assert_eq!(
+            global_mods_folder_missing_message(&saved("", "")),
+            Some(GLOBAL_MODS_FOLDER_MISSING_MESSAGE)
+        );
+        assert_eq!(
+            global_mods_folder_missing_message(&saved("   ", "")),
+            Some(GLOBAL_MODS_FOLDER_MISSING_MESSAGE)
+        );
+        assert_eq!(
+            global_mods_folder_missing_message(&saved("C:\\Games\\BIO\\mods\\extracted", "")),
+            None
+        );
+        assert_eq!(
+            global_mods_folder_missing_message(&saved("", "C:\\Games\\BIO\\mods\\extracted")),
+            None,
+            "the notice follows the same fallback the loader applies"
+        );
     }
 
     #[test]
