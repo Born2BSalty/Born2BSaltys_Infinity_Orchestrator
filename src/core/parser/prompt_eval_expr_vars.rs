@@ -82,9 +82,6 @@ pub(crate) fn apply_mod_compat_prompt_value_from_text(
     prompt_eval: &PromptEvalContext,
     ctx: &mut PromptVarContext,
 ) {
-    if !text.lines().any(|line| line.contains("prompt = 1")) {
-        return;
-    }
     let mut prompt = matches!(ctx.vars.get("prompt"), Some(PromptVarValue::Int(v)) if *v != 0);
     for line in text.lines().skip(1) {
         let cols = line.split_whitespace().collect::<Vec<_>>();
@@ -200,4 +197,56 @@ fn trim_wrappers(input: &str) -> String {
         .trim_matches('~')
         .trim_matches('%')
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TABLE: &str = "Mod Component Ident Item\n\nkivan.tp2 0 w1 bow12\nrr.tp2 12 w20 amul21\n";
+
+    fn eval_with_ticked(ticked: &[(&str, &str)]) -> PromptEvalContext {
+        PromptEvalContext {
+            checked_components: ticked
+                .iter()
+                .map(|(stem, component)| ((*stem).to_string(), (*component).to_string()))
+                .collect(),
+            ..PromptEvalContext::default()
+        }
+    }
+
+    #[test]
+    fn a_mod_compat_row_whose_component_is_ticked_sets_prompt() {
+        let mut ctx = PromptVarContext::default();
+        apply_mod_compat_prompt_value_from_text(
+            TABLE,
+            &eval_with_ticked(&[("rr", "12")]),
+            &mut ctx,
+        );
+        assert_eq!(ctx.vars.get("prompt"), Some(&PromptVarValue::Int(1)));
+    }
+
+    #[test]
+    fn mod_compat_rows_without_a_ticked_component_leave_prompt_zero() {
+        let mut ctx = PromptVarContext::default();
+        apply_mod_compat_prompt_value_from_text(
+            TABLE,
+            &eval_with_ticked(&[("cdtweaks", "10")]),
+            &mut ctx,
+        );
+        assert_eq!(ctx.vars.get("prompt"), Some(&PromptVarValue::Int(0)));
+    }
+
+    #[test]
+    fn a_prompt_already_lit_stays_lit() {
+        let mut ctx = PromptVarContext::default();
+        ctx.vars
+            .insert("prompt".to_string(), PromptVarValue::Int(1));
+        apply_mod_compat_prompt_value_from_text(
+            TABLE,
+            &eval_with_ticked(&[("cdtweaks", "10")]),
+            &mut ctx,
+        );
+        assert_eq!(ctx.vars.get("prompt"), Some(&PromptVarValue::Int(1)));
+    }
 }
