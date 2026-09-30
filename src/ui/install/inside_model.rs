@@ -143,8 +143,13 @@ fn parse_section(
             label: component_label(&component),
             wlb_inputs: component.wlb_inputs.clone(),
         };
+        let folder = if component.name.is_empty() {
+            component.tp_file.clone()
+        } else {
+            component.name.clone()
+        };
         if let Some(last) = groups.last_mut()
-            && last.folder.eq_ignore_ascii_case(&component.name)
+            && last.folder.eq_ignore_ascii_case(&folder)
             && last.tp_file.eq_ignore_ascii_case(&component.tp_file)
         {
             last.components.push(row);
@@ -152,7 +157,7 @@ fn parse_section(
         }
         let resolved = tiers.resolve(&component.tp_file);
         groups.push(ModGroup {
-            folder: component.name.clone(),
+            folder,
             tp_file: component.tp_file.clone(),
             version: display_version(&component, resolved.as_ref(), installed_refs),
             source: resolve_source(resolved),
@@ -346,6 +351,19 @@ mod tests {
         assert_eq!(groups[1].components.len(), 1);
         assert_eq!(groups[2].folder, "A");
         assert_eq!(groups[2].components.len(), 1);
+    }
+
+    #[test]
+    fn a_line_without_a_folder_is_titled_by_its_file_and_groups_with_its_siblings() {
+        let text = "\
+~SETUP-D0QUESTPACK.TP2~ #0 #5 // Additional Shadow Thieves Content: v3.5
+~SETUP-D0QUESTPACK.TP2~ #0 #6 // Alternative Harper/Xzar Plot: v3.5";
+        let groups = parse_section(text, &empty_tiers(), &empty_refs());
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].folder, "SETUP-D0QUESTPACK.TP2");
+        assert_eq!(groups[0].tp_file, "SETUP-D0QUESTPACK.TP2");
+        assert_eq!(groups[0].components.len(), 2);
     }
 
     #[test]

@@ -22,11 +22,14 @@ impl Component {
         let install_path = parts
             .nth(1)
             .ok_or_else(|| anyhow!("missing install path in line: {line}"))?;
+        if install_path.trim().is_empty() {
+            return Err(anyhow!("invalid install path in line: {line}"));
+        }
 
         let (name, tp_file) = install_path
             .rsplit_once('\\')
             .or_else(|| install_path.rsplit_once('/'))
-            .ok_or_else(|| anyhow!("invalid install path in line: {line}"))?;
+            .unwrap_or(("", install_path));
 
         let lang_component_part = parts
             .next()
@@ -128,6 +131,24 @@ mod tests {
         assert_eq!(c.component, "3");
         assert_eq!(c.component_name, "Angelo Notices Shar-teel");
         assert_eq!(c.version, "v17.1");
+    }
+
+    #[test]
+    fn parse_root_level_line_has_no_folder() {
+        let line = "~SETUP-D0QUESTPACK.TP2~ #0 #5 // Additional Shadow Thieves Content: v3.5";
+        let c = Component::parse_weidu_line(line).expect("parse should succeed");
+        assert_eq!(c.name, "");
+        assert_eq!(c.tp_file, "SETUP-D0QUESTPACK.TP2");
+        assert_eq!(c.lang, "0");
+        assert_eq!(c.component, "5");
+        assert_eq!(c.component_name, "Additional Shadow Thieves Content");
+        assert_eq!(c.version, "v3.5");
+    }
+
+    #[test]
+    fn parse_empty_install_path_still_fails() {
+        let err = Component::parse_weidu_line("~~ #0 #0 // x").expect_err("parse should fail");
+        assert!(err.to_string().contains("invalid install path"));
     }
 
     #[test]
