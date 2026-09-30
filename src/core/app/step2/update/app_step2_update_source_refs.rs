@@ -33,6 +33,17 @@ pub(crate) struct InstalledArchiveRecord {
     pub(crate) name: String,
     pub(crate) size: u64,
     pub(crate) hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) last_modified: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) etag: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub(crate) struct RemoteFileFacts {
+    pub(crate) size: Option<u64>,
+    pub(crate) last_modified: Option<String>,
+    pub(crate) etag: Option<String>,
 }
 
 pub(crate) fn installed_archive_record(archive_path: &Path) -> io::Result<InstalledArchiveRecord> {
@@ -42,7 +53,27 @@ pub(crate) fn installed_archive_record(archive_path: &Path) -> io::Result<Instal
         .unwrap_or_default();
     let size = fs::metadata(archive_path)?.len();
     let hash = crate::install_runtime::archive_store::hash_file(archive_path)?;
-    Ok(InstalledArchiveRecord { name, size, hash })
+    Ok(InstalledArchiveRecord {
+        name,
+        size,
+        hash,
+        last_modified: None,
+        etag: None,
+    })
+}
+
+#[must_use]
+pub(crate) fn same_remote_file(
+    record: &InstalledArchiveRecord,
+    remote: &RemoteFileFacts,
+) -> Option<bool> {
+    if let (Some(recorded), Some(served)) = (&record.etag, &remote.etag) {
+        return Some(recorded == served);
+    }
+    if let (Some(recorded), Some(served)) = (&record.last_modified, &remote.last_modified) {
+        return Some(recorded == served);
+    }
+    remote.size.map(|size| size == record.size)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -412,6 +443,8 @@ mod tests {
             name: name.to_string(),
             size,
             hash: hash.to_string(),
+            last_modified: None,
+            etag: None,
         }
     }
 
@@ -848,6 +881,79 @@ mod tests {
         assert_eq!(reparsed.refs, parsed.refs);
         assert_eq!(reparsed.sources, parsed.sources);
         assert!(reparsed.archives.is_empty());
+    }
+
+    fn refs_with_archive(archive: &InstalledArchiveRecord) -> ModSourceRefsFile {
+        let mut refs = ModSourceRefsFile::default();
+        refs.archives
+            .insert("d0questpack".to_string(), archive.clone());
+        refs
+    }
+
+    #[test]
+    fn archive_record_round_trips_the_headers() {
+        let archive = InstalledArchiveRecord {
+            last_modified: Some("Thu, 10 Sep 2020 17:25:37 GMT".to_string()),
+            etag: Some("\"abc-123\"".to_string()),
+            ..record("questpack-v35-win.zip", 21_707_615, "ff00")
+        };
+
+        let serialised = toml::to_string_pretty(&refs_with_archive(&archive)).unwrap();
+        let reparsed = parse_refs_file_text(&serialised);
+
+        assert_eq!(reparsed.archives.get("d0questpack"), Some(&archive));
+    }
+
+    #[test]
+    fn archive_record_without_headers_omits_them() {
+        let archive = record("questpack-v35-win.zip", 21_707_615, "ff00");
+
+        let serialised = toml::to_string_pretty(&refs_with_archive(&archive)).unwrap();
+
+        assert!(!serialised.contains("last_modified"), "{serialised}");
+        assert!(!serialised.contains("etag"), "{serialised}");
+        let before_this_run = "[archives.d0questpack]\nname = \"questpack-v35-win.zip\"\nsize = 21707615\nhash = \"ff00\"\n";
+        let parsed = parse_refs_file_text(before_this_run);
+        let loaded = parsed.archives.get("d0questpack").unwrap();
+        assert_eq!(loaded.last_modified, None);
+        assert_eq!(loaded.etag, None);
+        assert_eq!(loaded, &archive);
+    }
+
+    #[test]
+    fn same_remote_file_prefers_etag_then_date_then_size() {
+        let date = "Thu, 10 Sep 2020 17:25:37 GMT".to_string();
+        let dated = InstalledArchiveRecord {
+            last_modified: Some(date.clone()),
+            etag: Some("\"one\"".to_string()),
+            ..record("q.zip", 10, "aa")
+        };
+        let other_etag = RemoteFileFacts {
+            size: Some(10),
+            last_modified: Some(date.clone()),
+            etag: Some("\"two\"".to_string()),
+        };
+        assert_eq!(same_remote_file(&dated, &other_etag), Some(false));
+
+        let dated_only = InstalledArchiveRecord {
+            etag: None,
+            ..dated
+        };
+        let same_date = RemoteFileFacts {
+            size: Some(99),
+            last_modified: Some(date),
+            etag: Some("\"two\"".to_string()),
+        };
+        assert_eq!(same_remote_file(&dated_only, &same_date), Some(true));
+
+        let bare = record("q.zip", 10, "aa");
+        let same_size = RemoteFileFacts {
+            size: Some(10),
+            ..RemoteFileFacts::default()
+        };
+        assert_eq!(same_remote_file(&bare, &same_size), Some(true));
+
+        assert_eq!(same_remote_file(&bare, &RemoteFileFacts::default()), None);
     }
 
     #[test]

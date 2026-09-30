@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::app::app_step2_update_source_refs::RemoteFileFacts;
 use crate::app::github_forks_list::ForksListState;
 use crate::app::github_release_list::ReleaseListState;
 use crate::app::source_form::SourceForm;
@@ -195,6 +196,8 @@ pub struct Step2State<Flag = bool> {
     pub update_selected_unknown_sources: Vec<String>,
     pub update_selected_exact_version_failed_sources: Vec<String>,
     pub update_selected_failed_sources: Vec<String>,
+    pub(crate) update_selected_remote_file_facts: BTreeMap<String, RemoteFileFacts>,
+    pub update_selected_unverified_sources: Vec<String>,
     pub update_selected_version_override_warnings: Vec<String>,
     pub update_selected_check_requests: Vec<Step2UpdateRetryRequest>,
     pub update_selected_exact_version_retry_requests: Vec<Step2UpdateRetryRequest>,
@@ -296,6 +299,8 @@ impl Default for Step2State {
             update_selected_unknown_sources: Vec::new(),
             update_selected_exact_version_failed_sources: Vec::new(),
             update_selected_failed_sources: Vec::new(),
+            update_selected_remote_file_facts: BTreeMap::new(),
+            update_selected_unverified_sources: Vec::new(),
             update_selected_version_override_warnings: Vec::new(),
             update_selected_check_requests: Vec::new(),
             update_selected_exact_version_retry_requests: Vec::new(),

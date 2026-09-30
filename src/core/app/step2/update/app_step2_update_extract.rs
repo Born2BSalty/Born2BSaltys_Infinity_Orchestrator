@@ -476,6 +476,7 @@ mod tests {
             backup_version_tag: "v1".to_string(),
             installed_source_ref: None,
             installed_source_id: None,
+            remote_file: None,
         }
     }
 
@@ -542,6 +543,8 @@ mod tests {
                 name: format!("{label}.zip"),
                 size: 1,
                 hash: format!("hash-{label}"),
+                last_modified: None,
+                etag: None,
             }),
         }
     }

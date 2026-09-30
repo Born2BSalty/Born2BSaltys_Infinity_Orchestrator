@@ -63,7 +63,7 @@ pub(crate) fn extract_one_archive(
 }
 
 fn installed_record(job: &Step2UpdateExtractJob) -> InstalledRecord {
-    let archive = installed_archive_record(&job.archive_path)
+    let mut archive = installed_archive_record(&job.archive_path)
         .inspect_err(|err| {
             tracing::warn!(
                 target = "orchestrator",
@@ -72,6 +72,12 @@ fn installed_record(job: &Step2UpdateExtractJob) -> InstalledRecord {
             );
         })
         .ok();
+    if let (Some(archive), Some(remote)) = (archive.as_mut(), job.remote_file.as_ref())
+        && remote.size.is_none_or(|size| size == archive.size)
+    {
+        archive.last_modified.clone_from(&remote.last_modified);
+        archive.etag.clone_from(&remote.etag);
+    }
     InstalledRecord {
         tp2: job.tp_file.clone(),
         source_id: job.installed_source_id.clone(),
@@ -464,6 +470,66 @@ mod tests {
     }
 
     const QUESTPACK_TP2: &str = "setup-d0questpack.tp2";
+
+    fn questpack_job(
+        root: &ArchiveTestRoot,
+        archive_path: &Path,
+        remote_size: Option<u64>,
+    ) -> Step2UpdateExtractJob {
+        Step2UpdateExtractJob {
+            label: "d0questpack".to_string(),
+            tp_file: "d0questpack/setup-d0questpack.tp2".to_string(),
+            aliases: Vec::new(),
+            tp2_rename: None,
+            subdir_require: None,
+            archive_path: archive_path.to_path_buf(),
+            mods_root: root.0.join("mods"),
+            backup_root: root.0.join("backup"),
+            target_root: None,
+            backup_version_tag: "questpack-v35-win".to_string(),
+            installed_source_ref: Some("questpack-v35-win".to_string()),
+            installed_source_id: Some("pocket-plane-group".to_string()),
+            remote_file: Some(crate::app::app_step2_update_source_refs::RemoteFileFacts {
+                size: remote_size,
+                last_modified: Some("Thu, 10 Sep 2020 17:25:37 GMT".to_string()),
+                etag: Some("\"qp\"".to_string()),
+            }),
+        }
+    }
+
+    #[test]
+    fn installed_record_copies_the_remote_headers() {
+        let root = ArchiveTestRoot::new();
+        let archive_path = root.file("questpack-v35-win.zip", "ARCHIVE-BYTES");
+        let on_disk = fs::metadata(&archive_path).unwrap().len();
+        let job = questpack_job(&root, &archive_path, Some(on_disk));
+
+        let record = installed_record(&job).archive.unwrap();
+
+        assert_eq!(
+            record.last_modified.as_deref(),
+            Some("Thu, 10 Sep 2020 17:25:37 GMT")
+        );
+        assert_eq!(record.etag.as_deref(), Some("\"qp\""));
+        assert_eq!(record.size, on_disk);
+        assert_eq!(
+            record.hash,
+            crate::install_runtime::archive_store::hash_file(&archive_path).unwrap()
+        );
+    }
+
+    #[test]
+    fn installed_record_keeps_the_headers_off_an_archive_of_another_size() {
+        let root = ArchiveTestRoot::new();
+        let archive_path = root.file("questpack-v35-win.zip", "ARCHIVE-BYTES");
+        let job = questpack_job(&root, &archive_path, Some(999));
+
+        let record = installed_record(&job).archive.unwrap();
+
+        assert_eq!(record.last_modified, None);
+        assert_eq!(record.etag, None);
+        assert_eq!(record.size, fs::metadata(&archive_path).unwrap().len());
+    }
 
     #[test]
     fn root_level_tp2_follows_its_backup_directive_to_the_mod_folder() {

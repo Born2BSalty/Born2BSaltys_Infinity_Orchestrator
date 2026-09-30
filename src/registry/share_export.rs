@@ -1167,6 +1167,8 @@ mod tests {
                 name: "alpha__primary__v19.zip".to_string(),
                 size: 17,
                 hash: "deadbeef00000000deadbeef00000000".to_string(),
+                last_modified: None,
+                etag: None,
             },
         );
         refs_file.archives.insert(
@@ -1175,6 +1177,8 @@ mod tests {
                 name: "beta__primary__v2.zip".to_string(),
                 size: 29,
                 hash: "0123456789abcdef0123456789abcdef".to_string(),
+                last_modified: None,
+                etag: None,
             },
         );
 

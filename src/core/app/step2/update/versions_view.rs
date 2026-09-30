@@ -511,6 +511,7 @@ struct StatusFacts {
     locked_update: Option<Step2UpdateAsset>,
     in_sync_asset: Option<Step2UpdateAsset>,
     just_fetched: bool,
+    unverified: Option<String>,
 }
 
 fn status_facts(state: &WizardState, basis: &CardBasis) -> StatusFacts {
@@ -545,6 +546,7 @@ fn status_facts(state: &WizardState, basis: &CardBasis) -> StatusFacts {
         .find(|asset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) == basis.tp2_key)
         .cloned();
     let just_fetched = extracted_just_now(state, name);
+    let unverified = find_labelled_error(&state.step2.update_selected_unverified_sources, name);
     StatusFacts {
         fetch_asset,
         check_failed,
@@ -553,6 +555,7 @@ fn status_facts(state: &WizardState, basis: &CardBasis) -> StatusFacts {
         locked_update,
         in_sync_asset,
         just_fetched,
+        unverified,
     }
 }
 
@@ -601,6 +604,15 @@ fn arrow_status_line(version: &str, target: &str) -> String {
     format!("{version} \u{2192} {target}")
 }
 
+fn fetch_status_line(version: &str, target: &str, facts: &StatusFacts) -> String {
+    let arrow = arrow_status_line(version, target);
+    if facts.unverified.is_some() {
+        format!("{arrow} \u{b7} not verified")
+    } else {
+        arrow
+    }
+}
+
 fn locked_available_status_line(version: &str, target: &str) -> String {
     let target = display_version(target);
     format!("{version} \u{b7} locked \u{b7} {target} available")
@@ -639,7 +651,7 @@ fn card_outcome(
                     .map(|error| format!("fetch failed \u{b7} {error}"))
             });
         let (dot, status_line) = failure_line.map_or_else(
-            || (CardDot::Update, arrow_status_line(version, &target)),
+            || (CardDot::Update, fetch_status_line(version, &target, facts)),
             |line| (CardDot::Warn, line),
         );
         return CardOutcome {
@@ -1688,6 +1700,50 @@ mod tests {
         assert_eq!(card.status_line, "1.0 \u{2192} 2.0");
         assert_eq!(card.target.as_deref(), Some("2.0"));
         assert_eq!(view.fetch_count, 1);
+    }
+
+    fn questpack_fetch_state() -> WizardState {
+        let mut state = WizardState::default();
+        state.step2.bgee_mods.push(mod_state(
+            "d0questpack.tp2",
+            "d0questpack",
+            "~d0questpack.tp2~ #0 #0 // 3.5",
+        ));
+        state.step2.update_selected_update_assets.push(asset(
+            "d0questpack.tp2",
+            "d0questpack",
+            "questpack-v35-win",
+        ));
+        state
+    }
+
+    #[test]
+    fn not_verified_direct_link_card_says_so() {
+        let mut state = questpack_fetch_state();
+        state
+            .step2
+            .update_selected_unverified_sources
+            .push("d0questpack: not verified".to_string());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::Fetch);
+        assert_eq!(card.dot, CardDot::Update);
+        assert_eq!(
+            card.status_line,
+            "3.5 \u{2192} questpack-v35-win \u{b7} not verified"
+        );
+    }
+
+    #[test]
+    fn a_verified_fetch_card_has_no_suffix() {
+        let state = questpack_fetch_state();
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::Fetch);
+        assert_eq!(card.dot, CardDot::Update);
+        assert_eq!(card.status_line, "3.5 \u{2192} questpack-v35-win");
     }
 
     #[test]

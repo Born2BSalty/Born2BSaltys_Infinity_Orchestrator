@@ -310,6 +310,7 @@ fn release_asset_outcome(
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
         version_pin_overridden: None,
+        remote_file: None,
     })
 }
 
@@ -338,6 +339,7 @@ fn packaged_release_outcome(
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
         version_pin_overridden: None,
+        remote_file: None,
     })
 }
 
@@ -366,6 +368,7 @@ fn named_release_asset_outcome(
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
         version_pin_overridden: None,
+        remote_file: None,
     })
 }
 
@@ -392,6 +395,7 @@ fn tagged_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -416,6 +420,7 @@ fn branch_source_outcome(
             error: None,
             package_kind: Step2PackageKind::SourceSnapshot,
             version_pin_overridden: None,
+            remote_file: None,
         };
     }
     failed_outcome(
@@ -456,6 +461,7 @@ fn commit_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -552,6 +558,7 @@ fn tagged_tag_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -575,6 +582,7 @@ fn repo_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 

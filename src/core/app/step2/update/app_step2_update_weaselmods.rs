@@ -45,6 +45,7 @@ pub(super) fn check_weaselmods_download_page(
         error: None,
         package_kind: Step2PackageKind::PageArchive,
         version_pin_overridden: pin_overridden,
+        remote_file: None,
     }
 }
 
@@ -73,6 +74,7 @@ fn failed_weaselmods_outcome(
         error: Some(error.to_string()),
         package_kind: Step2PackageKind::PageArchive,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 

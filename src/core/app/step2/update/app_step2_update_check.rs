@@ -8,7 +8,9 @@ use crate::app::app_step2_update_policy::{
     mark_update_available, mod_has_current_version, source_ref_is_update, source_ref_matches,
     version_is_update,
 };
-use crate::app::app_step2_update_source_refs::InstalledRefLookup;
+use crate::app::app_step2_update_source_refs::{
+    InstalledRefLookup, RemoteFileFacts, same_remote_file,
+};
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
 use crate::app::state::{
@@ -54,6 +56,7 @@ pub(crate) struct Step2UpdateCheckOutcome {
     pub(crate) error: Option<String>,
     pub(crate) package_kind: Step2PackageKind,
     pub(crate) version_pin_overridden: Option<String>,
+    pub(crate) remote_file: Option<RemoteFileFacts>,
 }
 pub(crate) fn start_step2_update_check(
     state: &mut WizardState,
@@ -204,6 +207,8 @@ fn clear_previous_update_check_results(
             .update_selected_exact_version_failed_sources
             .clear();
         state.step2.update_selected_failed_sources.clear();
+        state.step2.update_selected_remote_file_facts.clear();
+        state.step2.update_selected_unverified_sources.clear();
         state
             .step2
             .update_selected_exact_version_retry_requests
@@ -266,6 +271,10 @@ fn apply_successful_update_check_outcome(
             .step2
             .update_selected_version_override_warnings
             .push(format!("{} ({wanted} -> {tag})", outcome.label));
+    }
+    if let Some(remote) = outcome.remote_file.as_ref() {
+        decide_direct_link(state, outcome, tag, remote, lookup);
+        return;
     }
     let has_current_version = mod_has_current_version(state, &outcome.game_tab, &outcome.tp_file);
     let allow_log_missing_download =
@@ -333,6 +342,62 @@ fn apply_successful_update_check_outcome(
     if allow_source_ref_update || has_current_version {
         mark_update_available(state, &outcome.game_tab, &outcome.tp_file);
     }
+}
+
+fn decide_direct_link(
+    state: &mut WizardState,
+    outcome: &Step2UpdateCheckOutcome,
+    tag: &str,
+    remote: &RemoteFileFacts,
+    lookup: &InstalledRefLookup,
+) {
+    state.step2.update_selected_remote_file_facts.insert(
+        mod_downloads::normalize_mod_download_tp2(&outcome.tp_file),
+        remote.clone(),
+    );
+    let source_ref = outcome.source_ref.as_deref().unwrap_or(tag);
+    match lookup
+        .archive(&outcome.tp_file)
+        .map(|record| same_remote_file(record, remote))
+    {
+        Some(Some(true)) => {
+            if reproduce_exact_gate(state) {
+                push_update_asset_if_available(state, outcome, tag, source_ref, false);
+                state
+                    .step2
+                    .update_selected_update_sources
+                    .push(format!("{} ({tag})", outcome.label));
+            } else {
+                keep_in_sync_asset(state, outcome, tag, source_ref, false);
+            }
+        }
+        Some(Some(false)) => fetch_direct_link(state, outcome, tag, source_ref),
+        None | Some(None) => {
+            fetch_direct_link(state, outcome, tag, source_ref);
+            state
+                .step2
+                .update_selected_unverified_sources
+                .push(format!("{}: not verified", outcome.label));
+        }
+    }
+}
+
+fn fetch_direct_link(
+    state: &mut WizardState,
+    outcome: &Step2UpdateCheckOutcome,
+    tag: &str,
+    source_ref: &str,
+) {
+    push_update_asset_if_available(state, outcome, tag, source_ref, false);
+    let entry = format!("{} ({tag})", outcome.label);
+    if exact_log_missing_download_requested(state, &outcome.game_tab, &outcome.tp_file)
+        && log_missing_downloads_enabled(state)
+    {
+        state.step2.update_selected_missing_sources.push(entry);
+    } else {
+        state.step2.update_selected_update_sources.push(entry);
+    }
+    mark_update_available(state, &outcome.game_tab, &outcome.tp_file);
 }
 
 fn push_update_asset_if_available(
@@ -428,7 +493,9 @@ pub(super) fn check_latest_release_for_worker(
     } else if mod_downloads::source_is_morpheus_mart_page_url(&request.source_url) {
         super::app_step2_update_morpheus_mart::check_morpheus_mart_download_page(agent, &request)
     } else if mod_downloads::is_direct_archive_url(&request.source_url) {
-        super::app_step2_update_direct_archive::check_direct_archive(&request)
+        super::app_step2_update_direct_archive::check_direct_archive(&request, &|url| {
+            super::app_step2_update_direct_archive::probe_remote_file(agent, url)
+        })
     } else {
         failed_outcome(request, "source is not auto-resolvable")
     }
@@ -456,6 +523,7 @@ pub(super) fn failed_outcome(
         error: Some(error.to_string()),
         package_kind,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -504,6 +572,14 @@ pub(crate) fn clear_update_check_result_for_mod(
         .step2
         .update_selected_failed_sources
         .retain(|entry| !entry.starts_with(&format!("{label}:")));
+    state
+        .step2
+        .update_selected_unverified_sources
+        .retain(|entry| !entry.starts_with(&format!("{label}:")));
+    state
+        .step2
+        .update_selected_remote_file_facts
+        .remove(&tp2_key);
     state
         .step2
         .update_selected_exact_version_retry_requests
@@ -656,6 +732,7 @@ fn push_exact_version_retry_request(state: &mut WizardState, game_tab: &str, tp_
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::app_step2_update_source_refs::InstalledArchiveRecord;
 
     #[test]
     fn reproduce_exact_gate_fires_only_in_reproduce_mode() {
@@ -755,6 +832,7 @@ mod tests {
             error: None,
             package_kind: Step2PackageKind::PageArchive,
             version_pin_overridden: Some("6.5.5".to_string()),
+            remote_file: None,
         };
 
         let sources = ModDownloadsLoad::default();
@@ -888,6 +966,7 @@ mod tests {
             error: None,
             package_kind: Step2PackageKind::ReleaseAsset,
             version_pin_overridden: None,
+            remote_file: None,
         }
     }
 
@@ -1047,6 +1126,7 @@ mod tests {
             error: None,
             package_kind: Step2PackageKind::SourceSnapshot,
             version_pin_overridden: None,
+            remote_file: None,
         }
     }
 
@@ -1192,10 +1272,13 @@ mod tests {
     }
 
     #[test]
-    fn direct_archive_request_resolves_without_a_network_call() {
+    fn direct_archive_request_resolves_from_the_link_and_the_probe() {
         let request = questpack_request("https://pocketplane.net/mods/questpack-v35-win.zip");
-        let outcome = check_latest_release_for_worker(&ureq::AgentBuilder::new().build(), request);
+        let probe = |_: &str| Ok(recorded_date_facts());
+        let outcome =
+            super::super::app_step2_update_direct_archive::check_direct_archive(&request, &probe);
         assert!(outcome.error.is_none());
+        assert_eq!(outcome.remote_file, Some(recorded_date_facts()));
         assert_eq!(outcome.tag.as_deref(), Some("questpack-v35-win"));
         assert_eq!(outcome.asset_name.as_deref(), Some("questpack-v35-win.zip"));
         assert_eq!(
@@ -1217,5 +1300,220 @@ mod tests {
             outcome.error.as_deref(),
             Some("source is not auto-resolvable")
         );
+    }
+
+    const QUESTPACK_TP2: &str = "d0questpack/setup-d0questpack.tp2";
+    const QUESTPACK_SIZE: u64 = 21_707_615;
+    const RECORDED_DATE: &str = "Thu, 10 Sep 2020 17:25:37 GMT";
+
+    fn recorded_date_facts() -> RemoteFileFacts {
+        RemoteFileFacts {
+            size: Some(QUESTPACK_SIZE),
+            last_modified: Some(RECORDED_DATE.to_string()),
+            etag: None,
+        }
+    }
+
+    fn questpack_record(last_modified: Option<&str>) -> InstalledArchiveRecord {
+        InstalledArchiveRecord {
+            name: "questpack-v35-win.zip".to_string(),
+            size: QUESTPACK_SIZE,
+            hash: "00ff00ff00ff00ff00ff00ff00ff00ff".to_string(),
+            last_modified: last_modified.map(str::to_string),
+            etag: None,
+        }
+    }
+
+    fn questpack_state() -> WizardState<bool> {
+        let mut state = multikits_state();
+        let mod_state = &mut state.step2.bgee_mods[0];
+        mod_state.name = "d0questpack".to_string();
+        mod_state.tp_file = QUESTPACK_TP2.to_string();
+        mod_state.components[0].label = "d0questpack".to_string();
+        mod_state.components[0].raw_line =
+            "~D0QUESTPACK/SETUP-D0QUESTPACK.TP2~ #0 #0 // Quest Pack: v3.5".to_string();
+        state
+    }
+
+    fn questpack_outcome(remote: RemoteFileFacts) -> Step2UpdateCheckOutcome {
+        Step2UpdateCheckOutcome {
+            game_tab: "BGEE".to_string(),
+            tp_file: QUESTPACK_TP2.to_string(),
+            label: "d0questpack".to_string(),
+            source_id: "pocket-plane-group".to_string(),
+            source_url: String::new(),
+            tag: Some("questpack-v35-win".to_string()),
+            source_ref: None,
+            asset_name: Some("questpack-v35-win.zip".to_string()),
+            asset_url: Some("https://pocketplane.net/mods/questpack-v35-win.zip".to_string()),
+            error: None,
+            package_kind: Step2PackageKind::ReleaseAsset,
+            version_pin_overridden: None,
+            remote_file: Some(remote),
+        }
+    }
+
+    fn check_questpack(
+        record: Option<InstalledArchiveRecord>,
+        remote: RemoteFileFacts,
+    ) -> WizardState<bool> {
+        let mut list = crate::app::app_step2_update_source_refs::ModSourceRefsFile::default();
+        if let Some(record) = record {
+            list.archives.insert("d0questpack".to_string(), record);
+        }
+        let lookup = InstalledRefLookup::from_files(None, list);
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        let mut state = questpack_state();
+        apply_update_check_outcome(
+            &mut state,
+            &questpack_outcome(remote),
+            &sources,
+            &lookup,
+            false,
+        );
+        state
+    }
+
+    fn assert_questpack_in_sync(state: &WizardState<bool>) {
+        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert!(state.step2.update_selected_update_sources.is_empty());
+        assert!(state.step2.update_selected_unverified_sources.is_empty());
+        assert_eq!(state.step2.update_selected_in_sync_assets.len(), 1);
+        assert_eq!(state.step2.bgee_mods[0].package_marker, None);
+    }
+
+    fn assert_questpack_fetch(state: &WizardState<bool>) {
+        let assets = &state.step2.update_selected_update_assets;
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].tag, "questpack-v35-win");
+        assert_eq!(assets[0].asset_name, "questpack-v35-win.zip");
+        assert_eq!(
+            state.step2.update_selected_update_sources,
+            vec!["d0questpack (questpack-v35-win)".to_string()]
+        );
+        assert_eq!(state.step2.bgee_mods[0].package_marker, Some('+'));
+    }
+
+    #[test]
+    fn direct_link_with_the_recorded_date_stays_in_sync() {
+        let state = check_questpack(
+            Some(questpack_record(Some(RECORDED_DATE))),
+            recorded_date_facts(),
+        );
+        assert_questpack_in_sync(&state);
+    }
+
+    #[test]
+    fn direct_link_with_a_newer_date_is_a_fetch() {
+        let newer = RemoteFileFacts {
+            last_modified: Some("Fri, 11 Sep 2020 17:25:37 GMT".to_string()),
+            ..recorded_date_facts()
+        };
+        let state = check_questpack(Some(questpack_record(Some(RECORDED_DATE))), newer);
+        assert_questpack_fetch(&state);
+        assert!(state.step2.update_selected_unverified_sources.is_empty());
+    }
+
+    #[test]
+    fn direct_link_record_without_a_date_compares_size() {
+        let same_size = check_questpack(Some(questpack_record(None)), recorded_date_facts());
+        assert_questpack_in_sync(&same_size);
+
+        let resized = RemoteFileFacts {
+            size: Some(QUESTPACK_SIZE + 1),
+            ..recorded_date_facts()
+        };
+        let other_size = check_questpack(Some(questpack_record(None)), resized);
+        assert_questpack_fetch(&other_size);
+        assert!(
+            other_size
+                .step2
+                .update_selected_unverified_sources
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn direct_link_without_a_record_is_a_fetch_marked_not_verified() {
+        let state = check_questpack(None, recorded_date_facts());
+        assert_questpack_fetch(&state);
+        assert_eq!(
+            state.step2.update_selected_unverified_sources,
+            vec!["d0questpack: not verified".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_log_pending_direct_link_without_a_record_is_counted_missing() {
+        let lookup = InstalledRefLookup::from_files(
+            None,
+            crate::app::app_step2_update_source_refs::ModSourceRefsFile::default(),
+        );
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        let mut state = questpack_state();
+        state.step2.whole_folder_check_active = true;
+        state
+            .step2
+            .log_pending_downloads
+            .push(crate::app::state::Step2LogPendingDownload {
+                game_tab: "BGEE".to_string(),
+                tp_file: QUESTPACK_TP2.to_string(),
+                label: "d0questpack".to_string(),
+                requested_version: None,
+            });
+
+        apply_update_check_outcome(
+            &mut state,
+            &questpack_outcome(recorded_date_facts()),
+            &sources,
+            &lookup,
+            false,
+        );
+
+        assert_eq!(state.step2.update_selected_update_assets.len(), 1);
+        assert_eq!(
+            state.step2.update_selected_missing_sources,
+            vec!["d0questpack (questpack-v35-win)".to_string()]
+        );
+        assert!(state.step2.update_selected_update_sources.is_empty());
+        assert_eq!(
+            state.step2.update_selected_unverified_sources,
+            vec!["d0questpack: not verified".to_string()]
+        );
+    }
+
+    #[test]
+    fn direct_link_facts_are_remembered_for_the_extract_job() {
+        let state = check_questpack(
+            Some(questpack_record(Some(RECORDED_DATE))),
+            recorded_date_facts(),
+        );
+        assert_eq!(
+            state
+                .step2
+                .update_selected_remote_file_facts
+                .get("d0questpack"),
+            Some(&recorded_date_facts())
+        );
+        assert_eq!(state.step2.update_selected_remote_file_facts.len(), 1);
+    }
+
+    #[test]
+    fn a_new_check_forgets_the_remembered_facts() {
+        let mut full = check_questpack(None, recorded_date_facts());
+        assert!(!full.step2.update_selected_remote_file_facts.is_empty());
+        clear_previous_update_check_results(&mut full, &[], false);
+        assert!(full.step2.update_selected_remote_file_facts.is_empty());
+        assert!(full.step2.update_selected_unverified_sources.is_empty());
+
+        let mut targeted = check_questpack(None, recorded_date_facts());
+        targeted.step2.update_selected_refresh_target_tp_file = Some(QUESTPACK_TP2.to_string());
+        clear_previous_update_check_results(
+            &mut targeted,
+            &[questpack_outcome(recorded_date_facts())],
+            false,
+        );
+        assert!(targeted.step2.update_selected_remote_file_facts.is_empty());
+        assert!(targeted.step2.update_selected_unverified_sources.is_empty());
     }
 }

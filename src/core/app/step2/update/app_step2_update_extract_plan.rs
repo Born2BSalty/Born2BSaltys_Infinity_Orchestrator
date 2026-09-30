@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::app::app_step2_update_download;
 use crate::app::app_step2_update_source_refs::{
-    RefsTargets, installed_source_refs_path, mods_folder_refs_path,
+    RefsTargets, RemoteFileFacts, installed_source_refs_path, mods_folder_refs_path,
 };
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
@@ -26,6 +26,7 @@ pub(crate) struct Step2UpdateExtractJob {
     pub(crate) backup_version_tag: String,
     pub(crate) installed_source_ref: Option<String>,
     pub(crate) installed_source_id: Option<String>,
+    pub(crate) remote_file: Option<RemoteFileFacts>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +105,11 @@ pub(crate) fn build_extract_jobs(
             backup_version_tag: asset.tag.clone(),
             installed_source_ref: extract_source_ref(asset, source.as_ref()),
             installed_source_id,
+            remote_file: state
+                .step2
+                .update_selected_remote_file_facts
+                .get(&mod_downloads::normalize_mod_download_tp2(&asset.tp_file))
+                .cloned(),
         });
     }
     plan
@@ -334,6 +340,50 @@ mod tests {
         assert!(blank.jobs.is_empty());
         assert_eq!(blank.refs_targets.list, refs_path);
         assert_eq!(blank.refs_targets.folder, None);
+    }
+
+    #[test]
+    fn extract_job_carries_the_remembered_facts_for_its_asset() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = TestRoot::new("remembered_facts");
+        let archive_dir = root.archive_dir();
+
+        let mut state = WizardState::default();
+        state.step1.mods_folder = root.0.join("mods").to_string_lossy().into_owned();
+        let questpack = asset(
+            "d0questpack/setup-d0questpack.tp2",
+            "d0questpack",
+            "questpack-v35-win",
+        );
+        let alpha = asset("alpha.tp2", "Alpha", "1.0");
+        for on_disk in [&questpack, &alpha] {
+            fs::write(
+                archive_dir.join(app_step2_update_download::archive_file_name(on_disk)),
+                b"x",
+            )
+            .unwrap();
+        }
+        let facts = RemoteFileFacts {
+            size: Some(21_707_615),
+            last_modified: Some("Thu, 10 Sep 2020 17:25:37 GMT".to_string()),
+            etag: None,
+        };
+        state
+            .step2
+            .update_selected_remote_file_facts
+            .insert("d0questpack".to_string(), facts.clone());
+        state.step2.update_selected_update_assets = vec![questpack, alpha];
+        let refs_path = root.0.join("refs.toml");
+
+        let jobs = build_extract_jobs(&mut state, &archive_dir, Some(&refs_path), None).jobs;
+
+        assert_eq!(jobs.len(), 2);
+        let remembered = jobs.iter().find(|job| job.label == "d0questpack").unwrap();
+        assert_eq!(remembered.remote_file, Some(facts));
+        let unremembered = jobs.iter().find(|job| job.label == "Alpha").unwrap();
+        assert_eq!(unremembered.remote_file, None);
     }
 
     fn named_asset(asset_name: &str, tag: &str) -> Step2UpdateAsset {

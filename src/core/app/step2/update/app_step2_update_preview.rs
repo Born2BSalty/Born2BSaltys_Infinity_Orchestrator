@@ -371,6 +371,8 @@ fn clear_full_update_preview_results(state: &mut WizardState) {
         .update_selected_exact_version_failed_sources
         .clear();
     state.step2.update_selected_failed_sources.clear();
+    state.step2.update_selected_remote_file_facts.clear();
+    state.step2.update_selected_unverified_sources.clear();
     state.step2.update_selected_check_requests.clear();
     state
         .step2

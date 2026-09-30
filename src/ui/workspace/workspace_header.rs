@@ -868,6 +868,8 @@ mod tests {
             name: "alpha__primary__v19.zip".to_string(),
             size: 1234,
             hash: "0123456789abcdef0123456789abcdef".to_string(),
+            last_modified: None,
+            etag: None,
         };
         let mut refs_file = ModSourceRefsFile::default();
         refs_file
