@@ -16,6 +16,8 @@ pub mod app_step2_update_asset_pick;
 pub mod app_step2_update_check;
 #[path = "step2/update/app_step2_update_check_worker.rs"]
 pub mod app_step2_update_check_worker;
+#[path = "step2/update/app_step2_update_direct_archive.rs"]
+pub mod app_step2_update_direct_archive;
 #[path = "step2/update/app_step2_update_download.rs"]
 pub mod app_step2_update_download;
 #[path = "step2/update/app_step2_update_extract.rs"]

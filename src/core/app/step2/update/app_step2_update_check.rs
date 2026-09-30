@@ -395,6 +395,8 @@ pub(super) fn check_latest_release_for_worker(
         super::app_step2_update_weaselmods::check_weaselmods_download_page(agent, &request)
     } else if mod_downloads::source_is_morpheus_mart_page_url(&request.source_url) {
         super::app_step2_update_morpheus_mart::check_morpheus_mart_download_page(agent, &request)
+    } else if mod_downloads::is_direct_archive_url(&request.source_url) {
+        super::app_step2_update_direct_archive::check_direct_archive(&request)
     } else {
         failed_outcome(request, "source is not auto-resolvable")
     }
@@ -1059,5 +1061,53 @@ mod tests {
         let expected_source_url = request.source_url.clone();
         let outcome = failed_outcome(request, "x");
         assert_eq!(outcome.source_url, expected_source_url);
+    }
+
+    fn questpack_request(source_url: &str) -> Step2UpdateCheckRequest {
+        Step2UpdateCheckRequest {
+            game_tab: "BGEE".to_string(),
+            tp_file: "d0questpack/setup-d0questpack.tp2".to_string(),
+            label: "d0questpack".to_string(),
+            source_id: "pocket-plane-group".to_string(),
+            repo: String::new(),
+            exact_github: vec![],
+            source_url: source_url.to_string(),
+            channel: None,
+            tag: None,
+            commit: None,
+            branch: None,
+            release: None,
+            asset: None,
+            pkg: None,
+            requested_version: None,
+        }
+    }
+
+    #[test]
+    fn direct_archive_request_resolves_without_a_network_call() {
+        let request = questpack_request("https://pocketplane.net/mods/questpack-v35-win.zip");
+        let outcome = check_latest_release_for_worker(&ureq::AgentBuilder::new().build(), request);
+        assert!(outcome.error.is_none());
+        assert_eq!(outcome.tag.as_deref(), Some("questpack-v35-win"));
+        assert_eq!(outcome.asset_name.as_deref(), Some("questpack-v35-win.zip"));
+        assert_eq!(
+            outcome.asset_url.as_deref(),
+            Some("https://pocketplane.net/mods/questpack-v35-win.zip")
+        );
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::ReleaseAsset
+        ));
+    }
+
+    #[test]
+    fn unresolvable_request_still_fails() {
+        let request =
+            questpack_request("https://www.nexusmods.com/baldursgateenhancededition/mods/1");
+        let outcome = check_latest_release_for_worker(&ureq::AgentBuilder::new().build(), request);
+        assert_eq!(
+            outcome.error.as_deref(),
+            Some("source is not auto-resolvable")
+        );
     }
 }

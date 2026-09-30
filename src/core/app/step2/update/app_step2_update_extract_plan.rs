@@ -133,6 +133,12 @@ fn extract_source_ref(
         if source.is_some_and(|source| source.github.is_some()) {
             return Some(asset.tag.clone());
         }
+        if source.is_some_and(|source| {
+            mod_downloads::is_direct_archive_url(&source.url)
+                && !mod_downloads::source_is_page_archive_url(&source.url)
+        }) {
+            return Some(asset.tag.clone());
+        }
         if source
             .and_then(|source| source.asset.as_ref())
             .is_some_and(|value| !value.trim().is_empty())
@@ -355,7 +361,10 @@ mod tests {
 
     #[test]
     fn page_archive_asset_keeps_the_old_recording_rule() {
-        let page_source = mod_downloads::ModDownloadSource::default();
+        let page_source = mod_downloads::ModDownloadSource {
+            url: "https://downloads.weaselmods.net/download/mod.zip".to_string(),
+            ..Default::default()
+        };
         assert_eq!(
             extract_source_ref(&named_asset("mod.zip", "1.2"), Some(&page_source)),
             None
@@ -364,6 +373,19 @@ mod tests {
             extract_source_ref(&named_asset("mod-source.zip", "1.2"), Some(&page_source))
                 .as_deref(),
             Some("1.2")
+        );
+    }
+
+    #[test]
+    fn direct_archive_asset_records_its_stem_as_the_installed_ref() {
+        let source = mod_downloads::ModDownloadSource {
+            url: "https://pocketplane.net/mods/questpack-v35-win.zip".to_string(),
+            ..Default::default()
+        };
+        let asset = named_asset("questpack-v35-win.zip", "questpack-v35-win");
+        assert_eq!(
+            extract_source_ref(&asset, Some(&source)).as_deref(),
+            Some("questpack-v35-win")
         );
     }
 
