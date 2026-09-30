@@ -9,6 +9,7 @@ use std::sync::mpsc::Receiver;
 use anyhow::Result;
 
 mod analyze;
+mod analyze_error_block;
 mod api;
 mod backend;
 mod input;

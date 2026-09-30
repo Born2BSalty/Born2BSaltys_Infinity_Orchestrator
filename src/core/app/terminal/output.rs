@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 mod accessors {
-    use super::super::{EmbeddedTerminal, PromptInfo, analyze};
+    use super::super::{EmbeddedTerminal, PromptInfo, analyze, analyze_error_block};
 
     impl EmbeddedTerminal {
         #[must_use]
@@ -32,7 +32,7 @@ mod accessors {
 
         #[must_use]
         pub fn extract_error_block(&self) -> String {
-            analyze::extract_error_block(&self.output_buffer)
+            analyze_error_block::extract_error_block(&self.output_buffer)
         }
 
         #[must_use]
