@@ -85,8 +85,8 @@ tp2 = "examplemod"
 # Aliases help BIO match logs and scanned mods.
 # Aliases do not rename files or folders.
 
-# tp2 = "questpack"           # Main TP2 name BIO should use
-# aliases = ["d0questpack"]   # Other TP2 names BIO should also recognize
+# tp2 = "d0questpack"         # Main TP2 name BIO should use (the TP2 file's name)
+# aliases = ["questpack"]     # Other TP2 or folder names BIO should also recognize
 
 # This means BIO treats these as the same mod:
 # questpack

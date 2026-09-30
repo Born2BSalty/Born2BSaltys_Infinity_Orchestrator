@@ -187,7 +187,11 @@ fn find_extracted_mod_root(
         return Ok(tp2_parent.to_path_buf());
     }
     let mod_dir = find_matching_child_mod_dir(tp2_parent, &accepted)
-        .ok_or_else(|| "matching mod folder not found for root-level .tp2".to_string())?;
+        .or_else(|| {
+            backup_folder_from_tp2(&tp2_path)
+                .and_then(|name| find_child_dir_named(tp2_parent, &name))
+        })
+        .ok_or_else(|| MOD_FOLDER_NOT_FOUND.to_string())?;
     let file_name = tp2_path
         .file_name()
         .ok_or_else(|| "matching .tp2 file name is missing".to_string())?;
@@ -239,6 +243,43 @@ fn find_matching_child_mod_dir(parent: &Path, accepted: &[String]) -> Option<Pat
     } else {
         None
     }
+}
+
+const BACKUP_KEYWORD: &str = "backup";
+const MOD_FOLDER_NOT_FOUND: &str = "matching mod folder not found for root-level .tp2 (add the folder name under Other TP2 or folder names)";
+
+fn backup_folder_from_tp2(tp2_path: &Path) -> Option<String> {
+    let bytes = fs::read(tp2_path).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
+    let line = text
+        .lines()
+        .map(str::trim_start)
+        .find(|line| line.to_ascii_lowercase().starts_with(BACKUP_KEYWORD))?;
+    let rest = line.get(BACKUP_KEYWORD.len()..)?.trim();
+    let open = rest.find(['~', '"', '%'])?;
+    let quote = rest.get(open..)?.chars().next()?;
+    let after_open = rest.get(open + quote.len_utf8()..)?;
+    let value = after_open.get(..after_open.find(quote)?)?;
+    let normalized = value.replace('\\', "/");
+    let segment = normalized.split('/').find(|segment| !segment.is_empty())?;
+    if segment == "." || segment == ".." {
+        return None;
+    }
+    Some(segment.to_string())
+}
+
+fn find_child_dir_named(parent: &Path, name: &str) -> Option<PathBuf> {
+    fs::read_dir(parent)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .find(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case(name)
+        })
+        .map(|entry| entry.path())
 }
 
 fn apply_tp2_rename(
@@ -381,4 +422,111 @@ fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    struct ArchiveTestRoot(PathBuf);
+
+    impl ArchiveTestRoot {
+        fn new() -> Self {
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_extract_root_test_{}_{}",
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::SeqCst)
+            )));
+            fs::create_dir_all(&root.0).unwrap();
+            root
+        }
+
+        fn folder(&self, name: &str) {
+            let dir = self.0.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("readme.txt"), "x").unwrap();
+        }
+
+        fn file(&self, name: &str, text: &str) -> PathBuf {
+            let path = self.0.join(name);
+            fs::write(&path, text).unwrap();
+            path
+        }
+    }
+
+    impl Drop for ArchiveTestRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const QUESTPACK_TP2: &str = "setup-d0questpack.tp2";
+
+    #[test]
+    fn root_level_tp2_follows_its_backup_directive_to_the_mod_folder() {
+        let root = ArchiveTestRoot::new();
+        root.folder("questpack");
+        root.file(QUESTPACK_TP2, "BACKUP ~questpack/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None);
+
+        assert_eq!(found, Ok(root.0.join("questpack")));
+        assert!(root.0.join("questpack").join(QUESTPACK_TP2).is_file());
+    }
+
+    #[test]
+    fn backup_directive_lookup_is_case_insensitive() {
+        let root = ArchiveTestRoot::new();
+        root.folder("QuestPack");
+        root.file(QUESTPACK_TP2, "BACKUP ~questpack/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None).unwrap();
+
+        assert_eq!(
+            found.file_name().and_then(|name| name.to_str()),
+            Some("QuestPack")
+        );
+    }
+
+    #[test]
+    fn backup_directive_naming_a_missing_folder_keeps_the_old_error() {
+        let root = ArchiveTestRoot::new();
+        root.folder("questpack");
+        root.file(QUESTPACK_TP2, "BACKUP ~elsewhere/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None);
+
+        assert_eq!(found, Err(MOD_FOLDER_NOT_FOUND.to_string()));
+        assert!(MOD_FOLDER_NOT_FOUND.contains("Other TP2 or folder names"));
+    }
+
+    #[test]
+    fn backup_folder_from_tp2_reads_quotes_and_backslashes() {
+        let root = ArchiveTestRoot::new();
+        let double_quoted = root.file("double.tp2", "  BACKUP \"questpack\\backup\"\n");
+        let parent_escape = root.file("escape.tp2", "BACKUP ~..\\x~\n");
+        let no_backup = root.file("none.tp2", "AUTHOR ~x~\nBEGIN ~y~\n");
+
+        assert_eq!(
+            backup_folder_from_tp2(&double_quoted),
+            Some("questpack".to_string())
+        );
+        assert_eq!(backup_folder_from_tp2(&parent_escape), None);
+        assert_eq!(backup_folder_from_tp2(&no_backup), None);
+    }
+
+    #[test]
+    fn child_named_like_the_tp2_still_wins_over_the_directive() {
+        let root = ArchiveTestRoot::new();
+        root.folder("d0questpack");
+        root.folder("questpack");
+        root.file(QUESTPACK_TP2, "BACKUP ~questpack/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None);
+
+        assert_eq!(found, Ok(root.0.join("d0questpack")));
+    }
 }

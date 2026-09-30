@@ -1466,18 +1466,18 @@ tp2 = "npcflirt"
 
 [[mods]]
 name = "Quest Pack"
-tp2 = "questpack"
-aliases = ["d0questpack"]
+tp2 = "d0questpack"
+aliases = ["questpack"]
 
   [[mods.sources]]
   id = "pocket-plane-group"
   label = "Pocket-Plane-Group"
-  type = "github"
-  url = "https://github.com/Pocket-Plane-Group/QuestPack"
-  repo = "Pocket-Plane-Group/QuestPack"
+  type = "url"
+  url = "https://pocketplane.net/mods/questpack-v35-win.zip"
+  repo = ""
   commit = ""
   tag = ""
-  branch = "master"
+  branch = ""
   channel = ""
   asset = ""
   pkg_windows = ""

@@ -13,7 +13,7 @@ use crate::app::state::{
     exact_log_ready_to_install, update_pipeline_busy,
 };
 use crate::app::step2_action::Step2Action;
-use crate::app::versions_view::{self, VersionCard, VersionsView};
+use crate::app::versions_view::{self, FetchOffer, VersionCard, VersionsView};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::drawer::{self, DrawerSpec, DrawerWidth};
 use crate::ui::orchestrator::widgets::{
@@ -219,7 +219,7 @@ fn next_queued_fetch(versions_ui: &mut VersionsDrawerUi, view: &VersionsView) ->
         if view
             .cards
             .iter()
-            .any(|card| card.tp2 == tp2 && card.can_fetch && !card.locked)
+            .any(|card| card.tp2 == tp2 && card.offer != FetchOffer::None && !card.locked)
         {
             return Some(tp2);
         }
@@ -1341,7 +1341,11 @@ mod tests {
             status_line: String::new(),
             target: None,
             locked,
-            can_fetch,
+            offer: if can_fetch {
+                FetchOffer::Fetch
+            } else {
+                FetchOffer::None
+            },
             layer: "",
             rule_words: String::new(),
             selector_hover: String::new(),
@@ -1352,6 +1356,35 @@ mod tests {
             fetching: None,
             queued: false,
         }
+    }
+
+    fn refetch_test_card(tp2: &str, locked: bool) -> VersionCard {
+        VersionCard {
+            status: versions_view::CardStatus::InSync,
+            dot: versions_view::CardDot::Neutral,
+            offer: FetchOffer::Refetch,
+            ..queue_test_card(tp2, false, locked)
+        }
+    }
+
+    #[test]
+    fn next_queued_fetch_accepts_a_refetch_card() {
+        let view = VersionsView {
+            cards: vec![refetch_test_card("r", true), refetch_test_card("s", false)],
+            fetch_count: 0,
+            attention_count: 0,
+            locked_count: 0,
+            log_missing_count: 0,
+        };
+        let mut versions_ui = VersionsDrawerUi {
+            fetch_queue: ["r", "s"].map(str::to_string).to_vec(),
+            ..VersionsDrawerUi::default()
+        };
+        assert_eq!(
+            next_queued_fetch(&mut versions_ui, &view).as_deref(),
+            Some("s")
+        );
+        assert!(versions_ui.fetch_queue.is_empty());
     }
 
     #[test]

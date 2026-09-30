@@ -196,6 +196,7 @@ fn clear_previous_update_check_results(
         clear_targeted_update_check_results(state, outcomes);
     } else {
         state.step2.update_selected_update_assets.clear();
+        state.step2.update_selected_in_sync_assets.clear();
         state.step2.update_selected_update_sources.clear();
         state.step2.update_selected_missing_sources.clear();
         state
@@ -279,6 +280,8 @@ fn apply_successful_update_check_outcome(
                 .step2
                 .update_selected_update_sources
                 .push(format!("{} ({tag})", outcome.label));
+        } else {
+            keep_in_sync_asset(state, outcome, tag, source_ref, uses_source_snapshot);
         }
         return;
     }
@@ -317,6 +320,7 @@ fn apply_successful_update_check_outcome(
         || (has_current_version
             && version_is_update(state, &outcome.game_tab, &outcome.tp_file, tag));
     if !should_apply_update_outcome {
+        keep_in_sync_asset(state, outcome, tag, source_ref, uses_source_snapshot);
         return;
     }
     push_update_asset_if_available(state, outcome, tag, source_ref, uses_source_snapshot);
@@ -354,6 +358,34 @@ fn push_update_asset_if_available(
             asset_url: asset_url.clone(),
             installed_source_ref: uses_source_snapshot.then(|| source_ref.to_string()),
         });
+}
+
+fn keep_in_sync_asset(
+    state: &mut WizardState,
+    outcome: &Step2UpdateCheckOutcome,
+    tag: &str,
+    source_ref: &str,
+    uses_source_snapshot: bool,
+) {
+    let (Some(asset_name), Some(asset_url)) = (&outcome.asset_name, &outcome.asset_url) else {
+        return;
+    };
+    let tp2_key = mod_downloads::normalize_mod_download_tp2(&outcome.tp_file);
+    let in_sync = &mut state.step2.update_selected_in_sync_assets;
+    in_sync.retain(|asset| {
+        asset.game_tab != outcome.game_tab
+            || mod_downloads::normalize_mod_download_tp2(&asset.tp_file) != tp2_key
+    });
+    in_sync.push(Step2UpdateAsset {
+        game_tab: outcome.game_tab.clone(),
+        tp_file: outcome.tp_file.clone(),
+        label: outcome.label.clone(),
+        source_id: outcome.source_id.clone(),
+        tag: tag.to_string(),
+        asset_name: asset_name.clone(),
+        asset_url: asset_url.clone(),
+        installed_source_ref: uses_source_snapshot.then(|| source_ref.to_string()),
+    });
 }
 
 fn update_check_finished_status(
@@ -449,6 +481,10 @@ pub(crate) fn clear_update_check_result_for_mod(
 ) {
     let tp2_key = mod_downloads::normalize_mod_download_tp2(tp_file);
     state.step2.update_selected_update_assets.retain(|asset| {
+        asset.game_tab != game_tab
+            || mod_downloads::normalize_mod_download_tp2(&asset.tp_file) != tp2_key
+    });
+    state.step2.update_selected_in_sync_assets.retain(|asset| {
         asset.game_tab != game_tab
             || mod_downloads::normalize_mod_download_tp2(&asset.tp_file) != tp2_key
     });
@@ -856,6 +892,23 @@ mod tests {
     }
 
     fn check_multikits_release(label: &str, refs_file: Option<&str>) -> WizardState<bool> {
+        check_multikits_release_times(label, refs_file, 1)
+    }
+
+    fn check_multikits_release_times(
+        label: &str,
+        refs_file: Option<&str>,
+        times: usize,
+    ) -> WizardState<bool> {
+        check_multikits_outcome(label, refs_file, &multikits_release_outcome(), times)
+    }
+
+    fn check_multikits_outcome(
+        label: &str,
+        refs_file: Option<&str>,
+        outcome: &Step2UpdateCheckOutcome,
+        times: usize,
+    ) -> WizardState<bool> {
         let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -877,14 +930,69 @@ mod tests {
         ));
         let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
         let lookup = InstalledRefLookup::load(state.step1.mods_folder.trim());
-        apply_update_check_outcome(
-            &mut state,
-            &multikits_release_outcome(),
-            &sources,
-            &lookup,
-            false,
-        );
+        for _ in 0..times {
+            apply_update_check_outcome(&mut state, outcome, &sources, &lookup, false);
+        }
         state
+    }
+
+    fn assert_single_in_sync_multikits_asset(state: &WizardState<bool>) {
+        assert!(state.step2.update_selected_update_assets.is_empty());
+        let outcome = multikits_release_outcome();
+        let in_sync = &state.step2.update_selected_in_sync_assets;
+        assert_eq!(in_sync.len(), 1);
+        assert_eq!(Some(in_sync[0].tag.as_str()), outcome.tag.as_deref());
+        assert_eq!(
+            Some(in_sync[0].asset_name.as_str()),
+            outcome.asset_name.as_deref()
+        );
+        assert_eq!(
+            Some(in_sync[0].asset_url.as_str()),
+            outcome.asset_url.as_deref()
+        );
+        assert!(in_sync[0].installed_source_ref.is_none());
+    }
+
+    #[test]
+    fn in_sync_outcome_keeps_its_asset_for_a_refetch() {
+        let state = check_multikits_release(
+            "in_sync_keeps_asset",
+            Some("[refs]\na7-multikits = \"v1.1\"\n\n[sources]\na7-multikits = \"argent77\"\n"),
+        );
+        assert_single_in_sync_multikits_asset(&state);
+    }
+
+    #[test]
+    fn version_match_outcome_keeps_its_asset_for_a_refetch() {
+        let state = check_multikits_release("version_match_keeps_asset", None);
+        assert_single_in_sync_multikits_asset(&state);
+    }
+
+    #[test]
+    fn a_repeat_check_replaces_the_in_sync_entry() {
+        let state = check_multikits_release_times("repeat_check_in_sync", None, 2);
+        assert_single_in_sync_multikits_asset(&state);
+    }
+
+    #[test]
+    fn in_sync_snapshot_outcome_keeps_its_commit_ref() {
+        let commit_ref = "commit@abc1234abc1234abc1234abc1234abc1234abc1";
+        let outcome = Step2UpdateCheckOutcome {
+            tag: Some("commit-abc1234".to_string()),
+            source_ref: Some(commit_ref.to_string()),
+            asset_name: Some("A7-MultiKits-abc1234.zip".to_string()),
+            asset_url: Some("https://example.com/argent77/A7-MultiKits/abc1234.zip".to_string()),
+            package_kind: Step2PackageKind::SourceSnapshot,
+            ..multikits_release_outcome()
+        };
+        let refs_file = format!(
+            "[refs]\na7-multikits = \"{commit_ref}\"\n\n[sources]\na7-multikits = \"argent77\"\n"
+        );
+        let state = check_multikits_outcome("in_sync_snapshot_ref", Some(&refs_file), &outcome, 1);
+        assert!(state.step2.update_selected_update_assets.is_empty());
+        let in_sync = &state.step2.update_selected_in_sync_assets;
+        assert_eq!(in_sync.len(), 1);
+        assert_eq!(in_sync[0].installed_source_ref.as_deref(), Some(commit_ref));
     }
 
     struct FolderRefsRoot(std::path::PathBuf);

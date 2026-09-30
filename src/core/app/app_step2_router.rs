@@ -11,7 +11,9 @@ use crate::app::controller::util::open_in_shell;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads;
 use crate::app::mod_source_history;
-use crate::app::state::{DownloadOrigin, Step2Selection, WizardState};
+use crate::app::state::{
+    DownloadOrigin, Step2Selection, Step2State, Step2UpdateAsset, WizardState,
+};
 use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
 use crate::app::step2_worker::Step2ScanEvent;
 
@@ -44,7 +46,10 @@ pub(crate) fn handle_step2_action(
         }
         Step2Action::DownloadUpdateFor { tp2 } => {
             if !crate::app::state::update_pipeline_busy(&state.step2) {
-                start_workspace_download(state, step2_update_download_rx, Some(tp2));
+                let promoted = promote_in_sync_assets(&mut state.step2, &tp2);
+                if !start_workspace_download(state, step2_update_download_rx, Some(tp2)) {
+                    demote_in_sync_assets(&mut state.step2, &promoted);
+                }
             }
         }
         Step2Action::AcceptLatestForExactVersionMisses => {
@@ -98,19 +103,64 @@ fn start_workspace_download(
         Receiver<super::app_step2_update_download::Step2UpdateDownloadEvent>,
     >,
     scope_tp2: Option<String>,
-) {
-    if let Err(refusal) = super::app_step2_update_download::start_step2_update_download_scoped(
+) -> bool {
+    match super::app_step2_update_download::start_step2_update_download_scoped(
         state,
         step2_update_download_rx,
         scope_tp2,
         &HashSet::new(),
         DownloadOrigin::Workspace,
     ) {
-        tracing::info!(
-            target = "orchestrator",
-            ?refusal,
-            "workspace update download not started"
-        );
+        Ok(()) => true,
+        Err(refusal) => {
+            tracing::info!(
+                target = "orchestrator",
+                ?refusal,
+                "workspace update download not started"
+            );
+            false
+        }
+    }
+}
+
+fn in_sync_source_line(asset: &Step2UpdateAsset) -> String {
+    format!("{} ({})", asset.label, asset.tag)
+}
+
+pub(crate) fn promote_in_sync_assets(step2: &mut Step2State, tp2: &str) -> Vec<Step2UpdateAsset> {
+    let matches_tp2 =
+        |asset: &Step2UpdateAsset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) == tp2;
+    if step2.update_selected_update_assets.iter().any(matches_tp2) {
+        return Vec::new();
+    }
+    let (promoted, kept): (Vec<_>, Vec<_>) =
+        std::mem::take(&mut step2.update_selected_in_sync_assets)
+            .into_iter()
+            .partition(matches_tp2);
+    step2.update_selected_in_sync_assets = kept;
+    for asset in &promoted {
+        step2
+            .update_selected_update_sources
+            .push(in_sync_source_line(asset));
+        step2.update_selected_update_assets.push(asset.clone());
+    }
+    promoted
+}
+
+fn demote_in_sync_assets(step2: &mut Step2State, promoted: &[Step2UpdateAsset]) {
+    for asset in promoted {
+        step2
+            .update_selected_update_assets
+            .retain(|candidate| candidate != asset);
+        let line = in_sync_source_line(asset);
+        if let Some(index) = step2
+            .update_selected_update_sources
+            .iter()
+            .position(|source| *source == line)
+        {
+            step2.update_selected_update_sources.remove(index);
+        }
+        step2.update_selected_in_sync_assets.push(asset.clone());
     }
 }
 
@@ -961,6 +1011,7 @@ fn invalidate_update_selected_results(state: &mut WizardState) {
     state.step2.update_selected_update_sources.clear();
     state.step2.update_selected_locked_update_assets.clear();
     state.step2.update_selected_locked_update_sources.clear();
+    state.step2.update_selected_in_sync_assets.clear();
     state.step2.update_selected_missing_sources.clear();
     state.step2.update_selected_downloaded_sources.clear();
     state.step2.update_selected_download_failed_sources.clear();
@@ -2410,5 +2461,149 @@ mod tests {
             ("BGEE".to_string(), "gadget.tp2".to_string()),
         );
         assert!(!state.step2.whole_folder_check_active);
+    }
+
+    fn eefixpack_asset(tag: &str) -> crate::app::state::Step2UpdateAsset {
+        crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: "EEFixPack/setup-EEFixPack.tp2".to_string(),
+            label: "EEFixPack".to_string(),
+            source_id: "beamdog".to_string(),
+            tag: tag.to_string(),
+            asset_name: format!("EEFixPack-{tag}.zip"),
+            asset_url: format!("https://example.com/EEFixPack-{tag}.zip"),
+            installed_source_ref: None,
+        }
+    }
+
+    fn eefixpack_key() -> String {
+        crate::app::mod_downloads::normalize_mod_download_tp2("EEFixPack/setup-EEFixPack.tp2")
+    }
+
+    #[test]
+    fn refetch_promotes_the_in_sync_asset_into_the_download_list() {
+        let mut state = WizardState::<bool>::default();
+        state
+            .step2
+            .update_selected_in_sync_assets
+            .push(eefixpack_asset("v14.1"));
+
+        let promoted = super::promote_in_sync_assets(&mut state.step2, &eefixpack_key());
+
+        assert_eq!(promoted, vec![eefixpack_asset("v14.1")]);
+        assert!(state.step2.update_selected_in_sync_assets.is_empty());
+        let assets = &state.step2.update_selected_update_assets;
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].tag, "v14.1");
+        assert_eq!(assets[0].asset_name, "EEFixPack-v14.1.zip");
+        assert_eq!(
+            state.step2.update_selected_update_sources,
+            vec!["EEFixPack (v14.1)".to_string()]
+        );
+    }
+
+    #[test]
+    fn refetch_leaves_a_real_update_asset_alone() {
+        let mut state = WizardState::<bool>::default();
+        state
+            .step2
+            .update_selected_update_assets
+            .push(eefixpack_asset("v15"));
+        state
+            .step2
+            .update_selected_in_sync_assets
+            .push(eefixpack_asset("v14.1"));
+
+        assert!(super::promote_in_sync_assets(&mut state.step2, &eefixpack_key()).is_empty());
+
+        let assets = &state.step2.update_selected_update_assets;
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].tag, "v15");
+        let in_sync = &state.step2.update_selected_in_sync_assets;
+        assert_eq!(in_sync.len(), 1);
+        assert_eq!(in_sync[0].tag, "v14.1");
+        assert!(state.step2.update_selected_update_sources.is_empty());
+    }
+
+    #[test]
+    fn refetch_promotes_every_tab_entry() {
+        let mut state = WizardState::<bool>::default();
+        let bg2ee = crate::app::state::Step2UpdateAsset {
+            game_tab: "BG2EE".to_string(),
+            ..eefixpack_asset("v14.1")
+        };
+        state
+            .step2
+            .update_selected_in_sync_assets
+            .extend([eefixpack_asset("v14.1"), bg2ee.clone()]);
+
+        let promoted = super::promote_in_sync_assets(&mut state.step2, &eefixpack_key());
+
+        assert_eq!(promoted, vec![eefixpack_asset("v14.1"), bg2ee.clone()]);
+        assert!(state.step2.update_selected_in_sync_assets.is_empty());
+        assert_eq!(
+            state.step2.update_selected_update_assets,
+            vec![eefixpack_asset("v14.1"), bg2ee]
+        );
+        assert_eq!(
+            state.step2.update_selected_update_sources,
+            vec![
+                "EEFixPack (v14.1)".to_string(),
+                "EEFixPack (v14.1)".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn refused_refetch_restores_the_in_sync_entry() {
+        use crate::app::step2_action::Step2Action;
+
+        let mut state = WizardState::<bool>::default();
+        state.step1.download_archive = false;
+        state
+            .step2
+            .update_selected_update_sources
+            .push("Other (v2)".to_string());
+        state
+            .step2
+            .update_selected_in_sync_assets
+            .push(eefixpack_asset("v14.1"));
+        let sources_before = state.step2.update_selected_update_sources.clone();
+
+        super::handle_step2_action(
+            &mut state,
+            &mut None,
+            &mut None,
+            &mut std::collections::VecDeque::new(),
+            &mut None,
+            &mut None,
+            Step2Action::DownloadUpdateFor {
+                tp2: eefixpack_key(),
+            },
+        );
+
+        assert_eq!(
+            state.step2.scan_status,
+            "Download Archive is disabled in Step 1"
+        );
+        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert_eq!(state.step2.update_selected_update_sources, sources_before);
+        assert_eq!(
+            state.step2.update_selected_in_sync_assets,
+            vec![eefixpack_asset("v14.1")]
+        );
+    }
+
+    #[test]
+    fn invalidate_clears_the_in_sync_assets() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .update_selected_in_sync_assets
+            .push(eefixpack_asset("v14.1"));
+
+        super::invalidate_update_selected_results(&mut state);
+
+        assert!(state.step2.update_selected_in_sync_assets.is_empty());
     }
 }

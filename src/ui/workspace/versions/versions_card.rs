@@ -4,7 +4,7 @@
 use eframe::egui;
 
 use crate::app::step2_action::Step2Action;
-use crate::app::versions_view::{CardDot, FetchPhase, SourceRowKind, VersionCard};
+use crate::app::versions_view::{CardDot, FetchOffer, FetchPhase, SourceRowKind, VersionCard};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
     redesign_border_soft, redesign_border_strong, redesign_chrome_bg, redesign_error,
@@ -194,7 +194,7 @@ fn render_icons(
 ) -> (Option<Step2Action>, egui::Response) {
     let mut action = None;
 
-    if card.can_fetch && card.fetching.is_none() {
+    if card.offer != FetchOffer::None && card.fetching.is_none() {
         let response = render_fetch_icon(ui, palette, fetch_rect, card);
         if response.clicked() {
             action = Some(Step2Action::DownloadUpdateFor {
@@ -479,10 +479,6 @@ fn render_fetch_icon(
     rect: egui::Rect,
     card: &VersionCard,
 ) -> egui::Response {
-    let tip = card
-        .target
-        .as_ref()
-        .map_or_else(|| "Fetch".to_string(), |target| format!("Fetch {target}"));
     icon_button_at(
         ui,
         palette,
@@ -490,9 +486,24 @@ fn render_fetch_icon(
         card.tp2.as_str(),
         "fetch",
         versions_icons::paint_down_arrow,
-        Some(redesign_accent(palette)),
+        fetch_arrow_color(palette, card),
     )
-    .on_hover_text(tip)
+    .on_hover_text(fetch_label(card))
+}
+
+fn fetch_arrow_color(palette: ThemePalette, card: &VersionCard) -> Option<egui::Color32> {
+    card.offer.can_fetch().then(|| redesign_accent(palette))
+}
+
+pub(super) fn fetch_label(card: &VersionCard) -> String {
+    let verb = if card.offer.can_fetch() {
+        "Fetch"
+    } else {
+        "Fetch again"
+    };
+    card.target
+        .as_deref()
+        .map_or_else(|| verb.to_string(), |target| format!("{verb} {target}"))
 }
 
 fn render_lock_icon(
@@ -575,7 +586,7 @@ mod tests {
             status_line: "1.0 \u{2192} 2.0".to_string(),
             target: Some("2.0".to_string()),
             locked: false,
-            can_fetch: true,
+            offer: FetchOffer::Fetch,
             layer: "BIO default",
             rule_words: String::new(),
             selector_hover: String::new(),
@@ -620,5 +631,28 @@ mod tests {
         );
         assert_eq!(fetch_bar_fraction(FetchPhase::Downloading(None)), None);
         assert_eq!(fetch_bar_fraction(FetchPhase::Rescanning), None);
+    }
+
+    #[test]
+    fn refetch_only_card_uses_the_muted_arrow_colour() {
+        let palette = ThemePalette::Dark;
+        let fetch = card_in(None);
+        assert_eq!(
+            fetch_arrow_color(palette, &fetch),
+            Some(redesign_accent(palette))
+        );
+        assert_eq!(fetch_label(&fetch), "Fetch 2.0");
+        let refetch = VersionCard {
+            status: CardStatus::InSync,
+            offer: FetchOffer::Refetch,
+            ..card_in(None)
+        };
+        assert_eq!(fetch_arrow_color(palette, &refetch), None);
+        assert_eq!(fetch_label(&refetch), "Fetch again 2.0");
+        let untargeted = VersionCard {
+            target: None,
+            ..refetch
+        };
+        assert_eq!(fetch_label(&untargeted), "Fetch again");
     }
 }

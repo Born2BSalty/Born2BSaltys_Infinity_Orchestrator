@@ -360,6 +360,7 @@ fn clear_full_update_preview_results(state: &mut WizardState) {
     state.step2.update_selected_update_sources.clear();
     state.step2.update_selected_locked_update_assets.clear();
     state.step2.update_selected_locked_update_sources.clear();
+    state.step2.update_selected_in_sync_assets.clear();
     state.step2.update_selected_missing_sources.clear();
     state.step2.update_selected_downloaded_sources.clear();
     state.step2.update_selected_download_failed_sources.clear();

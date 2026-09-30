@@ -1105,7 +1105,7 @@ fn render_advanced(ui: &mut egui::Ui, palette: ThemePalette, form: &mut SourceFo
         labeled_text_field_inline(
             ui,
             palette,
-            "Other TP2 names",
+            "Other TP2 or folder names",
             &mut form.aliases_text,
             "none",
             width,

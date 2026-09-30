@@ -6,13 +6,30 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::app::mod_downloads::{self, ModDownloadSource, SourceTier, SourceTiers};
 use crate::app::mod_source_history::{self, BookmarkEntry, HistoryEntry, ModSourceHistoryStore};
 use crate::app::state::{Step2ModState, Step2UpdateAsset, WizardState};
-use crate::parser::weidu_version::parse_version;
+use crate::parser::weidu_version::{parse_version, version_phrase};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CardStatus {
     Fetch,
     Attention,
     InSync,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FetchOffer {
+    None,
+    Fetch,
+    Refetch,
+}
+
+impl FetchOffer {
+    pub(crate) const fn can_fetch(self) -> bool {
+        matches!(self, Self::Fetch)
+    }
+
+    pub(crate) const fn can_refetch(self) -> bool {
+        matches!(self, Self::Refetch)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -169,7 +186,7 @@ pub(crate) struct VersionCard {
     pub(crate) status_line: String,
     pub(crate) target: Option<String>,
     pub(crate) locked: bool,
-    pub(crate) can_fetch: bool,
+    pub(crate) offer: FetchOffer,
     pub(crate) layer: &'static str,
     pub(crate) rule_words: String,
     pub(crate) selector_hover: String,
@@ -250,7 +267,7 @@ pub(crate) fn refresh_fetch_phase(view: &mut VersionsView, state: &WizardState) 
             card.status = CardStatus::InSync;
             card.dot = CardDot::Neutral;
             card.status_line = "Rescanning\u{2026}".to_string();
-            card.can_fetch = false;
+            card.offer = FetchOffer::None;
             card.target = None;
         }
     }
@@ -444,7 +461,13 @@ fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
             on_disk_version: mod_state
                 .components
                 .iter()
-                .find_map(|component| parse_version(&component.raw_line)),
+                .find_map(|component| parse_version(&component.raw_line))
+                .or_else(|| {
+                    mod_state
+                        .components
+                        .iter()
+                        .find_map(|component| version_phrase(&component.raw_line))
+                }),
             locked: mod_state.update_locked,
             log_pending_only: false,
         });
@@ -484,7 +507,9 @@ struct StatusFacts {
     fetch_asset: Option<Step2UpdateAsset>,
     check_failed: Option<String>,
     fetch_failed: Option<String>,
+    unpack_failed: Option<String>,
     locked_update: Option<Step2UpdateAsset>,
+    in_sync_asset: Option<Step2UpdateAsset>,
     just_fetched: bool,
 }
 
@@ -504,12 +529,18 @@ fn status_facts(state: &WizardState, basis: &CardBasis) -> StatusFacts {
             )
         });
     let fetch_failed =
-        find_labelled_error(&state.step2.update_selected_download_failed_sources, name).or_else(
-            || find_labelled_error(&state.step2.update_selected_extract_failed_sources, name),
-        );
+        find_labelled_error(&state.step2.update_selected_download_failed_sources, name);
+    let unpack_failed =
+        find_labelled_error(&state.step2.update_selected_extract_failed_sources, name);
     let locked_update = state
         .step2
         .update_selected_locked_update_assets
+        .iter()
+        .find(|asset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) == basis.tp2_key)
+        .cloned();
+    let in_sync_asset = state
+        .step2
+        .update_selected_in_sync_assets
         .iter()
         .find(|asset| mod_downloads::normalize_mod_download_tp2(&asset.tp_file) == basis.tp2_key)
         .cloned();
@@ -518,7 +549,9 @@ fn status_facts(state: &WizardState, basis: &CardBasis) -> StatusFacts {
         fetch_asset,
         check_failed,
         fetch_failed,
+        unpack_failed,
         locked_update,
+        in_sync_asset,
         just_fetched,
     }
 }
@@ -534,7 +567,7 @@ fn version_label(on_disk_version: Option<&str>, log_pending_only: bool) -> Strin
     match on_disk_version {
         Some(version) => version.to_string(),
         None if log_pending_only => "not on disk".to_string(),
-        None => String::new(),
+        None => "unknown version".to_string(),
     }
 }
 
@@ -565,20 +598,12 @@ fn short_target(tag: &str) -> String {
 
 fn arrow_status_line(version: &str, target: &str) -> String {
     let target = display_version(target);
-    if version.is_empty() {
-        format!("? \u{2192} {target}")
-    } else {
-        format!("{version} \u{2192} {target}")
-    }
+    format!("{version} \u{2192} {target}")
 }
 
 fn locked_available_status_line(version: &str, target: &str) -> String {
     let target = display_version(target);
-    if version.is_empty() {
-        format!("locked \u{b7} {target} available")
-    } else {
-        format!("{version} \u{b7} locked \u{b7} {target} available")
-    }
+    format!("{version} \u{b7} locked \u{b7} {target} available")
 }
 
 fn is_manual_not_on_disk(source: Option<&ModDownloadSource>, log_pending_only: bool) -> bool {
@@ -602,11 +627,26 @@ fn card_outcome(
     version: &str,
 ) -> CardOutcome {
     if let Some(asset) = facts.fetch_asset.as_ref() {
+        let target = short_target(&asset.tag);
+        let failure_line = facts
+            .unpack_failed
+            .as_ref()
+            .map(|error| format!("unpack failed \u{b7} {error}"))
+            .or_else(|| {
+                facts
+                    .fetch_failed
+                    .as_ref()
+                    .map(|error| format!("fetch failed \u{b7} {error}"))
+            });
+        let (dot, status_line) = failure_line.map_or_else(
+            || (CardDot::Update, arrow_status_line(version, &target)),
+            |line| (CardDot::Warn, line),
+        );
         return CardOutcome {
             status: CardStatus::Fetch,
-            dot: CardDot::Update,
-            status_line: arrow_status_line(version, &short_target(&asset.tag)),
-            target: Some(short_target(&asset.tag)),
+            dot,
+            status_line,
+            target: Some(target),
         };
     }
     if let Some(error) = facts.check_failed.as_ref() {
@@ -622,6 +662,14 @@ fn card_outcome(
             status: CardStatus::Attention,
             dot: CardDot::Warn,
             status_line: format!("fetch failed \u{b7} {error}"),
+            target: None,
+        };
+    }
+    if let Some(error) = facts.unpack_failed.as_ref() {
+        return CardOutcome {
+            status: CardStatus::Attention,
+            dot: CardDot::Warn,
+            status_line: format!("unpack failed \u{b7} {error}"),
             target: None,
         };
     }
@@ -979,7 +1027,22 @@ fn build_card(
     let repo = source.as_ref().and_then(|source| source.github.clone());
     let open_url = source.as_ref().and_then(mod_downloads::source_open_url);
     let source_id = source.as_ref().map(|source| source.source_id.clone());
-    let can_fetch = outcome.status == CardStatus::Fetch && !basis.locked;
+    let offer = if outcome.status == CardStatus::Fetch && !basis.locked {
+        FetchOffer::Fetch
+    } else if outcome.status == CardStatus::InSync
+        && state.step2.update_selected_has_run
+        && !basis.locked
+        && !basis.log_pending_only
+        && facts.in_sync_asset.is_some()
+    {
+        FetchOffer::Refetch
+    } else {
+        FetchOffer::None
+    };
+    let target = match (outcome.target, facts.in_sync_asset.as_ref()) {
+        (None, Some(asset)) if offer.can_refetch() => Some(short_target(&asset.tag)),
+        (target, _) => target,
+    };
 
     let sources = build_source_options(
         state,
@@ -996,9 +1059,9 @@ fn build_card(
         status: outcome.status,
         dot: outcome.dot,
         status_line: outcome.status_line,
-        target: outcome.target,
+        target,
         locked: basis.locked,
-        can_fetch,
+        offer,
         layer,
         rule_words: rule_words_value,
         selector_hover: selector_hover_value,
@@ -1557,7 +1620,7 @@ mod tests {
         let extracted = card_named(&view, "a.tp2");
         assert_eq!(extracted.status, CardStatus::InSync);
         assert_eq!(extracted.status_line, "Rescanning\u{2026}");
-        assert!(!extracted.can_fetch);
+        assert_eq!(extracted.offer, FetchOffer::None);
         assert_eq!(extracted.target, None);
         assert_eq!(card_named(&view, "b.tp2").status, CardStatus::Fetch);
         assert_eq!(view.fetch_count, 1);
@@ -1689,6 +1752,114 @@ mod tests {
     }
 
     #[test]
+    fn unparseable_script_version_shows_its_phrase() {
+        let mut state = WizardState::default();
+        state.step2.bgee_mods.push(mod_state(
+            "eefixpack.tp2",
+            "EEFixPack",
+            "~eefixpack.tp2~ #0 #0 // Core Fixes: Beta 2 - Working Master",
+        ));
+        let tiers = mod_downloads::source_tiers_from_texts(&github_source("eefixpack.tp2"), "", "");
+
+        let view = build_versions_view(&state, &tiers, None);
+        assert_eq!(
+            view.cards[0].status_line,
+            "Beta 2 - Working Master \u{b7} not checked"
+        );
+    }
+
+    #[test]
+    fn mod_with_no_script_version_reads_unknown_version() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("x.tp2", "X", "~x.tp2~ #0 #0 // Core Fixes"));
+        let tiers = mod_downloads::source_tiers_from_texts(&github_source("x.tp2"), "", "");
+
+        let view = build_versions_view(&state, &tiers, None);
+        assert_eq!(
+            view.cards[0].status_line,
+            "unknown version \u{b7} not checked"
+        );
+    }
+
+    #[test]
+    fn failed_unpack_with_pending_asset_keeps_fetch_and_shows_the_reason() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("mod.tp2", "Mod", "~mod.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .update_selected_update_assets
+            .push(asset("mod.tp2", "Mod", "2.0"));
+        state
+            .step2
+            .update_selected_extract_failed_sources
+            .push("Mod: matching mod folder not found for root-level .tp2".to_string());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::Fetch);
+        assert_eq!(card.dot, CardDot::Warn);
+        assert_eq!(
+            card.status_line,
+            "unpack failed \u{b7} matching mod folder not found for root-level .tp2"
+        );
+        assert_eq!(card.target.as_deref(), Some("2.0"));
+        assert_eq!(view.fetch_count, 1);
+    }
+
+    #[test]
+    fn failed_download_with_pending_asset_keeps_fetch_and_shows_the_reason() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("mod.tp2", "Mod", "~mod.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .update_selected_update_assets
+            .push(asset("mod.tp2", "Mod", "2.0"));
+        state
+            .step2
+            .update_selected_download_failed_sources
+            .push("Mod: disk full".to_string());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::Fetch);
+        assert_eq!(card.dot, CardDot::Warn);
+        assert_eq!(card.status_line, "fetch failed \u{b7} disk full");
+        assert_eq!(card.target.as_deref(), Some("2.0"));
+        assert_eq!(view.fetch_count, 1);
+    }
+
+    #[test]
+    fn failed_unpack_without_asset_is_attention() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("mod.tp2", "Mod", "~mod.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .update_selected_extract_failed_sources
+            .push("Mod: matching mod folder not found for root-level .tp2".to_string());
+
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::Attention);
+        assert_eq!(card.dot, CardDot::Warn);
+        assert_eq!(
+            card.status_line,
+            "unpack failed \u{b7} matching mod folder not found for root-level .tp2"
+        );
+    }
+
+    #[test]
     fn mod_without_catalog_source_is_attention_with_bad_dot() {
         let mut state = WizardState::default();
         state
@@ -1722,11 +1893,14 @@ mod tests {
 
     #[test]
     fn blank_version_never_leads_with_a_separator() {
-        assert_eq!(arrow_status_line("", "2.0"), "? \u{2192} 2.0");
+        assert_eq!(
+            arrow_status_line("unknown version", "2.0"),
+            "unknown version \u{2192} 2.0"
+        );
         assert_eq!(arrow_status_line("1.0", "2.0"), "1.0 \u{2192} 2.0");
         assert_eq!(
-            locked_available_status_line("", "2.0"),
-            "locked \u{b7} 2.0 available"
+            locked_available_status_line("unknown version", "2.0"),
+            "unknown version \u{b7} locked \u{b7} 2.0 available"
         );
         assert_eq!(
             locked_available_status_line("1.0", "2.0"),
@@ -1786,8 +1960,85 @@ mod tests {
         assert_eq!(card.status, CardStatus::InSync);
         assert_eq!(card.status_line, "1.0 \u{b7} locked \u{b7} 2.0 available");
         assert!(card.locked);
-        assert!(!card.can_fetch);
+        assert_eq!(card.offer, FetchOffer::None);
         assert_eq!(view.locked_count, 1);
+    }
+
+    fn in_sync_refetch_state(locked: bool) -> WizardState {
+        let mut state = WizardState::default();
+        let mut mod_state_value = mod_state("mod.tp2", "Mod", "~mod.tp2~ #0 #0 // 1.0");
+        mod_state_value.update_locked = locked;
+        state.step2.bgee_mods.push(mod_state_value);
+        state
+            .step2
+            .update_selected_in_sync_assets
+            .push(asset("mod.tp2", "Mod", "2.0"));
+        state.step2.update_selected_has_run = true;
+        state
+    }
+
+    #[test]
+    fn in_sync_card_after_a_check_offers_a_grey_refetch() {
+        let state = in_sync_refetch_state(false);
+        let tiers = mod_downloads::source_tiers_from_texts(&github_source("mod.tp2"), "", "");
+
+        let view = build_versions_view(&state, &tiers, None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::InSync);
+        assert_eq!(card.offer, FetchOffer::Refetch);
+        assert_eq!(card.target.as_deref(), Some("2.0"));
+        assert_eq!(view.fetch_count, 0);
+    }
+
+    #[test]
+    fn locked_in_sync_card_offers_no_refetch() {
+        let state = in_sync_refetch_state(true);
+        let tiers = mod_downloads::source_tiers_from_texts(&github_source("mod.tp2"), "", "");
+
+        let view = build_versions_view(&state, &tiers, None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::InSync);
+        assert!(card.locked);
+        assert_eq!(card.offer, FetchOffer::None);
+    }
+
+    #[test]
+    fn rescanning_card_offers_no_refetch() {
+        let mut state = in_sync_refetch_state(false);
+        state.step2.is_scanning = true;
+        state
+            .step2
+            .update_selected_extracted_sources
+            .push("Mod -> C:/mods/mod".to_string());
+        let tiers = mod_downloads::source_tiers_from_texts(&github_source("mod.tp2"), "", "");
+
+        let view = build_versions_view(&state, &tiers, None);
+        let card = &view.cards[0];
+        assert_eq!(card.status_line, "Rescanning\u{2026}");
+        assert_eq!(card.offer, FetchOffer::None);
+        assert_eq!(card.target, None);
+    }
+
+    #[test]
+    fn not_checked_card_offers_no_refetch() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("mod.tp2", "Mod", "~mod.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .update_selected_in_sync_assets
+            .push(asset("mod.tp2", "Mod", "2.0"));
+        assert!(!state.step2.update_selected_has_run);
+        let tiers = mod_downloads::source_tiers_from_texts(&github_source("mod.tp2"), "", "");
+
+        let view = build_versions_view(&state, &tiers, None);
+        let card = &view.cards[0];
+        assert_eq!(card.status, CardStatus::InSync);
+        assert_eq!(card.status_line, "1.0 \u{b7} not checked");
+        assert_eq!(card.offer, FetchOffer::None);
+        assert_eq!(card.target, None);
     }
 
     #[test]

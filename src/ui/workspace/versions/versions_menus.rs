@@ -7,7 +7,7 @@ use crate::app::mod_downloads;
 use crate::app::mod_source_history;
 use crate::app::state::VersionsSheet;
 use crate::app::step2_action::{ModSourceEditDestination, Step2Action};
-use crate::app::versions_view::{CardSourceOption, SourceRowKind, VersionCard};
+use crate::app::versions_view::{CardSourceOption, FetchOffer, SourceRowKind, VersionCard};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
@@ -15,6 +15,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_text_primary,
 };
 
+use super::versions_card::fetch_label;
 use super::versions_icons;
 use super::versions_sheets::{self, NoteSeed};
 
@@ -426,13 +427,10 @@ fn render_fetch_kebab_item(
     busy: bool,
     outcome: &mut MenuOutcome,
 ) -> bool {
-    if !card.can_fetch {
+    if card.offer == FetchOffer::None {
         return false;
     }
-    let label = card
-        .target
-        .as_deref()
-        .map_or_else(|| "Fetch".to_string(), |t| format!("Fetch {t}"));
+    let label = fetch_label(card);
     if menu_item(ui, palette, &label, busy) {
         outcome.action = Some(Step2Action::DownloadUpdateFor {
             tp2: card.tp2.clone(),

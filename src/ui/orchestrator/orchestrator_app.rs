@@ -729,6 +729,11 @@ impl OrchestratorApp {
         {
             self.after_download_finished();
         }
+        let unpack_failures_before = self
+            .wizard_state
+            .step2
+            .update_selected_extract_failed_sources
+            .len();
         app_step2_update_extract::poll_step2_update_extract(
             &mut self.wizard_state,
             &mut self.step2_update_extract_rx,
@@ -736,6 +741,7 @@ impl OrchestratorApp {
             &mut self.step2_cancel,
             &mut self.step2_progress_queue,
         );
+        self.toast_new_unpack_failures(unpack_failures_before);
         crate::app::github_release_list::poll_release_list(
             &mut self.wizard_state,
             &mut self.release_list_rx,
@@ -762,6 +768,21 @@ impl OrchestratorApp {
         );
         crate::ui::workspace::step2_log_glue::advance_pending_weidu_log_reapply(self);
         self.reseed_added_mods_when_settled(seed_watch);
+    }
+
+    fn toast_new_unpack_failures(&mut self, before: usize) {
+        let entries: Vec<String> = self
+            .wizard_state
+            .step2
+            .update_selected_extract_failed_sources
+            .iter()
+            .skip(before)
+            .cloned()
+            .collect();
+        for entry in entries {
+            self.notification_manager
+                .error(format!("Could not unpack {entry}"));
+        }
     }
 
     fn reseed_added_mods_when_settled(&mut self, watch: AddedModSeedWatch) {
@@ -2338,5 +2359,32 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_new_unpack_failure_raises_one_error_toast() {
+        let mut app = OrchestratorApp::new_isolated_for_test("unpack_toast");
+        let before = app.notification_manager.history().len();
+        app.wizard_state
+            .step2
+            .update_selected_extract_failed_sources
+            .push("Old: stale".to_string());
+        app.wizard_state
+            .step2
+            .update_selected_extract_failed_sources
+            .push("d0questpack: matching mod folder not found".to_string());
+        app.toast_new_unpack_failures(1);
+        let errors = app
+            .notification_manager
+            .history()
+            .iter()
+            .skip(before)
+            .filter(|record| record.kind == egui_toast::ToastKind::Error)
+            .map(|record| record.text.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            errors,
+            vec!["Could not unpack d0questpack: matching mod folder not found".to_string()]
+        );
     }
 }
