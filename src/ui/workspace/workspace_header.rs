@@ -299,7 +299,7 @@ fn render_save_or_share_button(
     }
 }
 
-fn save_draft(orchestrator: &mut OrchestratorApp) {
+pub(crate) fn save_draft(orchestrator: &mut OrchestratorApp) {
     let id = orchestrator.workspace_view.modlist_id.clone();
     if id.is_empty() {
         return;

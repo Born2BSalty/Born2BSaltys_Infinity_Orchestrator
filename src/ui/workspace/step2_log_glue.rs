@@ -17,6 +17,7 @@ use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::WeiduLogImportForm;
 use crate::ui::workspace::step_action_dispatch::handle_step2_via_bio;
 use crate::ui::workspace::versions::versions_drawer::close_versions_drawer;
+use crate::ui::workspace::workspace_header::save_draft;
 
 pub fn apply_weidu_log_selection_for_orchestrator(orchestrator: &mut OrchestratorApp, bgee: bool) {
     let (current, tab) = if bgee {
@@ -193,6 +194,7 @@ fn settle_weidu_log_import_check(orchestrator: &mut OrchestratorApp) {
     let step2 = &mut orchestrator.wizard_state.step2;
     if step2.log_pending_downloads.is_empty() {
         step2.weidu_log_import = None;
+        save_draft(orchestrator);
         finish_weidu_log_import(orchestrator);
     }
 }
@@ -235,6 +237,7 @@ pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
     };
     apply_recorded_logs(orchestrator, &record);
     orchestrator.mark_workspace_dirty();
+    save_draft(orchestrator);
     finish_weidu_log_import(orchestrator);
 }
 
@@ -403,6 +406,129 @@ mod tests {
         assert!(app.wizard_state.step2.weidu_log_import.is_some());
         assert!(app.wizard_state.step2.update_selected_popup_open);
         assert_eq!(app.notification_manager.history().len(), toasts_before);
+    }
+
+    const SAVE_DRAFT_ID: &str = "LOGIMPORTSAVE";
+
+    fn unchecked_component(component_id: &str) -> crate::app::state::Step2ComponentState {
+        crate::app::state::Step2ComponentState {
+            component_id: component_id.to_string(),
+            label: format!("X {component_id}"),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    fn scanned_x_mod() -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: "X".to_string(),
+            tp_file: "SETUP-X.TP2".to_string(),
+            tp2_path: "X/SETUP-X.TP2".to_string(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: vec![unchecked_component("1"), unchecked_component("2")],
+        }
+    }
+
+    fn app_with_a_saved_list(tag: &str, log_path: PathBuf) -> OrchestratorApp {
+        let mut app = OrchestratorApp::new_isolated_for_test(tag);
+        app.nav = NavDestination::Workspace {
+            modlist_id: Some(SAVE_DRAFT_ID.to_string()),
+        };
+        app.registry
+            .entries
+            .push(crate::registry::model::ModlistEntry {
+                id: SAVE_DRAFT_ID.to_string(),
+                name: "save draft on import".to_string(),
+                game: crate::registry::model::Game::BGEE,
+                state: crate::registry::model::ModlistState::InProgress,
+                ..Default::default()
+            });
+        app.workspace_view.modlist_id = SAVE_DRAFT_ID.to_string();
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        let step2 = &mut app.wizard_state.step2;
+        step2.bgee_mods = vec![scanned_x_mod()];
+        step2.weidu_log_import = Some(WeiduLogImport {
+            first: Some(log_path),
+            second: None,
+        });
+        step2.update_selected_popup_open = true;
+        app
+    }
+
+    fn assert_the_draft_was_saved_with_the_counts(app: &OrchestratorApp) {
+        let entry = app
+            .registry
+            .find(SAVE_DRAFT_ID)
+            .expect("the registry entry");
+        assert_eq!(entry.mod_count, 1);
+        assert_eq!(entry.component_count, 2);
+        let store_path = app.workspace_stores[SAVE_DRAFT_ID].path().to_path_buf();
+        assert!(
+            store_path.starts_with(std::env::temp_dir()),
+            "the workspace store must live under the isolated temp root: {}",
+            store_path.display()
+        );
+        assert!(
+            store_path.is_file(),
+            "the import must write the workspace file"
+        );
+    }
+
+    #[test]
+    fn reapply_saves_the_draft_and_writes_the_counts() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = app_with_a_saved_list("logimport-reapply-save", log_path);
+        app.wizard_state.step2.pending_weidu_log_reapply = true;
+        let toasts_before = app.notification_manager.history().len();
+
+        advance_pending_weidu_log_reapply(&mut app);
+
+        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
+        assert!(app.wizard_state.step2.log_pending_downloads.is_empty());
+        assert_the_draft_was_saved_with_the_counts(&app);
+    }
+
+    #[test]
+    fn no_fetch_completion_saves_the_draft_and_writes_the_counts() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = app_with_a_saved_list("logimport-nofetch-save", log_path);
+        let step2 = &mut app.wizard_state.step2;
+        step2.weidu_log_import_awaiting_check = true;
+        step2.update_selected_has_run = true;
+        let toasts_before = app.notification_manager.history().len();
+
+        advance_pending_weidu_log_reapply(&mut app);
+
+        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
+        assert_eq!(app.wizard_state.step2.weidu_log_import, None);
+        assert_the_draft_was_saved_with_the_counts(&app);
     }
 
     #[test]
