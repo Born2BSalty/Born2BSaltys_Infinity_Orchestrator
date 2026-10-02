@@ -371,7 +371,7 @@ fn save_source_form(
         }
         return;
     }
-    if adding_new_mod && !route_new_mod_to_this_modlist(state, &mut form) {
+    if adding_new_mod && !require_open_modlist_for_new_mod(state) {
         return;
     }
     let full_text = super::source_form::source_form_save_text(&form);
@@ -470,17 +470,13 @@ fn apply_new_mod_tp2(form: &mut super::source_form::SourceForm) -> bool {
     true
 }
 
-fn route_new_mod_to_this_modlist(
-    state: &mut WizardState,
-    form: &mut super::source_form::SourceForm,
-) -> bool {
+fn require_open_modlist_for_new_mod(state: &mut WizardState) -> bool {
     if mod_downloads::active_modlist_downloads_path().is_none() {
         if let Some(open_form) = state.step2.versions_ui.source_form.as_mut() {
             open_form.error = Some("Open a modlist first".to_string());
         }
         return false;
     }
-    form.save_to = ModSourceEditDestination::ThisModlist;
     true
 }
 
@@ -532,11 +528,7 @@ fn save_form_note(
     }
     let signature = mod_source_history::rule_signature(new_source);
     let key = mod_source_history::note_key(&form.tp2, &signature);
-    let who = if form.note_who.trim().is_empty() {
-        destination_label(form.save_to)
-    } else {
-        form.note_who.as_str()
-    };
+    let who = history_saved_to(form.save_to, &form.note_who);
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     match mod_source_history::with_writable_store(|store| {
         mod_source_history::set_note(store, &key, &form.note, who, &today);
@@ -1216,6 +1208,7 @@ mod tests {
 
     use crate::app::mod_downloads::AMBIENT_TEST_LOCK;
     use crate::app::state::{Step2ModState, Step2Selection, WizardState};
+    use crate::app::step2_action::ModSourceEditDestination;
 
     struct AmbientGuard(Option<PathBuf>);
 
@@ -2255,7 +2248,7 @@ mod tests {
         assert_eq!(state.step2.versions_ui.pending_toast, None);
     }
 
-    fn new_mod_state(typed_tp2: &str) -> WizardState {
+    fn new_mod_state(typed_tp2: &str, save_to: ModSourceEditDestination) -> WizardState {
         let seed = crate::app::mod_downloads::ModDownloadSource {
             source_id: "primary".to_string(),
             source_label: "Primary".to_string(),
@@ -2268,7 +2261,7 @@ mod tests {
                 may_change_id: true,
                 is_new_mod: true,
             },
-            crate::app::step2_action::ModSourceEditDestination::GlobalDefault,
+            save_to,
             super::NEW_MOD_CARD_KEY,
         );
         form.tp2 = typed_tp2.to_string();
@@ -2292,7 +2285,7 @@ mod tests {
         let target_guard = TargetDirGuard::create("new_mod_pushes_pending_target");
         crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
 
-        let mut state = new_mod_state(" Setup-Widget.TP2 ");
+        let mut state = new_mod_state(" Setup-Widget.TP2 ", ModSourceEditDestination::ThisModlist);
         let mut rx = None;
         super::save_source_form(&mut state, &mut rx);
 
@@ -2320,7 +2313,7 @@ mod tests {
         );
         assert!(target_guard.0.join("added_mods.json").exists());
 
-        let mut again = new_mod_state("widget");
+        let mut again = new_mod_state("widget", ModSourceEditDestination::ThisModlist);
         again.step2.log_pending_downloads = state.step2.log_pending_downloads.clone();
         super::save_source_form(&mut again, &mut rx);
         assert_eq!(again.step2.log_pending_downloads.len(), 1);
@@ -2336,7 +2329,7 @@ mod tests {
         let target_guard = TargetDirGuard::create("new_mod_scanned_target");
         crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
 
-        let mut state = new_mod_state("widget");
+        let mut state = new_mod_state("widget", ModSourceEditDestination::ThisModlist);
         state
             .step2
             .bgee_mods
@@ -2362,7 +2355,7 @@ mod tests {
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
         for typed in ["", "   ", "setup-.tp2", "my mod", "mods/widget", "wid*get"] {
-            let mut state = new_mod_state(typed);
+            let mut state = new_mod_state(typed, ModSourceEditDestination::ThisModlist);
             let mut rx = None;
             super::save_source_form(&mut state, &mut rx);
 
@@ -2383,39 +2376,79 @@ mod tests {
     }
 
     #[test]
-    fn new_mod_save_forces_this_modlist() {
+    fn new_mod_save_without_a_modlist_is_refused() {
         let _lock = AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _ambient_guard = AmbientGuard::acquire();
-        let _config_guard = SourceFormConfigDirGuard::new("new_mod_forces_modlist");
+        let _config_guard = SourceFormConfigDirGuard::new("new_mod_refused_without_modlist");
         crate::app::mod_downloads::set_active_modlist_dir(None);
 
-        let mut without_modlist = new_mod_state("widget");
-        let mut rx = None;
-        super::save_source_form(&mut without_modlist, &mut rx);
-        assert_eq!(
-            without_modlist
-                .step2
-                .versions_ui
-                .source_form
-                .as_ref()
-                .and_then(|form| form.error.as_deref()),
-            Some("Open a modlist first")
-        );
+        for save_to in [
+            ModSourceEditDestination::ThisModlist,
+            ModSourceEditDestination::GlobalDefault,
+        ] {
+            let mut state = new_mod_state("widget", save_to);
+            let mut rx = None;
+            super::save_source_form(&mut state, &mut rx);
+            assert_eq!(
+                state
+                    .step2
+                    .versions_ui
+                    .source_form
+                    .as_ref()
+                    .and_then(|form| form.error.as_deref()),
+                Some("Open a modlist first"),
+                "{save_to:?}"
+            );
+            assert!(state.step2.log_pending_downloads.is_empty(), "{save_to:?}");
+        }
+        assert!(!crate::app::mod_downloads::mod_downloads_user_path().exists());
+    }
 
-        let target_guard = TargetDirGuard::create("new_mod_forces_modlist_target");
+    fn read_or_empty(path: &std::path::Path) -> String {
+        std::fs::read_to_string(path).unwrap_or_default()
+    }
+
+    #[test]
+    fn new_mod_save_follows_the_chosen_target() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let mut rx = None;
+
+        {
+            let _config_guard = SourceFormConfigDirGuard::new("new_mod_target_my_default");
+            let target_guard = TargetDirGuard::create("new_mod_target_my_default_list");
+            crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
+
+            let mut state = new_mod_state("widget", ModSourceEditDestination::GlobalDefault);
+            super::save_source_form(&mut state, &mut rx);
+
+            assert!(
+                state.step2.versions_ui.source_form.is_none(),
+                "{}",
+                state.step2.scan_status
+            );
+            let user_default = read_or_empty(&crate::app::mod_downloads::mod_downloads_user_path());
+            assert!(user_default.contains("tp2 = \"widget\""), "{user_default}");
+            assert!(user_default.contains("owner/widget"), "{user_default}");
+            let modlist = read_or_empty(&target_guard.0.join("mod_downloads_user.toml"));
+            assert!(!modlist.contains("widget"), "{modlist}");
+            assert_eq!(
+                crate::app::added_mods::load_added_mods(),
+                std::collections::BTreeSet::from(["widget".to_string()])
+            );
+            assert_eq!(state.step2.log_pending_downloads.len(), 1);
+            assert_eq!(state.step2.log_pending_downloads[0].tp_file, "widget.tp2");
+        }
+
+        let _config_guard = SourceFormConfigDirGuard::new("new_mod_target_this_modlist");
+        let target_guard = TargetDirGuard::create("new_mod_target_this_modlist_list");
         crate::app::mod_downloads::set_active_modlist_dir(Some(target_guard.0.clone()));
-        let mut state = new_mod_state("widget");
-        assert_eq!(
-            state
-                .step2
-                .versions_ui
-                .source_form
-                .as_ref()
-                .map(|f| f.save_to),
-            Some(crate::app::step2_action::ModSourceEditDestination::GlobalDefault)
-        );
+
+        let mut state = new_mod_state("widget", ModSourceEditDestination::ThisModlist);
         super::save_source_form(&mut state, &mut rx);
 
         assert!(
@@ -2423,12 +2456,10 @@ mod tests {
             "{}",
             state.step2.scan_status
         );
-        let written =
-            std::fs::read_to_string(target_guard.0.join("mod_downloads_user.toml")).unwrap();
-        assert!(written.contains("tp2 = \"widget\""), "{written}");
-        let user_default =
-            std::fs::read_to_string(crate::app::mod_downloads::mod_downloads_user_path())
-                .unwrap_or_default();
+        let modlist = read_or_empty(&target_guard.0.join("mod_downloads_user.toml"));
+        assert!(modlist.contains("tp2 = \"widget\""), "{modlist}");
+        assert!(modlist.contains("owner/widget"), "{modlist}");
+        let user_default = read_or_empty(&crate::app::mod_downloads::mod_downloads_user_path());
         assert!(!user_default.contains("widget"), "{user_default}");
     }
 

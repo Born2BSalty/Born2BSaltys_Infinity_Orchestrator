@@ -58,7 +58,7 @@ pub(crate) fn render(
         ui.add_space(ROW_GAP);
     }
 
-    if env.has_modlist_destination && !new_mod_form {
+    if env.has_modlist_destination {
         render_save_to(ui, palette, form);
         ui.add_space(ROW_GAP);
     }

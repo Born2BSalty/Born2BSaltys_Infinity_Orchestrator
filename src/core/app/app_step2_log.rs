@@ -135,9 +135,6 @@ pub(crate) fn reseed_added_mod_pending_downloads(state: &mut WizardState) {
         return;
     };
     let modlist_text = std::fs::read_to_string(path).unwrap_or_default();
-    if modlist_text.trim().is_empty() {
-        return;
-    }
     let added = added_mods::load_added_mods();
     if added.is_empty() {
         return;
@@ -169,7 +166,10 @@ pub(crate) fn seed_added_mod_pending_downloads(
         .collect();
     let game_tab = state.step2.active_game_tab.clone();
     for source in &sources.sources {
-        if tiers.tier_of(&source.tp2, &source.source_id) != SourceTier::Modlist {
+        if !matches!(
+            tiers.tier_of(&source.tp2, &source.source_id),
+            SourceTier::Modlist | SourceTier::User
+        ) {
             continue;
         }
         let tp2 = mod_downloads::normalize_mod_download_tp2(&source.tp2);
@@ -420,13 +420,17 @@ mod tests {
 
     fn seed_from_texts(
         state: &mut WizardState,
+        default_text: &str,
         user_text: &str,
         modlist_text: &str,
         added: &[&str],
     ) {
-        let sources =
-            mod_downloads::load_mod_download_sources_from_texts("", user_text, modlist_text);
-        let tiers = mod_downloads::source_tiers_from_texts("", user_text, modlist_text);
+        let sources = mod_downloads::load_mod_download_sources_from_texts(
+            default_text,
+            user_text,
+            modlist_text,
+        );
+        let tiers = mod_downloads::source_tiers_from_texts(default_text, user_text, modlist_text);
         let added: BTreeSet<String> = added.iter().map(ToString::to_string).collect();
         seed_added_mod_pending_downloads(state, &sources, &tiers, &added);
     }
@@ -437,14 +441,14 @@ mod tests {
         let mut state = WizardState::default();
         state.step2.active_game_tab = "BG2EE".to_string();
 
-        seed_from_texts(&mut state, "", &modlist_text, &[]);
+        seed_from_texts(&mut state, "", "", &modlist_text, &[]);
         assert!(
             state.step2.log_pending_downloads.is_empty(),
             "{:?}",
             state.step2.log_pending_downloads
         );
 
-        seed_from_texts(&mut state, "", &modlist_text, &["widget"]);
+        seed_from_texts(&mut state, "", "", &modlist_text, &["widget"]);
         assert_eq!(state.step2.log_pending_downloads.len(), 1);
     }
 
@@ -458,7 +462,7 @@ mod tests {
         let mut state = WizardState::default();
         state.step2.active_game_tab = "BG2EE".to_string();
 
-        seed_from_texts(&mut state, "", &modlist_text, &["widget"]);
+        seed_from_texts(&mut state, "", "", &modlist_text, &["widget"]);
 
         assert_eq!(
             state.step2.log_pending_downloads,
@@ -470,12 +474,12 @@ mod tests {
             }]
         );
 
-        seed_from_texts(&mut state, "", &modlist_text, &["widget"]);
+        seed_from_texts(&mut state, "", "", &modlist_text, &["widget"]);
         assert_eq!(state.step2.log_pending_downloads.len(), 1);
     }
 
     #[test]
-    fn reseed_skips_scanned_and_my_default_mods() {
+    fn reseed_skips_scanned_mods() {
         let mut state = WizardState::default();
         state
             .step2
@@ -484,10 +488,113 @@ mod tests {
 
         seed_from_texts(
             &mut state,
-            &github_block("gadget", "Gadget"),
+            "",
+            "",
             &github_block("widget", "Widget"),
-            &["widget", "gadget"],
+            &["widget"],
         );
+
+        assert!(
+            state.step2.log_pending_downloads.is_empty(),
+            "{:?}",
+            state.step2.log_pending_downloads
+        );
+    }
+
+    #[test]
+    fn reseed_adds_a_card_for_an_added_mod_saved_to_my_default() {
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BG2EE".to_string();
+
+        seed_from_texts(
+            &mut state,
+            "",
+            &github_block("gadget", "Gadget"),
+            "",
+            &["gadget"],
+        );
+
+        assert_eq!(
+            state.step2.log_pending_downloads,
+            vec![Step2LogPendingDownload {
+                game_tab: "BG2EE".to_string(),
+                tp_file: "gadget.tp2".to_string(),
+                label: "Gadget".to_string(),
+                requested_version: None,
+            }]
+        );
+    }
+
+    struct IsolatedAmbient {
+        previous_modlist_dir: Option<PathBuf>,
+        root: TempRoot,
+    }
+
+    impl IsolatedAmbient {
+        fn create() -> Self {
+            let root = TempRoot::new();
+            let config_dir = root.path.join("config");
+            let modlist_dir = root.path.join("modlist");
+            std::fs::create_dir_all(&config_dir).expect("create temp config dir");
+            std::fs::create_dir_all(&modlist_dir).expect("create temp modlist dir");
+            let previous_modlist_dir = mod_downloads::active_modlist_dir();
+            crate::platform_defaults::set_config_dir_override(Some(config_dir));
+            mod_downloads::set_active_modlist_dir(Some(modlist_dir));
+            Self {
+                previous_modlist_dir,
+                root,
+            }
+        }
+    }
+
+    impl Drop for IsolatedAmbient {
+        fn drop(&mut self) {
+            mod_downloads::set_active_modlist_dir(self.previous_modlist_dir.take());
+            crate::platform_defaults::clear_config_dir_override_if(&self.root.path.join("config"));
+        }
+    }
+
+    #[test]
+    fn reseed_runs_for_a_list_whose_own_sources_file_is_absent() {
+        let _lock = mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let ambient = IsolatedAmbient::create();
+        let user_path = mod_downloads::mod_downloads_user_path();
+        assert!(user_path.starts_with(&ambient.root.path), "{user_path:?}");
+        std::fs::create_dir_all(user_path.parent().expect("user path parent"))
+            .expect("create user sources dir");
+        std::fs::write(&user_path, github_block("gadget", "Gadget")).expect("write user sources");
+        added_mods::record_added_mod("gadget").expect("record gadget");
+        let modlist_sources = mod_downloads::active_modlist_downloads_path().expect("modlist path");
+        assert!(!modlist_sources.exists());
+
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BG2EE".to_string();
+        reseed_added_mod_pending_downloads(&mut state);
+
+        assert_eq!(
+            state.step2.log_pending_downloads,
+            vec![Step2LogPendingDownload {
+                game_tab: "BG2EE".to_string(),
+                tp_file: "gadget.tp2".to_string(),
+                label: "Gadget".to_string(),
+                requested_version: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn reseed_skips_a_bio_default_block() {
+        let default_text = github_block("gizmo", "Gizmo");
+        assert!(
+            !mod_downloads::load_mod_download_sources_from_texts(&default_text, "", "")
+                .find_sources("gizmo")
+                .is_empty()
+        );
+        let mut state = WizardState::default();
+
+        seed_from_texts(&mut state, &default_text, "", "", &["gizmo"]);
 
         assert!(
             state.step2.log_pending_downloads.is_empty(),
