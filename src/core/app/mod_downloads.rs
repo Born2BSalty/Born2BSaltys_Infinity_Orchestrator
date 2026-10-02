@@ -217,6 +217,17 @@ impl ModDownloadsLoad {
     }
 }
 
+impl ModDownloadSource {
+    #[must_use]
+    pub(crate) fn declared_tp2_names(&self) -> Vec<String> {
+        std::iter::once(self.tp2.trim())
+            .chain(self.aliases.iter().map(|alias| alias.trim()))
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .collect()
+    }
+}
+
 pub(crate) fn mod_downloads_user_path() -> PathBuf {
     app_config_file(MOD_DOWNLOADS_USER_FILE_NAME, "config")
 }
@@ -1906,6 +1917,19 @@ mod tests {
 
         assert_eq!(source.tag.as_deref(), Some("v1.1"));
         assert!(source.release.is_none(), "tag must clear release");
+    }
+
+    #[test]
+    fn declared_tp2_names_lead_with_the_block_tp2_and_drop_blanks() {
+        let source = ModDownloadSource {
+            tp2: " d0questpack ".to_string(),
+            aliases: vec!["questpack".to_string(), "  ".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(
+            source.declared_tp2_names(),
+            vec!["d0questpack".to_string(), "questpack".to_string()]
+        );
     }
 
     #[test]

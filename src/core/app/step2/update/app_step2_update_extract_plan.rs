@@ -94,7 +94,7 @@ pub(crate) fn build_extract_jobs(
             tp_file: asset.tp_file.clone(),
             aliases: source
                 .as_ref()
-                .map(|source| source.aliases.clone())
+                .map(mod_downloads::ModDownloadSource::declared_tp2_names)
                 .unwrap_or_default(),
             tp2_rename,
             subdir_require,
@@ -384,6 +384,38 @@ mod tests {
         assert_eq!(remembered.remote_file, Some(facts));
         let unremembered = jobs.iter().find(|job| job.label == "Alpha").unwrap();
         assert_eq!(unremembered.remote_file, None);
+    }
+
+    #[test]
+    fn job_requested_under_an_alias_accepts_the_block_tp2_too() {
+        let _lock = AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = TestRoot::new("alias_job");
+        let archive_dir = root.archive_dir();
+        fs::write(
+            root.0.join("mod_downloads_user.toml"),
+            "[[mods]]\nname = \"Folder Named\"\ntp2 = \"filename\"\naliases = [\"foldername\"]\n\n  [[mods.sources]]\n  id = \"primary\"\n  type = \"url\"\n  url = \"https://example.test/foldername.zip\"\n",
+        )
+        .unwrap();
+
+        let mut state = WizardState::default();
+        state.step1.mods_folder = root.0.join("mods").to_string_lossy().into_owned();
+        let by_alias = asset("foldername/setup-foldername.tp2", "FOLDERNAME", "1.0");
+        fs::write(
+            archive_dir.join(app_step2_update_download::archive_file_name(&by_alias)),
+            b"x",
+        )
+        .unwrap();
+        state.step2.update_selected_update_assets = vec![by_alias];
+
+        let jobs = build_extract_jobs(&mut state, &archive_dir, None, None).jobs;
+
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(
+            jobs[0].aliases,
+            vec!["filename".to_string(), "foldername".to_string()]
+        );
     }
 
     fn named_asset(asset_name: &str, tag: &str) -> Step2UpdateAsset {

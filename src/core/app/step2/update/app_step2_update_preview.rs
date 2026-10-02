@@ -294,7 +294,7 @@ fn queue_mod_update_preview(
                     source_id: source.source_id.clone(),
                     page_url: source.url.clone(),
                     reason: ManualDownloadReason::NotAutoResolvable,
-                    aliases: source.aliases.clone(),
+                    aliases: source.declared_tp2_names(),
                     display_name: source.name.clone(),
                 },
             );
@@ -510,7 +510,7 @@ fn queue_target_mod_update_preview(
                     source_id: source.source_id.clone(),
                     page_url: source.url.clone(),
                     reason: ManualDownloadReason::NotAutoResolvable,
-                    aliases: source.aliases.clone(),
+                    aliases: source.declared_tp2_names(),
                     display_name: source.name.clone(),
                 },
             );
@@ -588,7 +588,7 @@ fn queue_pending_target_update_preview(
                     source_id: source.source_id.clone(),
                     page_url: source.url.clone(),
                     reason: ManualDownloadReason::NotAutoResolvable,
-                    aliases: source.aliases.clone(),
+                    aliases: source.declared_tp2_names(),
                     display_name: source.name.clone(),
                 },
             );
@@ -839,7 +839,7 @@ fn extend_log_pending_update_requests(
                         source_id: source.source_id.clone(),
                         page_url: source.url.clone(),
                         reason: ManualDownloadReason::NotAutoResolvable,
-                        aliases: source.aliases.clone(),
+                        aliases: source.declared_tp2_names(),
                         display_name: source.name.clone(),
                     },
                 );

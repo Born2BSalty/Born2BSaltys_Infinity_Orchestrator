@@ -5556,7 +5556,8 @@ tp2 = "BardicWonders"
 
 [[mods]]
 name = "Warlock"
-tp2 = "C0Warlock"
+tp2 = "Artisans_Warlock"
+aliases = ["C0Warlock"]
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6520,11 +6521,11 @@ name = "Rogue Rebalancing"
 tp2 = "RR"
 
   [[mods.sources]]
-  id = "fredriklindgren"
-  label = "FredrikLindgren"
+  id = "camdawg"
+  label = "CamDawg"
   type = "github"
-  url = "https://github.com/FredrikLindgren/rr"
-  repo = "FredrikLindgren/rr"
+  url = "https://github.com/CamDawg/rr"
+  repo = "CamDawg/rr"
   commit = ""
   tag = ""
   branch = "master"
