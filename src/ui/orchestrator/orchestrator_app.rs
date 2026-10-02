@@ -1584,11 +1584,11 @@ mod tests {
     #[test]
     fn isolated_app_carries_no_machine_paths() {
         let app = OrchestratorApp::new_isolated_for_test("no_machine_paths");
-        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
-        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
-        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
         assert_eq!(
             app.wizard_state.step1.prepare_target_dirs_before_install,
             crate::app::state::Step1State::default().prepare_target_dirs_before_install
@@ -1801,9 +1801,9 @@ mod tests {
         assert!(!ws.step2.pending_saved_log_download);
         assert!(!ws.step2.update_selected_download_running);
         assert!(!ws.step2.update_selected_extract_running);
-        assert!(ws.step2.update_selected_download_bytes.is_empty());
-        assert!(ws.step2.update_selected_download_done.is_empty());
-        assert!(ws.step2.update_selected_extract_jobs.is_empty());
+        assert_eq!(ws.step2.update_selected_download_bytes.len(), 0);
+        assert_eq!(ws.step2.update_selected_download_done.len(), 0);
+        assert_eq!(ws.step2.update_selected_extract_jobs.len(), 0);
 
         assert!(pending.is_none());
         assert!(active.is_none());
@@ -1852,7 +1852,7 @@ mod tests {
         assert!(!iss.pipeline_flags.archives_verified());
         assert!(iss.download_progress.hash_progress.is_none());
         assert!(iss.download_progress.extract_progress.is_none());
-        assert!(iss.hashed_indices.is_empty());
+        assert_eq!(iss.hashed_indices.len(), 0);
         assert_eq!(
             iss.stage,
             crate::ui::install::state_install::InstallStage::Gallery

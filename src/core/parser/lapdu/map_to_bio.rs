@@ -280,7 +280,7 @@ mod tests {
             ]),
             None,
         );
-        assert!(index.mod_events.is_empty());
+        assert_eq!(index.mod_events.len(), 0);
         assert!(index.mod_summary.is_none());
         assert_eq!(index.by_component_id_events["502"].len(), 2);
         assert!(index.by_component_id["502"].contains("storage capacity"));

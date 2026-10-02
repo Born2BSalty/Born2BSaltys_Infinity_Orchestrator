@@ -183,12 +183,12 @@ mod tests {
         let dir = AmbientModlistDir::create("parse_error");
         let path = dir.root.join("added_mods.json");
 
-        assert!(load_added_mods().is_empty());
+        assert_eq!(load_added_mods().len(), 0);
         assert_eq!(forget_added_mods_present(["widget"]), Ok(0));
         assert!(!path.exists());
 
         std::fs::write(&path, "{ not json").expect("write broken file");
-        assert!(load_added_mods().is_empty());
+        assert_eq!(load_added_mods().len(), 0);
         assert!(record_added_mod("widget").is_err());
         assert!(forget_added_mods_present(["widget"]).is_err());
         assert_eq!(

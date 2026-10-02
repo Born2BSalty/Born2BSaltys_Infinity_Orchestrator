@@ -440,7 +440,7 @@ mod tests {
         let entries =
             collect_step2_prompt_toolbar_entries(&[mod_state], &PromptEvalContext::default());
         assert_eq!(entries.len(), 1);
-        assert!(entries[0].components.is_empty());
+        assert_eq!(entries[0].components.len(), 0);
         assert!(entries[0].mod_level);
         assert_eq!(prompt_toolbar_count(&entries), 1);
     }
@@ -534,7 +534,7 @@ Pick a flavour"
             collect_step2_prompt_toolbar_entries(&[mod_state], &PromptEvalContext::default());
         assert_eq!(entries.len(), 1);
         assert!(entries[0].mod_level);
-        assert!(entries[0].components.is_empty());
+        assert_eq!(entries[0].components.len(), 0);
         assert_eq!(prompt_toolbar_count(&entries), 1);
     }
 

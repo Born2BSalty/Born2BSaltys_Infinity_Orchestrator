@@ -1454,7 +1454,7 @@ mod tests {
         assert!(state.step2.versions_ui.focus_scroll_pending);
         assert!(!state.step2.versions_ui.auto_check_pending);
         assert_eq!(state.step2.versions_ui.chip, VersionsChip::All);
-        assert!(state.step2.versions_ui.search.is_empty());
+        assert_eq!(state.step2.versions_ui.search.len(), 0);
         assert!(state.step2.update_selected_popup_open);
     }
 
@@ -1846,7 +1846,7 @@ mod tests {
 
         assert!(result.is_err(), "{result:?}");
         let store = crate::app::mod_source_history::load_store();
-        assert!(store.history.is_empty());
+        assert_eq!(store.history.len(), 0);
     }
 
     #[test]
@@ -2007,7 +2007,7 @@ mod tests {
             state.step2.scan_status
         );
         let store = crate::app::mod_source_history::load_store();
-        assert!(store.history.is_empty());
+        assert_eq!(store.history.len(), 0);
     }
 
     #[test]
@@ -2342,7 +2342,7 @@ mod tests {
             "{}",
             state.step2.scan_status
         );
-        assert!(state.step2.log_pending_downloads.is_empty());
+        assert_eq!(state.step2.log_pending_downloads.len(), 0);
     }
 
     #[test]
@@ -2370,7 +2370,7 @@ mod tests {
                 Some("Enter the mod's TP2 name first"),
                 "{typed:?}"
             );
-            assert!(state.step2.log_pending_downloads.is_empty(), "{typed:?}");
+            assert_eq!(state.step2.log_pending_downloads.len(), 0, "{typed:?}");
         }
         assert!(!crate::app::mod_downloads::mod_downloads_user_path().exists());
     }
@@ -2401,7 +2401,7 @@ mod tests {
                 Some("Open a modlist first"),
                 "{save_to:?}"
             );
-            assert!(state.step2.log_pending_downloads.is_empty(), "{save_to:?}");
+            assert_eq!(state.step2.log_pending_downloads.len(), 0, "{save_to:?}");
         }
         assert!(!crate::app::mod_downloads::mod_downloads_user_path().exists());
     }
@@ -2524,7 +2524,7 @@ mod tests {
         let promoted = super::promote_in_sync_assets(&mut state.step2, &eefixpack_key());
 
         assert_eq!(promoted, vec![eefixpack_asset("v14.1")]);
-        assert!(state.step2.update_selected_in_sync_assets.is_empty());
+        assert_eq!(state.step2.update_selected_in_sync_assets.len(), 0);
         let assets = &state.step2.update_selected_update_assets;
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].tag, "v14.1");
@@ -2547,7 +2547,10 @@ mod tests {
             .update_selected_in_sync_assets
             .push(eefixpack_asset("v14.1"));
 
-        assert!(super::promote_in_sync_assets(&mut state.step2, &eefixpack_key()).is_empty());
+        assert_eq!(
+            super::promote_in_sync_assets(&mut state.step2, &eefixpack_key()).len(),
+            0
+        );
 
         let assets = &state.step2.update_selected_update_assets;
         assert_eq!(assets.len(), 1);
@@ -2555,7 +2558,7 @@ mod tests {
         let in_sync = &state.step2.update_selected_in_sync_assets;
         assert_eq!(in_sync.len(), 1);
         assert_eq!(in_sync[0].tag, "v14.1");
-        assert!(state.step2.update_selected_update_sources.is_empty());
+        assert_eq!(state.step2.update_selected_update_sources.len(), 0);
     }
 
     #[test]
@@ -2573,7 +2576,7 @@ mod tests {
         let promoted = super::promote_in_sync_assets(&mut state.step2, &eefixpack_key());
 
         assert_eq!(promoted, vec![eefixpack_asset("v14.1"), bg2ee.clone()]);
-        assert!(state.step2.update_selected_in_sync_assets.is_empty());
+        assert_eq!(state.step2.update_selected_in_sync_assets.len(), 0);
         assert_eq!(
             state.step2.update_selected_update_assets,
             vec![eefixpack_asset("v14.1"), bg2ee]
@@ -2619,7 +2622,7 @@ mod tests {
             state.step2.scan_status,
             "Download Archive is disabled in Step 1"
         );
-        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
         assert_eq!(state.step2.update_selected_update_sources, sources_before);
         assert_eq!(
             state.step2.update_selected_in_sync_assets,
@@ -2637,6 +2640,6 @@ mod tests {
 
         super::invalidate_update_selected_results(&mut state);
 
-        assert!(state.step2.update_selected_in_sync_assets.is_empty());
+        assert_eq!(state.step2.update_selected_in_sync_assets.len(), 0);
     }
 }

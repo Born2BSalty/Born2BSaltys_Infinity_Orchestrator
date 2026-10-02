@@ -127,7 +127,10 @@ fn surface_save_error(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &O
         .painter()
         .layout_no_wrap(last.to_string(), font.clone(), text_color);
     let (rect, _) = ui.allocate_exact_size(
-        egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0),
+        egui::vec2(
+            f32::mul_add(pad_x, 2.0, galley.size().x),
+            f32::mul_add(pad_y, 2.0, galley.size().y),
+        ),
         egui::Sense::hover(),
     );
     if ui.is_rect_visible(rect) {

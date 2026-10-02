@@ -117,7 +117,7 @@ mod tests {
             "both toasts must be returned on first drain"
         );
         let second = take_pending_toasts(&ctx);
-        assert!(second.is_empty(), "queue must be empty after first drain");
+        assert_eq!(second.len(), 0, "queue must be empty after first drain");
     }
 
     #[test]

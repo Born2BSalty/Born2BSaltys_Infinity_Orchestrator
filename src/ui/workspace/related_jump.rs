@@ -45,7 +45,7 @@ mod tests {
         apply_related_jump_outcome(&mut app, Some(RelatedJumpOutcome::HoppedToStep2));
 
         assert_eq!(app.workspace_view.current_step, WorkspaceStep::Step2);
-        assert!(app.notification_manager.history().is_empty());
+        assert_eq!(app.notification_manager.history().len(), 0);
     }
 
     #[test]
@@ -78,7 +78,7 @@ mod tests {
         apply_related_jump_outcome(&mut app, Some(RelatedJumpOutcome::LandedOnStep3));
 
         assert_eq!(app.workspace_view.current_step, WorkspaceStep::Step3);
-        assert!(app.notification_manager.history().is_empty());
+        assert_eq!(app.notification_manager.history().len(), 0);
     }
 
     #[test]

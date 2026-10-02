@@ -587,7 +587,7 @@ fn menu_item(ui: &mut egui::Ui, palette: ThemePalette, label: &str, disabled: bo
     let galley = ui
         .painter()
         .layout_no_wrap(shown.clone(), font.clone(), text_color);
-    let row_height = galley.size().y + pad_y * 2.0;
+    let row_height = f32::mul_add(pad_y, 2.0, galley.size().y);
     let sense = if disabled {
         egui::Sense::hover()
     } else {

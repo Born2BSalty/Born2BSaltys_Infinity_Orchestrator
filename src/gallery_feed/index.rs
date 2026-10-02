@@ -355,7 +355,7 @@ mod tests {
             ],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -391,7 +391,7 @@ mod tests {
             )],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -410,7 +410,7 @@ mod tests {
             entries: vec![entry("big-code", "One", true, "EET", "entries/one.biolist")],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -459,7 +459,7 @@ mod tests {
             entries: vec![entry("bad-code", "One", true, "EET", "entries/one.biolist")],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -478,7 +478,7 @@ mod tests {
             )],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -494,7 +494,7 @@ mod tests {
             )],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod tests {
             )],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -533,7 +533,7 @@ mod tests {
             entries: vec![fixture],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -549,7 +549,7 @@ mod tests {
             entries: vec![fixture],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -602,7 +602,7 @@ mod tests {
             entries: vec![fixture],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -617,7 +617,7 @@ mod tests {
             entries: vec![fixture],
         };
         let result = entries_from_index(index, &resolver(&files));
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
     }
 
     #[test]

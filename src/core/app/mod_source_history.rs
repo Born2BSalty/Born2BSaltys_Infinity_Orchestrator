@@ -517,9 +517,9 @@ mod tests {
         std::fs::write(&path, "not json").unwrap();
 
         let store = load_store();
-        assert!(store.notes.is_empty());
-        assert!(store.history.is_empty());
-        assert!(store.bookmarks.is_empty());
+        assert_eq!(store.notes.len(), 0);
+        assert_eq!(store.history.len(), 0);
+        assert_eq!(store.bookmarks.len(), 0);
 
         let after = std::fs::read_to_string(&path).unwrap();
         assert_eq!(after, "not json");

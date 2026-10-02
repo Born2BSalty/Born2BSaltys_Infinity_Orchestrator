@@ -504,7 +504,7 @@ mod tests {
         );
         assert_eq!(outcome, MoveSelectionOutcome::RefusedLocked);
         assert_eq!(items, before);
-        assert!(undo_stack.is_empty());
+        assert_eq!(undo_stack.len(), 0);
     }
 
     #[test]
@@ -542,7 +542,7 @@ mod tests {
         let (outcome, undo_stack, _) =
             run(&mut items, &mut selected, &[], 0, MoveSelectionTarget::Top);
         assert_eq!(outcome, MoveSelectionOutcome::NothingToMove);
-        assert!(undo_stack.is_empty());
+        assert_eq!(undo_stack.len(), 0);
 
         let mut items2 = vec![
             parent("A", "A::b0"),
@@ -559,7 +559,7 @@ mod tests {
             MoveSelectionTarget::Bottom,
         );
         assert_eq!(outcome2, MoveSelectionOutcome::NothingToMove);
-        assert!(undo_stack2.is_empty());
+        assert_eq!(undo_stack2.len(), 0);
     }
 
     #[test]
@@ -595,7 +595,7 @@ mod tests {
         assert_eq!(outcome, MoveSelectionOutcome::Moved);
         assert_eq!(undo_stack.len(), 1);
         assert_eq!(undo_stack[0].items, before);
-        assert!(redo_stack.is_empty());
+        assert_eq!(redo_stack.len(), 0);
     }
 
     #[test]
@@ -782,7 +782,7 @@ mod tests {
 
         expand_blocks_hiding_lit_components(&items, &selected, &mut collapsed_blocks);
 
-        assert!(collapsed_blocks.is_empty());
+        assert_eq!(collapsed_blocks.len(), 0);
     }
 
     #[test]

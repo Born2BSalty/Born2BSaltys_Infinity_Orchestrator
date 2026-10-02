@@ -357,7 +357,7 @@ mod tests {
                     .map(|path| format!("{}: {path}", source.tp2))
             })
             .collect();
-        assert!(offenders.is_empty(), "{offenders:?}");
+        assert_eq!(offenders.len(), 0, "{offenders:?}");
     }
 
     fn assert_refused_with(paths: &[&str], expected: &str) {

@@ -732,10 +732,10 @@ mod tests {
     fn empty_message_points_at_the_other_games_with_hits() {
         let none = empty_message("BGEE", &[]);
         assert_eq!(none.lead, "No mods or components match.");
-        assert!(none.links.is_empty());
+        assert_eq!(none.links.len(), 0);
         let zero_elsewhere = empty_message("BGEE", &[("BG2EE".to_string(), 0)]);
         assert_eq!(zero_elsewhere.lead, "No mods or components match.");
-        assert!(zero_elsewhere.links.is_empty());
+        assert_eq!(zero_elsewhere.links.len(), 0);
         let hit_elsewhere = empty_message("BGEE", &[("BG2EE".to_string(), 1)]);
         assert_eq!(hit_elsewhere.lead, "No matches on BGEE.");
         assert_eq!(

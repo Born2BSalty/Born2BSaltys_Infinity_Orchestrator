@@ -1193,7 +1193,7 @@ mod tests {
         let clean_after = !app.workspace_state_dirty;
         assert!(clean_before);
         assert!(!clean_after);
-        assert!(app.notification_manager.history().is_empty());
+        assert_eq!(app.notification_manager.history().len(), 0);
     }
 
     #[test]
@@ -1364,7 +1364,7 @@ mod tests {
         );
         assert_eq!(undo_stack.len(), 1);
         assert_eq!(undo_stack[0].items.len(), 2);
-        assert!(redo_stack.is_empty());
+        assert_eq!(redo_stack.len(), 0);
     }
 
     #[test]

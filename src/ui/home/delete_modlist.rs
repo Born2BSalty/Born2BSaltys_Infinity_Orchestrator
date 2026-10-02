@@ -87,6 +87,6 @@ mod tests {
         assert!(!app.workspace_state.contains_key("DEL000000001"));
         assert!(!app.workspace_stores.contains_key("DEL000000001"));
         assert!(!data_dir.exists());
-        assert!(app.pending_folder_deletes.is_empty());
+        assert_eq!(app.pending_folder_deletes.len(), 0);
     }
 }

@@ -172,7 +172,7 @@ mod tests {
         poll_forks_sheet(&mut state, &mut fetch);
 
         assert_eq!(state.step2.forks_list.status, ForksStatus::Idle);
-        assert!(state.step2.mod_download_forks.is_empty());
+        assert_eq!(state.step2.mod_download_forks.len(), 0);
         assert!(fetch.is_none());
     }
 }

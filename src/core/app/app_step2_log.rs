@@ -587,10 +587,11 @@ mod tests {
     #[test]
     fn reseed_skips_a_bio_default_block() {
         let default_text = github_block("gizmo", "Gizmo");
-        assert!(
-            !mod_downloads::load_mod_download_sources_from_texts(&default_text, "", "")
+        assert_ne!(
+            mod_downloads::load_mod_download_sources_from_texts(&default_text, "", "")
                 .find_sources("gizmo")
-                .is_empty()
+                .len(),
+            0
         );
         let mut state = WizardState::default();
 

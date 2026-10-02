@@ -2233,10 +2233,11 @@ mod tests {
     #[test]
     fn every_scanned_mod_gets_a_card() {
         let mut state = WizardState::default();
-        assert!(
+        assert_eq!(
             build_versions_view(&state, &empty_tiers(), None)
                 .cards
-                .is_empty()
+                .len(),
+            0
         );
 
         let mut unticked = mod_state("mod.tp2", "Mod", "~mod.tp2~ #0 #0 // 1.0");

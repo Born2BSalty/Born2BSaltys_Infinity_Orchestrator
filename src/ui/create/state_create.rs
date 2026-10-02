@@ -35,8 +35,8 @@ mod tests {
     fn new_defaults_to_eet() {
         let s = CreateScreenState::new();
         assert_eq!(s.game, Game::EET);
-        assert!(s.modlist_name.is_empty());
-        assert!(s.destination.is_empty());
+        assert_eq!(s.modlist_name.len(), 0);
+        assert_eq!(s.destination.len(), 0);
         assert_eq!(s.destination_choice, None);
         assert!(!s.load_draft_open);
         assert_eq!(s.resumed_build_id, None);

@@ -262,8 +262,8 @@ mod tests {
         ];
         for page in pages {
             let text = help_text(page);
-            assert!(!text.title.is_empty());
-            assert!(!text.bullets.is_empty());
+            assert_ne!(text.title.len(), 0);
+            assert_ne!(text.bullets.len(), 0);
         }
     }
 

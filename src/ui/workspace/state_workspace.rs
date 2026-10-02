@@ -180,7 +180,7 @@ mod tests {
     fn default_lands_on_step2() {
         let s = WorkspaceViewState::default();
         assert_eq!(s.current_step, WorkspaceStep::Step2);
-        assert!(s.completed_steps.is_empty());
+        assert_eq!(s.completed_steps.len(), 0);
         assert_eq!(s.loaded_workspace_id, None);
     }
 

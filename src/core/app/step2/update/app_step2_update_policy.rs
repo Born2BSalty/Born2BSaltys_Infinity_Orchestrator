@@ -146,7 +146,7 @@ mod tests {
         state.step2.bgee_mods.push(mod_state("mod.tp2"));
         mark_update_available(&mut state, "IWDEE", "mod.tp2");
         assert_eq!(state.step2.bgee_mods[0].package_marker, Some('+'));
-        assert!(state.step2.bg2ee_mods.is_empty());
+        assert_eq!(state.step2.bg2ee_mods.len(), 0);
     }
 
     #[test]

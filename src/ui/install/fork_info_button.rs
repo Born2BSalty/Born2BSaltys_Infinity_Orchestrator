@@ -24,7 +24,10 @@ pub(crate) fn render(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response
     let gap = 5.0;
     let content_w = fork_w + gap + galley.size().x;
     let content_h = galley.size().y.max(fork_w);
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
 
     let pressed = response.is_pointer_button_down_on();

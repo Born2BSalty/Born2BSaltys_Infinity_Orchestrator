@@ -246,7 +246,7 @@ mod tests {
                 let egui::WidgetText::LayoutJob(job) = widget_text else {
                     panic!("expected a LayoutJob widget text");
                 };
-                assert!(!job.sections.is_empty());
+                assert_ne!(job.sections.len(), 0);
                 for s in &job.sections {
                     assert_eq!(s.format.font_id, expected_font);
                 }

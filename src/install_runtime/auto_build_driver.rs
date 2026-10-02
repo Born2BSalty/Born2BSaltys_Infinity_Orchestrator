@@ -169,7 +169,7 @@ mod tests {
         );
 
         assert!(st.step1.generate_directory_enabled);
-        assert!(!st.step1.mods_folder.is_empty());
+        assert_ne!(st.step1.mods_folder.len(), 0);
         let _ = std::fs::remove_dir_all(&dest);
     }
 

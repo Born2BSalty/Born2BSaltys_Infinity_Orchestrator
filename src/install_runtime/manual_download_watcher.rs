@@ -233,7 +233,7 @@ mod tests {
             errors[0]
         );
         let more_errors = drain_errors(&rx, Duration::from_millis(200));
-        assert!(more_errors.is_empty(), "not reported again");
+        assert_eq!(more_errors.len(), 0, "not reported again");
         drop(rx);
         wait_for_thread_exit(&alive);
     }

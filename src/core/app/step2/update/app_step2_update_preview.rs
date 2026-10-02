@@ -1044,8 +1044,8 @@ mod tests {
             UpdateCheckScope::Selection,
         );
         assert_eq!(preview.unknown, vec!["Mod".to_string()]);
-        assert!(preview.known.is_empty());
-        assert!(preview.manual.is_empty());
+        assert_eq!(preview.known.len(), 0);
+        assert_eq!(preview.manual.len(), 0);
     }
 
     fn archive_sources() -> ModDownloadsLoad {
@@ -1090,8 +1090,8 @@ mod tests {
             false,
             UpdateCheckScope::WholeFolder,
         );
-        assert!(empty.update_requests.is_empty());
-        assert!(empty.known.is_empty());
+        assert_eq!(empty.update_requests.len(), 0);
+        assert_eq!(empty.known.len(), 0);
 
         state.step2.bgee_mods = vec![unticked_mod()];
         let preview = collect_full_update_preview(
@@ -1118,9 +1118,9 @@ mod tests {
             false,
             UpdateCheckScope::Selection,
         );
-        assert!(preview.update_requests.is_empty());
-        assert!(preview.known.is_empty());
-        assert!(preview.queued_tp2.is_empty());
+        assert_eq!(preview.update_requests.len(), 0);
+        assert_eq!(preview.known.len(), 0);
+        assert_eq!(preview.queued_tp2.len(), 0);
     }
 
     #[test]

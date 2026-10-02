@@ -92,7 +92,10 @@ fn render_one_tab(
         .y
         .max(sub_galley.as_ref().map_or(0.0, |g| g.size().y));
 
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
     let (rect, _resp) = ui.allocate_exact_size(desired, egui::Sense::click());
 
     if ui.is_rect_visible(rect) {

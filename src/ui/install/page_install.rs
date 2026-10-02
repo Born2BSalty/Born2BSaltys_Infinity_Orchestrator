@@ -996,7 +996,7 @@ mod tests {
             Some(crate::ui::install::state_install::DrawerKind::Install),
             "a refused Begin Import must leave the Install drawer open"
         );
-        assert!(app.registry.entries.is_empty());
+        assert_eq!(app.registry.entries.len(), 0);
         let history = app.notification_manager.history();
         assert_eq!(history.len(), 1);
         let record = history.back().unwrap();
@@ -1023,9 +1023,9 @@ mod tests {
             console_back_request(&mut app, StageInstallingOutcome::BackAfterCompletedInstall);
 
         assert_eq!(request, Some(InstallRequest::Stage(InstallStage::Gallery)));
-        assert!(app.install_screen_state.review.name.is_empty());
-        assert!(app.install_screen_state.destination.is_empty());
-        assert!(app.install_screen_state.import_code.is_empty());
+        assert_eq!(app.install_screen_state.review.name.len(), 0);
+        assert_eq!(app.install_screen_state.destination.len(), 0);
+        assert_eq!(app.install_screen_state.import_code.len(), 0);
         assert!(!app.install_screen_state.preview_cached);
         assert!(!app.post_install_reset_gate.is_pending());
     }
@@ -1082,7 +1082,7 @@ mod tests {
         assert!(!state.review.modify);
         assert!(state.preview_cached);
         assert!(state.parsed_preview.is_some());
-        assert!(!state.import_code.is_empty());
+        assert_ne!(state.import_code.len(), 0);
     }
 
     #[test]
@@ -1123,7 +1123,7 @@ mod tests {
         assert_eq!(request, InstallRequest::Stage(InstallStage::Gallery));
         assert!(state.parsed_preview.is_none());
         assert!(state.gallery.selected.is_none());
-        assert!(state.import_code.is_empty());
+        assert_eq!(state.import_code.len(), 0);
     }
 
     #[test]
@@ -1198,7 +1198,7 @@ mod tests {
         );
 
         assert_eq!(request, None);
-        assert!(state.import_code.is_empty());
+        assert_eq!(state.import_code.len(), 0);
         assert!(state.parsed_preview.is_none());
         let history = notification_manager.history();
         assert_eq!(history.len(), 1);
@@ -1222,7 +1222,7 @@ mod tests {
 
         assert_eq!(request, InstallRequest::Stage(InstallStage::Gallery));
         assert!(state.parsed_preview.is_none());
-        assert!(state.import_code.is_empty());
+        assert_eq!(state.import_code.len(), 0);
         assert!(state.gallery.selected.is_none());
     }
 
@@ -1269,7 +1269,7 @@ mod tests {
         let request = open_paste_from_gallery(&mut state);
 
         assert_eq!(request, InstallRequest::Stage(InstallStage::Paste));
-        assert!(state.import_code.is_empty());
+        assert_eq!(state.import_code.len(), 0);
         assert!(state.parsed_preview.is_none());
     }
 

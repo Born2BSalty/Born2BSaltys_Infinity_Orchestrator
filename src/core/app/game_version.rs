@@ -389,7 +389,7 @@ mod tests {
             installed_game_folders(&step1, "IWDEE"),
             vec![("IWDEE", "/single")]
         );
-        assert!(installed_game_folders(&step1, "garbage").is_empty());
+        assert_eq!(installed_game_folders(&step1, "garbage").len(), 0);
     }
 
     #[test]

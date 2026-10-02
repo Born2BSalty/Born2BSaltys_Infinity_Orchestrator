@@ -872,7 +872,7 @@ mod tests {
     fn refs_file_without_archives_serialises_as_before() {
         let text = "[refs]\nalpha = \"v19\"\n\n[sources]\nalpha = \"primary\"\n";
         let parsed = parse_refs_file_text(text);
-        assert!(parsed.archives.is_empty());
+        assert_eq!(parsed.archives.len(), 0);
 
         let serialised = toml::to_string_pretty(&parsed).unwrap();
         assert!(!serialised.contains("archives"), "{serialised}");
@@ -880,7 +880,7 @@ mod tests {
         let reparsed = parse_refs_file_text(&serialised);
         assert_eq!(reparsed.refs, parsed.refs);
         assert_eq!(reparsed.sources, parsed.sources);
-        assert!(reparsed.archives.is_empty());
+        assert_eq!(reparsed.archives.len(), 0);
     }
 
     fn refs_with_archive(archive: &InstalledArchiveRecord) -> ModSourceRefsFile {

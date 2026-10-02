@@ -622,7 +622,7 @@ mod tests {
     fn default_review_state_is_an_unnamed_unmodified_details_review() {
         let review = InstallScreenState::default().review;
         assert_eq!(review.origin, ReviewOrigin::Details);
-        assert!(review.name.is_empty());
+        assert_eq!(review.name.len(), 0);
         assert!(!review.modify);
     }
 
@@ -728,7 +728,7 @@ mod tests {
         assert!(st.drawer.open.is_none());
         assert_eq!(st.drawer.logs_tab, 0);
         assert_eq!(st.drawer.mods_tab, 0);
-        assert!(st.drawer.mods_query.is_empty());
+        assert_eq!(st.drawer.mods_query.len(), 0);
     }
 
     #[test]
@@ -770,7 +770,7 @@ mod tests {
         st.import_code = "BIO:example".to_string();
         assert!(st.has_route_context());
         st.reset_to_gallery();
-        assert!(st.import_code.is_empty());
+        assert_eq!(st.import_code.len(), 0);
         assert_eq!(st.stage, InstallStage::Gallery);
         assert!(!st.has_route_context());
     }

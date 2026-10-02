@@ -380,7 +380,7 @@ mod tests {
         fs::write(&path, b"hello").unwrap();
         let probe = probe_archive(&path, &HashSet::new()).unwrap();
         assert_eq!(probe.format, ProbeFormat::Unsupported);
-        assert!(probe.tp2_names.is_empty());
+        assert_eq!(probe.tp2_names.len(), 0);
     }
 
     #[test]

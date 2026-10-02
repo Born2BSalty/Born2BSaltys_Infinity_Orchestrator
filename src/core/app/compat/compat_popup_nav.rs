@@ -597,7 +597,7 @@ mod tests {
             other => panic!("expected a mod selection, got {other:?}"),
         }
         assert!(state.step2.jump_to_selected_requested);
-        assert!(state.step2.search_query.is_empty());
+        assert_eq!(state.step2.search_query.len(), 0);
         assert_eq!(state.current_step, 1);
         assert!(!state.step2.compat_popup_open);
     }

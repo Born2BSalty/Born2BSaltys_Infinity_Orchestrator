@@ -271,7 +271,10 @@ fn clickable_pill(
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let size = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    let size = egui::vec2(
+        f32::mul_add(pad_x, 2.0, galley.size().x),
+        f32::mul_add(pad_y, 2.0, galley.size().y),
+    );
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();

@@ -1016,7 +1016,7 @@ mod tests {
     }
 
     fn assert_single_in_sync_multikits_asset(state: &WizardState<bool>) {
-        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
         let outcome = multikits_release_outcome();
         let in_sync = &state.step2.update_selected_in_sync_assets;
         assert_eq!(in_sync.len(), 1);
@@ -1068,7 +1068,7 @@ mod tests {
             "[refs]\na7-multikits = \"{commit_ref}\"\n\n[sources]\na7-multikits = \"argent77\"\n"
         );
         let state = check_multikits_outcome("in_sync_snapshot_ref", Some(&refs_file), &outcome, 1);
-        assert!(state.step2.update_selected_update_assets.is_empty());
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
         let in_sync = &state.step2.update_selected_in_sync_assets;
         assert_eq!(in_sync.len(), 1);
         assert_eq!(in_sync[0].installed_source_ref.as_deref(), Some(commit_ref));
@@ -1190,22 +1190,22 @@ mod tests {
             "release_tag_in_sync",
             Some("[refs]\na7-multikits = \"v1.1\"\n\n[sources]\na7-multikits = \"argent77\"\n"),
         );
-        assert!(state.step2.update_selected_update_assets.is_empty());
-        assert!(state.step2.update_selected_update_sources.is_empty());
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
+        assert_eq!(state.step2.update_selected_update_sources.len(), 0);
     }
 
     #[test]
     fn no_recorded_ref_falls_back_to_the_version_comparison() {
         let state = check_multikits_release("no_recorded_ref", None);
-        assert!(state.step2.update_selected_update_assets.is_empty());
-        assert!(state.step2.update_selected_update_sources.is_empty());
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
+        assert_eq!(state.step2.update_selected_update_sources.len(), 0);
     }
 
     #[test]
     fn a_folder_record_makes_a_branch_source_in_sync_on_a_list_that_never_fetched_it() {
         let in_sync = check_cdtweaks_with_folder_record(&format!("master@{CDTWEAKS_SHA}"));
-        assert!(in_sync.step2.update_selected_update_assets.is_empty());
-        assert!(in_sync.step2.update_selected_update_sources.is_empty());
+        assert_eq!(in_sync.step2.update_selected_update_assets.len(), 0);
+        assert_eq!(in_sync.step2.update_selected_update_sources.len(), 0);
 
         let moved =
             check_cdtweaks_with_folder_record("master@0123456789abcdef0123456789abcdef01234567");
@@ -1223,8 +1223,8 @@ mod tests {
                 "[refs]\na7-multikits = \"devel@6ae6ae0bd3d2b6275a24aa9c72abc54e2122f805\"\n\n[sources]\na7-multikits = \"someone-else\"\n",
             ),
         );
-        assert!(state.step2.update_selected_update_assets.is_empty());
-        assert!(state.step2.update_selected_update_sources.is_empty());
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
+        assert_eq!(state.step2.update_selected_update_sources.len(), 0);
     }
 
     #[test]
@@ -1375,9 +1375,9 @@ mod tests {
     }
 
     fn assert_questpack_in_sync(state: &WizardState<bool>) {
-        assert!(state.step2.update_selected_update_assets.is_empty());
-        assert!(state.step2.update_selected_update_sources.is_empty());
-        assert!(state.step2.update_selected_unverified_sources.is_empty());
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
+        assert_eq!(state.step2.update_selected_update_sources.len(), 0);
+        assert_eq!(state.step2.update_selected_unverified_sources.len(), 0);
         assert_eq!(state.step2.update_selected_in_sync_assets.len(), 1);
         assert_eq!(state.step2.bgee_mods[0].package_marker, None);
     }
@@ -1411,7 +1411,7 @@ mod tests {
         };
         let state = check_questpack(Some(questpack_record(Some(RECORDED_DATE))), newer);
         assert_questpack_fetch(&state);
-        assert!(state.step2.update_selected_unverified_sources.is_empty());
+        assert_eq!(state.step2.update_selected_unverified_sources.len(), 0);
     }
 
     #[test]
@@ -1425,12 +1425,7 @@ mod tests {
         };
         let other_size = check_questpack(Some(questpack_record(None)), resized);
         assert_questpack_fetch(&other_size);
-        assert!(
-            other_size
-                .step2
-                .update_selected_unverified_sources
-                .is_empty()
-        );
+        assert_eq!(other_size.step2.update_selected_unverified_sources.len(), 0);
     }
 
     #[test]
@@ -1475,7 +1470,7 @@ mod tests {
             state.step2.update_selected_missing_sources,
             vec!["d0questpack (questpack-v35-win)".to_string()]
         );
-        assert!(state.step2.update_selected_update_sources.is_empty());
+        assert_eq!(state.step2.update_selected_update_sources.len(), 0);
         assert_eq!(
             state.step2.update_selected_unverified_sources,
             vec!["d0questpack: not verified".to_string()]
@@ -1501,10 +1496,10 @@ mod tests {
     #[test]
     fn a_new_check_forgets_the_remembered_facts() {
         let mut full = check_questpack(None, recorded_date_facts());
-        assert!(!full.step2.update_selected_remote_file_facts.is_empty());
+        assert_ne!(full.step2.update_selected_remote_file_facts.len(), 0);
         clear_previous_update_check_results(&mut full, &[], false);
-        assert!(full.step2.update_selected_remote_file_facts.is_empty());
-        assert!(full.step2.update_selected_unverified_sources.is_empty());
+        assert_eq!(full.step2.update_selected_remote_file_facts.len(), 0);
+        assert_eq!(full.step2.update_selected_unverified_sources.len(), 0);
 
         let mut targeted = check_questpack(None, recorded_date_facts());
         targeted.step2.update_selected_refresh_target_tp_file = Some(QUESTPACK_TP2.to_string());
@@ -1513,7 +1508,7 @@ mod tests {
             &[questpack_outcome(recorded_date_facts())],
             false,
         );
-        assert!(targeted.step2.update_selected_remote_file_facts.is_empty());
-        assert!(targeted.step2.update_selected_unverified_sources.is_empty());
+        assert_eq!(targeted.step2.update_selected_remote_file_facts.len(), 0);
+        assert_eq!(targeted.step2.update_selected_unverified_sources.len(), 0);
     }
 }

@@ -311,7 +311,7 @@ fn step3_same_phase_requires_merger_first_for_every_tweaks_component() {
         assert_eq!(result[&marker_key(&items[0])].kind, "order_block");
         assert_eq!(result[&marker_key(&items[2])].kind, "order_block");
         let reordered = [items[1].clone(), items[0].clone(), items[2].clone()];
-        assert!(markers(&state, "BGEE", &reordered, &reordered).is_empty());
+        assert_eq!(markers(&state, "BGEE", &reordered, &reordered).len(), 0);
     }
 }
 
@@ -350,7 +350,7 @@ fn step3_merger_before_tweaks_but_not_first_is_blocked_on_both_tabs() {
         let mut parent = item("dlcmerger.tp2", id);
         parent.is_parent = true;
         let reordered = [parent, first[1].clone(), first[2].clone()];
-        assert!(markers(&state, "BGEE", &reordered, &reordered).is_empty());
+        assert_eq!(markers(&state, "BGEE", &reordered, &reordered).len(), 0);
     }
 }
 
@@ -626,8 +626,8 @@ fn absent_source_dlc_leaves_step2_and_step3_unchanged() {
     assert_eq!(first, before);
     assert_eq!(second, before);
     let items = [item("cdtweaks.tp2", "2010")];
-    assert!(markers(&state, "BGEE", &items, &items).is_empty());
-    assert!(markers(&state, "BG2EE", &items, &[]).is_empty());
+    assert_eq!(markers(&state, "BGEE", &items, &items).len(), 0);
+    assert_eq!(markers(&state, "BG2EE", &items, &[]).len(), 0);
 }
 
 #[test]

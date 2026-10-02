@@ -375,11 +375,11 @@ mod tests {
         let mut term = EmbeddedTerminal::new().expect("terminal");
         term.update_important_lines(batch_line);
         term.update_important_lines(success_line);
-        assert!(!term.current_batch.is_empty());
-        assert!(!term.pending_display_patches.is_empty());
+        assert_ne!(term.current_batch.len(), 0);
+        assert_ne!(term.pending_display_patches.len(), 0);
         term.clear_console();
-        assert!(term.current_batch.is_empty());
-        assert!(term.pending_display_patches.is_empty());
+        assert_eq!(term.current_batch.len(), 0);
+        assert_eq!(term.pending_display_patches.len(), 0);
         term.append_output(success_line);
         term.apply_pending_display_patches();
         assert_eq!(term.output_text(), success_line);

@@ -101,7 +101,7 @@ fn render_traffic_lights(ui: &egui::Ui, rect: egui::Rect, palette: ThemePalette)
     let dots_start_x = rect.left() + 12.0;
     let dot_y = rect.center().y;
 
-    let mut cx = dots_start_x + dot_d * 0.5;
+    let mut cx = f32::mul_add(dot_d, 0.5, dots_start_x);
     for _ in 0..3 {
         let center = egui::pos2(cx, dot_y);
         let painter = ui.painter();

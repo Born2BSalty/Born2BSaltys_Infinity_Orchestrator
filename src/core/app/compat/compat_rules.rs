@@ -399,7 +399,7 @@ mod tests {
         let guard = temp_root("no_default");
         assert!(!guard.0.join("step2_compat_rules_default.toml").exists());
         let expected = load_rules_from_content(default_step2_rules_content(), BUILT_IN_RULES_LABEL);
-        assert!(!expected.rules.is_empty());
+        assert_ne!(expected.rules.len(), 0);
         let loaded = load_rules();
         let built_in_count = loaded
             .rules

@@ -91,7 +91,7 @@ mod tests {
             .collect();
         ids.sort_unstable();
         folders.sort_unstable();
-        assert!(!folders.is_empty());
+        assert_ne!(folders.len(), 0);
         assert_eq!(ids, folders);
         let order_keys: Vec<(i32, bool, String)> = entries
             .iter()
@@ -162,18 +162,18 @@ mod tests {
             ("folder/entry.json", entry_json.as_slice()),
             ("folder/modlist.biolist", biolist_bytes.as_slice()),
         ];
-        assert!(entries_from_files(&files).is_empty());
+        assert_eq!(entries_from_files(&files).len(), 0);
     }
 
     #[test]
     fn entries_from_files_skips_unparsable_meta() {
         let files: Vec<(&str, &[u8])> = vec![("broken/entry.json", b"not json".as_slice())];
-        assert!(entries_from_files(&files).is_empty());
+        assert_eq!(entries_from_files(&files).len(), 0);
     }
 
     #[test]
     fn entries_from_files_ignores_a_biolist_without_meta() {
         let files: Vec<(&str, &[u8])> = vec![("x/modlist.biolist", b"anything".as_slice())];
-        assert!(entries_from_files(&files).is_empty());
+        assert_eq!(entries_from_files(&files).len(), 0);
     }
 }

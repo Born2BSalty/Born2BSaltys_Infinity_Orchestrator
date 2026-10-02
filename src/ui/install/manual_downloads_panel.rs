@@ -92,7 +92,12 @@ fn render_grid(
     let from_w = 170.0;
     let status_w = 110.0;
     let actions_w = 200.0;
-    let mod_w = (ui.available_width() - from_w - status_w - actions_w - col_gap * 3.0).max(120.0);
+    let mod_w = f32::mul_add(
+        col_gap,
+        -3.0,
+        ui.available_width() - from_w - status_w - actions_w,
+    )
+    .max(120.0);
 
     egui::ScrollArea::vertical()
         .max_height(120.0)

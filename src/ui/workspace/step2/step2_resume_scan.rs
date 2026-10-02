@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn empty_order_yields_empty_snapshot() {
-        assert!(snapshot_from_order(&[]).is_empty());
+        assert_eq!(snapshot_from_order(&[]).len(), 0);
     }
 
     #[test]
@@ -429,7 +429,7 @@ mod tests {
             ws.step2.bgee_mods.is_empty(),
             "cold resume: no scanned mods yet"
         );
-        assert!(ws.step3.bgee_items.is_empty(), "cold resume: Step 3 empty");
+        assert_eq!(ws.step3.bgee_items.len(), 0, "cold resume: Step 3 empty");
 
         let snapshot = snapshot_from_order(&workspace.order_bgee);
         assert_eq!(snapshot.len(), 2);

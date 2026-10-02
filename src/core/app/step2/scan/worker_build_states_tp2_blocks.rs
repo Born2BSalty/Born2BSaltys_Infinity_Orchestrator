@@ -289,7 +289,7 @@ mod tests {
         let text = "BEGIN ~A~ // DESIGNATED 99\nbody\n";
         let blocks = parse_tp2_component_blocks_in_order(text);
         assert_eq!(blocks.len(), 1);
-        assert!(blocks[0].component_id.is_empty());
+        assert_eq!(blocks[0].component_id.len(), 0);
         assert!(!parse_tp2_component_blocks(text).contains_key("99"));
     }
 

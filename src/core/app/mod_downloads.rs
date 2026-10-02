@@ -1813,7 +1813,7 @@ mod tests {
             .expect("resolves");
 
         assert_eq!(source.url, "https://github.com/Me/B");
-        assert!(source.config_files.is_empty());
+        assert_eq!(source.config_files.len(), 0);
     }
 
     #[test]

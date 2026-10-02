@@ -1384,7 +1384,7 @@ mod tests {
             next_queued_fetch(&mut versions_ui, &view).as_deref(),
             Some("s")
         );
-        assert!(versions_ui.fetch_queue.is_empty());
+        assert_eq!(versions_ui.fetch_queue.len(), 0);
     }
 
     #[test]

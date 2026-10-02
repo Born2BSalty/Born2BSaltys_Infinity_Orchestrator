@@ -389,7 +389,10 @@ fn paint_block_badge(
     let text_color = redesign_pill_text(palette);
     let font = egui::FontId::new(11.0, egui::FontFamily::Name("poppins_medium".into()));
     let galley = painter.layout_no_wrap(block.label().to_string(), font.clone(), text_color);
-    let size = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    let size = egui::vec2(
+        f32::mul_add(pad_x, 2.0, galley.size().x),
+        f32::mul_add(pad_y, 2.0, galley.size().y),
+    );
     let rect = egui::Rect::from_min_size(
         egui::pos2(art_rect.right() - 8.0 - size.x, art_rect.top() + 8.0),
         size,

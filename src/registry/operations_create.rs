@@ -173,7 +173,7 @@ mod tests {
         assert_eq!(reg.find(&entry.id).unwrap().name, "Tactical EET 2026");
 
         assert_eq!(entry.author, None);
-        assert!(entry.forked_from.is_empty());
+        assert_eq!(entry.forked_from.len(), 0);
     }
 
     #[test]
@@ -224,7 +224,7 @@ mod tests {
             RegistryError::Io(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidInput),
             other => panic!("expected Io(InvalidInput), got {other:?}"),
         }
-        assert!(reg.entries.is_empty(), "no entry added on rejection");
+        assert_eq!(reg.entries.len(), 0, "no entry added on rejection");
     }
 
     #[test]
@@ -342,7 +342,7 @@ mod tests {
             RegistryError::Io(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidInput),
             other => panic!("expected Io(InvalidInput), got {other:?}"),
         }
-        assert!(reg.entries.is_empty(), "no entry added on rejection");
+        assert_eq!(reg.entries.len(), 0, "no entry added on rejection");
     }
 
     #[test]

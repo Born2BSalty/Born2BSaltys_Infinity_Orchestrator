@@ -640,7 +640,7 @@ mod tests {
         assert_eq!(header.version, None);
         assert_eq!(header.description, None);
         assert_eq!(header.fork_note, None);
-        assert!(header.tags.is_empty());
+        assert_eq!(header.tags.len(), 0);
         assert_eq!(header.requirements, requirements_for(Game::EET));
         assert_eq!(header.built_with, None);
         assert_eq!(header.back_label, "Back");

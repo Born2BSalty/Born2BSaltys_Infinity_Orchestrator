@@ -677,7 +677,7 @@ mod tests {
         close_edit_dialog(&mut app);
 
         assert!(app.home_screen_state.edit_target.is_none());
-        assert!(app.home_screen_state.edit_name.is_empty());
-        assert!(app.home_screen_state.edit_description.is_empty());
+        assert_eq!(app.home_screen_state.edit_name.len(), 0);
+        assert_eq!(app.home_screen_state.edit_description.len(), 0);
     }
 }

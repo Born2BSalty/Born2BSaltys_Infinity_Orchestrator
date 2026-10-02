@@ -209,7 +209,10 @@ fn current_tag(ui: &mut egui::Ui, palette: ThemePalette) {
     let gap = 4.0;
     let content_w = fork_w + gap + galley.size().x;
     let content_h = galley.size().y.max(fork_w);
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
     let (rect, _resp) = ui.allocate_exact_size(desired, egui::Sense::hover());
 
     if ui.is_rect_visible(rect) {
@@ -289,7 +292,7 @@ mod tests {
             name: "X",
             author: "",
         };
-        assert!(s.author.trim().is_empty());
+        assert_eq!(s.author.trim().len(), 0);
     }
 
     #[test]

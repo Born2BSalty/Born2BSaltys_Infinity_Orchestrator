@@ -191,7 +191,10 @@ pub(crate) fn glyph_btn(
 
     let content_w = glyph_galley.size().x + gap + prose_galley.size().x;
     let content_h = glyph_galley.size().y.max(prose_galley.size().y);
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
 
     let sense = if disabled {
         egui::Sense::hover()

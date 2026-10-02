@@ -1455,7 +1455,7 @@ mod tests {
         assert!(preview.allow_auto_install);
         assert_eq!(preview.name, None);
         assert_eq!(preview.author, None);
-        assert!(preview.forked_from.is_empty());
+        assert_eq!(preview.forked_from.len(), 0);
         assert_eq!(preview.game_install, "BGEE");
         assert_eq!(preview.bgee_entries, 1);
     }
@@ -1841,7 +1841,7 @@ mod tests {
             "a mod known only to the default tier must get a source block: {:?}",
             resolved.toml
         );
-        assert!(resolved.unresolved.is_empty());
+        assert_eq!(resolved.unresolved.len(), 0);
     }
 
     #[test]
@@ -1906,7 +1906,7 @@ mod tests {
         )
         .expect("export");
         let payload = decode_share_payload(&code).expect("decode");
-        assert!(payload.source_overrides.unresolved_mods.is_empty());
+        assert_eq!(payload.source_overrides.unresolved_mods.len(), 0);
     }
 
     #[test]
@@ -1922,7 +1922,7 @@ mod tests {
             resolved.toml.is_none(),
             "empty mods list must yield None source overrides"
         );
-        assert!(resolved.unresolved.is_empty());
+        assert_eq!(resolved.unresolved.len(), 0);
     }
 
     fn count_mods_blocks_for_tp2(toml_out: &str, tp2: &str) -> usize {

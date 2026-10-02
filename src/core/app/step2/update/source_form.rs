@@ -655,7 +655,7 @@ mod tests {
             "repo",
         );
         assert_eq!(form.follow, Follow::Branch);
-        assert!(form.branch.is_empty());
+        assert_eq!(form.branch.len(), 0);
         assert!(form.notice.is_none());
     }
 
@@ -841,7 +841,7 @@ mod tests {
             "repo",
         );
         assert_eq!(form.follow, Follow::Release);
-        assert!(form.release.is_empty());
+        assert_eq!(form.release.len(), 0);
         assert_eq!(form.kept.asset.as_deref(), Some("win-stratagems.exe"));
         assert_eq!(
             form.notice.as_deref(),
@@ -908,7 +908,7 @@ mod tests {
             "repo",
         );
         assert_eq!(form2.follow, Follow::Branch);
-        assert!(form2.branch.is_empty());
+        assert_eq!(form2.branch.len(), 0);
     }
 
     #[test]

@@ -216,7 +216,7 @@ mod tests {
             source_game_folders(&step1, "IWDEE"),
             vec![("IWDEE", "/games/iwdee")]
         );
-        assert!(source_game_folders(&step1, "garbage").is_empty());
+        assert_eq!(source_game_folders(&step1, "garbage").len(), 0);
         let eet = source_game_folders(&step1, "EET");
         assert_eq!(
             eet,
@@ -262,7 +262,7 @@ mod tests {
             )
         );
         step1.iwdee_game_folder = "/games/iwdee".to_string();
-        assert!(missing_source_folders(&step1, "IWDEE").is_empty());
+        assert_eq!(missing_source_folders(&step1, "IWDEE").len(), 0);
         assert_eq!(
             missing_source_message(&missing_source_folders(&step1, "IWDEE")),
             None

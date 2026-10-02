@@ -510,7 +510,7 @@ mod tests {
         advance_pending_weidu_log_reapply(&mut app);
 
         assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
-        assert!(app.wizard_state.step2.log_pending_downloads.is_empty());
+        assert_eq!(app.wizard_state.step2.log_pending_downloads.len(), 0);
         assert_the_draft_was_saved_with_the_counts(&app);
     }
 
@@ -644,7 +644,7 @@ mod tests {
         assert_eq!(step2.weidu_log_import, None);
         assert!(!step2.pending_weidu_log_reapply);
         assert!(step2.update_selected_popup_open);
-        assert!(step2.log_pending_downloads.is_empty());
+        assert_eq!(step2.log_pending_downloads.len(), 0);
         assert_eq!(app.notification_manager.history().len(), toasts_before);
     }
 

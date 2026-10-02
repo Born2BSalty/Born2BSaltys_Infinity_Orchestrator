@@ -698,7 +698,7 @@ mod tests {
             &SettingsStore::new_default(),
             &mut ws,
         );
-        assert!(ws.step2.bgee_mods.is_empty());
+        assert_eq!(ws.step2.bgee_mods.len(), 0);
 
         ws.step2.bgee_mods = vec![mod_state(
             "EEFixPack",
@@ -720,7 +720,7 @@ mod tests {
              modlist's scanned mod set (it must be fully reset, not just \
              unchecked-in-place)"
         );
-        assert!(ws.step3.bgee_items.is_empty());
+        assert_eq!(ws.step3.bgee_items.len(), 0);
     }
 
     #[test]
@@ -938,7 +938,7 @@ mod tests {
             "Bug B: fresh modlist B must start with NO scanned mods (A's \
              scanned set must not leak across the swap)"
         );
-        assert!(ws.step3.bgee_items.is_empty(), "Bug B: B's Step 3 empty");
+        assert_eq!(ws.step3.bgee_items.len(), 0, "Bug B: B's Step 3 empty");
         assert!(
             ws.step2.selected.is_none() && ws.step2.next_selection_order == 1,
             "Bug B: B's Step-2 selection transients reset"
@@ -1028,7 +1028,7 @@ mod tests {
             !ws.step2.bgee_mods.is_empty(),
             "scanned set must be non-empty so the guard does NOT fire"
         );
-        assert!(ws.step3.bgee_items.is_empty(), "Step 3 deselected → empty");
+        assert_eq!(ws.step3.bgee_items.len(), 0, "Step 3 deselected → empty");
 
         let extracted = extract_workspace_state_from_wizard(&ws, &prior);
         assert!(

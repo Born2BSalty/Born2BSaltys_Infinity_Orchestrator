@@ -193,7 +193,7 @@ mod tests {
         let raw = r#"{"format_version":1,"entries":[]}"#;
         let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat");
         assert_eq!(r.format_version, 1);
-        assert!(r.entries.is_empty());
+        assert_eq!(r.entries.len(), 0);
     }
 
     #[test]
@@ -229,7 +229,7 @@ mod tests {
         let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat parse");
         assert_eq!(r.entries[0].author, None);
         assert_eq!(r.entries[0].description, None);
-        assert!(r.entries[0].forked_from.is_empty());
+        assert_eq!(r.entries[0].forked_from.len(), 0);
 
         assert_eq!(r.entries[0].install_started_at, None);
 

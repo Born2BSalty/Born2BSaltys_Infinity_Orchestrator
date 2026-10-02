@@ -895,7 +895,7 @@ mod tests {
         let form = seed_new_mod_form("Speedrun EET");
         assert!(form.identity.is_new_mod);
         assert!(form.identity.may_change_id);
-        assert!(form.tp2.is_empty());
+        assert_eq!(form.tp2.len(), 0);
         assert_eq!(form.source_id, "primary");
         assert_eq!(sheet_mod_name(&form), "New mod");
         assert_eq!(form.save_to, ModSourceEditDestination::ThisModlist);

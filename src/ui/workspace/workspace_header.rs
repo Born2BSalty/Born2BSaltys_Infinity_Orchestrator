@@ -432,7 +432,7 @@ fn render_fork_info_popup(
 fn pencil_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response {
     let pad = 4.0;
     let ink = 13.0;
-    let desired = egui::vec2(ink + pad * 2.0, ink + pad * 2.0);
+    let desired = egui::vec2(f32::mul_add(pad, 2.0, ink), f32::mul_add(pad, 2.0, ink));
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
     let color = if response.hovered() {
         redesign_text_primary(palette)
@@ -502,8 +502,8 @@ fn fork_badge(ui: &mut egui::Ui, palette: ThemePalette) {
     let gap = 5.0;
     let content_w = fork_w + gap + galley.size().x;
     let desired = egui::vec2(
-        content_w + pad_x * 2.0,
-        galley.size().y.max(fork_w) + pad_y * 2.0,
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, galley.size().y.max(fork_w)),
     );
     let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
@@ -542,7 +542,10 @@ fn fork_details_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respon
     let gap = 5.0;
     let content_w = fork_w + gap + galley.size().x;
     let content_h = galley.size().y.max(fork_w);
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
     let pressed = response.is_pointer_button_down_on();
     let rect = if pressed {
@@ -590,7 +593,10 @@ fn saved_flash_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respons
         .layout_no_wrap(prose.to_string(), prose_font.clone(), color);
     let content_w = g.size().x + p.size().x;
     let content_h = g.size().y.max(p.size().y);
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();

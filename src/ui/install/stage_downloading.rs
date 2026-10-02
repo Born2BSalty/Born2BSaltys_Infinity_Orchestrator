@@ -2306,7 +2306,8 @@ fn render_mod_progress(
         let col_gap = 12.0;
         let status_w = 170.0;
         let prog_w = 130.0;
-        let flex_total = (ui.available_width() - status_w - prog_w - col_gap * 3.0).max(120.0);
+        let flex_total =
+            f32::mul_add(col_gap, -3.0, ui.available_width() - status_w - prog_w).max(120.0);
         let mod_w = flex_total * (1.8 / 2.8);
         let src_w = flex_total * (1.0 / 2.8);
 
@@ -2510,9 +2511,9 @@ fn paint_indeterminate_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Re
     let tri = if phase < 0.5 {
         phase * 2.0
     } else {
-        2.0 - phase * 2.0
+        phase.mul_add(-2.0, 2.0)
     }; // 0→1→0
-    let x = track.left() + travel * tri;
+    let x = travel.mul_add(tri, track.left());
     let block_rect = egui::Rect::from_min_size(
         egui::pos2(x, track.top()),
         egui::vec2(block, track.height()),
@@ -3635,11 +3636,11 @@ mod tests {
             crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
                 "claim-gallery-replace",
             );
-        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
-        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
-        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
 
         app.registry
             .entries
@@ -3688,11 +3689,11 @@ mod tests {
             crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
                 "claim-fork-adopt",
             );
-        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
-        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
-        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
 
         app.registry
             .entries
@@ -3725,11 +3726,11 @@ mod tests {
             crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
                 "claim-reinstall-adopt",
             );
-        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
-        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
-        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
 
         app.registry
             .entries
@@ -3761,11 +3762,11 @@ mod tests {
             crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
                 "claim-busy-refused",
             );
-        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
-        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
-        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
 
         app.registry
             .entries
@@ -3803,11 +3804,11 @@ mod tests {
             crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
                 "claim-noprev-refused",
             );
-        assert!(app.wizard_state.step1.bgee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.bg2ee_game_folder.is_empty());
-        assert!(app.wizard_state.step1.eet_pre_dir.is_empty());
-        assert!(app.wizard_state.step1.eet_new_dir.is_empty());
-        assert!(app.wizard_state.step1.mods_folder.is_empty());
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
 
         app.registry
             .entries
@@ -4033,7 +4034,7 @@ mod tests {
         };
 
         enter_manual_hold_once(&mut app, &inputs);
-        assert!(app.install_screen_state.manual_downloads.rows.is_empty());
+        assert_eq!(app.install_screen_state.manual_downloads.rows.len(), 0);
         assert!(app.manual_download_rx.is_none());
 
         stage_and_kick_archive_skip_once(&mut app, &inputs);

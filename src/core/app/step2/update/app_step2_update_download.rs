@@ -956,7 +956,7 @@ mod tests {
         assert_eq!(fs::read(&dest_a).unwrap(), b"AAA-bytes-payload");
         assert_eq!(fs::read(&dest_b).unwrap(), vec![7_u8; 4096]);
         assert!(!part_path(&dest_a).exists() && !part_path(&dest_b).exists());
-        assert!(result.failed.is_empty());
+        assert_eq!(result.failed.len(), 0);
         assert_eq!(
             result.downloaded,
             vec![
@@ -981,7 +981,7 @@ mod tests {
             | Step2UpdateDownloadEvent::AssetDone { total, .. } => total.is_none(),
             Step2UpdateDownloadEvent::Finished(_) => true,
         }));
-        assert!(result.failed.is_empty());
+        assert_eq!(result.failed.len(), 0);
         assert_eq!(
             fs::read(destination(&root, &a)).unwrap(),
             b"no-content-length-body"
@@ -1118,19 +1118,9 @@ mod tests {
             state.step2.update_selected_downloaded_sources,
             vec!["Beta -> C:\\b".to_string()]
         );
-        assert!(
-            state
-                .step2
-                .update_selected_download_failed_sources
-                .is_empty()
-        );
-        assert!(state.step2.update_selected_extracted_sources.is_empty());
-        assert!(
-            state
-                .step2
-                .update_selected_extract_failed_sources
-                .is_empty()
-        );
+        assert_eq!(state.step2.update_selected_download_failed_sources.len(), 0);
+        assert_eq!(state.step2.update_selected_extracted_sources.len(), 0);
+        assert_eq!(state.step2.update_selected_extract_failed_sources.len(), 0);
     }
 
     #[test]
@@ -1143,20 +1133,10 @@ mod tests {
 
         clear_download_result_buckets(&mut state, None);
 
-        assert!(state.step2.update_selected_downloaded_sources.is_empty());
-        assert!(
-            state
-                .step2
-                .update_selected_download_failed_sources
-                .is_empty()
-        );
-        assert!(state.step2.update_selected_extracted_sources.is_empty());
-        assert!(
-            state
-                .step2
-                .update_selected_extract_failed_sources
-                .is_empty()
-        );
+        assert_eq!(state.step2.update_selected_downloaded_sources.len(), 0);
+        assert_eq!(state.step2.update_selected_download_failed_sources.len(), 0);
+        assert_eq!(state.step2.update_selected_extracted_sources.len(), 0);
+        assert_eq!(state.step2.update_selected_extract_failed_sources.len(), 0);
     }
 
     #[test]
@@ -1286,7 +1266,7 @@ mod tests {
         ));
         assert!(!part_path(&dest).exists());
         assert_eq!(fs::read(&dest).unwrap(), b"old-archive");
-        assert!(result.downloaded.is_empty());
+        assert_eq!(result.downloaded.len(), 0);
         assert_eq!(result.failed.len(), 1);
     }
 
@@ -1360,7 +1340,7 @@ mod tests {
         ));
         assert!(!part_path(&dest).exists());
         assert_eq!(fs::read(&dest).unwrap(), b"old-archive");
-        assert!(result.downloaded.is_empty());
+        assert_eq!(result.downloaded.len(), 0);
         assert_eq!(result.failed.len(), 1);
     }
 
@@ -1426,11 +1406,11 @@ mod tests {
             step2.update_selected_downloaded_sources,
             vec!["A -> C:\\a.zip".to_string()]
         );
-        assert!(step2.update_selected_download_failed_sources.is_empty());
-        assert!(step2.update_selected_extracted_sources.is_empty());
-        assert!(step2.update_selected_extract_failed_sources.is_empty());
-        assert!(step2.update_selected_download_bytes.is_empty());
-        assert!(step2.update_selected_download_done.is_empty());
+        assert_eq!(step2.update_selected_download_failed_sources.len(), 0);
+        assert_eq!(step2.update_selected_extracted_sources.len(), 0);
+        assert_eq!(step2.update_selected_extract_failed_sources.len(), 0);
+        assert_eq!(step2.update_selected_download_bytes.len(), 0);
+        assert_eq!(step2.update_selected_download_done.len(), 0);
         assert!(!step2.update_selected_download_running);
         assert!(!root.archive_dir().exists());
     }
@@ -1557,7 +1537,7 @@ mod tests {
             DownloadOrigin::InstallPipeline,
         );
 
-        assert!(!events.is_empty());
+        assert_ne!(events.len(), 0);
         assert!(event_indices(&events).iter().all(|index| *index == 1));
         assert_eq!(fixture.log.hits(), vec!["/cl/B".to_string()]);
         assert_eq!(result.downloaded.len(), 1);
@@ -1598,10 +1578,10 @@ mod tests {
         .expect("engine starts");
         assert_eq!(state.step2.scan_status, "Downloading updates: 0/1");
         assert_eq!(state.step2.update_selected_extract_progress, None);
-        assert!(state.step2.update_selected_extract_jobs.is_empty());
+        assert_eq!(state.step2.update_selected_extract_jobs.len(), 0);
         let (events, result) = collect_events(rx.as_ref());
 
-        assert!(!events.is_empty());
+        assert_ne!(events.len(), 0);
         assert!(event_indices(&events).iter().all(|index| *index == 7));
         assert_eq!(
             result.downloaded,
@@ -1677,7 +1657,7 @@ mod tests {
         .expect("engine starts");
         assert_eq!(state.step2.update_selected_download_scope, None);
         assert_eq!(state.step2.update_selected_extract_progress, None);
-        assert!(state.step2.update_selected_extract_jobs.is_empty());
+        assert_eq!(state.step2.update_selected_extract_jobs.len(), 0);
         assert_eq!(
             state.step2.update_selected_download_origin,
             DownloadOrigin::InstallPipeline
@@ -1709,9 +1689,9 @@ mod tests {
         )
         .expect("engine starts");
 
-        assert!(state.step2.update_selected_extract_jobs.is_empty());
+        assert_eq!(state.step2.update_selected_extract_jobs.len(), 0);
         poll_until_finished(&mut state, &mut rx);
-        assert!(state.step2.update_selected_extract_jobs.is_empty());
+        assert_eq!(state.step2.update_selected_extract_jobs.len(), 0);
     }
 
     #[test]
@@ -1765,7 +1745,7 @@ mod tests {
             state.step2.update_selected_download_bytes.get(&0),
             Some(&(10, Some(10)))
         );
-        assert!(state.step2.update_selected_download_finished.is_empty());
+        assert_eq!(state.step2.update_selected_download_finished.len(), 0);
         assert_eq!(
             state.step2.update_selected_download_failed_sources,
             vec!["A: unknown error".to_string()]
@@ -1823,7 +1803,7 @@ mod tests {
             state.step2.scan_status,
             "Download updates finished: 0 downloaded, 1 failed"
         );
-        assert!(state.step2.update_selected_downloaded_sources.is_empty());
+        assert_eq!(state.step2.update_selected_downloaded_sources.len(), 0);
     }
 
     #[test]

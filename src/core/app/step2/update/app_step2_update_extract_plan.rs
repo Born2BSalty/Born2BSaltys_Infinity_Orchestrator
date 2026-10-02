@@ -337,7 +337,7 @@ mod tests {
 
         state.step1.mods_folder = "   ".to_string();
         let blank = build_extract_jobs(&mut state, &archive_dir, Some(&refs_path), None);
-        assert!(blank.jobs.is_empty());
+        assert_eq!(blank.jobs.len(), 0);
         assert_eq!(blank.refs_targets.list, refs_path);
         assert_eq!(blank.refs_targets.folder, None);
     }

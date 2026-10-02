@@ -651,13 +651,13 @@ mod tests {
             DownloadOrigin::Workspace
         );
         assert_eq!(DownloadOrigin::default(), DownloadOrigin::Workspace);
-        assert!(step2.update_selected_download_bytes.is_empty());
-        assert!(step2.update_selected_download_done.is_empty());
+        assert_eq!(step2.update_selected_download_bytes.len(), 0);
+        assert_eq!(step2.update_selected_download_done.len(), 0);
         assert_eq!(step2.update_selected_download_total, 0);
-        assert!(step2.update_selected_download_finished.is_empty());
+        assert_eq!(step2.update_selected_download_finished.len(), 0);
         assert_eq!(step2.update_selected_download_scope, None);
         assert_eq!(step2.update_selected_extract_progress, None);
-        assert!(step2.update_selected_extract_jobs.is_empty());
+        assert_eq!(step2.update_selected_extract_jobs.len(), 0);
     }
 
     #[test]

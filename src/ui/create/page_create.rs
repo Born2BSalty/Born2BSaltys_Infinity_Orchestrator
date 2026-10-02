@@ -442,7 +442,7 @@ mod tests {
             .load()
             .map(|s| s.step1.effective_global_mods_folder().to_string())
             .unwrap_or_default();
-        assert!(global.trim().is_empty(), "isolated app has no mods folder");
+        assert_eq!(global.trim().len(), 0, "isolated app has no mods folder");
 
         finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string());
 
@@ -601,7 +601,7 @@ mod tests {
 
         start_scratch(&mut app);
 
-        assert!(app.registry.entries.is_empty());
+        assert_eq!(app.registry.entries.len(), 0);
         let history = app.notification_manager.history();
         assert_eq!(history.len(), 1);
         let record = history.back().unwrap();
