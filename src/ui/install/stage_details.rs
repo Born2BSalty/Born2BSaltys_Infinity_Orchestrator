@@ -51,7 +51,14 @@ pub(crate) struct FactRow {
     pub(crate) value: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DetailsCover {
+    pub(crate) entry_id: String,
+    pub(crate) png: Vec<u8>,
+}
+
 pub(crate) struct DetailsHeader {
+    pub(crate) cover: Option<DetailsCover>,
     pub(crate) source_compat_issue: Option<SourceNotice>,
     pub(crate) source_residue_issue: Option<SourceNotice>,
     pub(crate) unresolved_sources_issue: Option<SourceNotice>,
@@ -74,6 +81,10 @@ impl DetailsHeader {
     #[must_use]
     pub(crate) fn from_gallery_entry(entry: &FeedEntry, preview: &ModlistSharePreview) -> Self {
         Self {
+            cover: entry.cover_png.clone().map(|png| DetailsCover {
+                entry_id: entry.id.clone(),
+                png,
+            }),
             name: entry.name.clone(),
             author: Some(entry.author.clone()),
             version: Some(entry.version.clone()),
@@ -102,6 +113,7 @@ impl DetailsHeader {
         let game = Game::from_legacy_string(&preview.game_install);
         let has_lineage = !preview.forked_from.is_empty();
         Self {
+            cover: None,
             name: stage_review::display_name(typed_name, preview),
             author: preview
                 .author
@@ -283,7 +295,18 @@ fn header_row(
 
         let (art_rect, _) =
             ui.allocate_exact_size(egui::vec2(ART_W_PX, art_h), egui::Sense::hover());
-        card_art::paint(ui, palette, header.game, art_rect);
+        if let Some(cover) = &header.cover {
+            card_art::paint_cover(
+                ui,
+                palette,
+                header.game,
+                &cover.entry_id,
+                &cover.png,
+                art_rect,
+            );
+        } else {
+            card_art::paint(ui, palette, header.game, art_rect);
+        }
 
         let text_w = ui.available_width().max(200.0);
         ui.allocate_ui_with_layout(
@@ -749,6 +772,81 @@ mod tests {
         assert_eq!(sources_fact_value(0), "all resolved");
         assert_eq!(sources_fact_value(1), "1 without a source");
         assert_eq!(sources_fact_value(2), "2 without a source");
+    }
+
+    fn cover_png(width: u32, height: u32) -> Vec<u8> {
+        let image = image::RgbaImage::new(width, height);
+        let mut buffer = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut buffer, image::ImageFormat::Png)
+            .expect("encode png");
+        buffer.into_inner()
+    }
+
+    fn entry_with_cover(cover: Option<Vec<u8>>) -> FeedEntry {
+        let mut entry = crate::ui::install::gallery::catalog::entries()[0].clone();
+        entry.id = "details-cover-under-test".to_string();
+        entry.cover_png = cover;
+        entry
+    }
+
+    fn cover_cached_after_one_frame(header: &DetailsHeader, cache_id: egui::Id) -> bool {
+        let ctx = egui::Context::default();
+        crate::ui::shared::redesign_fonts::install_redesign_fonts(&ctx);
+        let mut fork_info_open = false;
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                header_row(ui, ThemePalette::Dark, header, &mut fork_info_open);
+            });
+        });
+        ctx.memory(|m| m.data.get_temp::<egui::TextureHandle>(cache_id).is_some())
+    }
+
+    #[test]
+    fn gallery_header_carries_the_cover() {
+        let bytes = cover_png(4, 2);
+        let entry = entry_with_cover(Some(bytes.clone()));
+        let preview = eet_preview("0.1.0-test");
+        let header = DetailsHeader::from_gallery_entry(&entry, &preview);
+        assert_eq!(
+            header.cover,
+            Some(DetailsCover {
+                entry_id: entry.id,
+                png: bytes,
+            })
+        );
+
+        let bare = entry_with_cover(None);
+        let header = DetailsHeader::from_gallery_entry(&bare, &preview);
+        assert!(header.cover.is_none());
+    }
+
+    #[test]
+    fn code_header_has_no_cover() {
+        let preview = eet_preview("0.1.0-test");
+        let header = DetailsHeader::from_preview(&preview, "", ReviewOrigin::Paste);
+        assert!(header.cover.is_none());
+    }
+
+    #[test]
+    fn header_row_fills_the_shared_cover_cache() {
+        let png = cover_png(460, 215);
+        let entry = entry_with_cover(Some(png.clone()));
+        let preview = eet_preview("0.1.0-test");
+        let cache_id = egui::Id::new(("gallery_cover", entry.id.as_str(), png.len()));
+
+        let header = DetailsHeader::from_gallery_entry(&entry, &preview);
+        assert!(
+            cover_cached_after_one_frame(&header, cache_id),
+            "the Details frame must paint through the card's cover cache"
+        );
+
+        let mut bare = DetailsHeader::from_gallery_entry(&entry, &preview);
+        bare.cover = None;
+        assert!(
+            !cover_cached_after_one_frame(&bare, cache_id),
+            "a header without a cover must keep the placeholder"
+        );
     }
 
     #[test]
