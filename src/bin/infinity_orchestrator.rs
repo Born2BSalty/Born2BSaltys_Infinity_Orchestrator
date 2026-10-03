@@ -10,7 +10,7 @@ use eframe::egui;
 use bio::ui::orchestrator::OrchestratorApp;
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 
-const APP_TITLE: &str = concat!("Infinity Orchestrator (alpha) v", env!("CARGO_PKG_VERSION"));
+const APP_TITLE: &str = concat!("Infinity Orchestrator (beta) v", env!("CARGO_PKG_VERSION"));
 
 const WINDOW_WIDTH: f32 = 1280.0;
 const WINDOW_HEIGHT: f32 = 820.0;
@@ -20,7 +20,7 @@ const WINDOW_MIN_HEIGHT: f32 = 700.0;
 #[derive(Parser, Debug)]
 #[command(name = "BIO")]
 #[command(version)]
-#[command(about = "Infinity Orchestrator — the redesigned BIO frontend (alpha)")]
+#[command(about = "Infinity Orchestrator — the redesigned BIO frontend (beta)")]
 struct OrchestratorCli {
     #[arg(long, default_value = "info")]
     log_level: String,
