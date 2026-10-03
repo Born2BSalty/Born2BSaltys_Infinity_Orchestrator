@@ -382,6 +382,15 @@ fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &s
                 "save draft: share code re-bake for {id} skipped ({err}); \
                  existing code retained"
             );
+            if let Some(entry_mut) = orchestrator.registry.find_mut(id)
+                && let Some(code) = entry_mut.latest_share_code.clone()
+                && let Ok(stamped) = share_export::set_packed_identity(&code, &meta)
+            {
+                entry_mut.latest_share_code = Some(stamped);
+                orchestrator
+                    .persistence_cycle
+                    .mark_registry_dirty(Instant::now());
+            }
         }
     }
 }
@@ -777,6 +786,38 @@ mod tests {
             "a not-yet-scanned modlist (no WeiDU entries) must not have its \
              share code overwritten by save draft"
         );
+    }
+
+    #[test]
+    fn rebake_stamps_the_entry_identity_when_the_full_bake_cannot_run() {
+        let code = crate::app::modlist_share::encode_share_payload_text(
+            r#"{
+                "format_version": 1,
+                "game_install": "EET",
+                "install_mode": "start_from_scratch",
+                "name": "EET Essentials",
+                "author": "BIO Team",
+                "weidu_logs": { "bgee": "~MOD/MOD.TP2~ #0 #0 // A component" }
+            }"#,
+        )
+        .expect("mint code");
+        let mut app = orch_with_entry_and_code("EET Essentials +++", &code);
+        app.registry.find_mut("HDRTEST00000").unwrap().author = Some("Xgatt".to_string());
+
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+
+        let stamped = app
+            .registry
+            .find("HDRTEST00000")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("code kept");
+        let preview = crate::app::modlist_share::preview_modlist_share_code(&stamped)
+            .expect("stamped code decodes");
+        assert_eq!(preview.name.as_deref(), Some("EET Essentials +++"));
+        assert_eq!(preview.author.as_deref(), Some("Xgatt"));
+        assert_eq!(preview.bgee_entries, 1);
     }
 
     #[test]

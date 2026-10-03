@@ -5,7 +5,7 @@ use std::io;
 
 use crate::registry::errors::RegistryError;
 use crate::registry::model::ModlistRegistry;
-use crate::registry::share_export::{set_packed_description, set_packed_name};
+use crate::registry::share_export::{ShareMeta, set_packed_identity};
 
 pub const MAX_DESCRIPTION_CHARS: usize = 500;
 
@@ -42,10 +42,9 @@ pub fn edit_modlist(
     entry.description = Some(trimmed_description.to_string()).filter(|s| !s.is_empty());
 
     if let Some(code) = entry.latest_share_code.clone()
-        && let Ok(renamed) = set_packed_name(&code, trimmed_name)
-        && let Ok(described) = set_packed_description(&renamed, trimmed_description)
+        && let Ok(stamped) = set_packed_identity(&code, &ShareMeta::from_entry(entry, false))
     {
-        entry.latest_share_code = Some(described);
+        entry.latest_share_code = Some(stamped);
     }
 
     Ok(())
@@ -72,6 +71,11 @@ pub fn rename_modlist(
     };
 
     entry.name = trimmed.to_string();
+    if let Some(code) = entry.latest_share_code.clone()
+        && let Ok(stamped) = set_packed_identity(&code, &ShareMeta::from_entry(entry, false))
+    {
+        entry.latest_share_code = Some(stamped);
+    }
     Ok(())
 }
 
@@ -247,5 +251,48 @@ mod tests {
         let mut r = reg_with("SAME00000000", "Same Name", "");
         rename_modlist("SAME00000000", "Same Name", &mut r).expect("ok");
         assert_eq!(r.find("SAME00000000").unwrap().name, "Same Name");
+    }
+
+    #[test]
+    fn rename_rebakes_the_entry_identity_and_keeps_the_rest_of_the_code() {
+        use crate::app::modlist_share::ForkAncestor;
+        let mut r = reg_with("ABC000000000", "EET Essentials", "/install/here");
+        {
+            let e = r.find_mut("ABC000000000").unwrap();
+            e.latest_share_code = Some(minimal_share_code("EET Essentials"));
+            e.author = Some("Xgatt".to_string());
+            e.forked_from = vec![ForkAncestor {
+                name: "EET Essentials".to_string(),
+                author: "BIO Team".to_string(),
+            }];
+        }
+        let before = crate::app::modlist_share::preview_modlist_share_code(
+            r.find("ABC000000000")
+                .unwrap()
+                .latest_share_code
+                .as_deref()
+                .unwrap(),
+        )
+        .expect("preview");
+
+        rename_modlist("ABC000000000", "EET Essentials ++++", &mut r).expect("rename ok");
+
+        let e = r.find("ABC000000000").unwrap();
+        let after = crate::app::modlist_share::preview_modlist_share_code(
+            e.latest_share_code.as_deref().unwrap(),
+        )
+        .expect("preview");
+        assert_eq!(after.name.as_deref(), Some("EET Essentials ++++"));
+        assert_eq!(after.author.as_deref(), Some("Xgatt"));
+        assert_eq!(after.forked_from, e.forked_from);
+        assert_eq!(after.bgee_log_text, before.bgee_log_text);
+        assert_eq!(after.bgee_entries, before.bgee_entries);
+    }
+
+    #[test]
+    fn rename_without_a_cached_code_leaves_it_absent() {
+        let mut r = reg_with("ABC000000000", "old", "/install/here");
+        rename_modlist("ABC000000000", "new", &mut r).expect("rename ok");
+        assert_eq!(r.find("ABC000000000").unwrap().latest_share_code, None);
     }
 }

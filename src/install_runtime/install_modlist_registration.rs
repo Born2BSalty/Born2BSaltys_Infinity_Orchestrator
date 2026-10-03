@@ -749,7 +749,16 @@ mod tests {
         let dest = TempDestGuard::new("held");
         let mut app = OrchestratorApp::new_isolated_for_test("held-code");
         let stored_code = minimal_share_code("Stored Name");
-        let chosen_code = minimal_share_code("Chosen Name");
+        let chosen_code = crate::app::modlist_share::encode_share_payload_text(
+            r#"{
+                "format_version": 1,
+                "game_install": "BGEE",
+                "install_mode": "start_from_scratch",
+                "weidu_logs": { "bgee": "~CHOSEN/CHOSEN.TP2~ #0 #0 // The chosen one" },
+                "name": "Chosen Name"
+            }"#,
+        )
+        .expect("mint code");
         app.registry.entries.push(ModlistEntry {
             id: "HELDCODE0001".to_string(),
             name: "Stored Name".to_string(),
@@ -775,10 +784,14 @@ mod tests {
             .expect("held code present");
         let preview = crate::app::modlist_share::preview_modlist_share_code(&held)
             .expect("held code decodes");
+        assert!(
+            preview.bgee_log_text.contains("CHOSEN.TP2"),
+            "the user-chosen code's content wins over the entry's previously stored one"
+        );
         assert_eq!(
             preview.name.as_deref(),
-            Some("Chosen Name"),
-            "the user-chosen code wins over the entry's previously stored one"
+            Some("Stored Name"),
+            "the code's name is the entry's name"
         );
         assert!(
             !preview.allow_auto_install,
