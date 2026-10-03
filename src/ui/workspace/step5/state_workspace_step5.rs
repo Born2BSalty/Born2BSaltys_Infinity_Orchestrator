@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::time::Instant;
-
 use crate::registry::model::Game;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +15,6 @@ pub struct WorkspaceStep5State {
 
     pub share_dialog_open: bool,
     pub post_install_action_pending: Option<PostInstallAction>,
-    pub copied_flash_until: Option<Instant>,
 }
 
 impl WorkspaceStep5State {
@@ -44,7 +41,6 @@ mod tests {
         );
         assert!(!s.share_dialog_open);
         assert!(s.post_install_action_pending.is_none());
-        assert!(s.copied_flash_until.is_none());
     }
 
     #[test]
@@ -53,7 +49,6 @@ mod tests {
             install_clicked: true,
             share_dialog_open: true,
             post_install_action_pending: Some(PostInstallAction::ReturnToHome),
-            copied_flash_until: Some(Instant::now()),
         };
         s.reset_for_modlist();
         assert!(
@@ -63,10 +58,6 @@ mod tests {
         );
         assert!(!s.share_dialog_open);
         assert!(s.post_install_action_pending.is_none());
-        assert!(
-            s.copied_flash_until.is_none(),
-            "a modlist swap clears the copied-flash too"
-        );
     }
 
     #[test]

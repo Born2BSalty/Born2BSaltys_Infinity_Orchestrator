@@ -75,8 +75,41 @@ pub fn compose_weidu_log_path(folder: &str) -> String {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static CONFIG_DIR_OVERRIDE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub fn set_config_dir_override(root: Option<PathBuf>) {
+    CONFIG_DIR_OVERRIDE.with(|slot| *slot.borrow_mut() = root);
+}
+
+#[cfg(test)]
+pub fn clear_config_dir_override_if(root: &Path) {
+    CONFIG_DIR_OVERRIDE.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if slot.as_deref() == Some(root) {
+            *slot = None;
+        }
+    });
+}
+
+#[cfg(test)]
+fn config_dir_override() -> Option<PathBuf> {
+    CONFIG_DIR_OVERRIDE.with(|slot| slot.borrow().clone())
+}
+
+#[cfg(not(test))]
+const fn config_dir_override() -> Option<PathBuf> {
+    None
+}
+
 #[must_use]
 pub fn app_config_dir() -> Option<PathBuf> {
+    if let Some(root) = config_dir_override() {
+        return Some(root);
+    }
     #[cfg(target_os = "windows")]
     {
         if let Ok(appdata) = std::env::var("APPDATA")
@@ -168,4 +201,58 @@ fn weidu_path_fallback_folder(path_part: &str) -> String {
     let mut parts = path_part.rsplit(['\\', '/']);
     let _ = parts.next();
     parts.next().unwrap_or("MOD").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static C: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_root(label: &str) -> PathBuf {
+        let n = C.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "bio_platform_defaults_test_{}_{}_{}",
+            std::process::id(),
+            n,
+            label
+        ))
+    }
+
+    #[test]
+    fn config_dir_override_is_per_thread() {
+        let root = temp_root("per_thread");
+        set_config_dir_override(Some(root.clone()));
+
+        assert_eq!(app_config_dir(), Some(root.clone()));
+
+        let other_thread_dir = std::thread::spawn(app_config_dir).join().unwrap();
+        assert_ne!(other_thread_dir, Some(root));
+
+        set_config_dir_override(None);
+    }
+
+    #[test]
+    fn clear_only_matches_its_own_root() {
+        let root_a = temp_root("clear_a");
+        let root_b = temp_root("clear_b");
+        set_config_dir_override(Some(root_a.clone()));
+
+        clear_config_dir_override_if(&root_b);
+        assert_eq!(app_config_dir(), Some(root_a.clone()));
+
+        clear_config_dir_override_if(&root_a);
+        assert_ne!(app_config_dir(), Some(root_a));
+    }
+
+    #[test]
+    fn override_routes_app_config_file() {
+        let root = temp_root("config_file");
+        set_config_dir_override(Some(root.clone()));
+
+        assert_eq!(app_config_file("x.json", "config"), root.join("x.json"));
+
+        set_config_dir_override(None);
+    }
 }

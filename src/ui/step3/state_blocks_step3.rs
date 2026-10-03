@@ -142,19 +142,9 @@ mod keys {
 mod repair {
     use crate::app::state::Step3ItemState;
 
-    use super::keys::{mod_key, step3_item_key};
+    use super::keys::mod_key;
 
-    pub fn repair_orphan_children(
-        items: &mut Vec<Step3ItemState>,
-        selected: &[usize],
-        clone_seq: &mut usize,
-    ) {
-        let selected_keys: std::collections::HashSet<String> = selected
-            .iter()
-            .filter_map(|idx| items.get(*idx))
-            .filter(|item| !item.is_parent)
-            .map(step3_item_key)
-            .collect();
+    pub fn repair_orphan_children(items: &mut Vec<Step3ItemState>, clone_seq: &mut usize) {
         let mut idx = 0usize;
         while idx < items.len() {
             if items[idx].is_parent {
@@ -183,19 +173,14 @@ mod repair {
             {
                 let target_block = items[pidx].block_id.clone();
                 let mut j = idx;
-                let mut moved_any = false;
                 while j < items.len() {
                     if items[j].is_parent || items[j].block_id != block_id {
                         break;
                     }
-                    if !selected_keys.contains(&step3_item_key(&items[j])) {
-                        break;
-                    }
                     items[j].block_id.clone_from(&target_block);
-                    moved_any = true;
                     j += 1;
                 }
-                idx = if moved_any { j } else { idx + 1 };
+                idx = j;
                 continue;
             }
 
@@ -217,9 +202,6 @@ mod repair {
                 let mut j = idx + 1;
                 while j < items.len() {
                     if items[j].is_parent || items[j].block_id != block_id {
-                        break;
-                    }
-                    if !selected_keys.contains(&step3_item_key(&items[j])) {
                         break;
                     }
                     items[j].block_id.clone_from(&new_block);
@@ -283,3 +265,188 @@ pub use clone_ops::clone_parent_empty_block;
 pub use keys::step3_item_key;
 pub use repair::repair_orphan_children;
 pub use visibility::{block_indices, count_children_in_block, visible_indices};
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        count_children_in_block, merge_adjacent_same_mod_blocks, prune_empty_parent_blocks,
+        repair_orphan_children,
+    };
+    use crate::app::state::Step3ItemState;
+
+    fn row(mod_name: &str, component_id: &str, is_parent: bool, block_id: &str) -> Step3ItemState {
+        Step3ItemState {
+            tp_file: format!("{mod_name}.tp2"),
+            component_id: component_id.to_string(),
+            mod_name: mod_name.to_string(),
+            component_label: String::new(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 0,
+            block_id: block_id.to_string(),
+            is_parent,
+            parent_placeholder: is_parent && block_id.contains("::split"),
+        }
+    }
+
+    fn assert_every_component_sits_under_its_own_header(items: &[Step3ItemState]) {
+        for (idx, item) in items.iter().enumerate() {
+            if item.is_parent {
+                continue;
+            }
+            let nearest_parent = items[..idx].iter().rev().find(|i| i.is_parent);
+            let parent = nearest_parent
+                .unwrap_or_else(|| panic!("component at {idx} has no header above it"));
+            assert_eq!(parent.block_id, item.block_id);
+            assert_eq!(parent.mod_name, item.mod_name);
+        }
+    }
+
+    fn tidy(items: &mut Vec<Step3ItemState>, clone_seq: &mut usize, selected: &mut Vec<usize>) {
+        repair_orphan_children(items, clone_seq);
+        merge_adjacent_same_mod_blocks(items, selected);
+        prune_empty_parent_blocks(items, selected);
+    }
+
+    #[test]
+    fn the_stranded_lower_half_gets_its_own_split_header() {
+        let mut items = vec![
+            row("B", "__PARENT__", true, "B::b0"),
+            row("B", "1", false, "B::b0"),
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+            row("B", "2", false, "B::b0"),
+        ];
+        let mut clone_seq = 1usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_eq!(items.len(), 6);
+        assert!(items[4].is_parent);
+        assert!(items[4].parent_placeholder);
+        assert!(items[4].block_id.contains("::split"));
+        assert_eq!(items[5].component_id, "2");
+        assert_eq!(items[5].block_id, items[4].block_id);
+        assert_eq!(items[1].block_id, "B::b0");
+        assert_eq!(count_children_in_block(&items, 0), 1);
+        assert_eq!(count_children_in_block(&items, 4), 1);
+        assert_every_component_sits_under_its_own_header(&items);
+    }
+
+    #[test]
+    fn loose_intruders_and_the_stranded_half_each_get_a_header() {
+        let mut items = vec![
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "9", false, "A::b0"),
+            row("B", "__PARENT__", true, "B::b0"),
+            row("B", "1", false, "B::b0"),
+            row("A", "1", false, "A::b0"),
+            row("B", "2", false, "B::b0"),
+        ];
+        let mut clone_seq = 1usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_every_component_sits_under_its_own_header(&items);
+        let a1_block = items
+            .iter()
+            .find(|i| i.mod_name == "A" && i.component_id == "1")
+            .unwrap()
+            .block_id
+            .clone();
+        let b2_block = items
+            .iter()
+            .find(|i| i.mod_name == "B" && i.component_id == "2")
+            .unwrap()
+            .block_id
+            .clone();
+        assert_ne!(a1_block, "A::b0");
+        assert_ne!(b2_block, "B::b0");
+        assert_ne!(a1_block, b2_block);
+        let a1_header = items
+            .iter()
+            .find(|i| i.is_parent && i.block_id == a1_block)
+            .unwrap();
+        let b2_header = items
+            .iter()
+            .find(|i| i.is_parent && i.block_id == b2_block)
+            .unwrap();
+        assert!(a1_header.parent_placeholder);
+        assert!(b2_header.parent_placeholder);
+    }
+
+    #[test]
+    fn a_stranded_row_adopts_a_same_mod_header_even_across_a_third_mod() {
+        let mut items = vec![
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+            row("C", "__PARENT__", true, "C::b0"),
+            row("C", "1", false, "C::b0"),
+            row("A", "__PARENT__", true, "A::b0::split7"),
+            row("A", "2", false, "A::b0::split7"),
+            row("A", "3", false, "A::b0"),
+        ];
+        let mut clone_seq = 1usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_eq!(items.len(), 7);
+        let a3 = items
+            .iter()
+            .find(|i| i.mod_name == "A" && i.component_id == "3")
+            .unwrap();
+        assert_eq!(a3.block_id, "A::b0::split7");
+        assert_every_component_sits_under_its_own_header(&items);
+    }
+
+    #[test]
+    fn dragging_the_intruder_out_rejoins_the_halves() {
+        let mut items = vec![
+            row("B", "__PARENT__", true, "B::b0"),
+            row("B", "1", false, "B::b0"),
+            row("B", "__PARENT__", true, "B::b0::split1"),
+            row("B", "2", false, "B::b0::split1"),
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+        ];
+        let mut clone_seq = 1usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_eq!(items.len(), 5);
+        assert!(items[0].is_parent);
+        assert_eq!(items[0].block_id, "B::b0");
+        assert_eq!(items[1].component_id, "1");
+        assert_eq!(items[1].block_id, "B::b0");
+        assert_eq!(items[2].component_id, "2");
+        assert_eq!(items[2].block_id, "B::b0");
+        assert!(items[3].is_parent);
+        assert_eq!(items[3].mod_name, "A");
+        assert_eq!(items[4].component_id, "1");
+        assert_every_component_sits_under_its_own_header(&items);
+    }
+
+    #[test]
+    fn a_tidy_list_is_left_exactly_as_it_was() {
+        let mut items = vec![
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+            row("A", "2", false, "A::b0"),
+            row("B", "__PARENT__", true, "B::b0"),
+            row("B", "1", false, "B::b0"),
+        ];
+        let before = items.clone();
+        let mut clone_seq = 1usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_eq!(items, before);
+        assert_every_component_sits_under_its_own_header(&items);
+    }
+}

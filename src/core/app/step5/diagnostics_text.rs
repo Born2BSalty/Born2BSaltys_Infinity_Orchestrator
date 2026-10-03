@@ -342,6 +342,7 @@ fn append_step1_paths(out: &mut String, s: &Step1State) {
     push_fmt!(out, "bgee_log_folder={}\n", s.bgee_log_folder);
     push_fmt!(out, "bgee_log_file={}\n", s.bgee_log_file);
     push_fmt!(out, "bg2ee_game_folder={}\n", s.bg2ee_game_folder);
+    push_fmt!(out, "iwdee_game_folder={}\n", s.iwdee_game_folder);
     push_fmt!(out, "bg2ee_log_folder={}\n", s.bg2ee_log_folder);
     push_fmt!(out, "bg2ee_log_file={}\n", s.bg2ee_log_file);
     push_fmt!(out, "eet_bgee_game_folder={}\n", s.eet_bgee_game_folder);

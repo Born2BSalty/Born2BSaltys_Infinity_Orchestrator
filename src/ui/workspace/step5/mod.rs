@@ -3,6 +3,5 @@
 
 pub mod page_workspace_step5;
 pub mod post_install_actions;
-pub mod share_paste_code_dialog;
 pub mod state_workspace_step5;
 pub mod success_banner;

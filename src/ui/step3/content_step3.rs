@@ -309,7 +309,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState, dev_mode: bool, exe_fi
     let mut jump_to_selected_requested = state.step3.jump_to_selected_requested;
     state.step3.jump_to_selected_requested = false;
     list_step3::render(ui, state, &mut jump_to_selected_requested, active_markers);
-    crate::ui::step2::content_step2::render_compat_popup(ui, state);
+    let _ = crate::ui::step2::content_step2::render_compat_popup(ui, state);
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, state);
     state.step3.jump_to_selected_requested =
         state.step3.jump_to_selected_requested || jump_to_selected_requested;

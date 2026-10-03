@@ -103,6 +103,7 @@ fn render_source_log_info(ui: &mut egui::Ui, info: &crate::ui::step5::log_files:
     let tag = match info.tag {
         "bgee" => "BGEE log:",
         "bg2ee" => "BG2EE log:",
+        "iwdee" => "IWDEE log:",
         other => other,
     };
     ui.label(tag);

@@ -29,7 +29,7 @@ pub fn compute_path_validation_summary(state: &WizardState) -> PathValidationSum
     use crate::app::state_validation;
 
     let step1 = &state.step1;
-    if state_validation::is_step1_valid(step1) {
+    if state_validation::settings_paths_ok(step1) {
         return PathValidationSummary {
             kind: PathValidationKind::Ok,
             text: String::from("weidu v\u{2026} \u{00B7} all paths ok"),

@@ -207,7 +207,7 @@ fn render_package_source_buttons(ui: &mut egui::Ui, action: &mut Option<Step2Act
         }
         if ui
             .button("Reload Sources")
-            .on_hover_text("Reload mod_downloads_default.toml and mod_downloads_user.toml")
+            .on_hover_text("Reload download sources")
             .clicked()
         {
             *action = Some(Step2Action::ReloadModDownloadSources);
@@ -341,10 +341,8 @@ pub(crate) fn render_component_block(
     ui: &mut egui::Ui,
     details: &Step2Details,
     palette: ThemePalette,
+    block: &str,
 ) {
-    let Some(block) = details.compat_component_block.as_deref() else {
-        return;
-    };
     let id = ui.make_persistent_id((
         "step2_component_block",
         details.tp_file.as_deref().unwrap_or_default(),
@@ -401,14 +399,21 @@ fn render_code_section(
                 .inner_margin(egui::Margin::symmetric(10, 8));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(value)
-                            .family(egui::FontFamily::Monospace)
-                            .color(redesign_text_primary(palette)),
-                    )
-                    .wrap(),
-                );
+                egui::ScrollArea::vertical()
+                    .id_salt(id)
+                    .max_height(320.0)
+                    .min_scrolled_height(320.0)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(value)
+                                    .family(egui::FontFamily::Monospace)
+                                    .color(redesign_text_primary(palette)),
+                            )
+                            .wrap(),
+                        );
+                    });
             });
         });
 }

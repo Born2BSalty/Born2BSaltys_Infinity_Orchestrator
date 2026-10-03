@@ -10,7 +10,7 @@ use eframe::egui;
 use bio::ui::orchestrator::OrchestratorApp;
 use bio::ui::shared::redesign_fonts::install_redesign_fonts;
 
-const APP_TITLE: &str = concat!("Infinity Orchestrator (alpha) v", env!("CARGO_PKG_VERSION"));
+const APP_TITLE: &str = concat!("Infinity Orchestrator (beta) v", env!("CARGO_PKG_VERSION"));
 
 const WINDOW_WIDTH: f32 = 1280.0;
 const WINDOW_HEIGHT: f32 = 820.0;
@@ -20,7 +20,7 @@ const WINDOW_MIN_HEIGHT: f32 = 700.0;
 #[derive(Parser, Debug)]
 #[command(name = "BIO")]
 #[command(version)]
-#[command(about = "Infinity Orchestrator — the redesigned BIO frontend (alpha)")]
+#[command(about = "Infinity Orchestrator — the redesigned BIO frontend (beta)")]
 struct OrchestratorCli {
     #[arg(long, default_value = "info")]
     log_level: String,
@@ -31,6 +31,57 @@ struct OrchestratorCli {
 fn main() -> Result<()> {
     let cli = OrchestratorCli::parse();
     bio::logging::setup::init(&cli.log_level)?;
+
+    let settings_store = bio::settings::store::SettingsStore::new_default();
+    match bio::settings::migrate_general::fold_legacy_general_settings(&settings_store) {
+        bio::settings::migrate_general::LegacyGeneralOutcome::NoLegacyFile => {}
+        bio::settings::migrate_general::LegacyGeneralOutcome::Merged => {
+            tracing::info!(
+                target = "orchestrator",
+                "folded bio_redesign_settings.json into bio_settings.json"
+            );
+        }
+        bio::settings::migrate_general::LegacyGeneralOutcome::LegacyUnreadable(Some(backup)) => {
+            tracing::warn!(
+                target = "orchestrator",
+                "legacy general settings file unreadable, backed up to {}",
+                backup.display()
+            );
+        }
+        bio::settings::migrate_general::LegacyGeneralOutcome::LegacyUnreadable(None) => {
+            tracing::warn!(
+                target = "orchestrator",
+                "legacy general settings file unreadable and could not be moved aside; it stays in place"
+            );
+        }
+        bio::settings::migrate_general::LegacyGeneralOutcome::MergedFileUnreadable(backup) => {
+            tracing::warn!(
+                target = "orchestrator",
+                "bio_settings.json was unreadable during legacy general merge, backed up to {}",
+                backup.display()
+            );
+        }
+        bio::settings::migrate_general::LegacyGeneralOutcome::SaveFailed(err) => {
+            tracing::warn!(
+                target = "orchestrator",
+                "failed saving merged settings during legacy general migration: {err}"
+            );
+        }
+    }
+
+    match bio::settings::launch_cleanup::clear_unreachable_eet_sources_in_file(&settings_store) {
+        Ok(true) => tracing::info!(
+            target = "orchestrator",
+            "cleared unreachable EET source fields from bio_settings.json"
+        ),
+        Ok(false) => {}
+        Err(err) => tracing::warn!(
+            target = "orchestrator",
+            "clearing unreachable EET source fields from bio_settings.json failed: {err}"
+        ),
+    }
+
+    bio::app::mod_downloads_migrate::migrate_source_files_at_launch();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

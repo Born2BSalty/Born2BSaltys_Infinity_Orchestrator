@@ -21,29 +21,17 @@ pub fn maybe_trigger_resume_scan(
     } else {
         None
     };
-    let installation_folder = pick_resume_folder(orchestrator.dev_mode, workspace);
-    let Some(folder) = choose_resume_folder(
-        workspace.mods_source,
-        global_folder.as_deref(),
-        installation_folder,
-    )
-    .map(str::to_string) else {
-        return;
-    };
-    let has_order = !workspace.order_bgee.is_empty()
-        || !workspace.order_bg2ee.is_empty()
-        || !workspace.order_iwdee.is_empty();
-    if !has_order {
-        return;
-    }
     let step2_empty = orchestrator.wizard_state.step2.bgee_mods.is_empty()
         && orchestrator.wizard_state.step2.bg2ee_mods.is_empty();
-    if !step2_empty {
+    let Some(folder) = resume_scan_folder(
+        workspace,
+        global_folder.as_deref(),
+        orchestrator.dev_mode,
+        step2_empty,
+        orchestrator.wizard_state.step2.is_scanning,
+    ) else {
         return;
-    }
-    if orchestrator.wizard_state.step2.is_scanning {
-        return;
-    }
+    };
 
     orchestrator.wizard_state.step1.mods_folder = folder;
 
@@ -74,6 +62,24 @@ pub fn maybe_trigger_resume_scan(
 
     orchestrator.workspace_view.step2.was_scanning =
         step2_rescan_reconcile::armed_was_scanning_for_inflight_scan();
+}
+
+pub(crate) fn resume_scan_folder(
+    workspace: &ModlistWorkspaceState,
+    global_folder: Option<&str>,
+    dev_mode: bool,
+    step2_empty: bool,
+    is_scanning: bool,
+) -> Option<String> {
+    if !step2_empty || is_scanning {
+        return None;
+    }
+    choose_resume_folder(
+        workspace.mods_source,
+        global_folder,
+        pick_resume_folder(dev_mode, workspace),
+    )
+    .map(str::to_string)
 }
 
 fn choose_resume_folder<'a>(
@@ -154,7 +160,7 @@ mod tests {
 
     #[test]
     fn empty_order_yields_empty_snapshot() {
-        assert!(snapshot_from_order(&[]).is_empty());
+        assert_eq!(snapshot_from_order(&[]).len(), 0);
     }
 
     #[test]
@@ -259,6 +265,49 @@ mod tests {
         assert_eq!(
             choose_resume_folder(ModsSource::InstallationFolder, Some(r"D:\global"), None),
             None
+        );
+    }
+
+    fn fresh_list_with_scratch() -> ModlistWorkspaceState {
+        ModlistWorkspaceState {
+            mods_source: ModsSource::InstallationFolder,
+            scratch_mods_folder: Some(r"D:\install\mods".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn resume_scans_a_list_with_no_saved_order() {
+        let ws = fresh_list_with_scratch();
+        assert!(ws.order_bgee.is_empty() && ws.order_bg2ee.is_empty() && ws.order_iwdee.is_empty());
+        assert_eq!(
+            resume_scan_folder(&ws, None, false, true, false),
+            Some(r"D:\install\mods".to_string())
+        );
+    }
+
+    #[test]
+    fn resume_skips_when_the_tree_is_not_empty() {
+        let ws = fresh_list_with_scratch();
+        assert_eq!(resume_scan_folder(&ws, None, false, false, false), None);
+    }
+
+    #[test]
+    fn resume_skips_while_a_scan_runs() {
+        let ws = fresh_list_with_scratch();
+        assert_eq!(resume_scan_folder(&ws, None, false, true, true), None);
+    }
+
+    #[test]
+    fn resume_prefers_the_global_folder_for_a_global_list() {
+        let ws = ModlistWorkspaceState {
+            mods_source: ModsSource::GlobalModsFolder,
+            scratch_mods_folder: Some(r"D:\install\mods".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            resume_scan_folder(&ws, Some(r"D:\global\mods"), false, true, false),
+            Some(r"D:\global\mods".to_string())
         );
     }
 
@@ -380,7 +429,7 @@ mod tests {
             ws.step2.bgee_mods.is_empty(),
             "cold resume: no scanned mods yet"
         );
-        assert!(ws.step3.bgee_items.is_empty(), "cold resume: Step 3 empty");
+        assert_eq!(ws.step3.bgee_items.len(), 0, "cold resume: Step 3 empty");
 
         let snapshot = snapshot_from_order(&workspace.order_bgee);
         assert_eq!(snapshot.len(), 2);

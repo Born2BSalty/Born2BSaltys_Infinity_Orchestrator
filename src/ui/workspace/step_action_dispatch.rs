@@ -19,10 +19,32 @@ pub fn dispatch_step2(action: Step2Action, orchestrator: &mut OrchestratorApp) {
             step2_log_glue::apply_weidu_log_selection_for_orchestrator(orchestrator, false);
             orchestrator.mark_workspace_dirty();
         }
+        Step2Action::ImportWeiduLogs => {
+            if let Some(form) = orchestrator
+                .workspace_view
+                .step2
+                .weidu_log_import_form
+                .take()
+            {
+                step2_log_glue::import_weidu_logs(orchestrator, form);
+            }
+        }
 
         Step2Action::DownloadUpdates => {
             step2_rescan_reconcile::arm_post_download_snapshot(orchestrator);
             handle_step2_via_bio(Step2Action::DownloadUpdates, orchestrator);
+            orchestrator.mark_workspace_dirty();
+        }
+        Step2Action::DownloadUpdatesAndApplyLogs => {
+            handle_step2_via_bio(Step2Action::DownloadUpdates, orchestrator);
+            let step2 = &mut orchestrator.wizard_state.step2;
+            step2.pending_weidu_log_reapply = step2.update_selected_download_running;
+            orchestrator.mark_workspace_dirty();
+        }
+
+        Step2Action::DownloadUpdateFor { tp2 } => {
+            step2_rescan_reconcile::arm_post_download_snapshot(orchestrator);
+            handle_step2_via_bio(Step2Action::DownloadUpdateFor { tp2 }, orchestrator);
             orchestrator.mark_workspace_dirty();
         }
 
@@ -41,7 +63,7 @@ pub fn dispatch_step2(action: Step2Action, orchestrator: &mut OrchestratorApp) {
     }
 }
 
-fn handle_step2_via_bio(action: Step2Action, orchestrator: &mut OrchestratorApp) {
+pub(crate) fn handle_step2_via_bio(action: Step2Action, orchestrator: &mut OrchestratorApp) {
     app_step2_router::handle_step2_action(
         &mut orchestrator.wizard_state,
         &mut orchestrator.step2_scan_rx,
@@ -56,4 +78,45 @@ fn handle_step2_via_bio(action: Step2Action, orchestrator: &mut OrchestratorApp)
 pub fn dispatch_step4(action: Step4Action, orchestrator: &mut OrchestratorApp) {
     app_step4_flow::handle_step4_action(&mut orchestrator.wizard_state, action);
     orchestrator.mark_workspace_dirty();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn download_update_for_arms_the_rescan_snapshot() {
+        let mut app = OrchestratorApp::new_isolated_for_test("download-update-for-arms-snapshot");
+
+        dispatch_step2(
+            Step2Action::DownloadUpdateFor {
+                tp2: "mod.tp2".to_string(),
+            },
+            &mut app,
+        );
+
+        assert!(
+            app.workspace_view
+                .step2
+                .pending_update_download_snapshot
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn a_refused_download_and_apply_leaves_the_flag_down_and_no_snapshot() {
+        let mut app = OrchestratorApp::new_isolated_for_test("download-and-apply-arms-reapply");
+        app.wizard_state.step2.pending_weidu_log_reapply = true;
+
+        dispatch_step2(Step2Action::DownloadUpdatesAndApplyLogs, &mut app);
+
+        assert!(!app.wizard_state.step2.update_selected_download_running);
+        assert!(!app.wizard_state.step2.pending_weidu_log_reapply);
+        assert!(
+            app.workspace_view
+                .step2
+                .pending_update_download_snapshot
+                .is_none()
+        );
+    }
 }

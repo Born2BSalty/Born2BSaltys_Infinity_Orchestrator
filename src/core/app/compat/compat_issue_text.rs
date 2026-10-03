@@ -82,6 +82,7 @@ pub(crate) fn issue_summary(
         return if games.is_empty() {
             if selected_mode.eq_ignore_ascii_case("BGEE")
                 || selected_mode.eq_ignore_ascii_case("BG2EE")
+                || selected_mode.eq_ignore_ascii_case("IWDEE")
             {
                 "This component is not available on the current game mode.".to_string()
             } else {

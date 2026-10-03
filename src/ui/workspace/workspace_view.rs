@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::fmt::Write as _;
+
 use eframe::egui;
 
 use crate::ui::orchestrator::nav_destination::NavDestination;
@@ -75,17 +77,23 @@ fn nav_status_text(orchestrator: &OrchestratorApp, current: WorkspaceStep) -> Op
         return None;
     }
 
-    Some(
-        orchestrator
-            .workspace_view
-            .step2
-            .rescan_drop_warning
-            .as_deref()
-            .map_or_else(
-                || status.to_string(),
-                |warning| format!("{status} - {warning}"),
-            ),
-    )
+    let mut text = orchestrator
+        .workspace_view
+        .step2
+        .rescan_drop_warning
+        .as_deref()
+        .map_or_else(
+            || status.to_string(),
+            |warning| format!("{status} - {warning}"),
+        );
+
+    let skipped = &orchestrator.wizard_state.step2.skipped_manual_downloads;
+    if !skipped.is_empty() {
+        let word = if skipped.len() == 1 { "mod" } else { "mods" };
+        let _ = write!(text, " - {} {word} skipped during download", skipped.len());
+    }
+
+    Some(text)
 }
 
 fn sync_step3_from_step2_on_nav_edge(orchestrator: &mut OrchestratorApp) {

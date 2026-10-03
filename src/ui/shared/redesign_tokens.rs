@@ -17,7 +17,6 @@ pub(crate) struct PaletteValues {
     pub chrome_bg: Color32,
     pub rail_bg: Color32,
     pub input_bg: Color32,
-    pub shadow: Color32,
 
     pub border_strong: Color32,
     pub border_soft: Color32,
@@ -101,7 +100,6 @@ pub(crate) const LIGHT: PaletteValues = PaletteValues {
     chrome_bg: Color32::from_rgb(0xcf, 0xdc, 0xe8),
     rail_bg: Color32::from_rgb(0xdd, 0xe6, 0xf0),
     input_bg: Color32::from_rgb(0xff, 0xff, 0xff),
-    shadow: Color32::from_rgb(0x1a, 0x26, 0x38),
 
     border_strong: Color32::from_rgb(0x1a, 0x26, 0x38),
     border_soft: Color32::from_rgb(0xa5, 0xb4, 0xc7),
@@ -185,7 +183,6 @@ pub(crate) const DARK: PaletteValues = PaletteValues {
     chrome_bg: Color32::from_rgb(0x15, 0x22, 0x2B),
     rail_bg: Color32::from_rgb(0x15, 0x22, 0x2B),
     input_bg: Color32::from_rgb(0x0B, 0x11, 0x16),
-    shadow: Color32::from_rgb(0x24, 0x33, 0x3D),
 
     border_strong: Color32::from_rgb(0x24, 0x33, 0x3D),
     border_soft: Color32::from_rgb(0x24, 0x33, 0x3D),
@@ -291,11 +288,6 @@ pub const fn redesign_rail_bg(palette: ThemePalette) -> Color32 {
 pub const fn redesign_input_bg(palette: ThemePalette) -> Color32 {
     values(palette).input_bg
 }
-#[must_use]
-pub const fn redesign_shadow(palette: ThemePalette) -> Color32 {
-    values(palette).shadow
-}
-
 #[must_use]
 pub const fn redesign_border_strong(palette: ThemePalette) -> Color32 {
     values(palette).border_strong
@@ -576,8 +568,6 @@ pub const REDESIGN_BORDER_RADIUS_U8: u8 = 3;
 pub const REDESIGN_PANEL_RADIUS_U8: u8 = 11;
 pub const REDESIGN_SHADOW_OFFSET_PX: f32 = 6.0;
 pub const REDESIGN_SHADOW_OFFSET_I8: i8 = 6;
-pub const REDESIGN_SHADOW_OFFSET_BTN_PX: f32 = 2.0;
-pub const REDESIGN_SHADOW_OFFSET_BTN_I8: i8 = 2;
 pub const REDESIGN_TITLEBAR_HEIGHT_PX: f32 = 34.0;
 pub const REDESIGN_STATUSBAR_HEIGHT_PX: f32 = 26.0;
 pub const REDESIGN_NAV_WIDTH_PX: f32 = 200.0;

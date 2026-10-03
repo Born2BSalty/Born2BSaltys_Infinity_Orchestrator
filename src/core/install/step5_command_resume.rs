@@ -36,10 +36,12 @@ pub(crate) fn capture_resume_targets(config: &InstallCommandConfig) -> ResumeTar
                     && !config.generate_directory.trim().is_empty()
                 {
                     config.generate_directory.trim().to_string()
-                } else if config.game_install == "BG2EE" {
-                    config.bg2ee_game_folder.trim().to_string()
                 } else {
-                    config.bgee_game_folder.trim().to_string()
+                    match config.game_install.as_str() {
+                        "BG2EE" => config.bg2ee_game_folder.trim().to_string(),
+                        "IWDEE" => config.iwdee_game_folder.trim().to_string(),
+                        _ => config.bgee_game_folder.trim().to_string(),
+                    }
                 },
             ),
         }
@@ -75,10 +77,10 @@ pub(crate) fn build_resume_invocation(
         args.push("normal".to_string());
         args.push("--game-directory".to_string());
         let game_dir = resume_targets.game_dir.as_deref().unwrap_or_else(|| {
-            if config.game_install == "BG2EE" {
-                config.bg2ee_game_folder.trim()
-            } else {
-                config.bgee_game_folder.trim()
+            match config.game_install.as_str() {
+                "BG2EE" => config.bg2ee_game_folder.trim(),
+                "IWDEE" => config.iwdee_game_folder.trim(),
+                _ => config.bgee_game_folder.trim(),
             }
         });
         args.push(game_dir.to_string());
@@ -96,7 +98,8 @@ pub(crate) fn build_resume_invocation(
 
 #[cfg(test)]
 mod tests {
-    use crate::app::state::ResumeTargets;
+    use crate::app::state::{ResumeTargets, Step1State};
+    use crate::app::step5::command_config::build_install_command_config;
     use crate::install::step5_command_config::{InstallCommandConfig, SafetyOptions};
 
     use super::build_resume_invocation;
@@ -128,6 +131,31 @@ mod tests {
                 arg_value(&args, "--skip-installed"),
                 expected,
                 "Resume Install must not force --skip-installed away from the user setting"
+            );
+        }
+    }
+
+    #[test]
+    fn resume_invocation_uses_each_games_source_folder() {
+        let step1 = Step1State {
+            bgee_game_folder: "/games/bgee".to_string(),
+            bg2ee_game_folder: "/games/bg2ee".to_string(),
+            iwdee_game_folder: "/games/iwdee".to_string(),
+            ..Step1State::default()
+        };
+        for (game, expected) in [
+            ("BGEE", "/games/bgee"),
+            ("BG2EE", "/games/bg2ee"),
+            ("IWDEE", "/games/iwdee"),
+        ] {
+            let mut step1 = step1.clone();
+            step1.game_install = game.to_string();
+            let config = build_install_command_config(&step1);
+            let (_program, args) = build_resume_invocation(&config, &ResumeTargets::default());
+            assert_eq!(
+                arg_value(&args, "--game-directory"),
+                expected,
+                "{game}: --game-directory must be its own source folder"
             );
         }
     }

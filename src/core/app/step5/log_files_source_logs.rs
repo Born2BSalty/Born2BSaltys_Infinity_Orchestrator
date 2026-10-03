@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use crate::app::game_authority;
 use crate::app::state::Step1State;
 
 #[derive(Debug, Clone)]
@@ -78,7 +79,10 @@ fn resolve_source_logs(step1: &Step1State) -> Vec<(&'static str, PathBuf)> {
             ("bg2ee", resolve_bg2_log_path(step1)),
         ],
         "BG2EE" => vec![("bg2ee", resolve_bg2_log_path(step1))],
-        _ => vec![("bgee", resolve_bgee_log_path(step1))],
+        game_install => vec![(
+            game_authority::log_source_subdir(game_authority::first_slot_tab(game_install)),
+            resolve_bgee_log_path(step1),
+        )],
     }
 }
 
@@ -105,7 +109,10 @@ fn resolve_saved_logs(step1: &Step1State) -> Vec<(&'static str, PathBuf)> {
             ("bg2ee", resolve_saved_bg2_log_path(step1)),
         ],
         "BG2EE" => vec![("bg2ee", resolve_saved_bg2_log_path(step1))],
-        _ => vec![("bgee", resolve_saved_bgee_log_path(step1))],
+        game_install => vec![(
+            game_authority::log_source_subdir(game_authority::first_slot_tab(game_install)),
+            resolve_saved_bgee_log_path(step1),
+        )],
     }
 }
 
@@ -125,4 +132,41 @@ fn resolve_saved_bg2_log_path(step1: &Step1State) -> PathBuf {
         step1.bg2ee_log_folder.trim()
     };
     PathBuf::from(folder).join("weidu.log")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_log_tags_follow_the_lists_game() {
+        let step1 = Step1State {
+            game_install: "IWDEE".to_string(),
+            bgee_log_file: "C:/iwdee/weidu.log".to_string(),
+            ..Step1State::default()
+        };
+        let logs = resolve_source_logs(&step1);
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].0, "iwdee");
+    }
+
+    #[test]
+    fn source_log_tags_are_unchanged_for_bgee_bg2ee_and_eet() {
+        for game_install in ["BGEE", "BG2EE", "EET"] {
+            let step1 = Step1State {
+                game_install: game_install.to_string(),
+                ..Step1State::default()
+            };
+            let tags: Vec<&str> = resolve_source_logs(&step1)
+                .into_iter()
+                .map(|(tag, _)| tag)
+                .collect();
+            let expected: Vec<&str> = match game_install {
+                "BG2EE" => vec!["bg2ee"],
+                "EET" => vec!["bgee", "bg2ee"],
+                _ => vec!["bgee"],
+            };
+            assert_eq!(tags, expected, "mismatch for {game_install}");
+        }
+    }
 }

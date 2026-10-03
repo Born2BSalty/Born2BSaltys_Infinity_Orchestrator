@@ -8,7 +8,9 @@ pub struct Step5ConsoleViewState {
     pub filter: ConsoleOutputFilter,
     pub auto_scroll: bool,
     pub request_input_focus: bool,
-    pub last_selected_console_text_len: usize,
+    pub last_console_revision: Option<u64>,
+    pub last_filter: ConsoleOutputFilter,
+    pub last_auto_scroll: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +26,9 @@ impl Default for Step5ConsoleViewState {
             filter: ConsoleOutputFilter::General,
             auto_scroll: true,
             request_input_focus: false,
-            last_selected_console_text_len: 0,
+            last_console_revision: None,
+            last_filter: ConsoleOutputFilter::General,
+            last_auto_scroll: true,
         }
     }
 }

@@ -3,6 +3,7 @@
 
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::state::{Step2ComponentState, Step2ModState, WizardState};
+use crate::ui::step2::state_step2::{active_mods_mut, normalize_active_tab};
 
 #[test]
 fn bg2ee_tab_only_counts_as_eet_after_eet_core_is_checked() {
@@ -34,6 +35,47 @@ fn bgee_tab_does_not_count_as_eet_even_when_eet_core_is_checked() {
     assert!(!prompt_eval.active_games.contains("eet"));
     assert!(prompt_eval.active_engines.contains("bgee"));
     assert!(!prompt_eval.active_engines.contains("bg2ee"));
+}
+
+#[test]
+fn iwdee_list_normalises_to_the_iwdee_tab() {
+    let mut state = WizardState::default();
+    state.step1.game_install = "IWDEE".to_string();
+
+    state.step2.active_game_tab = "BGEE".to_string();
+    normalize_active_tab(&mut state);
+    assert_eq!(state.step2.active_game_tab, "IWDEE");
+
+    state.step2.active_game_tab = "BG2EE".to_string();
+    normalize_active_tab(&mut state);
+    assert_eq!(state.step2.active_game_tab, "IWDEE");
+}
+
+#[test]
+fn iwdee_tab_reads_the_first_container() {
+    let mut state: WizardState = WizardState::default();
+    state.step1.game_install = "IWDEE".to_string();
+    state.step2.active_game_tab = "IWDEE".to_string();
+    state.step2.bgee_mods.push(eet_core_mod(true));
+    assert_eq!(active_mods_mut(&mut state.step2).len(), 1);
+
+    state.step2.active_game_tab = "BG2EE".to_string();
+    state.step2.bg2ee_mods.push(eet_core_mod(false));
+    assert_eq!(active_mods_mut(&mut state.step2).len(), 1);
+}
+
+#[test]
+fn eet_keeps_either_tab() {
+    let mut state = WizardState::default();
+    state.step1.game_install = "EET".to_string();
+
+    state.step2.active_game_tab = "BGEE".to_string();
+    normalize_active_tab(&mut state);
+    assert_eq!(state.step2.active_game_tab, "BGEE");
+
+    state.step2.active_game_tab = "BG2EE".to_string();
+    normalize_active_tab(&mut state);
+    assert_eq!(state.step2.active_game_tab, "BG2EE");
 }
 
 fn eet_core_mod(checked: bool) -> Step2ModState {

@@ -35,7 +35,8 @@ fn serialize_tab(
     mods: &[Step2ModState],
     items: &[Step3ItemState],
 ) -> serde_json::Value {
-    let markers = collect_step3_compat_markers(&state.step1, tab, mods, items);
+    let markers =
+        collect_step3_compat_markers(&state.step1, tab, mods, items, &state.step3.bgee_items);
     let conflict_count = markers
         .values()
         .filter(|marker| marker.kind.eq_ignore_ascii_case("conflict"))

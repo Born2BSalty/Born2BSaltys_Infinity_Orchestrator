@@ -6,6 +6,13 @@ pub(crate) fn parse_version(raw_line: &str) -> Option<String> {
     parse_version_text(comment)
 }
 
+pub(crate) fn version_phrase(raw_line: &str) -> Option<String> {
+    let comment = raw_line.split_once("//")?.1;
+    let (_, tail) = comment.rsplit_once(':')?;
+    let tail = tail.trim();
+    (!tail.is_empty()).then(|| tail.to_string())
+}
+
 pub(crate) fn parse_version_text(text: &str) -> Option<String> {
     text.split(':').rev().find_map(extract_version_from_segment)
 }
@@ -76,7 +83,25 @@ fn collapse_version_separators(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_version_text;
+    use super::{normalize_version_text, version_phrase};
+
+    #[test]
+    fn version_phrase_takes_the_text_after_the_last_colon() {
+        assert_eq!(
+            version_phrase("~eefixpack.tp2~ #0 #0 // Core Fixes: Beta 2 - Working Master"),
+            Some("Beta 2 - Working Master".to_string())
+        );
+    }
+
+    #[test]
+    fn version_phrase_is_none_without_a_colon() {
+        assert_eq!(version_phrase("~x.tp2~ #0 #0 // Core Fixes"), None);
+    }
+
+    #[test]
+    fn version_phrase_is_none_when_the_tail_is_blank() {
+        assert_eq!(version_phrase("~x.tp2~ #0 #0 // Core Fixes:  "), None);
+    }
 
     #[test]
     fn normalizes_separator_variants_equally() {

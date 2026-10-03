@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step2ModState, Step2State, WizardState};
 
 #[derive(Debug, Clone, Default)]
@@ -43,25 +44,17 @@ pub struct Step2Details {
 }
 
 pub fn normalize_active_tab(state: &mut WizardState) {
-    let show_first_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_second_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let active_is_visible = (state.step2.active_game_tab == "BGEE" && show_first_game)
-        || (state.step2.active_game_tab == "BG2EE" && show_second_game);
-    if active_is_visible {
-        return;
-    }
-    if show_first_game {
-        state.step2.active_game_tab = "BGEE".to_string();
-    } else if show_second_game {
-        state.step2.active_game_tab = "BG2EE".to_string();
+    let normalized =
+        game_authority::normalized_tab(&state.step1.game_install, &state.step2.active_game_tab);
+    if normalized != state.step2.active_game_tab {
+        state.step2.active_game_tab = normalized.to_string();
     }
 }
 
 pub fn active_mods_mut(step2: &mut Step2State) -> &mut Vec<Step2ModState> {
-    if step2.active_game_tab == "BGEE" {
-        &mut step2.bgee_mods
-    } else {
-        &mut step2.bg2ee_mods
+    match game_authority::slot_for_tab(&step2.active_game_tab) {
+        GameSlot::First => &mut step2.bgee_mods,
+        GameSlot::Second => &mut step2.bg2ee_mods,
     }
 }
 

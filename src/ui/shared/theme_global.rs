@@ -3,22 +3,6 @@
 
 use eframe::egui;
 
-pub fn apply_runtime_theme(ctx: &egui::Context) {
-    if !cfg!(debug_assertions) {
-        let mut visuals = egui::Visuals::dark();
-        visuals.override_text_color = Some(text_primary());
-        visuals.panel_fill = bg_panel();
-        visuals.extreme_bg_color = bg_extreme();
-        visuals.widgets.noninteractive.bg_fill = bg_panel();
-        let radius =
-            egui::CornerRadius::same(crate::ui::shared::layout_tokens_global::RADIUS_SM_U8);
-        visuals.widgets.inactive.corner_radius = radius;
-        visuals.widgets.active.corner_radius = radius;
-        visuals.widgets.hovered.corner_radius = radius;
-        ctx.set_visuals(visuals);
-    }
-}
-
 #[must_use]
 pub const fn text_primary() -> egui::Color32 {
     egui::Color32::from_gray(224)

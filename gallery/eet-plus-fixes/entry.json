@@ -1,0 +1,10 @@
+{
+  "id": "eet-plus-fixes",
+  "name": "EET + Fixes",
+  "author": "BIO Team",
+  "description": "EET Essentials with the community fixpack layered on top, so the merged saga starts from a patched engine instead of a vanilla one.",
+  "tags": ["Starter", "Fixes"],
+  "game": "EET",
+  "featured": true,
+  "version": "1.0.0"
+}

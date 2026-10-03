@@ -7,7 +7,8 @@ use std::path::Path;
 use flate2::read::GzDecoder;
 use tar::Archive as TarArchive;
 
-pub(super) fn is_tar_gz_archive(path: &Path) -> bool {
+#[must_use]
+pub fn is_tar_gz_archive(path: &Path) -> bool {
     path.file_name()
         .and_then(|value| value.to_str())
         .is_some_and(|value| {

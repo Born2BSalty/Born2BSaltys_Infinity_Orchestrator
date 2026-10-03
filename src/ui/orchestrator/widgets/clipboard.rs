@@ -23,10 +23,6 @@ pub fn copy(ctx: &egui::Context, text: impl Into<String>) {
     enqueue_toast(ctx, "Copied to clipboard".to_string());
 }
 
-pub fn copy_silent(ctx: &egui::Context, text: impl Into<String>) {
-    ctx.copy_text(text.into());
-}
-
 pub fn copy_with_message(ctx: &egui::Context, text: impl Into<String>, message: impl Into<String>) {
     ctx.copy_text(text.into());
     enqueue_toast(ctx, message.into());
@@ -41,7 +37,7 @@ pub fn take_pending_toasts(ctx: &egui::Context) -> Vec<String> {
 mod tests {
     use eframe::egui;
 
-    use super::{copy, copy_silent, copy_with_message, take_pending_toasts};
+    use super::{copy, copy_with_message, take_pending_toasts};
 
     fn has_copy_text(output: &egui::FullOutput, expected: &str) -> bool {
         output
@@ -75,28 +71,6 @@ mod tests {
             toasts[0], "Copied to clipboard",
             "copy must enqueue the default message"
         );
-    }
-
-    #[test]
-    fn copy_silent_emits_copy_text_command() {
-        let ctx = egui::Context::default();
-        let output = ctx.run(egui::RawInput::default(), |ctx| {
-            copy_silent(ctx, "SILENT-TEXT");
-        });
-        assert!(
-            has_copy_text(&output, "SILENT-TEXT"),
-            "expected CopyText(\"SILENT-TEXT\") in platform output commands"
-        );
-    }
-
-    #[test]
-    fn copy_silent_enqueues_nothing() {
-        let ctx = egui::Context::default();
-        let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            copy_silent(ctx, "TEXT");
-        });
-        let toasts = take_pending_toasts(&ctx);
-        assert!(toasts.is_empty(), "copy_silent must not enqueue any toast");
     }
 
     #[test]
@@ -143,7 +117,7 @@ mod tests {
             "both toasts must be returned on first drain"
         );
         let second = take_pending_toasts(&ctx);
-        assert!(second.is_empty(), "queue must be empty after first drain");
+        assert_eq!(second.len(), 0, "queue must be empty after first drain");
     }
 
     #[test]

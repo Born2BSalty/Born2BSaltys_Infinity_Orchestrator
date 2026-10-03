@@ -46,6 +46,7 @@ impl SettingsTab {
 pub enum PathStatus {
     Empty,
     Ok { detail: Option<String> },
+    Modded { detail: String },
     Warning { reason: String },
     Error { reason: String },
 }
@@ -65,6 +66,7 @@ impl PathStatus {
             Self::Empty => String::new(),
             Self::Ok { detail: Some(d) } => format!("ok \u{00B7} {d}"),
             Self::Ok { detail: None } => "ok".to_string(),
+            Self::Modded { detail } => format!("! modded \u{00B7} {detail}"),
             Self::Warning { reason } => format!("! {reason}"),
             Self::Error { reason } => format!("\u{00D7} {reason}"),
         }
@@ -75,7 +77,7 @@ impl PathStatus {
         match self {
             Self::Empty => PathStatusTone::Neutral,
             Self::Ok { .. } => PathStatusTone::Success,
-            Self::Warning { .. } => PathStatusTone::Warning,
+            Self::Modded { .. } | Self::Warning { .. } => PathStatusTone::Warning,
             Self::Error { .. } => PathStatusTone::Error,
         }
     }

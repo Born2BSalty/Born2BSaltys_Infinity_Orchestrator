@@ -60,14 +60,6 @@ pub(crate) fn set_mod_update_lock(tp2: &str, locked: bool) -> io::Result<()> {
     save_mod_update_locks(&locked_tp2)
 }
 
-pub(crate) fn clear_mod_update_locks() -> io::Result<()> {
-    match fs::remove_file(mod_update_locks_path()) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err),
-    }
-}
-
 pub(crate) fn take_last_load_error() -> Option<String> {
     last_load_error()
         .lock()

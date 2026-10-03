@@ -25,6 +25,7 @@ pub(crate) fn build_install_command_config(step1: &Step1State) -> InstallCommand
         bgee_log_folder: step1.bgee_log_folder.clone(),
         bgee_log_file: step1.bgee_log_file.clone(),
         bg2ee_game_folder: step1.bg2ee_game_folder.clone(),
+        iwdee_game_folder: step1.iwdee_game_folder.clone(),
         bg2ee_log_folder: step1.bg2ee_log_folder.clone(),
         bg2ee_log_file: step1.bg2ee_log_file.clone(),
         eet_bgee_game_folder: step1.eet_bgee_game_folder.clone(),

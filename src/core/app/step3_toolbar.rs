@@ -3,6 +3,7 @@
 
 use crate::app::compat_issue::CompatIssue;
 use crate::app::compat_step3_rules::Step3CompatMarker;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::prompt_popup_text::{collect_step3_prompt_toolbar_entries, prompt_toolbar_count};
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
@@ -31,13 +32,15 @@ pub(crate) struct Step3ToolbarSummary {
 }
 
 pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary {
-    let has_first_game_tab = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let has_second_game_tab = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let first_tab = game_authority::first_slot_tab(&state.step1.game_install);
+    let has_first_game_tab = game_authority::has_slot(&state.step1.game_install, GameSlot::First);
+    let has_second_game_tab = game_authority::has_slot(&state.step1.game_install, GameSlot::Second);
     let first_game_markers = if has_first_game_tab {
         crate::app::compat_step3_rules::collect_step3_compat_markers(
             &state.step1,
-            "BGEE",
+            first_tab,
             &state.step2.bgee_mods,
+            &state.step3.bgee_items,
             &state.step3.bgee_items,
         )
     } else {
@@ -49,6 +52,7 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
             "BG2EE",
             &state.step2.bg2ee_mods,
             &state.step3.bg2ee_items,
+            &state.step3.bgee_items,
         )
     } else {
         std::collections::HashMap::new()
@@ -79,7 +83,11 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
         bg2ee_summary: tab_compat_summary(&second_game_markers),
         bgee_prompt_count: first_game_prompt_count,
         bg2ee_prompt_count: second_game_prompt_count,
-        bgee_target: first_tab_issue_target("BGEE", &state.step3.bgee_items, &first_game_markers),
+        bgee_target: first_tab_issue_target(
+            first_tab,
+            &state.step3.bgee_items,
+            &first_game_markers,
+        ),
         bg2ee_target: first_tab_issue_target(
             "BG2EE",
             &state.step3.bg2ee_items,

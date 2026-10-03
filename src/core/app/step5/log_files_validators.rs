@@ -4,6 +4,7 @@
 use std::fs;
 use std::path::Path;
 
+use crate::app::game_authority;
 use crate::app::state::{ResumeTargets, Step1State};
 use crate::install::plan::InstallPlan;
 use crate::install::runner::check_missing_mod_folders;
@@ -13,36 +14,38 @@ use crate::platform_defaults::compose_weidu_log_path;
 use super::target_prep::paths_point_to_same_dir;
 
 pub fn validate_runtime_prep_paths(step1: &Step1State) -> Result<(), String> {
-    let mut checks: Vec<(&str, &str, &str)> = Vec::new();
+    let mut checks: Vec<(String, &str, &str)> = Vec::new();
     if step1.game_install == "EET" {
         if step1.new_pre_eet_dir_enabled {
             checks.push((
-                "Source BGEE Folder (-p)",
+                "Source BGEE Folder (-p)".to_string(),
                 step1.bgee_game_folder.trim(),
                 step1.eet_pre_dir.trim(),
             ));
         }
         if step1.new_eet_dir_enabled {
             checks.push((
-                "Source BG2EE Folder (-n)",
+                "Source BG2EE Folder (-n)".to_string(),
                 step1.bg2ee_game_folder.trim(),
                 step1.eet_new_dir.trim(),
             ));
         }
     } else if step1.generate_directory_enabled {
-        let source = if step1.game_install == "BG2EE" {
-            step1.bg2ee_game_folder.trim()
-        } else {
-            step1.bgee_game_folder.trim()
-        };
+        let source = game_authority::single_game_source_folder(step1, &step1.game_install);
+        if source.is_empty() {
+            let labels = game_authority::missing_source_folders(step1, &step1.game_install);
+            return Err(game_authority::missing_source_message(&labels)
+                .unwrap_or_else(|| "Source Game Folder (-g) is required".to_string()));
+        }
         checks.push((
-            "Source Game Folder (-g)",
+            "Source Game Folder (-g)".to_string(),
             source,
             step1.generate_directory.trim(),
         ));
     }
 
     for (source_label, source, target) in checks {
+        let source_label = source_label.as_str();
         if source.is_empty() {
             return Err(format!("{source_label} is required"));
         }
@@ -167,11 +170,7 @@ pub fn validate_resume_paths(
         checks.push(("Resume BG2EE/EET game directory", bg2_dir));
     } else {
         let game_dir = resume_targets.game_dir.as_deref().unwrap_or_else(|| {
-            if step1.game_install == "BG2EE" {
-                step1.bg2ee_game_folder.trim()
-            } else {
-                step1.bgee_game_folder.trim()
-            }
+            game_authority::single_game_source_folder(step1, &step1.game_install)
         });
         checks.push(("Resume game directory", game_dir));
     }
@@ -196,11 +195,35 @@ pub fn validate_resume_paths(
 mod tests {
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::app::state::Step1State;
 
-    use super::validate_mod_folders_for_log;
+    use super::{validate_mod_folders_for_log, validate_runtime_prep_paths};
+
+    struct TempRoot {
+        path: PathBuf,
+    }
+
+    impl TempRoot {
+        fn new(name: &str) -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_log_files_validators_test_{name}_{}_{id}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&path).expect("create temp root");
+            Self { path }
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 
     fn temp_dir() -> PathBuf {
         let mut base = std::env::temp_dir();
@@ -274,5 +297,58 @@ mod tests {
         let step1 = Step1State::default();
         let result = validate_mod_folders_for_log(&step1);
         assert!(result.is_ok(), "empty mods_folder must skip the check");
+    }
+
+    #[test]
+    fn preflight_names_the_missing_game_folder() {
+        let step1 = Step1State {
+            generate_directory_enabled: true,
+            generate_directory: "/some/target".to_string(),
+            bgee_game_folder: "/games/bgee".to_string(),
+            game_install: "IWDEE".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_runtime_prep_paths(&step1),
+            Err("The IWDEE game folder is not set. Set it in Settings \u{2192} Paths.".to_string())
+        );
+
+        let step1 = Step1State {
+            generate_directory_enabled: true,
+            generate_directory: "/some/target".to_string(),
+            bgee_game_folder: "/games/bgee".to_string(),
+            game_install: "BG2EE".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_runtime_prep_paths(&step1),
+            Err("The BG2EE game folder is not set. Set it in Settings \u{2192} Paths.".to_string())
+        );
+    }
+
+    #[test]
+    fn preflight_reads_the_iwdee_folder_for_an_iwdee_list() {
+        let root = TempRoot::new("iwdee_ok");
+        let source = root.path.join("source");
+        let target = root.path.join("target");
+        fs::create_dir_all(&source).expect("create source");
+        fs::create_dir_all(&target).expect("create target");
+        fs::write(source.join("chitin.key"), b"key").expect("write chitin.key");
+
+        let step1 = Step1State {
+            generate_directory_enabled: true,
+            generate_directory: target.to_string_lossy().into_owned(),
+            iwdee_game_folder: source.to_string_lossy().into_owned(),
+            game_install: "IWDEE".to_string(),
+            ..Default::default()
+        };
+
+        let result = validate_runtime_prep_paths(&step1);
+        if let Err(msg) = &result {
+            assert!(
+                !msg.contains("is not set"),
+                "unexpected missing-folder error: {msg}"
+            );
+        }
     }
 }

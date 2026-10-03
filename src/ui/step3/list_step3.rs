@@ -178,7 +178,6 @@ fn run_drag_pipeline(ui: &egui::Ui, ctx: &mut DragPipelineContext<'_>) {
         drag_over: &mut *ctx.drag_over,
         drag_indices: &mut *ctx.drag_indices,
         drag_grab_offset: &mut *ctx.drag_grab_offset,
-        drag_grab_pos_in_block: &mut *ctx.drag_grab_pos_in_block,
         drag_row_h: &mut *ctx.drag_row_h,
         visible_rows: ctx.visible_rows,
     };

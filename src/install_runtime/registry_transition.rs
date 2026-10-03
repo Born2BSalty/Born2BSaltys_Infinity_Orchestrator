@@ -54,7 +54,7 @@ pub fn flip_to_installed(
     registry: &mut ModlistRegistry,
     store: &RegistryStore,
     wizard_state: &WizardState,
-    share_code_override: Option<&str>,
+    held_code: Option<&str>,
 ) -> Option<SizeWorkerReceiver> {
     let (mod_count, component_count) = count_mods_and_components(wizard_state);
 
@@ -73,13 +73,7 @@ pub fn flip_to_installed(
     let archive_meta =
         share_export::build_archive_meta_from_install_lock(&destination, &archive_dir);
 
-    let new_code = build_verified_code(
-        id,
-        entry_ref,
-        wizard_state,
-        share_code_override,
-        archive_meta,
-    )?;
+    let new_code = build_verified_code(id, entry_ref, wizard_state, held_code, &archive_meta)?;
 
     let Some(entry) = registry.find_mut(id) else {
         warn!(
@@ -135,52 +129,71 @@ fn build_verified_code(
     id: &str,
     entry_ref: &ModlistEntry,
     wizard_state: &WizardState,
-    share_code_override: Option<&str>,
-    archive_meta: Vec<ArchiveMeta>,
+    held_code: Option<&str>,
+    archive_meta: &[ArchiveMeta],
 ) -> Option<String> {
-    if let Some(src) = share_code_override {
-        let bit_flipped = match share_export::set_allow_auto_install(src.trim(), true) {
-            Ok(code) => code,
-            Err(err) => {
-                warn!(
-                    target = "orchestrator",
-                    "flip_to_installed: could not decode the held code for \
-                     {id} to set allow_auto_install=true ({err}) — persisting \
-                     it VERBATIM (the real code is the priority; SPEC §13.13)"
-                );
-                src.trim().to_string()
-            }
-        };
+    regenerate_code(entry_ref, wizard_state, archive_meta).map_or_else(
+        |err| {
+            held_code.map_or_else(
+                || {
+                    warn!(
+                        target = "orchestrator",
+                        "flip_to_installed: share-code regeneration for {id} \
+                         failed: {err} (registry NOT flipped — install \
+                         already completed)"
+                    );
+                    None
+                },
+                |src| {
+                    warn!(
+                        target = "orchestrator",
+                        "flip_to_installed: share-code regeneration for {id} \
+                         failed: {err} — keeping the held code (SPEC §13.13)"
+                    );
+                    Some(held_code_with_bit_and_archives(id, src, archive_meta))
+                },
+            )
+        },
+        Some,
+    )
+}
 
-        match share_export::bake_archive_meta_into_code(&bit_flipped, &archive_meta) {
-            Ok(code) => code,
-            Err(err) => {
-                warn!(
-                    target = "orchestrator",
-                    "flip_to_installed: could not bake archive_meta into the \
-                     held code for {id} ({err}) — keeping it without the \
-                     per-archive {{size,hash}} (recipients fall back to \
-                     always-download; the real code is preserved)"
-                );
-                bit_flipped
-            }
+fn regenerate_code(
+    entry_ref: &ModlistEntry,
+    wizard_state: &WizardState,
+    archive_meta: &[ArchiveMeta],
+) -> Result<String, String> {
+    let meta = ShareMeta::from_entry(entry_ref, true).with_archive_meta(archive_meta.to_vec());
+    share_export::pack_meta_for_completed_install(wizard_state, &meta)
+}
+
+fn held_code_with_bit_and_archives(id: &str, src: &str, archive_meta: &[ArchiveMeta]) -> String {
+    let bit_flipped = match share_export::set_allow_auto_install(src.trim(), true) {
+        Ok(code) => code,
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "flip_to_installed: could not decode the held code for \
+                 {id} to set allow_auto_install=true ({err}) — persisting \
+                 it VERBATIM (the real code is the priority; SPEC §13.13)"
+            );
+            src.trim().to_string()
         }
-    } else {
-        let meta = ShareMeta::from_entry(entry_ref, true).with_archive_meta(archive_meta);
-        match share_export::pack_meta(wizard_state, &meta) {
-            Ok(code) => code,
-            Err(err) => {
-                warn!(
-                    target = "orchestrator",
-                    "flip_to_installed: share-code regeneration for {id} \
-                     failed: {err} (registry NOT flipped — install already \
-                     completed)"
-                );
-                return None;
-            }
+    };
+
+    match share_export::bake_archive_meta_into_code(&bit_flipped, archive_meta) {
+        Ok(code) => code,
+        Err(err) => {
+            warn!(
+                target = "orchestrator",
+                "flip_to_installed: could not bake archive_meta into the \
+                 held code for {id} ({err}) — keeping it without the \
+                 per-archive {{size,hash}} (recipients fall back to \
+                 always-download; the real code is preserved)"
+            );
+            bit_flipped
         }
     }
-    .into()
 }
 
 fn spawn_size_worker(id: &str, destination: String) -> Option<SizeWorkerReceiver> {
@@ -403,6 +416,39 @@ mod tests {
         s.step3.bgee_items = vec![leaf("A.TP2", "0"), leaf("A.TP2", "1")];
         s.step3.bg2ee_items = vec![leaf("B.TP2", "0")];
 
+        let eet_pre_dir = temp_destination("flip_happy_pre");
+        let eet_new_dir = temp_destination("flip_happy_new");
+        let first_game_order_log_dir = temp_destination("flip_happy_bgee_order_log");
+        let second_game_order_log_dir = temp_destination("flip_happy_bg2ee_order_log");
+        std::fs::create_dir_all(&eet_pre_dir).unwrap();
+        std::fs::create_dir_all(&eet_new_dir).unwrap();
+        std::fs::create_dir_all(&first_game_order_log_dir).unwrap();
+        std::fs::create_dir_all(&second_game_order_log_dir).unwrap();
+        std::fs::write(
+            eet_pre_dir.join("WeiDU.log"),
+            "~A/A.TP2~ #0 #0 // comp 0: v9.9\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eet_new_dir.join("WeiDU.log"),
+            "~B/B.TP2~ #0 #0 // comp 0: v3.3\n",
+        )
+        .unwrap();
+        std::fs::write(
+            first_game_order_log_dir.join("weidu.log"),
+            "~A/A.TP2~ #0 #0 // comp 0\n",
+        )
+        .unwrap();
+        std::fs::write(
+            second_game_order_log_dir.join("weidu.log"),
+            "~B/B.TP2~ #0 #0 // comp 0\n",
+        )
+        .unwrap();
+        s.step1.eet_pre_dir = eet_pre_dir.to_string_lossy().into_owned();
+        s.step1.eet_new_dir = eet_new_dir.to_string_lossy().into_owned();
+        s.step1.eet_bgee_log_folder = first_game_order_log_dir.to_string_lossy().into_owned();
+        s.step1.eet_bg2ee_log_folder = second_game_order_log_dir.to_string_lossy().into_owned();
+
         let rx = flip_to_installed("FLIPME000001", &mut registry, &store, &s, None);
 
         let entry = registry.find("FLIPME000001").expect("entry present");
@@ -429,6 +475,19 @@ mod tests {
             "flip_to_installed must regenerate with allow_auto_install = true"
         );
 
+        let preview = crate::app::modlist_share::preview_modlist_share_code(code)
+            .expect("regenerated code must decode");
+        assert!(
+            preview.bgee_log_text.contains(": v9.9"),
+            "the completed install's real BGEE WeiDU.log tail is baked in: {}",
+            preview.bgee_log_text
+        );
+        assert!(
+            preview.bg2ee_log_text.contains(": v3.3"),
+            "the completed install's real BG2EE WeiDU.log tail is baked in: {}",
+            preview.bg2ee_log_text
+        );
+
         let rx = rx.expect("size worker spawned");
         let (got_id, bytes) = rx
             .recv_timeout(std::time::Duration::from_secs(5))
@@ -437,6 +496,45 @@ mod tests {
         assert_eq!(bytes, 0, "no destination on disk ⇒ 0 bytes");
 
         assert!(path.exists(), "registry written to the temp path");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&eet_pre_dir);
+        let _ = std::fs::remove_dir_all(&eet_new_dir);
+        let _ = std::fs::remove_dir_all(&first_game_order_log_dir);
+        let _ = std::fs::remove_dir_all(&second_game_order_log_dir);
+    }
+
+    #[test]
+    fn flip_without_an_installed_log_falls_back_to_rebuilt_lines() {
+        let (store, path) = temp_registry_store("no_installed_log");
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "FLIPNOLOG001".to_string(),
+            name: "Polished EET".to_string(),
+            game: Game::EET,
+            destination_folder: String::new(),
+            state: ModlistState::InProgress,
+            latest_share_code: Some("BIO-MODLIST-V1:STALE".to_string()),
+            ..Default::default()
+        });
+
+        let s = eet_state_with_leaves();
+
+        let rx = flip_to_installed("FLIPNOLOG001", &mut registry, &store, &s, None);
+        assert!(rx.is_some(), "clean-exit flip succeeded");
+
+        let entry = registry.find("FLIPNOLOG001").expect("entry present");
+        let code = entry.latest_share_code.as_deref().expect("code");
+        let preview = crate::app::modlist_share::preview_modlist_share_code(code)
+            .expect("regenerated code must decode");
+        assert!(
+            preview.bgee_log_text.contains("comp 0"),
+            "no installed log on disk ⇒ falls back to the rebuilt step3 lines: {}",
+            preview.bgee_log_text
+        );
+
+        if let Some(rx) = rx {
+            let _ = rx.recv_timeout(std::time::Duration::from_secs(5));
+        }
         let _ = std::fs::remove_file(&path);
     }
 
@@ -622,9 +720,110 @@ mod tests {
     }
 
     #[test]
-    fn flip_to_installed_install_modlist_override_uses_held_code_not_pack_meta() {
-        let (store, store_path) = temp_registry_store("im_override");
-        let dest = temp_destination("im_override");
+    fn flip_regenerates_the_code_even_when_a_held_code_exists() {
+        let (store, store_path) = temp_registry_store("regen_over_held");
+        let dest = temp_destination("regen_over_held");
+        std::fs::create_dir_all(&dest).unwrap();
+        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "REGENOVR0001".to_string(),
+            name: "Tactical EET 2026".to_string(),
+            game: Game::EET,
+            destination_folder: dest.to_string_lossy().into_owned(),
+            state: ModlistState::InProgress,
+
+            latest_share_code: Some("BIO-MODLIST-V1:STALE".to_string()),
+            ..Default::default()
+        });
+
+        let mut s = WizardState::default();
+        s.step1.game_install = "EET".to_string();
+        s.step3.bgee_items = vec![leaf("A.TP2", "0"), leaf("A.TP2", "1")];
+        s.step3.bg2ee_items = vec![leaf("B.TP2", "0")];
+
+        let eet_pre_dir = temp_destination("regen_over_held_pre");
+        let eet_new_dir = temp_destination("regen_over_held_new");
+        let first_game_order_log_dir = temp_destination("regen_over_held_bgee_order_log");
+        let second_game_order_log_dir = temp_destination("regen_over_held_bg2ee_order_log");
+        std::fs::create_dir_all(&eet_pre_dir).unwrap();
+        std::fs::create_dir_all(&eet_new_dir).unwrap();
+        std::fs::create_dir_all(&first_game_order_log_dir).unwrap();
+        std::fs::create_dir_all(&second_game_order_log_dir).unwrap();
+        std::fs::write(
+            eet_pre_dir.join("WeiDU.log"),
+            "~A/A.TP2~ #0 #0 // comp 0: v9.9\n",
+        )
+        .unwrap();
+        std::fs::write(
+            eet_new_dir.join("WeiDU.log"),
+            "~B/B.TP2~ #0 #0 // comp 0: v3.3\n",
+        )
+        .unwrap();
+        std::fs::write(
+            first_game_order_log_dir.join("weidu.log"),
+            "~A/A.TP2~ #0 #0 // comp 0\n",
+        )
+        .unwrap();
+        std::fs::write(
+            second_game_order_log_dir.join("weidu.log"),
+            "~B/B.TP2~ #0 #0 // comp 0\n",
+        )
+        .unwrap();
+        s.step1.eet_pre_dir = eet_pre_dir.to_string_lossy().into_owned();
+        s.step1.eet_new_dir = eet_new_dir.to_string_lossy().into_owned();
+        s.step1.eet_bgee_log_folder = first_game_order_log_dir.to_string_lossy().into_owned();
+        s.step1.eet_bg2ee_log_folder = second_game_order_log_dir.to_string_lossy().into_owned();
+
+        let held_without_tail = "BIO-MODLIST-V1:STALE";
+        std::fs::write(&draft_path, held_without_tail).unwrap();
+
+        let rx = flip_to_installed(
+            "REGENOVR0001",
+            &mut registry,
+            &store,
+            &s,
+            Some(held_without_tail),
+        );
+        assert!(rx.is_some(), "clean-exit flip succeeded");
+
+        let entry = registry.find("REGENOVR0001").unwrap();
+        assert_eq!(entry.state, ModlistState::Installed, "state flipped");
+        let code = entry.latest_share_code.as_deref().expect("code");
+        assert!(
+            decoded_allow_auto_install(code),
+            "regenerated code carries allow_auto_install = true"
+        );
+
+        let preview = crate::app::modlist_share::preview_modlist_share_code(code)
+            .expect("regenerated code must decode");
+        assert!(
+            preview.bgee_log_text.contains(": v9.9"),
+            "regeneration wins over the held code, so the completed \
+             install's real BGEE WeiDU.log tail is baked in: {}",
+            preview.bgee_log_text
+        );
+        assert!(
+            preview.bg2ee_log_text.contains(": v3.3"),
+            "regeneration wins over the held code, so the completed \
+             install's real BG2EE WeiDU.log tail is baked in: {}",
+            preview.bg2ee_log_text
+        );
+
+        let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&eet_pre_dir);
+        let _ = std::fs::remove_dir_all(&eet_new_dir);
+        let _ = std::fs::remove_dir_all(&first_game_order_log_dir);
+        let _ = std::fs::remove_dir_all(&second_game_order_log_dir);
+        let _ = std::fs::remove_file(&store_path);
+    }
+
+    #[test]
+    fn flip_falls_back_to_the_held_code_when_regeneration_fails() {
+        let (store, store_path) = temp_registry_store("held_fallback");
+        let dest = temp_destination("held_fallback");
         std::fs::create_dir_all(&dest).unwrap();
         let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
 
@@ -632,6 +831,7 @@ mod tests {
             allow_auto_install: false,
             name: Some("Tactical EET 2026".to_string()),
             author: Some("@sharer".to_string()),
+            description: None,
             forked_from: vec![crate::app::modlist_share::ForkAncestor {
                 name: "Root".to_string(),
                 author: "@root".to_string(),
@@ -646,7 +846,7 @@ mod tests {
 
         let mut registry = ModlistRegistry::default();
         registry.entries.push(ModlistEntry {
-            id: "IMOVR0000001".to_string(),
+            id: "HELDFALLBK01".to_string(),
             name: "Tactical EET 2026".to_string(),
             game: Game::EET,
             destination_folder: dest.to_string_lossy().into_owned(),
@@ -659,7 +859,7 @@ mod tests {
         let empty_step3 = WizardState::default();
 
         let rx = flip_to_installed(
-            "IMOVR0000001",
+            "HELDFALLBK01",
             &mut registry,
             &store,
             &empty_step3,
@@ -667,66 +867,34 @@ mod tests {
         );
         assert!(
             rx.is_some(),
-            "the Install-Modlist override path flips even with EMPTY step3 \
-             (it does NOT regenerate via pack_meta — the pinned symptom fix)"
+            "regeneration fails on an empty WizardState (no Step 3 items), \
+             so the flip falls back to the held code instead of failing"
         );
 
-        let entry = registry.find("IMOVR0000001").unwrap();
+        let entry = registry.find("HELDFALLBK01").unwrap();
         assert_eq!(entry.state, ModlistState::Installed, "state flipped");
         let code = entry.latest_share_code.as_deref().expect("code");
         assert!(decoded_allow_auto_install(code), "true-bit on clean exit");
 
+        let held_true = share_export::set_allow_auto_install(&held_false, true).unwrap();
+        let held_json = decoded_json(&held_true);
+        let persisted_json = decoded_json(code);
+        for key in [
+            "name",
+            "author",
+            "description",
+            "forked_from",
+            "archive_meta",
+        ] {
+            assert_eq!(
+                persisted_json[key], held_json[key],
+                "persisted code must equal the held code (bit flipped to \
+                 true), key {key} diverged"
+            );
+        }
+
         let on_disk = std::fs::read_to_string(&draft_path).unwrap();
         assert_eq!(Some(on_disk.as_str()), entry.latest_share_code.as_deref());
-        assert!(decoded_allow_auto_install(&on_disk));
-
-        let encoded = on_disk.strip_prefix("BIO-MODLIST-V1:").unwrap();
-        let mut vals: Vec<u8> = Vec::new();
-        for ch in encoded.chars().filter(|c| !c.is_whitespace()) {
-            vals.push(match ch {
-                'A'..='Z' => ch as u8 - b'A',
-                'a'..='z' => ch as u8 - b'a' + 26,
-                '0'..='9' => ch as u8 - b'0' + 52,
-                '-' => 62,
-                '_' => 63,
-                _ => panic!("bad b64url"),
-            });
-        }
-        let mut bytes = Vec::new();
-        for chunk in vals.chunks(4) {
-            let c0 = chunk[0];
-            let c1 = *chunk.get(1).unwrap_or(&0);
-            let c2 = *chunk.get(2).unwrap_or(&0);
-            let c3 = *chunk.get(3).unwrap_or(&0);
-            bytes.push((c0 << 2) | (c1 >> 4));
-            if chunk.len() > 2 {
-                bytes.push(((c1 & 0x0F) << 4) | (c2 >> 2));
-            }
-            if chunk.len() > 3 {
-                bytes.push(((c2 & 0x03) << 6) | c3);
-            }
-        }
-        let mut json = String::new();
-        {
-            use flate2::read::ZlibDecoder;
-            use std::io::Read;
-            ZlibDecoder::new(&bytes[..])
-                .read_to_string(&mut json)
-                .unwrap();
-        }
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(
-            v["name"],
-            serde_json::json!("Tactical EET 2026"),
-            "the pasted code's packed name rode through verbatim"
-        );
-        assert_eq!(v["author"], serde_json::json!("@sharer"));
-        assert_eq!(
-            v["forked_from"],
-            serde_json::json!([{ "name": "Root", "author": "@root" }]),
-            "the pasted code's lineage rode through verbatim (every \
-             ancestor stays credited — SPEC §13.3)"
-        );
 
         let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
         let _ = std::fs::remove_dir_all(&dest);
@@ -988,7 +1156,7 @@ mod tests {
         let _ = std::fs::remove_file(&store_path);
     }
 
-    fn decoded_allow_auto_install(code: &str) -> bool {
+    fn decoded_json(code: &str) -> serde_json::Value {
         use flate2::read::ZlibDecoder;
         use std::io::Read;
 
@@ -1025,7 +1193,12 @@ mod tests {
         ZlibDecoder::new(&bytes[..])
             .read_to_string(&mut json)
             .expect("zlib inflate");
-        let v: serde_json::Value = serde_json::from_str(&json).expect("json");
-        v["allow_auto_install"].as_bool().expect("bit present")
+        serde_json::from_str(&json).expect("json")
+    }
+
+    fn decoded_allow_auto_install(code: &str) -> bool {
+        decoded_json(code)["allow_auto_install"]
+            .as_bool()
+            .expect("bit present")
     }
 }

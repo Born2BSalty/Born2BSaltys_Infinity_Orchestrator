@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 
+use crate::app::tp2_component_begin::{code_part, component_begin_at, designated_id_in_code};
+
 #[derive(Debug, Clone)]
 pub(super) struct Tp2ComponentBlock {
     pub component_id: String,
@@ -15,27 +17,15 @@ pub(super) struct Tp2ComponentBlock {
 pub(super) fn parse_tp2_component_blocks(tp2_text: &str) -> HashMap<String, Tp2ComponentBlock> {
     let mut out = HashMap::<String, Tp2ComponentBlock>::new();
     let lines: Vec<&str> = tp2_text.lines().collect();
-    let mut index = 0usize;
     let mut in_block_comment = false;
-    while index < lines.len() {
-        let line = lines[index];
-        if !line_starts_begin_outside_block_comment(line, &mut in_block_comment) {
-            index += 1;
-            continue;
-        }
-
-        let mut end = index + 1;
-        while end < lines.len() {
-            if line_starts_begin_outside_block_comment(lines[end], &mut in_block_comment) {
-                break;
-            }
-            end += 1;
-        }
+    let mut next_start = find_next_begin_start(&lines, 0, &mut in_block_comment);
+    while let Some((index, label_index)) = next_start {
+        next_start = find_next_begin_start(&lines, index + 1, &mut in_block_comment);
+        let end = next_start.map_or(lines.len(), |(found_index, _)| found_index);
 
         let block = &lines[index..end];
-        let component_id = block
-            .iter()
-            .find_map(|line| parse_designated_id(&line.to_ascii_uppercase()));
+        let body_lines = build_block_body_lines(block, label_index - index);
+        let component_id = block.iter().find_map(|line| designated_id_in_code(line));
         if let Some(id) = component_id {
             out.insert(
                 id.clone(),
@@ -44,11 +34,10 @@ pub(super) fn parse_tp2_component_blocks(tp2_text: &str) -> HashMap<String, Tp2C
                     begin_at_component_id: false,
                     group_key: block.iter().find_map(|line| parse_group_key(line)),
                     subcomponent_key: block.iter().find_map(|line| parse_subcomponent_key(line)),
-                    body_lines: block.iter().map(|line| (*line).to_string()).collect(),
+                    body_lines,
                 },
             );
         }
-        index = end;
     }
     out
 }
@@ -56,35 +45,23 @@ pub(super) fn parse_tp2_component_blocks(tp2_text: &str) -> HashMap<String, Tp2C
 pub(super) fn parse_tp2_component_blocks_in_order(tp2_text: &str) -> Vec<Tp2ComponentBlock> {
     let mut out = Vec::<Tp2ComponentBlock>::new();
     let lines: Vec<&str> = tp2_text.lines().collect();
-    let mut index = 0usize;
     let mut in_block_comment = false;
-    while index < lines.len() {
-        let line = lines[index];
-        if !line_starts_begin_outside_block_comment(line, &mut in_block_comment) {
-            index += 1;
-            continue;
-        }
-
-        let mut end = index + 1;
-        while end < lines.len() {
-            if line_starts_begin_outside_block_comment(lines[end], &mut in_block_comment) {
-                break;
-            }
-            end += 1;
-        }
+    let mut next_start = find_next_begin_start(&lines, 0, &mut in_block_comment);
+    while let Some((index, label_index)) = next_start {
+        next_start = find_next_begin_start(&lines, index + 1, &mut in_block_comment);
+        let end = next_start.map_or(lines.len(), |(found_index, _)| found_index);
 
         let block = &lines[index..end];
-        let designated_component_id = block
-            .iter()
-            .find_map(|line| parse_designated_id(&line.to_ascii_uppercase()));
+        let body_lines = build_block_body_lines(block, label_index - index);
+        let designated_component_id = block.iter().find_map(|line| designated_id_in_code(line));
         let begin_at_component_id = designated_component_id.is_none()
-            && block
+            && body_lines
                 .first()
                 .and_then(|line| parse_begin_at_component_id(line))
                 .is_some();
         let component_id = designated_component_id
             .or_else(|| {
-                block
+                body_lines
                     .first()
                     .and_then(|line| parse_begin_at_component_id(line))
             })
@@ -94,28 +71,73 @@ pub(super) fn parse_tp2_component_blocks_in_order(tp2_text: &str) -> Vec<Tp2Comp
             begin_at_component_id,
             group_key: block.iter().find_map(|line| parse_group_key(line)),
             subcomponent_key: block.iter().find_map(|line| parse_subcomponent_key(line)),
-            body_lines: block.iter().map(|line| (*line).to_string()).collect(),
+            body_lines,
         });
-        index = end;
     }
     out
 }
 
-fn line_starts_begin_outside_block_comment(line: &str, in_block_comment: &mut bool) -> bool {
+fn build_block_body_lines(block: &[&str], label_offset: usize) -> Vec<String> {
+    let mut body_lines: Vec<String> = block.iter().map(|line| (*line).to_string()).collect();
+    if label_offset >= block.len() {
+        return body_lines;
+    }
+    let first = begin_token_onward(block[0]);
+    if label_offset == 0 {
+        if first.len() != code_part(block[0]).trim().len() {
+            body_lines[0] = first;
+        }
+        return body_lines;
+    }
+    body_lines[0] = format!("{first} {}", code_part(block[label_offset]).trim());
+    body_lines
+}
+
+fn begin_token_onward(line: &str) -> String {
+    let code = code_part(line).trim();
+    let start = code.to_ascii_uppercase().find("BEGIN").unwrap_or(0);
+    code[start..].to_string()
+}
+
+fn find_next_begin_start(
+    lines: &[&str],
+    from: usize,
+    in_block_comment: &mut bool,
+) -> Option<(usize, usize)> {
+    let mut index = from;
+    while index < lines.len() {
+        if let Some(label_index) =
+            line_starts_begin_outside_block_comment(lines, index, in_block_comment)
+        {
+            return Some((index, label_index));
+        }
+        index += 1;
+    }
+    None
+}
+
+fn line_starts_begin_outside_block_comment(
+    lines: &[&str],
+    index: usize,
+    in_block_comment: &mut bool,
+) -> Option<usize> {
+    let line = lines[index];
     let trimmed = line.trim_start();
     if *in_block_comment {
-        if trimmed.contains("*/") {
-            *in_block_comment = false;
-        }
-        return false;
+        let pos = trimmed.find("*/")?;
+        *in_block_comment = false;
+        let remainder = &trimmed[pos + 2..];
+        return component_begin_at(remainder, lines, index);
     }
     if trimmed.starts_with("/*") {
-        if !trimmed.contains("*/") {
-            *in_block_comment = true;
+        if let Some(pos) = trimmed.find("*/") {
+            let remainder = &trimmed[pos + 2..];
+            return component_begin_at(remainder, lines, index);
         }
-        return false;
+        *in_block_comment = true;
+        return None;
     }
-    trimmed.to_ascii_uppercase().starts_with("BEGIN ")
+    component_begin_at(line, lines, index)
 }
 
 fn parse_begin_at_component_id(line: &str) -> Option<String> {
@@ -150,22 +172,7 @@ pub(super) fn split_subcomponent_display_label(label: &str) -> Option<(String, S
 }
 
 pub(super) fn parse_designated_id(upper_line: &str) -> Option<String> {
-    if upper_line.trim_start().starts_with("//") {
-        return None;
-    }
-    let index = upper_line.find("DESIGNATED")?;
-    let tail = upper_line[index + "DESIGNATED".len()..].trim_start();
-    let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
-    if digits.is_empty() {
-        None
-    } else {
-        let normalized = digits.trim_start_matches('0');
-        if normalized.is_empty() {
-            Some("0".to_string())
-        } else {
-            Some(normalized.to_string())
-        }
-    }
+    designated_id_in_code(upper_line)
 }
 
 pub(super) fn extract_tilde_or_quote_paths(line: &str) -> Vec<String> {
@@ -254,4 +261,52 @@ fn parse_subcomponent_key(line: &str) -> Option<String> {
         .take_while(|c| !c.is_whitespace() && *c != '/')
         .collect();
     (!value.is_empty()).then_some(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bare_begin_followed_by_action_is_not_a_component_start() {
+        let text = "BEGIN ~A~\nACTION_IF x THEN BEGIN\nCOPY ~a~ ~b~\nEND\n\nBEGIN ~B~\nbody\n";
+        let blocks = parse_tp2_component_blocks_in_order(text);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0].body_lines.len(), 5);
+        assert_eq!(blocks[1].body_lines[0], "BEGIN ~B~");
+    }
+
+    #[test]
+    fn label_on_next_line_is_the_block_label() {
+        let text = "BEGIN\n~Widget~\nbody\n";
+        let blocks = parse_tp2_component_blocks_in_order(text);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].body_lines[0], "BEGIN ~Widget~");
+    }
+
+    #[test]
+    fn designated_in_comment_is_ignored_by_scan_splitter() {
+        let text = "BEGIN ~A~ // DESIGNATED 99\nbody\n";
+        let blocks = parse_tp2_component_blocks_in_order(text);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].component_id.len(), 0);
+        assert!(!parse_tp2_component_blocks(text).contains_key("99"));
+    }
+
+    #[test]
+    fn begin_after_block_comment_close_is_a_start() {
+        let text = "BEGIN ~A~\nbody a\n/* note\n*/ BEGIN ~B~\nbody b\n";
+        let blocks = parse_tp2_component_blocks_in_order(text);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(
+            blocks[0].body_lines,
+            vec![
+                "BEGIN ~A~".to_string(),
+                "body a".to_string(),
+                "/* note".to_string(),
+            ]
+        );
+        assert_eq!(blocks[1].body_lines[0], "BEGIN ~B~");
+        assert_eq!(blocks[1].body_lines[1], "body b");
+    }
 }

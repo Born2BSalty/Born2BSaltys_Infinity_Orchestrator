@@ -24,6 +24,9 @@ pub(super) fn check_github_download_page(
     if let Some(branch) = request.branch.as_deref() {
         return branch_source_outcome(agent, request, branch);
     }
+    if let Some(release) = request.release.as_deref() {
+        return release_source_outcome(agent, request, release);
+    }
     if request.requested_version.is_some() {
         return check_github_exact_version_download_page(agent, request);
     }
@@ -71,6 +74,10 @@ fn check_github_modhub_download_page(
             &format!("GitHub release asset not found: {}", asset_name.trim()),
         );
     }
+    if matches!(channel, GitHubChannel::Pre) && request.pkg.is_none() {
+        return pre_channel_newest_outcome(request, &releases)
+            .unwrap_or_else(|| repo_source_outcome(agent, request));
+    }
     for release in &releases {
         if !release_matches_channel(release, channel) {
             continue;
@@ -100,6 +107,18 @@ fn first_named_asset_outcome(
         .iter()
         .filter(|release| release_matches_channel(release, channel))
         .find_map(|release| named_release_asset_outcome(request, release, asset_name))
+}
+
+#[must_use]
+fn pre_channel_newest_outcome(
+    request: &Step2UpdateCheckRequest,
+    releases: &[GitHubRelease],
+) -> Option<Step2UpdateCheckOutcome> {
+    let release = releases.first()?;
+    Some(
+        release_asset_outcome(request, release)
+            .unwrap_or_else(|| tagged_source_outcome(request, release)),
+    )
 }
 
 fn check_github_exact_version_download_page(
@@ -262,8 +281,8 @@ fn requested_github_channel(value: Option<&str>) -> GitHubChannel {
 const fn release_matches_channel(release: &GitHubRelease, channel: GitHubChannel) -> bool {
     match channel {
         GitHubChannel::Stable => !release.prerelease,
-        GitHubChannel::Pre | GitHubChannel::PreOnly => release.prerelease,
-        GitHubChannel::Master | GitHubChannel::IFeelLucky => true,
+        GitHubChannel::PreOnly => release.prerelease,
+        GitHubChannel::Pre | GitHubChannel::Master | GitHubChannel::IFeelLucky => true,
     }
 }
 
@@ -283,6 +302,7 @@ fn release_asset_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(release.tag_name.clone()),
         source_ref: None,
         asset_name: Some(asset_name),
@@ -290,6 +310,7 @@ fn release_asset_outcome(
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
         version_pin_overridden: None,
+        remote_file: None,
     })
 }
 
@@ -310,6 +331,7 @@ fn packaged_release_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(release.tag_name.clone()),
         source_ref: None,
         asset_name: Some(asset_name),
@@ -317,6 +339,7 @@ fn packaged_release_outcome(
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
         version_pin_overridden: None,
+        remote_file: None,
     })
 }
 
@@ -337,6 +360,7 @@ fn named_release_asset_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(release.tag_name.clone()),
         source_ref: None,
         asset_name: Some(asset_name),
@@ -344,6 +368,7 @@ fn named_release_asset_outcome(
         error: None,
         package_kind: Step2PackageKind::ReleaseAsset,
         version_pin_overridden: None,
+        remote_file: None,
     })
 }
 
@@ -362,6 +387,7 @@ fn tagged_source_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(release.tag_name.clone()),
         source_ref: None,
         asset_name: Some(format!("{repo_name}-{}-source.zip", release.tag_name)),
@@ -369,6 +395,7 @@ fn tagged_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -385,6 +412,7 @@ fn branch_source_outcome(
             tp_file: request.tp_file.clone(),
             label: request.label.clone(),
             source_id: request.source_id.clone(),
+            source_url: String::new(),
             tag: Some(source_ref),
             source_ref: None,
             asset_name: Some(asset_name),
@@ -392,6 +420,7 @@ fn branch_source_outcome(
             error: None,
             package_kind: Step2PackageKind::SourceSnapshot,
             version_pin_overridden: None,
+            remote_file: None,
         };
     }
     failed_outcome(
@@ -420,6 +449,7 @@ fn commit_source_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(format!("commit-{short}")),
         source_ref: Some(format!("commit@{commit}")),
         asset_name: Some(format!("{repo_name}-commit-{short}-source.zip")),
@@ -431,7 +461,56 @@ fn commit_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
+}
+
+fn release_source_outcome(
+    agent: &ureq::Agent,
+    request: &Step2UpdateCheckRequest,
+    release: &str,
+) -> Step2UpdateCheckOutcome {
+    let releases = match fetch_github_releases(agent, &request.repo) {
+        Ok(releases) => releases,
+        Err(err) => return failed_outcome(request.clone(), &err),
+    };
+    release_outcome_from_releases(request, &releases, release)
+}
+
+fn release_outcome_from_releases(
+    request: &Step2UpdateCheckRequest,
+    releases: &[GitHubRelease],
+    release: &str,
+) -> Step2UpdateCheckOutcome {
+    let release_name = release.trim();
+    let Some(found) = releases
+        .iter()
+        .find(|candidate| candidate.tag_name.trim() == release_name)
+    else {
+        return failed_outcome(
+            request.clone(),
+            &format!("GitHub release not found: {release_name}"),
+        );
+    };
+    if let Some(asset_name) = request.asset.as_deref() {
+        if let Some(outcome) = named_release_asset_outcome(request, found, asset_name) {
+            return outcome;
+        }
+        return failed_outcome(
+            request.clone(),
+            &format!("GitHub release asset not found: {}", asset_name.trim()),
+        );
+    }
+    if let Some(pkg_list) = request.pkg.as_deref() {
+        if let Some(outcome) = packaged_release_outcome(request, found, pkg_list) {
+            return outcome;
+        }
+        return tagged_source_outcome(request, found);
+    }
+    if let Some(outcome) = release_asset_outcome(request, found) {
+        return outcome;
+    }
+    tagged_source_outcome(request, found)
 }
 
 fn tag_source_outcome(
@@ -467,6 +546,7 @@ fn tagged_tag_source_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(tag.name.clone()),
         source_ref: None,
         asset_name: Some(format!("{repo_name}-{}-source.zip", tag.name)),
@@ -478,6 +558,7 @@ fn tagged_tag_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -493,6 +574,7 @@ fn repo_source_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(tag),
         source_ref: None,
         asset_name: Some(asset_name),
@@ -500,6 +582,7 @@ fn repo_source_outcome(
         error: None,
         package_kind: Step2PackageKind::SourceSnapshot,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -519,7 +602,10 @@ fn fetch_latest_proper_release(
 fn fetch_github_releases(agent: &ureq::Agent, repo: &str) -> Result<Vec<GitHubRelease>, String> {
     super::app_step2_update_github_http::github_api_get_json(
         agent,
-        &format!("https://api.github.com/repos/{}/releases", repo.trim()),
+        &format!(
+            "https://api.github.com/repos/{}/releases?per_page=100",
+            repo.trim()
+        ),
     )
 }
 
@@ -728,8 +814,12 @@ struct GitHubTreeEntry {
 
 #[cfg(test)]
 mod tests {
-    use super::{GitHubAsset, GitHubChannel, GitHubRelease, first_named_asset_outcome};
-    use crate::app::app_step2_update_check::Step2UpdateCheckRequest;
+    use super::{
+        GitHubAsset, GitHubChannel, GitHubRelease, GitHubTag, first_named_asset_outcome,
+        pre_channel_newest_outcome, release_matches_channel, release_outcome_from_releases,
+        tagged_tag_source_outcome,
+    };
+    use crate::app::app_step2_update_check::{Step2PackageKind, Step2UpdateCheckRequest};
 
     fn make_request(asset: Option<&str>) -> Step2UpdateCheckRequest {
         Step2UpdateCheckRequest {
@@ -737,13 +827,14 @@ mod tests {
             tp_file: String::new(),
             label: String::new(),
             source_id: String::new(),
-            repo: String::new(),
+            repo: "owner/repo".to_string(),
             exact_github: vec![],
             source_url: String::new(),
             channel: Some("release".to_string()),
             tag: None,
             commit: None,
             branch: None,
+            release: None,
             asset: asset.map(ToString::to_string),
             pkg: None,
             requested_version: None,
@@ -751,9 +842,13 @@ mod tests {
     }
 
     fn make_release(tag: &str, asset_names: &[&str]) -> GitHubRelease {
+        make_release_with_flag(tag, asset_names, false)
+    }
+
+    fn make_release_with_flag(tag: &str, asset_names: &[&str], prerelease: bool) -> GitHubRelease {
         GitHubRelease {
             tag_name: tag.to_string(),
-            prerelease: false,
+            prerelease,
             zipball_url: format!("https://example.com/{tag}.zip"),
             assets: asset_names
                 .iter()
@@ -799,5 +894,134 @@ mod tests {
             "tweaks-and-tricks-v8.38.zip",
         );
         assert!(outcome.is_none());
+    }
+
+    #[test]
+    fn pre_release_channel_takes_newest_of_either_kind() {
+        let releases = vec![
+            make_release_with_flag("v2.0-beta", &[], true),
+            make_release_with_flag("v1.9", &[], false),
+        ];
+        let request = make_request(None);
+        let outcome = pre_channel_newest_outcome(&request, &releases).expect("expected an outcome");
+        assert_eq!(outcome.tag.as_deref(), Some("v2.0-beta"));
+
+        let releases = vec![
+            make_release_with_flag("v2.1", &[], false),
+            make_release_with_flag("v2.0-beta", &[], true),
+        ];
+        let outcome = pre_channel_newest_outcome(&request, &releases).expect("expected an outcome");
+        assert_eq!(outcome.tag.as_deref(), Some("v2.1"));
+    }
+
+    #[test]
+    fn preonly_channel_skips_stable_releases() {
+        let stable = make_release_with_flag("v1.0", &[], false);
+        let pre = make_release_with_flag("v1.0-beta", &[], true);
+        assert!(!release_matches_channel(&stable, GitHubChannel::PreOnly));
+        assert!(release_matches_channel(&pre, GitHubChannel::PreOnly));
+        assert!(release_matches_channel(&stable, GitHubChannel::Pre));
+        assert!(release_matches_channel(&pre, GitHubChannel::Pre));
+    }
+
+    #[test]
+    fn pre_release_without_packages_picks_os_asset_before_source_zip() {
+        let request = make_request(None);
+        let with_asset = vec![make_release_with_flag("v3.0", &["mod-archive.zip"], true)];
+        let outcome = pre_channel_newest_outcome(&request, &with_asset).expect("outcome");
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::ReleaseAsset
+        ));
+        assert_eq!(outcome.asset_name.as_deref(), Some("mod-archive.zip"));
+
+        let without_asset = vec![make_release_with_flag("v3.0", &[], true)];
+        let outcome = pre_channel_newest_outcome(&request, &without_asset).expect("outcome");
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::SourceSnapshot
+        ));
+    }
+
+    #[test]
+    fn release_with_asset_picks_that_file() {
+        let releases = vec![
+            make_release("v35.18", &["win-stratagems-v35.18.exe"]),
+            make_release("v35.17", &["win-stratagems-v35.17.exe"]),
+        ];
+        let mut request = make_request(Some("win-stratagems-v35.17.exe"));
+        request.release = Some("v35.17".to_string());
+        let outcome = release_outcome_from_releases(&request, &releases, "v35.17");
+        assert_eq!(
+            outcome.asset_name.as_deref(),
+            Some("win-stratagems-v35.17.exe")
+        );
+        assert_eq!(outcome.tag.as_deref(), Some("v35.17"));
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::ReleaseAsset
+        ));
+    }
+
+    #[test]
+    fn release_without_asset_uses_packages_then_os_pick_then_source_zip() {
+        let request = make_request(None);
+
+        let with_pkg_match = vec![make_release("v1.1", &["win-stratagems.exe"])];
+        let mut pkg_request = request.clone();
+        pkg_request.pkg = Some("win".to_string());
+        let outcome = release_outcome_from_releases(&pkg_request, &with_pkg_match, "v1.1");
+        assert_eq!(outcome.asset_name.as_deref(), Some("win-stratagems.exe"));
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::ReleaseAsset
+        ));
+
+        let with_zip_only = vec![make_release("v1.1", &["stratagems-archive.zip"])];
+        let outcome = release_outcome_from_releases(&request, &with_zip_only, "v1.1");
+        assert_eq!(
+            outcome.asset_name.as_deref(),
+            Some("stratagems-archive.zip")
+        );
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::ReleaseAsset
+        ));
+
+        let with_no_assets = vec![make_release("v1.1", &[])];
+        let outcome = release_outcome_from_releases(&request, &with_no_assets, "v1.1");
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::SourceSnapshot
+        ));
+        assert_eq!(outcome.tag.as_deref(), Some("v1.1"));
+    }
+
+    #[test]
+    fn release_not_in_list_fails_with_its_name() {
+        let releases = vec![make_release("v1.0", &[]), make_release("v1.1", &[])];
+        let request = make_request(None);
+        let outcome = release_outcome_from_releases(&request, &releases, "v9.9");
+        assert_eq!(
+            outcome.error.as_deref(),
+            Some("GitHub release not found: v9.9")
+        );
+    }
+
+    #[test]
+    fn tag_ignores_release_asset_and_packages() {
+        let mut request = make_request(Some("ignored-asset.zip"));
+        request.release = Some("ignored-release".to_string());
+        request.pkg = Some("win".to_string());
+        let tag = GitHubTag {
+            name: "v3.0".to_string(),
+        };
+        let outcome = tagged_tag_source_outcome(&request, &tag);
+        assert!(matches!(
+            outcome.package_kind,
+            Step2PackageKind::SourceSnapshot
+        ));
+        assert_eq!(outcome.tag.as_deref(), Some("v3.0"));
+        assert_eq!(outcome.asset_name.as_deref(), Some("repo-v3.0-source.zip"));
     }
 }

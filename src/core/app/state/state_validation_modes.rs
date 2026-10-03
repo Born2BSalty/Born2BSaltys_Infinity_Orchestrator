@@ -20,6 +20,19 @@ pub(crate) fn run_mode_checks(s: &Step1State, checked: &mut usize, errors: &mut 
                 );
             }
         }
+        "IWDEE" => {
+            fs_checks::check_game_dir("IWDEE Game Folder", &s.iwdee_game_folder, checked, errors);
+            if s.installs_exactly_from_weidu_logs() {
+                exec::check_file("IWDEE WeiDU Log File", &s.bgee_log_file, checked, errors);
+            } else if !s.bootstraps_from_weidu_logs() && !s.imports_modlist() {
+                fs_checks::check_dir(
+                    "IWDEE WeiDU Log Folder",
+                    &s.bgee_log_folder,
+                    checked,
+                    errors,
+                );
+            }
+        }
         "EET" => {
             if s.new_pre_eet_dir_enabled {
                 fs_checks::check_game_dir(

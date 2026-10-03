@@ -1,0 +1,40 @@
+name: Gallery feed
+
+on:
+  pull_request:
+    paths:
+      - "gallery/**"
+      - "src/gallery_feed/**"
+      - "src/bin/gallery_index.rs"
+      - ".github/workflows/gallery.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "gallery/**"
+      - "src/gallery_feed/**"
+      - "src/bin/gallery_index.rs"
+      - ".github/workflows/gallery.yml"
+
+jobs:
+  check:
+    name: Validate gallery index
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check gallery index
+        run: cargo run --release --bin gallery-index -- check gallery

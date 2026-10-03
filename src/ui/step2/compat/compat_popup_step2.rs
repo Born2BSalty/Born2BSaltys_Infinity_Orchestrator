@@ -7,14 +7,18 @@ pub(crate) use crate::ui::step2::compat_issue_text_step2::compat_popup_issue_tex
 pub mod compat_popup_action_row {
     use eframe::egui;
 
-    use crate::app::compat_popup_nav;
+    use crate::app::compat_popup_nav::{self, RelatedJumpOutcome};
     use crate::app::controller::util::open_in_shell;
     use crate::app::state::WizardState;
     use crate::ui::step2::compat_popup_nav_step2::{next_target, select_popup_target};
     use crate::ui::step2::compat_popup_step2::compat_popup_details as details;
     use crate::ui::step2::service_selection_step2::rule_source_open_path;
 
-    pub fn render_action_row(ui: &mut egui::Ui, state: &mut WizardState) {
+    #[must_use]
+    pub(crate) fn render_action_row(
+        ui: &mut egui::Ui,
+        state: &mut WizardState,
+    ) -> Option<RelatedJumpOutcome> {
         let issue = details::selected_or_synth_issue(state);
         let can_jump_this = compat_popup_nav::selected_game_tab(state).is_some();
         let can_jump_related = issue
@@ -22,6 +26,7 @@ pub mod compat_popup_action_row {
             .is_some_and(compat_popup_nav::can_jump_to_related);
         let can_next = next_target(state).is_some();
 
+        let mut outcome = None;
         ui.horizontal(|ui| {
             if ui
                 .add_enabled(can_jump_this, egui::Button::new("Jump To This"))
@@ -34,7 +39,7 @@ pub mod compat_popup_action_row {
                 .clicked()
                 && let Some(issue) = issue.as_ref()
             {
-                compat_popup_nav::jump_to_related(state, issue);
+                outcome = compat_popup_nav::jump_to_related(state, issue);
             }
             if ui
                 .add_enabled(can_next, egui::Button::new("Next"))
@@ -55,6 +60,7 @@ pub mod compat_popup_action_row {
                 state.step2.compat_popup_open = false;
             }
         });
+        outcome
     }
 
     fn jump_to_next(state: &mut WizardState) {
@@ -169,7 +175,14 @@ pub mod compat_popup_details {
             egui::CollapsingHeader::new(strong_text_primary("Component block", palette))
                 .default_open(false)
                 .show(ui, |ui| {
-                    ui.monospace(block);
+                    egui::ScrollArea::vertical()
+                        .id_salt("step2_compat_popup_component_block")
+                        .max_height(240.0)
+                        .min_scrolled_height(240.0)
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| {
+                            ui.monospace(block);
+                        });
                 });
         }
 

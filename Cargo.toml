@@ -1,6 +1,6 @@
 [package]
 name = "bio"
-version = "0.2.2-alpha"
+version = "1.0.0-beta"
 edition = "2024"
 build = "build.rs"
 authors = ["Born2BSalty"]
@@ -12,12 +12,12 @@ name = "bio"
 path = "src/lib.rs"
 
 [[bin]]
-name = "BIO_legacy"
-path = "src/main.rs"
-
-[[bin]]
 name = "BIO"
 path = "src/bin/infinity_orchestrator.rs"
+
+[[bin]]
+name = "gallery-index"
+path = "src/bin/gallery_index.rs"
 
 [dependencies]
 anyhow = "1.0.101"

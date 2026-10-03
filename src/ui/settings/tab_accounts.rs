@@ -42,19 +42,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         ui,
         palette,
         AccountCard {
-            initials: "NX",
-            service_name: "Nexus Mods",
-            state: CardState::NotConnected,
-            connect_label: "connect",
-            disconnect_label: "disconnect",
-            disabled: true,
-        },
-    );
-
-    let _ = account_card::render(
-        ui,
-        palette,
-        AccountCard {
             initials: "M",
             service_name: "Mega",
             state: CardState::NotConnected,

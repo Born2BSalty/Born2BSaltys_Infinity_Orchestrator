@@ -179,7 +179,7 @@ BIO stores user settings and support files in the normal per-user app data locat
 
 Common files may include:
 
-- bio_settings.json
+- bio_settings.json (paths, install flags, and the General tab: name, theme, language)
 - prompt_answers.json
 - compatibility rule files
 - diagnostics exports

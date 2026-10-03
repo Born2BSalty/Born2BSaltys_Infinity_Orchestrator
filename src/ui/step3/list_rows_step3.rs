@@ -9,7 +9,7 @@ use crate::app::compat_step3_rules::Step3CompatMarker;
 use crate::app::prompt_eval_summary_step3;
 use crate::app::prompt_popup_text::format_step3_prompt_popup;
 use crate::app::state::Step3ItemState;
-use crate::app::step3_history;
+use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_prompt_edit::PromptActionRequest;
 use crate::parser::prompt_eval_expr::PromptEvalContext;
 use crate::ui::step3::block_selection_step3::{
@@ -46,8 +46,8 @@ pub(crate) struct RowRenderContext<'a> {
     pub collapsed_blocks: &'a mut Vec<String>,
     pub clone_seq: &'a mut usize,
     pub locked_blocks: &'a mut Vec<String>,
-    pub undo_stack: &'a mut Vec<Vec<Step3ItemState>>,
-    pub redo_stack: &'a mut Vec<Vec<Step3ItemState>>,
+    pub undo_stack: &'a mut Vec<Step3HistoryEntry>,
+    pub redo_stack: &'a mut Vec<Step3HistoryEntry>,
 }
 
 pub(crate) fn render_rows(ui: &mut egui::Ui, ctx: &mut RowRenderContext<'_>) -> RowRenderOutcome {
@@ -331,7 +331,12 @@ fn render_parent_context_menu(
 ) {
     drag_response.context_menu(|ui| {
         if ui.button("Clone Parent (empty split target)").clicked() {
-            step3_history::push_undo_snapshot(ctx.items, ctx.undo_stack, ctx.redo_stack);
+            step3_history::push_undo_snapshot(
+                ctx.items,
+                Step3TouchedRows::default(),
+                ctx.undo_stack,
+                ctx.redo_stack,
+            );
             blocks::clone_parent_empty_block(ctx.items, idx, ctx.clone_seq);
             ui.close_menu();
         }
@@ -429,7 +434,12 @@ fn handle_drag_start(
         ctx.drag_indices.clear();
         return;
     }
-    step3_history::push_undo_snapshot(ctx.items, ctx.undo_stack, ctx.redo_stack);
+    step3_history::push_undo_snapshot(
+        ctx.items,
+        Step3TouchedRows::default(),
+        ctx.undo_stack,
+        ctx.redo_stack,
+    );
     *ctx.drag_from = Some(idx);
     update_drag_indices(ctx, idx);
     update_drag_grab_geometry(ui, ctx, idx, visible_rows);

@@ -9,14 +9,17 @@ use std::sync::mpsc::Receiver;
 use anyhow::Result;
 
 mod analyze;
+mod analyze_error_block;
 mod api;
 mod backend;
 mod input;
 mod output;
 mod process;
 mod scripted_inputs;
+mod success_prefix;
 
 pub use analyze::PromptInfo;
+use success_prefix::BatchComponent;
 
 #[derive(Default)]
 struct PromptCapture {
@@ -48,6 +51,9 @@ pub struct EmbeddedTerminal {
     prompt_capture: PromptCapture,
     warning_capture: WarningCapture,
     pub(super) max_buffer_chars: usize,
+    output_revision: u64,
+    important_revision: u64,
+    installed_revision: u64,
     boundary_event_count: u64,
     boundary_scan_tail: String,
     child_env: Vec<(String, String)>,
@@ -56,6 +62,8 @@ pub struct EmbeddedTerminal {
     current_component_tp2: Option<String>,
     current_component_id: Option<String>,
     current_component_name: Option<String>,
+    current_batch: Vec<BatchComponent>,
+    pending_display_patches: Vec<(String, String)>,
     scripted_inputs_loaded_count: usize,
     raw_log_path: Option<std::path::PathBuf>,
     raw_log_file: Option<File>,
@@ -79,6 +87,9 @@ impl EmbeddedTerminal {
             prompt_capture: PromptCapture::default(),
             warning_capture: WarningCapture::default(),
             max_buffer_chars: 250_000,
+            output_revision: 0,
+            important_revision: 0,
+            installed_revision: 0,
             boundary_event_count: 0,
             boundary_scan_tail: String::new(),
             child_env: Vec::new(),
@@ -87,6 +98,8 @@ impl EmbeddedTerminal {
             current_component_tp2: None,
             current_component_id: None,
             current_component_name: None,
+            current_batch: Vec::new(),
+            pending_display_patches: Vec::new(),
             scripted_inputs_loaded_count: 0,
             raw_log_path: None,
             raw_log_file: None,

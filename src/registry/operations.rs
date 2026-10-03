@@ -364,7 +364,7 @@ mod tests {
 
         let target = remove_entry_and_save("CCC111000000", &store, &mut reg).expect("ok");
         assert!(target.is_none(), "relative dest should yield None");
-        assert!(reg.entries.is_empty());
+        assert_eq!(reg.entries.len(), 0);
         let _ = std::fs::remove_file(&path);
     }
 
@@ -394,7 +394,7 @@ mod tests {
         );
 
         let reloaded = store.load().expect("reload");
-        assert!(reloaded.entries.is_empty(), "entry persisted as removed");
+        assert_eq!(reloaded.entries.len(), 0, "entry persisted as removed");
 
         let _ = std::fs::remove_dir_all(&install_dir);
         let _ = std::fs::remove_file(&path);
@@ -783,7 +783,7 @@ mod tests {
 
             let result = remove_entry_keep_folder("NOTEXIST0000", &store, &mut reg);
             assert!(result.is_ok(), "unknown id must not error");
-            assert!(reg.entries.is_empty());
+            assert_eq!(reg.entries.len(), 0);
             let _ = std::fs::remove_file(&path);
         }
     }

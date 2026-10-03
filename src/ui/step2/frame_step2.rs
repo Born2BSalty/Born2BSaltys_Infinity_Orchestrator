@@ -208,7 +208,7 @@ fn render_step2_content(
         palette,
         &mut details_open,
     );
-    crate::ui::step2::compat_window_step2::render(
+    let _ = crate::ui::step2::compat_window_step2::render(
         ui,
         state,
         crate::ui::shared::redesign_tokens::ThemePalette::Dark,

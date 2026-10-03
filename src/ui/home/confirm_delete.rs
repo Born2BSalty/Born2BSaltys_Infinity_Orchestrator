@@ -52,6 +52,7 @@ pub const fn delete_confirm<'a>(
         title,
         body,
         confirm_label: "Delete",
+        cancel_label: "Cancel",
         danger: true,
     }
 }
@@ -67,6 +68,7 @@ pub const fn reinstall_confirm<'a>(
         title,
         body,
         confirm_label: "Reinstall",
+        cancel_label: "Cancel",
         danger: true,
     }
 }
@@ -98,6 +100,7 @@ mod tests {
         assert!(b.starts_with("This will permanently remove:"));
         assert!(b.contains("\u{2022} the modlist's registry entry (it disappears from Home)"));
         assert!(b.contains("\u{2022} the install folder on disk: C:\\BIO\\modlists\\x"));
+        assert!(!b.contains("saved workspace"));
         assert!(b.trim_end().ends_with("This action cannot be undone."));
     }
 

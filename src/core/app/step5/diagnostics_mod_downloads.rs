@@ -59,29 +59,19 @@ pub(super) fn write_mod_download_diagnostics(
 
 fn copy_raw_mod_download_configs(run_dir: &Path) -> Result<Vec<PathBuf>> {
     let mut written = Vec::new();
-    for (source, file_name) in [
-        (
-            mod_downloads::mod_downloads_default_path(),
-            "mod_downloads_default.toml",
-        ),
-        (
-            mod_downloads::mod_downloads_user_path(),
-            "mod_downloads_user.toml",
-        ),
-    ] {
-        let destination = run_dir.join(file_name);
-        match fs::read_to_string(&source) {
-            Ok(content) => {
-                fs::write(&destination, content)?;
-                written.push(destination);
-            }
-            Err(err) => {
-                fs::write(
-                    &destination,
-                    format!("missing_or_unreadable={}\npath={}\n", err, source.display()),
-                )?;
-                written.push(destination);
-            }
+    let source = mod_downloads::mod_downloads_user_path();
+    let destination = run_dir.join("mod_downloads_user.toml");
+    match fs::read_to_string(&source) {
+        Ok(content) => {
+            fs::write(&destination, content)?;
+            written.push(destination);
+        }
+        Err(err) => {
+            fs::write(
+                &destination,
+                format!("missing_or_unreadable={}\npath={}\n", err, source.display()),
+            )?;
+            written.push(destination);
         }
     }
     Ok(written)

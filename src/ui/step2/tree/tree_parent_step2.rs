@@ -6,6 +6,7 @@ use eframe::egui;
 use crate::app::state::{Step2ModState, Step2Selection};
 use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
 use crate::ui::shared::redesign_tokens::ThemePalette;
+use crate::ui::shared::selected_row::selectable_row;
 use crate::ui::step2::tree_compat_display_step2::{parent_compat_summary, parent_compat_target};
 use crate::ui::step2::tree_selection_rules_step2::{
     enforce_collapsible_group_umbrella_after_bulk, enforce_meta_mode_after_bulk,
@@ -230,7 +231,7 @@ fn render_parent_selection_label(
     mod_header_label: &str,
     is_selected: bool,
 ) {
-    let row = ui.selectable_label(is_selected, mod_header_label);
+    let row = selectable_row(ui, ctx.palette, is_selected, mod_header_label);
     if *ctx.jump_to_selected_requested && is_selected {
         ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
         *ctx.jump_to_selected_requested = false;

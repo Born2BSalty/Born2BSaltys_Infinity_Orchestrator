@@ -3,13 +3,31 @@
 
 use eframe::egui;
 
-use crate::app::state::WizardState;
-use crate::install_runtime::archive_store;
-use crate::ui::install::sub_flow_footer::{self, BackBtn, PrimaryBtn};
-use crate::ui::orchestrator::nav_destination::NavDestination;
-use crate::ui::orchestrator::orchestrator_app::{
-    DestinationPrepFlow, PendingInstallDestinationPrep,
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::TryRecvError;
+use std::time::Duration;
+
+use crate::app::app_step2_update_download::{self, DownloadRefusal};
+use crate::app::state::{
+    DownloadOrigin, ManualDownloadReason, ManualDownloadRequest, Step2State, Step2UpdateAsset,
+    WizardState,
 };
+use crate::install_runtime::archive_store;
+use crate::install_runtime::manual_archive_probe::{self, ArchiveProbe, ProbeMatch, ProbeRefusal};
+use crate::install_runtime::manual_download_watcher::{self, WatchEvent};
+use crate::ui::install::manual_downloads_panel::{self, PanelAction};
+use crate::ui::install::state_install::{
+    ManualDownloadRow, ManualDownloadsState, ManualRowStatus, PipelineKind,
+};
+use crate::ui::install::sub_flow_footer::{self, BackBtn, LeftActionBtn, PrimaryBtn};
+use crate::ui::orchestrator::orchestrator_app::{
+    DestinationPrepFlow, OrchestratorApp, PendingInstallDestinationPrep,
+};
+use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{
+    self, ConfirmDialog, ConfirmOutcome,
+};
+use crate::ui::orchestrator::widgets::help_button::{self, HelpPage};
 use crate::ui::orchestrator::widgets::render_screen_title;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
@@ -17,7 +35,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_success, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
-const CHECK_STAGED: &str = "\u{2713}"; // ✓
+const CHECK_STAGED: &str = "\u{2713}";
 
 use crate::ui::shared::numeric::{
     f32_from_f64, f64_from_u64, pct_from_fraction, ratio_u64, ratio_usize, unit_f32,
@@ -178,7 +196,6 @@ pub struct DownloadProgress {
     pub rows: Vec<ModDownloadRow>,
     pub skipped: Vec<SkippedMod>,
     pub expected_sizes: std::collections::BTreeMap<usize, u64>,
-    pub asset_bytes: std::collections::BTreeMap<usize, (u64, Option<u64>)>,
     pub extract_progress: Option<(usize, usize)>,
     pub hash_progress: Option<(usize, usize)>,
 }
@@ -187,7 +204,6 @@ impl DownloadProgress {
     #[must_use]
     pub fn from_wizard_state_full(
         state: &WizardState,
-        prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
         prior_skipped: &[SkippedMod],
         prior_expected: &std::collections::BTreeMap<usize, u64>,
         hashed_indices: Option<&std::collections::HashSet<usize>>,
@@ -220,7 +236,13 @@ impl DownloadProgress {
                     } else if downloaded {
                         ModDownloadStatus::Extracting
                     } else if s2.update_selected_download_running {
-                        ModDownloadStatus::Downloading
+                        if s2.update_selected_download_bytes.contains_key(&i)
+                            && !s2.update_selected_download_done.contains(&i)
+                        {
+                            ModDownloadStatus::Downloading
+                        } else {
+                            ModDownloadStatus::Queued
+                        }
                     } else if hashed_indices.is_some_and(|h| !h.contains(&i)) {
                         ModDownloadStatus::Hashing
                     } else {
@@ -235,7 +257,7 @@ impl DownloadProgress {
                     name: a.label.clone(),
                     source: a.source_id.clone(),
                     status,
-                    per_byte: prior_bytes.get(&i).copied(),
+                    per_byte: s2.update_selected_download_bytes.get(&i).copied(),
                     expected_size,
                 }
             })
@@ -247,42 +269,14 @@ impl DownloadProgress {
             rows,
             skipped: Vec::new(),
             expected_sizes: prior_expected.clone(),
-            asset_bytes: prior_bytes.clone(),
             extract_progress: None,
             hash_progress: None,
         }
     }
 
     #[must_use]
-    pub fn from_wizard_state_with_bytes(
-        state: &WizardState,
-        prior_bytes: &std::collections::BTreeMap<usize, (u64, Option<u64>)>,
-    ) -> Self {
-        Self::from_wizard_state_full(
-            state,
-            prior_bytes,
-            &[],
-            &std::collections::BTreeMap::new(),
-            None,
-        )
-    }
-
-    #[must_use]
     pub fn from_wizard_state(state: &WizardState) -> Self {
-        Self::from_wizard_state_full(
-            state,
-            &std::collections::BTreeMap::new(),
-            &[],
-            &std::collections::BTreeMap::new(),
-            None,
-        )
-    }
-
-    pub fn set_asset_bytes(&mut self, index: usize, bytes: u64, total: Option<u64>) {
-        self.asset_bytes.insert(index, (bytes, total));
-        if let Some(row) = self.rows.get_mut(index) {
-            row.per_byte = Some((bytes, total));
-        }
+        Self::from_wizard_state_full(state, &[], &std::collections::BTreeMap::new(), None)
     }
 }
 
@@ -485,6 +479,7 @@ pub enum DownloadingOutcome {
     Stay,
     Cancel,
     Advance,
+    OpenWorkspace,
 }
 
 pub fn render(
@@ -493,7 +488,7 @@ pub fn render(
     copy: DownloadScreenCopy,
     progress: &DownloadProgress,
 ) -> DownloadingOutcome {
-    let back_clicked = render_chrome(ui, palette, copy, progress, None);
+    let (back_clicked, _) = render_chrome(ui, palette, copy, progress, None, None);
     if back_clicked {
         DownloadingOutcome::Cancel
     } else if progress.all_staged() {
@@ -505,7 +500,7 @@ pub fn render(
 
 pub fn render_live(
     ui: &mut egui::Ui,
-    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+    orchestrator: &mut OrchestratorApp,
     copy: DownloadScreenCopy,
 ) -> DownloadingOutcome {
     use crate::install_runtime::auto_build_driver;
@@ -515,17 +510,48 @@ pub fn render_live(
 
     arm_pipeline_once(orchestrator, &inputs);
     kick_explicit_resolve_once(orchestrator);
+    enter_manual_hold_once(orchestrator, &inputs);
     stage_and_kick_archive_skip_once(orchestrator, &inputs);
     kick_streaming_downloader_once(orchestrator);
     verify_downloaded_archives_once(orchestrator, &inputs.destination);
     ingest_downloaded_archives_once(orchestrator, &inputs.destination);
-    install_empty_asset_clean_finish(orchestrator);
+
+    if orchestrator
+        .install_screen_state
+        .manual_downloads
+        .continue_without
+        && !orchestrator
+            .install_screen_state
+            .manual_downloads
+            .extract_deferred
+        && super::stage_fork_download::fork_extract_complete(orchestrator)
+    {
+        return DownloadingOutcome::OpenWorkspace;
+    }
+    if let Some(outcome) = install_empty_asset_clean_finish(orchestrator) {
+        return outcome;
+    }
     gate_pre_step5_blocker_once(orchestrator);
     toast_version_override_warnings_once(orchestrator);
 
     let progress = build_and_hold_progress(orchestrator);
     let arm_error = orchestrator.install_screen_state.pipeline_arm_error.clone();
-    let back_clicked = render_chrome(ui, palette, copy, &progress, arm_error.as_deref());
+    let (back_clicked, panel_action) = render_chrome(
+        ui,
+        palette,
+        copy,
+        &progress,
+        arm_error.as_deref(),
+        Some(&mut orchestrator.install_screen_state.manual_downloads),
+    );
+
+    match panel_action {
+        PanelAction::OpenPage(index) => open_manual_page(orchestrator, index),
+        PanelAction::PickFile(index) => pick_manual_file(orchestrator, index),
+        PanelAction::None => {}
+    }
+
+    render_manual_confirm_dialog(ui, orchestrator, palette);
 
     if back_clicked {
         return DownloadingOutcome::Cancel;
@@ -548,12 +574,10 @@ impl LivePipelineInputs {
     pub(crate) fn from(
         orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
     ) -> Self {
-        let workflow = if orchestrator.install_screen_state.is_partial() {
-            crate::install_runtime::flag_policies::InstallWorkflow::ContinuePartialInstall
-        } else {
-            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall
-        };
-        Self::from_workflow(orchestrator, workflow)
+        Self::from_workflow(
+            orchestrator,
+            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+        )
     }
 
     pub(crate) fn from_workflow(
@@ -584,7 +608,7 @@ pub(crate) fn arm_pipeline_once(
     use crate::install_runtime::destination_prep;
     use std::sync::mpsc::TryRecvError;
 
-    let flow = install_destination_prep_flow(orchestrator);
+    let flow = install_destination_prep_flow(orchestrator.install_screen_state.pipeline_kind);
 
     if orchestrator.install_screen_state.pipeline_flags.armed()
         || orchestrator
@@ -594,6 +618,12 @@ pub(crate) fn arm_pipeline_once(
     {
         return;
     }
+
+    orchestrator
+        .wizard_state
+        .step2
+        .skipped_manual_downloads
+        .clear();
 
     if let Some(pending) = orchestrator.install_destination_prep_rx.as_ref() {
         if !pending.matches_context(
@@ -677,13 +707,10 @@ pub(crate) fn arm_pipeline_once(
         "Auto Build: preparing target destination".to_string();
 }
 
-const fn install_destination_prep_flow(
-    orchestrator: &crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
-) -> DestinationPrepFlow {
-    if matches!(orchestrator.nav, NavDestination::Create) {
-        DestinationPrepFlow::CreateForkDownload
-    } else {
-        DestinationPrepFlow::InstallPipeline
+pub(crate) const fn install_destination_prep_flow(kind: PipelineKind) -> DestinationPrepFlow {
+    match kind {
+        PipelineKind::Fork => DestinationPrepFlow::CreateForkDownload,
+        PipelineKind::Install => DestinationPrepFlow::InstallPipeline,
     }
 }
 
@@ -700,8 +727,23 @@ fn finish_pipeline_arm_after_destination_prep(
         .pipeline_flags
         .set_armed(true);
 
+    let held_id = match orchestrator.install_screen_state.pipeline_kind {
+        PipelineKind::Fork => orchestrator.active_install_modlist_id.clone(),
+        PipelineKind::Install => orchestrator.pending_reinstall_id.clone(),
+    };
+
     let early_mint_result = if auto_build_driver::is_share_code_consuming(inputs.workflow) {
-        install_modlist_registration::early_mint_modlist_id(orchestrator, &inputs.destination)
+        match install_modlist_registration::early_mint_modlist_id(
+            orchestrator,
+            &inputs.destination,
+            held_id.as_deref(),
+        ) {
+            Ok(result) => result,
+            Err(err) => {
+                set_pipeline_arm_error(orchestrator, &err);
+                return;
+            }
+        }
     } else {
         None
     };
@@ -737,7 +779,10 @@ fn finish_pipeline_arm_after_destination_prep(
                 &mut orchestrator.wizard_state,
                 &mods_archive_folder,
             );
-            install_modlist_registration::register_and_write_install_start_artifacts(orchestrator);
+            install_modlist_registration::register_and_write_install_start_artifacts(
+                orchestrator,
+                early_mint_result.as_ref().map(|(id, _)| id.as_str()),
+            );
         }
         Err(err) => {
             if let Some((ref id, true)) = early_mint_result {
@@ -792,9 +837,633 @@ pub(crate) fn kick_explicit_resolve_once(
     );
 }
 
-fn install_empty_asset_clean_finish(
-    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+fn manual_row_url_host(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let after_scheme = trimmed.split_once("://").map_or(trimmed, |(_, rest)| rest);
+    let host = after_scheme.split(['/', '?']).next()?;
+    let host = if host
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("www."))
+    {
+        &host[4..]
+    } else {
+        host
+    };
+    if host.is_empty() {
+        None
+    } else {
+        Some(host.to_string())
+    }
+}
+
+fn manual_row_from_request(request: &ManualDownloadRequest) -> ManualDownloadRow {
+    let from = match &request.reason {
+        ManualDownloadReason::NoSourceEntry => "no source entry".to_string(),
+        ManualDownloadReason::NotAutoResolvable | ManualDownloadReason::SourceCheckFailed(_) => {
+            manual_row_url_host(&request.page_url)
+                .unwrap_or_else(|| "source check failed".to_string())
+        }
+    };
+    let display_name = request.display_name.trim();
+    let label = if display_name.is_empty() {
+        request.label.clone()
+    } else {
+        display_name.to_string()
+    };
+    ManualDownloadRow {
+        label,
+        from,
+        page_url: request.page_url.clone(),
+        status: ManualRowStatus::Waiting,
+    }
+}
+
+const fn manual_hold_pending(orchestrator: &OrchestratorApp) -> bool {
+    orchestrator
+        .install_screen_state
+        .manual_downloads
+        .rows
+        .is_empty()
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_manual_downloads
+            .is_empty()
+}
+
+const fn manual_hold_entry_ready(orchestrator: &OrchestratorApp) -> bool {
+    let flags = orchestrator.install_screen_state.pipeline_flags;
+    flags.armed()
+        && orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_none()
+        && flags.explicit_resolve_started()
+        && !flags.archives_staged()
+        && !orchestrator
+            .wizard_state
+            .step2
+            .update_selected_check_running
+}
+
+fn enter_manual_hold_once(orchestrator: &mut OrchestratorApp, inputs: &LivePipelineInputs) {
+    enter_manual_hold_once_with_poll(orchestrator, inputs, Duration::from_secs(2));
+}
+
+fn enter_manual_hold_once_with_poll(
+    orchestrator: &mut OrchestratorApp,
+    inputs: &LivePipelineInputs,
+    poll: Duration,
+) -> Option<std::sync::Arc<()>> {
+    if !manual_hold_entry_ready(orchestrator) || !manual_hold_pending(orchestrator) {
+        return None;
+    }
+    let archive_dir = orchestrator
+        .wizard_state
+        .step1
+        .mods_archive_folder
+        .trim()
+        .to_string();
+    let rows: Vec<ManualDownloadRow> = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_manual_downloads
+        .iter()
+        .map(manual_row_from_request)
+        .collect();
+    orchestrator.install_screen_state.manual_downloads.rows = rows;
+    orchestrator
+        .install_screen_state
+        .manual_downloads
+        .watched_folder
+        .clone_from(&archive_dir);
+    let expected =
+        crate::registry::share_export::decode_archive_meta(&inputs.code).unwrap_or_default();
+    orchestrator
+        .install_screen_state
+        .expected_archive_meta
+        .clone_from(&expected);
+    let baseline: Vec<(PathBuf, u64, std::time::SystemTime)> = if archive_dir.is_empty() {
+        Vec::new()
+    } else {
+        std::fs::read_dir(&archive_dir).map_or_else(
+            |_| Vec::new(),
+            |read_dir| {
+                read_dir
+                    .flatten()
+                    .filter_map(|entry| {
+                        let metadata = entry.metadata().ok()?;
+                        if !metadata.is_file() {
+                            return None;
+                        }
+                        let modified = metadata.modified().ok()?;
+                        Some((entry.path(), metadata.len(), modified))
+                    })
+                    .collect()
+            },
+        )
+    };
+    orchestrator.install_screen_state.manual_downloads.baseline = baseline;
+    tracing::info!(
+        target = "orchestrator",
+        "manual downloads hold entered for {} request(s); watching {archive_dir}",
+        orchestrator
+            .install_screen_state
+            .manual_downloads
+            .rows
+            .len(),
+    );
+    if archive_dir.is_empty() {
+        return None;
+    }
+    let wanted_sizes: HashSet<u64> = expected.iter().map(|meta| meta.size).collect();
+    let ignored_names: HashSet<String> = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_update_assets
+        .iter()
+        .map(|asset| crate::app::app_step2_update_download::archive_file_name(asset).to_lowercase())
+        .collect();
+    let (rx, alive) = manual_download_watcher::start_watch(
+        PathBuf::from(&archive_dir),
+        wanted_sizes,
+        ignored_names,
+        poll,
+    );
+    orchestrator.manual_download_rx = Some(rx);
+    Some(alive)
+}
+
+fn push_manual_unmatched(manual: &mut ManualDownloadsState, name: String) {
+    if !manual.unmatched.contains(&name) {
+        manual.unmatched.push(name);
+    }
+}
+
+fn remove_manual_request_label(step2: &mut Step2State, request: &ManualDownloadRequest) {
+    match &request.reason {
+        ManualDownloadReason::NotAutoResolvable => {
+            step2
+                .update_selected_manual_sources
+                .retain(|label| label != &request.label);
+        }
+        ManualDownloadReason::NoSourceEntry => {
+            step2
+                .update_selected_unknown_sources
+                .retain(|label| label != &request.label);
+        }
+        ManualDownloadReason::SourceCheckFailed(_) => {
+            let prefix = format!("{}:", request.label);
+            step2
+                .update_selected_failed_sources
+                .retain(|entry| !entry.starts_with(&prefix));
+        }
+    }
+}
+
+fn decompose_manual_store_name(store_name: &str, tp2_prefix: &str) -> (String, String) {
+    let ext = crate::app::app_step2_update_download::archive_extension(store_name);
+    let stem = store_name.strip_suffix(ext.as_str()).unwrap_or(store_name);
+    let rest = stem
+        .strip_prefix(&format!("{tp2_prefix}__"))
+        .unwrap_or(stem);
+    rest.split_once("__").map_or_else(
+        || ("manual".to_string(), rest.to_string()),
+        |(source, tag)| (source.to_string(), tag.to_string()),
+    )
+}
+
+fn apply_manual_match(
+    orchestrator: &mut OrchestratorApp,
+    index: usize,
+    probe_path: &Path,
+    archive_dir: &Path,
+    result: ProbeMatch,
+    expected: &[crate::registry::share_export::ArchiveMeta],
+) -> bool {
+    let store_name = match result {
+        ProbeMatch::Meta { store_name } | ProbeMatch::Tp2 { store_name } => store_name,
+    };
+    let Some(request) = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_manual_downloads
+        .get(index)
+        .cloned()
+    else {
+        return false;
+    };
+    let target = archive_dir.join(&store_name);
+    let placed = if probe_path != target && target.exists() {
+        let wanted_sizes: HashSet<u64> = expected.iter().map(|meta| meta.size).collect();
+        let verified = manual_archive_probe::probe_archive(&target, &wanted_sizes)
+            .ok()
+            .and_then(|target_probe| {
+                manual_archive_probe::match_request(&target_probe, &request, expected).ok()
+            });
+        if verified.is_none() {
+            let file_name = probe_path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("file");
+            set_manual_refusal(
+                orchestrator,
+                index,
+                format!("{file_name}: a different file already sits at {store_name}"),
+            );
+            return false;
+        }
+        target
+    } else {
+        let already_handled = orchestrator
+            .install_screen_state
+            .manual_downloads
+            .handled
+            .iter()
+            .any(|path| path == probe_path);
+        let placement = if already_handled {
+            manual_archive_probe::copy_into_store(probe_path, archive_dir, &store_name)
+        } else {
+            manual_archive_probe::place_into_store(probe_path, archive_dir, &store_name)
+        };
+        match placement {
+            Ok(path) => path,
+            Err(err) => {
+                push_manual_unmatched(
+                    &mut orchestrator.install_screen_state.manual_downloads,
+                    format!("{store_name}: {err}"),
+                );
+                return false;
+            }
+        }
+    };
+    orchestrator
+        .install_screen_state
+        .manual_downloads
+        .handled
+        .push(placed);
+    if let Some(row) = orchestrator
+        .install_screen_state
+        .manual_downloads
+        .rows
+        .get_mut(index)
+    {
+        row.status = ManualRowStatus::Found;
+    }
+    let tp2_prefix = crate::app::app_step2_update_download::tp2_archive_name(&request.tp_file);
+    let (source_id, tag) = decompose_manual_store_name(&store_name, &tp2_prefix);
+    let dest = archive_dir.join(&store_name);
+    orchestrator
+        .wizard_state
+        .step2
+        .update_selected_update_assets
+        .push(Step2UpdateAsset {
+            game_tab: request.game_tab.clone(),
+            tp_file: request.tp_file.clone(),
+            label: request.label.clone(),
+            source_id,
+            tag,
+            asset_name: store_name,
+            asset_url: String::new(),
+            installed_source_ref: None,
+        });
+    push_downloaded_entry_once(
+        &mut orchestrator
+            .wizard_state
+            .step2
+            .update_selected_downloaded_sources,
+        &request.label,
+        &dest,
+    );
+    remove_manual_request_label(&mut orchestrator.wizard_state.step2, &request);
+    true
+}
+
+fn find_manual_match(
+    orchestrator: &OrchestratorApp,
+    probe: &ArchiveProbe,
+    requests: &[ManualDownloadRequest],
+    expected: &[crate::registry::share_export::ArchiveMeta],
+) -> Option<(usize, ProbeMatch)> {
+    for (index, row) in orchestrator
+        .install_screen_state
+        .manual_downloads
+        .rows
+        .iter()
+        .enumerate()
+    {
+        if !matches!(
+            row.status,
+            ManualRowStatus::Waiting | ManualRowStatus::Refused(_)
+        ) {
+            continue;
+        }
+        let request = requests.get(index)?;
+        if let Ok(result) = manual_archive_probe::match_request(probe, request, expected) {
+            return Some((index, result));
+        }
+    }
+    None
+}
+
+fn handle_manual_candidate(orchestrator: &mut OrchestratorApp, probe: &ArchiveProbe) {
+    if orchestrator
+        .install_screen_state
+        .manual_downloads
+        .handled
+        .contains(&probe.path)
+    {
+        return;
+    }
+    let requests = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_manual_downloads
+        .clone();
+    let expected = orchestrator
+        .install_screen_state
+        .expected_archive_meta
+        .clone();
+    let archive_dir = PathBuf::from(orchestrator.wizard_state.step1.mods_archive_folder.trim());
+    let mut current = probe.clone();
+    let mut matched_any = false;
+    while let Some((index, result)) =
+        find_manual_match(orchestrator, &current, &requests, &expected)
+    {
+        matched_any = true;
+        let store_name = match &result {
+            ProbeMatch::Meta { store_name } | ProbeMatch::Tp2 { store_name } => store_name.clone(),
+        };
+        let placed = apply_manual_match(
+            orchestrator,
+            index,
+            &current.path,
+            &archive_dir,
+            result,
+            &expected,
+        );
+        if !placed {
+            break;
+        }
+        current.path = archive_dir.join(&store_name);
+    }
+    if !matched_any && !probe_matches_baseline(orchestrator, probe) {
+        push_manual_unmatched(
+            &mut orchestrator.install_screen_state.manual_downloads,
+            probe.file_name.clone(),
+        );
+    }
+}
+
+fn probe_matches_baseline(orchestrator: &OrchestratorApp, probe: &ArchiveProbe) -> bool {
+    let Ok(modified) = std::fs::metadata(&probe.path).and_then(|meta| meta.modified()) else {
+        return false;
+    };
+    orchestrator
+        .install_screen_state
+        .manual_downloads
+        .baseline
+        .iter()
+        .any(|(path, size, base_modified)| {
+            path == &probe.path && *size == probe.size && *base_modified == modified
+        })
+}
+
+pub(crate) fn drain_manual_download_events(orchestrator: &mut OrchestratorApp) {
+    loop {
+        let event = match orchestrator.manual_download_rx.as_ref() {
+            Some(rx) => rx.try_recv(),
+            None => return,
+        };
+        match event {
+            Ok(WatchEvent::Tick) => {}
+            Ok(WatchEvent::Candidate(probe)) => handle_manual_candidate(orchestrator, &probe),
+            Ok(WatchEvent::Error(msg)) => {
+                push_manual_unmatched(&mut orchestrator.install_screen_state.manual_downloads, msg);
+            }
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => {
+                orchestrator.manual_download_rx = None;
+                return;
+            }
+        }
+        let rows = &orchestrator.install_screen_state.manual_downloads.rows;
+        if !rows.is_empty() && rows.iter().all(|row| row.status == ManualRowStatus::Found) {
+            orchestrator.manual_download_rx = None;
+            return;
+        }
+    }
+}
+
+fn set_manual_refusal(orchestrator: &mut OrchestratorApp, index: usize, reason: String) {
+    if let Some(row) = orchestrator
+        .install_screen_state
+        .manual_downloads
+        .rows
+        .get_mut(index)
+    {
+        row.status = ManualRowStatus::Refused(reason.clone());
+    }
+    orchestrator
+        .install_screen_state
+        .manual_downloads
+        .last_refusal = Some(reason);
+}
+
+fn pick_manual_file(orchestrator: &mut OrchestratorApp, index: usize) {
+    if orchestrator
+        .wizard_state
+        .step1
+        .mods_archive_folder
+        .trim()
+        .is_empty()
+    {
+        set_manual_refusal(
+            orchestrator,
+            index,
+            "set your Mods archive folder in Settings \u{2192} Paths first".to_string(),
+        );
+        return;
+    }
+    let Some(path) = rfd::FileDialog::new().pick_file() else {
+        return;
+    };
+    let expected = orchestrator
+        .install_screen_state
+        .expected_archive_meta
+        .clone();
+    let wanted_sizes: HashSet<u64> = expected.iter().map(|meta| meta.size).collect();
+    let probe = match manual_archive_probe::probe_archive(&path, &wanted_sizes) {
+        Ok(probe) => probe,
+        Err(err) => {
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("file")
+                .to_string();
+            set_manual_refusal(orchestrator, index, format!("{name}: {err}"));
+            return;
+        }
+    };
+    let Some(request) = orchestrator
+        .wizard_state
+        .step2
+        .update_selected_manual_downloads
+        .get(index)
+        .cloned()
+    else {
+        return;
+    };
+    match manual_archive_probe::match_request(&probe, &request, &expected) {
+        Ok(result) => {
+            let archive_dir =
+                PathBuf::from(orchestrator.wizard_state.step1.mods_archive_folder.trim());
+            apply_manual_match(
+                orchestrator,
+                index,
+                &probe.path,
+                &archive_dir,
+                result,
+                &expected,
+            );
+        }
+        Err(refusal) => {
+            let reason = match refusal {
+                ProbeRefusal::Unsupported => {
+                    format!("{}: not a zip, 7z, rar or tar.gz archive", probe.file_name)
+                }
+                ProbeRefusal::NoTp2 { wanted } => {
+                    format!("{}: no {wanted} inside", probe.file_name)
+                }
+            };
+            set_manual_refusal(orchestrator, index, reason);
+        }
+    }
+}
+
+fn open_manual_page(orchestrator: &mut OrchestratorApp, index: usize) {
+    let Some(url) = orchestrator
+        .install_screen_state
+        .manual_downloads
+        .rows
+        .get(index)
+        .map(|row| row.page_url.clone())
+    else {
+        return;
+    };
+    let target = manual_archive_probe::page_url_to_open(&url);
+    if let Err(err) = crate::app::controller::util::open_in_shell(&target) {
+        orchestrator
+            .notification_manager
+            .error(format!("Could not open the page: {err}"));
+    }
+}
+
+fn confirm_continue_without(orchestrator: &mut OrchestratorApp) {
+    let labels: Vec<String> = orchestrator
+        .install_screen_state
+        .manual_downloads
+        .rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.status != ManualRowStatus::Found)
+        .map(|(index, row)| {
+            orchestrator
+                .wizard_state
+                .step2
+                .update_selected_manual_downloads
+                .get(index)
+                .map_or_else(|| row.label.clone(), |request| request.label.clone())
+        })
+        .collect();
+    orchestrator
+        .install_screen_state
+        .manual_downloads
+        .continue_without = true;
+    for row in &mut orchestrator.install_screen_state.manual_downloads.rows {
+        if row.status != ManualRowStatus::Found {
+            row.status = ManualRowStatus::Skipped;
+        }
+    }
+    orchestrator.wizard_state.step2.skipped_manual_downloads = labels;
+    orchestrator
+        .install_screen_state
+        .manual_downloads
+        .confirm_open = false;
+    orchestrator.manual_download_rx = None;
+}
+
+fn manual_continue_without_title(pending: usize) -> String {
+    if pending == 1 {
+        "Continue without 1 mod?".to_string()
+    } else {
+        format!("Continue without {pending} mods?")
+    }
+}
+
+fn render_manual_confirm_dialog(
+    ui: &egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+    palette: ThemePalette,
 ) {
+    if !orchestrator
+        .install_screen_state
+        .manual_downloads
+        .confirm_open
+    {
+        return;
+    }
+    let pending = orchestrator
+        .install_screen_state
+        .manual_downloads
+        .pending_count();
+    let labels: Vec<String> = orchestrator
+        .install_screen_state
+        .manual_downloads
+        .rows
+        .iter()
+        .filter(|row| row.status != ManualRowStatus::Found)
+        .map(|row| row.label.clone())
+        .collect();
+    let title = manual_continue_without_title(pending);
+    let body = format!(
+        "{} will be skipped. The install may fail on anything that depends on them. \
+         You'll land on Mods / Components to review the list before installing.",
+        labels.join(", ")
+    );
+    let dialog = ConfirmDialog {
+        id_salt: "manual_downloads_continue_without",
+        title: &title,
+        body: &body,
+        confirm_label: "Continue without them",
+        cancel_label: "Keep waiting",
+        danger: false,
+    };
+    match confirm_dialog::render(ui.ctx(), palette, &dialog) {
+        ConfirmOutcome::Confirmed => confirm_continue_without(orchestrator),
+        ConfirmOutcome::Cancelled => {
+            orchestrator
+                .install_screen_state
+                .manual_downloads
+                .confirm_open = false;
+        }
+        ConfirmOutcome::Pending => {}
+    }
+}
+
+fn install_empty_asset_clean_finish(
+    orchestrator: &mut OrchestratorApp,
+) -> Option<DownloadingOutcome> {
+    if orchestrator
+        .install_screen_state
+        .manual_downloads
+        .manual_hold_active()
+    {
+        return None;
+    }
     let flags = orchestrator.install_screen_state.pipeline_flags;
     if !flags.armed()
         || orchestrator
@@ -813,8 +1482,12 @@ fn install_empty_asset_clean_finish(
             .update_selected_update_assets
             .is_empty()
     {
-        return;
+        return None;
     }
+    let continue_without = orchestrator
+        .install_screen_state
+        .manual_downloads
+        .continue_without;
     let skip_count = orchestrator.install_screen_state.skip_indices.len();
     let extracted_count = orchestrator
         .wizard_state
@@ -822,16 +1495,17 @@ fn install_empty_asset_clean_finish(
         .update_selected_extracted_sources
         .len();
     let archives_observed = extracted_count + skip_count;
-    if let Some(reason) = crate::app::app_step2_saved_log_flow::unresolved_required_mods_blocker(
+    let blocker = crate::app::app_step2_saved_log_flow::unresolved_required_mods_blocker(
         &orchestrator.wizard_state,
-    ) {
+    );
+    if !continue_without && let Some(reason) = blocker {
         orchestrator.install_screen_state.pipeline_arm_error = Some(reason.clone());
         orchestrator.wizard_state.modlist_auto_build_active = false;
         orchestrator
             .wizard_state
             .modlist_auto_build_waiting_for_install = false;
         tracing::warn!(target = "orchestrator", "{reason}");
-        return;
+        return None;
     }
     let assets_still_empty = orchestrator
         .wizard_state
@@ -839,17 +1513,44 @@ fn install_empty_asset_clean_finish(
         .update_selected_update_assets
         .is_empty();
     if assets_still_empty && (archives_observed > 0 || !flags.archives_staged()) {
+        if continue_without {
+            let step2 = &orchestrator.wizard_state.step2;
+            let post_extract_scan_running = step2.is_scanning
+                || step2.pending_saved_log_apply
+                || step2.pending_saved_log_update_preview
+                || step2.update_selected_download_running
+                || step2.update_selected_extract_running;
+            if post_extract_scan_running
+                || orchestrator
+                    .install_screen_state
+                    .manual_downloads
+                    .extract_deferred
+            {
+                return None;
+            }
+            tracing::info!(
+                target = "orchestrator",
+                "install path: continue-without with zero assets — routing to workspace"
+            );
+            return Some(DownloadingOutcome::OpenWorkspace);
+        }
         tracing::info!(
             target = "orchestrator",
             "install path: zero assets after resolve — routing to Step 5"
         );
         route_install_to_step5(&mut orchestrator.wizard_state);
     }
+    None
 }
 
-fn gate_pre_step5_blocker_once(
-    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
-) {
+fn gate_pre_step5_blocker_once(orchestrator: &mut OrchestratorApp) {
+    if orchestrator
+        .install_screen_state
+        .manual_downloads
+        .manual_hold_active()
+    {
+        return;
+    }
     let flags = orchestrator.install_screen_state.pipeline_flags;
     if !flags.armed()
         || !flags.explicit_resolve_started()
@@ -868,6 +1569,13 @@ fn gate_pre_step5_blocker_once(
         return;
     }
     orchestrator.install_screen_state.pre_step5_blocker_checked = true;
+    if orchestrator
+        .install_screen_state
+        .manual_downloads
+        .continue_without
+    {
+        return;
+    }
     if let Some(reason) = crate::app::app_step2_saved_log_flow::unresolved_required_mods_blocker(
         &orchestrator.wizard_state,
     ) {
@@ -924,11 +1632,8 @@ fn route_install_to_step5(state: &mut crate::app::state::WizardState) {
     state.step5.last_status_text = "Auto Build: ready to install".to_string();
 }
 
-pub(crate) fn stage_and_kick_archive_skip_once(
-    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
-    inputs: &LivePipelineInputs,
-) {
-    if !orchestrator
+const fn cache_check_ready(orchestrator: &OrchestratorApp, inputs: &LivePipelineInputs) -> bool {
+    !orchestrator
         .install_screen_state
         .pipeline_flags
         .archives_staged()
@@ -939,7 +1644,13 @@ pub(crate) fn stage_and_kick_archive_skip_once(
             .step2
             .update_selected_update_assets
             .is_empty()
-    {
+}
+
+pub(crate) fn stage_and_kick_archive_skip_once(
+    orchestrator: &mut OrchestratorApp,
+    inputs: &LivePipelineInputs,
+) {
+    if cache_check_ready(orchestrator, inputs) && !manual_hold_pending(orchestrator) {
         orchestrator
             .install_screen_state
             .pipeline_flags
@@ -968,6 +1679,25 @@ pub(crate) fn stage_and_kick_archive_skip_once(
             })
             .collect();
         orchestrator.install_screen_state.skipped_mods = Vec::new();
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_download_bytes
+            .clear();
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_download_done
+            .clear();
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_extract_progress = None;
+        orchestrator
+            .wizard_state
+            .step2
+            .update_selected_extract_jobs
+            .clear();
         orchestrator.install_screen_state.expected_archive_sizes = expected_sizes;
         orchestrator.install_screen_state.skip_indices = std::collections::HashSet::new();
         orchestrator
@@ -1009,9 +1739,7 @@ pub(crate) fn stage_and_kick_archive_skip_once(
     }
 }
 
-pub(crate) fn kick_streaming_downloader_once(
-    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
-) {
+pub(crate) fn kick_streaming_downloader_once(orchestrator: &mut OrchestratorApp) {
     use crate::install_runtime::auto_build_driver;
 
     if orchestrator.install_screen_state.pipeline_flags.armed()
@@ -1036,13 +1764,16 @@ pub(crate) fn kick_streaming_downloader_once(
             .install_screen_state
             .pipeline_flags
             .set_download_phase_started(true);
-        let skip_indices = orchestrator.install_screen_state.skip_indices.clone();
-        if let Some(rx) = crate::install_runtime::stream_downloader::start_stream_download(
+        let mut skip_indices = orchestrator.install_screen_state.skip_indices.clone();
+        mark_empty_url_assets_as_cache_hits(orchestrator, &mut skip_indices);
+        match app_step2_update_download::start_step2_update_download_scoped(
             &mut orchestrator.wizard_state,
+            &mut orchestrator.step2_update_download_rx,
+            None,
             &skip_indices,
+            DownloadOrigin::InstallPipeline,
         ) {
-            orchestrator.stream_download_rx = Some(rx);
-            tracing::info!(
+            Ok(()) => tracing::info!(
                 target = "orchestrator",
                 "parallel streaming downloader spawned for {} asset(s); \
                  bypasses {} skipped index/indices",
@@ -1052,13 +1783,68 @@ pub(crate) fn kick_streaming_downloader_once(
                     .update_selected_update_assets
                     .len(),
                 skip_indices.len()
+            ),
+            Err(DownloadRefusal::NothingToDownload) => {
+                tracing::info!(
+                    target = "orchestrator",
+                    "every asset is already on disk; finishing the download stage at once"
+                );
+                orchestrator.after_download_finished();
+            }
+            Err(refusal) => tracing::warn!(
+                target = "orchestrator",
+                ?refusal,
+                "parallel streaming downloader not started"
+            ),
+        }
+    }
+}
+
+fn downloaded_entry_already_recorded(sources: &[String], label: &str) -> bool {
+    sources.iter().any(|entry| {
+        entry
+            .split_once(" -> ")
+            .is_some_and(|(l, _)| l.trim() == label)
+    })
+}
+
+fn push_downloaded_entry_once(sources: &mut Vec<String>, label: &str, dest: &Path) {
+    if !downloaded_entry_already_recorded(sources, label) {
+        sources.push(format!("{label} -> {}", dest.display()));
+    }
+}
+
+fn mark_empty_url_assets_as_cache_hits(
+    orchestrator: &mut OrchestratorApp,
+    skip_indices: &mut HashSet<usize>,
+) {
+    let archive_dir = PathBuf::from(orchestrator.wizard_state.step1.mods_archive_folder.trim());
+    for (index, asset) in orchestrator
+        .wizard_state
+        .step2
+        .update_selected_update_assets
+        .iter()
+        .enumerate()
+    {
+        if asset.asset_url.trim().is_empty() {
+            skip_indices.insert(index);
+            let dest = archive_dir.join(crate::app::app_step2_update_download::archive_file_name(
+                asset,
+            ));
+            push_downloaded_entry_once(
+                &mut orchestrator
+                    .wizard_state
+                    .step2
+                    .update_selected_downloaded_sources,
+                &asset.label,
+                &dest,
             );
         }
     }
 }
 
 pub(crate) fn verify_downloaded_archives_once(
-    orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+    orchestrator: &mut OrchestratorApp,
     destination: &str,
 ) {
     if !orchestrator
@@ -1132,7 +1918,11 @@ pub(crate) fn ingest_downloaded_archives_once(
         && !destination_empty
         && !download_running
         && flags.download_phase_started()
-        && downloaded_sources > 0;
+        && downloaded_sources > 0
+        && !orchestrator
+            .install_screen_state
+            .manual_downloads
+            .manual_hold_active();
     if flags.download_phase_started() && !flags.archives_ingested() && !download_running {
         tracing::info!(
             target = "orchestrator",
@@ -1168,11 +1958,6 @@ pub(crate) fn ingest_downloaded_archives_once(
 pub(crate) fn build_and_hold_progress(
     orchestrator: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
 ) -> DownloadProgress {
-    let prior_bytes = orchestrator
-        .install_screen_state
-        .download_progress
-        .asset_bytes
-        .clone();
     let prior_skipped = orchestrator.install_screen_state.skipped_mods.clone();
     let prior_expected = orchestrator
         .install_screen_state
@@ -1190,12 +1975,15 @@ pub(crate) fn build_and_hold_progress(
     };
     let mut progress = DownloadProgress::from_wizard_state_full(
         &orchestrator.wizard_state,
-        &prior_bytes,
         &prior_skipped,
         &prior_expected,
         hashed,
     );
-    progress.extract_progress = orchestrator.extract_progress.lock().ok().and_then(|g| *g);
+    let step2 = &orchestrator.wizard_state.step2;
+    progress.extract_progress = (step2.update_selected_download_origin
+        == DownloadOrigin::InstallPipeline)
+        .then_some(step2.update_selected_extract_progress)
+        .flatten();
     progress.hash_progress = orchestrator.hash_progress.lock().ok().and_then(|g| *g);
 
     let hold_prior_grid = progress.rows.is_empty()
@@ -1222,32 +2010,90 @@ pub(crate) fn build_and_hold_progress(
     }
 }
 
+const fn downloading_middle_height(available_height: f32) -> f32 {
+    (available_height - sub_flow_footer::FOOTER_HEIGHT_PX).max(0.0)
+}
+
 pub(crate) fn render_chrome(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     copy: DownloadScreenCopy,
     progress: &DownloadProgress,
     arm_error: Option<&str>,
-) -> bool {
-    render_screen_title(ui, palette, copy.title, Some(copy.sub));
+    manual: Option<&mut ManualDownloadsState>,
+) -> (bool, PanelAction) {
+    let help_page = HelpPage::Downloading {
+        manual_downloads: manual.is_some(),
+    };
+    ui.horizontal_top(|ui| {
+        let title_width = (ui.available_width() - 30.0).max(0.0);
+        ui.vertical(|ui| {
+            ui.set_width(title_width);
+            render_screen_title(ui, palette, copy.title, Some(copy.sub));
+        });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            help_button::render(ui, palette, help_page);
+        });
+    });
     ui.add_space(12.0);
 
-    if let Some(err) = arm_error {
-        render_arm_error_banner(ui, palette, err);
-        ui.add_space(14.0);
-    }
+    let mut panel_action = PanelAction::None;
+    let mut hold_active = false;
+    let mut left_action_label = String::new();
+    let waiting: Option<String> = manual.as_deref().and_then(|state| {
+        (state.manual_hold_active() && (state.extract_deferred || progress.rows.is_empty()))
+            .then(|| state.waiting_label())
+    });
 
-    render_overall_progress(ui, palette, copy.hint, progress);
-    ui.add_space(14.0);
+    let body_h = downloading_middle_height(ui.available_height());
+    ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                if let Some(err) = arm_error {
+                    render_arm_error_banner(ui, palette, err);
+                    ui.add_space(14.0);
+                }
 
-    let footer_h = sub_flow_footer::FOOTER_HEIGHT_PX;
-    let grid_budget = (ui.available_height() - footer_h - 8.0).max(140.0);
-    render_mod_progress(ui, palette, progress, grid_budget);
+                render_overall_progress(ui, palette, copy.hint, progress, waiting.as_deref());
+                ui.add_space(14.0);
 
-    let spacer = (ui.available_height() - footer_h).max(0.0);
-    if spacer > 0.0 {
-        ui.add_space(spacer);
-    }
+                (panel_action, hold_active, left_action_label) = manual.as_deref().map_or_else(
+                    || (PanelAction::None, false, String::new()),
+                    |state| {
+                        let panel_action = if state.rows.is_empty() {
+                            PanelAction::None
+                        } else {
+                            let action = manual_downloads_panel::render(
+                                ui,
+                                palette,
+                                state,
+                                box_frame(palette),
+                                state.last_refusal.as_deref(),
+                            );
+                            ui.add_space(14.0);
+                            action
+                        };
+                        (
+                            panel_action,
+                            state.manual_hold_active(),
+                            state.continue_label(),
+                        )
+                    },
+                );
+
+                let grid_budget = (ui.available_height() - 8.0).max(140.0);
+                render_mod_progress(ui, palette, progress, grid_budget);
+            });
+    });
+
+    let left_action = if hold_active {
+        Some(LeftActionBtn {
+            label: &left_action_label,
+        })
+    } else {
+        None
+    };
 
     let footer = sub_flow_footer::render(
         ui,
@@ -1255,12 +2101,18 @@ pub(crate) fn render_chrome(
         Some(BackBtn { label: "Cancel" }),
         None::<sub_flow_footer::SecondaryBtn<'_>>,
         None,
+        left_action,
         PrimaryBtn {
-            label: "Waiting\u{2026}",
+            label: waiting.as_deref().unwrap_or("Waiting\u{2026}"),
             disabled: true,
         },
     );
-    footer.back_clicked
+    if footer == sub_flow_footer::FooterClick::LeftAction
+        && let Some(state) = manual
+    {
+        state.confirm_open = true;
+    }
+    (footer == sub_flow_footer::FooterClick::Back, panel_action)
 }
 
 fn render_overall_progress(
@@ -1268,6 +2120,7 @@ fn render_overall_progress(
     palette: ThemePalette,
     hint: Option<&str>,
     progress: &DownloadProgress,
+    waiting_headline: Option<&str>,
 ) {
     box_frame(palette).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -1289,20 +2142,27 @@ fn render_overall_progress(
         let ex_pct = progress.extract_overall_pct();
 
         let preparing = progress.is_preparing_install();
-        let phase_line = if preparing {
-            "Preparing to install \u{2026}".to_string()
-        } else {
-            let (verb, n, t, p) = match phase {
-                InstallPhase::Hashing => (InstallPhase::Hashing.verb(), h_n, h_total, h_pct),
-                InstallPhase::Downloading => {
-                    (InstallPhase::Downloading.verb(), dl_n, dl_total, dl_pct)
+        let phase_line = waiting_headline.map_or_else(
+            || {
+                if preparing {
+                    "Preparing to install \u{2026}".to_string()
+                } else {
+                    let (verb, n, t, p) = match phase {
+                        InstallPhase::Hashing => {
+                            (InstallPhase::Hashing.verb(), h_n, h_total, h_pct)
+                        }
+                        InstallPhase::Downloading => {
+                            (InstallPhase::Downloading.verb(), dl_n, dl_total, dl_pct)
+                        }
+                        InstallPhase::Extracting => {
+                            (InstallPhase::Extracting.verb(), ex_n, ex_total, ex_pct)
+                        }
+                    };
+                    format!("{verb} \u{2026} {n} / {t} mods \u{00B7} {p}%")
                 }
-                InstallPhase::Extracting => {
-                    (InstallPhase::Extracting.verb(), ex_n, ex_total, ex_pct)
-                }
-            };
-            format!("{verb} \u{2026} {n} / {t} mods \u{00B7} {p}%")
-        };
+            },
+            ToString::to_string,
+        );
         ui.label(
             egui::RichText::new(phase_line)
                 .size(15.0)
@@ -1446,7 +2306,8 @@ fn render_mod_progress(
         let col_gap = 12.0;
         let status_w = 170.0;
         let prog_w = 130.0;
-        let flex_total = (ui.available_width() - status_w - prog_w - col_gap * 3.0).max(120.0);
+        let flex_total =
+            f32::mul_add(col_gap, -3.0, ui.available_width() - status_w - prog_w).max(120.0);
         let mod_w = flex_total * (1.8 / 2.8);
         let src_w = flex_total * (1.0 / 2.8);
 
@@ -1552,7 +2413,7 @@ fn render_grid_row(
     }
 }
 
-fn check_prose_cell(ui: &mut egui::Ui, w: f32, prose: &str, color: egui::Color32) {
+pub(super) fn check_prose_cell(ui: &mut egui::Ui, w: f32, prose: &str, color: egui::Color32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 18.0), egui::Sense::hover());
     if !ui.is_rect_visible(rect) {
         return;
@@ -1590,7 +2451,7 @@ fn grid_header(ui: &mut egui::Ui, palette: ThemePalette, text: &str, w: f32) {
     );
 }
 
-fn sized_label(
+pub(super) fn sized_label(
     ui: &mut egui::Ui,
     w: f32,
     text: &str,
@@ -1650,9 +2511,9 @@ fn paint_indeterminate_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Re
     let tri = if phase < 0.5 {
         phase * 2.0
     } else {
-        2.0 - phase * 2.0
+        phase.mul_add(-2.0, 2.0)
     }; // 0→1→0
-    let x = track.left() + travel * tri;
+    let x = travel.mul_add(tri, track.left());
     let block_rect = egui::Rect::from_min_size(
         egui::pos2(x, track.top()),
         egui::vec2(block, track.height()),
@@ -1758,6 +2619,14 @@ mod tests {
             name: name.to_string(),
             source: "github".to_string(),
             size,
+        }
+    }
+
+    #[test]
+    fn downloading_middle_height_leaves_room_for_footer() {
+        for available in [700.0_f32, 820.0, 900.0] {
+            let middle = downloading_middle_height(available);
+            assert!((available - middle - sub_flow_footer::FOOTER_HEIGHT_PX).abs() < f32::EPSILON);
         }
     }
 
@@ -2262,7 +3131,7 @@ mod tests {
                 Some((50, Some(100))),
                 Some(100),
             )],
-            extract_progress: Some((7, 10)), // a stale value
+            extract_progress: Some((7, 10)),
             ..Default::default()
         };
         assert_eq!(p.phase(), InstallPhase::Downloading);
@@ -2408,7 +3277,7 @@ mod tests {
     }
 
     #[test]
-    fn set_asset_bytes_persists_and_survives_per_frame_rebuild() {
+    fn state_bytes_drive_rows_across_rebuild() {
         use crate::app::state::Step2UpdateAsset;
         let mut st = WizardState::default();
         let mk = |label: &str, src: &str| Step2UpdateAsset {
@@ -2423,17 +3292,18 @@ mod tests {
         };
         st.step2.update_selected_update_assets = vec![mk("A", "github"), mk("B", "weasel")];
         st.step2.update_selected_download_running = true;
+        st.step2
+            .update_selected_download_bytes
+            .insert(0, (512, Some(2048)));
 
-        let mut p = DownloadProgress::from_wizard_state(&st);
-        p.set_asset_bytes(0, 512, Some(2048));
-        assert_eq!(p.asset_bytes.get(&0), Some(&(512, Some(2048))));
+        let p = DownloadProgress::from_wizard_state(&st);
+        assert_eq!(p.rows[0].name, "A");
         assert_eq!(p.rows[0].per_byte, Some((512, Some(2048))));
 
         let mut expected = BTreeMap::new();
         expected.insert(0usize, 2048u64);
         let p2 = DownloadProgress::from_wizard_state_full(
             &st,
-            &p.asset_bytes,
             &[skipped("CACHED", Some(4096))],
             &expected,
             None,
@@ -2441,19 +3311,25 @@ mod tests {
         assert_eq!(
             p2.rows[0].per_byte,
             Some((512, Some(2048))),
-            "the byte map survives the per-frame row rebuild"
+            "the state byte map drives every per-frame row rebuild"
         );
         assert_eq!(
             p2.rows[0].expected_size,
             Some(2048),
             "the share-code expected size is merged onto the row"
         );
-        assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte delta yet");
+        assert_eq!(p2.rows[1].per_byte, None, "asset 1 had no byte event yet");
         assert!(
             p2.skipped.is_empty(),
             ": `skipped` is vestigial; not populated"
         );
         assert!((p2.rows[0].bar_fraction() - 0.25).abs() < 0.001);
+
+        st.step2
+            .update_selected_download_bytes
+            .insert(0, (1024, Some(2048)));
+        let p3 = DownloadProgress::from_wizard_state_full(&st, &[], &expected, None);
+        assert!((p3.rows[0].bar_fraction() - 0.5).abs() < 0.001);
     }
 
     #[test]
@@ -2481,19 +3357,19 @@ mod tests {
         ];
         st.step2.update_selected_extracted_sources = vec!["EET -> C:/m/EET".to_string()];
         st.step2.update_selected_download_running = true;
+        st.step2
+            .update_selected_download_bytes
+            .insert(3, (10, Some(100)));
 
         let sk = vec![skipped("ALREADY_HERE", Some(7777))];
-        let p = DownloadProgress::from_wizard_state_full(
-            &st,
-            &BTreeMap::new(),
-            &sk,
-            &BTreeMap::new(),
-            None,
-        );
+        let p = DownloadProgress::from_wizard_state_full(&st, &sk, &BTreeMap::new(), None);
         assert_eq!(p.rows.len(), 4);
         let statuses: Vec<_> = p.rows.iter().map(|r| r.status).collect();
+        let names: Vec<_> = p.rows.iter().map(|r| r.name.as_str()).collect();
         assert_eq!(statuses[0], ModDownloadStatus::Downloading);
-        assert_eq!(statuses[1], ModDownloadStatus::Downloading);
+        assert_eq!(names[0], "spell_rev", "the in-flight row sits on top");
+        assert_eq!(statuses[1], ModDownloadStatus::Queued);
+        assert_eq!(names[1], "stratagems", "a row with no bytes yet is queued");
         assert!(statuses[2..].iter().all(|s| s.download_complete()));
         assert_eq!(
             p.skipped.len(),
@@ -2501,6 +3377,43 @@ mod tests {
             "v3: skipped is not populated by from_wizard_state_full"
         );
         assert_eq!(p.total(), 4, "4 rows (no phantom skipped row)");
+    }
+
+    #[test]
+    fn failed_row_leaves_downloading_the_frame_its_done_lands() {
+        let mut st = WizardState::default();
+        let asset = |label: &str| crate::app::state::Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: format!("{label}/{label}.TP2"),
+            label: label.to_string(),
+            source_id: "github".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{label}.zip"),
+            asset_url: format!("https://x/{label}.zip"),
+            installed_source_ref: None,
+        };
+        st.step2.update_selected_update_assets = vec![asset("failed"), asset("streaming")];
+        st.step2.update_selected_download_running = true;
+        st.step2
+            .update_selected_download_bytes
+            .insert(0, (100, Some(100)));
+        st.step2.update_selected_download_done.insert(0);
+        st.step2
+            .update_selected_download_failed_sources
+            .push("failed: HTTP 404".to_string());
+        st.step2
+            .update_selected_download_bytes
+            .insert(1, (10, Some(100)));
+
+        let p = DownloadProgress::from_wizard_state_full(&st, &[], &BTreeMap::new(), None);
+        let rows: Vec<_> = p.rows.iter().map(|r| (r.name.as_str(), r.status)).collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("streaming", ModDownloadStatus::Downloading),
+                ("failed", ModDownloadStatus::Queued),
+            ]
+        );
     }
 
     #[test]
@@ -2523,13 +3436,7 @@ mod tests {
         let mut hashed = std::collections::HashSet::new();
         hashed.insert(0usize);
         hashed.insert(2usize);
-        let p = DownloadProgress::from_wizard_state_full(
-            &st,
-            &BTreeMap::new(),
-            &[],
-            &BTreeMap::new(),
-            Some(&hashed),
-        );
+        let p = DownloadProgress::from_wizard_state_full(&st, &[], &BTreeMap::new(), Some(&hashed));
         assert_eq!(p.rows.len(), 4);
         let hashing_labels: Vec<&str> = p
             .rows
@@ -2571,13 +3478,7 @@ mod tests {
         };
         st.step2.update_selected_update_assets = vec![asset("A"), asset("B")];
         st.step2.update_selected_download_running = false;
-        let p = DownloadProgress::from_wizard_state_full(
-            &st,
-            &BTreeMap::new(),
-            &[],
-            &BTreeMap::new(),
-            None,
-        );
+        let p = DownloadProgress::from_wizard_state_full(&st, &[], &BTreeMap::new(), None);
         assert!(
             p.rows
                 .iter()
@@ -2636,6 +3537,18 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_kind_picks_the_destination_prep_flow() {
+        assert_eq!(
+            install_destination_prep_flow(PipelineKind::Install),
+            DestinationPrepFlow::InstallPipeline
+        );
+        assert_eq!(
+            install_destination_prep_flow(PipelineKind::Fork),
+            DestinationPrepFlow::CreateForkDownload
+        );
+    }
+
+    #[test]
     fn build_version_override_toast_multiple_entries() {
         let warnings = vec![
             "ISNF (6.5.5 -> 6.5.6)".to_string(),
@@ -2646,5 +3559,1143 @@ mod tests {
             msg,
             "Pinned versions of the following mods not available. Latest will be installed:\n- ISNF (6.5.5 -> 6.5.6)\n- OtherMod (v0.3 -> v1.0)"
         );
+    }
+
+    struct ClaimRouteDestGuard(std::path::PathBuf);
+
+    impl ClaimRouteDestGuard {
+        fn new(tag: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("bio_claim_route_{tag}_{}", std::process::id()));
+            Self(path)
+        }
+
+        fn as_string(&self) -> String {
+            self.0.to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for ClaimRouteDestGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn claim_route_share_payload(name: &str) -> String {
+        format!(
+            r#"{{
+                "format_version": 1,
+                "game_install": "BGEE",
+                "install_mode": "start_from_scratch",
+                "weidu_logs": {{ "bgee": "~MOD/MOD.TP2~ #0 #0 // A component" }},
+                "name": "{name}"
+            }}"#
+        )
+    }
+
+    fn claim_route_share_code(name: &str) -> String {
+        crate::app::modlist_share::encode_share_payload_text(&claim_route_share_payload(name))
+            .expect("mint code")
+    }
+
+    fn entry_at(id: &str, name: &str, dest: &str) -> crate::registry::model::ModlistEntry {
+        crate::registry::model::ModlistEntry {
+            id: id.to_string(),
+            name: name.to_string(),
+            game: crate::registry::model::Game::EET,
+            destination_folder: dest.to_string(),
+            state: crate::registry::model::ModlistState::Installed,
+            ..Default::default()
+        }
+    }
+
+    fn arm_with_code(
+        app: &mut crate::ui::orchestrator::orchestrator_app::OrchestratorApp,
+        dest: &str,
+        name: &str,
+        workflow: crate::install_runtime::flag_policies::InstallWorkflow,
+    ) {
+        let code = claim_route_share_code(name);
+        let preview = crate::app::modlist_share::preview_modlist_share_code(&code)
+            .expect("share code decodes");
+        app.install_screen_state.destination = dest.to_string();
+        app.install_screen_state.import_code = code;
+        app.install_screen_state.parsed_preview = Some(preview);
+        app.install_screen_state.preview_cached = true;
+        app.install_screen_state.destination_choice =
+            Some(crate::ui::install::state_install::DestChoice::Clear);
+        let inputs = LivePipelineInputs::from_workflow(app, workflow);
+        finish_pipeline_arm_after_destination_prep(app, &inputs);
+    }
+
+    #[test]
+    fn gallery_install_into_an_owned_folder_replaces_that_list() {
+        let dest = ClaimRouteDestGuard::new("gallery-replace");
+        let dest_s = dest.as_string();
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "claim-gallery-replace",
+            );
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
+
+        app.registry
+            .entries
+            .push(entry_at("OLD", "OLD name", &dest_s));
+        app.install_screen_state.pipeline_kind = PipelineKind::Install;
+
+        let old_data_dir = crate::registry::store_workspace::modlist_data_dir("OLD");
+        std::fs::create_dir_all(&old_data_dir).expect("seed OLD data dir");
+        assert!(old_data_dir.is_dir());
+
+        arm_with_code(
+            &mut app,
+            &dest_s,
+            "New name",
+            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+        );
+
+        assert_eq!(app.install_screen_state.pipeline_arm_error, None);
+        let at_dest: Vec<_> = app
+            .registry
+            .entries
+            .iter()
+            .filter(|e| e.destination_folder.trim() == dest_s)
+            .collect();
+        assert_eq!(
+            at_dest.len(),
+            1,
+            "exactly one entry now owns the destination"
+        );
+        assert_eq!(at_dest[0].name, "New name");
+        assert_ne!(at_dest[0].id, "OLD");
+        assert!(app.registry.find("OLD").is_none());
+        assert!(app.pending_replaced_entry.is_none());
+        assert_eq!(
+            app.active_install_modlist_id.as_deref(),
+            Some(at_dest[0].id.as_str())
+        );
+        assert!(!old_data_dir.is_dir(), "OLD's data dir is gone");
+    }
+
+    #[test]
+    fn fork_route_adopts_the_fork_it_minted() {
+        let dest = ClaimRouteDestGuard::new("fork-adopt");
+        let dest_s = dest.as_string();
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "claim-fork-adopt",
+            );
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
+
+        app.registry
+            .entries
+            .push(entry_at("FORK", "My fork", &dest_s));
+        app.active_install_modlist_id = Some("FORK".to_string());
+        app.install_screen_state.pipeline_kind = PipelineKind::Fork;
+
+        arm_with_code(
+            &mut app,
+            &dest_s,
+            "Parent",
+            crate::install_runtime::flag_policies::InstallWorkflow::ForkAndModify,
+        );
+
+        assert_eq!(app.install_screen_state.pipeline_arm_error, None);
+        assert_eq!(app.registry.entries.len(), 1);
+        assert_eq!(
+            app.registry.find("FORK").expect("FORK still present").name,
+            "My fork"
+        );
+        assert_eq!(app.active_install_modlist_id.as_deref(), Some("FORK"));
+        assert!(app.pending_replaced_entry.is_none());
+    }
+
+    #[test]
+    fn reinstall_route_adopts_the_reinstalled_list() {
+        let dest = ClaimRouteDestGuard::new("reinstall-adopt");
+        let dest_s = dest.as_string();
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "claim-reinstall-adopt",
+            );
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
+
+        app.registry
+            .entries
+            .push(entry_at("RE", "RE name", &dest_s));
+        app.pending_reinstall_id = Some("RE".to_string());
+        app.install_screen_state.pipeline_kind = PipelineKind::Install;
+
+        arm_with_code(
+            &mut app,
+            &dest_s,
+            "Ignored",
+            crate::install_runtime::flag_policies::InstallWorkflow::Reinstall,
+        );
+
+        assert_eq!(app.install_screen_state.pipeline_arm_error, None);
+        assert_eq!(app.registry.entries.len(), 1);
+        assert_eq!(
+            app.registry.find("RE").expect("RE still present").name,
+            "RE name"
+        );
+        assert_eq!(app.active_install_modlist_id.as_deref(), Some("RE"));
+    }
+
+    #[test]
+    fn arming_into_a_folder_another_install_is_using_is_refused() {
+        let dest = ClaimRouteDestGuard::new("busy-refused");
+        let dest_s = dest.as_string();
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "claim-busy-refused",
+            );
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
+
+        app.registry
+            .entries
+            .push(entry_at("BUSY", "Busy List", &dest_s));
+        app.active_install_modlist_id = Some("BUSY".to_string());
+        app.install_screen_state.pipeline_kind = PipelineKind::Install;
+        app.pending_reinstall_id = None;
+
+        arm_with_code(
+            &mut app,
+            &dest_s,
+            "New name",
+            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+        );
+
+        let err = app
+            .install_screen_state
+            .pipeline_arm_error
+            .as_deref()
+            .expect("arm error");
+        assert!(
+            err.contains("is installing into this folder right now"),
+            "got {err:?}"
+        );
+        assert_eq!(app.registry.entries.len(), 1);
+        assert!(app.registry.find("BUSY").is_some());
+        assert!(app.pending_replaced_entry.is_none());
+    }
+
+    #[test]
+    fn arming_with_no_preview_on_an_owned_folder_is_refused_and_both_lists_survive() {
+        let dest = ClaimRouteDestGuard::new("noprev-refused");
+        let dest_s = dest.as_string();
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "claim-noprev-refused",
+            );
+        assert_eq!(app.wizard_state.step1.bgee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.bg2ee_game_folder.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_pre_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.eet_new_dir.len(), 0);
+        assert_eq!(app.wizard_state.step1.mods_folder.len(), 0);
+
+        app.registry
+            .entries
+            .push(entry_at("OLD", "OLD name", &dest_s));
+        app.install_screen_state.destination = dest_s.clone();
+        app.install_screen_state.parsed_preview = None;
+        app.install_screen_state.destination_choice =
+            Some(crate::ui::install::state_install::DestChoice::Clear);
+        app.install_screen_state.pipeline_kind = PipelineKind::Install;
+
+        let inputs = LivePipelineInputs::from_workflow(
+            &app,
+            crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+        );
+        finish_pipeline_arm_after_destination_prep(&mut app, &inputs);
+
+        let err = app
+            .install_screen_state
+            .pipeline_arm_error
+            .as_deref()
+            .expect("arm error");
+        assert!(err.contains("could not be replaced"), "got {err:?}");
+        let old = app.registry.find("OLD").expect("OLD still present");
+        assert_eq!(old.destination_folder, dest_s);
+    }
+
+    struct ManualDlTempRoot {
+        path: std::path::PathBuf,
+    }
+
+    impl ManualDlTempRoot {
+        fn new(tag: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "bio_manualdl_{}_{}_{tag}",
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+    }
+
+    impl Drop for ManualDlTempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn test_asset(label: &str, url: &str) -> Step2UpdateAsset {
+        Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: format!("{label}/setup-{label}.tp2"),
+            label: label.to_string(),
+            source_id: "github".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{label}.zip"),
+            asset_url: url.to_string(),
+            installed_source_ref: None,
+        }
+    }
+
+    fn manual_request(label: &str) -> ManualDownloadRequest {
+        ManualDownloadRequest {
+            game_tab: "BGEE".to_string(),
+            tp_file: format!("{label}/setup-{label}.tp2"),
+            label: label.to_string(),
+            source_id: String::new(),
+            page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
+            reason: ManualDownloadReason::NotAutoResolvable,
+            aliases: Vec::new(),
+            display_name: String::new(),
+        }
+    }
+
+    #[test]
+    fn cache_check_fires_while_manual_row_waits() {
+        let root = ManualDlTempRoot::new("cache-beside-hold");
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-cache-beside-hold",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.wizard_state.step2.update_selected_check_running = false;
+        app.wizard_state.step1.mods_archive_folder =
+            root.path.join("archives").to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_update_assets =
+            vec![test_asset("ModA", "https://example.com/a.zip")];
+        app.wizard_state.step2.update_selected_manual_downloads = vec![manual_request("Ascension")];
+        let inputs = LivePipelineInputs {
+            destination: "C:/dest".to_string(),
+            game: crate::registry::model::Game::BGEE,
+            workflow: crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+            code: String::new(),
+        };
+
+        let alive = enter_manual_hold_once_with_poll(&mut app, &inputs, Duration::from_millis(20));
+        stage_and_kick_archive_skip_once(&mut app, &inputs);
+
+        assert!(
+            app.install_screen_state
+                .manual_downloads
+                .manual_hold_active(),
+            "the manual hold is still active"
+        );
+        assert!(
+            app.install_screen_state.pipeline_flags.archives_staged(),
+            "the cache check fires on the same frame a manual row is still waiting"
+        );
+        app.manual_download_rx = None;
+        if let Some(alive) = alive {
+            manual_download_watcher::wait_for_thread_exit(&alive);
+        }
+    }
+
+    #[test]
+    fn panel_reads_the_extract_counter_only_for_a_pipeline_origin_run() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-panel-extract-origin",
+            );
+        app.wizard_state.step2.update_selected_update_assets =
+            vec![test_asset("ModA", "https://example.com/a.zip")];
+        app.wizard_state.step2.update_selected_extract_progress = Some((11, 11));
+
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::Workspace;
+        assert_eq!(
+            build_and_hold_progress(&mut app).extract_progress,
+            None,
+            "a drawer fetch's counter never reaches the install panel"
+        );
+
+        app.wizard_state.step2.update_selected_download_origin = DownloadOrigin::InstallPipeline;
+        assert_eq!(
+            build_and_hold_progress(&mut app).extract_progress,
+            Some((11, 11))
+        );
+    }
+
+    #[test]
+    fn cache_check_kick_clears_stale_download_bytes_from_a_previous_run() {
+        let root = ManualDlTempRoot::new("cache-clears-stale-bytes");
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-cache-clears-stale-bytes",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.wizard_state.step1.mods_archive_folder =
+            root.path.join("archives").to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_update_assets =
+            vec![test_asset("ModA", "https://example.com/a.zip")];
+        app.wizard_state
+            .step2
+            .update_selected_download_bytes
+            .insert(0, (50, Some(50)));
+        app.wizard_state
+            .step2
+            .update_selected_download_done
+            .insert(0);
+        app.wizard_state.step2.update_selected_extract_progress = Some((11, 11));
+        app.wizard_state
+            .step2
+            .update_selected_extract_jobs
+            .entry("moda".to_string())
+            .or_default()
+            .done = 1;
+        let inputs = LivePipelineInputs {
+            destination: "C:/dest".to_string(),
+            game: crate::registry::model::Game::BGEE,
+            workflow: crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+            code: String::new(),
+        };
+
+        stage_and_kick_archive_skip_once(&mut app, &inputs);
+
+        assert_eq!(
+            app.wizard_state.step2.update_selected_extract_progress,
+            None
+        );
+        assert!(
+            app.wizard_state
+                .step2
+                .update_selected_extract_jobs
+                .is_empty()
+        );
+        assert_eq!(build_and_hold_progress(&mut app).extract_progress, None);
+        assert!(
+            app.wizard_state
+                .step2
+                .update_selected_download_bytes
+                .is_empty(),
+            "a re-armed run starts with no bytes from the previous run"
+        );
+        assert!(
+            app.wizard_state
+                .step2
+                .update_selected_download_done
+                .is_empty()
+        );
+        let rows = DownloadProgress::from_wizard_state(&app.wizard_state).rows;
+        assert_eq!(rows[0].per_byte, None);
+        app.archive_skip_rx = None;
+    }
+
+    #[test]
+    fn no_requests_never_enters_hold() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-no-requests",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.wizard_state.step2.update_selected_update_assets =
+            vec![test_asset("ModA", "https://example.com/a.zip")];
+        let inputs = LivePipelineInputs {
+            destination: "C:/dest".to_string(),
+            game: crate::registry::model::Game::BGEE,
+            workflow: crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+            code: String::new(),
+        };
+
+        enter_manual_hold_once(&mut app, &inputs);
+        assert_eq!(app.install_screen_state.manual_downloads.rows.len(), 0);
+        assert!(app.manual_download_rx.is_none());
+
+        stage_and_kick_archive_skip_once(&mut app, &inputs);
+        assert!(
+            app.install_screen_state.pipeline_flags.archives_staged(),
+            "the cache-check kick still fires on the same frame when there are no manual requests"
+        );
+    }
+
+    #[test]
+    fn all_manual_list_enters_hold_without_assets() {
+        let root = ManualDlTempRoot::new("all-manual");
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-all-manual",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.wizard_state.step2.update_selected_check_running = false;
+        app.wizard_state.step1.mods_archive_folder =
+            root.path.join("archives").to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_manual_downloads = vec![manual_request("Ascension")];
+        let inputs = LivePipelineInputs {
+            destination: "C:/dest".to_string(),
+            game: crate::registry::model::Game::BGEE,
+            workflow: crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+            code: String::new(),
+        };
+
+        let alive = enter_manual_hold_once_with_poll(&mut app, &inputs, Duration::from_millis(20));
+        assert_eq!(app.install_screen_state.manual_downloads.rows.len(), 1);
+        assert!(
+            app.install_screen_state
+                .manual_downloads
+                .manual_hold_active()
+        );
+        assert!(app.manual_download_rx.is_some());
+        assert!(install_empty_asset_clean_finish(&mut app).is_none());
+        assert!(app.install_screen_state.pipeline_arm_error.is_none());
+        app.manual_download_rx = None;
+        if let Some(alive) = alive {
+            manual_download_watcher::wait_for_thread_exit(&alive);
+        }
+    }
+
+    #[test]
+    fn baseline_files_are_matched_but_never_listed_unmatched() {
+        let root = ManualDlTempRoot::new("baseline");
+        let archive_dir = root.path.join("archives");
+        std::fs::create_dir_all(&archive_dir).unwrap();
+        let preexisting = archive_dir.join("setup-ascension__manual__2.1.zip");
+        std::fs::write(&preexisting, b"content").unwrap();
+
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-baseline",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.wizard_state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_manual_downloads = vec![manual_request("Ascension")];
+        let inputs = LivePipelineInputs {
+            destination: "C:/dest".to_string(),
+            game: crate::registry::model::Game::BGEE,
+            workflow: crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+            code: String::new(),
+        };
+
+        let alive = enter_manual_hold_once_with_poll(&mut app, &inputs, Duration::from_millis(20));
+        assert!(
+            app.install_screen_state
+                .manual_downloads
+                .baseline
+                .iter()
+                .any(|(path, _, _)| path == &preexisting),
+            "the archive present before the hold started is recorded as baseline"
+        );
+        app.manual_download_rx = None;
+        if let Some(alive) = alive {
+            manual_download_watcher::wait_for_thread_exit(&alive);
+        }
+
+        let probe = ArchiveProbe {
+            path: preexisting,
+            file_name: "notes.txt".to_string(),
+            size: 7,
+            hash: None,
+            tp2_names: Vec::new(),
+            format: manual_archive_probe::ProbeFormat::Unsupported,
+        };
+        handle_manual_candidate(&mut app, &probe);
+
+        assert!(
+            app.install_screen_state
+                .manual_downloads
+                .unmatched
+                .is_empty(),
+            "a pre-existing archive that matches nothing must not flood the unmatched list"
+        );
+    }
+
+    #[test]
+    fn file_overwritten_over_baseline_is_reported() {
+        let root = ManualDlTempRoot::new("baseline-overwritten");
+        let archive_dir = root.path.join("archives");
+        std::fs::create_dir_all(&archive_dir).unwrap();
+        let preexisting = archive_dir.join("setup-ascension__manual__2.1.zip");
+        std::fs::write(&preexisting, b"content").unwrap();
+
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-baseline-overwritten",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.wizard_state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        app.wizard_state.step2.update_selected_manual_downloads = vec![manual_request("Ascension")];
+        let inputs = LivePipelineInputs {
+            destination: "C:/dest".to_string(),
+            game: crate::registry::model::Game::BGEE,
+            workflow: crate::install_runtime::flag_policies::InstallWorkflow::PasteAndInstall,
+            code: String::new(),
+        };
+
+        let alive = enter_manual_hold_once_with_poll(&mut app, &inputs, Duration::from_millis(20));
+        app.manual_download_rx = None;
+        if let Some(alive) = alive {
+            manual_download_watcher::wait_for_thread_exit(&alive);
+        }
+
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(&preexisting, b"different content, longer").unwrap();
+        let metadata = std::fs::metadata(&preexisting).unwrap();
+
+        let probe = ArchiveProbe {
+            path: preexisting,
+            file_name: "notes.txt".to_string(),
+            size: metadata.len(),
+            hash: None,
+            tp2_names: Vec::new(),
+            format: manual_archive_probe::ProbeFormat::Unsupported,
+        };
+        handle_manual_candidate(&mut app, &probe);
+
+        assert_eq!(
+            app.install_screen_state.manual_downloads.unmatched,
+            vec!["notes.txt".to_string()],
+            "a file saved over a pre-existing baseline name must be reported once it changes"
+        );
+    }
+
+    #[test]
+    fn one_archive_satisfies_both_eet_rows() {
+        let root = ManualDlTempRoot::new("eet-dup");
+        let dropped = root.path.join("Ascension-v2.1.zip");
+        std::fs::write(&dropped, b"content").unwrap();
+        let archive_dir = root.path.join("archives");
+
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-eet-dup",
+            );
+        let mut first_tab_request = manual_request("Ascension");
+        first_tab_request.game_tab = "BGEE".to_string();
+        let mut second_tab_request = manual_request("Ascension");
+        second_tab_request.game_tab = "BG2EE".to_string();
+        app.wizard_state.step2.update_selected_manual_downloads =
+            vec![first_tab_request, second_tab_request];
+        app.wizard_state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        app.install_screen_state.manual_downloads.rows = vec![
+            ManualDownloadRow {
+                label: "Ascension".to_string(),
+                from: "nexusmods.com".to_string(),
+                page_url: String::new(),
+                status: ManualRowStatus::Waiting,
+            },
+            ManualDownloadRow {
+                label: "Ascension".to_string(),
+                from: "nexusmods.com".to_string(),
+                page_url: String::new(),
+                status: ManualRowStatus::Waiting,
+            },
+        ];
+
+        let probe = ArchiveProbe {
+            path: dropped.clone(),
+            file_name: "Ascension-v2.1.zip".to_string(),
+            size: std::fs::metadata(&dropped).unwrap().len(),
+            hash: None,
+            tp2_names: vec!["setup-ascension.tp2".to_string()],
+            format: manual_archive_probe::ProbeFormat::Zip,
+        };
+        handle_manual_candidate(&mut app, &probe);
+
+        assert_eq!(
+            app.install_screen_state.manual_downloads.rows[0].status,
+            ManualRowStatus::Found
+        );
+        assert_eq!(
+            app.install_screen_state.manual_downloads.rows[1].status,
+            ManualRowStatus::Found
+        );
+        assert_eq!(
+            app.wizard_state.step2.update_selected_update_assets.len(),
+            2,
+            "one landed archive satisfies both EET-duplicate rows"
+        );
+        assert!(!dropped.exists());
+        assert!(
+            archive_dir
+                .join("setup-ascension__manual__2.1.zip")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn second_store_name_copies_instead_of_renaming() {
+        let root = ManualDlTempRoot::new("second-store");
+        let dropped = root.path.join("EETpack.zip");
+        std::fs::write(&dropped, b"content").unwrap();
+        let archive_dir = root.path.join("archives");
+
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-second-store",
+            );
+        app.wizard_state.step2.update_selected_manual_downloads =
+            vec![manual_request("eet"), manual_request("eet_end")];
+        app.wizard_state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
+        app.install_screen_state.manual_downloads.rows = vec![
+            ManualDownloadRow {
+                label: "eet".to_string(),
+                from: "nexusmods.com".to_string(),
+                page_url: String::new(),
+                status: ManualRowStatus::Waiting,
+            },
+            ManualDownloadRow {
+                label: "eet_end".to_string(),
+                from: "nexusmods.com".to_string(),
+                page_url: String::new(),
+                status: ManualRowStatus::Waiting,
+            },
+        ];
+
+        let probe = ArchiveProbe {
+            path: dropped.clone(),
+            file_name: "EETpack.zip".to_string(),
+            size: std::fs::metadata(&dropped).unwrap().len(),
+            hash: None,
+            tp2_names: vec!["setup-eet.tp2".to_string(), "setup-eet_end.tp2".to_string()],
+            format: manual_archive_probe::ProbeFormat::Zip,
+        };
+        handle_manual_candidate(&mut app, &probe);
+
+        assert_eq!(
+            app.install_screen_state.manual_downloads.rows[0].status,
+            ManualRowStatus::Found
+        );
+        assert_eq!(
+            app.install_screen_state.manual_downloads.rows[1].status,
+            ManualRowStatus::Found
+        );
+        let first_target = archive_dir.join("setup-eet__manual__manual.zip");
+        let second_target = archive_dir.join("setup-eet_end__manual__manual.zip");
+        assert!(
+            first_target.exists(),
+            "the first row's placed file must still exist after a second row claims a different store name"
+        );
+        assert!(second_target.exists());
+    }
+
+    #[test]
+    fn existing_store_file_is_verified_before_acceptance() {
+        let root = ManualDlTempRoot::new("verify-existing");
+        let archive_dir = root.path.join("archives");
+        std::fs::create_dir_all(&archive_dir).unwrap();
+        let store_name = "setup-ascension__manual__manual.zip";
+        let existing_target = archive_dir.join(store_name);
+        std::fs::write(&existing_target, b"not a zip").unwrap();
+        let landed = root.path.join("Ascension.zip");
+        std::fs::write(&landed, b"also not a zip").unwrap();
+
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-verify-existing",
+            );
+        app.wizard_state.step2.update_selected_manual_downloads = vec![manual_request("Ascension")];
+        app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            label: "Ascension".to_string(),
+            from: "nexusmods.com".to_string(),
+            page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
+            status: ManualRowStatus::Waiting,
+        }];
+
+        let placed = apply_manual_match(
+            &mut app,
+            0,
+            &landed,
+            &archive_dir,
+            ProbeMatch::Tp2 {
+                store_name: store_name.to_string(),
+            },
+            &[],
+        );
+
+        assert!(!placed);
+        match &app.install_screen_state.manual_downloads.rows[0].status {
+            ManualRowStatus::Refused(reason) => {
+                assert!(
+                    reason.contains("a different file already sits at"),
+                    "got {reason:?}"
+                );
+            }
+            other => panic!("expected Refused, got {other:?}"),
+        }
+        assert!(landed.exists(), "the landed file must be left untouched");
+        assert_eq!(
+            std::fs::read(&existing_target).unwrap(),
+            b"not a zip",
+            "the existing store file must be left untouched"
+        );
+    }
+
+    #[test]
+    fn blank_archive_folder_refuses_pick() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-blank-folder",
+            );
+        app.wizard_state.step1.mods_archive_folder = "   ".to_string();
+        app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            label: "Ascension".to_string(),
+            from: "nexusmods.com".to_string(),
+            page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
+            status: ManualRowStatus::Waiting,
+        }];
+
+        pick_manual_file(&mut app, 0);
+
+        match &app.install_screen_state.manual_downloads.rows[0].status {
+            ManualRowStatus::Refused(reason) => {
+                assert!(
+                    reason.contains("set your Mods archive folder in Settings"),
+                    "got {reason:?}"
+                );
+            }
+            other => panic!("expected Refused, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn found_row_appends_empty_url_asset_and_clears_bucket() {
+        let root = ManualDlTempRoot::new("found");
+        let dropped = root.path.join("Ascension-v2.1.zip");
+        std::fs::write(&dropped, b"content").unwrap();
+        let archive_dir = root.path.join("archives");
+
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-found",
+            );
+        let request = manual_request("Ascension");
+        app.wizard_state.step2.update_selected_manual_downloads = vec![request];
+        app.wizard_state.step2.update_selected_manual_sources = vec!["Ascension".to_string()];
+        app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            label: "Ascension".to_string(),
+            from: "nexusmods.com".to_string(),
+            page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
+            status: ManualRowStatus::Waiting,
+        }];
+
+        apply_manual_match(
+            &mut app,
+            0,
+            &dropped,
+            &archive_dir,
+            ProbeMatch::Tp2 {
+                store_name: "setup-ascension__manual__2.1.zip".to_string(),
+            },
+            &[],
+        );
+
+        assert_eq!(
+            app.install_screen_state.manual_downloads.rows[0].status,
+            ManualRowStatus::Found
+        );
+        assert_eq!(
+            app.wizard_state.step2.update_selected_update_assets.len(),
+            1
+        );
+        let asset = &app.wizard_state.step2.update_selected_update_assets[0];
+        assert_eq!(asset.asset_url, "");
+        assert_eq!(asset.asset_name, "setup-ascension__manual__2.1.zip");
+        assert_eq!(asset.source_id, "manual");
+        assert_eq!(asset.tag, "2.1");
+        assert!(
+            !app.wizard_state
+                .step2
+                .update_selected_manual_sources
+                .contains(&"Ascension".to_string())
+        );
+        assert!(
+            app.install_screen_state
+                .manual_downloads
+                .handled
+                .contains(&archive_dir.join("setup-ascension__manual__2.1.zip"))
+        );
+    }
+
+    #[test]
+    fn continue_without_records_the_lists_own_label() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-skip-label",
+            );
+        let mut request = manual_request("WL_HOUSERULES");
+        request.display_name = "House Rules".to_string();
+        app.install_screen_state.manual_downloads.rows = vec![manual_row_from_request(&request)];
+        app.wizard_state.step2.update_selected_manual_downloads = vec![request];
+
+        confirm_continue_without(&mut app);
+
+        assert_eq!(
+            app.install_screen_state.manual_downloads.rows[0].label,
+            "House Rules"
+        );
+        assert_eq!(
+            app.wizard_state.step2.skipped_manual_downloads,
+            vec!["WL_HOUSERULES".to_string()],
+            "the workspace toast names the mod the way the list does"
+        );
+    }
+
+    #[test]
+    fn found_row_records_download_once() {
+        let root = ManualDlTempRoot::new("found-once");
+        let dropped = root.path.join("Ascension-v2.1.zip");
+        std::fs::write(&dropped, b"content").unwrap();
+        let archive_dir = root.path.join("archives");
+
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-found-once",
+            );
+        let request = manual_request("Ascension");
+        app.wizard_state.step2.update_selected_manual_downloads = vec![request];
+        app.wizard_state.step2.update_selected_manual_sources = vec!["Ascension".to_string()];
+        app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            label: "Ascension".to_string(),
+            from: "nexusmods.com".to_string(),
+            page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
+            status: ManualRowStatus::Waiting,
+        }];
+
+        apply_manual_match(
+            &mut app,
+            0,
+            &dropped,
+            &archive_dir,
+            ProbeMatch::Tp2 {
+                store_name: "setup-ascension__manual__2.1.zip".to_string(),
+            },
+            &[],
+        );
+
+        assert_eq!(
+            app.wizard_state
+                .step2
+                .update_selected_downloaded_sources
+                .len(),
+            1,
+            "the found archive is recorded as downloaded exactly once"
+        );
+        assert!(
+            app.wizard_state.step2.update_selected_downloaded_sources[0]
+                .starts_with("Ascension -> ")
+        );
+
+        let mut skip_indices = std::collections::HashSet::new();
+        mark_empty_url_assets_as_cache_hits(&mut app, &mut skip_indices);
+
+        assert_eq!(
+            app.wizard_state
+                .step2
+                .update_selected_downloaded_sources
+                .len(),
+            1,
+            "the empty-URL pass does not record the same label twice"
+        );
+        assert!(
+            skip_indices.contains(&0),
+            "the found asset's index is skipped"
+        );
+    }
+
+    #[test]
+    fn empty_url_assets_join_skip_indices() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-skip-indices",
+            );
+        app.wizard_state.step2.update_selected_update_assets = vec![
+            test_asset("ModA", "https://example.com/a.zip"),
+            test_asset("ModB", ""),
+        ];
+        let mut skip_indices = std::collections::HashSet::new();
+
+        mark_empty_url_assets_as_cache_hits(&mut app, &mut skip_indices);
+
+        assert!(!skip_indices.contains(&0));
+        assert!(skip_indices.contains(&1));
+        assert_eq!(
+            app.wizard_state
+                .step2
+                .update_selected_downloaded_sources
+                .len(),
+            1
+        );
+        assert!(
+            app.wizard_state.step2.update_selected_downloaded_sources[0].starts_with("ModB -> ")
+        );
+    }
+
+    #[test]
+    fn continue_without_bypasses_blockers() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-continue-without",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_archives_ingested(true);
+        app.wizard_state.modlist_auto_build_active = true;
+        app.wizard_state.step2.update_selected_manual_sources = vec!["Ascension".to_string()];
+        app.install_screen_state.manual_downloads.continue_without = true;
+
+        gate_pre_step5_blocker_once(&mut app);
+
+        assert!(app.install_screen_state.pipeline_arm_error.is_none());
+        assert!(app.install_screen_state.pre_step5_blocker_checked);
+        assert!(app.wizard_state.modlist_auto_build_active);
+    }
+
+    #[test]
+    fn open_workspace_outcome_when_continue_without_and_no_assets() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-open-workspace",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.wizard_state.modlist_auto_build_active = true;
+        app.install_screen_state.manual_downloads.continue_without = true;
+
+        let outcome = install_empty_asset_clean_finish(&mut app);
+
+        assert_eq!(outcome, Some(DownloadingOutcome::OpenWorkspace));
+    }
+
+    #[test]
+    fn open_workspace_outcome_waits_out_the_post_extract_scan() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-open-workspace-scanning",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.wizard_state.modlist_auto_build_active = true;
+        app.install_screen_state.manual_downloads.continue_without = true;
+        app.wizard_state.step2.is_scanning = true;
+
+        let outcome = install_empty_asset_clean_finish(&mut app);
+
+        assert_eq!(
+            outcome, None,
+            "the workspace must not open while the post-extract scan is still running"
+        );
+    }
+
+    #[test]
+    fn ingest_waits_for_manual_hold() {
+        let root = ManualDlTempRoot::new("ingest-waits");
+        let destination = root.path.join("dest").to_string_lossy().into_owned();
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-ingest-waits",
+            );
+        app.install_screen_state
+            .pipeline_flags
+            .set_download_phase_started(true);
+        app.wizard_state.step2.update_selected_downloaded_sources =
+            vec!["Ascension -> C:/archives/Ascension.zip".to_string()];
+        app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            label: "Ascension".to_string(),
+            from: "nexusmods.com".to_string(),
+            page_url: String::new(),
+            status: ManualRowStatus::Waiting,
+        }];
+
+        ingest_downloaded_archives_once(&mut app, &destination);
+        assert!(
+            !app.install_screen_state.pipeline_flags.archives_ingested(),
+            "the store-and-lock step waits for the manual hold"
+        );
+
+        app.install_screen_state.manual_downloads.rows[0].status = ManualRowStatus::Found;
+        ingest_downloaded_archives_once(&mut app, &destination);
+        assert!(
+            app.install_screen_state.pipeline_flags.archives_ingested(),
+            "ingest proceeds once every manual row is found"
+        );
+    }
+
+    #[test]
+    fn continue_without_waits_for_deferred_extract() {
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manualdl-continue-without-deferred",
+            );
+        app.install_screen_state.pipeline_flags.set_armed(true);
+        app.install_screen_state
+            .pipeline_flags
+            .set_explicit_resolve_started(true);
+        app.wizard_state.modlist_auto_build_active = true;
+        app.install_screen_state.manual_downloads.continue_without = true;
+        app.install_screen_state.manual_downloads.extract_deferred = true;
+
+        let outcome = install_empty_asset_clean_finish(&mut app);
+
+        assert_eq!(
+            outcome, None,
+            "the workspace must not open while an extract is still deferred"
+        );
+    }
+
+    #[test]
+    fn manual_row_prefers_display_name_and_strips_www() {
+        let mut request = manual_request("Ascension");
+        request.display_name = "House Rules".to_string();
+        request.page_url = "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string();
+        let row = manual_row_from_request(&request);
+        assert_eq!(row.label, "House Rules");
+        assert_eq!(row.from, "nexusmods.com");
+
+        let mut fallback = manual_request("Ascension");
+        fallback.display_name = String::new();
+        let fallback_row = manual_row_from_request(&fallback);
+        assert_eq!(fallback_row.label, "Ascension");
     }
 }

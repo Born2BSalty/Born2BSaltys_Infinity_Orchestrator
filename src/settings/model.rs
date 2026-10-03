@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::platform_defaults::{default_mod_installer_binary, default_weidu_binary};
+use crate::settings::redesign_fields::RedesignSettings;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -153,6 +154,24 @@ impl Step1Settings {
             trimmed
         }
     }
+
+    pub fn clear_unreachable_eet_sources(&mut self) -> Option<(String, String)> {
+        let pre_eet_unreachable =
+            self.new_pre_eet_dir_enabled && !self.bgee_game_folder.trim().is_empty();
+        let new_eet_unreachable =
+            self.new_eet_dir_enabled && !self.bg2ee_game_folder.trim().is_empty();
+        let previous_pre_eet = self.eet_bgee_game_folder.clone();
+        let previous_new_eet = self.eet_bg2ee_game_folder.clone();
+        let cleared_pre_eet = pre_eet_unreachable && !previous_pre_eet.is_empty();
+        let cleared_new_eet = new_eet_unreachable && !previous_new_eet.is_empty();
+        if cleared_pre_eet {
+            self.eet_bgee_game_folder.clear();
+        }
+        if cleared_new_eet {
+            self.eet_bg2ee_game_folder.clear();
+        }
+        (cleared_pre_eet || cleared_new_eet).then_some((previous_pre_eet, previous_new_eet))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -160,6 +179,7 @@ impl Step1Settings {
 pub struct AppSettings {
     pub exe_fingerprint: String,
     pub step1: Step1Settings,
+    pub general: RedesignSettings,
 }
 
 #[cfg(test)]
@@ -218,5 +238,93 @@ mod tests {
             ..Step1Settings::default()
         };
         assert_eq!(s.effective_global_mods_folder(), r"C:\old\mods");
+    }
+
+    #[test]
+    fn app_settings_without_general_block_uses_general_defaults() {
+        let json = r#"{"exe_fingerprint":"x","step1":{}}"#;
+        let s: AppSettings = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(s.general, RedesignSettings::default());
+    }
+
+    #[test]
+    fn app_settings_round_trips_general() {
+        let s = AppSettings {
+            general: RedesignSettings {
+                user_name: "@me".to_string(),
+                theme_palette: crate::settings::redesign_fields::ThemeChoice::Light,
+                ..RedesignSettings::default()
+            },
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&s).expect("serialize");
+        let s2: AppSettings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(s2, s);
+    }
+
+    fn eet_step1(pre_on: bool, new_on: bool, plain_filled: bool) -> Step1Settings {
+        Step1Settings {
+            new_pre_eet_dir_enabled: pre_on,
+            new_eet_dir_enabled: new_on,
+            bgee_game_folder: if plain_filled { "C:\\Games\\BGEE" } else { "" }.to_string(),
+            bg2ee_game_folder: if plain_filled { "C:\\Games\\BG2EE" } else { "" }.to_string(),
+            eet_bgee_game_folder: "C:\\Games\\OldEetBgee".to_string(),
+            eet_bg2ee_game_folder: "C:\\Games\\OldEetBg2ee".to_string(),
+            ..Step1Settings::default()
+        }
+    }
+
+    #[test]
+    fn unreachable_eet_sources_are_cleared() {
+        let mut step1 = eet_step1(true, true, true);
+        let cleared = step1.clear_unreachable_eet_sources();
+        assert_eq!(
+            cleared,
+            Some((
+                "C:\\Games\\OldEetBgee".to_string(),
+                "C:\\Games\\OldEetBg2ee".to_string()
+            ))
+        );
+        assert_eq!(step1.eet_bgee_game_folder, "");
+        assert_eq!(step1.eet_bg2ee_game_folder, "");
+    }
+
+    #[test]
+    fn eet_sources_stay_when_the_switch_is_off() {
+        let mut step1 = eet_step1(false, false, true);
+        assert_eq!(step1.clear_unreachable_eet_sources(), None);
+        assert_eq!(step1.eet_bgee_game_folder, "C:\\Games\\OldEetBgee");
+        assert_eq!(step1.eet_bg2ee_game_folder, "C:\\Games\\OldEetBg2ee");
+    }
+
+    #[test]
+    fn eet_sources_stay_when_the_plain_row_is_empty() {
+        let mut step1 = eet_step1(true, true, false);
+        assert_eq!(step1.clear_unreachable_eet_sources(), None);
+        assert_eq!(step1.eet_bgee_game_folder, "C:\\Games\\OldEetBgee");
+        assert_eq!(step1.eet_bg2ee_game_folder, "C:\\Games\\OldEetBg2ee");
+    }
+
+    #[test]
+    fn only_the_reachable_side_is_kept() {
+        let mut step1 = eet_step1(true, false, true);
+        let cleared = step1.clear_unreachable_eet_sources();
+        assert_eq!(
+            cleared,
+            Some((
+                "C:\\Games\\OldEetBgee".to_string(),
+                "C:\\Games\\OldEetBg2ee".to_string()
+            ))
+        );
+        assert_eq!(step1.eet_bgee_game_folder, "");
+        assert_eq!(step1.eet_bg2ee_game_folder, "C:\\Games\\OldEetBg2ee");
+    }
+
+    #[test]
+    fn empty_hidden_fields_report_nothing() {
+        let mut step1 = eet_step1(true, true, true);
+        step1.eet_bgee_game_folder.clear();
+        step1.eet_bg2ee_game_folder.clear();
+        assert_eq!(step1.clear_unreachable_eet_sources(), None);
     }
 }

@@ -101,7 +101,7 @@ mod tests {
             InstallWorkflow::FreshCreate,
             &settings_with_flags(false, false, false),
         );
-        assert!(off.is_empty(), "Settings OFF ⇒ no flags for fresh-create");
+        assert_eq!(off.len(), 0, "Settings OFF ⇒ no flags for fresh-create");
     }
 
     #[test]

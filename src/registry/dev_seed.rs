@@ -38,6 +38,7 @@ pub fn seed_demo_entry(
         paused_at_step: Some(3),
         total_size_bytes: None,
         latest_share_code: None,
+        description: None,
 
         author: None,
         forked_from: Vec::new(),

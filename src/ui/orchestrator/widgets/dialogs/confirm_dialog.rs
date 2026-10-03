@@ -6,8 +6,7 @@ use eframe::egui;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_pill_danger, redesign_shadow, redesign_shell_bg, redesign_text_muted,
-    redesign_text_primary,
+    redesign_pill_danger, redesign_shell_bg, redesign_text_muted, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -23,6 +22,7 @@ pub struct ConfirmDialog<'a> {
     pub title: &'a str,
     pub body: &'a str,
     pub confirm_label: &'a str,
+    pub cancel_label: &'a str,
     pub danger: bool,
 }
 
@@ -102,7 +102,7 @@ pub fn render(
                     if redesign_btn(
                         ui,
                         palette,
-                        "Cancel",
+                        dialog.cancel_label,
                         BtnOpts {
                             small: true,
                             ..Default::default()
@@ -130,7 +130,10 @@ fn danger_primary_btn(ui: &mut egui::Ui, palette: ThemePalette, label: &str) -> 
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let desired = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, galley.size().x),
+        f32::mul_add(pad_y, 2.0, galley.size().y),
+    );
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
 
     let pressed = response.is_pointer_button_down_on();
@@ -143,8 +146,6 @@ fn danger_primary_btn(ui: &mut egui::Ui, palette: ThemePalette, label: &str) -> 
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         let radius = egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8);
-        let shadow_rect = rect.translate(egui::vec2(2.0, 2.0));
-        painter.rect_filled(shadow_rect, radius, redesign_shadow(palette));
         painter.rect_filled(rect, radius, fill);
         painter.rect_stroke(
             rect,

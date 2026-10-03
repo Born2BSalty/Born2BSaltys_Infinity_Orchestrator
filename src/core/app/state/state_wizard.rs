@@ -29,6 +29,7 @@ pub struct WizardState<Flag = bool> {
     pub modlist_import_preview_mod_configs: String,
     pub(crate) modlist_share_name: Option<String>,
     pub(crate) modlist_share_author: Option<String>,
+    pub(crate) modlist_share_description: Option<String>,
     pub(crate) modlist_share_forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
     pub modlist_auto_build_active: Flag,
     pub modlist_auto_build_waiting_for_install: Flag,

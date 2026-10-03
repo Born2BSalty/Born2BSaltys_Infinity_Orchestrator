@@ -8,7 +8,7 @@ use crate::app::terminal::EmbeddedTerminal;
 use crate::ui::orchestrator::widgets::{BtnOpts, clipboard, redesign_btn};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::service_diagnostics_support_step5::{
-    export_diagnostics, open_console_logs_folder, open_last_log_file, save_console_log,
+    open_console_logs_folder, open_last_log_file, save_console_log,
 };
 
 pub(crate) fn render_actions_menu(
@@ -88,100 +88,4 @@ pub(crate) fn render_actions_menu(
             }
         },
     );
-}
-
-pub(crate) fn render_diagnostics_menu(
-    ui: &mut egui::Ui,
-    state: &mut WizardState,
-    terminal: Option<&EmbeddedTerminal>,
-    dev_mode: bool,
-    exe_fingerprint: &str,
-    palette: ThemePalette,
-) {
-    if !dev_mode {
-        return;
-    }
-    state.step1.bio_full_debug = true;
-    state.step1.log_raw_output_dev = true;
-
-    let btn = redesign_btn(
-        ui,
-        palette,
-        "Diagnostics",
-        BtnOpts {
-            small: true,
-            ..Default::default()
-        },
-    );
-    let popup_id = ui.make_persistent_id("step5_diagnostics_menu");
-    if btn.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup_id));
-    }
-    egui::popup::popup_below_widget(
-        ui,
-        popup_id,
-        &btn,
-        egui::PopupCloseBehavior::CloseOnClickOutside,
-        |ui| {
-            ui.set_min_width(220.0);
-            ui.label("Applies on next install run (no app restart needed)");
-            ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
-            ui.horizontal(|ui| {
-                if ui
-                    .selectable_label(
-                        !state.step1.rust_log_debug && !state.step1.rust_log_trace,
-                        "RUST_LOG Off",
-                    )
-                    .clicked()
-                {
-                    set_rust_log_level(state, None);
-                }
-                if ui
-                    .selectable_label(state.step1.rust_log_debug, "RUST_LOG=DEBUG")
-                    .clicked()
-                {
-                    set_rust_log_level(state, Some("debug"));
-                }
-                if ui
-                    .selectable_label(state.step1.rust_log_trace, "RUST_LOG=TRACE")
-                    .clicked()
-                {
-                    set_rust_log_level(state, Some("trace"));
-                }
-            });
-            if ui.button("Export diagnostics").clicked() {
-                match export_diagnostics(state, terminal, dev_mode, exe_fingerprint) {
-                    Ok(path) => {
-                        state.step5.last_status_text =
-                            format!("Diagnostics exported: {}", path.display());
-                    }
-                    Err(err) => {
-                        state.step5.last_status_text = format!("Diagnostics export failed: {err}");
-                    }
-                }
-                ui.memory_mut(egui::Memory::close_popup);
-            }
-        },
-    );
-}
-
-fn set_rust_log_level(state: &mut WizardState, level: Option<&str>) {
-    match level {
-        Some("trace") => {
-            state.step1.rust_log_trace = true;
-            state.step1.rust_log_debug = false;
-        }
-        Some("debug") => {
-            state.step1.rust_log_debug = true;
-            state.step1.rust_log_trace = false;
-        }
-        _ => {
-            state.step1.rust_log_debug = false;
-            state.step1.rust_log_trace = false;
-        }
-    }
-}
-
-pub(crate) const fn diagnostics_ready_for_dev(state: &WizardState) -> bool {
-    state.step1.rust_log_debug || state.step1.rust_log_trace
 }

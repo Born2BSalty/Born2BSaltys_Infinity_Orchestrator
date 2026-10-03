@@ -3,9 +3,9 @@
 
 use eframe::egui;
 
+use crate::app::game_authority;
 use crate::app::state::WizardState;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::shared::redesign_tokens::ThemePalette;
 
 const STEP5_TITLE: &str = "Step 5: Install, Logs, Diagnostics";
 
@@ -13,33 +13,9 @@ pub(crate) fn render_dev_header(
     ui: &mut egui::Ui,
     state: &WizardState,
     terminal: Option<&EmbeddedTerminal>,
-    dev_mode: bool,
-    palette: ThemePalette,
 ) {
     ui.heading(step5_title(state, terminal));
     ui.label("Final execution view.");
-    if dev_mode {
-        let has_rust_log = state.step1.rust_log_debug || state.step1.rust_log_trace;
-        let level = if state.step1.rust_log_trace {
-            "TRACE"
-        } else if state.step1.rust_log_debug {
-            "DEBUG"
-        } else {
-            "OFF"
-        };
-        let color = if has_rust_log {
-            crate::ui::shared::redesign_tokens::redesign_success(palette)
-        } else {
-            crate::ui::shared::redesign_tokens::redesign_accent_path(palette)
-        };
-        let msg = if has_rust_log {
-            format!("Dev Mode: RUST_LOG={level} selected.")
-        } else {
-            "Dev Mode: open Diagnostics and choose RUST_LOG=DEBUG or TRACE before Install."
-                .to_string()
-        };
-        ui.label(crate::ui::shared::typography_global::strong(msg).color(color));
-    }
     ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_LG);
 }
 
@@ -60,7 +36,8 @@ fn step5_title(state: &WizardState, terminal: Option<&EmbeddedTerminal>) -> Stri
     let second_progress = mod_progress_for_items(&current_tp2, &state.step3.bg2ee_items);
     match (first_progress, second_progress) {
         (Some((index, total)), None) => {
-            format!("{STEP5_TITLE} — Installing BGEE mod {index}/{total}")
+            let first_slot_name = game_authority::first_slot_tab(&state.step1.game_install);
+            format!("{STEP5_TITLE} — Installing {first_slot_name} mod {index}/{total}")
         }
         (None, Some((index, total))) => {
             format!("{STEP5_TITLE} — Installing BG2EE mod {index}/{total}")

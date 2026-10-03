@@ -4,11 +4,10 @@
 use eframe::egui;
 
 use crate::registry::model::{ModlistRegistry, ModlistState};
-use crate::ui::home::modlist_card::{self, ModlistCardActions};
+use crate::ui::home::modlist_card::{self, CardMenu, ModlistCardActions};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_shell_bg, redesign_success, redesign_text_faint, redesign_text_muted,
-    redesign_text_primary,
+    redesign_shell_bg, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -17,7 +16,6 @@ pub enum LoadDraftOutcome {
     Pending,
     Cancelled,
     Resume(String),
-    CopyImportCode(String),
     Delete(String),
 }
 
@@ -28,7 +26,6 @@ pub fn render(
     ctx: &egui::Context,
     palette: ThemePalette,
     registry: &ModlistRegistry,
-    copied_name: Option<&str>,
 ) -> LoadDraftOutcome {
     let mut outcome = LoadDraftOutcome::Pending;
     let frame = dialog_frame(palette);
@@ -40,7 +37,7 @@ pub fn render(
         .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
         .frame(frame)
         .show(ctx, |ui| {
-            render_body(ui, palette, registry, copied_name, &mut outcome);
+            render_body(ui, palette, registry, &mut outcome);
         });
     outcome
 }
@@ -60,7 +57,6 @@ fn render_body(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     registry: &ModlistRegistry,
-    copied_name: Option<&str>,
     outcome: &mut LoadDraftOutcome,
 ) {
     ui.set_max_width(MAX_WIDTH_PX);
@@ -74,7 +70,6 @@ fn render_body(
         .collect();
     render_draft_list(ui, palette, &in_progress, outcome);
     render_footer(ui, palette, outcome);
-    render_copied_toast(ui, palette, copied_name);
 }
 
 fn render_header(ui: &mut egui::Ui, palette: ThemePalette) {
@@ -111,11 +106,8 @@ fn render_draft_list(
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 10.0;
                 for entry in in_progress {
-                    apply_card_action(
-                        outcome,
-                        modlist_card::render(ui, palette, entry, None),
-                        entry,
-                    );
+                    let action = modlist_card::render(ui, palette, entry, CardMenu::DraftPicker);
+                    apply_card_action(outcome, action, entry);
                 }
             });
     }
@@ -155,9 +147,6 @@ fn apply_card_action(
         ModlistCardActions::Resume => {
             *outcome = LoadDraftOutcome::Resume(entry.id.clone());
         }
-        ModlistCardActions::CopyImportCode => {
-            *outcome = LoadDraftOutcome::CopyImportCode(entry.id.clone());
-        }
         ModlistCardActions::Delete => {
             *outcome = LoadDraftOutcome::Delete(entry.id.clone());
         }
@@ -188,43 +177,6 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, outcome: &mut LoadDra
     );
 }
 
-fn render_copied_toast(ui: &mut egui::Ui, palette: ThemePalette, copied_name: Option<&str>) {
-    let Some(name) = copied_name else {
-        return;
-    };
-    ui.add_space(10.0);
-    egui::Frame::default()
-        .fill(redesign_shell_bg(palette))
-        .stroke(egui::Stroke::new(
-            REDESIGN_BORDER_WIDTH_PX,
-            redesign_border_strong(palette),
-        ))
-        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
-        .inner_margin(egui::Margin {
-            left: 12,
-            right: 12,
-            top: 6,
-            bottom: 6,
-        })
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                ui.label(
-                    egui::RichText::new("\u{2713}")
-                        .size(13.0)
-                        .family(egui::FontFamily::Name("firacode_nerd".into()))
-                        .color(redesign_success(palette)),
-                );
-                ui.label(
-                    egui::RichText::new(format!("Copied import code for \"{name}\""))
-                        .size(13.0)
-                        .family(egui::FontFamily::Name("poppins_light".into()))
-                        .color(redesign_success(palette)),
-                );
-            });
-        });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,14 +187,14 @@ mod tests {
     }
 
     #[test]
-    fn resume_and_copy_carry_the_id() {
+    fn resume_and_delete_carry_the_id() {
         assert_eq!(
             LoadDraftOutcome::Resume("ABC".to_string()),
             LoadDraftOutcome::Resume("ABC".to_string())
         );
         assert_ne!(
             LoadDraftOutcome::Resume("ABC".to_string()),
-            LoadDraftOutcome::CopyImportCode("ABC".to_string())
+            LoadDraftOutcome::Delete("ABC".to_string())
         );
     }
 }

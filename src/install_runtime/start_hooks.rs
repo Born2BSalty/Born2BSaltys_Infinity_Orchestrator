@@ -69,7 +69,8 @@ pub fn write_install_start_artifacts(
         .find(modlist_id)
         .ok_or_else(|| format!("modlist {modlist_id} not in registry at install start"))?;
     let destination = entry.destination_folder.trim().to_string();
-    let meta = ShareMeta::from_entry(entry, false);
+    let meta = ShareMeta::from_entry(entry, false)
+        .with_archive_meta(share_export::archive_meta_for_draft(wizard_state));
 
     let share_code = share_export::pack_meta(wizard_state, &meta)?;
 
@@ -117,7 +118,10 @@ pub fn write_install_start_artifacts_with_code(
         .ok_or_else(|| format!("modlist {modlist_id} not in registry at install start"))?;
     let destination = entry.destination_folder.trim().to_string();
     let trimmed_source = code_source.trim();
-    let share_code = match share_export::set_allow_auto_install(trimmed_source, false) {
+    let identity = ShareMeta::from_entry(entry, false);
+    let share_code = match share_export::set_allow_auto_install(trimmed_source, false)
+        .and_then(|code| share_export::set_packed_identity(&code, &identity))
+    {
         Ok(code) => code,
         Err(err) => {
             warn!(
@@ -626,5 +630,73 @@ mod tests {
                  reinstall={reinstall})"
             );
         }
+    }
+
+    #[test]
+    fn write_install_start_artifacts_with_code_stamps_the_entry_identity_onto_a_carried_code() {
+        use crate::app::modlist_share::{ForkAncestor, preview_modlist_share_code};
+
+        struct StoreFileGuard(std::path::PathBuf);
+        impl Drop for StoreFileGuard {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+
+        let (store, store_path) = temp_registry_store("carried_identity");
+        let _guard = StoreFileGuard(store_path);
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "FORK-1".to_string(),
+            name: "EET Essentials +++".to_string(),
+            game: Game::EET,
+            state: ModlistState::InProgress,
+            author: Some("Xgatt".to_string()),
+            forked_from: vec![ForkAncestor {
+                name: "EET Essentials".to_string(),
+                author: "BIO Team".to_string(),
+            }],
+            ..Default::default()
+        });
+        let parent_code = crate::app::modlist_share::encode_share_payload_text(
+            r#"{
+                "format_version": 1,
+                "game_install": "EET",
+                "install_mode": "start_from_scratch",
+                "allow_auto_install": true,
+                "name": "EET Essentials",
+                "author": "BIO Team",
+                "weidu_logs": { "bgee": "~MOD/MOD.TP2~ #0 #0 // A component" }
+            }"#,
+        )
+        .expect("mint parent code");
+
+        write_install_start_artifacts_with_code(
+            "FORK-1",
+            InstallButtonVariant::Install,
+            &parent_code,
+            &mut registry,
+            &store,
+        )
+        .expect("hook ok");
+
+        let stored = registry
+            .find("FORK-1")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("code stored");
+        let preview = preview_modlist_share_code(&stored).expect("preview");
+        assert_eq!(preview.name.as_deref(), Some("EET Essentials +++"));
+        assert_eq!(preview.author.as_deref(), Some("Xgatt"));
+        assert_eq!(
+            preview.forked_from,
+            vec![ForkAncestor {
+                name: "EET Essentials".to_string(),
+                author: "BIO Team".to_string(),
+            }]
+        );
+        assert!(!preview.allow_auto_install);
+        assert_eq!(preview.bgee_entries, 1);
     }
 }

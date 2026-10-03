@@ -51,19 +51,32 @@ pub fn render_weidu_line(
             ui.add_space(LINENO_GAP_PX);
         }
 
-        let job = build_weidu_job(ui, palette, &text);
+        let job = build_weidu_job(palette, &text);
         ui.label(egui::WidgetText::from(job));
     });
 }
 
-fn build_weidu_job(ui: &egui::Ui, palette: ThemePalette, text: &str) -> egui::text::LayoutJob {
-    let mut job = egui::text::LayoutJob::default();
+#[must_use]
+pub(crate) fn weidu_widget_text(
+    ui: &egui::Ui,
+    palette: ThemePalette,
+    text: &str,
+) -> egui::WidgetText {
+    let font = egui::TextStyle::Monospace.resolve(ui.style());
+    egui::WidgetText::from(weidu_job(palette, text, &font))
+}
+
+fn build_weidu_job(palette: ThemePalette, text: &str) -> egui::text::LayoutJob {
     let mono = egui::FontId::new(
         LINE_FONT_SIZE,
         egui::FontFamily::Name("firacode_nerd".into()),
     );
+    weidu_job(palette, text, &mono)
+}
+
+fn weidu_job(palette: ThemePalette, text: &str, font: &egui::FontId) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = f32::INFINITY;
-    let _ = ui;
 
     let path_color = egui::Color32::from_rgb(0xD4, 0xA3, 0x5C);
     let nums_color = egui::Color32::from_rgb(0x2F, 0x6F, 0xB7);
@@ -71,7 +84,7 @@ fn build_weidu_job(ui: &egui::Ui, palette: ThemePalette, text: &str) -> egui::te
 
     let trimmed_start = text.trim_start();
     if trimmed_start.starts_with("//") {
-        append(&mut job, text, &mono, comment_color);
+        append(&mut job, text, font, comment_color);
         return job;
     }
 
@@ -81,16 +94,16 @@ fn build_weidu_job(ui: &egui::Ui, palette: ThemePalette, text: &str) -> egui::te
         let path_end = path_start + path_end_rel + 2;
         let comment_start = text[path_end..].find("//").map(|idx| path_end + idx);
 
-        append(&mut job, &text[..path_start], &mono, comment_color);
-        append(&mut job, &text[path_start..path_end], &mono, path_color);
+        append(&mut job, &text[..path_start], font, comment_color);
+        append(&mut job, &text[path_start..path_end], font, path_color);
         if let Some(comment_start) = comment_start {
-            append(&mut job, &text[path_end..comment_start], &mono, nums_color);
-            append(&mut job, &text[comment_start..], &mono, comment_color);
+            append(&mut job, &text[path_end..comment_start], font, nums_color);
+            append(&mut job, &text[comment_start..], font, comment_color);
         } else {
-            append(&mut job, &text[path_end..], &mono, nums_color);
+            append(&mut job, &text[path_end..], font, nums_color);
         }
     } else {
-        append(&mut job, text, &mono, comment_color);
+        append(&mut job, text, font, comment_color);
     }
 
     job
@@ -177,21 +190,15 @@ mod tests {
     #[test]
     fn three_colour_split_matches_wireframe_hues() {
         let palette = ThemePalette::Dark;
-        let ctx = egui::Context::default();
+        let job = build_weidu_job(
+            palette,
+            "~EEFIXPACK\\EEFIXPACK.TP2~ #0 #2 // Game Text Update",
+        );
         let mut produced: Vec<(String, egui::Color32)> = Vec::new();
-        let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                let job = build_weidu_job(
-                    ui,
-                    palette,
-                    "~EEFIXPACK\\EEFIXPACK.TP2~ #0 #2 // Game Text Update",
-                );
-                for s in &job.sections {
-                    let txt = job.text[s.byte_range.clone()].to_string();
-                    produced.push((txt, s.format.color));
-                }
-            });
-        });
+        for s in &job.sections {
+            let txt = job.text[s.byte_range.clone()].to_string();
+            produced.push((txt, s.format.color));
+        }
         assert_eq!(produced.len(), 3, "path + numbers + comment = 3 runs");
         assert!(produced[0].0.starts_with('~') && produced[0].0.ends_with('~'));
         assert_eq!(produced[0].1, egui::Color32::from_rgb(0xD4, 0xA3, 0x5C));
@@ -204,19 +211,46 @@ mod tests {
     #[test]
     fn pure_comment_line_is_single_run() {
         let palette = ThemePalette::Dark;
+        let job = build_weidu_job(palette, "// Log of Currently Installed WeiDU Mods");
+        assert_eq!(job.sections.len(), 1);
+        assert_eq!(job.sections[0].format.color, redesign_success(palette));
+    }
+
+    #[test]
+    fn step3_text_uses_step4_colours() {
+        let palette = ThemePalette::Dark;
+        let font = egui::FontId::new(13.0, egui::FontFamily::Monospace);
+        let job = weidu_job(palette, "~X/X.TP2~ #0 #1 // Y: 1.0", &font);
+        let mut produced: Vec<(String, egui::Color32)> = Vec::new();
+        for s in &job.sections {
+            let txt = job.text[s.byte_range.clone()].to_string();
+            produced.push((txt, s.format.color));
+        }
+        assert_eq!(produced.len(), 3, "path + numbers + comment = 3 runs");
+        assert!(produced[0].0.starts_with('~') && produced[0].0.ends_with('~'));
+        assert_eq!(produced[0].1, egui::Color32::from_rgb(0xD4, 0xA3, 0x5C));
+        assert!(produced[1].0.contains("#0 #1"));
+        assert_eq!(produced[1].1, egui::Color32::from_rgb(0x2F, 0x6F, 0xB7));
+        assert!(produced[2].0.contains("// Y: 1.0"));
+        assert_eq!(produced[2].1, redesign_success(palette));
+    }
+
+    #[test]
+    fn step3_text_uses_monospace_style_font() {
+        let palette = ThemePalette::Dark;
         let ctx = egui::Context::default();
-        let mut runs = 0usize;
-        let mut color = egui::Color32::TRANSPARENT;
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                let job = build_weidu_job(ui, palette, "// Log of Currently Installed WeiDU Mods");
-                runs = job.sections.len();
-                if let Some(s) = job.sections.first() {
-                    color = s.format.color;
+                let expected_font = egui::TextStyle::Monospace.resolve(ui.style());
+                let widget_text = weidu_widget_text(ui, palette, "~X/X.TP2~ #0 #1 // Y: 1.0");
+                let egui::WidgetText::LayoutJob(job) = widget_text else {
+                    panic!("expected a LayoutJob widget text");
+                };
+                assert_ne!(job.sections.len(), 0);
+                for s in &job.sections {
+                    assert_eq!(s.format.font_id, expected_font);
                 }
             });
         });
-        assert_eq!(runs, 1);
-        assert_eq!(color, redesign_success(palette));
     }
 }

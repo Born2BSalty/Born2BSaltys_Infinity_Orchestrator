@@ -43,8 +43,11 @@ pub struct HomeScreenState {
     pub delete_target: Option<String>,
     pub reinstall_target: Option<String>,
 
-    pub rename_target: Option<String>,
-    pub rename_temp: String,
+    pub edit_target: Option<String>,
+    pub edit_name: String,
+    pub edit_description: String,
+
+    pub share_target: Option<String>,
 }
 
 impl HomeScreenState {

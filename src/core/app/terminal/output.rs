@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 mod accessors {
-    use super::super::{EmbeddedTerminal, PromptInfo, analyze};
+    use super::super::{EmbeddedTerminal, PromptInfo, analyze, analyze_error_block};
 
     impl EmbeddedTerminal {
         #[must_use]
@@ -32,7 +32,7 @@ mod accessors {
 
         #[must_use]
         pub fn extract_error_block(&self) -> String {
-            analyze::extract_error_block(&self.output_buffer)
+            analyze_error_block::extract_error_block(&self.output_buffer)
         }
 
         #[must_use]
@@ -68,6 +68,21 @@ mod accessors {
         #[must_use]
         pub const fn output_len(&self) -> usize {
             self.output_buffer.len()
+        }
+
+        #[must_use]
+        pub const fn output_revision(&self) -> u64 {
+            self.output_revision
+        }
+
+        #[must_use]
+        pub const fn important_revision(&self) -> u64 {
+            self.important_revision
+        }
+
+        #[must_use]
+        pub const fn installed_revision(&self) -> u64 {
+            self.installed_revision
         }
 
         #[must_use]
@@ -113,12 +128,17 @@ mod buffers {
             self.important_buffer.clear();
             self.installed_buffer.clear();
             self.important_scan_tail.clear();
+            self.current_batch.clear();
+            self.pending_display_patches.clear();
             self.prompt_capture.active = false;
             self.prompt_capture.lines = 0;
             self.prompt_capture.after_send = false;
             self.warning_capture.active = false;
             self.warning_capture.lines = 0;
             self.events.has_new_data = true;
+            self.output_revision = self.output_revision.wrapping_add(1);
+            self.important_revision = self.important_revision.wrapping_add(1);
+            self.installed_revision = self.installed_revision.wrapping_add(1);
         }
 
         pub fn append_marker(&mut self, text: &str) {
@@ -137,6 +157,34 @@ mod buffers {
                     .map_or(0, |(idx, _)| idx);
                 self.output_buffer.drain(..byte_idx);
             }
+            self.output_revision = self.output_revision.wrapping_add(1);
+        }
+
+        pub(in crate::app::terminal) fn apply_pending_display_patches(&mut self) {
+            let mut patched = false;
+            for (raw, display) in std::mem::take(&mut self.pending_display_patches)
+                .into_iter()
+                .rev()
+            {
+                if let Some(pos) = self.output_buffer.rfind(raw.as_str()) {
+                    self.output_buffer
+                        .replace_range(pos..pos + raw.len(), &display);
+                    patched = true;
+                }
+            }
+            if patched {
+                self.output_revision = self.output_revision.wrapping_add(1);
+            }
+        }
+
+        pub(in crate::app::terminal) fn push_important(&mut self, text: &str) {
+            self.important_buffer.push_str(text);
+            self.important_revision = self.important_revision.wrapping_add(1);
+        }
+
+        pub(in crate::app::terminal) fn push_installed(&mut self, text: &str) {
+            self.installed_buffer.push_str(text);
+            self.installed_revision = self.installed_revision.wrapping_add(1);
         }
 
         pub(in crate::app::terminal) fn update_boundary_events(&mut self, new_text: &str) {
@@ -174,6 +222,7 @@ mod buffers {
     }
 }
 mod capture {
+    use super::super::success_prefix::{is_batch_line, parse_batch_line, prefixed_success_line};
     use super::super::{EmbeddedTerminal, analyze};
 
     impl EmbeddedTerminal {
@@ -199,6 +248,19 @@ mod capture {
             for line in parts {
                 let expanded = expand_escaped_newlines(line);
                 for sub in expanded.lines() {
+                    if is_batch_line(sub) {
+                        self.current_batch = parse_batch_line(sub).unwrap_or_default();
+                    }
+                    let display = if analyze::installed_line(sub) {
+                        prefixed_success_line(sub, &self.current_batch)
+                    } else {
+                        None
+                    };
+                    let shown = display.as_deref().unwrap_or(sub);
+                    if let Some(display) = display.as_ref() {
+                        self.pending_display_patches
+                            .push((sub.to_string(), display.clone()));
+                    }
                     if analyze::prompt_capture_start(sub) {
                         self.prompt_capture.active = true;
                         self.prompt_capture.lines = 0;
@@ -210,8 +272,7 @@ mod capture {
                             self.prompt_capture.lines = 0;
                             self.prompt_capture.after_send = false;
                         }
-                        self.important_buffer.push_str(sub);
-                        self.important_buffer.push('\n');
+                        self.push_important(&format!("{shown}\n"));
                         self.prompt_capture.lines = self.prompt_capture.lines.saturating_add(1);
                         if analyze::prompt_capture_end(sub) || self.prompt_capture.lines >= 5000 {
                             self.prompt_capture.active = false;
@@ -228,8 +289,7 @@ mod capture {
                             self.warning_capture.active = false;
                             self.warning_capture.lines = 0;
                         } else {
-                            self.important_buffer.push_str(sub);
-                            self.important_buffer.push('\n');
+                            self.push_important(&format!("{shown}\n"));
                             self.warning_capture.lines =
                                 self.warning_capture.lines.saturating_add(1);
                             continue;
@@ -239,12 +299,10 @@ mod capture {
                         self.prompt_capture.after_send = false;
                     }
                     if analyze::important_line(sub) {
-                        self.important_buffer.push_str(sub);
-                        self.important_buffer.push('\n');
+                        self.push_important(&format!("{shown}\n"));
                     }
                     if analyze::installed_line(sub) {
-                        self.installed_buffer.push_str(sub);
-                        self.installed_buffer.push('\n');
+                        self.push_installed(&format!("{shown}\n"));
                     }
                 }
             }
@@ -256,5 +314,74 @@ mod capture {
             .replace("\\r\\n", "\n")
             .replace("\\n", "\n")
             .replace("\\r", "\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::EmbeddedTerminal;
+
+    #[test]
+    fn output_revision_moves_when_capped_buffer_is_full() {
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        term.max_buffer_chars = 10;
+        term.append_output("01234567890123456789");
+        let revision_before = term.output_revision();
+        let len_before = term.output_len();
+        term.append_output("abcde");
+        assert_eq!(term.output_len(), len_before);
+        assert_ne!(term.output_revision(), revision_before);
+    }
+
+    #[test]
+    fn output_revision_moves_on_clear() {
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        term.append_output("hello");
+        let output_before = term.output_revision();
+        let important_before = term.important_revision();
+        let installed_before = term.installed_revision();
+        term.clear_console();
+        assert_ne!(term.output_revision(), output_before);
+        assert_ne!(term.important_revision(), important_before);
+        assert_ne!(term.installed_revision(), installed_before);
+    }
+
+    #[test]
+    fn installed_revision_moves_on_installed_line() {
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        let revision_before = term.installed_revision();
+        term.update_important_lines("SUCCESSFULLY INSTALLED\n");
+        assert_ne!(term.installed_revision(), revision_before);
+    }
+
+    #[test]
+    fn filtered_revisions_quiet_on_plain_output() {
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        let important_before = term.important_revision();
+        let installed_before = term.installed_revision();
+        term.update_important_lines("just a plain line of output\n");
+        term.append_output("just a plain line of output\n");
+        let output_before = term.output_revision();
+        term.append_output("more plain output\n");
+        assert_eq!(term.important_revision(), important_before);
+        assert_eq!(term.installed_revision(), installed_before);
+        assert_ne!(term.output_revision(), output_before);
+    }
+
+    #[test]
+    fn clear_console_drops_the_batch_and_pending_patches() {
+        let batch_line = "[2026-09-29T03:30:35Z INFO  mod_installer::installers] Installing mod WeiduBatchedComponents([WeiduComponent { tp_file: \"DLCMERGER.TP2\", name: \"DlcMerger\", lang: \"0\", component: \"1\", component_name: \"Merge DLC into game\", sub_component: \"Siege of Dragonspear\", version: \"1.8\" }])\n";
+        let success_line = "[2026-09-29T03:31:14Z INFO  mod_installer::parser] SUCCESSFULLY INSTALLED      Merge DLC into game\n";
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        term.update_important_lines(batch_line);
+        term.update_important_lines(success_line);
+        assert_ne!(term.current_batch.len(), 0);
+        assert_ne!(term.pending_display_patches.len(), 0);
+        term.clear_console();
+        assert_eq!(term.current_batch.len(), 0);
+        assert_eq!(term.pending_display_patches.len(), 0);
+        term.append_output(success_line);
+        term.apply_pending_display_patches();
+        assert_eq!(term.output_text(), success_line);
     }
 }

@@ -257,7 +257,7 @@ mod tests {
         let registry = ModlistRegistry::default();
         let mut cycle = RegistryPersistenceCycle::new_with_baseline(registry.clone());
         let errs = cycle.flush_all(&registry, &store, &HashMap::new(), &HashMap::new());
-        assert!(errs.is_empty());
+        assert_eq!(errs.len(), 0);
         assert!(!path.exists(), "no save when nothing changed");
     }
 }

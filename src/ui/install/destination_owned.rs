@@ -3,8 +3,8 @@
 
 use eframe::egui;
 
+use crate::registry::destination_claim::{ClaimRefusal, DestinationClaim};
 use crate::registry::model::ModlistRegistry;
-use crate::registry::operations::DestinationOwnership;
 use crate::ui::install::destination_not_empty::{
     WARN_BORDER, WARN_INK, paint_warning_triangle, warn_fill,
 };
@@ -12,32 +12,23 @@ use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_error,
 };
 
-#[must_use]
-pub(crate) fn proceed_allowed(
-    ownership: &DestinationOwnership,
-    active_install_id: Option<&str>,
-) -> bool {
-    match ownership {
-        DestinationOwnership::Free => true,
-        DestinationOwnership::ExactOwners(ids) => {
-            active_install_id.is_none_or(|active| ids.iter().all(|id| id != active))
-        }
-        DestinationOwnership::InsideOwner(_) | DestinationOwnership::ContainsOwners(_) => false,
-    }
-}
-
 pub(crate) fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    ownership: &DestinationOwnership,
+    claim: &DestinationClaim,
     registry: &ModlistRegistry,
 ) {
-    match ownership {
-        DestinationOwnership::Free => {}
-        DestinationOwnership::ExactOwners(ids) => render_exact_warning(ui, ids, registry),
-        DestinationOwnership::InsideOwner(id) => render_inside_block(ui, palette, id, registry),
-        DestinationOwnership::ContainsOwners(ids) => {
+    match claim {
+        DestinationClaim::Free | DestinationClaim::Adopt(_) => {}
+        DestinationClaim::Replace(ids) => render_exact_warning(ui, ids, registry),
+        DestinationClaim::Refused(ClaimRefusal::InsideAnother(id)) => {
+            render_inside_block(ui, palette, id, registry);
+        }
+        DestinationClaim::Refused(ClaimRefusal::ContainsOthers(ids)) => {
             render_contains_block(ui, palette, ids, registry);
+        }
+        DestinationClaim::Refused(ClaimRefusal::OwnerIsInstalling(id)) => {
+            render_installing_block(ui, palette, id, registry);
         }
     }
 }
@@ -145,6 +136,28 @@ fn render_inside_block(
     });
 }
 
+fn render_installing_block(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    id: &str,
+    registry: &ModlistRegistry,
+) {
+    ui.add_space(12.0);
+    let name = registry.find(id).map_or_else(|| id, |e| e.name.as_str());
+    let style = danger_style(palette);
+    banner_frame(style).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        header_row(ui, "Folder in use", style.ink);
+        ui.add_space(4.0);
+        body_label(
+            ui,
+            format!(
+                "\"{name}\" is installing into this folder right now \u{2014} wait for it to finish or pick a different folder."
+            ),
+        );
+    });
+}
+
 fn render_contains_block(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -179,7 +192,6 @@ fn render_contains_block(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
 
     fn reg_with(id: &str, name: &str, dest: &str) -> ModlistRegistry {
@@ -193,53 +205,6 @@ mod tests {
             ..Default::default()
         });
         r
-    }
-
-    #[test]
-    fn proceed_allowed_free_always_true() {
-        assert!(proceed_allowed(&DestinationOwnership::Free, None));
-        assert!(proceed_allowed(&DestinationOwnership::Free, Some("X")));
-    }
-
-    #[test]
-    fn proceed_allowed_exact_no_active_install() {
-        let o = DestinationOwnership::ExactOwners(vec!["A".to_string()]);
-        assert!(proceed_allowed(&o, None));
-    }
-
-    #[test]
-    fn proceed_allowed_exact_active_install_not_owner() {
-        let o = DestinationOwnership::ExactOwners(vec!["A".to_string()]);
-        assert!(proceed_allowed(&o, Some("B")));
-    }
-
-    #[test]
-    fn proceed_blocked_exact_active_install_is_owner() {
-        let o = DestinationOwnership::ExactOwners(vec!["A".to_string()]);
-        assert!(!proceed_allowed(&o, Some("A")));
-    }
-
-    #[test]
-    fn proceed_blocked_inside_owner() {
-        let o = DestinationOwnership::InsideOwner("A".to_string());
-        assert!(!proceed_allowed(&o, None));
-        assert!(!proceed_allowed(&o, Some("B")));
-    }
-
-    #[test]
-    fn proceed_blocked_contains_owners() {
-        let o = DestinationOwnership::ContainsOwners(vec!["A".to_string()]);
-        assert!(!proceed_allowed(&o, None));
-        assert!(!proceed_allowed(&o, Some("B")));
-    }
-
-    #[test]
-    fn exact_block_with_multiple_owners_mid_install_blocks_on_any() {
-        let o = DestinationOwnership::ExactOwners(vec!["A".to_string(), "B".to_string()]);
-        assert!(!proceed_allowed(&o, Some("A")));
-        assert!(!proceed_allowed(&o, Some("B")));
-        assert!(proceed_allowed(&o, Some("C")));
-        assert!(proceed_allowed(&o, None));
     }
 
     #[test]
