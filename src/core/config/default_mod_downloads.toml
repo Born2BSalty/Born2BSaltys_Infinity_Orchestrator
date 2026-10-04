@@ -1465,19 +1465,19 @@ tp2 = "npcflirt"
   pkg_macos = "mac,rar,zip"
 
 [[mods]]
-name = "Quest Pack"
+name = "QuestPack"
 tp2 = "d0questpack"
 aliases = ["questpack"]
 
   [[mods.sources]]
   id = "pocket-plane-group"
   label = "Pocket-Plane-Group"
-  type = "url"
-  url = "https://pocketplane.net/mods/questpack-v35-win.zip"
-  repo = ""
+  type = "github"
+  url = "https://github.com/Pocket-Plane-Group/QuestPack"
+  repo = "Pocket-Plane-Group/QuestPack"
   commit = ""
   tag = ""
-  branch = ""
+  branch = "master"
   channel = ""
   asset = ""
   pkg_windows = ""
@@ -5556,8 +5556,7 @@ tp2 = "BardicWonders"
 
 [[mods]]
 name = "Warlock"
-tp2 = "Artisans_Warlock"
-aliases = ["C0Warlock"]
+tp2 = "C0Warlock"
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6521,11 +6520,11 @@ name = "Rogue Rebalancing"
 tp2 = "RR"
 
   [[mods.sources]]
-  id = "camdawg"
-  label = "CamDawg"
+  id = "fredriklindgren"
+  label = "FredrikLindgren"
   type = "github"
-  url = "https://github.com/CamDawg/rr"
-  repo = "CamDawg/rr"
+  url = "https://github.com/FredrikLindgren/rr"
+  repo = "FredrikLindgren/rr"
   commit = ""
   tag = ""
   branch = "master"
