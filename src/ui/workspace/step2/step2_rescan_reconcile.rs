@@ -512,7 +512,7 @@ mod tests {
         }];
         let mut mods = vec![mod_state("mod.tp2", vec![comp("1", false, None)])];
         reapply_snapshot(&snapshot, &mut mods);
-        assert!(collect_unrestored(&snapshot, &mods).is_empty());
+        assert_eq!(collect_unrestored(&snapshot, &mods).len(), 0);
     }
 
     #[test]

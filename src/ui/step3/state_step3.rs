@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step3ItemState, WizardState};
 
 pub type ActiveListMut<'a> = (
@@ -17,27 +18,20 @@ pub type ActiveListMut<'a> = (
     &'a mut Vec<String>,
     &'a mut usize,
     &'a mut Vec<String>,
-    &'a mut Vec<Vec<Step3ItemState>>,
-    &'a mut Vec<Vec<Step3ItemState>>,
+    &'a mut Vec<crate::app::step3_history::Step3HistoryEntry>,
+    &'a mut Vec<crate::app::step3_history::Step3HistoryEntry>,
 );
 
 pub fn normalize_active_tab(state: &mut WizardState) {
-    let show_first_game = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let show_second_game = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
-    let active_is_visible = (state.step3.active_game_tab == "BGEE" && show_first_game)
-        || (state.step3.active_game_tab == "BG2EE" && show_second_game);
-    if active_is_visible {
-        return;
-    }
-    if show_first_game {
-        state.step3.active_game_tab = "BGEE".to_string();
-    } else if show_second_game {
-        state.step3.active_game_tab = "BG2EE".to_string();
+    let normalized =
+        game_authority::normalized_tab(&state.step1.game_install, &state.step3.active_game_tab);
+    if normalized != state.step3.active_game_tab {
+        state.step3.active_game_tab = normalized.to_string();
     }
 }
 
 pub fn active_list_mut(state: &mut WizardState) -> ActiveListMut<'_> {
-    if state.step3.active_game_tab == "BGEE" {
+    if game_authority::slot_for_tab(&state.step3.active_game_tab) == GameSlot::First {
         (
             &mut state.step3.bgee_items,
             &mut state.step3.bgee_selected,
@@ -73,5 +67,37 @@ pub fn active_list_mut(state: &mut WizardState) -> ActiveListMut<'_> {
             &mut state.step3.bg2ee_undo_stack,
             &mut state.step3.bg2ee_redo_stack,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{active_list_mut, normalize_active_tab};
+    use crate::app::state::{Step3ItemState, WizardState};
+
+    #[test]
+    fn iwdee_step3_tab_normalises_and_reads_the_first_container() {
+        let mut state = WizardState::default();
+        state.step1.game_install = "IWDEE".to_string();
+
+        state.step3.active_game_tab = "BG2EE".to_string();
+        normalize_active_tab(&mut state);
+        assert_eq!(state.step3.active_game_tab, "IWDEE");
+
+        state.step3.bgee_items.push(Step3ItemState {
+            tp_file: "MOD.TP2".to_string(),
+            component_id: "0".to_string(),
+            mod_name: "MOD".to_string(),
+            component_label: "Component".to_string(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 0,
+            block_id: "0".to_string(),
+            is_parent: false,
+            parent_placeholder: false,
+        });
+        let (items, ..) = active_list_mut(&mut state);
+        assert_eq!(items.len(), 1);
     }
 }

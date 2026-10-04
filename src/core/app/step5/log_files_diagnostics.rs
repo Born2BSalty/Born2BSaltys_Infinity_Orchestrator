@@ -83,6 +83,12 @@ pub fn copy_diagnostic_origin_logs(step1: &Step1State, logs_dir: &Path) -> Vec<D
         ),
         copy_directory_group(
             logs_dir,
+            "IWDEE Game Folder",
+            step1.iwdee_game_folder.trim(),
+            should_check_weidu_bgee_log(step1, "IWDEE Game Folder"),
+        ),
+        copy_directory_group(
+            logs_dir,
             "BGEE WeiDU Log Folder",
             &resolve_bgee_log_folder(step1),
             should_check_weidu_bgee_log(step1, "BGEE WeiDU Log Folder"),

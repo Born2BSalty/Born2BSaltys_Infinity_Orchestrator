@@ -5,108 +5,57 @@ pub mod constraints {
     use crate::app::state::Step3ItemState;
 
     #[must_use]
-    pub fn snap_to_parent_boundary(remaining: &[Step3ItemState], target: usize) -> usize {
-        let mut candidates: Vec<usize> = remaining
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, item)| if item.is_parent { Some(idx) } else { None })
-            .collect();
-        candidates.push(remaining.len());
-        if !candidates.contains(&0) {
-            candidates.push(0);
-        }
-        let mut best = candidates[0];
-        let mut best_dist = best.abs_diff(target);
-        for c in candidates.into_iter().skip(1) {
-            let d = c.abs_diff(target);
-            if d < best_dist {
-                best = c;
-                best_dist = d;
-            }
-        }
-        best
-    }
-
-    #[must_use]
-    pub fn enforce_child_parent_constraint(
+    pub fn resolve_insert_at(
         remaining: &[Step3ItemState],
         insert_at: usize,
         moving: &[Step3ItemState],
+        locked_blocks: &[String],
     ) -> usize {
-        if moving.is_empty() || moving.iter().any(|i| i.is_parent) {
-            return insert_at;
+        let at = insert_at.min(remaining.len());
+        if moving.is_empty() || at == 0 || at >= remaining.len() || remaining[at].is_parent {
+            return at;
         }
-        let first_key = mod_key(&moving[0]);
-        if moving.iter().any(|i| mod_key(i) != first_key) {
-            return insert_at;
+        if joins_its_own_mod(remaining, at, moving) {
+            return at;
         }
-        if remaining.is_empty() || insert_at == 0 {
-            return insert_at;
+        if remaining[at - 1].is_parent {
+            return at - 1;
         }
-        if insert_at < remaining.len() && remaining[insert_at].is_parent {
-            return insert_at;
+        let block_id = remaining[at].block_id.clone();
+        if locked_blocks.contains(&block_id) {
+            return nearer_block_edge(remaining, at, &block_id);
         }
+        at
+    }
 
-        let owner_idx = insert_at.saturating_sub(1);
-        let owner_block = remaining[owner_idx].block_id.clone();
-        let owner_key = mod_key(&remaining[owner_idx]);
-        if owner_key == first_key {
-            return insert_at;
+    fn joins_its_own_mod(
+        remaining: &[Step3ItemState],
+        at: usize,
+        moving: &[Step3ItemState],
+    ) -> bool {
+        if moving.iter().any(|item| item.is_parent) {
+            return false;
         }
+        let Some(first) = moving.first() else {
+            return false;
+        };
+        let key = mod_key(first);
+        if moving.iter().any(|item| mod_key(item) != key) {
+            return false;
+        }
+        key == mod_key(&remaining[at - 1])
+    }
 
-        let mut start = owner_idx;
-        while start > 0 && remaining[start - 1].block_id == owner_block {
+    fn nearer_block_edge(remaining: &[Step3ItemState], at: usize, block_id: &str) -> usize {
+        let mut start = at;
+        while start > 0 && remaining[start - 1].block_id == block_id {
             start -= 1;
         }
-        let mut end = owner_idx + 1;
-        while end < remaining.len() && remaining[end].block_id == owner_block {
+        let mut end = at;
+        while end < remaining.len() && remaining[end].block_id == block_id {
             end += 1;
         }
-        let d_start = insert_at.abs_diff(start);
-        let d_end = insert_at.abs_diff(end);
-        if d_start <= d_end { start } else { end }
-    }
-
-    #[must_use]
-    pub fn hard_clamp_insert_at(
-        remaining: &[Step3ItemState],
-        insert_at: usize,
-        moving: &[Step3ItemState],
-    ) -> usize {
-        let mut clamped = insert_at.min(remaining.len());
-        if moving.is_empty() {
-            return clamped;
-        }
-
-        if moving.iter().any(|i| i.is_parent) {
-            return snap_to_parent_boundary(remaining, clamped);
-        }
-
-        clamped = enforce_child_parent_constraint(remaining, clamped, moving);
-        if clamped == 0 || clamped >= remaining.len() {
-            return clamped;
-        }
-
-        let left = &remaining[clamped - 1];
-        let right = &remaining[clamped];
-        if left.block_id == right.block_id {
-            let moving_key = mod_key(&moving[0]);
-            let owner_key = mod_key(left);
-            if owner_key != moving_key {
-                let mut start = clamped - 1;
-                while start > 0 && remaining[start - 1].block_id == left.block_id {
-                    start -= 1;
-                }
-                let mut end = clamped;
-                while end < remaining.len() && remaining[end].block_id == left.block_id {
-                    end += 1;
-                }
-                let d_start = clamped.abs_diff(start);
-                let d_end = clamped.abs_diff(end);
-                clamped = if d_start <= d_end { start } else { end };
-            }
-        }
-        clamped
+        if at - start <= end - at { start } else { end }
     }
 
     #[must_use]
@@ -194,13 +143,43 @@ pub mod slots {
             .position(|idx| *idx == target_full)
             .unwrap_or(remaining_len)
     }
+
+    #[must_use]
+    pub fn pointer_to_visible_slot(
+        visible_rows: &[(usize, egui::Rect)],
+        block: &[usize],
+        grabbed: usize,
+        target_y: f32,
+    ) -> usize {
+        let n = visible_rows.len();
+        if n == 0 {
+            return 0;
+        }
+        let k = visible_rows
+            .iter()
+            .filter(|(idx, _)| block.contains(idx))
+            .count()
+            .max(1);
+        let desired_grabbed_row = visible_rows
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, rect))| rect.top() <= target_y)
+            .map(|(i, _)| i)
+            .next_back()
+            .unwrap_or(0);
+        let rank = visible_rows
+            .iter()
+            .filter(|(idx, _)| block.contains(idx) && *idx < grabbed)
+            .count();
+        desired_grabbed_row
+            .saturating_sub(rank)
+            .min(n.saturating_sub(k))
+    }
 }
 
-pub use constraints::enforce_child_parent_constraint;
-pub use constraints::hard_clamp_insert_at;
-pub use constraints::snap_to_parent_boundary;
+pub use constraints::resolve_insert_at;
 pub use math::compute_desired_block_start;
-pub use slots::visible_slot_to_insert_at;
+pub use slots::{pointer_to_visible_slot, visible_slot_to_insert_at};
 
 #[cfg(test)]
 mod tests {
@@ -214,5 +193,187 @@ mod tests {
         let s2 = compute_desired_block_start(99999.0, 100.0, 24.0, 5.0, 1, n, k);
         assert_eq!(s1, 0);
         assert_eq!(s2, n - k);
+    }
+
+    mod resolve_insert_at {
+        use super::super::resolve_insert_at;
+        use crate::app::state::Step3ItemState;
+
+        fn row(
+            mod_name: &str,
+            component_id: &str,
+            is_parent: bool,
+            block_id: &str,
+        ) -> Step3ItemState {
+            Step3ItemState {
+                tp_file: format!("{mod_name}.tp2"),
+                component_id: component_id.to_string(),
+                mod_name: mod_name.to_string(),
+                component_label: String::new(),
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                selected_order: 0,
+                block_id: block_id.to_string(),
+                is_parent,
+                parent_placeholder: false,
+            }
+        }
+
+        fn default_remaining() -> Vec<Step3ItemState> {
+            vec![
+                row("B", "__PARENT__", true, "B::b0"),
+                row("B", "1", false, "B::b0"),
+                row("B", "2", false, "B::b0"),
+                row("B", "3", false, "B::b0"),
+                row("C", "__PARENT__", true, "C::b0"),
+                row("C", "1", false, "C::b0"),
+            ]
+        }
+
+        #[test]
+        fn foreign_components_land_between_two_components_of_another_mod() {
+            let remaining = default_remaining();
+            let moving = vec![row("A", "1", false, "A::b0")];
+            assert_eq!(resolve_insert_at(&remaining, 2, &moving, &[]), 2);
+            assert_eq!(resolve_insert_at(&remaining, 3, &moving, &[]), 3);
+        }
+
+        #[test]
+        fn a_whole_mod_lands_between_two_components_of_another_mod() {
+            let remaining = default_remaining();
+            let moving = vec![
+                row("A", "__PARENT__", true, "A::b0"),
+                row("A", "1", false, "A::b0"),
+            ];
+            assert_eq!(resolve_insert_at(&remaining, 2, &moving, &[]), 2);
+        }
+
+        #[test]
+        fn a_mixed_selection_lands_between_two_components_of_another_mod() {
+            let remaining = default_remaining();
+            let moving = vec![row("A", "1", false, "A::b0"), row("D", "1", false, "D::b0")];
+            assert_eq!(resolve_insert_at(&remaining, 3, &moving, &[]), 3);
+        }
+
+        #[test]
+        fn directly_under_a_foreign_header_snaps_above_it() {
+            let remaining = default_remaining();
+            let moving = vec![row("A", "1", false, "A::b0")];
+            assert_eq!(resolve_insert_at(&remaining, 1, &moving, &[]), 0);
+
+            let moving = vec![
+                row("A", "__PARENT__", true, "A::b0"),
+                row("A", "1", false, "A::b0"),
+            ];
+            assert_eq!(resolve_insert_at(&remaining, 5, &moving, &[]), 4);
+        }
+
+        #[test]
+        fn a_locked_block_keeps_the_snap_to_its_nearer_edge() {
+            let remaining = default_remaining();
+            let moving = vec![row("A", "1", false, "A::b0")];
+            let locked = vec!["B::b0".to_string()];
+            assert_eq!(resolve_insert_at(&remaining, 2, &moving, &locked), 0);
+            assert_eq!(resolve_insert_at(&remaining, 3, &moving, &locked), 4);
+
+            let locked = vec!["C::b0".to_string()];
+            assert_eq!(resolve_insert_at(&remaining, 2, &moving, &locked), 2);
+        }
+
+        #[test]
+        fn components_still_join_their_own_mod_anywhere() {
+            let remaining = default_remaining();
+            let moving = vec![row("B", "9", false, "B::b0")];
+            assert_eq!(resolve_insert_at(&remaining, 1, &moving, &[]), 1);
+            assert_eq!(resolve_insert_at(&remaining, 2, &moving, &[]), 2);
+
+            let locked = vec!["B::b0".to_string()];
+            assert_eq!(resolve_insert_at(&remaining, 1, &moving, &locked), 1);
+            assert_eq!(resolve_insert_at(&remaining, 2, &moving, &locked), 2);
+        }
+
+        #[test]
+        fn edges_and_header_boundaries_are_left_alone() {
+            let remaining = default_remaining();
+            let moving = vec![row("A", "1", false, "A::b0")];
+            assert_eq!(resolve_insert_at(&remaining, 0, &moving, &[]), 0);
+            assert_eq!(resolve_insert_at(&remaining, 4, &moving, &[]), 4);
+            assert_eq!(resolve_insert_at(&remaining, 6, &moving, &[]), 6);
+            assert_eq!(resolve_insert_at(&remaining, 99, &moving, &[]), 6);
+            assert_eq!(resolve_insert_at(&remaining, 3, &[], &[]), 3);
+        }
+    }
+
+    mod pointer_slot {
+        use eframe::egui;
+
+        use super::super::pointer_to_visible_slot;
+
+        fn stacked_rows(indices: &[usize]) -> Vec<(usize, egui::Rect)> {
+            indices
+                .iter()
+                .enumerate()
+                .map(|(slot, idx)| {
+                    let top = f32::from(u16::try_from(slot).unwrap_or(u16::MAX)) * 24.0;
+                    (
+                        *idx,
+                        egui::Rect::from_min_size(egui::pos2(0.0, top), egui::vec2(400.0, 24.0)),
+                    )
+                })
+                .collect()
+        }
+
+        fn six_collapsed_headers() -> Vec<(usize, egui::Rect)> {
+            stacked_rows(&[0, 11, 22, 33, 44, 55])
+        }
+
+        fn c_d_e_block() -> Vec<usize> {
+            (22..=54).collect()
+        }
+
+        #[test]
+        fn grabbing_a_lower_collapsed_header_keeps_the_slab_where_it_is() {
+            let visible_rows = six_collapsed_headers();
+            let block = c_d_e_block();
+
+            let slot =
+                pointer_to_visible_slot(&visible_rows, &block, 33, 3.0f32.mul_add(24.0, 5.0));
+
+            assert_eq!(slot, 2);
+        }
+
+        #[test]
+        fn one_visible_row_down_moves_the_slab_one_slot() {
+            let visible_rows = six_collapsed_headers();
+            let block: Vec<usize> = (22..=43).collect();
+
+            let slot =
+                pointer_to_visible_slot(&visible_rows, &block, 33, 4.0f32.mul_add(24.0, 5.0));
+
+            assert_eq!(slot, 3);
+        }
+
+        #[test]
+        fn the_slot_is_clamped_to_the_list() {
+            let visible_rows = six_collapsed_headers();
+            let block = c_d_e_block();
+
+            let above = pointer_to_visible_slot(&visible_rows, &block, 33, -1000.0);
+            let below = pointer_to_visible_slot(&visible_rows, &block, 33, 1000.0);
+
+            assert_eq!(above, 0);
+            assert_eq!(below, 3);
+        }
+
+        #[test]
+        fn expanded_rows_count_one_each() {
+            let visible_rows = stacked_rows(&[0, 1, 2, 3, 4]);
+            let block = vec![2, 3];
+
+            let slot = pointer_to_visible_slot(&visible_rows, &block, 3, 3.0f32.mul_add(24.0, 5.0));
+
+            assert_eq!(slot, 2);
+        }
     }
 }

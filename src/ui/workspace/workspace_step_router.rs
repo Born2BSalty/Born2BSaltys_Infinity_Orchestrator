@@ -5,6 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use eframe::egui;
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::WizardState;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::WorkspaceStep;
@@ -44,7 +45,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
 }
 
 fn step3_fingerprint(state: &WizardState) -> u64 {
-    let is_bg2ee = state.step3.active_game_tab == "BG2EE";
+    let is_bg2ee = game_authority::slot_for_tab(&state.step3.active_game_tab) == GameSlot::Second;
     let (items, collapsed) = if is_bg2ee {
         (
             &state.step3.bg2ee_items,
@@ -57,15 +58,12 @@ fn step3_fingerprint(state: &WizardState) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     is_bg2ee.hash(&mut h);
     items.len().hash(&mut h);
-    if let Some(first) = items.first() {
-        first.tp_file.hash(&mut h);
-        first.component_id.hash(&mut h);
-        first.selected_order.hash(&mut h);
-    }
-    if let Some(last) = items.last() {
-        last.tp_file.hash(&mut h);
-        last.component_id.hash(&mut h);
-        last.selected_order.hash(&mut h);
+    for item in items {
+        item.tp_file.hash(&mut h);
+        item.component_id.hash(&mut h);
+        item.selected_order.hash(&mut h);
+        item.block_id.hash(&mut h);
+        item.is_parent.hash(&mut h);
     }
     collapsed.len().hash(&mut h);
     for block in collapsed {
@@ -133,6 +131,35 @@ mod tests {
         let before = step3_fingerprint(&s);
         s.step3.bgee_items = vec![item("B/B.TP2", "2", 1), item("A/A.TP2", "0", 2)];
         assert_ne!(before, step3_fingerprint(&s), "reorder must change it");
+    }
+
+    #[test]
+    fn fingerprint_changes_when_only_middle_rows_swap() {
+        let mut s = WizardState::default();
+        s.step3.active_game_tab = "BGEE".to_string();
+        s.step3.bgee_items = vec![
+            item("A/A.TP2", "0", 1),
+            item("B/B.TP2", "2", 2),
+            item("C/C.TP2", "5", 3),
+            item("D/D.TP2", "1", 4),
+        ];
+        let before = step3_fingerprint(&s);
+        s.step3.bgee_items.swap(1, 2);
+        assert_ne!(before, step3_fingerprint(&s));
+    }
+
+    #[test]
+    fn fingerprint_changes_when_a_row_changes_block_only() {
+        let mut s = WizardState::default();
+        s.step3.active_game_tab = "BGEE".to_string();
+        s.step3.bgee_items = vec![
+            item("A/A.TP2", "0", 1),
+            item("A/A.TP2", "1", 2),
+            item("B/B.TP2", "2", 3),
+        ];
+        let before = step3_fingerprint(&s);
+        s.step3.bgee_items[1].block_id = "A/A.TP2::split0".to_string();
+        assert_ne!(before, step3_fingerprint(&s));
     }
 
     #[test]

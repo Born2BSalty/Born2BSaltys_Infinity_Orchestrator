@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::game_authority;
 use crate::app::state::{Step1State, Step2ComponentState, Step2ModState};
 
 use super::compat_conflict_scan::apply_step2_scan_conflict;
@@ -24,9 +25,11 @@ pub(crate) fn apply_step2_compat_rules(
     clear_step2_compat_state(first_game_mods);
     clear_step2_compat_state(second_game_mods);
 
-    apply_step2_scan_mismatch(step1, "BGEE", first_game_mods);
+    let first_tab = game_authority::first_slot_tab(&step1.game_install);
+
+    apply_step2_scan_mismatch(step1, first_tab, first_game_mods);
     apply_step2_scan_mismatch(step1, "BG2EE", second_game_mods);
-    apply_step2_scan_path_requirement(step1, "BGEE", first_game_mods);
+    apply_step2_scan_path_requirement(step1, first_tab, first_game_mods);
     apply_step2_scan_path_requirement(step1, "BG2EE", second_game_mods);
     apply_step2_scan_missing_dep(first_game_mods);
     apply_step2_scan_missing_dep(second_game_mods);
@@ -38,15 +41,16 @@ pub(crate) fn apply_step2_compat_rules(
     let loaded = load_rules();
     let rules = loaded.rules;
     if !rules.is_empty() {
-        apply_direct_rules_to_tab(step1, "BGEE", &rules, first_game_mods);
+        apply_direct_rules_to_tab(step1, first_tab, &rules, first_game_mods);
         apply_direct_rules_to_tab(step1, "BG2EE", &rules, second_game_mods);
         finalize_step2_compat_state(first_game_mods);
         finalize_step2_compat_state(second_game_mods);
 
-        apply_relation_rules_to_tab(step1, "BGEE", &rules, first_game_mods);
+        apply_relation_rules_to_tab(step1, first_tab, &rules, first_game_mods);
         apply_relation_rules_to_tab(step1, "BG2EE", &rules, second_game_mods);
     }
 
+    super::compat_dlc_source::apply_step2(step1, first_game_mods, second_game_mods);
     finalize_step2_compat_state(first_game_mods);
     finalize_step2_compat_state(second_game_mods);
     loaded.error

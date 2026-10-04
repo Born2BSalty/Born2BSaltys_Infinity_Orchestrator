@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::warn;
 
+use crate::app::game_authority;
 use crate::app::state::Step1State;
 use crate::registry::model::Game;
 
@@ -17,6 +18,8 @@ pub const WEIDU_LOG_SOURCE_DIRNAME: &str = "weidu_log_source";
 pub const WEIDU_LOG_SOURCE_BGEE_SUBDIR: &str = "bgee";
 
 pub const WEIDU_LOG_SOURCE_BG2EE_SUBDIR: &str = "bg2ee";
+
+pub const WEIDU_LOG_SOURCE_IWDEE_SUBDIR: &str = "iwdee";
 
 pub const WEIDU_LOG_FILENAME: &str = "weidu.log";
 
@@ -74,7 +77,9 @@ pub fn resolve(destination: &str, game: Game) -> PerInstallDirs {
     let mods_folder = dest.join(MODS_DIRNAME);
     let weidu_component_logs = dest.join(WEIDU_COMPONENT_LOGS_DIRNAME);
     let weidu_log_source_root = dest.join(WEIDU_LOG_SOURCE_DIRNAME);
-    let phase_one_log_source = weidu_log_source_root.join(WEIDU_LOG_SOURCE_BGEE_SUBDIR);
+    let phase_one_log_source = weidu_log_source_root.join(game_authority::log_source_subdir(
+        game_authority::first_slot_tab(game.to_legacy_string()),
+    ));
     let phase_two_log_source = weidu_log_source_root.join(WEIDU_LOG_SOURCE_BG2EE_SUBDIR);
 
     let (eet_clone_dirs, single_game_clone_dir) = match game {
@@ -229,6 +234,23 @@ mod tests {
             assert_eq!(d.eet_clone_dirs, None, "{game:?} has no EET dirs");
             let g = d.single_game_clone_dir.expect("single-game clone dir");
             assert!(g.ends_with(name), "{game:?} → {name}");
+        }
+    }
+
+    #[test]
+    fn iwdee_log_source_is_its_own_subfolder() {
+        assert!(
+            resolve(r"C:\games\m", Game::IWDEE)
+                .weidu_log_source_bgee
+                .ends_with(WEIDU_LOG_SOURCE_IWDEE_SUBDIR)
+        );
+        for game in [Game::BGEE, Game::BG2EE, Game::EET] {
+            assert!(
+                resolve(r"C:\games\m", game)
+                    .weidu_log_source_bgee
+                    .ends_with(WEIDU_LOG_SOURCE_BGEE_SUBDIR),
+                "{game:?} phase-one log source stays bgee"
+            );
         }
     }
 

@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step3ItemState, WizardState};
 use crate::app::step4_action::Step4Action;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
@@ -24,10 +25,16 @@ pub fn is_dual_game(state: &WizardState) -> bool {
 
 #[must_use]
 pub fn active_tab_items(state: &WizardState) -> (&'static str, &[Step3ItemState]) {
-    match state.step1.game_install.as_str() {
-        "BG2EE" => ("BG2EE", &state.step3.bg2ee_items),
-        "EET" if state.step3.active_game_tab == "BG2EE" => ("BG2EE", &state.step3.bg2ee_items),
-        _ => ("BGEE", &state.step3.bgee_items),
+    let game_install = state.step1.game_install.as_str();
+    let eet_on_second_slot = game_install == "EET"
+        && game_authority::slot_for_tab(&state.step3.active_game_tab) == GameSlot::Second;
+    if game_install == "BG2EE" || eet_on_second_slot {
+        ("BG2EE", &state.step3.bg2ee_items)
+    } else {
+        (
+            game_authority::first_slot_tab(game_install),
+            &state.step3.bgee_items,
+        )
     }
 }
 
@@ -120,7 +127,10 @@ fn surface_save_error(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &O
         .painter()
         .layout_no_wrap(last.to_string(), font.clone(), text_color);
     let (rect, _) = ui.allocate_exact_size(
-        egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0),
+        egui::vec2(
+            f32::mul_add(pad_x, 2.0, galley.size().x),
+            f32::mul_add(pad_y, 2.0, galley.size().y),
+        ),
         egui::Sense::hover(),
     );
     if ui.is_rect_visible(rect) {
@@ -202,6 +212,6 @@ mod tests {
 
         s.step1.game_install = "IWDEE".to_string();
         let (t, _it) = active_tab_items(&s);
-        assert_eq!(t, "BGEE");
+        assert_eq!(t, "IWDEE");
     }
 }

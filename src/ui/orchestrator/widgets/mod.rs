@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+pub mod brand_mark;
 pub mod btn;
 pub mod clipboard;
 pub mod dialogs;
+pub mod drawer;
+pub mod help_button;
+pub mod help_copy;
 pub mod icon_button;
 pub mod input;
 pub mod kebab;
@@ -13,6 +17,8 @@ pub mod pill;
 pub mod r_box;
 pub mod screen_title;
 pub mod section_header;
+pub mod share_actions;
+pub mod tab_strip;
 pub mod window_title;
 
 pub use btn::{BtnOpts, redesign_btn, redesign_btn_glyph, redesign_btn_height};

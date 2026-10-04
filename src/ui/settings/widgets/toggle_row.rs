@@ -45,9 +45,15 @@ pub fn render(
         );
         let knob_size = 16.0;
         let knob_center = if *on {
-            egui::pos2(rect.right() - knob_size * 0.5 - 4.0, rect.center().y)
+            egui::pos2(
+                f32::mul_add(knob_size, -0.5, rect.right()) - 4.0,
+                rect.center().y,
+            )
         } else {
-            egui::pos2(rect.left() + knob_size * 0.5 + 4.0, rect.center().y)
+            egui::pos2(
+                f32::mul_add(knob_size, 0.5, rect.left()) + 4.0,
+                rect.center().y,
+            )
         };
         painter.circle_filled(
             knob_center,

@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::WizardState;
 use crate::app::step3_toolbar::Step3ToolbarSummary;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
@@ -77,7 +78,8 @@ struct Step3RowState {
 
 impl Step3RowState {
     fn from_state(state: &WizardState, summary: &Step3ToolbarSummary) -> Self {
-        let active_is_bgee = state.step3.active_game_tab == "BGEE";
+        let active_is_bgee =
+            game_authority::slot_for_tab(&state.step3.active_game_tab) == GameSlot::First;
         let (conflict_count, conflict_target) = if active_is_bgee {
             (summary.bgee_summary.0, summary.bgee_target.clone())
         } else {
@@ -269,7 +271,10 @@ fn clickable_pill(
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let size = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    let size = egui::vec2(
+        f32::mul_add(pad_x, 2.0, galley.size().x),
+        f32::mul_add(pad_y, 2.0, galley.size().y),
+    );
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();

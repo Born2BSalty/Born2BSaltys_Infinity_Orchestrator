@@ -3,52 +3,37 @@
 
 use std::path::PathBuf;
 use std::sync::mpsc::TryRecvError;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use eframe::egui;
 use tracing::warn;
 
-use crate::app::modlist_share::preview_modlist_share_code;
-use crate::install_runtime::{destination_prep, fork_pipeline_arm, per_install_dirs};
-use crate::registry::model::Game;
-use crate::registry::operations::{
-    self, DestinationOwnership, classify_destination, remove_entry_keep_folder,
+use crate::install_runtime::replaced_owners::{self, HeldOwners};
+use crate::install_runtime::{destination_prep, per_install_dirs};
+use crate::registry::destination_claim::{
+    ClaimContext, DestinationClaim, resolve_destination_claim,
 };
+use crate::registry::model::Game;
 use crate::registry::operations_create::create_modlist_with_author;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::{ModlistWorkspaceState, ModsSource};
 use crate::ui::create::destination_default::default_destination;
 use crate::ui::create::load_draft_dialog::{self, LoadDraftOutcome};
 use crate::ui::create::stage_choose::{self, ChooseOutcome};
-use crate::ui::create::stage_fork_download::{self, ForkDownloadOutcome};
-use crate::ui::create::stage_fork_paste::{self, ForkPasteOutcome};
-use crate::ui::create::stage_fork_preview::{self, ForkPreviewOutcome};
-use crate::ui::create::state_create::CreateStage;
 use crate::ui::home::confirm_delete;
 use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::{
-    DestinationPrepFlow, OrchestratorApp, PendingCreateStart, PendingFolderDelete,
+    DestinationPrepFlow, OrchestratorApp, PendingCreateStart,
 };
-use crate::ui::orchestrator::widgets::clipboard;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
-const COPY_CONFIRM_MS: u64 = 1600;
-
 enum CreateRequest {
     StartScratch,
-    GoForkPaste,
-    ForkPasteBack,
-    ForkPastePreview,
-    ForkPreviewBack,
-    ForkBeginImport,
-    ForkDownloadCancel,
-    ForkExtractCompleteRouteToWorkspace(String),
     OpenLoadDraft,
     CloseLoadDraft,
     ResumeWorkspace(String),
-    CopyImportCode(String),
     ArmDeleteDraft(String),
 }
 
@@ -57,14 +42,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
 
     poll_create_destination_prep(orchestrator);
 
-    if let Some(deadline) = orchestrator.create_screen_state.load_draft_copied_until
-        && Instant::now() >= deadline
-    {
-        orchestrator.create_screen_state.load_draft_copied_name = None;
-        orchestrator.create_screen_state.load_draft_copied_until = None;
-    }
-
-    let mut request = collect_stage_request(ui, palette, ctx, orchestrator);
+    let mut request = collect_stage_request(ui, palette, orchestrator);
 
     if orchestrator.create_screen_state.load_draft_open {
         request = collect_load_draft_request(ctx, palette, orchestrator).or(request);
@@ -73,57 +51,32 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     }
 
     if let Some(req) = request {
-        handle_create_request(orchestrator, ctx, req);
+        handle_create_request(orchestrator, req);
     }
 }
 
 fn collect_stage_request(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    ctx: &egui::Context,
     orchestrator: &mut OrchestratorApp,
 ) -> Option<CreateRequest> {
-    match orchestrator.create_screen_state.stage {
-        CreateStage::Choose => {
-            match stage_choose::render(
-                ui,
-                palette,
-                &mut orchestrator.create_screen_state,
-                orchestrator.create_destination_prep_rx.is_some(),
-                &orchestrator.registry,
-                orchestrator.active_install_modlist_id.as_deref(),
-            ) {
-                ChooseOutcome::StartScratch => Some(CreateRequest::StartScratch),
-                ChooseOutcome::GoForkPaste => Some(CreateRequest::GoForkPaste),
-                ChooseOutcome::OpenLoadDraft => Some(CreateRequest::OpenLoadDraft),
-                ChooseOutcome::Stay => None,
-            }
-        }
-        CreateStage::ForkPaste => {
-            match stage_fork_paste::render(ui, palette, &mut orchestrator.create_screen_state) {
-                ForkPasteOutcome::Back => Some(CreateRequest::ForkPasteBack),
-                ForkPasteOutcome::Preview => Some(CreateRequest::ForkPastePreview),
-                ForkPasteOutcome::Stay => None,
-            }
-        }
-        CreateStage::ForkPreview => match stage_fork_preview::render(
-            ui,
-            palette,
-            ctx,
-            &mut orchestrator.create_screen_state,
-        ) {
-            ForkPreviewOutcome::Back => Some(CreateRequest::ForkPreviewBack),
-            ForkPreviewOutcome::BeginImport => Some(CreateRequest::ForkBeginImport),
-            ForkPreviewOutcome::Stay => None,
-        },
-        CreateStage::ForkDownload => match stage_fork_download::render_live(ui, orchestrator) {
-            ForkDownloadOutcome::Cancel => Some(CreateRequest::ForkDownloadCancel),
-            ForkDownloadOutcome::Import => orchestrator
-                .active_install_modlist_id
-                .clone()
-                .map(CreateRequest::ForkExtractCompleteRouteToWorkspace),
-            ForkDownloadOutcome::Stay => None,
-        },
+    let destination_prep_running = orchestrator.create_destination_prep_rx.is_some();
+    let ctx = stage_choose::ChooseCtx {
+        registry: &orchestrator.registry,
+        active_install_id: orchestrator.active_install_modlist_id.as_deref(),
+        step1: &orchestrator.wizard_state.step1,
+        saved_step1: &orchestrator.bio_settings_last_saved.step1,
+    };
+    match stage_choose::render(
+        ui,
+        palette,
+        &mut orchestrator.create_screen_state,
+        destination_prep_running,
+        &ctx,
+    ) {
+        ChooseOutcome::StartScratch => Some(CreateRequest::StartScratch),
+        ChooseOutcome::OpenLoadDraft => Some(CreateRequest::OpenLoadDraft),
+        ChooseOutcome::Stay => None,
     }
 }
 
@@ -132,82 +85,31 @@ fn collect_load_draft_request(
     palette: ThemePalette,
     orchestrator: &OrchestratorApp,
 ) -> Option<CreateRequest> {
-    let copied = orchestrator
-        .create_screen_state
-        .load_draft_copied_name
-        .clone();
-    match load_draft_dialog::render(ctx, palette, &orchestrator.registry, copied.as_deref()) {
+    match load_draft_dialog::render(ctx, palette, &orchestrator.registry) {
         LoadDraftOutcome::Cancelled => Some(CreateRequest::CloseLoadDraft),
         LoadDraftOutcome::Resume(id) => Some(CreateRequest::ResumeWorkspace(id)),
-        LoadDraftOutcome::CopyImportCode(id) => Some(CreateRequest::CopyImportCode(id)),
         LoadDraftOutcome::Delete(id) => Some(CreateRequest::ArmDeleteDraft(id)),
         LoadDraftOutcome::Pending => None,
     }
 }
 
-fn handle_create_request(
-    orchestrator: &mut OrchestratorApp,
-    ctx: &egui::Context,
-    request: CreateRequest,
-) {
+fn handle_create_request(orchestrator: &mut OrchestratorApp, request: CreateRequest) {
     match request {
         CreateRequest::StartScratch => start_scratch(orchestrator),
-        CreateRequest::GoForkPaste => {
-            orchestrator.create_screen_state.fork_code.clear();
-            orchestrator.create_screen_state.clear_fork_preview();
-            orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
-        }
-        CreateRequest::ForkPasteBack => {
-            orchestrator.create_screen_state.clear_fork_preview();
-            orchestrator.create_screen_state.stage = CreateStage::Choose;
-        }
-        CreateRequest::ForkPastePreview => {
-            run_fork_preview_parse(&mut orchestrator.create_screen_state);
-            orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
-        }
-        CreateRequest::ForkPreviewBack => {
-            orchestrator.create_screen_state.clear_fork_preview();
-            orchestrator.create_screen_state.stage = CreateStage::ForkPaste;
-        }
-        CreateRequest::ForkBeginImport => {
-            if !ensure_creator_name(orchestrator) {
-                return;
-            }
-            match fork_pipeline_arm::mint_and_arm(orchestrator) {
-                Ok(_) => {
-                    orchestrator.create_screen_state.stage = CreateStage::ForkDownload;
-                }
-                Err(err) => {
-                    warn!(
-                        target = "orchestrator",
-                        "Create fork: mint_and_arm failed: {err}"
-                    );
-                }
-            }
-        }
-        CreateRequest::ForkDownloadCancel => fork_download_cancel(orchestrator),
-        CreateRequest::ForkExtractCompleteRouteToWorkspace(id) => {
-            fork_extract_complete_route_to_workspace(orchestrator, id);
-        }
         CreateRequest::OpenLoadDraft => {
             orchestrator.create_screen_state.load_draft_open = true;
         }
         CreateRequest::CloseLoadDraft => {
             orchestrator.create_screen_state.load_draft_open = false;
-            orchestrator.create_screen_state.load_draft_copied_name = None;
-            orchestrator.create_screen_state.load_draft_copied_until = None;
             orchestrator.create_screen_state.load_draft_delete_target = None;
         }
         CreateRequest::ResumeWorkspace(id) => {
             orchestrator.create_screen_state.load_draft_open = false;
-            orchestrator.create_screen_state.load_draft_copied_name = None;
-            orchestrator.create_screen_state.load_draft_copied_until = None;
             orchestrator.create_screen_state.resumed_build_id = Some(id.clone());
             orchestrator.nav = NavDestination::Workspace {
                 modlist_id: Some(id),
             };
         }
-        CreateRequest::CopyImportCode(id) => copy_import_code(orchestrator, ctx, &id),
         CreateRequest::ArmDeleteDraft(id) => {
             orchestrator.create_screen_state.load_draft_delete_target = Some(id);
         }
@@ -234,39 +136,7 @@ fn render_load_draft_delete_confirm(orchestrator: &mut OrchestratorApp, ctx: &eg
     match outcome {
         ConfirmOutcome::Confirmed => {
             orchestrator.create_screen_state.load_draft_delete_target = None;
-            let name = entry.name;
-            match operations::remove_entry_and_save(
-                &id,
-                &orchestrator.registry_store,
-                &mut orchestrator.registry,
-            ) {
-                Ok(Some(target)) => {
-                    orchestrator.persistence_cycle.last_saved_registry =
-                        orchestrator.registry.clone();
-                    orchestrator
-                        .notification_manager
-                        .info(format!("Deleting \"{}\"\u{2026}", target.name));
-                    let rx = operations::spawn_delete_folder_worker(target.dest);
-                    orchestrator
-                        .pending_folder_deletes
-                        .push(PendingFolderDelete {
-                            modlist_name: target.name,
-                            rx,
-                        });
-                }
-                Ok(None) => {
-                    orchestrator.persistence_cycle.last_saved_registry =
-                        orchestrator.registry.clone();
-                    orchestrator
-                        .notification_manager
-                        .success(format!("Deleted \"{name}\""));
-                }
-                Err(err) => {
-                    orchestrator
-                        .notification_manager
-                        .error(format!("Couldn't delete \"{name}\": {err}"));
-                }
-            }
+            crate::ui::home::delete_modlist::delete_confirmed_modlist(orchestrator, &entry);
         }
         ConfirmOutcome::Cancelled => {
             orchestrator.create_screen_state.load_draft_delete_target = None;
@@ -296,7 +166,7 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
         );
         return;
     }
-    if !ensure_creator_name(orchestrator) {
+    if !orchestrator.ensure_creator_name() {
         return;
     }
     let game = orchestrator.create_screen_state.game;
@@ -327,16 +197,6 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     }
 
     finish_start_scratch(orchestrator, &name, game, &dest);
-}
-
-fn ensure_creator_name(orchestrator: &mut OrchestratorApp) -> bool {
-    if !orchestrator.redesign_settings.user_name.trim().is_empty() {
-        return true;
-    }
-    orchestrator
-        .notification_manager
-        .error("Set your name in Settings > General before creating or sharing a modlist.");
-    false
 }
 
 fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
@@ -407,9 +267,7 @@ fn pending_create_matches_current(
     orchestrator: &OrchestratorApp,
     pending: &PendingCreateStart,
 ) -> bool {
-    if !matches!(orchestrator.nav, NavDestination::Create)
-        || orchestrator.create_screen_state.stage != CreateStage::Choose
-    {
+    if !matches!(orchestrator.nav, NavDestination::Create) {
         return false;
     }
 
@@ -434,41 +292,35 @@ fn pending_create_matches_current(
     ) && pending.game == orchestrator.create_screen_state.game
 }
 
-fn scratch_take_over_if_needed(orchestrator: &mut OrchestratorApp, dest: &str) -> bool {
-    let ownership = classify_destination(dest, &orchestrator.registry);
-    let DestinationOwnership::ExactOwners(ids) = ownership else {
-        return true;
-    };
-    if ids.iter().any(|id| {
-        orchestrator
-            .active_install_modlist_id
-            .as_deref()
-            .is_some_and(|active| active == id.as_str())
-    }) {
-        warn!(
-            target = "orchestrator",
-            "Create scratch: take-over refused — destination owned by an actively-installing modlist"
-        );
-        return false;
+fn scratch_claim(
+    orchestrator: &mut OrchestratorApp,
+    dest: &str,
+) -> Result<Option<HeldOwners>, String> {
+    let claim = resolve_destination_claim(
+        &orchestrator.registry,
+        &ClaimContext {
+            destination: dest,
+            held_id: None,
+            installing_id: orchestrator.active_install_modlist_id.as_deref(),
+        },
+    );
+    match claim {
+        DestinationClaim::Free | DestinationClaim::Adopt(_) => Ok(None),
+        DestinationClaim::Replace(ids) => replaced_owners::hold_owners(orchestrator, &ids)
+            .map(Some)
+            .map_err(|err| format!("the modlist at {dest} could not be replaced: {err}")),
+        DestinationClaim::Refused(refusal) => Err(refusal.message(&orchestrator.registry)),
     }
-    for id in &ids {
-        if let Err(err) =
-            remove_entry_keep_folder(id, &orchestrator.registry_store, &mut orchestrator.registry)
-        {
-            warn!(
-                target = "orchestrator",
-                "Create scratch: take-over remove_entry_keep_folder({id}) failed: {err}"
-            );
-        }
-    }
-    orchestrator.persistence_cycle.last_saved_registry = orchestrator.registry.clone();
-    true
 }
 
 fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Game, dest: &str) {
-    if !scratch_take_over_if_needed(orchestrator, dest) {
-        return;
-    }
+    let mut held = match scratch_claim(orchestrator, dest) {
+        Ok(h) => h,
+        Err(msg) => {
+            warn!(target = "orchestrator", "Create scratch: refused — {msg}");
+            return;
+        }
+    };
 
     let scratch_mods_folder = match create_scratch_mods_folder(dest, game) {
         Ok(path) => path,
@@ -477,6 +329,9 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
                 target = "orchestrator",
                 "Create: creating scratch mods folder failed: {err}"
             );
+            if let Some(h) = held.take() {
+                replaced_owners::restore_owners(orchestrator, h);
+            }
             return;
         }
     };
@@ -495,6 +350,9 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
                 target = "orchestrator",
                 "Create: create_modlist failed: {err}"
             );
+            if let Some(h) = held.take() {
+                replaced_owners::restore_owners(orchestrator, h);
+            }
             return;
         }
     };
@@ -503,11 +361,7 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
         .notification_manager
         .success(format!("Created \"{}\"", entry.name));
 
-    let global_non_empty = orchestrator
-        .settings_store
-        .load()
-        .is_ok_and(|s| !s.step1.effective_global_mods_folder().trim().is_empty());
-    let source = default_scratch_mods_source(global_non_empty);
+    let source = ModsSource::GlobalModsFolder;
 
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
     let workspace_state = ModlistWorkspaceState {
@@ -542,6 +396,10 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
         .persistence_cycle
         .mark_registry_dirty(Instant::now());
 
+    if let Some(h) = held.take() {
+        replaced_owners::finalize_owners(h, &entry.id);
+    }
+
     let new_id = entry.id;
     orchestrator.create_screen_state.modlist_name.clear();
     orchestrator.create_screen_state.destination.clear();
@@ -550,15 +408,6 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
     orchestrator.nav = NavDestination::Workspace {
         modlist_id: Some(new_id),
     };
-}
-
-#[must_use]
-const fn default_scratch_mods_source(global_folder_non_empty: bool) -> ModsSource {
-    if global_folder_non_empty {
-        ModsSource::GlobalModsFolder
-    } else {
-        ModsSource::InstallationFolder
-    }
 }
 
 fn create_scratch_mods_folder(destination: &str, game: Game) -> Result<String, String> {
@@ -572,100 +421,45 @@ const fn destination_choice_requires_worker(choice: Option<DestChoice>) -> bool 
     matches!(choice, Some(DestChoice::Clear | DestChoice::Backup))
 }
 
-fn copy_import_code(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, id: &str) {
-    let name = orchestrator
-        .registry
-        .find(id)
-        .map_or_else(|| "modlist".to_string(), |e| e.name.clone());
-    if let Some(code) = operations::share_code_for(id, &orchestrator.registry) {
-        clipboard::copy_silent(ctx, code);
-        orchestrator.create_screen_state.load_draft_copied_name = Some(name);
-    } else {
-        orchestrator.create_screen_state.load_draft_copied_name = Some(format!(
-            "{name}\u{201D} \u{2014} no import code yet \u{201C}"
-        ));
-    }
-    orchestrator.create_screen_state.load_draft_copied_until =
-        Some(Instant::now() + Duration::from_millis(COPY_CONFIRM_MS));
-}
-
-fn run_fork_preview_parse(state: &mut crate::ui::create::state_create::CreateScreenState) {
-    state.clear_fork_preview();
-    match preview_modlist_share_code(state.fork_code.trim()) {
-        Ok(preview) => {
-            state.fork_preview = Some(preview);
-            state.fork_active_preview_tab =
-                crate::ui::install::state_install::PreviewTab::default();
-        }
-        Err(msg) => {
-            state.fork_preview_parse_error = Some(msg);
-        }
-    }
-}
-
-fn fork_download_cancel(orchestrator: &mut OrchestratorApp) {
-    orchestrator.reset_install_screen_to_paste();
-    orchestrator.create_screen_state.fork_download_progress =
-        crate::ui::install::stage_downloading::DownloadProgress::default();
-    orchestrator.create_screen_state.stage = CreateStage::ForkPreview;
-}
-
-fn fork_extract_complete_route_to_workspace(orchestrator: &mut OrchestratorApp, id: String) {
-    let name = orchestrator
-        .registry
-        .find(&id)
-        .map_or_else(|| "modlist".to_string(), |e| e.name.clone());
-    orchestrator
-        .notification_manager
-        .success(format!("Imported \"{name}\" \u{2014} ready to edit"));
-
-    orchestrator.reset_install_screen_to_paste();
-    orchestrator.create_screen_state.fork_code.clear();
-    orchestrator.create_screen_state.clear_fork_preview();
-    orchestrator.create_screen_state.fork_download_progress =
-        crate::ui::install::stage_downloading::DownloadProgress::default();
-    orchestrator.create_screen_state.stage = CreateStage::Choose;
-    orchestrator.create_screen_state.modlist_name.clear();
-    orchestrator.create_screen_state.destination.clear();
-    orchestrator.create_screen_state.destination_choice = None;
-    orchestrator.create_screen_state.resumed_build_id = Some(id.clone());
-    orchestrator.nav = NavDestination::Workspace {
-        modlist_id: Some(id),
-    };
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
-    use crate::registry::store::RegistryStore;
+    use crate::registry::model::{Game, ModlistEntry, ModlistState};
     use egui_toast::ToastKind;
 
-    static CREATETEST_TMP: AtomicU64 = AtomicU64::new(0);
-
     fn orch_for_create_test() -> OrchestratorApp {
-        let mut app = OrchestratorApp::new(false);
-        let tmp = std::env::temp_dir().join(format!(
-            "bio_createtest_{}_{}.json",
-            std::process::id(),
-            CREATETEST_TMP.fetch_add(1, Ordering::Relaxed)
-        ));
-        app.registry_store = RegistryStore::new_with_path(tmp);
-        app.registry = ModlistRegistry::default();
-        app
+        OrchestratorApp::new_isolated_for_test("createtest")
     }
 
     #[test]
-    fn scratch_mods_source_defaults_to_global_when_folder_configured() {
+    fn created_list_starts_on_the_global_mods_folder_even_when_none_is_set() {
+        let dest = TempDestGuard::new("globaldefault");
+        let mut app = orch_for_create_test();
+        app.redesign_settings.user_name = "@tester".to_string();
+        let global = app
+            .settings_store
+            .load()
+            .map(|s| s.step1.effective_global_mods_folder().to_string())
+            .unwrap_or_default();
+        assert_eq!(global.trim().len(), 0, "isolated app has no mods folder");
+
+        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string());
+
+        let fresh = app
+            .registry
+            .entries
+            .iter()
+            .find(|e| e.name == "Fresh")
+            .expect("the list is created");
+        let workspace = app
+            .workspace_state
+            .get(&fresh.id)
+            .expect("the workspace state is seeded");
+        assert_eq!(workspace.mods_source, ModsSource::GlobalModsFolder);
         assert_eq!(
-            default_scratch_mods_source(true),
+            workspace.last_rescanned_mods_source,
             ModsSource::GlobalModsFolder
-        );
-        assert_eq!(
-            default_scratch_mods_source(false),
-            ModsSource::InstallationFolder
         );
     }
 
@@ -690,7 +484,10 @@ mod tests {
             ..Default::default()
         });
 
-        fork_extract_complete_route_to_workspace(&mut app, "FORKTEST00000".to_string());
+        crate::install_runtime::fork_route::extract_complete_route_to_workspace(
+            &mut app,
+            "FORKTEST00000".to_string(),
+        );
 
         let history = app.notification_manager.history();
         assert_eq!(
@@ -710,6 +507,92 @@ mod tests {
         );
     }
 
+    struct TempDestGuard(PathBuf);
+
+    impl TempDestGuard {
+        fn new(tag: &str) -> Self {
+            Self(std::env::temp_dir().join(format!(
+                "bio_create_scratch_test_{tag}_{}",
+                std::process::id()
+            )))
+        }
+
+        fn as_string(&self) -> String {
+            self.0.to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for TempDestGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    #[test]
+    fn scratch_take_over_holds_the_old_owner_and_removes_its_data_dir() {
+        let dest = TempDestGuard::new("takeover");
+        let mut app = orch_for_create_test();
+        app.registry.entries.push(ModlistEntry {
+            id: "OLD000000001".to_string(),
+            name: "Old scratch".to_string(),
+            game: Game::EET,
+            destination_folder: dest.as_string(),
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+        let old_data_dir = crate::registry::store_workspace::modlist_data_dir("OLD000000001");
+        std::fs::create_dir_all(&old_data_dir).expect("seed the old data dir");
+        app.redesign_settings.user_name = "@tester".to_string();
+
+        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string());
+
+        assert!(app.registry.find("OLD000000001").is_none());
+        assert!(!old_data_dir.exists());
+        let fresh: Vec<_> = app
+            .registry
+            .entries
+            .iter()
+            .filter(|e| e.name == "Fresh")
+            .collect();
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(
+            app.nav,
+            NavDestination::Workspace {
+                modlist_id: Some(fresh[0].id.clone())
+            }
+        );
+    }
+
+    #[test]
+    fn scratch_mint_failure_restores_the_old_owner() {
+        let dest = TempDestGuard::new("mint-failure");
+        std::fs::write(&dest.0, b"blocker").expect("seed a blocking file");
+        let mut app = orch_for_create_test();
+        app.registry.entries.push(ModlistEntry {
+            id: "OLD000000002".to_string(),
+            name: "Old scratch 2".to_string(),
+            game: Game::EET,
+            destination_folder: dest.as_string(),
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+        let old_data_dir = crate::registry::store_workspace::modlist_data_dir("OLD000000002");
+        std::fs::create_dir_all(&old_data_dir).expect("seed the old data dir");
+        app.redesign_settings.user_name = "@tester".to_string();
+
+        finish_start_scratch(&mut app, "Fresh 2", Game::BGEE, &dest.as_string());
+
+        let restored = app
+            .registry
+            .entries
+            .iter()
+            .position(|e| e.id == "OLD000000002")
+            .expect("the old owner is restored");
+        assert_eq!(restored, 0);
+        assert!(old_data_dir.exists());
+    }
+
     #[test]
     fn start_scratch_requires_creator_name() {
         let mut app = orch_for_create_test();
@@ -718,7 +601,7 @@ mod tests {
 
         start_scratch(&mut app);
 
-        assert!(app.registry.entries.is_empty());
+        assert_eq!(app.registry.entries.len(), 0);
         let history = app.notification_manager.history();
         assert_eq!(history.len(), 1);
         let record = history.back().unwrap();

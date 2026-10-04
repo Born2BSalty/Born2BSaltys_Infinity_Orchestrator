@@ -35,6 +35,7 @@ pub(super) fn check_morpheus_mart_download_page(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: String::new(),
         tag: Some(version),
         source_ref: None,
         asset_name: Some(asset_name),
@@ -42,6 +43,7 @@ pub(super) fn check_morpheus_mart_download_page(
         error: None,
         package_kind: Step2PackageKind::PageArchive,
         version_pin_overridden: pin_overridden,
+        remote_file: None,
     }
 }
 
@@ -84,6 +86,7 @@ fn failed_morpheus_mart_outcome(
         tp_file: request.tp_file.clone(),
         label: request.label.clone(),
         source_id: request.source_id.clone(),
+        source_url: request.source_url.clone(),
         tag: None,
         source_ref: None,
         asset_name: None,
@@ -91,6 +94,7 @@ fn failed_morpheus_mart_outcome(
         error: Some(error.to_string()),
         package_kind: Step2PackageKind::PageArchive,
         version_pin_overridden: None,
+        remote_file: None,
     }
 }
 
@@ -124,7 +128,7 @@ fn filename_from_url(url: &str) -> Option<String> {
     }
 }
 
-fn version_from_filename(name: &str) -> Option<String> {
+pub(crate) fn version_from_filename(name: &str) -> Option<String> {
     let stem = name
         .trim()
         .strip_suffix(".zip")

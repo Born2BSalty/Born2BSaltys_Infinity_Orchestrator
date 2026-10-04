@@ -82,7 +82,10 @@ fn installed_pill(ui: &mut egui::Ui, success: egui::Color32) {
     let galley = ui
         .painter()
         .layout_no_wrap("Installed".to_string(), font.clone(), text_color);
-    let desired = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, galley.size().x),
+        f32::mul_add(pad_y, 2.0, galley.size().y),
+    );
     let (rect, _resp) = ui.allocate_exact_size(desired, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();

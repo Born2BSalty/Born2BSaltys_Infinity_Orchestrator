@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::Step1State;
 
 use super::super::compat_rule_runtime::{
@@ -16,11 +17,35 @@ pub(in crate::app) fn build_mismatch_context(
     checked_components: HashSet<(String, String)>,
 ) -> MismatchContext {
     let include_eet = is_eet_core_selected(&checked_components);
-    if tab.eq_ignore_ascii_case("BGEE") {
+    if game_authority::slot_for_tab(tab) == GameSlot::First {
+        let identity = game_authority::first_slot_tab(&step1.game_install);
+        if identity == game_authority::TAB_IWDEE {
+            return build_iwdee_context(checked_components);
+        }
         return build_bgee_context(step1, tab, checked_components);
     }
 
     build_bg2ee_context(include_eet, checked_components)
+}
+
+fn build_iwdee_context(checked_components: HashSet<(String, String)>) -> MismatchContext {
+    let mut active_games = HashSet::<String>::new();
+    let mut active_engines = HashSet::<String>::new();
+    let mut active_includes = HashSet::<String>::new();
+
+    active_games.insert("iwdee".to_string());
+    active_engines.insert("iwdee".to_string());
+    active_includes.insert("iwd".to_string());
+    active_includes.insert("how".to_string());
+    active_includes.insert("totlm".to_string());
+
+    MismatchContext {
+        active_games,
+        active_engines,
+        active_includes,
+        uncertain_includes: HashSet::new(),
+        checked_components,
+    }
 }
 
 fn build_bgee_context(

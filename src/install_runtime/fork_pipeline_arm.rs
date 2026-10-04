@@ -6,17 +6,17 @@ use std::path::PathBuf;
 use tracing::warn;
 
 use crate::app::modlist_share::ModlistSharePreview;
+use crate::install_runtime::replaced_owners::{self, HeldOwners};
+use crate::registry::destination_claim::{
+    ClaimContext, ClaimRefusal, DestinationClaim, resolve_destination_claim,
+};
 use crate::registry::errors::RegistryError;
 use crate::registry::model::Game;
-use crate::registry::operations::{
-    DestinationOwnership, classify_destination, remove_entry_keep_folder,
-};
 use crate::registry::operations_create::{ForkedModlistInput, create_forked_modlist};
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::create::destination_default::default_destination;
-use crate::ui::create::state_create::CreateScreenState;
-use crate::ui::install::state_install::{DestChoice, InstallStage, PreviewTab};
+use crate::ui::install::state_install::{DestChoice, InstallStage, PipelineKind};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,39 +45,55 @@ fn count_unique_mods(log_texts: &[&str]) -> u32 {
     u32::try_from(seen.len()).unwrap_or(u32::MAX)
 }
 
-pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport, ForkMintError> {
-    let preview = orchestrator
-        .create_screen_state
-        .fork_preview
-        .clone()
-        .ok_or(ForkMintError::NoParsedPreview)?;
+pub(crate) struct ForkArmRequest<'a> {
+    pub(crate) preview: &'a ModlistSharePreview,
+    pub(crate) name: &'a str,
+    pub(crate) destination: &'a str,
+    pub(crate) code: &'a str,
+    pub(crate) choice: Option<DestChoice>,
+}
 
-    let (parent_name, parent_author, game, fork_name, dest, code, choice) =
-        derive_inputs(&preview, &orchestrator.create_screen_state);
+pub(crate) fn mint_and_arm(
+    orchestrator: &mut OrchestratorApp,
+    request: &ForkArmRequest<'_>,
+) -> Result<ForkMintReport, ForkMintError> {
+    let preview = request.preview.clone();
 
-    let ownership = classify_destination(&dest, &orchestrator.registry);
-    if let DestinationOwnership::ExactOwners(ids) = ownership {
-        if ids.iter().any(|id| {
-            orchestrator
-                .active_install_modlist_id
-                .as_deref()
-                .is_some_and(|active| active == id.as_str())
-        }) {
+    let ForkInputs {
+        parent_name,
+        parent_author,
+        game,
+        fork_name,
+        dest,
+        code,
+        choice,
+    } = derive_inputs(request);
+
+    let claim = resolve_destination_claim(
+        &orchestrator.registry,
+        &ClaimContext {
+            destination: &dest,
+            held_id: None,
+            installing_id: orchestrator.active_install_modlist_id.as_deref(),
+        },
+    );
+    let mut held: Option<HeldOwners> = None;
+    match claim {
+        DestinationClaim::Free | DestinationClaim::Adopt(_) => {}
+        DestinationClaim::Replace(ids) => {
+            held = Some(
+                replaced_owners::hold_owners(orchestrator, &ids)
+                    .map_err(ForkMintError::Registry)?,
+            );
+        }
+        DestinationClaim::Refused(ClaimRefusal::OwnerIsInstalling(_)) => {
             return Err(ForkMintError::MidInstall);
         }
-        for id in &ids {
-            if let Err(err) = remove_entry_keep_folder(
-                id,
-                &orchestrator.registry_store,
-                &mut orchestrator.registry,
-            ) {
-                warn!(
-                    target = "orchestrator",
-                    "Create fork: take-over remove_entry_keep_folder({id}) failed: {err}"
-                );
-            }
+        DestinationClaim::Refused(other) => {
+            return Err(ForkMintError::DestinationRefused(
+                other.message(&orchestrator.registry),
+            ));
         }
-        orchestrator.persistence_cycle.last_saved_registry = orchestrator.registry.clone();
     }
 
     let user_name = orchestrator.redesign_settings.user_name.clone();
@@ -86,7 +102,7 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
         u32::try_from(preview.bgee_entries + preview.bg2ee_entries).unwrap_or(u32::MAX);
     let parent_mod_count = count_unique_mods(&[&preview.bgee_log_text, &preview.bg2ee_log_text]);
 
-    let entry = create_forked_modlist(
+    let entry = match create_forked_modlist(
         ForkedModlistInput {
             name: &fork_name,
             game,
@@ -97,40 +113,25 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
             parent_forked_from: &preview.forked_from,
             parent_mod_count,
             parent_component_count,
+            parent_description: preview.description.as_deref(),
         },
         &mut orchestrator.registry,
-    )
-    .map_err(ForkMintError::Registry)?;
+    ) {
+        Ok(entry) => entry,
+        Err(err) => {
+            if let Some(h) = held.take() {
+                replaced_owners::restore_owners(orchestrator, h);
+            }
+            return Err(ForkMintError::Registry(err));
+        }
+    };
 
     let modlist_id = entry.id.clone();
 
-    let canonical_store = WorkspaceStore::new_for_id(&entry.id);
-    let workspace_state = ModlistWorkspaceState {
-        pending_destination_prep: None,
-        ..Default::default()
-    };
-    if let Err(err) = canonical_store.save(&workspace_state) {
-        warn!(
-            target = "orchestrator",
-            "Create fork: writing canonical workspace.json for {} failed: {err}", entry.id
-        );
+    persist_forked_workspace(orchestrator, &entry.id);
+    if let Some(h) = held.take() {
+        replaced_owners::finalize_owners(h, &entry.id);
     }
-    orchestrator
-        .workspace_state
-        .insert(entry.id.clone(), workspace_state);
-    orchestrator
-        .workspace_stores
-        .insert(entry.id.clone(), canonical_store);
-
-    if let Err(err) = orchestrator.registry_store.save(&orchestrator.registry) {
-        warn!(
-            target = "orchestrator",
-            "Create fork: atomic registry persist for {} failed: {err}", entry.id
-        );
-    }
-    orchestrator
-        .persistence_cycle
-        .mark_registry_dirty(std::time::Instant::now());
 
     {
         let st = &mut orchestrator.install_screen_state;
@@ -140,9 +141,13 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
         st.destination_choice = choice;
         st.parsed_preview = Some(preview);
         st.preview_cached = true;
-        st.active_preview_tab = PreviewTab::default();
+        st.pipeline_kind = PipelineKind::Fork;
         st.stage = InstallStage::Downloading;
     }
+    crate::ui::install::page_install::refresh_source_compat_issue(
+        &mut orchestrator.install_screen_state,
+        &orchestrator.wizard_state.step1,
+    );
     orchestrator.create_screen_state.destination_choice = None;
     orchestrator.pending_reinstall_id = None;
     orchestrator.active_install_modlist_id = Some(modlist_id.clone());
@@ -151,18 +156,48 @@ pub fn mint_and_arm(orchestrator: &mut OrchestratorApp) -> Result<ForkMintReport
     Ok(ForkMintReport { modlist_id })
 }
 
-fn derive_inputs(
-    preview: &ModlistSharePreview,
-    state: &CreateScreenState,
-) -> (
-    String,
-    String,
-    Game,
-    String,
-    String,
-    String,
-    Option<DestChoice>,
-) {
+fn persist_forked_workspace(orchestrator: &mut OrchestratorApp, modlist_id: &str) {
+    let canonical_store = WorkspaceStore::new_for_id(modlist_id);
+    let workspace_state = ModlistWorkspaceState {
+        pending_destination_prep: None,
+        ..Default::default()
+    };
+    if let Err(err) = canonical_store.save(&workspace_state) {
+        warn!(
+            target = "orchestrator",
+            "Create fork: writing canonical workspace.json for {modlist_id} failed: {err}"
+        );
+    }
+    orchestrator
+        .workspace_state
+        .insert(modlist_id.to_string(), workspace_state);
+    orchestrator
+        .workspace_stores
+        .insert(modlist_id.to_string(), canonical_store);
+
+    if let Err(err) = orchestrator.registry_store.save(&orchestrator.registry) {
+        warn!(
+            target = "orchestrator",
+            "Create fork: atomic registry persist for {modlist_id} failed: {err}"
+        );
+    }
+    orchestrator
+        .persistence_cycle
+        .mark_registry_dirty(std::time::Instant::now());
+}
+
+pub(crate) struct ForkInputs {
+    pub(crate) parent_name: String,
+    pub(crate) parent_author: String,
+    pub(crate) game: Game,
+    pub(crate) fork_name: String,
+    pub(crate) dest: String,
+    pub(crate) code: String,
+    pub(crate) choice: Option<DestChoice>,
+}
+
+fn derive_inputs(request: &ForkArmRequest<'_>) -> ForkInputs {
+    let preview = request.preview;
     let parent_name = preview
         .name
         .as_deref()
@@ -173,7 +208,7 @@ fn derive_inputs(
     let parent_author = preview.author.as_deref().unwrap_or("").trim().to_string();
     let game = Game::from_legacy_string(&preview.game_install);
     let fork_name = {
-        let n = state.modlist_name.trim();
+        let n = request.name.trim();
         if n.is_empty() {
             format!("{parent_name} (fork)")
         } else {
@@ -181,44 +216,40 @@ fn derive_inputs(
         }
     };
     let dest = {
-        let d = state.destination.trim();
+        let d = request.destination.trim();
         if d.is_empty() {
             default_destination(&fork_name)
         } else {
             d.to_string()
         }
     };
-    let code = state.fork_code.trim().to_string();
-    let choice = state.destination_choice;
-    (
+    ForkInputs {
         parent_name,
         parent_author,
         game,
         fork_name,
         dest,
-        code,
-        choice,
-    )
+        code: request.code.trim().to_string(),
+        choice: request.choice,
+    }
 }
 
 #[derive(Debug)]
 pub enum ForkMintError {
-    NoParsedPreview,
     Registry(RegistryError),
     MidInstall,
+    DestinationRefused(String),
 }
 
 impl std::fmt::Display for ForkMintError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoParsedPreview => {
-                write!(f, "fork import requested without a parsed parent preview")
-            }
             Self::Registry(err) => write!(f, "registry: {err}"),
             Self::MidInstall => write!(
                 f,
                 "cannot take over a folder that is actively being installed"
             ),
+            Self::DestinationRefused(msg) => write!(f, "cannot use that folder: {msg}"),
         }
     }
 }
@@ -240,13 +271,33 @@ pub fn fork_workspace_relpath(modlist_id: &str) -> PathBuf {
 mod tests {
     use super::*;
     use crate::app::modlist_share::ForkAncestor;
-    use crate::registry::model::ModlistRegistry;
-    use crate::ui::create::state_create::{CreateScreenState, StartingPoint};
+    use crate::registry::model::{ModlistEntry, ModlistRegistry, ModlistState};
+
+    struct TempDestGuard(std::path::PathBuf);
+
+    impl TempDestGuard {
+        fn new(tag: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("bio_fork_arm_test_{tag}_{}", std::process::id()));
+            Self(path)
+        }
+
+        fn as_string(&self) -> String {
+            self.0.to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for TempDestGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
 
     fn preview(name: Option<&str>, author: Option<&str>, game: &str) -> ModlistSharePreview {
         ModlistSharePreview {
             bio_version: "x".to_string(),
             game_install: game.to_string(),
+            game_version: None,
             install_mode: "build-from-scanned-mods".to_string(),
             bgee_entries: 0,
             bg2ee_entries: 0,
@@ -261,71 +312,85 @@ mod tests {
             allow_auto_install: true,
             name: name.map(str::to_string),
             author: author.map(str::to_string),
+            description: None,
             forked_from: Vec::new(),
+            unresolved_mods: Vec::new(),
         }
     }
 
-    fn state(modlist_name: &str, destination: &str, code: &str) -> CreateScreenState {
-        CreateScreenState {
-            modlist_name: modlist_name.to_string(),
-            destination: destination.to_string(),
-            destination_choice: None,
-            fork_code: code.to_string(),
-            starting_point: StartingPoint::Import,
-            ..CreateScreenState::new()
+    fn request<'a>(
+        preview: &'a ModlistSharePreview,
+        name: &'a str,
+        destination: &'a str,
+        code: &'a str,
+    ) -> ForkArmRequest<'a> {
+        ForkArmRequest {
+            preview,
+            name,
+            destination,
+            code,
+            choice: None,
         }
     }
 
     #[test]
-    fn derive_inputs_uses_user_modlist_name_when_present() {
+    fn derive_inputs_uses_the_requested_name_and_destination() {
         let p = preview(Some("Parent name"), Some("@p"), "EET");
-        let s = state("My fork", "D:\\fork", "BIO-MODLIST-V1:CODE");
-        let (parent_name, parent_author, game, fork_name, dest, code, choice) =
-            derive_inputs(&p, &s);
-        assert_eq!(parent_name, "Parent name");
-        assert_eq!(parent_author, "@p");
-        assert_eq!(game, Game::EET);
-        assert_eq!(fork_name, "My fork", "user's modlist_name MUST win");
-        assert_eq!(dest, "D:\\fork", "user's destination MUST win");
-        assert_eq!(code, "BIO-MODLIST-V1:CODE");
-        assert_eq!(choice, None);
+        let inputs = derive_inputs(&request(&p, "My fork", "D:\\fork", "BIO-MODLIST-V1:CODE"));
+        assert_eq!(inputs.parent_name, "Parent name");
+        assert_eq!(inputs.parent_author, "@p");
+        assert_eq!(inputs.game, Game::EET);
+        assert_eq!(
+            inputs.fork_name, "My fork",
+            "the request's name MUST win over any screen state"
+        );
+        assert_eq!(
+            inputs.dest, "D:\\fork",
+            "the request's destination MUST win over any screen state"
+        );
+        assert_eq!(inputs.code, "BIO-MODLIST-V1:CODE");
+        assert_eq!(inputs.choice, None);
     }
 
     #[test]
     fn derive_inputs_falls_back_to_parent_fork_when_name_blank() {
         let p = preview(Some("Parent"), None, "BGEE");
-        let s = state("   ", "D:\\dest", "code");
-        let (_, _, _, fork_name, _, _, _) = derive_inputs(&p, &s);
-        assert_eq!(fork_name, "Parent (fork)");
+        let inputs = derive_inputs(&request(&p, "   ", "D:\\dest", "code"));
+        assert_eq!(inputs.fork_name, "Parent (fork)");
     }
 
     #[test]
     fn derive_inputs_falls_back_to_default_destination_when_dest_blank() {
         let p = preview(Some("Parent"), None, "BGEE");
-        let s = state("My fork", "  ", "code");
-        let (_, _, _, fork_name, dest, _, _) = derive_inputs(&p, &s);
-        assert_eq!(fork_name, "My fork");
+        let inputs = derive_inputs(&request(&p, "My fork", "  ", "code"));
+        assert_eq!(inputs.fork_name, "My fork");
         assert!(
-            dest.ends_with("my-fork"),
-            "default_destination(name) ends with the slugified fork name; got {dest}"
+            inputs.dest.ends_with("my-fork"),
+            "default_destination(name) ends with the slugified fork name; got {}",
+            inputs.dest
         );
     }
 
     #[test]
     fn derive_inputs_uses_shared_modlist_fallback_when_parent_name_absent() {
         let p = preview(None, None, "BGEE");
-        let s = state("My fork", "D:\\dest", "code");
-        let (parent_name, _, _, _, _, _, _) = derive_inputs(&p, &s);
-        assert_eq!(parent_name, "Shared modlist");
+        let inputs = derive_inputs(&request(&p, "My fork", "D:\\dest", "code"));
+        assert_eq!(inputs.parent_name, "Shared modlist");
     }
 
     #[test]
     fn derive_inputs_carries_destination_choice() {
         let p = preview(Some("P"), None, "EET");
-        let mut s = state("F", "D:\\d", "c");
-        s.destination_choice = Some(DestChoice::Backup);
-        let (_, _, _, _, _, _, choice) = derive_inputs(&p, &s);
-        assert_eq!(choice, Some(DestChoice::Backup));
+        let mut req = request(&p, "F", "D:\\d", "c");
+        req.choice = Some(DestChoice::Backup);
+        assert_eq!(derive_inputs(&req).choice, Some(DestChoice::Backup));
+    }
+
+    #[test]
+    fn derive_inputs_trims_the_requested_code() {
+        let p = preview(Some("P"), None, "EET");
+        let inputs = derive_inputs(&request(&p, "F", "D:\\d", "  BIO-MODLIST-V1:X  "));
+        assert_eq!(inputs.code, "BIO-MODLIST-V1:X");
     }
 
     #[test]
@@ -345,6 +410,7 @@ mod tests {
             parent_forked_from: &existing_chain,
             parent_mod_count: 0,
             parent_component_count: 0,
+            parent_description: None,
         };
         let entry = create_forked_modlist(input, &mut reg).expect("ok");
         assert_eq!(entry.forked_from.len(), 2);
@@ -394,5 +460,32 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn fork_take_over_holds_the_old_owner_and_removes_its_data_dir() {
+        let dest = TempDestGuard::new("fork-take-over");
+        let mut app = OrchestratorApp::new_isolated_for_test("fork-take-over");
+        app.registry.entries.push(ModlistEntry {
+            id: "OLD000000001".to_string(),
+            name: "Old fork".to_string(),
+            game: Game::EET,
+            destination_folder: dest.as_string(),
+            state: ModlistState::InProgress,
+            ..Default::default()
+        });
+        let old_data_dir = crate::registry::store_workspace::modlist_data_dir("OLD000000001");
+        std::fs::create_dir_all(&old_data_dir).expect("seed the old data dir");
+
+        let p = preview(Some("Parent"), Some("@p"), "EET");
+        let dest_string = dest.as_string();
+        let req = request(&p, "New fork", &dest_string, "code");
+
+        let report = mint_and_arm(&mut app, &req).expect("mint ok");
+
+        assert!(app.registry.find("OLD000000001").is_none());
+        assert!(!old_data_dir.exists());
+        assert!(app.registry.find(&report.modlist_id).is_some());
+        assert!(app.pending_replaced_entry.is_none());
     }
 }

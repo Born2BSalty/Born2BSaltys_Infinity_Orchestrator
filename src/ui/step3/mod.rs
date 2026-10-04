@@ -7,6 +7,7 @@ pub mod format_step3;
 pub mod frame_step3;
 pub mod list_rows_step3;
 pub mod list_step3;
+pub mod move_selection_step3;
 pub mod page_step3;
 pub mod service_component_uncheck_step3;
 pub mod service_drag_ops_step3;

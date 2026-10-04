@@ -211,7 +211,18 @@ pub mod details_pane_content {
         };
         render_paths_grid(ui, details, action, paths_layout);
         ui.add_space(6.0);
-        render_component_block(ui, details, palette);
+        if let Some(component_id) = details.component_id.as_deref() {
+            let block = details.compat_component_block.as_deref().map_or_else(
+                || {
+                    std::borrow::Cow::Owned(format!(
+                        "No BEGIN block matched component #{component_id} in {}.",
+                        details.tp_file.as_deref().unwrap_or("this TP2")
+                    ))
+                },
+                std::borrow::Cow::Borrowed,
+            );
+            render_component_block(ui, details, palette, &block);
+        }
         render_raw_line(ui, details, palette);
     }
 

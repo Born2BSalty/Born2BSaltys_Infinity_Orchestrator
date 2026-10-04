@@ -83,30 +83,6 @@ mod filters {
         false
     }
 
-    pub(in crate::app::terminal) fn extract_error_block(output: &str) -> String {
-        let mut out = Vec::new();
-        for line in output.lines().rev() {
-            let u = line.to_ascii_uppercase();
-            if u.contains("ERROR")
-                || u.contains("FATAL")
-                || u.contains("NOT INSTALLED DUE TO ERRORS")
-                || u.contains("PARSE ERROR")
-                || u.contains("WEIDU COMMAND FAILED")
-            {
-                out.push(line.to_string());
-                if out.len() >= 30 {
-                    break;
-                }
-            }
-        }
-        out.reverse();
-        if out.is_empty() {
-            "No error lines found in current console output.".to_string()
-        } else {
-            out.join("\n")
-        }
-    }
-
     #[cfg(test)]
     mod tests {
         use super::likely_failure_visible;
@@ -307,7 +283,6 @@ mod utils {
 
 pub use model::PromptInfo;
 
-pub(in crate::app::terminal) use filters::extract_error_block;
 pub(in crate::app::terminal) use filters::important_line;
 pub(in crate::app::terminal) use filters::installed_line;
 pub(in crate::app::terminal) use filters::likely_failure_visible;

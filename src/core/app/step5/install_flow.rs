@@ -11,6 +11,7 @@ use super::log_files::{
     verify_targets_prepared,
 };
 use crate::app::compat_step3_rules;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step1State, WizardState};
 use crate::app::step5::command_config::build_install_command_config;
 use crate::app::terminal::EmbeddedTerminal;
@@ -25,20 +26,36 @@ pub struct PendingInstallStart {
 }
 
 #[must_use]
+pub fn step3_gate_tabs(game_install: &str) -> [(&'static str, bool); 2] {
+    [
+        (
+            game_authority::first_slot_tab(game_install),
+            game_authority::has_slot(game_install, GameSlot::First),
+        ),
+        (
+            game_authority::TAB_BG2EE,
+            game_authority::has_slot(game_install, GameSlot::Second),
+        ),
+    ]
+}
+
+#[must_use]
 pub fn step3_install_block_reason(state: &WizardState) -> Option<String> {
-    let has_first_game_tab = matches!(state.step1.game_install.as_str(), "BGEE" | "EET");
-    let has_second_game_tab = matches!(state.step1.game_install.as_str(), "BG2EE" | "EET");
+    let [
+        (first_tab, has_first_game_tab),
+        (second_tab, has_second_game_tab),
+    ] = step3_gate_tabs(&state.step1.game_install);
     let mut blocked_tabs = Vec::<String>::new();
 
     for (tab, show, mods, items) in [
         (
-            "BGEE",
+            first_tab,
             has_first_game_tab,
             &state.step2.bgee_mods,
             &state.step3.bgee_items,
         ),
         (
-            "BG2EE",
+            second_tab,
             has_second_game_tab,
             &state.step2.bg2ee_mods,
             &state.step3.bg2ee_items,
@@ -47,14 +64,19 @@ pub fn step3_install_block_reason(state: &WizardState) -> Option<String> {
         if !show {
             continue;
         }
-        let count =
-            compat_step3_rules::collect_step3_compat_markers(&state.step1, tab, mods, items)
-                .values()
-                .filter(|marker| {
-                    marker.kind.eq_ignore_ascii_case("missing_dep")
-                        || marker.kind.eq_ignore_ascii_case("order_block")
-                })
-                .count();
+        let count = compat_step3_rules::collect_step3_compat_markers(
+            &state.step1,
+            tab,
+            mods,
+            items,
+            &state.step3.bgee_items,
+        )
+        .values()
+        .filter(|marker| {
+            marker.kind.eq_ignore_ascii_case("missing_dep")
+                || marker.kind.eq_ignore_ascii_case("order_block")
+        })
+        .count();
         if count > 0 {
             blocked_tabs.push(format!("{tab}: {count}"));
         }
@@ -340,6 +362,17 @@ fn now_unix_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn step3_blockers_gate_an_iwdee_install() {
+        assert_eq!(step3_gate_tabs("BGEE"), [("BGEE", true), ("BG2EE", false)]);
+        assert_eq!(step3_gate_tabs("BG2EE"), [("BGEE", false), ("BG2EE", true)]);
+        assert_eq!(step3_gate_tabs("EET"), [("BGEE", true), ("BG2EE", true)]);
+        assert_eq!(
+            step3_gate_tabs("IWDEE"),
+            [("IWDEE", true), ("BG2EE", false)]
+        );
+    }
 
     #[test]
     fn prepare_start_request_preserves_previous_console_run_output() {

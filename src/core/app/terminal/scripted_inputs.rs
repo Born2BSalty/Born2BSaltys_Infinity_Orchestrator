@@ -23,6 +23,8 @@ pub(super) fn set_scripted_inputs(
     term.current_component_tp2 = None;
     term.current_component_id = None;
     term.current_component_name = None;
+    term.current_batch.clear();
+    term.pending_display_patches.clear();
     let mut total = 0usize;
     for (k, values) in entries {
         if values.is_empty() {
@@ -89,7 +91,7 @@ fn parse_component_key_from_installer_line(line: &str) -> Option<ComponentContex
     })
 }
 
-fn extract_field(line: &str, field: &str) -> Option<String> {
+pub(super) fn extract_field(line: &str, field: &str) -> Option<String> {
     let needle = format!("{field}: \"");
     let start = line.find(&needle)? + needle.len();
     let rest = &line[start..];

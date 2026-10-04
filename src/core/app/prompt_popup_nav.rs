@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::prompt_jump_targets::{collect_prompt_jump_component_ids, prompt_popup_mod_ref};
 use crate::app::prompt_popup_text::{
@@ -26,7 +27,7 @@ pub(crate) fn open_toolbar_prompt_popup(state: &mut WizardState, title: &str) {
 }
 
 pub(crate) fn active_step2_mods(state: &WizardState) -> &[Step2ModState] {
-    if state.step2.active_game_tab == "BGEE" {
+    if game_authority::slot_for_tab(&state.step2.active_game_tab) == GameSlot::First {
         &state.step2.bgee_mods
     } else {
         &state.step2.bg2ee_mods
@@ -48,7 +49,7 @@ pub(crate) fn apply_text_prompt_jump(state: &mut WizardState, title: &str, compo
         let _ = step3_jump_to_target(state, &game_tab, &mod_ref, Some(component_id));
     } else {
         let game_tab = state.step2.active_game_tab.clone();
-        step2_jump_to_target(state, &game_tab, &mod_ref, Some(component_id));
+        let _ = step2_jump_to_target(state, &game_tab, &mod_ref, Some(component_id));
         state.step2.jump_to_selected_requested = true;
     }
 }
@@ -58,12 +59,14 @@ pub(crate) fn collect_active_prompt_toolbar_entries(
 ) -> Vec<PromptToolbarModEntry> {
     let prompt_eval = build_prompt_eval_context(state);
     if state.current_step == 2 {
-        let items = if state.step3.active_game_tab == "BGEE" {
+        let active_first_slot =
+            game_authority::slot_for_tab(&state.step3.active_game_tab) == GameSlot::First;
+        let items = if active_first_slot {
             &state.step3.bgee_items
         } else {
             &state.step3.bg2ee_items
         };
-        let mods = if state.step3.active_game_tab == "BGEE" {
+        let mods = if active_first_slot {
             &state.step2.bgee_mods
         } else {
             &state.step2.bg2ee_mods
@@ -87,7 +90,7 @@ pub(crate) fn apply_toolbar_prompt_jump(
     if state.current_step == 2 {
         let _ = step3_jump_to_target(state, &game_tab, mod_ref, component_id);
     } else if let Some(component_id) = component_id {
-        step2_jump_to_target(state, &game_tab, mod_ref, Some(component_id));
+        let _ = step2_jump_to_target(state, &game_tab, mod_ref, Some(component_id));
         state.step2.jump_to_selected_requested = true;
     } else {
         select_step2_mod_row(state, &game_tab, mod_ref);
@@ -96,7 +99,7 @@ pub(crate) fn apply_toolbar_prompt_jump(
 
 fn select_step2_mod_row(state: &mut WizardState, game_tab: &str, mod_ref: &str) {
     let target_key = normalize_mod_key(mod_ref);
-    let mods = if game_tab.eq_ignore_ascii_case("BGEE") {
+    let mods = if game_authority::slot_for_tab(game_tab) == GameSlot::First {
         &state.step2.bgee_mods
     } else {
         &state.step2.bg2ee_mods
@@ -157,5 +160,14 @@ mod tests {
             _ => panic!("expected the parent mod row to be selected"),
         }
         assert!(state.step2.jump_to_selected_requested);
+    }
+
+    #[test]
+    fn prompt_popup_nav_routes_iwdee_to_the_first_container() {
+        let mut state = state_with_mod("DLCMERGER/DLCMERGER.TP2");
+        state.step2.active_game_tab = "IWDEE".to_string();
+        let mods = active_step2_mods(&state);
+        assert_eq!(mods.len(), 1);
+        assert_eq!(mods[0].tp_file, "DLCMERGER/DLCMERGER.TP2");
     }
 }

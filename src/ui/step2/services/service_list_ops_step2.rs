@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step2ModState, WizardState};
 use crate::ui::step2::tree_selection_rules_step2::{
     enforce_collapsible_group_umbrella_after_bulk, enforce_subcomponent_single_select_keep_first,
@@ -62,7 +63,7 @@ pub fn select_visible(mods: &mut [Step2ModState], filter: &str, next_selection_o
 }
 
 pub fn recompute_selection_counts(state: &mut WizardState) {
-    let mods = if state.step2.active_game_tab == "BGEE" {
+    let mods = if game_authority::slot_for_tab(&state.step2.active_game_tab) == GameSlot::First {
         &state.step2.bgee_mods
     } else {
         &state.step2.bg2ee_mods
@@ -93,5 +94,61 @@ fn enforce_meta_mode_after_bulk(mod_state: &mut Step2ModState) {
                 comp.selected_order = None;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::state::Step2ComponentState;
+
+    fn mod_with_one_checked_component() -> Step2ModState {
+        Step2ModState {
+            name: "Mod".to_string(),
+            tp_file: "mod.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: vec![Step2ComponentState {
+                component_id: "0".to_string(),
+                label: "Component".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: true,
+                selected_order: Some(1),
+            }],
+        }
+    }
+
+    #[test]
+    fn list_ops_route_iwdee_to_the_first_container() {
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "IWDEE".to_string();
+        state.step2.bgee_mods = vec![mod_with_one_checked_component()];
+        recompute_selection_counts(&mut state);
+        assert_eq!(state.step2.total_count, 1);
+        assert_eq!(state.step2.selected_count, 1);
     }
 }

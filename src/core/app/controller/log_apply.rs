@@ -24,12 +24,29 @@ pub fn apply_log_to_mods(
     reset_before_apply: bool,
     next_order: &mut usize,
 ) -> usize {
+    apply_log_to_mods_with_sources(
+        mods,
+        log,
+        tp2_allow,
+        reset_before_apply,
+        next_order,
+        &mod_downloads::load_mod_download_sources(),
+    )
+}
+
+pub(crate) fn apply_log_to_mods_with_sources(
+    mods: &mut [Step2ModState],
+    log: &LogFile,
+    tp2_allow: Option<&HashSet<String, RandomState>>,
+    reset_before_apply: bool,
+    next_order: &mut usize,
+    mod_download_sources: &mod_downloads::ModDownloadsLoad,
+) -> usize {
     if reset_before_apply {
         reset_mod_selection(mods);
     }
 
-    let mod_download_sources = mod_downloads::load_mod_download_sources();
-    let mod_lookup = build_mod_lookup(mods, &mod_download_sources);
+    let mod_lookup = build_mod_lookup(mods, mod_download_sources);
     let mut matched = 0usize;
     for installed in log.components() {
         if let Some(allow) = tp2_allow
@@ -42,7 +59,7 @@ pub fn apply_log_to_mods(
             mods,
             installed,
             &mod_lookup,
-            &mod_download_sources,
+            mod_download_sources,
             next_order,
         );
     }
@@ -298,3 +315,147 @@ fn strip_wlb_marker(raw_line: &str) -> String {
 }
 
 pub use super::log_apply_keys::normalize_path_key;
+
+#[cfg(test)]
+mod tests {
+    use super::apply_log_to_mods_with_sources;
+    use crate::app::mod_downloads::{self, ModDownloadsLoad};
+    use crate::app::state::{Step2ComponentState, Step2ModState};
+    use crate::mods::log_file::LogFile;
+
+    const SOURCE_TAIL: &str = "\n  [[mods.sources]]\n  id = \"primary\"\n  label = \"\"\n  type = \"url\"\n  url = \"https://pocketplane.net/mods/questpack-v35-win.zip\"\n  repo = \"\"\n  commit = \"\"\n  tag = \"\"\n  branch = \"\"\n  channel = \"\"\n  asset = \"\"\n  pkg_windows = \"\"\n  pkg_linux = \"\"\n  pkg_macos = \"\"\n";
+
+    const BLOCK_D0: &str =
+        "[[mods]]\nname = \"Quest Pack\"\ntp2 = \"d0questpack\"\naliases = [\"questpack\"]\n";
+    const BLOCK_QP: &str =
+        "[[mods]]\nname = \"Quest Pack\"\ntp2 = \"questpack\"\naliases = [\"d0questpack\"]\n";
+    const BLOCK_NO_ALIAS: &str = "[[mods]]\nname = \"Quest Pack\"\ntp2 = \"d0questpack\"\n";
+
+    const TAIL: &str = " #0 #5 // Additional Shadow Thieves Content: v3.5";
+
+    fn sources(block_head: &str) -> ModDownloadsLoad {
+        let default_toml = format!("{block_head}{SOURCE_TAIL}");
+        let load = mod_downloads::load_mod_download_sources_from_texts(&default_toml, "", "");
+        assert_eq!(load.error, None);
+        assert_eq!(load.sources.len(), 1);
+        load
+    }
+
+    fn component(id: &str, raw_line: &str) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: id.to_string(),
+            label: id.to_string(),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: raw_line.to_string(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    fn scanned_questpack() -> Step2ModState {
+        Step2ModState {
+            name: "questpack".to_string(),
+            tp_file: "setup-d0questpack.tp2".to_string(),
+            tp2_path: "C:/mods/questpack/setup-d0questpack.tp2".to_string(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: vec![component(
+                "5",
+                "~QUESTPACK/SETUP-D0QUESTPACK.TP2~ #0 #5 // Additional Shadow Thieves Content: v3.5",
+            )],
+        }
+    }
+
+    fn log(line: &str) -> LogFile {
+        LogFile::from_text(line).expect("log should parse")
+    }
+
+    fn apply(line: &str, block_head: &str) -> (usize, bool) {
+        let mut mods = vec![scanned_questpack()];
+        let mut next_order = 1;
+        let matched = apply_log_to_mods_with_sources(
+            &mut mods,
+            &log(line),
+            None,
+            true,
+            &mut next_order,
+            &sources(block_head),
+        );
+        let checked = mods[0]
+            .components
+            .iter()
+            .any(|component| component.component_id == "5" && component.checked);
+        (matched, checked)
+    }
+
+    fn quest_line(install_path: &str) -> String {
+        format!("~{install_path}~{TAIL}")
+    }
+
+    #[test]
+    fn folder_and_file_form_matches_by_file_name() {
+        let line = quest_line(r"D0QUESTPACK\SETUP-D0QUESTPACK.TP2");
+        assert_eq!(apply(&line, BLOCK_NO_ALIAS), (1, true));
+    }
+
+    #[test]
+    fn the_users_own_log_form_matches_by_file_name() {
+        let line = quest_line(r"QUESTPACK\SETUP-D0QUESTPACK.TP2");
+        assert_eq!(apply(&line, BLOCK_NO_ALIAS), (1, true));
+    }
+
+    #[test]
+    fn folder_named_file_matches_through_the_alias_either_way_round() {
+        let line = quest_line(r"QUESTPACK\QUESTPACK.TP2");
+        assert_eq!(apply(&line, BLOCK_D0), (1, true));
+        assert_eq!(apply(&line, BLOCK_QP), (1, true));
+    }
+
+    #[test]
+    fn setup_prefixed_alias_matches_either_way_round() {
+        let line = quest_line(r"QUESTPACK\SETUP-QUESTPACK.TP2");
+        assert_eq!(apply(&line, BLOCK_D0), (1, true));
+        assert_eq!(apply(&line, BLOCK_QP), (1, true));
+    }
+
+    #[test]
+    fn root_level_line_matches_by_file_name() {
+        let line = quest_line("SETUP-D0QUESTPACK.TP2");
+        assert_eq!(apply(&line, BLOCK_NO_ALIAS), (1, true));
+        assert_eq!(apply(&line, BLOCK_QP), (1, true));
+    }
+
+    #[test]
+    fn folder_named_forms_need_the_alias() {
+        let line = quest_line(r"QUESTPACK\QUESTPACK.TP2");
+        assert_eq!(apply(&line, BLOCK_NO_ALIAS), (0, false));
+    }
+
+    #[test]
+    fn a_different_mods_line_leaves_questpack_alone() {
+        let line = r"~BG1UB\BG1UB.TP2~ #0 #3 // Angelo: v17.1";
+        assert_eq!(apply(line, BLOCK_D0), (0, false));
+    }
+}

@@ -5,16 +5,21 @@ use eframe::egui;
 
 use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::orchestrator::widgets::{BtnOpts, InputOpts, redesign_btn, redesign_text_input};
+use crate::ui::orchestrator::widgets::{
+    BtnOpts, InputOpts, redesign_btn, redesign_btn_height, redesign_text_input,
+};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
     redesign_input_bg, redesign_shell_bg, redesign_text_muted, redesign_text_primary,
+    redesign_with_alpha,
 };
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::step2::step2_rescan_reconcile;
+use crate::ui::workspace::step2::workspace_step2;
 
 const SEARCH_INPUT_H: f32 = 30.0;
 const ROW_GAP: f32 = 10.0;
+const HELP_HOVER: &str = "How to add mods to this modlist";
 const SEARCH_INPUT_TEXT_PAD: i8 = 8;
 const DROPDOWN_MIN_W: f32 = 160.0;
 const SOURCE_SELECTOR_PAD_X: f32 = 10.0;
@@ -73,10 +78,19 @@ pub fn render(
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
     rect: egui::Rect,
+    content_rect: egui::Rect,
 ) -> Option<Step2Action> {
     let is_scanning = orchestrator.wizard_state.step2.is_scanning;
     let params = RowParams::from_orchestrator(orchestrator);
-    render_row(ui, orchestrator, palette, rect, is_scanning, &params)
+    render_row(
+        ui,
+        orchestrator,
+        palette,
+        rect,
+        is_scanning,
+        &params,
+        content_rect,
+    )
 }
 
 fn render_row(
@@ -86,6 +100,7 @@ fn render_row(
     rect: egui::Rect,
     is_scanning: bool,
     params: &RowParams,
+    content_rect: egui::Rect,
 ) -> Option<Step2Action> {
     let mut action: Option<Step2Action> = None;
 
@@ -101,8 +116,8 @@ fn render_row(
             let btn_w = small_btn_width(ui, btn_label);
             let sel_w = source_selector_width(ui, params.current_source);
             let label_w = mods_source_label_width(ui);
-            let search_w =
-                (rect.width() - label_w - ROW_GAP - sel_w - ROW_GAP - btn_w - ROW_GAP).max(80.0);
+            let help_w = redesign_btn_height(ui, true);
+            let search_w = search_width(rect.width(), label_w, sel_w, btn_w, help_w);
 
             let search_margin = egui::Margin::symmetric(SEARCH_INPUT_TEXT_PAD, 4);
             let _resp = redesign_text_input(
@@ -154,10 +169,69 @@ fn render_row(
             if let Some(a) = render_scan_btn(ui, orchestrator, palette, is_scanning, params) {
                 action = Some(a);
             }
+
+            let popup_id = ui.make_persistent_id("workspace_step2_add_mods_help");
+            let help_response = help_glyph_button(ui, palette, help_w);
+            if help_response.clicked() {
+                ui.memory_mut(|memory| memory.toggle_popup(popup_id));
+            }
+            let help_response = help_response.on_hover_text(HELP_HOVER);
+            let help_folder = source_folder(
+                params.current_source,
+                &params.global_mods_folder,
+                orchestrator,
+            );
+            workspace_step2::render_help_popover(
+                ui,
+                palette,
+                &help_response,
+                content_rect.shrink(12.0),
+                &help_folder,
+                matches!(params.current_source, ModsSource::GlobalModsFolder),
+            );
         });
     });
 
     action
+}
+
+fn help_glyph_button(ui: &mut egui::Ui, palette: ThemePalette, edge: f32) -> egui::Response {
+    let size = egui::vec2(edge, edge);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let fill = if response.hovered() {
+            redesign_shell_bg(palette)
+        } else {
+            egui::Color32::TRANSPARENT
+        };
+        painter.rect_filled(
+            rect,
+            egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
+            fill,
+        );
+        painter.rect_stroke(
+            rect,
+            egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8),
+            egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, redesign_border_strong(palette)),
+            egui::StrokeKind::Inside,
+        );
+        let color = if response.hovered() {
+            redesign_text_primary(palette)
+        } else {
+            redesign_with_alpha(redesign_text_primary(palette), 4, 10)
+        };
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "?",
+            egui::FontId::new(13.0, egui::FontFamily::Name("poppins_light".into())),
+            color,
+        );
+    }
+
+    response
 }
 
 fn render_scan_btn(
@@ -397,7 +471,7 @@ fn dropdown_item(
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let row_height = galley.size().y + pad_y * 2.0;
+    let row_height = f32::mul_add(pad_y, 2.0, galley.size().y);
     let sense = if enabled {
         egui::Sense::click()
     } else {
@@ -446,6 +520,11 @@ fn scratch_scan_enabled(orchestrator: &OrchestratorApp) -> bool {
         .get(id)
         .and_then(|workspace| workspace.scratch_mods_folder.as_deref())
         .is_some_and(|folder| !folder.trim().is_empty())
+}
+
+const fn search_width(row_w: f32, label_w: f32, sel_w: f32, btn_w: f32, help_w: f32) -> f32 {
+    let width = row_w - label_w - ROW_GAP - sel_w - ROW_GAP - btn_w - ROW_GAP - help_w - ROW_GAP;
+    if width < 80.0 { 80.0 } else { width }
 }
 
 fn small_btn_width(ui: &egui::Ui, label: &str) -> f32 {
@@ -588,6 +667,18 @@ pub(crate) const fn global_item_disabled(is_fork: bool, global_settings_non_empt
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_width_subtracts_every_fixed_widget_and_gap() {
+        let search_w = search_width(900.0, 90.0, 160.0, 100.0, 22.0);
+        assert!((search_w - 488.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn search_width_clamps_to_the_minimum() {
+        let search_w = search_width(300.0, 90.0, 160.0, 100.0, 22.0);
+        assert!((search_w - 80.0).abs() < f32::EPSILON);
+    }
 
     #[test]
     fn same_source_does_not_need_warning() {

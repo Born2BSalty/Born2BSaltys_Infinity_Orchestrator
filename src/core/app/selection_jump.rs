@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::controller::log_apply_match::parse_component_tp2_from_raw;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::selection_refs::normalize_mod_key;
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
 
@@ -10,9 +11,9 @@ pub(crate) fn step2_jump_to_target(
     game_tab: &str,
     mod_ref: &str,
     component_ref: Option<u32>,
-) {
+) -> bool {
     let target_key = normalize_mod_key(mod_ref);
-    let mods = if game_tab.eq_ignore_ascii_case("BGEE") {
+    let mods = if game_authority::slot_for_tab(game_tab) == GameSlot::First {
         &state.step2.bgee_mods
     } else {
         &state.step2.bg2ee_mods
@@ -33,7 +34,7 @@ pub(crate) fn step2_jump_to_target(
                     component_id: component.component_id.clone(),
                     component_key: component.raw_line.clone(),
                 });
-                return;
+                return true;
             }
         } else if let Some(component) = mod_state.components.iter().find(|component| {
             parse_component_tp2_from_raw(&component.raw_line).map_or_else(
@@ -47,7 +48,7 @@ pub(crate) fn step2_jump_to_target(
                 component_id: component.component_id.clone(),
                 component_key: component.raw_line.clone(),
             });
-            return;
+            return true;
         }
         if normalize_mod_key(&mod_state.tp_file) != target_key {
             continue;
@@ -56,8 +57,9 @@ pub(crate) fn step2_jump_to_target(
             game_tab: game_tab.to_string(),
             tp_file: mod_state.tp_file.clone(),
         });
-        return;
+        return true;
     }
+    false
 }
 
 pub(crate) fn step3_jump_to_target(
@@ -67,7 +69,7 @@ pub(crate) fn step3_jump_to_target(
     component_ref: Option<u32>,
 ) -> bool {
     let target_key = normalize_mod_key(mod_ref);
-    if game_tab.eq_ignore_ascii_case("BGEE") {
+    if game_authority::slot_for_tab(game_tab) == GameSlot::First {
         let mut target = Step3JumpTarget {
             active_game_tab: &mut state.step3.active_game_tab,
             jump_to_selected_requested: &mut state.step3.jump_to_selected_requested,
@@ -150,4 +152,53 @@ fn jump_to_target_in_tab(
     *target.active_game_tab = game_tab.to_string();
     *target.jump_to_selected_requested = true;
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::state::Step2ModState;
+
+    fn mod_state(tp_file: &str) -> Step2ModState {
+        Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn selection_jump_routes_iwdee_to_the_first_container() {
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![mod_state("mod/mod.tp2")];
+        let found = step2_jump_to_target(&mut state, "IWDEE", "mod/mod.tp2", None);
+        assert!(found);
+        match state.step2.selected.as_ref() {
+            Some(Step2Selection::Mod { game_tab, tp_file }) => {
+                assert_eq!(game_tab, "IWDEE");
+                assert_eq!(tp_file, "mod/mod.tp2");
+            }
+            other => panic!("expected a mod selection, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn step2_jump_reports_a_missing_mod() {
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![mod_state("mod/mod.tp2")];
+        let found = step2_jump_to_target(&mut state, "BGEE", "other/other.tp2", None);
+        assert!(!found);
+        assert!(state.step2.selected.is_none());
+    }
 }

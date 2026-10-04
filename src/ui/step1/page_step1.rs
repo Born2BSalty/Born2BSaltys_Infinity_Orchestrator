@@ -368,6 +368,7 @@ mod tests {
         let preview = crate::app::modlist_share::ModlistSharePreview {
             bio_version: "0.1.0-test".to_string(),
             game_install: "EET".to_string(),
+            game_version: None,
             install_mode: "build_from_scanned_mods".to_string(),
             bgee_entries: 7,
             bg2ee_entries: 11,
@@ -382,10 +383,12 @@ mod tests {
             allow_auto_install: true,
             name: Some("Tactical EET 2026".to_string()),
             author: Some("@hidden".to_string()),
+            description: None,
             forked_from: vec![crate::app::modlist_share::ForkAncestor {
                 name: "Root".to_string(),
                 author: "@root".to_string(),
             }],
+            unresolved_mods: Vec::new(),
         };
 
         let text = format_modlist_import_preview(&preview);

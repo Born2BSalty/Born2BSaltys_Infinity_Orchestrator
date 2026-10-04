@@ -55,6 +55,20 @@ pub(crate) fn save_pending_mod_configs(
     fs::write(path, content).map_err(|err| err.to_string())
 }
 
+const OS_ARTIFACT_FILE_NAMES: [&str; 3] = ["desktop.ini", "thumbs.db", ".ds_store"];
+
+#[must_use]
+pub(crate) fn is_os_artifact_file(relative_path: &Path) -> bool {
+    relative_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            OS_ARTIFACT_FILE_NAMES
+                .iter()
+                .any(|artifact| name.eq_ignore_ascii_case(artifact))
+        })
+}
+
 pub(crate) fn validate_relative_config_path(relative_path: &str) -> Result<PathBuf, String> {
     let normalized = relative_path.trim().replace('\\', "/");
     if normalized.is_empty() {
@@ -76,7 +90,32 @@ pub(crate) fn validate_relative_config_path(relative_path: &str) -> Result<PathB
             "mod config path contains traversal: {relative_path}"
         ));
     }
+    if let Some(reason) = normalized.split('/').find_map(segment_refusal) {
+        return Err(format!("mod config path {reason}: {relative_path}"));
+    }
     Ok(PathBuf::from(normalized))
+}
+
+fn segment_refusal(segment: &str) -> Option<&'static str> {
+    if segment.is_empty() {
+        return Some("has an empty segment");
+    }
+    if segment.chars().all(|ch| ch == '.') {
+        return Some("has a dot-only segment");
+    }
+    if segment
+        .chars()
+        .any(|ch| matches!(ch, '<' | '>' | ':' | '"' | '|' | '?' | '*') || ch < '\u{20}')
+    {
+        return Some("uses a character Windows refuses");
+    }
+    if segment.ends_with('.') || segment.ends_with(' ') {
+        return Some("has a segment ending in a dot or space");
+    }
+    if is_windows_reserved_name(segment) {
+        return Some("uses a reserved Windows name");
+    }
+    None
 }
 
 pub(crate) fn restore_pending_mod_configs_for_mod(
@@ -107,6 +146,9 @@ pub(crate) fn restore_pending_mod_configs_for_mod(
             continue;
         }
         let relative_path = validate_relative_config_path(&file.relative_path)?;
+        if is_os_artifact_file(&relative_path) {
+            continue;
+        }
         let destination = safe_config_destination(target_root, &relative_path)?;
         let bytes = base64url_decode(&file.base64_data)
             .map_err(|err| format!("Decode pending mod config failed: {err}"))?;
@@ -167,6 +209,21 @@ fn has_drive_prefix(path: &str) -> bool {
     chars.next().is_some_and(|ch| ch.is_ascii_alphabetic()) && chars.next() == Some(':')
 }
 
+fn is_windows_reserved_name(segment: &str) -> bool {
+    let stem = segment
+        .split_once('.')
+        .map_or(segment, |(stem, _)| stem)
+        .trim()
+        .to_ascii_uppercase();
+    match stem.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" => true,
+        _ => ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix)
+                .is_some_and(|digit| matches!(digit.as_bytes(), [b'1'..=b'9']))
+        }),
+    }
+}
+
 fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
     let mut values = Vec::new();
     for ch in text.chars().filter(|ch| !ch.is_whitespace()) {
@@ -207,4 +264,200 @@ fn base64url_decode(text: &str) -> Result<Vec<u8>, String> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::modlist_share::ModlistShareConfigFile;
+    use crate::platform_defaults::{clear_config_dir_override_if, set_config_dir_override};
+
+    struct TempRootGuard(PathBuf);
+
+    impl Drop for TempRootGuard {
+        fn drop(&mut self) {
+            clear_config_dir_override_if(&self.0);
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn temp_root(tag: &str) -> TempRootGuard {
+        let root = std::env::temp_dir().join(format!(
+            "bio_modcfg_{tag}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        ));
+        fs::create_dir_all(&root).expect("temp root");
+        set_config_dir_override(Some(root.clone()));
+        TempRootGuard(root)
+    }
+
+    #[test]
+    fn os_artifact_names_are_recognised_case_insensitively() {
+        assert!(is_os_artifact_file(Path::new("desktop.ini")));
+        assert!(is_os_artifact_file(Path::new("Desktop.INI")));
+        assert!(is_os_artifact_file(Path::new("sub/Thumbs.db")));
+        assert!(is_os_artifact_file(Path::new(".DS_Store")));
+        assert!(!is_os_artifact_file(Path::new("cdtweaks.ini")));
+        assert!(!is_os_artifact_file(Path::new("desktop.ini.bak")));
+        assert!(!is_os_artifact_file(Path::new("thumbs/settings.ini")));
+    }
+
+    #[test]
+    fn restore_skips_os_artifacts_and_writes_real_configs() {
+        let guard = temp_root("restore_skip");
+        let mod_root = guard.0.join("mod");
+        fs::create_dir_all(&mod_root).expect("mod root");
+        let files = vec![
+            ModlistShareConfigFile {
+                tp2: "cdtweaks".to_string(),
+                source_id: "gibberlings3".to_string(),
+                relative_path: "cdtweaks.ini".to_string(),
+                base64_data: crate::app::modlist_share::base64url_encode(b"[cfg]\nx=1\n"),
+            },
+            ModlistShareConfigFile {
+                tp2: "cdtweaks".to_string(),
+                source_id: "gibberlings3".to_string(),
+                relative_path: "desktop.ini".to_string(),
+                base64_data: crate::app::modlist_share::base64url_encode(b"[.ShellClassInfo]\n"),
+            },
+        ];
+        assert!(pending_mod_configs_path().starts_with(&guard.0));
+        save_pending_mod_configs(&files).expect("pending file written under the override");
+
+        restore_pending_mod_configs_for_mod("cdtweaks", "gibberlings3", &[], &mod_root)
+            .expect("restore");
+
+        assert!(mod_root.join("cdtweaks.ini").is_file());
+        assert!(!mod_root.join("desktop.ini").exists());
+    }
+
+    #[test]
+    fn default_sources_list_no_os_artifact_config_files() {
+        let load = crate::app::mod_downloads::load_mod_download_sources_from_texts(
+            include_str!("../config/default_mod_downloads.toml"),
+            "",
+            "",
+        );
+        assert!(load.error.is_none(), "{:?}", load.error);
+        let offenders: Vec<String> = load
+            .sources
+            .iter()
+            .flat_map(|source| {
+                source
+                    .config_files
+                    .iter()
+                    .filter(|path| {
+                        validate_relative_config_path(path)
+                            .is_ok_and(|normalized| is_os_artifact_file(&normalized))
+                    })
+                    .map(|path| format!("{}: {path}", source.tp2))
+            })
+            .collect();
+        assert_eq!(offenders.len(), 0, "{offenders:?}");
+    }
+
+    fn assert_refused_with(paths: &[&str], expected: &str) {
+        for path in paths {
+            let error = validate_relative_config_path(path).expect_err(path);
+            assert!(error.contains(expected), "{path:?}: {error}");
+            assert!(error.ends_with(&format!(": {path}")), "{path:?}: {error}");
+        }
+    }
+
+    #[test]
+    fn dot_only_segments_are_refused() {
+        assert_refused_with(
+            &[".../test.ini", "..../a.ini", "./a.ini", "a/.../b.ini"],
+            "dot-only",
+        );
+    }
+
+    #[test]
+    fn empty_segments_are_refused() {
+        assert_refused_with(&["a//b.ini", "a/"], "empty segment");
+    }
+
+    #[test]
+    fn windows_refused_characters_are_refused() {
+        for path in [
+            "a<b.ini",
+            "a:b.ini",
+            "a|b.ini",
+            "a?.ini",
+            "a*.ini",
+            "\"a\".ini",
+            "a\u{7}.ini",
+        ] {
+            assert!(validate_relative_config_path(path).is_err(), "{path:?}");
+        }
+        assert_refused_with(
+            &[
+                "a<b.ini",
+                "sub/a:b.ini",
+                "a|b.ini",
+                "a?.ini",
+                "a*.ini",
+                "\"a\".ini",
+                "a\u{7}.ini",
+            ],
+            "character Windows refuses",
+        );
+    }
+
+    #[test]
+    fn segments_ending_in_dot_or_space_are_refused() {
+        assert_refused_with(
+            &["a./b.ini", "a /b.ini", "b.ini."],
+            "ending in a dot or space",
+        );
+    }
+
+    #[test]
+    fn windows_reserved_names_are_refused() {
+        assert_refused_with(
+            &[
+                "CON",
+                "con.ini",
+                "sub/NUL.txt",
+                "com1.ini",
+                "LPT9",
+                "Aux.cfg",
+            ],
+            "reserved Windows name",
+        );
+    }
+
+    #[test]
+    fn ordinary_names_still_pass() {
+        for (path, normalized) in [
+            ("a.ini", "a.ini"),
+            ("sub/b.ini", "sub/b.ini"),
+            ("sub\\c.ini", "sub/c.ini"),
+            ("weird name (1).ini", "weird name (1).ini"),
+            ("x.y.z.ini", "x.y.z.ini"),
+            (".hidden.ini", ".hidden.ini"),
+            ("console.ini", "console.ini"),
+            ("communist.ini", "communist.ini"),
+            ("com10.ini", "com10.ini"),
+            ("lpt.ini", "lpt.ini"),
+        ] {
+            assert_eq!(
+                validate_relative_config_path(path),
+                Ok(PathBuf::from(normalized)),
+                "{path:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn traversal_keeps_its_own_message() {
+        assert_eq!(
+            validate_relative_config_path("../x.ini"),
+            Err("mod config path contains traversal: ../x.ini".to_string())
+        );
+    }
 }

@@ -3,15 +3,22 @@
 
 use eframe::egui;
 
+use crate::app::compat_popup_nav::RelatedJumpOutcome;
 use crate::app::state::WizardState;
 use crate::ui::shared::redesign_tokens::ThemePalette;
 
-pub fn render(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette) {
+#[must_use]
+pub(crate) fn render(
+    ui: &egui::Ui,
+    state: &mut WizardState,
+    palette: ThemePalette,
+) -> Option<RelatedJumpOutcome> {
     if !state.step2.compat_popup_open {
-        return;
+        return None;
     }
 
     let mut open = state.step2.compat_popup_open;
+    let mut outcome = None;
     egui::Window::new("Step 2 Compatibility")
         .open(&mut open)
         .collapsible(true)
@@ -33,10 +40,13 @@ pub fn render(ui: &mut egui::Ui, state: &mut WizardState, palette: ThemePalette)
                 });
 
             ui.add_space(10.0);
-            crate::ui::step2::content_step2::compat_popup_action_row::render_action_row(ui, state);
+            outcome = crate::ui::step2::content_step2::compat_popup_action_row::render_action_row(
+                ui, state,
+            );
         });
     state.step2.compat_popup_open = open && state.step2.compat_popup_open;
     if !state.step2.compat_popup_open {
         state.step2.compat_popup_issue_override = None;
     }
+    outcome
 }

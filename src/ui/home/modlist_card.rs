@@ -12,7 +12,7 @@ use crate::ui::orchestrator::widgets::{
 use crate::ui::shared::format_relative::relative_time;
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_primary,
+    redesign_shell_bg, redesign_text_faint, redesign_text_primary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -21,20 +21,104 @@ pub enum ModlistCardActions {
     None,
     Resume,
     Open,
-    CopyImportCode,
+    ShareModlist,
     OpenInstallFolder,
     Reinstall,
     Delete,
-    Rename,
-    SaveRename,
-    CancelRename,
+    EditModlist,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardMenu {
+    Full,
+    DraftPicker,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CardMenuEntry {
+    pub label: &'static str,
+    pub action: ModlistCardActions,
+    pub danger: bool,
+}
+
+#[must_use]
+pub fn menu_entries(state: ModlistState, menu: CardMenu) -> Vec<CardMenuEntry> {
+    match (state, menu) {
+        (ModlistState::InProgress, CardMenu::Full) => vec![
+            CardMenuEntry {
+                label: "Share this modlist",
+                action: ModlistCardActions::ShareModlist,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Edit modlist",
+                action: ModlistCardActions::EditModlist,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Delete",
+                action: ModlistCardActions::Delete,
+                danger: true,
+            },
+        ],
+        (ModlistState::InProgress, CardMenu::DraftPicker) => vec![CardMenuEntry {
+            label: "Delete",
+            action: ModlistCardActions::Delete,
+            danger: true,
+        }],
+        (ModlistState::Installed, CardMenu::Full) => vec![
+            CardMenuEntry {
+                label: "Share this modlist",
+                action: ModlistCardActions::ShareModlist,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Open install folder",
+                action: ModlistCardActions::OpenInstallFolder,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Edit modlist",
+                action: ModlistCardActions::EditModlist,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Reinstall",
+                action: ModlistCardActions::Reinstall,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Delete",
+                action: ModlistCardActions::Delete,
+                danger: true,
+            },
+        ],
+        (ModlistState::Installed, CardMenu::DraftPicker) => vec![
+            CardMenuEntry {
+                label: "Open install folder",
+                action: ModlistCardActions::OpenInstallFolder,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Reinstall",
+                action: ModlistCardActions::Reinstall,
+                danger: false,
+            },
+            CardMenuEntry {
+                label: "Delete",
+                action: ModlistCardActions::Delete,
+                danger: true,
+            },
+        ],
+    }
+}
+
+#[must_use]
 pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     entry: &ModlistEntry,
-    rename_buf: Option<&mut String>,
+    menu: CardMenu,
 ) -> ModlistCardActions {
     let mut action = ModlistCardActions::None;
 
@@ -54,126 +138,34 @@ pub fn render(
 
     chassis.show(ui, |ui| {
         ui.horizontal(|ui| {
-            if let Some(buf) = rename_buf {
-                render_rename_row(ui, palette, entry, buf, &mut action);
-            } else {
-                let full_w = ui.available_width();
-                ui.allocate_ui_with_layout(
-                    egui::vec2(full_w, 40.0),
-                    egui::Layout::top_down(egui::Align::LEFT),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.y = 2.0;
-                        ui.label(
-                            egui::RichText::new(&entry.name)
-                                .size(13.0)
-                                .family(egui::FontFamily::Name("poppins_medium".into()))
-                                .color(redesign_text_primary(palette)),
-                        );
-                        ui.label(
-                            egui::RichText::new(meta_line(entry))
-                                .size(14.0)
-                                .family(egui::FontFamily::Name("poppins_light".into()))
-                                .color(redesign_text_faint(palette)),
-                        );
-                    },
-                );
+            let full_w = ui.available_width();
+            ui.allocate_ui_with_layout(
+                egui::vec2(full_w, 40.0),
+                egui::Layout::top_down(egui::Align::LEFT),
+                |ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    ui.label(
+                        egui::RichText::new(&entry.name)
+                            .size(13.0)
+                            .family(egui::FontFamily::Name("poppins_medium".into()))
+                            .color(redesign_text_primary(palette)),
+                    );
+                    ui.label(
+                        egui::RichText::new(meta_line(entry))
+                            .size(14.0)
+                            .family(egui::FontFamily::Name("poppins_light".into()))
+                            .color(redesign_text_faint(palette)),
+                    );
+                },
+            );
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    action = render_action_cluster(ui, palette, entry);
-                });
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                action = render_action_cluster(ui, palette, entry, menu);
+            });
         });
     });
 
     action
-}
-
-fn render_rename_row(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    entry: &ModlistEntry,
-    buf: &mut String,
-    action: &mut ModlistCardActions,
-) {
-    let item_spacing = 6.0_f32;
-    let btn_pad_x = 10.0_f32;
-    let btn_font = egui::FontId::new(12.0, egui::FontFamily::Name("poppins_medium".into()));
-
-    let save_text_w = ui
-        .painter()
-        .layout_no_wrap("save".to_string(), btn_font.clone(), egui::Color32::WHITE)
-        .size()
-        .x;
-    let cancel_text_w = ui
-        .painter()
-        .layout_no_wrap("cancel".to_string(), btn_font, egui::Color32::WHITE)
-        .size()
-        .x;
-
-    let save_btn_w = btn_pad_x.mul_add(2.0, save_text_w);
-    let cancel_btn_w = btn_pad_x.mul_add(2.0, cancel_text_w);
-
-    let available_w = ui.available_width();
-    let reserved = item_spacing.mul_add(2.0, save_btn_w + cancel_btn_w);
-    let field_w = (available_w - reserved).max(0.0);
-
-    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        ui.spacing_mut().item_spacing.x = item_spacing;
-
-        let edit_id = egui::Id::new(("home_card_rename_edit",)).with(&entry.id);
-        let response = ui.add(
-            egui::TextEdit::singleline(buf)
-                .id(edit_id)
-                .desired_width(field_w)
-                .font(egui::FontId::new(
-                    13.0,
-                    egui::FontFamily::Name("poppins_medium".into()),
-                ))
-                .text_color(redesign_text_primary(palette))
-                .background_color(redesign_input_bg(palette))
-                .margin(egui::Margin::symmetric(8, 4)),
-        );
-
-        let focus_marker = edit_id.with("focused_once");
-        let already_focused = ui
-            .memory(|m| m.data.get_temp::<bool>(focus_marker))
-            .unwrap_or(false);
-        if !already_focused {
-            response.request_focus();
-            ui.memory_mut(|m| m.data.insert_temp(focus_marker, true));
-        }
-
-        let enter_pressed = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        let escape_pressed = ui.input(|i| i.key_pressed(egui::Key::Escape));
-
-        let save_clicked = redesign_btn(
-            ui,
-            palette,
-            "save",
-            BtnOpts {
-                primary: true,
-                small: true,
-                ..Default::default()
-            },
-        )
-        .clicked();
-        let cancel_clicked = redesign_btn(
-            ui,
-            palette,
-            "cancel",
-            BtnOpts {
-                small: true,
-                ..Default::default()
-            },
-        )
-        .clicked();
-
-        if save_clicked || enter_pressed {
-            *action = ModlistCardActions::SaveRename;
-        } else if cancel_clicked || escape_pressed {
-            *action = ModlistCardActions::CancelRename;
-        }
-    });
 }
 
 pub fn meta_line(entry: &ModlistEntry) -> String {
@@ -209,27 +201,32 @@ fn render_action_cluster(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     entry: &ModlistEntry,
+    menu: CardMenu,
 ) -> ModlistCardActions {
     use std::cell::Cell;
 
     let picked: Cell<ModlistCardActions> = Cell::new(ModlistCardActions::None);
     ui.spacing_mut().item_spacing.x = 6.0;
 
+    let entries = menu_entries(entry.state, menu);
+    let picked_ref = &picked;
+    let mut items: Vec<KebabItem<'_>> = entries
+        .into_iter()
+        .map(|menu_entry| {
+            let action = menu_entry.action;
+            if menu_entry.danger {
+                KebabItem::danger(menu_entry.label, move || picked_ref.set(action))
+            } else {
+                KebabItem::new(menu_entry.label, move || picked_ref.set(action))
+            }
+        })
+        .collect();
+    let kebab_h = redesign_btn_height(ui, true);
+    render_kebab(ui, palette, &entry.id, &mut items, kebab_h);
+    drop(items);
+
     match entry.state {
         ModlistState::InProgress => {
-            let mut items = vec![
-                KebabItem::new("Copy import code", || {
-                    picked.set(ModlistCardActions::CopyImportCode);
-                }),
-                KebabItem::new("Rename", || {
-                    picked.set(ModlistCardActions::Rename);
-                }),
-                KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
-            ];
-            let kebab_h = redesign_btn_height(ui, true);
-            render_kebab(ui, palette, &entry.id, &mut items, kebab_h);
-            drop(items);
-
             if redesign_btn(
                 ui,
                 palette,
@@ -237,7 +234,6 @@ fn render_action_cluster(
                 BtnOpts {
                     small: true,
                     primary: true,
-                    no_shadow: true,
                     ..Default::default()
                 },
             )
@@ -247,23 +243,6 @@ fn render_action_cluster(
             }
         }
         ModlistState::Installed => {
-            let mut items = vec![
-                KebabItem::new("Copy import code", || {
-                    picked.set(ModlistCardActions::CopyImportCode);
-                }),
-                KebabItem::new("Open install folder", || {
-                    picked.set(ModlistCardActions::OpenInstallFolder);
-                }),
-                KebabItem::new("Rename", || {
-                    picked.set(ModlistCardActions::Rename);
-                }),
-                KebabItem::new("Reinstall", || picked.set(ModlistCardActions::Reinstall)),
-                KebabItem::danger("Delete", || picked.set(ModlistCardActions::Delete)),
-            ];
-            let kebab_h = redesign_btn_height(ui, true);
-            render_kebab(ui, palette, &entry.id, &mut items, kebab_h);
-            drop(items);
-
             if redesign_btn(
                 ui,
                 palette,
@@ -378,5 +357,47 @@ mod tests {
         assert_eq!(human_size(512), "512 B");
         assert_eq!(human_size(2048), "2.0 KB");
         assert_eq!(human_size(5 * 1024 * 1024), "5.0 MB");
+    }
+
+    #[test]
+    fn full_menu_in_progress_keeps_share_edit_delete() {
+        let entries = menu_entries(ModlistState::InProgress, CardMenu::Full);
+        let labels: Vec<&str> = entries.iter().map(|e| e.label).collect();
+        assert_eq!(labels, ["Share this modlist", "Edit modlist", "Delete"]);
+        assert!(entries.last().unwrap().danger);
+        assert_eq!(entries[0].action, ModlistCardActions::ShareModlist);
+        assert_eq!(entries[1].action, ModlistCardActions::EditModlist);
+        assert_eq!(entries[2].action, ModlistCardActions::Delete);
+    }
+
+    #[test]
+    fn full_menu_installed_keeps_all_five() {
+        let entries = menu_entries(ModlistState::Installed, CardMenu::Full);
+        let labels: Vec<&str> = entries.iter().map(|e| e.label).collect();
+        assert_eq!(
+            labels,
+            [
+                "Share this modlist",
+                "Open install folder",
+                "Edit modlist",
+                "Reinstall",
+                "Delete"
+            ]
+        );
+    }
+
+    #[test]
+    fn draft_picker_in_progress_is_delete_only() {
+        let entries = menu_entries(ModlistState::InProgress, CardMenu::DraftPicker);
+        let labels: Vec<&str> = entries.iter().map(|e| e.label).collect();
+        assert_eq!(labels, ["Delete"]);
+        assert!(entries[0].danger);
+    }
+
+    #[test]
+    fn draft_picker_installed_hides_share_and_edit() {
+        let entries = menu_entries(ModlistState::Installed, CardMenu::DraftPicker);
+        let labels: Vec<&str> = entries.iter().map(|e| e.label).collect();
+        assert_eq!(labels, ["Open install folder", "Reinstall", "Delete"]);
     }
 }

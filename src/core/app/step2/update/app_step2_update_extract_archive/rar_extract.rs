@@ -5,7 +5,8 @@ use std::path::Path;
 
 use unrar::Archive;
 
-pub(super) fn is_rar_archive(path: &Path) -> bool {
+#[must_use]
+pub fn is_rar_archive(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
         .is_some_and(|value| value.eq_ignore_ascii_case("rar"))

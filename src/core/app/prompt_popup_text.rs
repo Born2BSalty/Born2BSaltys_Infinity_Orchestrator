@@ -56,26 +56,6 @@ pub(crate) fn format_component_prompt_popup_text_with_body(
     )
 }
 
-fn component_prompt_body(
-    component: &Step2ComponentState,
-    prompt_eval: &PromptEvalContext,
-) -> String {
-    let evaluated = evaluate_component_prompt_summary(component, prompt_eval);
-    if !evaluated.is_empty() {
-        return evaluated;
-    }
-    let from_events = format_prompt_event_blocks(&component.prompt_events, None);
-    if !from_events.is_empty() {
-        return from_events;
-    }
-    component
-        .prompt_summary
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .to_string()
-}
-
 fn component_has_prompt_data(component: &Step2ComponentState) -> bool {
     component
         .prompt_summary
@@ -124,7 +104,7 @@ pub(crate) fn collect_step2_prompt_toolbar_entries(
                 .iter()
                 .filter_map(|component| {
                     if !component.checked
-                        || component_prompt_body(component, prompt_eval).is_empty()
+                        || evaluate_component_prompt_summary(component, prompt_eval).is_empty()
                     {
                         return None;
                     }
@@ -460,7 +440,7 @@ mod tests {
         let entries =
             collect_step2_prompt_toolbar_entries(&[mod_state], &PromptEvalContext::default());
         assert_eq!(entries.len(), 1);
-        assert!(entries[0].components.is_empty());
+        assert_eq!(entries[0].components.len(), 0);
         assert!(entries[0].mod_level);
         assert_eq!(prompt_toolbar_count(&entries), 1);
     }
@@ -554,7 +534,7 @@ Pick a flavour"
             collect_step2_prompt_toolbar_entries(&[mod_state], &PromptEvalContext::default());
         assert_eq!(entries.len(), 1);
         assert!(entries[0].mod_level);
-        assert!(entries[0].components.is_empty());
+        assert_eq!(entries[0].components.len(), 0);
         assert_eq!(prompt_toolbar_count(&entries), 1);
     }
 
@@ -570,6 +550,28 @@ Pick a flavour"
         assert_eq!(components[0].id, 1);
         assert_eq!(components[0].label, "One");
         assert_eq!(components[1].id, 2);
+    }
+
+    #[test]
+    fn collect_step2_prompt_toolbar_entries_skip_components_whose_prompts_do_not_apply() {
+        let mut component = blank_component("1300", true, None);
+        component.prompt_events.push(PromptSummaryEvent {
+            summary_line: "Preserve the previous seed?".to_string(),
+            game_allow: vec!["iwdee".to_string()],
+            ..blank_mod_event()
+        });
+        let prompt_eval = PromptEvalContext {
+            active_games: std::iter::once("bg2ee".to_string()).collect(),
+            ..PromptEvalContext::default()
+        };
+        assert!(
+            evaluate_component_prompt_summary(&component, &prompt_eval).is_empty(),
+            "the component row and Step 3 show no prompt for this component"
+        );
+        assert!(
+            collect_step2_prompt_toolbar_entries(&[blank_mod(vec![component])], &prompt_eval)
+                .is_empty()
+        );
     }
 
     #[test]

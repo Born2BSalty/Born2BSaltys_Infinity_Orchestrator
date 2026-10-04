@@ -18,6 +18,9 @@ pub fn resolve_scan_game_dir(step1: &Step1State) -> Option<PathBuf> {
             candidates.push(step1.bgee_game_folder.trim());
             candidates.push(step1.eet_bgee_game_folder.trim());
         }
+        "IWDEE" => {
+            candidates.push(step1.iwdee_game_folder.trim());
+        }
         "EET" => {
             candidates.push(step1.eet_bg2ee_game_folder.trim());
             candidates.push(step1.bg2ee_game_folder.trim());
@@ -191,9 +194,60 @@ fn named_package_group_key(
 
 #[cfg(test)]
 mod tests {
-    use super::mod_group_key;
+    use super::{mod_group_key, resolve_scan_game_dir};
+    use crate::app::state::Step1State;
     use std::collections::BTreeSet;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct TempRoot {
+        path: PathBuf,
+    }
+
+    impl TempRoot {
+        fn new(name: &str) -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "bio_discovery_test_{name}_{}_{id}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).expect("create temp root");
+            Self { path }
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn scan_game_dir_for_iwdee_reads_only_the_iwdee_folder() {
+        let root = TempRoot::new("iwdee");
+        let dir_a = root.path.join("a");
+        let dir_b = root.path.join("b");
+        std::fs::create_dir_all(&dir_a).expect("create dir a");
+        std::fs::create_dir_all(&dir_b).expect("create dir b");
+        std::fs::write(dir_a.join("chitin.key"), b"key").expect("write chitin.key a");
+        std::fs::write(dir_b.join("chitin.key"), b"key").expect("write chitin.key b");
+
+        let step1 = Step1State {
+            game_install: "IWDEE".to_string(),
+            bgee_game_folder: dir_a.to_string_lossy().into_owned(),
+            iwdee_game_folder: dir_b.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        assert_eq!(resolve_scan_game_dir(&step1), Some(dir_b));
+
+        let step1_empty = Step1State {
+            game_install: "IWDEE".to_string(),
+            bgee_game_folder: dir_a.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        assert_eq!(resolve_scan_game_dir(&step1_empty), None);
+    }
 
     #[test]
     fn nested_self_named_tp2_uses_its_own_group() {

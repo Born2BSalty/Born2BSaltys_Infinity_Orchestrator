@@ -1,0 +1,12 @@
+{
+  "id": "born2bsalty-personal-modlist",
+  "name": "Born2BSalty Personal Modlist",
+  "author": "@Born2BSalty",
+  "description": "A challenging power fantasy EET list curated by Born2BSalty. Built around Tactics Remix and featuring a huge amount of content, this list pushes you to use everything in your disposal to brave the dangers of the Sword Coast. But don't worry! You have plenty of help at hand in the form of itemization, custom kits, multikit multiclasses, powerful NPC companions, and more.",
+  "tags": ["Megamod", "Quests", "NPCs", "Kits", "Siege of Dragonspear", "Tactics Remix"],
+  "game": "EET",
+  "featured": true,
+  "version": "1.0.0",
+  "order": 1,
+  "requirements": "Baldur's Gate: Enhanced Edition with the Siege of Dragonspear DLC and Baldur's Gate II: Enhanced Edition, Windows only (EEex)"
+}

@@ -4,6 +4,7 @@
 use std::path::Path;
 
 use crate::app::compat_rules::CompatRule;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::Step1State;
 
 use super::{
@@ -114,8 +115,14 @@ pub(in crate::app) fn relation_rule_applies(
 }
 
 pub(in crate::app) fn game_dir_for_tab<'a>(step1: &'a Step1State, tab: &str) -> Option<&'a str> {
-    let value = if tab.eq_ignore_ascii_case("BGEE") {
-        if step1.game_install.eq_ignore_ascii_case("EET") {
+    let value = if game_authority::slot_for_tab(tab) == GameSlot::First {
+        if game_authority::first_slot_tab(&step1.game_install) == game_authority::TAB_IWDEE {
+            if step1.generate_directory_enabled && !step1.generate_directory.trim().is_empty() {
+                step1.generate_directory.trim()
+            } else {
+                step1.iwdee_game_folder.trim()
+            }
+        } else if step1.game_install.eq_ignore_ascii_case("EET") {
             if step1.new_pre_eet_dir_enabled && !step1.eet_pre_dir.trim().is_empty() {
                 step1.eet_pre_dir.trim()
             } else {
@@ -297,6 +304,7 @@ fn path_field_value<'a>(step1: &'a Step1State, field: &str) -> Option<&'a str> {
         "bg2ee_game_folder" => step1.bg2ee_game_folder.trim(),
         "bg2ee_log_folder" => step1.bg2ee_log_folder.trim(),
         "bg2ee_log_file" => step1.bg2ee_log_file.trim(),
+        "iwdee_game_folder" => step1.iwdee_game_folder.trim(),
         "eet_bgee_game_folder" => step1.eet_bgee_game_folder.trim(),
         "eet_bgee_log_folder" => step1.eet_bgee_log_folder.trim(),
         "eet_bg2ee_game_folder" => step1.eet_bg2ee_game_folder.trim(),
@@ -311,4 +319,22 @@ fn path_field_value<'a>(step1: &'a Step1State, field: &str) -> Option<&'a str> {
         _ => return None,
     };
     Some(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_field_value;
+    use crate::app::state::Step1State;
+
+    #[test]
+    fn path_field_value_knows_the_iwdee_folder() {
+        let step1 = Step1State {
+            iwdee_game_folder: "  /games/iwdee  ".to_string(),
+            ..Step1State::default()
+        };
+        assert_eq!(
+            path_field_value(&step1, "iwdee_game_folder"),
+            Some("/games/iwdee")
+        );
+    }
 }

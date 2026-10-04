@@ -77,6 +77,9 @@ pub struct ModlistEntry {
     pub author: Option<String>,
 
     #[serde(default)]
+    pub description: Option<String>,
+
+    #[serde(default)]
     pub(crate) forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
 
     pub workspace_file_relpath: PathBuf,
@@ -102,6 +105,7 @@ impl Default for ModlistEntry {
             total_size_bytes: None,
             latest_share_code: None,
             author: None,
+            description: None,
             forked_from: Vec::new(),
             workspace_file_relpath: PathBuf::new(),
         }
@@ -189,7 +193,7 @@ mod tests {
         let raw = r#"{"format_version":1,"entries":[]}"#;
         let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat");
         assert_eq!(r.format_version, 1);
-        assert!(r.entries.is_empty());
+        assert_eq!(r.entries.len(), 0);
     }
 
     #[test]
@@ -224,7 +228,8 @@ mod tests {
         }"#;
         let r: ModlistRegistry = serde_json::from_str(raw).expect("backward-compat parse");
         assert_eq!(r.entries[0].author, None);
-        assert!(r.entries[0].forked_from.is_empty());
+        assert_eq!(r.entries[0].description, None);
+        assert_eq!(r.entries[0].forked_from.len(), 0);
 
         assert_eq!(r.entries[0].install_started_at, None);
 
@@ -234,6 +239,7 @@ mod tests {
             name: "Forked".to_string(),
             game: Game::EET,
             author: Some("@me".to_string()),
+            description: Some("BG2EE with the fixpack".to_string()),
             forked_from: vec![
                 ForkAncestor {
                     name: "Original".to_string(),
@@ -250,6 +256,10 @@ mod tests {
         let back: ModlistRegistry = serde_json::from_str(&s).expect("deserialize");
         assert_eq!(reg, back);
         assert_eq!(back.entries[0].author.as_deref(), Some("@me"));
+        assert_eq!(
+            back.entries[0].description.as_deref(),
+            Some("BG2EE with the fixpack")
+        );
         assert_eq!(back.entries[0].forked_from.len(), 2);
         assert_eq!(back.entries[0].forked_from[0].name, "Original");
         assert_eq!(back.entries[0].forked_from[1].author, "@mid");

@@ -197,7 +197,7 @@ fn render_install_mode_combo(ui: &mut egui::Ui, s: &mut Step1State) {
         ui.label(typo::strong("Install Mode"));
     });
     egui::ComboBox::from_id_salt("install_mode")
-        .selected_text(install_mode_label(&s.install_mode))
+        .selected_text(Step1State::install_mode_label(&s.install_mode))
         .show_ui(ui, |ui| {
             ui.selectable_value(
                 &mut s.install_mode,
@@ -420,17 +420,6 @@ fn render_bgee_paths(ui: &mut egui::Ui, s: &mut Step1State) {
 
 fn section_title(ui: &mut egui::Ui, text: &str) {
     ui.label(crate::ui::shared::typography_global::section_title(text));
-}
-
-fn install_mode_label(value: &str) -> &'static str {
-    match value {
-        Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS => "Install exactly from WeiDU logs",
-        Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT => {
-            "Start from WeiDU logs, then review/edit"
-        }
-        Step1State::INSTALL_MODE_IMPORT_MODLIST => "Import Modlist",
-        _ => "Build from scanned mods",
-    }
 }
 
 fn path_row_dir(ui: &mut egui::Ui, label: &str, value: &mut String) {

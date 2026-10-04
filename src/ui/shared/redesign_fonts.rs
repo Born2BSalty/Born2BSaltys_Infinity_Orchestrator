@@ -29,18 +29,12 @@ pub fn install_redesign_fonts(ctx: &egui::Context) {
         .or_default()
         .insert(0, "firacode_nerd".to_owned());
 
-    fonts.families.insert(
-        egui::FontFamily::Name("poppins_light".into()),
-        vec!["poppins_light".to_owned()],
-    );
-    fonts.families.insert(
-        egui::FontFamily::Name("poppins_medium".into()),
-        vec!["poppins_medium".to_owned()],
-    );
-    fonts.families.insert(
-        egui::FontFamily::Name("poppins_bold".into()),
-        vec!["poppins_bold".to_owned()],
-    );
+    for poppins in ["poppins_light", "poppins_medium", "poppins_bold"] {
+        fonts.families.insert(
+            egui::FontFamily::Name(poppins.into()),
+            vec![poppins.to_owned(), "firacode_nerd".to_owned()],
+        );
+    }
     fonts.families.insert(
         egui::FontFamily::Name("firacode_nerd".into()),
         vec!["firacode_nerd".to_owned()],
@@ -61,6 +55,25 @@ fn register_font(fonts: &mut egui::FontDefinitions, name: &'static str, bytes: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn poppins_families_fall_back_for_the_arrow_glyph() {
+        let ctx = egui::Context::default();
+        install_redesign_fonts(&ctx);
+        let _ = ctx.run(egui::RawInput::default(), |_| {});
+
+        ctx.fonts(|f| {
+            for poppins in ["poppins_light", "poppins_medium", "poppins_bold"] {
+                assert!(
+                    f.has_glyph(
+                        &egui::FontId::new(13.0, egui::FontFamily::Name(poppins.into())),
+                        '\u{2192}'
+                    ),
+                    "{poppins} must draw the arrow used in \"Settings \u{2192} Paths\""
+                );
+            }
+        });
+    }
 
     #[test]
     fn redesign_fonts_register() {

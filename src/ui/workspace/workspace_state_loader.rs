@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::controller::step3_sync;
+use crate::app::game_authority;
 use crate::app::state::{
     Step1State, Step2ComponentState, Step2ModState, Step3ItemState, WizardState,
 };
@@ -17,10 +18,24 @@ pub fn populate_wizard_state_from_workspace(
     settings_store: &SettingsStore,
     wizard_state: &mut WizardState,
 ) {
+    wizard_state.step2.update_selected_popup_open = false;
+    wizard_state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
+    wizard_state.step2.weidu_log_import = None;
+    wizard_state.step2.pending_weidu_log_reapply = false;
+    wizard_state.step2.weidu_log_import_awaiting_check = false;
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
+    wizard_state.step2.active_game_tab = game_authority::normalized_tab(
+        &wizard_state.step1.game_install,
+        &wizard_state.step2.active_game_tab,
+    )
+    .to_string();
+    wizard_state.step3.active_game_tab = game_authority::normalized_tab(
+        &wizard_state.step1.game_install,
+        &wizard_state.step3.active_game_tab,
+    )
+    .to_string();
 
     sync_paths_from_settings(settings_store, wizard_state);
-    apply_mods_source(workspace, settings_store, wizard_state);
 
     if let Err(err) = crate::install_runtime::per_install_dirs::derive_per_install_dirs(
         &mut wizard_state.step1,
@@ -32,6 +47,8 @@ pub fn populate_wizard_state_from_workspace(
             "workspace cold-load re-derive failed: {err}"
         );
     }
+
+    apply_mods_source(workspace, settings_store, wizard_state);
 
     reset_scanned_step2_set(wizard_state);
 
@@ -50,7 +67,12 @@ pub fn populate_wizard_state_from_workspace(
     wizard_state.step3.bgee_items = step3_sync::build_step3_items(&wizard_state.step2.bgee_mods);
     wizard_state.step3.bg2ee_items = step3_sync::build_step3_items(&wizard_state.step2.bg2ee_mods);
 
-    wizard_state.step3.bgee_collapsed_blocks = collapsed_blocks_for_tab(workspace, "BGEE");
+    let first_tab_key = game_authority::first_slot_tab(&wizard_state.step1.game_install);
+    let mut first_collapsed = collapsed_blocks_for_tab(workspace, first_tab_key);
+    if first_collapsed.is_empty() && first_tab_key != "BGEE" {
+        first_collapsed = collapsed_blocks_for_tab(workspace, "BGEE");
+    }
+    wizard_state.step3.bgee_collapsed_blocks = first_collapsed;
     wizard_state.step3.bg2ee_collapsed_blocks = collapsed_blocks_for_tab(workspace, "BG2EE");
 
     wizard_state.step3.bgee_undo_stack.clear();
@@ -168,15 +190,18 @@ fn collapsed_blocks_for_tab(workspace: &ModlistWorkspaceState, tab: &str) -> Vec
 }
 
 pub fn sync_step3_from_step2_if_changed(wizard_state: &mut WizardState) {
-    use crate::app::app_nav::{NextAction, decide_next_action};
+    use crate::app::app_nav::{step2_selection_signature, step3_has_no_real_items};
     use crate::app::app_step3_sync_flow::sync_step3_from_step2;
 
-    let saved_step = wizard_state.current_step;
-    wizard_state.current_step = 1;
-    let action = decide_next_action(wizard_state);
-    wizard_state.current_step = saved_step;
-
-    if let NextAction::SyncStep3AndAdvance { signature } = action {
+    if wizard_state.step2.is_scanning || wizard_state.step1.installs_exactly_from_weidu_logs() {
+        return;
+    }
+    let signature = step2_selection_signature(wizard_state);
+    let changed = wizard_state
+        .last_step2_sync_signature
+        .as_deref()
+        .is_none_or(|existing| existing != signature);
+    if step3_has_no_real_items(wizard_state) || changed {
         sync_step3_from_step2(wizard_state);
         wizard_state.set_last_step2_sync_signature(signature);
     }
@@ -205,9 +230,13 @@ pub fn extract_workspace_state_from_wizard(
     };
 
     let mut step3_group_collapse = prior.step3_group_collapse.clone();
+    let first_tab_key = game_authority::first_slot_tab(&wizard_state.step1.game_install);
+    if first_tab_key != game_authority::TAB_BGEE {
+        write_collapsed_blocks(&mut step3_group_collapse, game_authority::TAB_BGEE, &[]);
+    }
     write_collapsed_blocks(
         &mut step3_group_collapse,
-        "BGEE",
+        first_tab_key,
         &wizard_state.step3.bgee_collapsed_blocks,
     );
     write_collapsed_blocks(
@@ -317,15 +346,14 @@ fn apply_mods_source(
     settings_store: &SettingsStore,
     wizard_state: &mut WizardState,
 ) {
+    wizard_state.step1.install_mode = Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
+    wizard_state.step1.sync_install_mode_flags();
     match workspace.mods_source {
         ModsSource::GlobalModsFolder => {
             if let Ok(settings) = settings_store.load() {
                 let folder = settings.step1.effective_global_mods_folder().to_string();
                 if !folder.trim().is_empty() {
                     wizard_state.step1.mods_folder = folder;
-                    wizard_state.step1.install_mode =
-                        Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
-                    wizard_state.step1.sync_install_mode_flags();
                     return;
                 }
             }
@@ -342,8 +370,6 @@ fn apply_mods_source(
     };
 
     wizard_state.step1.mods_folder = folder.to_string();
-    wizard_state.step1.install_mode = Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS.to_string();
-    wizard_state.step1.sync_install_mode_flags();
 }
 
 #[cfg(test)]
@@ -590,6 +616,26 @@ mod tests {
     }
 
     #[test]
+    fn apply_mods_source_always_resets_a_leaked_install_mode() {
+        use crate::registry::workspace_model::ModsSource;
+        let workspace = ModlistWorkspaceState {
+            mods_source: ModsSource::InstallationFolder,
+            scratch_mods_folder: None,
+            ..Default::default()
+        };
+        let mut ws = WizardState::default();
+        ws.step1.install_mode = Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        ws.step1.mods_folder = "C:\\keep".to_string();
+        apply_mods_source(&workspace, &SettingsStore::new_default(), &mut ws);
+        assert_eq!(
+            ws.step1.install_mode,
+            Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS
+        );
+        assert!(!ws.step1.installs_exactly_from_weidu_logs());
+        assert_eq!(ws.step1.mods_folder, "C:\\keep");
+    }
+
+    #[test]
     fn step3_collapse_round_trips() {
         let mut ws = WizardState::default();
         ws.step3.bgee_collapsed_blocks = vec!["BLOCK_A".to_string(), "BLOCK_B".to_string()];
@@ -652,7 +698,7 @@ mod tests {
             &SettingsStore::new_default(),
             &mut ws,
         );
-        assert!(ws.step2.bgee_mods.is_empty());
+        assert_eq!(ws.step2.bgee_mods.len(), 0);
 
         ws.step2.bgee_mods = vec![mod_state(
             "EEFixPack",
@@ -674,7 +720,82 @@ mod tests {
              modlist's scanned mod set (it must be fully reset, not just \
              unchecked-in-place)"
         );
-        assert!(ws.step3.bgee_items.is_empty());
+        assert_eq!(ws.step3.bgee_items.len(), 0);
+    }
+
+    #[test]
+    fn save_sync_rebuilds_step3_to_empty_when_nothing_is_ticked() {
+        let mut ws = WizardState::default();
+        ws.step1.game_install = "BGEE".to_string();
+        ws.step2.bgee_mods = vec![
+            mod_state(
+                "EEFixPack",
+                "EEFIXPACK/EEFIXPACK.TP2",
+                vec![comp("0", "Core Fixes")],
+            ),
+            mod_state("Tweaks", "TWEAKS/TWEAKS.TP2", vec![comp("1", "Tweak")]),
+        ];
+        for (order, scanned) in ws.step2.bgee_mods.iter_mut().enumerate() {
+            scanned.checked = true;
+            scanned.components[0].checked = true;
+            scanned.components[0].selected_order = Some(order + 1);
+        }
+
+        sync_step3_from_step2_if_changed(&mut ws);
+        let leaves = ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count();
+        assert_eq!(leaves, 2);
+
+        for scanned in &mut ws.step2.bgee_mods {
+            scanned.checked = false;
+            scanned.components[0].checked = false;
+            scanned.components[0].selected_order = None;
+        }
+
+        sync_step3_from_step2_if_changed(&mut ws);
+        assert!(ws.step3.bgee_items.iter().all(|i| i.is_parent));
+        let empty_signature = crate::app::app_nav::step2_selection_signature(&ws);
+        assert_eq!(
+            ws.last_step2_sync_signature.as_deref(),
+            Some(empty_signature.as_str())
+        );
+    }
+
+    #[test]
+    fn save_sync_never_rebuilds_step3_while_a_scan_runs() {
+        let mut ws = WizardState::default();
+        ws.step1.game_install = "BGEE".to_string();
+        ws.step2.bgee_mods = vec![mod_state(
+            "EEFixPack",
+            "EEFIXPACK/EEFIXPACK.TP2",
+            vec![comp("0", "Core Fixes")],
+        )];
+        ws.step2.bgee_mods[0].checked = true;
+        ws.step2.bgee_mods[0].components[0].checked = true;
+        ws.step2.bgee_mods[0].components[0].selected_order = Some(1);
+        sync_step3_from_step2_if_changed(&mut ws);
+        assert_eq!(
+            ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
+            1
+        );
+
+        ws.step2.is_scanning = true;
+        ws.step2.bgee_mods.clear();
+        sync_step3_from_step2_if_changed(&mut ws);
+
+        assert_eq!(
+            ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
+            1
+        );
+
+        ws.step2.is_scanning = false;
+        ws.step1.install_mode =
+            crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        sync_step3_from_step2_if_changed(&mut ws);
+
+        assert_eq!(
+            ws.step3.bgee_items.iter().filter(|i| !i.is_parent).count(),
+            1
+        );
     }
 
     use crate::registry::store_workspace::WorkspaceStore;
@@ -817,7 +938,7 @@ mod tests {
             "Bug B: fresh modlist B must start with NO scanned mods (A's \
              scanned set must not leak across the swap)"
         );
-        assert!(ws.step3.bgee_items.is_empty(), "Bug B: B's Step 3 empty");
+        assert_eq!(ws.step3.bgee_items.len(), 0, "Bug B: B's Step 3 empty");
         assert!(
             ws.step2.selected.is_none() && ws.step2.next_selection_order == 1,
             "Bug B: B's Step-2 selection transients reset"
@@ -907,7 +1028,7 @@ mod tests {
             !ws.step2.bgee_mods.is_empty(),
             "scanned set must be non-empty so the guard does NOT fire"
         );
-        assert!(ws.step3.bgee_items.is_empty(), "Step 3 deselected → empty");
+        assert_eq!(ws.step3.bgee_items.len(), 0, "Step 3 deselected → empty");
 
         let extracted = extract_workspace_state_from_wizard(&ws, &prior);
         assert!(
@@ -986,6 +1107,89 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn iwdee_collapsed_groups_fall_back_to_the_bgee_key() {
+        let mut step3_group_collapse = std::collections::HashMap::new();
+        step3_group_collapse.insert("BGEE::BLOCK_A".to_string(), true);
+        let workspace = ModlistWorkspaceState {
+            step3_group_collapse,
+            ..Default::default()
+        };
+
+        let mut ws = WizardState::default();
+        populate_wizard_state_from_workspace(
+            &workspace,
+            &entry(Game::IWDEE),
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+        assert!(
+            ws.step3
+                .bgee_collapsed_blocks
+                .contains(&"BLOCK_A".to_string()),
+            "an IWDEE list with no IWDEE key falls back to the BGEE key"
+        );
+
+        let mut step3_group_collapse = std::collections::HashMap::new();
+        step3_group_collapse.insert("IWDEE::BLOCK_B".to_string(), true);
+        step3_group_collapse.insert("BGEE::BLOCK_A".to_string(), true);
+        let workspace = ModlistWorkspaceState {
+            step3_group_collapse,
+            ..Default::default()
+        };
+        let mut ws2 = WizardState::default();
+        populate_wizard_state_from_workspace(
+            &workspace,
+            &entry(Game::IWDEE),
+            &SettingsStore::new_default(),
+            &mut ws2,
+        );
+        assert_eq!(ws2.step3.bgee_collapsed_blocks, vec!["BLOCK_B".to_string()]);
+    }
+
+    #[test]
+    fn saving_an_iwdee_list_retires_its_old_bgee_collapse_keys() {
+        let mut step3_group_collapse = std::collections::HashMap::new();
+        step3_group_collapse.insert("BGEE::BLOCK_A".to_string(), true);
+        step3_group_collapse.insert("BG2EE::BLOCK_Z".to_string(), true);
+        let prior = ModlistWorkspaceState {
+            step3_group_collapse,
+            ..Default::default()
+        };
+
+        let mut expanded = WizardState::default();
+        expanded.step1.game_install = "IWDEE".to_string();
+        let saved = extract_workspace_state_from_wizard(&expanded, &prior);
+        assert!(
+            !saved
+                .step3_group_collapse
+                .keys()
+                .any(|key| key.starts_with("BGEE::")),
+            "an expanded group must not come back collapsed through the old key"
+        );
+
+        let mut bgee_list = WizardState::default();
+        bgee_list.step1.game_install = "BGEE".to_string();
+        bgee_list.step3.bgee_collapsed_blocks = vec!["BLOCK_A".to_string()];
+        let kept = extract_workspace_state_from_wizard(&bgee_list, &prior);
+        assert!(kept.step3_group_collapse.contains_key("BGEE::BLOCK_A"));
+    }
+
+    #[test]
+    fn opening_an_iwdee_list_starts_on_the_iwdee_tab() {
+        let mut ws = WizardState::default();
+        ws.step2.active_game_tab = "BGEE".to_string();
+        ws.step3.active_game_tab = "BG2EE".to_string();
+        populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &entry(Game::IWDEE),
+            &SettingsStore::new_default(),
+            &mut ws,
+        );
+        assert_eq!(ws.step2.active_game_tab, "IWDEE");
+        assert_eq!(ws.step3.active_game_tab, "IWDEE");
     }
 
     #[test]
@@ -1089,5 +1293,112 @@ mod tests {
              got: {}",
             leaves[0].raw_line
         );
+    }
+
+    struct TempRoot(std::path::PathBuf);
+
+    impl TempRoot {
+        fn new() -> Self {
+            Self::named("bio_loader_global")
+        }
+
+        fn named(prefix: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static N: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "{prefix}_{}_{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            )));
+            std::fs::create_dir_all(&root.0).expect("create temp root");
+            root
+        }
+
+        fn path_of(&self, name: &str) -> String {
+            self.0.join(name).to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn open_list(root: &TempRoot, mods_source: ModsSource, global_folder: &str) -> WizardState {
+        use crate::settings::model::{AppSettings, Step1Settings};
+        let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let settings = AppSettings {
+            step1: Step1Settings {
+                global_mods_folder: global_folder.to_string(),
+                ..Step1Settings::default()
+            },
+            ..AppSettings::default()
+        };
+        store.save(&settings).expect("save temp settings");
+        let workspace = ModlistWorkspaceState {
+            mods_source,
+            scratch_mods_folder: Some(root.path_of("scratch")),
+            ..Default::default()
+        };
+        let mut list = entry(Game::BGEE);
+        list.destination_folder = root.path_of("dest");
+        let mut ws = WizardState::default();
+        populate_wizard_state_from_workspace(&workspace, &list, &store, &mut ws);
+        ws
+    }
+
+    #[test]
+    fn open_global_list_uses_the_settings_global_folder() {
+        let root = TempRoot::new();
+        let ws = open_list(&root, ModsSource::GlobalModsFolder, &root.path_of("global"));
+        assert_eq!(ws.step1.mods_folder, root.path_of("global"));
+        assert!(
+            std::path::Path::new(&ws.step1.weidu_log_folder).starts_with(root.0.join("dest")),
+            "the per-install derive still runs: {}",
+            ws.step1.weidu_log_folder
+        );
+    }
+
+    #[test]
+    fn open_global_list_without_a_global_folder_falls_back_to_the_scratch_folder() {
+        let root = TempRoot::new();
+        let ws = open_list(&root, ModsSource::GlobalModsFolder, "");
+        assert_eq!(ws.step1.mods_folder, root.path_of("scratch"));
+    }
+
+    #[test]
+    fn opening_a_list_drops_a_waiting_log_import() {
+        let root = TempRoot::named("bio_loader_logimport");
+        let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let mut list = entry(Game::EET);
+        list.destination_folder = root.path_of("dest");
+        let mut ws = WizardState::default();
+        ws.step2.weidu_log_import = Some(crate::app::state::WeiduLogImport {
+            first: Some(root.0.join("weidu.log")),
+            second: None,
+        });
+        ws.step2.pending_weidu_log_reapply = true;
+
+        populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &list,
+            &store,
+            &mut ws,
+        );
+
+        assert_eq!(ws.step2.weidu_log_import, None);
+        assert!(!ws.step2.pending_weidu_log_reapply);
+    }
+
+    #[test]
+    fn open_installation_list_ignores_the_global_folder() {
+        let root = TempRoot::new();
+        let ws = open_list(
+            &root,
+            ModsSource::InstallationFolder,
+            &root.path_of("global"),
+        );
+        assert_eq!(ws.step1.mods_folder, root.path_of("scratch"));
     }
 }

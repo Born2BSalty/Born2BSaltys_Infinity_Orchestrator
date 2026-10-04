@@ -10,6 +10,7 @@ use crate::app::component_details::{
     compat_code_from_kind, compat_role, display_name_from_tp2, tp2_file_name,
 };
 use crate::app::controller::log_apply_match::parse_component_tp2_from_raw;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step2Selection, WizardState};
 use crate::parser::weidu_component_line::parse_lang;
 use crate::parser::weidu_version::parse_version;
@@ -61,7 +62,7 @@ pub(crate) fn selected_details_data(state: &WizardState) -> SelectedDetailsData 
     };
     let mods = match selection {
         Step2Selection::Mod { game_tab, .. } | Step2Selection::Component { game_tab, .. } => {
-            if game_tab == "BGEE" {
+            if game_authority::slot_for_tab(game_tab) == GameSlot::First {
                 &state.step2.bgee_mods
             } else {
                 &state.step2.bg2ee_mods
@@ -139,7 +140,12 @@ fn build_mod_details(
             &mod_state.tp_file,
         ))
         .map(String::as_str);
-    attach_package_source(&mut details, &mod_state.tp_file, selected_source_id);
+    attach_package_source(
+        &mut details,
+        state.step1.mods_folder.trim(),
+        &mod_state.tp_file,
+        selected_source_id,
+    );
     details
 }
 
@@ -202,13 +208,15 @@ fn build_component_details(
 
 fn attach_package_source(
     details: &mut SelectedDetailsData,
+    mods_folder: &str,
     tp2: &str,
     selected_source_id: Option<&str>,
 ) {
     details.package_source_status = Some("Unknown".to_string());
     let loaded = crate::app::mod_downloads::load_mod_download_sources();
     if let Some(installed_source_id) =
-        crate::app::app_step2_update_source_refs::load_installed_source_id(tp2)
+        crate::app::app_step2_update_source_refs::InstalledRefLookup::load(mods_folder)
+            .source_id(tp2)
         && let Some(source) = loaded.resolve_source(tp2, Some(&installed_source_id))
     {
         details.package_installed_source_name =

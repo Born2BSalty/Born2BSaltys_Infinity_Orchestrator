@@ -5,8 +5,18 @@ use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::sync::mpsc::Receiver;
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads::{self, ModDownloadSource, ModDownloadsLoad};
-use crate::app::state::{Step2Selection, WizardState, update_selection_signature};
+use crate::app::state::{
+    ManualDownloadReason, ManualDownloadRequest, Step2Selection, WizardState,
+    push_manual_download_request, update_selection_signature,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UpdateCheckScope {
+    Selection,
+    WholeFolder,
+}
 
 pub(crate) fn preview_update_selected(
     state: &mut WizardState,
@@ -14,23 +24,27 @@ pub(crate) fn preview_update_selected(
         Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
     >,
     sources: &ModDownloadsLoad,
+    scope: UpdateCheckScope,
 ) {
     let exact_log_mode = state.step1.installs_exactly_from_weidu_logs();
     let selected_source_ids = state.step2.selected_source_ids.clone();
     state.step2.update_selected_target_game_tab = None;
     state.step2.update_selected_target_tp_file = None;
+    state.step2.whole_folder_check_active = scope == UpdateCheckScope::WholeFolder;
 
     let FullUpdatePreviewCollection {
         mut known,
         mut manual,
+        mut manual_requests,
         mut unknown,
         locked,
         mut update_requests,
         mut queued_tp2,
-    } = collect_full_update_preview(state, sources, &selected_source_ids, exact_log_mode);
+    } = collect_full_update_preview(state, sources, &selected_source_ids, exact_log_mode, scope);
     let mut pending_preview = PendingLogUpdatePreview {
         known: &mut known,
         manual: &mut manual,
+        manual_requests: &mut manual_requests,
         unknown: &mut unknown,
         update_requests: &mut update_requests,
     };
@@ -45,6 +59,7 @@ pub(crate) fn preview_update_selected(
     let preview = FullUpdatePreviewResult {
         known,
         manual,
+        manual_requests,
         unknown,
         locked,
         update_requests,
@@ -64,10 +79,10 @@ pub(crate) fn preview_update_selected_mod(
         Receiver<super::app_step2_update_check_worker::Step2UpdateCheckEvent>,
     >,
     sources: &ModDownloadsLoad,
+    target: (String, String),
 ) {
-    let Some((game_tab, tp_file)) = target_update_mod(state) else {
-        return;
-    };
+    let (game_tab, tp_file) = target;
+    state.step2.whole_folder_check_active = target_is_pending_download(state, &game_tab, &tp_file);
     state.step2.update_selected_target_game_tab = Some(game_tab.clone());
     state.step2.update_selected_target_tp_file = Some(tp_file.clone());
     let selected_source_ids = state.step2.selected_source_ids.clone();
@@ -86,9 +101,27 @@ pub(crate) fn preview_update_selected_mod(
     apply_target_update_preview(state, &game_tab, &tp_file, preview, step2_update_check_rx);
 }
 
+fn target_is_pending_download(state: &WizardState, game_tab: &str, tp_file: &str) -> bool {
+    let target_tp2 = mod_downloads::normalize_mod_download_tp2(tp_file);
+    let scanned = state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .any(|mod_state| {
+            mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) == target_tp2
+        });
+    !scanned
+        && state.step2.log_pending_downloads.iter().any(|pending| {
+            pending.game_tab == game_tab
+                && mod_downloads::normalize_mod_download_tp2(&pending.tp_file) == target_tp2
+        })
+}
+
 struct FullUpdatePreviewCollection {
     known: Vec<String>,
     manual: Vec<String>,
+    manual_requests: Vec<ManualDownloadRequest>,
     unknown: Vec<String>,
     locked: Vec<String>,
     update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
@@ -98,6 +131,7 @@ struct FullUpdatePreviewCollection {
 struct FullUpdatePreviewResult {
     known: Vec<String>,
     manual: Vec<String>,
+    manual_requests: Vec<ManualDownloadRequest>,
     unknown: Vec<String>,
     locked: Vec<String>,
     update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
@@ -107,6 +141,7 @@ struct TargetUpdatePreview {
     target_label: Option<String>,
     known: Vec<String>,
     manual: Vec<String>,
+    manual_requests: Vec<ManualDownloadRequest>,
     unknown: Vec<String>,
     update_requests: Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
 }
@@ -116,10 +151,12 @@ fn collect_full_update_preview(
     sources: &ModDownloadsLoad,
     selected_source_ids: &BTreeMap<String, String>,
     exact_log_mode: bool,
+    scope: UpdateCheckScope,
 ) -> FullUpdatePreviewCollection {
     let mut preview = FullUpdatePreviewCollection {
         known: Vec::new(),
         manual: Vec::new(),
+        manual_requests: Vec::new(),
         unknown: Vec::new(),
         locked: Vec::new(),
         update_requests: Vec::new(),
@@ -138,6 +175,7 @@ fn collect_full_update_preview(
             sources,
             selected_source_ids,
             exact_log_mode,
+            scope,
             game_tab,
             &mut preview,
         );
@@ -150,32 +188,52 @@ fn collect_game_tab_update_preview(
     sources: &ModDownloadsLoad,
     selected_source_ids: &BTreeMap<String, String>,
     exact_log_mode: bool,
+    scope: UpdateCheckScope,
     game_tab: &str,
     preview: &mut FullUpdatePreviewCollection,
 ) {
-    let mods = if game_tab == "BGEE" {
+    let mods = if game_authority::slot_for_tab(game_tab) == GameSlot::First {
         &mut state.step2.bgee_mods
     } else {
         &mut state.step2.bg2ee_mods
     };
     for mod_state in mods.iter_mut() {
         mod_state.package_marker = None;
-        if exact_log_mode || !mod_selected_for_update(mod_state) {
+        if exact_log_mode || !mod_in_check_scope(scope, mod_state) {
             continue;
         }
         let label = mod_update_label(mod_state);
+        let tp2_key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
+        let first_seen =
+            scope == UpdateCheckScope::Selection || !preview.queued_tp2.contains(&tp2_key);
         if mod_state.update_locked {
-            preview.locked.push(label);
-            continue;
+            if first_seen {
+                preview.locked.push(label);
+            }
+        } else {
+            queue_mod_update_preview(
+                game_tab,
+                mod_state,
+                &label,
+                sources,
+                selected_source_ids,
+                first_seen,
+                preview,
+            );
         }
-        queue_mod_update_preview(
-            game_tab,
-            mod_state,
-            &label,
-            sources,
-            selected_source_ids,
-            preview,
-        );
+        if scope == UpdateCheckScope::WholeFolder {
+            preview.queued_tp2.insert(tp2_key);
+        }
+    }
+}
+
+fn mod_in_check_scope(
+    scope: UpdateCheckScope,
+    mod_state: &crate::app::state::Step2ModState,
+) -> bool {
+    match scope {
+        UpdateCheckScope::Selection => mod_selected_for_update(mod_state),
+        UpdateCheckScope::WholeFolder => true,
     }
 }
 
@@ -201,6 +259,7 @@ fn queue_mod_update_preview(
     label: &str,
     sources: &ModDownloadsLoad,
     selected_source_ids: &BTreeMap<String, String>,
+    first_seen: bool,
     preview: &mut FullUpdatePreviewCollection,
 ) {
     let source = resolve_selected_source(sources, selected_source_ids, &mod_state.tp_file);
@@ -217,14 +276,48 @@ fn queue_mod_update_preview(
                     &mut preview.update_requests,
                 );
             }
-            preview.known.push(label.to_string());
+            if first_seen {
+                preview.known.push(label.to_string());
+            }
         } else {
             mod_state.package_marker = Some('!');
+            if !first_seen {
+                return;
+            }
             preview.manual.push(label.to_string());
+            push_manual_download_request(
+                &mut preview.manual_requests,
+                ManualDownloadRequest {
+                    game_tab: game_tab.to_string(),
+                    tp_file: mod_state.tp_file.clone(),
+                    label: label.to_string(),
+                    source_id: source.source_id.clone(),
+                    page_url: source.url.clone(),
+                    reason: ManualDownloadReason::NotAutoResolvable,
+                    aliases: source.declared_tp2_names(),
+                    display_name: source.name.clone(),
+                },
+            );
         }
     } else {
         mod_state.package_marker = Some('!');
+        if !first_seen {
+            return;
+        }
         preview.unknown.push(label.to_string());
+        push_manual_download_request(
+            &mut preview.manual_requests,
+            ManualDownloadRequest {
+                game_tab: game_tab.to_string(),
+                tp_file: mod_state.tp_file.clone(),
+                label: label.to_string(),
+                source_id: String::new(),
+                page_url: String::new(),
+                reason: ManualDownloadReason::NoSourceEntry,
+                aliases: Vec::new(),
+                display_name: String::new(),
+            },
+        );
     }
 }
 
@@ -240,6 +333,7 @@ fn apply_full_update_preview_state(
     let request_count = preview.update_requests.len();
     state.step2.update_selected_known_sources = preview.known;
     state.step2.update_selected_manual_sources = preview.manual;
+    state.step2.update_selected_manual_downloads = preview.manual_requests;
     state.step2.update_selected_unknown_sources = preview.unknown;
     clear_full_update_preview_results(state);
     state.step2.update_selected_check_total_count = request_count;
@@ -266,6 +360,7 @@ fn clear_full_update_preview_results(state: &mut WizardState) {
     state.step2.update_selected_update_sources.clear();
     state.step2.update_selected_locked_update_assets.clear();
     state.step2.update_selected_locked_update_sources.clear();
+    state.step2.update_selected_in_sync_assets.clear();
     state.step2.update_selected_missing_sources.clear();
     state.step2.update_selected_downloaded_sources.clear();
     state.step2.update_selected_download_failed_sources.clear();
@@ -276,6 +371,8 @@ fn clear_full_update_preview_results(state: &mut WizardState) {
         .update_selected_exact_version_failed_sources
         .clear();
     state.step2.update_selected_failed_sources.clear();
+    state.step2.update_selected_remote_file_facts.clear();
+    state.step2.update_selected_unverified_sources.clear();
     state.step2.update_selected_check_requests.clear();
     state
         .step2
@@ -330,16 +427,13 @@ fn start_full_update_preview_check(
     }
 }
 
-fn target_update_mod(state: &WizardState) -> Option<(String, String)> {
-    if let (Some(game_tab), Some(tp_file)) = (
-        state.step2.update_selected_target_game_tab.clone(),
-        state.step2.update_selected_target_tp_file.clone(),
-    ) {
-        Some((game_tab, tp_file))
-    } else if let Some(Step2Selection::Mod { game_tab, tp_file }) = state.step2.selected.clone() {
-        Some((game_tab, tp_file))
-    } else {
-        None
+#[must_use]
+pub(crate) fn selected_mod_target(state: &WizardState) -> Option<(String, String)> {
+    match state.step2.selected.clone()? {
+        Step2Selection::Mod { game_tab, tp_file }
+        | Step2Selection::Component {
+            game_tab, tp_file, ..
+        } => Some((game_tab, tp_file)),
     }
 }
 
@@ -354,10 +448,11 @@ fn collect_target_update_preview(
         target_label: None,
         known: Vec::new(),
         manual: Vec::new(),
+        manual_requests: Vec::new(),
         unknown: Vec::new(),
         update_requests: Vec::new(),
     };
-    let mods = if game_tab == "BGEE" {
+    let mods = if game_authority::slot_for_tab(game_tab) == GameSlot::First {
         &mut state.step2.bgee_mods
     } else {
         &mut state.step2.bg2ee_mods
@@ -406,10 +501,36 @@ fn queue_target_mod_update_preview(
         } else {
             mod_state.package_marker = Some('!');
             preview.manual.push(label.to_string());
+            push_manual_download_request(
+                &mut preview.manual_requests,
+                ManualDownloadRequest {
+                    game_tab: game_tab.to_string(),
+                    tp_file: mod_state.tp_file.clone(),
+                    label: label.to_string(),
+                    source_id: source.source_id.clone(),
+                    page_url: source.url.clone(),
+                    reason: ManualDownloadReason::NotAutoResolvable,
+                    aliases: source.declared_tp2_names(),
+                    display_name: source.name.clone(),
+                },
+            );
         }
     } else {
         mod_state.package_marker = Some('!');
         preview.unknown.push(label.to_string());
+        push_manual_download_request(
+            &mut preview.manual_requests,
+            ManualDownloadRequest {
+                game_tab: game_tab.to_string(),
+                tp_file: mod_state.tp_file.clone(),
+                label: label.to_string(),
+                source_id: String::new(),
+                page_url: String::new(),
+                reason: ManualDownloadReason::NoSourceEntry,
+                aliases: Vec::new(),
+                display_name: String::new(),
+            },
+        );
     }
 }
 
@@ -458,9 +579,35 @@ fn queue_pending_target_update_preview(
             preview.known.push(pending.label.clone());
         } else {
             preview.manual.push(pending.label.clone());
+            push_manual_download_request(
+                &mut preview.manual_requests,
+                ManualDownloadRequest {
+                    game_tab: pending.game_tab.clone(),
+                    tp_file: pending.tp_file.clone(),
+                    label: pending.label.clone(),
+                    source_id: source.source_id.clone(),
+                    page_url: source.url.clone(),
+                    reason: ManualDownloadReason::NotAutoResolvable,
+                    aliases: source.declared_tp2_names(),
+                    display_name: source.name.clone(),
+                },
+            );
         }
     } else {
         preview.unknown.push(pending.label.clone());
+        push_manual_download_request(
+            &mut preview.manual_requests,
+            ManualDownloadRequest {
+                game_tab: pending.game_tab.clone(),
+                tp_file: pending.tp_file.clone(),
+                label: pending.label.clone(),
+                source_id: String::new(),
+                page_url: String::new(),
+                reason: ManualDownloadReason::NoSourceEntry,
+                aliases: Vec::new(),
+                display_name: String::new(),
+            },
+        );
     }
     preview.target_label = Some(pending.label.clone());
 }
@@ -491,6 +638,16 @@ fn apply_target_update_preview(
             label,
             preview.unknown,
         );
+        state
+            .step2
+            .update_selected_manual_downloads
+            .retain(|request| request.game_tab != game_tab || request.tp_file != tp_file);
+        for request in preview.manual_requests {
+            push_manual_download_request(
+                &mut state.step2.update_selected_manual_downloads,
+                request,
+            );
+        }
         super::app_step2_update_check::clear_update_check_result_for_mod(
             state, game_tab, tp_file, label,
         );
@@ -552,6 +709,7 @@ fn queue_source_request(
             tag: source.tag.clone(),
             commit: source.commit.clone(),
             branch: source.branch.clone(),
+            release: source.release.clone(),
             asset: if source.commit.is_none() && source.tag.is_none() && source.branch.is_none() {
                 source.asset.clone()
             } else {
@@ -580,6 +738,7 @@ fn queue_source_request(
             tag: None,
             commit: None,
             branch: None,
+            release: None,
             asset: None,
             pkg: None,
             requested_version: requested_version
@@ -600,6 +759,7 @@ fn queue_source_request(
             tag: None,
             commit: None,
             branch: None,
+            release: None,
             asset: None,
             pkg: None,
             requested_version: requested_version
@@ -620,6 +780,7 @@ fn queue_source_request(
             tag: None,
             commit: None,
             branch: None,
+            release: None,
             asset: None,
             pkg: None,
             requested_version: requested_version
@@ -633,6 +794,7 @@ fn queue_source_request(
 struct PendingLogUpdatePreview<'a> {
     known: &'a mut Vec<String>,
     manual: &'a mut Vec<String>,
+    manual_requests: &'a mut Vec<ManualDownloadRequest>,
     unknown: &'a mut Vec<String>,
     update_requests: &'a mut Vec<super::app_step2_update_check::Step2UpdateCheckRequest>,
 }
@@ -668,9 +830,35 @@ fn extend_log_pending_update_requests(
                 pending_preview.known.push(pending.label.clone());
             } else {
                 pending_preview.manual.push(pending.label.clone());
+                push_manual_download_request(
+                    pending_preview.manual_requests,
+                    ManualDownloadRequest {
+                        game_tab: pending.game_tab.clone(),
+                        tp_file: pending.tp_file.clone(),
+                        label: pending.label.clone(),
+                        source_id: source.source_id.clone(),
+                        page_url: source.url.clone(),
+                        reason: ManualDownloadReason::NotAutoResolvable,
+                        aliases: source.declared_tp2_names(),
+                        display_name: source.name.clone(),
+                    },
+                );
             }
         } else {
             pending_preview.unknown.push(pending.label.clone());
+            push_manual_download_request(
+                pending_preview.manual_requests,
+                ManualDownloadRequest {
+                    game_tab: pending.game_tab.clone(),
+                    tp_file: pending.tp_file.clone(),
+                    label: pending.label.clone(),
+                    source_id: String::new(),
+                    page_url: String::new(),
+                    reason: ManualDownloadReason::NoSourceEntry,
+                    aliases: Vec::new(),
+                    display_name: String::new(),
+                },
+            );
         }
     }
 }
@@ -735,5 +923,352 @@ mod tests {
     fn non_reproduce_non_exact_drops_version() {
         let state = WizardState::default();
         assert_eq!(forwarded_version(&state, Some("8.39")), None);
+    }
+
+    #[test]
+    fn selected_mod_target_from_mod_row() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                selected: Some(Step2Selection::Mod {
+                    game_tab: "BGEE".to_string(),
+                    tp_file: "modA/modA.tp2".to_string(),
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            selected_mod_target(&state),
+            Some(("BGEE".to_string(), "modA/modA.tp2".to_string()))
+        );
+    }
+
+    #[test]
+    fn selected_mod_target_from_component_row_is_its_mod() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                selected: Some(Step2Selection::Component {
+                    game_tab: "BG2EE".to_string(),
+                    tp_file: "modC/modC.tp2".to_string(),
+                    component_id: "3".to_string(),
+                    component_key: "3".to_string(),
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            selected_mod_target(&state),
+            Some(("BG2EE".to_string(), "modC/modC.tp2".to_string()))
+        );
+    }
+
+    #[test]
+    fn selected_mod_target_none_without_selection() {
+        let state = WizardState::default();
+        assert_eq!(selected_mod_target(&state), None);
+    }
+
+    #[test]
+    fn check_this_mod_target_follows_the_selection() {
+        let state = WizardState {
+            step2: crate::app::state::Step2State {
+                update_selected_target_game_tab: Some("BGEE".to_string()),
+                update_selected_target_tp_file: Some("modA/modA.tp2".to_string()),
+                selected: Some(Step2Selection::Mod {
+                    game_tab: "BG2EE".to_string(),
+                    tp_file: "modB/modB.tp2".to_string(),
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            selected_mod_target(&state),
+            Some(("BG2EE".to_string(), "modB/modB.tp2".to_string())),
+            "the sticky fields must no longer act as a fallback over the live selection"
+        );
+    }
+
+    #[test]
+    fn preview_writes_the_target_fields() {
+        let mut state = WizardState::default();
+        let mut rx = None;
+        let sources = ModDownloadsLoad::default();
+        preview_update_selected_mod(
+            &mut state,
+            &mut rx,
+            &sources,
+            ("BGEE".to_string(), "modA/modA.tp2".to_string()),
+        );
+        assert_eq!(
+            state.step2.update_selected_target_game_tab,
+            Some("BGEE".to_string())
+        );
+        assert_eq!(
+            state.step2.update_selected_target_tp_file,
+            Some("modA/modA.tp2".to_string())
+        );
+        assert!(rx.is_none());
+    }
+
+    #[test]
+    fn update_preview_tabs_follow_the_lists_game() {
+        use crate::app::state::Step2ModState;
+
+        let mut state = WizardState::default();
+        state.step1.game_install = "IWDEE".to_string();
+        state.step2.active_game_tab = "IWDEE".to_string();
+        state.step2.bgee_mods = vec![Step2ModState {
+            name: "Mod".to_string(),
+            tp_file: "mod/mod.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }];
+        let sources = ModDownloadsLoad::default();
+        let preview = collect_full_update_preview(
+            &mut state,
+            &sources,
+            &BTreeMap::new(),
+            false,
+            UpdateCheckScope::Selection,
+        );
+        assert_eq!(preview.unknown, vec!["Mod".to_string()]);
+        assert_eq!(preview.known.len(), 0);
+        assert_eq!(preview.manual.len(), 0);
+    }
+
+    fn archive_sources() -> ModDownloadsLoad {
+        ModDownloadsLoad {
+            sources: vec![ModDownloadSource {
+                tp2: "mod/setup-mod.tp2".to_string(),
+                url: "https://example.test/mod.zip".to_string(),
+                ..ModDownloadSource::default()
+            }],
+            error: None,
+        }
+    }
+
+    fn unticked_mod() -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: "Mod".to_string(),
+            tp_file: "mod/setup-mod.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn every_scanned_mod_is_checked() {
+        let sources = archive_sources();
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BGEE".to_string();
+        let empty = collect_full_update_preview(
+            &mut state,
+            &sources,
+            &BTreeMap::new(),
+            false,
+            UpdateCheckScope::WholeFolder,
+        );
+        assert_eq!(empty.update_requests.len(), 0);
+        assert_eq!(empty.known.len(), 0);
+
+        state.step2.bgee_mods = vec![unticked_mod()];
+        let preview = collect_full_update_preview(
+            &mut state,
+            &sources,
+            &BTreeMap::new(),
+            false,
+            UpdateCheckScope::WholeFolder,
+        );
+        assert_eq!(preview.known, vec!["Mod".to_string()]);
+        assert_eq!(preview.update_requests.len(), 1);
+    }
+
+    #[test]
+    fn selection_scope_skips_unticked_mods() {
+        let sources = archive_sources();
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BGEE".to_string();
+        state.step2.bgee_mods = vec![unticked_mod()];
+        let preview = collect_full_update_preview(
+            &mut state,
+            &sources,
+            &BTreeMap::new(),
+            false,
+            UpdateCheckScope::Selection,
+        );
+        assert_eq!(preview.update_requests.len(), 0);
+        assert_eq!(preview.known.len(), 0);
+        assert_eq!(preview.queued_tp2.len(), 0);
+    }
+
+    #[test]
+    fn whole_folder_scope_counts_a_mod_once_across_eet_tabs() {
+        let sources = archive_sources();
+        let mut state = WizardState::default();
+        state.step1.game_install = "EET".to_string();
+        state.step2.bgee_mods = vec![unticked_mod()];
+        state.step2.bg2ee_mods = vec![unticked_mod()];
+        let preview = collect_full_update_preview(
+            &mut state,
+            &sources,
+            &BTreeMap::new(),
+            false,
+            UpdateCheckScope::WholeFolder,
+        );
+        assert_eq!(preview.update_requests.len(), 1);
+        assert_eq!(preview.known, vec!["Mod".to_string()]);
+    }
+
+    #[test]
+    fn requests_collected_for_manual_source_with_url() {
+        use crate::app::mod_downloads::ModDownloadSource;
+        use crate::app::state::Step2ModState;
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![Step2ModState {
+            name: "Ascension".to_string(),
+            tp_file: "ascension/setup-ascension.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }];
+        let sources = ModDownloadsLoad {
+            sources: vec![ModDownloadSource {
+                tp2: "ascension/setup-ascension.tp2".to_string(),
+                url: "https://www.nexusmods.com/baldursgateenhancededition/mods/1".to_string(),
+                ..ModDownloadSource::default()
+            }],
+            error: None,
+        };
+        let mut rx = None;
+        preview_update_selected(&mut state, &mut rx, &sources, UpdateCheckScope::Selection);
+
+        assert_eq!(state.step2.update_selected_manual_downloads.len(), 1);
+        let request = &state.step2.update_selected_manual_downloads[0];
+        assert_eq!(request.reason, ManualDownloadReason::NotAutoResolvable);
+        assert_eq!(
+            request.page_url,
+            "https://www.nexusmods.com/baldursgateenhancededition/mods/1"
+        );
+    }
+
+    #[test]
+    fn manual_request_carries_source_name() {
+        use crate::app::mod_downloads::ModDownloadSource;
+        use crate::app::state::Step2ModState;
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![Step2ModState {
+            name: "Ascension".to_string(),
+            tp_file: "ascension/setup-ascension.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }];
+        let sources = ModDownloadsLoad {
+            sources: vec![ModDownloadSource {
+                tp2: "ascension/setup-ascension.tp2".to_string(),
+                url: "https://www.nexusmods.com/baldursgateenhancededition/mods/1".to_string(),
+                name: "House Rules".to_string(),
+                ..ModDownloadSource::default()
+            }],
+            error: None,
+        };
+        let mut rx = None;
+        preview_update_selected(&mut state, &mut rx, &sources, UpdateCheckScope::Selection);
+
+        assert_eq!(state.step2.update_selected_manual_downloads.len(), 1);
+        let request = &state.step2.update_selected_manual_downloads[0];
+        assert_eq!(request.display_name, "House Rules");
+    }
+
+    #[test]
+    fn requests_collected_for_manual_source_via_target_preview() {
+        use crate::app::mod_downloads::ModDownloadSource;
+        use crate::app::state::Step2ModState;
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![Step2ModState {
+            name: "Ascension".to_string(),
+            tp_file: "ascension/setup-ascension.tp2".to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }];
+        let sources = ModDownloadsLoad {
+            sources: vec![ModDownloadSource {
+                tp2: "ascension/setup-ascension.tp2".to_string(),
+                url: "https://www.nexusmods.com/baldursgateenhancededition/mods/1".to_string(),
+                ..ModDownloadSource::default()
+            }],
+            error: None,
+        };
+        let mut rx = None;
+        preview_update_selected_mod(
+            &mut state,
+            &mut rx,
+            &sources,
+            (
+                "BGEE".to_string(),
+                "ascension/setup-ascension.tp2".to_string(),
+            ),
+        );
+
+        assert_eq!(state.step2.update_selected_manual_downloads.len(), 1);
+        let request = &state.step2.update_selected_manual_downloads[0];
+        assert_eq!(request.reason, ManualDownloadReason::NotAutoResolvable);
+        assert_eq!(
+            request.page_url,
+            "https://www.nexusmods.com/baldursgateenhancededition/mods/1"
+        );
     }
 }

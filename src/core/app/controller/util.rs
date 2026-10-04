@@ -31,8 +31,23 @@ pub fn open_in_shell(target: &str) -> std::io::Result<()> {
     if target.is_empty() {
         return Ok(());
     }
-    std::process::Command::new("explorer").arg(target).spawn()?;
+    if is_web_url(target) {
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", target])
+            .spawn()?;
+    } else {
+        std::process::Command::new("explorer").arg(target).spawn()?;
+    }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn is_web_url(target: &str) -> bool {
+    ["http://", "https://"].iter().any(|scheme| {
+        target
+            .get(..scheme.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -86,4 +101,20 @@ pub fn sort_mods_alphabetically(mods: &mut [Step2ModState]) {
         let bn = b.name.to_ascii_lowercase();
         an.cmp(&bn).then_with(|| a.tp_file.cmp(&b.tp_file))
     });
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::is_web_url;
+
+    #[test]
+    fn web_urls_are_told_apart_from_paths() {
+        assert!(is_web_url(
+            "https://www.nexusmods.com/baldursgate2ee/mods/110?tab=files"
+        ));
+        assert!(is_web_url("HTTP://example.com"));
+        assert!(!is_web_url("C:\\Games\\BIO\\mods"));
+        assert!(!is_web_url("https"));
+        assert!(!is_web_url("ftp://example.com/file.zip"));
+    }
 }

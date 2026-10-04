@@ -1,0 +1,11 @@
+{
+  "id": "eet-essentials",
+  "name": "EET Essentials",
+  "author": "BIO Team",
+  "description": "The EET spine with the rough edges filed off: merge the campaigns, bridge Baldur's Gate into Shadows of Amn, then the community fixpack, EEex, a cleaner UI, the graphical overhaul, Icewind Dale's spells and a light pass of quality-of-life tweaks that never reshape the saga.",
+  "tags": ["Starter", "Vanilla+", "Quality of life"],
+  "game": "EET",
+  "featured": true,
+  "version": "1.0.0",
+  "requirements": "Baldur's Gate: Enhanced Edition and Baldur's Gate II: Enhanced Edition, Windows only (EEex)"
+}

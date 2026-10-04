@@ -19,6 +19,21 @@ pub fn modlist_data_dir(modlist_id: &str) -> PathBuf {
         .join(modlist_id)
 }
 
+pub fn remove_modlist_data_dir(modlist_id: &str) -> Result<(), std::io::Error> {
+    let trimmed = modlist_id.trim();
+    if trimmed.is_empty() || !trimmed.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "modlist id must be alphanumeric",
+        ));
+    }
+    match std::fs::remove_dir_all(modlist_data_dir(trimmed)) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WorkspaceStore {
     path: PathBuf,
@@ -135,5 +150,65 @@ mod tests {
             other => panic!("expected Corrupt, got {other:?}"),
         }
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn with_config_dir_override<F: FnOnce(&PathBuf)>(label: &str, f: F) {
+        let root = temp_root(label);
+        std::fs::create_dir_all(&root).expect("mkdir root");
+        crate::platform_defaults::set_config_dir_override(Some(root.clone()));
+        f(&root);
+        crate::platform_defaults::clear_config_dir_override_if(&root);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn remove_data_dir_refuses_a_blank_id() {
+        with_config_dir_override("refuse-blank", |root| {
+            let keep = root.join("modlists").join("KEEP00000001");
+            std::fs::create_dir_all(&keep).expect("mkdir keep");
+
+            for id in ["", "  "] {
+                match remove_modlist_data_dir(id) {
+                    Err(err) => assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput),
+                    other => panic!("expected InvalidInput, got {other:?}"),
+                }
+            }
+            assert!(keep.exists(), "a sibling folder must survive a refusal");
+        });
+    }
+
+    #[test]
+    fn remove_data_dir_refuses_a_path_like_id() {
+        with_config_dir_override("refuse-path-like", |_root| {
+            for id in ["../x", "A/B"] {
+                match remove_modlist_data_dir(id) {
+                    Err(err) => assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput),
+                    other => panic!("expected InvalidInput, got {other:?}"),
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn remove_data_dir_missing_folder_is_ok() {
+        with_config_dir_override("missing-ok", |_root| {
+            remove_modlist_data_dir("NOFOLDER0001").expect("missing folder is Ok");
+        });
+    }
+
+    #[test]
+    fn remove_data_dir_removes_the_folder() {
+        with_config_dir_override("removes", |root| {
+            let gone = root.join("modlists").join("GONE00000001");
+            std::fs::create_dir_all(&gone).expect("mkdir gone");
+            std::fs::write(gone.join("workspace.json"), b"{}").expect("seed workspace.json");
+            let keep = root.join("modlists").join("KEEP00000001");
+            std::fs::create_dir_all(&keep).expect("mkdir keep");
+
+            remove_modlist_data_dir("GONE00000001").expect("remove ok");
+
+            assert!(!gone.exists(), "the target folder is gone");
+            assert!(keep.exists(), "the sibling folder survives");
+        });
     }
 }

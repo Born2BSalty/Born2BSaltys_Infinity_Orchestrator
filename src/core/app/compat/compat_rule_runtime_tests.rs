@@ -1,10 +1,35 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use super::{compat_component_matches, compat_mod_matches};
-use crate::app::state::Step2ComponentState;
+use super::{compat_component_matches, compat_mod_matches, game_dir_for_tab};
+use crate::app::state::{Step1State, Step2ComponentState};
 
 use super::super::compat_rules::{CompatRule, StringOrMany};
+
+#[test]
+fn game_dir_for_tab_reads_the_iwdee_folder_on_the_first_slot() {
+    let step1 = Step1State {
+        game_install: "IWDEE".to_string(),
+        iwdee_game_folder: "/games/iwdee".to_string(),
+        bgee_game_folder: "/games/bgee".to_string(),
+        generate_directory_enabled: false,
+        ..Step1State::default()
+    };
+    assert_eq!(game_dir_for_tab(&step1, "IWDEE"), Some("/games/iwdee"));
+    assert_eq!(game_dir_for_tab(&step1, "BGEE"), Some("/games/iwdee"));
+}
+
+#[test]
+fn game_dir_for_tab_prefers_generate_directory_for_iwdee() {
+    let step1 = Step1State {
+        game_install: "IWDEE".to_string(),
+        iwdee_game_folder: "/games/iwdee".to_string(),
+        generate_directory_enabled: true,
+        generate_directory: "/games/generated".to_string(),
+        ..Step1State::default()
+    };
+    assert_eq!(game_dir_for_tab(&step1, "IWDEE"), Some("/games/generated"));
+}
 
 #[test]
 fn compat_mod_matches_any_item_from_mod_list() {

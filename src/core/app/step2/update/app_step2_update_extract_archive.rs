@@ -4,7 +4,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::Sender;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Local;
@@ -12,45 +11,21 @@ use walkdir::WalkDir;
 
 use crate::app::mod_downloads;
 
+use super::super::app_step2_update_source_refs::{InstalledRecord, installed_archive_record};
 use super::plan::Step2UpdateExtractJob;
-use super::{Step2UpdateExtractEvent, Step2UpdateExtractResult};
 
 #[path = "app_step2_update_extract_archive/rar_extract.rs"]
-mod rar_extract;
+pub mod rar_extract;
 #[path = "app_step2_update_extract_archive/seven_zip_extract.rs"]
-mod seven_zip_extract;
+pub mod seven_zip_extract;
 #[path = "app_step2_update_extract_archive/tar_gz_extract.rs"]
-mod tar_gz_extract;
+pub mod tar_gz_extract;
 #[path = "app_step2_update_extract_archive/zip_extract.rs"]
-mod zip_extract;
+pub mod zip_extract;
 
-pub(super) fn extract_update_archives(
-    jobs: &[Step2UpdateExtractJob],
-    tx: &Sender<Step2UpdateExtractEvent>,
-) -> Step2UpdateExtractResult {
-    let mut result = Step2UpdateExtractResult {
-        extracted: Vec::new(),
-        failed: Vec::new(),
-    };
-    let total = jobs.len();
-    for (index, job) in jobs.iter().enumerate() {
-        match extract_one_archive(job) {
-            Ok(target_root) => {
-                result
-                    .extracted
-                    .push(format!("{} -> {}", job.label, target_root.display()));
-            }
-            Err(err) => result.failed.push(format!("{}: {err}", job.label)),
-        }
-        let _ = tx.send(Step2UpdateExtractEvent::Progress {
-            completed: index + 1,
-            total,
-        });
-    }
-    result
-}
-
-pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf, String> {
+pub(crate) fn extract_one_archive(
+    job: &Step2UpdateExtractJob,
+) -> Result<(PathBuf, InstalledRecord), String> {
     let temp_root = temp_extract_root(&job.tp_file);
     if temp_root.exists() {
         let _ = fs::remove_dir_all(&temp_root);
@@ -80,28 +55,35 @@ pub(crate) fn extract_one_archive(job: &Step2UpdateExtractJob) -> Result<PathBuf
             &job.aliases,
             &target_root,
         )?;
-        let refs_target = &job.installed_refs_path;
-        if let Some(source_ref) = &job.installed_source_ref {
-            super::super::app_step2_update_source_refs::save_installed_source_ref(
-                &job.tp_file,
-                source_ref,
-                refs_target,
-            )
-            .map_err(|err| err.to_string())?;
-        }
-        if let Some(source_id) = &job.installed_source_id {
-            super::super::app_step2_update_source_refs::save_installed_source_id(
-                &job.tp_file,
-                source_id,
-                refs_target,
-            )
-            .map_err(|err| err.to_string())?;
-        }
-        Ok(target_root)
+        Ok((target_root, installed_record(job)))
     })();
 
     let _ = fs::remove_dir_all(&temp_root);
     result
+}
+
+fn installed_record(job: &Step2UpdateExtractJob) -> InstalledRecord {
+    let mut archive = installed_archive_record(&job.archive_path)
+        .inspect_err(|err| {
+            tracing::warn!(
+                target = "orchestrator",
+                "record archive for {}: {err} (share codes carry no hash for it until the next fetch)",
+                job.tp_file
+            );
+        })
+        .ok();
+    if let (Some(archive), Some(remote)) = (archive.as_mut(), job.remote_file.as_ref())
+        && remote.size.is_none_or(|size| size == archive.size)
+    {
+        archive.last_modified.clone_from(&remote.last_modified);
+        archive.etag.clone_from(&remote.etag);
+    }
+    InstalledRecord {
+        tp2: job.tp_file.clone(),
+        source_id: job.installed_source_id.clone(),
+        source_ref: job.installed_source_ref.clone(),
+        archive,
+    }
 }
 
 fn resolve_target_root(
@@ -211,7 +193,11 @@ fn find_extracted_mod_root(
         return Ok(tp2_parent.to_path_buf());
     }
     let mod_dir = find_matching_child_mod_dir(tp2_parent, &accepted)
-        .ok_or_else(|| "matching mod folder not found for root-level .tp2".to_string())?;
+        .or_else(|| {
+            backup_folder_from_tp2(&tp2_path)
+                .and_then(|name| find_child_dir_named(tp2_parent, &name))
+        })
+        .ok_or_else(|| MOD_FOLDER_NOT_FOUND.to_string())?;
     let file_name = tp2_path
         .file_name()
         .ok_or_else(|| "matching .tp2 file name is missing".to_string())?;
@@ -233,7 +219,7 @@ fn tp2_parent_matches(path: &Path, accepted: &[String]) -> bool {
         })
 }
 
-fn accepted_tp2_names(tp_file: &str, aliases: &[String]) -> Vec<String> {
+pub(crate) fn accepted_tp2_names(tp_file: &str, aliases: &[String]) -> Vec<String> {
     let mut accepted = vec![mod_downloads::normalize_mod_download_tp2(tp_file)];
     for alias in aliases {
         let alias = mod_downloads::normalize_mod_download_tp2(alias);
@@ -263,6 +249,43 @@ fn find_matching_child_mod_dir(parent: &Path, accepted: &[String]) -> Option<Pat
     } else {
         None
     }
+}
+
+const BACKUP_KEYWORD: &str = "backup";
+const MOD_FOLDER_NOT_FOUND: &str = "matching mod folder not found for root-level .tp2 (add the folder name under Other TP2 or folder names)";
+
+fn backup_folder_from_tp2(tp2_path: &Path) -> Option<String> {
+    let bytes = fs::read(tp2_path).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
+    let line = text
+        .lines()
+        .map(str::trim_start)
+        .find(|line| line.to_ascii_lowercase().starts_with(BACKUP_KEYWORD))?;
+    let rest = line.get(BACKUP_KEYWORD.len()..)?.trim();
+    let open = rest.find(['~', '"', '%'])?;
+    let quote = rest.get(open..)?.chars().next()?;
+    let after_open = rest.get(open + quote.len_utf8()..)?;
+    let value = after_open.get(..after_open.find(quote)?)?;
+    let normalized = value.replace('\\', "/");
+    let segment = normalized.split('/').find(|segment| !segment.is_empty())?;
+    if segment == "." || segment == ".." {
+        return None;
+    }
+    Some(segment.to_string())
+}
+
+fn find_child_dir_named(parent: &Path, name: &str) -> Option<PathBuf> {
+    fs::read_dir(parent)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .find(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case(name)
+        })
+        .map(|entry| entry.path())
 }
 
 fn apply_tp2_rename(
@@ -405,4 +428,171 @@ fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    struct ArchiveTestRoot(PathBuf);
+
+    impl ArchiveTestRoot {
+        fn new() -> Self {
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_extract_root_test_{}_{}",
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::SeqCst)
+            )));
+            fs::create_dir_all(&root.0).unwrap();
+            root
+        }
+
+        fn folder(&self, name: &str) {
+            let dir = self.0.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("readme.txt"), "x").unwrap();
+        }
+
+        fn file(&self, name: &str, text: &str) -> PathBuf {
+            let path = self.0.join(name);
+            fs::write(&path, text).unwrap();
+            path
+        }
+    }
+
+    impl Drop for ArchiveTestRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const QUESTPACK_TP2: &str = "setup-d0questpack.tp2";
+
+    fn questpack_job(
+        root: &ArchiveTestRoot,
+        archive_path: &Path,
+        remote_size: Option<u64>,
+    ) -> Step2UpdateExtractJob {
+        Step2UpdateExtractJob {
+            label: "d0questpack".to_string(),
+            tp_file: "d0questpack/setup-d0questpack.tp2".to_string(),
+            aliases: Vec::new(),
+            tp2_rename: None,
+            subdir_require: None,
+            archive_path: archive_path.to_path_buf(),
+            mods_root: root.0.join("mods"),
+            backup_root: root.0.join("backup"),
+            target_root: None,
+            backup_version_tag: "questpack-v35-win".to_string(),
+            installed_source_ref: Some("questpack-v35-win".to_string()),
+            installed_source_id: Some("pocket-plane-group".to_string()),
+            remote_file: Some(crate::app::app_step2_update_source_refs::RemoteFileFacts {
+                size: remote_size,
+                last_modified: Some("Thu, 10 Sep 2020 17:25:37 GMT".to_string()),
+                etag: Some("\"qp\"".to_string()),
+            }),
+        }
+    }
+
+    #[test]
+    fn installed_record_copies_the_remote_headers() {
+        let root = ArchiveTestRoot::new();
+        let archive_path = root.file("questpack-v35-win.zip", "ARCHIVE-BYTES");
+        let on_disk = fs::metadata(&archive_path).unwrap().len();
+        let job = questpack_job(&root, &archive_path, Some(on_disk));
+
+        let record = installed_record(&job).archive.unwrap();
+
+        assert_eq!(
+            record.last_modified.as_deref(),
+            Some("Thu, 10 Sep 2020 17:25:37 GMT")
+        );
+        assert_eq!(record.etag.as_deref(), Some("\"qp\""));
+        assert_eq!(record.size, on_disk);
+        assert_eq!(
+            record.hash,
+            crate::install_runtime::archive_store::hash_file(&archive_path).unwrap()
+        );
+    }
+
+    #[test]
+    fn installed_record_keeps_the_headers_off_an_archive_of_another_size() {
+        let root = ArchiveTestRoot::new();
+        let archive_path = root.file("questpack-v35-win.zip", "ARCHIVE-BYTES");
+        let job = questpack_job(&root, &archive_path, Some(999));
+
+        let record = installed_record(&job).archive.unwrap();
+
+        assert_eq!(record.last_modified, None);
+        assert_eq!(record.etag, None);
+        assert_eq!(record.size, fs::metadata(&archive_path).unwrap().len());
+    }
+
+    #[test]
+    fn root_level_tp2_follows_its_backup_directive_to_the_mod_folder() {
+        let root = ArchiveTestRoot::new();
+        root.folder("questpack");
+        root.file(QUESTPACK_TP2, "BACKUP ~questpack/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None);
+
+        assert_eq!(found, Ok(root.0.join("questpack")));
+        assert!(root.0.join("questpack").join(QUESTPACK_TP2).is_file());
+    }
+
+    #[test]
+    fn backup_directive_lookup_is_case_insensitive() {
+        let root = ArchiveTestRoot::new();
+        root.folder("QuestPack");
+        root.file(QUESTPACK_TP2, "BACKUP ~questpack/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None).unwrap();
+
+        assert_eq!(
+            found.file_name().and_then(|name| name.to_str()),
+            Some("QuestPack")
+        );
+    }
+
+    #[test]
+    fn backup_directive_naming_a_missing_folder_keeps_the_old_error() {
+        let root = ArchiveTestRoot::new();
+        root.folder("questpack");
+        root.file(QUESTPACK_TP2, "BACKUP ~elsewhere/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None);
+
+        assert_eq!(found, Err(MOD_FOLDER_NOT_FOUND.to_string()));
+        assert!(MOD_FOLDER_NOT_FOUND.contains("Other TP2 or folder names"));
+    }
+
+    #[test]
+    fn backup_folder_from_tp2_reads_quotes_and_backslashes() {
+        let root = ArchiveTestRoot::new();
+        let double_quoted = root.file("double.tp2", "  BACKUP \"questpack\\backup\"\n");
+        let parent_escape = root.file("escape.tp2", "BACKUP ~..\\x~\n");
+        let no_backup = root.file("none.tp2", "AUTHOR ~x~\nBEGIN ~y~\n");
+
+        assert_eq!(
+            backup_folder_from_tp2(&double_quoted),
+            Some("questpack".to_string())
+        );
+        assert_eq!(backup_folder_from_tp2(&parent_escape), None);
+        assert_eq!(backup_folder_from_tp2(&no_backup), None);
+    }
+
+    #[test]
+    fn child_named_like_the_tp2_still_wins_over_the_directive() {
+        let root = ArchiveTestRoot::new();
+        root.folder("d0questpack");
+        root.folder("questpack");
+        root.file(QUESTPACK_TP2, "BACKUP ~questpack/backup~\nAUTHOR ~x~\n");
+
+        let found = find_extracted_mod_root(&root.0, "d0questpack.tp2", &[], None);
+
+        assert_eq!(found, Ok(root.0.join("d0questpack")));
+    }
 }

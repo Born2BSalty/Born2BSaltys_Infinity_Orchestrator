@@ -8,6 +8,7 @@ use eframe::egui;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 
 use crate::ui::orchestrator::widgets::icon_button::paint_close_icon;
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_window_title};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, REDESIGN_STATUSBAR_HEIGHT_PX,
     ThemePalette, redesign_border_strong, redesign_error, redesign_error_emphasis, redesign_info,
@@ -32,6 +33,12 @@ const TTL_SUCCESS: f64 = 3.0;
 const TTL_INFO: f64 = 3.0;
 const TTL_WARNING: f64 = 4.0;
 
+const TOAST_PREVIEW_LINES: usize = 6;
+const HISTORY_PREVIEW_LINES: usize = 3;
+const PREVIEW_LINE_CHARS: usize = 160;
+const TOAST_MAX_ROWS: usize = 8;
+const HISTORY_MAX_ROWS: usize = 4;
+
 pub const KIND_PROGRESS: u32 = 0;
 pub const KIND_CUSTOM: u32 = 1;
 
@@ -42,11 +49,91 @@ pub struct NotificationRecord {
     pub added_at: Instant,
 }
 
+#[derive(Clone)]
+struct ViewAllRequest {
+    kind: ToastKind,
+    text: String,
+}
+
+fn view_all_request_id() -> egui::Id {
+    egui::Id::new("notification_view_all_request")
+}
+
+struct TextPreview {
+    text: String,
+    hidden_lines: usize,
+    truncated: bool,
+}
+
+fn preview_text(full: &str, max_lines: usize, max_chars: usize) -> TextPreview {
+    let full = full.trim_end_matches('\n');
+    let all_lines: Vec<&str> = full.split('\n').collect();
+    let total_lines = all_lines.len();
+    let mut cut_any_line = false;
+    let mut kept_lines: Vec<String> = Vec::new();
+    for line in all_lines.into_iter().take(max_lines) {
+        let char_count = line.chars().count();
+        if char_count > max_chars {
+            cut_any_line = true;
+            let cut: String = line.chars().take(max_chars.saturating_sub(1)).collect();
+            kept_lines.push(format!("{cut}\u{2026}"));
+        } else {
+            kept_lines.push(line.to_string());
+        }
+    }
+    let hidden_lines = total_lines.saturating_sub(kept_lines.len());
+    let truncated = hidden_lines > 0 || cut_any_line;
+    TextPreview {
+        text: kept_lines.join("\n"),
+        hidden_lines,
+        truncated,
+    }
+}
+
+fn preview_galley(
+    ui: &egui::Ui,
+    text: &str,
+    max_rows: usize,
+    width: f32,
+    size: f32,
+    color: egui::Color32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple(
+        text.to_string(),
+        egui::FontId::new(size, egui::FontFamily::Name("poppins_medium".into())),
+        color,
+        width,
+    );
+    job.wrap.overflow_character = Some('\u{2026}');
+    job.wrap.max_rows = max_rows;
+    ui.fonts(|f| f.layout_job(job))
+}
+
+fn lines_hidden(preview: &TextPreview, galley: &egui::Galley) -> usize {
+    if !galley.elided {
+        return preview.hidden_lines;
+    }
+    let row_breaks = galley
+        .rows
+        .iter()
+        .rev()
+        .skip(1)
+        .filter(|row| row.ends_with_newline)
+        .count();
+    hidden_after_row_breaks(preview, row_breaks)
+}
+
+fn hidden_after_row_breaks(preview: &TextPreview, row_breaks: usize) -> usize {
+    let kept_lines = preview.text.split('\n').count();
+    preview.hidden_lines + kept_lines.saturating_sub(row_breaks + 1)
+}
+
 #[derive(Default)]
 pub struct NotificationManager {
     pending: Vec<(ToastKind, String, bool)>,
     history: VecDeque<NotificationRecord>,
     pub history_open: bool,
+    view_all: Option<ViewAllRequest>,
 }
 
 impl NotificationManager {
@@ -131,6 +218,19 @@ impl NotificationManager {
         }
 
         toasts.show(ctx);
+
+        let id = view_all_request_id();
+        let request = ctx.data_mut(|d| {
+            let value = d.get_temp::<ViewAllRequest>(id);
+            if value.is_some() {
+                d.remove::<ViewAllRequest>(id);
+            }
+            value
+        });
+        if let Some(request) = request {
+            self.view_all = Some(request);
+        }
+        self.render_view_all_window(ctx, palette);
     }
 
     #[must_use]
@@ -178,6 +278,7 @@ impl NotificationManager {
                             palette,
                             &self.history,
                             &mut self.history_open,
+                            &mut self.view_all,
                         );
                     })
                     .response
@@ -188,6 +289,85 @@ impl NotificationManager {
             self.history_open = false;
         }
     }
+
+    fn render_view_all_window(&mut self, ctx: &egui::Context, palette: ThemePalette) {
+        let Some(request) = self.view_all.as_ref() else {
+            return;
+        };
+
+        let title = match request.kind {
+            ToastKind::Success => "Success",
+            ToastKind::Info => "Info",
+            ToastKind::Warning => "Warning",
+            ToastKind::Error | ToastKind::Custom(_) => "Error",
+        };
+        let text = request.text.as_str();
+
+        let mut open = true;
+        let mut close_clicked = false;
+        let max_h = (ctx.screen_rect().height() * 0.6).max(120.0);
+        egui::Window::new(redesign_window_title(palette, title))
+            .id(egui::Id::new("notification_view_all_window"))
+            .collapsible(false)
+            .resizable(true)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .default_width(560.0)
+            .order(egui::Order::Foreground)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(max_h)
+                    .min_scrolled_height(max_h)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(text)
+                                    .size(12.0)
+                                    .family(egui::FontFamily::Name("poppins_medium".into()))
+                                    .color(redesign_text_primary(palette)),
+                            )
+                            .selectable(true)
+                            .wrap(),
+                        );
+                    });
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if redesign_btn(
+                            ui,
+                            palette,
+                            "Close",
+                            BtnOpts {
+                                primary: true,
+                                small: true,
+                                ..Default::default()
+                            },
+                        )
+                        .clicked()
+                        {
+                            close_clicked = true;
+                        }
+                        if redesign_btn(
+                            ui,
+                            palette,
+                            "Copy",
+                            BtnOpts {
+                                small: true,
+                                ..Default::default()
+                            },
+                        )
+                        .clicked()
+                        {
+                            ui.ctx().copy_text(text.to_string());
+                        }
+                    });
+                });
+            });
+
+        if !open || close_clicked {
+            self.view_all = None;
+        }
+    }
 }
 
 fn render_history_popup_body(
@@ -195,6 +375,7 @@ fn render_history_popup_body(
     palette: ThemePalette,
     history: &VecDeque<NotificationRecord>,
     history_open: &mut bool,
+    view_all: &mut Option<ViewAllRequest>,
 ) {
     ui.horizontal(|ui| {
         ui.label(
@@ -227,7 +408,7 @@ fn render_history_popup_body(
         );
     } else {
         for record in history.iter().rev() {
-            render_history_row(ui, record, palette);
+            render_history_row(ui, record, palette, view_all);
             ui.add_space(4.0);
         }
     }
@@ -294,17 +475,36 @@ fn render_custom_toast(
                 render_toast_icon(ui, toast.kind, accent);
                 let gap = ui.spacing().item_spacing.x;
                 let label_w = (ui.available_width() - CLOSE_BTN_SIZE.x - gap - gap).max(0.0);
+                let kind = toast.kind;
+                let toast_ctx = ui.ctx().clone();
+                let preview =
+                    preview_text(toast.text.text(), TOAST_PREVIEW_LINES, PREVIEW_LINE_CHARS);
                 ui.allocate_ui_with_layout(
                     egui::vec2(label_w, CLOSE_BTN_SIZE.y),
                     egui::Layout::top_down(egui::Align::LEFT),
                     |ui| {
                         ui.set_min_width(label_w);
-                        ui.label(
-                            egui::RichText::new(toast.text.text())
-                                .size(12.0)
-                                .family(egui::FontFamily::Name("poppins_medium".into()))
-                                .color(text_color),
+                        let galley = preview_galley(
+                            ui,
+                            &preview.text,
+                            TOAST_MAX_ROWS,
+                            label_w,
+                            12.0,
+                            text_color,
                         );
+                        let elided = galley.elided;
+                        let hidden = lines_hidden(&preview, &galley);
+                        ui.label(galley);
+                        if preview.truncated || elided {
+                            render_preview_footer(ui, palette, 11.0, text_color, hidden, || {
+                                let id = view_all_request_id();
+                                let request = ViewAllRequest {
+                                    kind,
+                                    text: toast.text.text().to_string(),
+                                };
+                                toast_ctx.data_mut(|d| d.insert_temp(id, request));
+                            });
+                        }
                     },
                 );
                 let (close_rect, close_resp) =
@@ -339,6 +539,48 @@ fn render_custom_toast(
     outer
 }
 
+fn render_preview_footer(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    size: f32,
+    view_all_color: egui::Color32,
+    hidden_lines: usize,
+    mut on_view_all: impl FnMut(),
+) {
+    ui.horizontal(|ui| {
+        if hidden_lines > 0 {
+            ui.label(
+                egui::RichText::new(format!("…and {hidden_lines} more"))
+                    .size(size)
+                    .color(redesign_text_muted(palette)),
+            );
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let resp = ui.add(
+                egui::Label::new(
+                    egui::RichText::new("View all")
+                        .size(size)
+                        .color(view_all_color),
+                )
+                .sense(egui::Sense::click()),
+            );
+            if resp.hovered() {
+                let y = resp.rect.bottom() - 1.0;
+                ui.painter().line_segment(
+                    [
+                        egui::pos2(resp.rect.left(), y),
+                        egui::pos2(resp.rect.right(), y),
+                    ],
+                    egui::Stroke::new(1.0_f32, view_all_color),
+                );
+            }
+            if resp.clicked() {
+                on_view_all();
+            }
+        });
+    });
+}
+
 fn render_toast_icon(ui: &mut egui::Ui, kind: ToastKind, accent: egui::Color32) {
     match kind {
         ToastKind::Success => {
@@ -364,7 +606,12 @@ fn render_toast_icon(ui: &mut egui::Ui, kind: ToastKind, accent: egui::Color32) 
     }
 }
 
-fn render_history_row(ui: &mut egui::Ui, record: &NotificationRecord, palette: ThemePalette) {
+fn render_history_row(
+    ui: &mut egui::Ui,
+    record: &NotificationRecord,
+    palette: ThemePalette,
+    view_all: &mut Option<ViewAllRequest>,
+) {
     let accent = accent_color_for(record.kind, palette);
     let now = chrono::Utc::now();
     let elapsed = record.added_at.elapsed();
@@ -380,17 +627,38 @@ fn render_history_row(ui: &mut egui::Ui, record: &NotificationRecord, palette: T
         let gap = ui.spacing().item_spacing.x;
         let ts_w = 52.0_f32;
         let msg_w = (ui.available_width() - ts_w - gap - gap).max(0.0);
+        let preview = preview_text(&record.text, HISTORY_PREVIEW_LINES, PREVIEW_LINE_CHARS);
         ui.allocate_ui_with_layout(
             egui::vec2(msg_w, ICON_SIZE),
             egui::Layout::top_down(egui::Align::LEFT),
             |ui| {
                 ui.set_min_width(msg_w);
-                ui.label(
-                    egui::RichText::new(&record.text)
-                        .size(11.0)
-                        .family(egui::FontFamily::Name("poppins_medium".into()))
-                        .color(redesign_text_primary(palette)),
+                let galley = preview_galley(
+                    ui,
+                    &preview.text,
+                    HISTORY_MAX_ROWS,
+                    msg_w,
+                    11.0,
+                    redesign_text_primary(palette),
                 );
+                let elided = galley.elided;
+                let hidden = lines_hidden(&preview, &galley);
+                ui.label(galley);
+                if preview.truncated || elided {
+                    render_preview_footer(
+                        ui,
+                        palette,
+                        10.0,
+                        redesign_text_primary(palette),
+                        hidden,
+                        || {
+                            *view_all = Some(ViewAllRequest {
+                                kind: record.kind,
+                                text: record.text.clone(),
+                            });
+                        },
+                    );
+                }
             },
         );
         ui.allocate_ui_with_layout(
@@ -582,5 +850,65 @@ mod tests {
                 "{kind:?} must have non-zero initial progress (finite TTL)"
             );
         }
+    }
+
+    #[test]
+    fn preview_keeps_short_text_whole() {
+        let full = "line one\nline two\nline three";
+        let preview = preview_text(full, 6, 160);
+        assert_eq!(preview.text, full);
+        assert_eq!(preview.hidden_lines, 0);
+        assert!(!preview.truncated);
+    }
+
+    #[test]
+    fn preview_hides_lines_past_the_cap() {
+        let full = (0..45)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let preview = preview_text(&full, 6, 160);
+        assert_eq!(preview.text.split('\n').count(), 6);
+        assert_eq!(preview.hidden_lines, 39);
+        assert!(preview.truncated);
+    }
+
+    #[test]
+    fn hidden_count_includes_preview_lines_the_row_cap_cut() {
+        let full = (0..45)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let preview = preview_text(&full, 6, 160);
+        assert_eq!(hidden_after_row_breaks(&preview, 2), 42);
+        assert_eq!(hidden_after_row_breaks(&preview, 5), 39);
+    }
+
+    #[test]
+    fn preview_cuts_a_long_line_with_an_ellipsis() {
+        let full = "a".repeat(400);
+        let preview = preview_text(&full, 6, 160);
+        assert_eq!(preview.text.chars().count(), 160);
+        assert!(preview.text.ends_with('\u{2026}'));
+        assert_eq!(preview.hidden_lines, 0);
+        assert!(preview.truncated);
+    }
+
+    #[test]
+    fn preview_counts_chars_not_bytes() {
+        let full = "é".repeat(200);
+        let preview = preview_text(&full, 6, 160);
+        let chars: Vec<char> = preview.text.chars().collect();
+        assert_eq!(chars.len(), 160);
+        assert!(chars[..159].iter().all(|&c| c == 'é'));
+        assert_eq!(chars[159], '\u{2026}');
+    }
+
+    #[test]
+    fn preview_ignores_a_trailing_newline() {
+        let full = "one\ntwo\nthree\nfour\nfive\nsix\n";
+        let preview = preview_text(full, 6, 160);
+        assert_eq!(preview.hidden_lines, 0);
+        assert!(!preview.truncated);
     }
 }

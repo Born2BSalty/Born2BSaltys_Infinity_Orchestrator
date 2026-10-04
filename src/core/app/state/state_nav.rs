@@ -93,6 +93,7 @@ impl WizardState {
             modlist_import_preview_mod_configs: String::new(),
             modlist_share_name: None,
             modlist_share_author: None,
+            modlist_share_description: None,
             modlist_share_forked_from: Vec::new(),
             modlist_auto_build_active: false,
             modlist_auto_build_waiting_for_install: false,
@@ -146,16 +147,19 @@ impl WizardState {
         &mut self,
         name: Option<String>,
         author: Option<String>,
+        description: Option<String>,
         forked_from: Vec<crate::app::modlist_share::ForkAncestor>,
     ) {
         self.modlist_share_name = normalized_optional_text(name);
         self.modlist_share_author = normalized_optional_text(author);
+        self.modlist_share_description = normalized_optional_text(description);
         self.modlist_share_forked_from = forked_from;
     }
 
     pub(crate) fn clear_modlist_share_provenance(&mut self) {
         self.modlist_share_name = None;
         self.modlist_share_author = None;
+        self.modlist_share_description = None;
         self.modlist_share_forked_from.clear();
     }
 }

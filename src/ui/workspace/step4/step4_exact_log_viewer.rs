@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 
 use eframe::egui;
 
+use crate::app::game_authority;
 use crate::app::state::Step3ItemState;
 use crate::app::step4_action::Step4Action;
 use crate::app::step5::log_files::{SourceLogInfo, source_log_infos};
@@ -50,10 +51,11 @@ pub fn render(
 }
 
 fn active_log_tag(orchestrator: &OrchestratorApp) -> &'static str {
-    match orchestrator.wizard_state.step1.game_install.as_str() {
+    let game_install = orchestrator.wizard_state.step1.game_install.as_str();
+    match game_install {
         "BG2EE" => "bg2ee",
         "EET" if orchestrator.wizard_state.step3.active_game_tab == "BG2EE" => "bg2ee",
-        _ => "bgee",
+        _ => game_authority::log_source_subdir(game_authority::first_slot_tab(game_install)),
     }
 }
 
@@ -239,14 +241,17 @@ mod tests {
             match game {
                 "BG2EE" => "bg2ee",
                 "EET" if tab == "BG2EE" => "bg2ee",
-                _ => "bgee",
+                _ => crate::app::game_authority::log_source_subdir(
+                    crate::app::game_authority::first_slot_tab(game),
+                ),
             }
         };
         assert_eq!(resolve("BG2EE", "BGEE"), "bg2ee");
         assert_eq!(resolve("EET", "BG2EE"), "bg2ee");
         assert_eq!(resolve("EET", "BGEE"), "bgee");
         assert_eq!(resolve("BGEE", "BGEE"), "bgee");
-        assert_eq!(resolve("IWDEE", "BGEE"), "bgee");
+        assert_eq!(resolve("IWDEE", "BGEE"), "iwdee");
+        assert_eq!(resolve("IWDEE", "IWDEE"), "iwdee");
     }
 
     #[test]

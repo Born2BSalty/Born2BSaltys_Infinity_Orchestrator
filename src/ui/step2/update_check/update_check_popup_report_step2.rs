@@ -3,7 +3,6 @@
 
 use crate::app::state::WizardState;
 use crate::ui::step2::state_step2::applied_weidu_log_has_pending_downloads;
-use crate::ui::step2::update_check_popup_lists_step2::pending_log_labels;
 
 #[derive(Clone, Copy)]
 struct PopupReportModes<Flag = bool> {
@@ -13,7 +12,7 @@ struct PopupReportModes<Flag = bool> {
     hybrid_source_pending: Flag,
 }
 
-pub(super) fn build_popup_report(
+pub(crate) fn build_popup_report(
     state: &WizardState,
     exact_log_mode: bool,
     exact_log_good_to_go: bool,
@@ -359,4 +358,13 @@ fn append_report_section(lines: &mut Vec<String>, title: &str, values: &[String]
     } else {
         lines.extend(values.iter().cloned());
     }
+}
+
+fn pending_log_labels(state: &WizardState) -> Vec<String> {
+    state
+        .step2
+        .log_pending_downloads
+        .iter()
+        .map(|pending| pending.label.clone())
+        .collect()
 }

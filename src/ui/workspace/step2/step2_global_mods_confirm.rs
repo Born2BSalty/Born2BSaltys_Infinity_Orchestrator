@@ -11,6 +11,7 @@ pub const fn global_mods_scan_confirm<'a>() -> ConfirmDialog<'a> {
         body: "Rescanning with a different mods source can drop selected components \
                not present in the new source.",
         confirm_label: "Scan anyway",
+        cancel_label: "Cancel",
         danger: false,
     }
 }

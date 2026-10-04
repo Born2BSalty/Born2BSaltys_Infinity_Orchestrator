@@ -650,7 +650,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(ArchiveIndex::load(&archive_dir).archives.is_empty());
+        assert_eq!(ArchiveIndex::load(&archive_dir).archives.len(), 0);
         assert!(
             InstallArchiveLock::load(&dest.to_string_lossy())
                 .resolved

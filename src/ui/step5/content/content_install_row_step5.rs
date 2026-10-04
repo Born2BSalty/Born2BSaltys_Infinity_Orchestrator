@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::app::state::WizardState;
 use crate::app::step5::install_flow::step3_install_block_reason;
 use crate::app::terminal::EmbeddedTerminal;
-use crate::ui::orchestrator::widgets::{BtnOpts, clipboard, redesign_btn, redesign_btn_glyph};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_glyph};
 use crate::ui::shared::redesign_tokens::ThemePalette;
 use crate::ui::step5::action_step5::Step5Action;
 use crate::ui::step5::content_step5::Step5RenderCtx;
@@ -23,30 +23,14 @@ pub(crate) fn render_install_row(
     let mut action: Option<Step5Action> = None;
     ui.horizontal_wrapped(|ui| {
         render_progress_label(ui, state, ctx.palette);
-        action = render_install_control(
-            ui,
-            state,
-            &mut terminal,
-            terminal_error,
-            ctx.dev_mode,
-            ctx.palette,
-        );
-        render_step5_menus(
-            ui,
-            state,
-            &mut terminal,
-            ctx.dev_mode,
-            ctx.exe_fingerprint,
-            ctx.palette,
-        );
+        action = render_install_control(ui, state, &terminal, terminal_error, ctx.palette);
+        render_step5_menus(ui, state, &mut terminal, ctx.palette);
         if ctx.dev_mode {
             crate::ui::step5::prompt_answers_step5::render_button(ui, state, ctx.palette);
         }
-        render_export_modlist_button(ui, state);
         render_console_filters(ui, console_view);
     });
     crate::ui::step5::content_cancel_step5::render_cancel_confirm(ui, state, terminal, ctx.palette);
-    render_modlist_share_popup(ui, state, ctx.palette);
     action
 }
 
@@ -81,18 +65,14 @@ fn render_progress_label(ui: &mut egui::Ui, state: &WizardState, palette: ThemeP
 fn render_install_control(
     ui: &mut egui::Ui,
     state: &mut WizardState,
-    terminal: &mut Option<&mut EmbeddedTerminal>,
+    terminal: &Option<&mut EmbeddedTerminal>,
     terminal_error: Option<&str>,
-    dev_mode: bool,
     palette: ThemePalette,
 ) -> Option<Step5Action> {
     let can_install = terminal.is_some() && terminal_error.is_none();
-    let diagnostics_ready = crate::ui::step5::menus_step5::diagnostics_ready_for_dev(state);
     let install_block_reason = step3_install_block_reason(state);
-    let install_allowed = can_install
-        && !state.step5.prep_running
-        && install_block_reason.is_none()
-        && (!dev_mode || diagnostics_ready);
+    let install_allowed =
+        can_install && !state.step5.prep_running && install_block_reason.is_none();
 
     if state.step5.install_running {
         render_cancel_button(ui, state, can_install, palette);
@@ -129,27 +109,8 @@ fn render_install_control(
             ..Default::default()
         },
     );
-    let install_resp = install_hover_response(
-        install_resp,
-        install_block_reason.as_deref(),
-        dev_mode,
-        diagnostics_ready,
-    );
-    let mut action = None;
-    if install_resp.clicked() {
-        if dev_mode && !diagnostics_ready {
-            state.step5.last_status_text =
-                "Dev mode install blocked: enable diagnostics (Full Debug + Raw Output + RUST_LOG DEBUG/TRACE)."
-                    .to_string();
-            if let Some(term) = terminal.as_deref_mut() {
-                term.append_marker(
-                    "Dev mode install blocked: enable diagnostics (Full Debug + Raw Output + RUST_LOG DEBUG/TRACE).",
-                );
-            }
-        } else {
-            action = Some(Step5Action::StartInstall);
-        }
-    }
+    let install_resp = install_hover_response(install_resp, install_block_reason.as_deref());
+    let action = install_resp.clicked().then_some(Step5Action::StartInstall);
     if let Some(reason) = install_block_reason {
         ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_MD);
         ui.label(crate::ui::shared::typography_global::weak(reason));
@@ -195,13 +156,9 @@ const fn install_button_label(state: &WizardState) -> (&'static str, bool) {
 fn install_hover_response(
     response: egui::Response,
     install_block_reason: Option<&str>,
-    dev_mode: bool,
-    diagnostics_ready: bool,
 ) -> egui::Response {
     if let Some(reason) = install_block_reason {
         response.on_hover_text(reason)
-    } else if dev_mode && !diagnostics_ready {
-        response.on_hover_text(crate::ui::shared::tooltip_global::STEP5_DEV_MODE_DIAG_REQUIRED)
     } else {
         response.on_hover_text(crate::ui::shared::tooltip_global::STEP5_START_INSTALL)
     }
@@ -211,39 +168,9 @@ fn render_step5_menus(
     ui: &mut egui::Ui,
     state: &mut WizardState,
     terminal: &mut Option<&mut EmbeddedTerminal>,
-    dev_mode: bool,
-    exe_fingerprint: &str,
     palette: ThemePalette,
 ) {
     crate::ui::step5::menus_step5::render_actions_menu(ui, state, terminal.as_deref_mut(), palette);
-    crate::ui::step5::menus_step5::render_diagnostics_menu(
-        ui,
-        state,
-        terminal.as_deref(),
-        dev_mode,
-        exe_fingerprint,
-        palette,
-    );
-}
-
-fn render_export_modlist_button(ui: &mut egui::Ui, state: &mut WizardState) {
-    if state.step5.has_run_once
-        && !state.step5.install_running
-        && state.step5.last_exit_code == Some(0)
-        && ui.button("Export Modlist…").clicked()
-    {
-        match crate::app::modlist_share::export_modlist_share_code(state) {
-            Ok(code) => {
-                state.step5.modlist_share_code = code;
-                state.step5.modlist_share_error.clear();
-            }
-            Err(err) => {
-                state.step5.modlist_share_code.clear();
-                state.step5.modlist_share_error = err;
-            }
-        }
-        state.step5.modlist_share_window_open = true;
-    }
 }
 
 fn render_console_filters(ui: &mut egui::Ui, console_view: &mut Step5ConsoleViewState) {
@@ -281,54 +208,4 @@ fn render_console_filters(ui: &mut egui::Ui, console_view: &mut Step5ConsoleView
     }
     ui.checkbox(&mut console_view.auto_scroll, "Auto-scroll")
         .on_hover_text(crate::ui::shared::tooltip_global::STEP5_AUTO_SCROLL);
-}
-
-fn render_modlist_share_popup(ui: &egui::Ui, state: &mut WizardState, palette: ThemePalette) {
-    let mut open = state.step5.modlist_share_window_open;
-    if !open {
-        return;
-    }
-    egui::Window::new("Export Modlist Share Code")
-        .open(&mut open)
-        .resizable(true)
-        .default_size(egui::vec2(720.0, 360.0))
-        .show(ui.ctx(), |ui| {
-            if !state.step5.modlist_share_error.trim().is_empty() {
-                ui.label(
-                    crate::ui::shared::typography_global::plain(&state.step5.modlist_share_error)
-                        .color(crate::ui::shared::redesign_tokens::redesign_error(palette)),
-                );
-            }
-            ui.label(
-                "Share this text with another BIO user. It contains no game files or mod archives.",
-            );
-            ui.add_space(crate::ui::shared::layout_tokens_global::SPACE_XS);
-            let text_height = (ui.available_height() - 32.0).max(120.0);
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .max_height(text_height)
-                .show(ui, |ui| {
-                    ui.add_sized(
-                        [ui.available_width(), text_height],
-                        egui::TextEdit::multiline(&mut state.step5.modlist_share_code)
-                            .code_editor(),
-                    );
-                });
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(
-                        !state.step5.modlist_share_code.trim().is_empty(),
-                        egui::Button::new("Copy"),
-                    )
-                    .clicked()
-                {
-                    clipboard::copy(ui.ctx(), state.step5.modlist_share_code.clone());
-                    state.step5.last_status_text = "Modlist share code copied".to_string();
-                }
-                if ui.button("Close").clicked() {
-                    state.step5.modlist_share_window_open = false;
-                }
-            });
-        });
-    state.step5.modlist_share_window_open = open && state.step5.modlist_share_window_open;
 }

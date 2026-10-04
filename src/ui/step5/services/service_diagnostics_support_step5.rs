@@ -16,6 +16,15 @@ pub(crate) const fn apply_dev_defaults(state: &mut WizardState, dev_mode: bool) 
     }
 }
 
+pub(crate) const fn apply_diagnostic_log_level(
+    step1: &mut Step1State,
+    diagnostic_mode: bool,
+    launched_with_dev_flag: bool,
+) {
+    step1.rust_log_trace = launched_with_dev_flag;
+    step1.rust_log_debug = diagnostic_mode && !launched_with_dev_flag;
+}
+
 pub(crate) fn export_diagnostics(
     state: &WizardState,
     terminal: Option<&EmbeddedTerminal>,
@@ -23,7 +32,9 @@ pub(crate) fn export_diagnostics(
     exe_fingerprint: &str,
 ) -> anyhow::Result<PathBuf> {
     if !dev_mode {
-        anyhow::bail!("Diagnostics export is only available in -d mode");
+        anyhow::bail!(
+            "Diagnostics export needs diagnostic mode. Turn it on in Settings > General."
+        );
     }
     let ctx = crate::ui::step5::diagnostics::DiagnosticsContext {
         dev_mode,
@@ -51,4 +62,45 @@ pub(crate) fn open_console_logs_folder() -> anyhow::Result<()> {
 
 pub(crate) fn open_last_log_file(step1: &Step1State) -> anyhow::Result<()> {
     Ok(crate::ui::step5::log_files::open_last_log_file(step1)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apply_diagnostic_log_level_off_clears_both_flags() {
+        let mut step1 = Step1State {
+            rust_log_debug: true,
+            rust_log_trace: true,
+            ..Default::default()
+        };
+        apply_diagnostic_log_level(&mut step1, false, false);
+        assert!(!step1.rust_log_debug);
+        assert!(!step1.rust_log_trace);
+    }
+
+    #[test]
+    fn apply_diagnostic_log_level_settings_on_selects_debug() {
+        let mut step1 = Step1State::default();
+        apply_diagnostic_log_level(&mut step1, true, false);
+        assert!(step1.rust_log_debug);
+        assert!(!step1.rust_log_trace);
+    }
+
+    #[test]
+    fn apply_diagnostic_log_level_launched_with_flag_selects_trace() {
+        let mut step1 = Step1State::default();
+        apply_diagnostic_log_level(&mut step1, false, true);
+        assert!(!step1.rust_log_debug);
+        assert!(step1.rust_log_trace);
+    }
+
+    #[test]
+    fn apply_diagnostic_log_level_flag_wins_over_settings() {
+        let mut step1 = Step1State::default();
+        apply_diagnostic_log_level(&mut step1, true, true);
+        assert!(!step1.rust_log_debug);
+        assert!(step1.rust_log_trace);
+    }
 }

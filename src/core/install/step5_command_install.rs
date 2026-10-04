@@ -42,10 +42,10 @@ pub(crate) fn build_install_invocation(config: &InstallCommandConfig) -> (String
     } else {
         args.push("normal".to_string());
         args.push("--game-directory".to_string());
-        let game_dir = if config.game_install == "BG2EE" {
-            &config.bg2ee_game_folder
-        } else {
-            &config.bgee_game_folder
+        let game_dir = match config.game_install.as_str() {
+            "BG2EE" => &config.bg2ee_game_folder,
+            "IWDEE" => &config.iwdee_game_folder,
+            _ => &config.bgee_game_folder,
         };
         args.push(game_dir.clone());
         args.push("--log-file".to_string());
@@ -62,4 +62,44 @@ pub(crate) fn build_install_invocation(config: &InstallCommandConfig) -> (String
     }
     append_common_args(config, &mut args);
     (installer, args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_install_invocation;
+    use crate::app::state::Step1State;
+    use crate::app::step5::command_config::build_install_command_config;
+
+    fn arg_value<'a>(args: &'a [String], key: &str) -> &'a str {
+        let index = args
+            .iter()
+            .position(|arg| arg == key)
+            .expect("arg key exists");
+        args.get(index + 1).expect("arg value exists")
+    }
+
+    #[test]
+    fn install_invocation_uses_each_games_source_folder() {
+        let step1 = Step1State {
+            bgee_game_folder: "/games/bgee".to_string(),
+            bg2ee_game_folder: "/games/bg2ee".to_string(),
+            iwdee_game_folder: "/games/iwdee".to_string(),
+            ..Step1State::default()
+        };
+        for (game, expected) in [
+            ("BGEE", "/games/bgee"),
+            ("BG2EE", "/games/bg2ee"),
+            ("IWDEE", "/games/iwdee"),
+        ] {
+            let mut step1 = step1.clone();
+            step1.game_install = game.to_string();
+            let config = build_install_command_config(&step1);
+            let (_program, args) = build_install_invocation(&config);
+            assert_eq!(
+                arg_value(&args, "--game-directory"),
+                expected,
+                "{game}: --game-directory must be its own source folder"
+            );
+        }
+    }
 }

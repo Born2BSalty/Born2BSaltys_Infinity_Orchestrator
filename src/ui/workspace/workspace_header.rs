@@ -10,6 +10,7 @@ use crate::registry::share_export::{self, ShareMeta};
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::fork_info_popup::{self, SelfNode};
+use crate::ui::orchestrator::widgets::help_button::{self, HelpPage};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
@@ -26,10 +27,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
     let palette = orchestrator.theme_palette;
 
     ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            render_title_row(ui, orchestrator, palette);
-            render_fork_subline(ui, orchestrator, palette);
-        });
+        render_title_row(ui, orchestrator, palette);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
             render_save_or_share_button(ui, orchestrator, palette);
@@ -38,11 +36,26 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
             {
                 orchestrator.workspace_view.fork_info_open = true;
             }
+            ui.add_space(8.0);
+            let created_from_mods = orchestrator.workspace_view.fork_meta.is_none();
+            let page =
+                help_page_for_step(orchestrator.workspace_view.current_step, created_from_mods);
+            help_button::render(ui, palette, page);
         });
     });
+    render_fork_subline(ui, orchestrator, palette);
 
     if orchestrator.workspace_view.fork_info_open {
         render_fork_info_popup(orchestrator, palette, ctx);
+    }
+}
+
+const fn help_page_for_step(step: WorkspaceStep, created_from_mods: bool) -> HelpPage {
+    match step {
+        WorkspaceStep::Step2 => HelpPage::Step2 { created_from_mods },
+        WorkspaceStep::Step3 => HelpPage::Step3,
+        WorkspaceStep::Step4 => HelpPage::Step4,
+        WorkspaceStep::Step5 => HelpPage::Step5,
     }
 }
 
@@ -191,7 +204,7 @@ fn render_fork_subline(ui: &mut egui::Ui, orchestrator: &OrchestratorApp, palett
         return;
     };
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         paint_inline_fork(ui, redesign_accent_deep(palette));
         ui.add_space(5.0);
@@ -238,7 +251,7 @@ fn render_save_or_share_button(
         let resp = redesign_btn(
             ui,
             palette,
-            "Share import code",
+            "Share this modlist",
             BtnOpts {
                 small: true,
                 primary: installed,
@@ -247,7 +260,7 @@ fn render_save_or_share_button(
             },
         )
         .on_hover_text(if installed {
-            "View and copy the import code for this modlist"
+            "Export a modlist file or copy the share code"
         } else {
             "Available after a successful install"
         });
@@ -286,7 +299,7 @@ fn render_save_or_share_button(
     }
 }
 
-fn save_draft(orchestrator: &mut OrchestratorApp) {
+pub(crate) fn save_draft(orchestrator: &mut OrchestratorApp) {
     let id = orchestrator.workspace_view.modlist_id.clone();
     if id.is_empty() {
         return;
@@ -320,6 +333,7 @@ fn save_draft(orchestrator: &mut OrchestratorApp) {
                 .insert(id.clone(), extracted);
             orchestrator.workspace_view.save_draft_flash_until =
                 Some(Instant::now() + Duration::from_millis(SAVE_FLASH_MS));
+            write_selection_counts(orchestrator, &id);
             rebake_share_code_after_save_draft(orchestrator, &id);
         }
         Err(err) => {
@@ -328,11 +342,31 @@ fn save_draft(orchestrator: &mut OrchestratorApp) {
     }
 }
 
+fn write_selection_counts(orchestrator: &mut OrchestratorApp, id: &str) {
+    let step2 = &orchestrator.wizard_state.step2;
+    if step2.is_scanning || (step2.bgee_mods.is_empty() && step2.bg2ee_mods.is_empty()) {
+        return;
+    }
+    let (mods, components) = crate::install_runtime::registry_transition::count_mods_and_components(
+        &orchestrator.wizard_state,
+    );
+    let Some(entry) = orchestrator.registry.find_mut(id) else {
+        return;
+    };
+    entry.mod_count = mods;
+    entry.component_count = components;
+    orchestrator
+        .persistence_cycle
+        .mark_registry_dirty(Instant::now());
+}
+
 fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &str) {
     let Some(entry) = orchestrator.registry.find(id) else {
         return;
     };
-    let meta = ShareMeta::from_entry(entry, false);
+    let meta = ShareMeta::from_entry(entry, false).with_archive_meta(
+        share_export::archive_meta_for_draft(&orchestrator.wizard_state),
+    );
     match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
         Ok(code) => {
             if let Some(entry_mut) = orchestrator.registry.find_mut(id) {
@@ -348,6 +382,15 @@ fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &s
                 "save draft: share code re-bake for {id} skipped ({err}); \
                  existing code retained"
             );
+            if let Some(entry_mut) = orchestrator.registry.find_mut(id)
+                && let Some(code) = entry_mut.latest_share_code.clone()
+                && let Ok(stamped) = share_export::set_packed_identity(&code, &meta)
+            {
+                entry_mut.latest_share_code = Some(stamped);
+                orchestrator
+                    .persistence_cycle
+                    .mark_registry_dirty(Instant::now());
+            }
         }
     }
 }
@@ -398,7 +441,7 @@ fn render_fork_info_popup(
 fn pencil_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Response {
     let pad = 4.0;
     let ink = 13.0;
-    let desired = egui::vec2(ink + pad * 2.0, ink + pad * 2.0);
+    let desired = egui::vec2(f32::mul_add(pad, 2.0, ink), f32::mul_add(pad, 2.0, ink));
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
     let color = if response.hovered() {
         redesign_text_primary(palette)
@@ -468,8 +511,8 @@ fn fork_badge(ui: &mut egui::Ui, palette: ThemePalette) {
     let gap = 5.0;
     let content_w = fork_w + gap + galley.size().x;
     let desired = egui::vec2(
-        content_w + pad_x * 2.0,
-        galley.size().y.max(fork_w) + pad_y * 2.0,
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, galley.size().y.max(fork_w)),
     );
     let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
@@ -508,7 +551,10 @@ fn fork_details_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respon
     let gap = 5.0;
     let content_w = fork_w + gap + galley.size().x;
     let content_h = galley.size().y.max(fork_w);
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
     let pressed = response.is_pointer_button_down_on();
     let rect = if pressed {
@@ -556,7 +602,10 @@ fn saved_flash_button(ui: &mut egui::Ui, palette: ThemePalette) -> egui::Respons
         .layout_no_wrap(prose.to_string(), prose_font.clone(), color);
     let content_w = g.size().x + p.size().x;
     let content_h = g.size().y.max(p.size().y);
-    let desired = egui::vec2(content_w + pad_x * 2.0, content_h + pad_y * 2.0);
+    let desired = egui::vec2(
+        f32::mul_add(pad_x, 2.0, content_w),
+        f32::mul_add(pad_y, 2.0, content_h),
+    );
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
@@ -626,24 +675,13 @@ fn paint_inline_fork(ui: &mut egui::Ui, color: egui::Color32) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::registry::model::{Game, ModlistEntry, ModlistRegistry, ModlistState};
-    use crate::registry::store::RegistryStore;
+    use crate::registry::model::{Game, ModlistEntry, ModlistState};
     use egui_toast::ToastKind;
 
-    static HDRTEST_TMP: AtomicU64 = AtomicU64::new(0);
-
     fn orch_with_entry(name: &str) -> OrchestratorApp {
-        let mut app = OrchestratorApp::new(false);
-        let tmp = std::env::temp_dir().join(format!(
-            "bio_hdrtest_{}_{}.json",
-            std::process::id(),
-            HDRTEST_TMP.fetch_add(1, Ordering::Relaxed)
-        ));
-        app.registry_store = RegistryStore::new_with_path(tmp);
-        app.registry = ModlistRegistry::default();
+        let mut app = OrchestratorApp::new_isolated_for_test("hdrtest");
         app.registry.entries.push(ModlistEntry {
             id: "HDRTEST00000".to_string(),
             name: name.to_string(),
@@ -751,6 +789,38 @@ mod tests {
     }
 
     #[test]
+    fn rebake_stamps_the_entry_identity_when_the_full_bake_cannot_run() {
+        let code = crate::app::modlist_share::encode_share_payload_text(
+            r#"{
+                "format_version": 1,
+                "game_install": "EET",
+                "install_mode": "start_from_scratch",
+                "name": "EET Essentials",
+                "author": "BIO Team",
+                "weidu_logs": { "bgee": "~MOD/MOD.TP2~ #0 #0 // A component" }
+            }"#,
+        )
+        .expect("mint code");
+        let mut app = orch_with_entry_and_code("EET Essentials +++", &code);
+        app.registry.find_mut("HDRTEST00000").unwrap().author = Some("Xgatt".to_string());
+
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+
+        let stamped = app
+            .registry
+            .find("HDRTEST00000")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("code kept");
+        let preview = crate::app::modlist_share::preview_modlist_share_code(&stamped)
+            .expect("stamped code decodes");
+        assert_eq!(preview.name.as_deref(), Some("EET Essentials +++"));
+        assert_eq!(preview.author.as_deref(), Some("Xgatt"));
+        assert_eq!(preview.bgee_entries, 1);
+    }
+
+    #[test]
     fn rebake_is_noop_for_missing_entry() {
         let mut app = orch_with_entry_and_code("X", "BIO-MODLIST-V1:NOTOUCH");
 
@@ -765,5 +835,169 @@ mod tests {
             Some("BIO-MODLIST-V1:NOTOUCH"),
             "a rebake for a missing id must not affect other entries"
         );
+    }
+
+    fn counted_mod(tp_file: &str) -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: format!("{tp_file}/{tp_file}.tp2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: vec![crate::app::state::Step2ComponentState {
+                component_id: "0".to_string(),
+                label: "0".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: true,
+                selected_order: Some(1),
+            }],
+        }
+    }
+
+    struct AmbientRestore(Option<std::path::PathBuf>);
+
+    impl Drop for AmbientRestore {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
+
+    #[test]
+    fn save_draft_rebake_carries_the_recorded_archive_hashes() {
+        use crate::app::app_step2_update_source_refs::{
+            InstalledArchiveRecord, ModSourceRefsFile, installed_source_refs_path,
+        };
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient = AmbientRestore(crate::app::mod_downloads::active_modlist_dir());
+        let mut app = orch_with_entry("hashes");
+        crate::install_runtime::active_modlist_source_path::set_ambient_for_modlist("HDRTEST00000");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![counted_mod("alpha")];
+        app.wizard_state.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "ALPHA/ALPHA.TP2".to_string(),
+            component_id: "0".to_string(),
+            mod_name: "alpha".to_string(),
+            component_label: "0".to_string(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 1,
+            block_id: String::new(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+        let record = InstalledArchiveRecord {
+            name: "alpha__primary__v19.zip".to_string(),
+            size: 1234,
+            hash: "0123456789abcdef0123456789abcdef".to_string(),
+            last_modified: None,
+            etag: None,
+        };
+        let mut refs_file = ModSourceRefsFile::default();
+        refs_file
+            .archives
+            .insert("alpha".to_string(), record.clone());
+        let refs_path = installed_source_refs_path();
+        assert!(
+            refs_path.starts_with(app.isolated_test_config_root.as_ref().unwrap()),
+            "the refs file must sit under the isolated config root: {}",
+            refs_path.display()
+        );
+        std::fs::create_dir_all(refs_path.parent().unwrap()).unwrap();
+        std::fs::write(&refs_path, toml::to_string_pretty(&refs_file).unwrap()).unwrap();
+
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+
+        let code = app
+            .registry
+            .find("HDRTEST00000")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("the rebake must mint a share code");
+        let metas = share_export::decode_archive_meta(&code).unwrap();
+        assert_eq!(
+            metas,
+            vec![share_export::ArchiveMeta {
+                name: record.name,
+                size: record.size,
+                hash: record.hash,
+            }]
+        );
+    }
+
+    fn counts_of(app: &OrchestratorApp) -> (u32, u32) {
+        let entry = app.registry.find("HDRTEST00000").unwrap();
+        (entry.mod_count, entry.component_count)
+    }
+
+    #[test]
+    fn save_draft_writes_the_selection_counts() {
+        let mut app = orch_with_entry("counts");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![counted_mod("alpha"), counted_mod("beta")];
+
+        save_draft(&mut app);
+
+        let store_path = app.workspace_stores["HDRTEST00000"].path().to_path_buf();
+        assert!(
+            store_path.starts_with(std::env::temp_dir()),
+            "the workspace store must live under the isolated temp root: {}",
+            store_path.display()
+        );
+        assert!(
+            store_path.is_file(),
+            "save draft must write the workspace file"
+        );
+        assert_eq!(counts_of(&app), (2, 2));
+
+        app.wizard_state.step2.bgee_mods[1].components[0].checked = false;
+        save_draft(&mut app);
+
+        assert_eq!(counts_of(&app), (1, 1));
+    }
+
+    #[test]
+    fn save_draft_keeps_the_counts_while_the_tree_is_not_loaded() {
+        let mut app = orch_with_entry("counts_hold");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![counted_mod("alpha"), counted_mod("beta")];
+        save_draft(&mut app);
+        assert_eq!(counts_of(&app), (2, 2));
+
+        app.wizard_state.step2.is_scanning = true;
+        app.wizard_state.step3.bgee_items.clear();
+        save_draft(&mut app);
+        assert_eq!(counts_of(&app), (2, 2));
+
+        app.wizard_state.step2.is_scanning = false;
+        app.wizard_state.step2.bgee_mods.clear();
+        save_draft(&mut app);
+        assert_eq!(counts_of(&app), (2, 2));
     }
 }

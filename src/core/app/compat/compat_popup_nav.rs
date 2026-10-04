@@ -4,6 +4,7 @@
 use crate::app::compat_issue::CompatIssue;
 use crate::app::compat_popup_targets::issue_related_target;
 use crate::app::compat_step3_rules;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::selection_jump::{
     selected_step2_jump_target, step2_jump_to_target, step3_jump_to_target,
 };
@@ -162,27 +163,48 @@ pub(crate) fn jump_to_this(state: &mut WizardState) {
     state.step2.compat_popup_issue_override = None;
 }
 
-pub(crate) fn jump_to_related(state: &mut WizardState, issue: &CompatIssue) {
-    let Some(game_tab) = selected_game_tab(state) else {
-        return;
-    };
-    let Some((related_mod, related_component)) = issue_related_target(issue) else {
-        return;
-    };
-    step2_jump_to_target(state, &game_tab, &related_mod, related_component);
-    state.step2.active_game_tab.clone_from(&game_tab);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RelatedJumpOutcome {
+    LandedOnStep3,
+    LandedOnStep2,
+    HoppedToStep2,
+    NotInMods {
+        related_mod: String,
+        related_component: Option<u32>,
+    },
+}
+
+pub(crate) fn jump_to_related(
+    state: &mut WizardState,
+    issue: &CompatIssue,
+) -> Option<RelatedJumpOutcome> {
+    let game_tab = selected_game_tab(state)?;
+    let (related_mod, related_component) = issue_related_target(issue)?;
+    let on_step3 = state.current_step == 2;
+    let found = step2_jump_to_target(state, &game_tab, &related_mod, related_component);
+    if on_step3 && step3_jump_to_target(state, &game_tab, &related_mod, related_component) {
+        state.step2.active_game_tab.clone_from(&game_tab);
+        state.step2.jump_to_selected_requested = true;
+        state.current_step = 2;
+        refresh_popup_override(state);
+        return Some(RelatedJumpOutcome::LandedOnStep3);
+    }
+    if !found {
+        return Some(RelatedJumpOutcome::NotInMods {
+            related_mod,
+            related_component,
+        });
+    }
+    state.step2.active_game_tab = game_tab;
     state.step2.jump_to_selected_requested = true;
-    if state.current_step == 2 {
-        if step3_jump_to_target(state, &game_tab, &related_mod, related_component) {
-            state.current_step = 2;
-            refresh_popup_override(state);
-        } else {
-            state.current_step = 1;
-            state.step2.compat_popup_issue_override = None;
-        }
+    state.step2.search_query.clear();
+    state.current_step = 1;
+    state.step2.compat_popup_issue_override = None;
+    if on_step3 {
+        state.step2.compat_popup_open = false;
+        Some(RelatedJumpOutcome::HoppedToStep2)
     } else {
-        state.current_step = 1;
-        state.step2.compat_popup_issue_override = None;
+        Some(RelatedJumpOutcome::LandedOnStep2)
     }
 }
 
@@ -269,7 +291,7 @@ fn collect_step2_targets(
     game_tab: &str,
     filter: &str,
 ) -> Vec<PopupCompatTarget> {
-    let mods = if game_tab.eq_ignore_ascii_case("BGEE") {
+    let mods = if game_authority::slot_for_tab(game_tab) == GameSlot::First {
         &state.step2.bgee_mods
     } else {
         &state.step2.bg2ee_mods
@@ -304,13 +326,18 @@ fn collect_step3_targets(
     game_tab: &str,
     filter: &str,
 ) -> Vec<PopupCompatTarget> {
-    let (mods, items) = if game_tab.eq_ignore_ascii_case("BGEE") {
+    let (mods, items) = if game_authority::slot_for_tab(game_tab) == GameSlot::First {
         (&state.step2.bgee_mods, &state.step3.bgee_items)
     } else {
         (&state.step2.bg2ee_mods, &state.step3.bg2ee_items)
     };
-    let markers =
-        compat_step3_rules::collect_step3_compat_markers(&state.step1, game_tab, mods, items);
+    let markers = compat_step3_rules::collect_step3_compat_markers(
+        &state.step1,
+        game_tab,
+        mods,
+        items,
+        &state.step3.bgee_items,
+    );
     let mut out = Vec::<PopupCompatTarget>::new();
     for item in items.iter().filter(|item| !item.is_parent) {
         let key = compat_step3_rules::marker_key(item);
@@ -335,7 +362,7 @@ fn collect_step3_targets(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::state::{Step2ComponentState, Step2ModState};
+    use crate::app::state::{Step2ComponentState, Step2ModState, Step3ItemState};
 
     fn component(id: &str, checked: bool, kind: &str) -> Step2ComponentState {
         Step2ComponentState {
@@ -465,5 +492,152 @@ mod tests {
             }
             _ => panic!("expected a component selection"),
         }
+    }
+
+    #[test]
+    fn compat_popup_nav_routes_iwdee_to_the_first_container() {
+        let state = state_with(vec![component("1", true, "conflict")]);
+        let targets = collect_step2_targets(&state, "IWDEE", "All");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].tp_file, "mod.tp2");
+    }
+
+    fn plain_mod(tp_file: &str) -> Step2ModState {
+        Step2ModState {
+            name: tp_file.to_string(),
+            tp_file: tp_file.to_string(),
+            tp2_path: String::new(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    fn plain_row(mod_name: &str, component_id: &str, is_parent: bool) -> Step3ItemState {
+        Step3ItemState {
+            tp_file: format!("{mod_name}.tp2"),
+            component_id: component_id.to_string(),
+            mod_name: mod_name.to_string(),
+            component_label: String::new(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 0,
+            block_id: format!("{mod_name}::block0"),
+            is_parent,
+            parent_placeholder: false,
+        }
+    }
+
+    fn related_issue(related_mod: &str) -> CompatIssue {
+        CompatIssue {
+            kind: "conflict".to_string(),
+            related_mod: related_mod.to_string(),
+            related_component: None,
+            reason: String::new(),
+            source: String::new(),
+            raw_evidence: None,
+        }
+    }
+
+    fn state_seeded_on(current_step: usize) -> WizardState {
+        let mut state = WizardState {
+            current_step,
+            ..WizardState::default()
+        };
+        state.step2.active_game_tab = "BGEE".to_string();
+        state.step2.bgee_mods = vec![plain_mod("req.tp2"), plain_mod("dep.tp2")];
+        state.step2.selected = Some(Step2Selection::Mod {
+            game_tab: "BGEE".to_string(),
+            tp_file: "dep.tp2".to_string(),
+        });
+        state
+    }
+
+    #[test]
+    fn related_in_the_step3_order_lands_on_step3() {
+        let mut state = state_seeded_on(2);
+        state.step3.active_game_tab = "BGEE".to_string();
+        state.step3.bgee_items = vec![plain_row("req", "1", false)];
+        let issue = related_issue("req");
+
+        let outcome = jump_to_related(&mut state, &issue);
+
+        assert_eq!(outcome, Some(RelatedJumpOutcome::LandedOnStep3));
+        assert_eq!(state.current_step, 2);
+        assert_eq!(state.step3.bgee_selected, vec![0]);
+        assert!(state.step3.jump_to_selected_requested);
+    }
+
+    #[test]
+    fn related_only_among_the_mods_hops_from_step3() {
+        let mut state = state_seeded_on(2);
+        state.step3.active_game_tab = "BGEE".to_string();
+        state.step3.bgee_items = vec![plain_row("dep", "1", false)];
+        state.step2.search_query = "zzz".to_string();
+        state.step2.compat_popup_open = true;
+        let issue = related_issue("req");
+
+        let outcome = jump_to_related(&mut state, &issue);
+
+        assert_eq!(outcome, Some(RelatedJumpOutcome::HoppedToStep2));
+        match state.step2.selected.as_ref() {
+            Some(Step2Selection::Mod { game_tab, tp_file }) => {
+                assert_eq!(game_tab, "BGEE");
+                assert_eq!(tp_file, "req.tp2");
+            }
+            other => panic!("expected a mod selection, got {other:?}"),
+        }
+        assert!(state.step2.jump_to_selected_requested);
+        assert_eq!(state.step2.search_query.len(), 0);
+        assert_eq!(state.current_step, 1);
+        assert!(!state.step2.compat_popup_open);
+    }
+
+    #[test]
+    fn the_same_jump_on_step2_keeps_the_popup_open() {
+        let mut state = state_seeded_on(1);
+        state.step2.compat_popup_open = true;
+        let issue = related_issue("req");
+
+        let outcome = jump_to_related(&mut state, &issue);
+
+        assert_eq!(outcome, Some(RelatedJumpOutcome::LandedOnStep2));
+        assert_eq!(state.current_step, 1);
+        assert!(state.step2.compat_popup_open);
+    }
+
+    #[test]
+    fn related_not_among_the_mods_changes_nothing() {
+        let mut state = state_seeded_on(1);
+        state.step2.search_query = "kept".to_string();
+        state.step2.compat_popup_open = true;
+        let selection_before = state.step2.selected.clone();
+        let tab_before = state.step2.active_game_tab.clone();
+        let issue = related_issue("ghost");
+
+        let outcome = jump_to_related(&mut state, &issue);
+
+        assert_eq!(
+            outcome,
+            Some(RelatedJumpOutcome::NotInMods {
+                related_mod: "ghost".to_string(),
+                related_component: None,
+            })
+        );
+        assert_eq!(state.step2.selected, selection_before);
+        assert_eq!(state.step2.active_game_tab, tab_before);
+        assert!(!state.step2.jump_to_selected_requested);
+        assert_eq!(state.step2.search_query, "kept");
+        assert!(state.step2.compat_popup_open);
+        assert_eq!(state.current_step, 1);
     }
 }

@@ -596,7 +596,7 @@ mod tests {
             .any(|e| matches!(e, ArchiveSkipEvent::CandidateEnumerated { total: 1 }));
         assert!(has_enum, "must emit CandidateEnumerated with total=1");
         let (_summary, indices) = finished.expect("Finished arrives");
-        assert!(indices.is_empty(), "empty archive_dir ⇒ no skipped indices");
+        assert_eq!(indices.len(), 0, "empty archive_dir ⇒ no skipped indices");
     }
 
     #[test]
@@ -625,7 +625,7 @@ mod tests {
         let (summary, indices) = finished.expect("Finished arrives");
         assert_eq!(summary.no_expected_hash, 2);
         assert_eq!(summary.skipped_present, 0);
-        assert!(indices.is_empty());
+        assert_eq!(indices.len(), 0);
         let _ = std::fs::remove_dir_all(&archive_dir);
     }
 

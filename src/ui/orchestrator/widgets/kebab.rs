@@ -127,7 +127,7 @@ fn trigger_button(ui: &mut egui::Ui, palette: ThemePalette, height: f32) -> egui
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let desired = egui::vec2(galley.size().x + pad_x * 2.0, height);
+    let desired = egui::vec2(f32::mul_add(pad_x, 2.0, galley.size().x), height);
     let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
 
     if ui.is_rect_visible(rect) {
@@ -166,7 +166,7 @@ fn menu_item(ui: &mut egui::Ui, palette: ThemePalette, label: &str, danger: bool
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font.clone(), text_color);
-    let row_height = galley.size().y + pad_y * 2.0;
+    let row_height = f32::mul_add(pad_y, 2.0, galley.size().y);
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(row_width, row_height), egui::Sense::click());
 

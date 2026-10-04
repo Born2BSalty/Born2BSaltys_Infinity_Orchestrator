@@ -11,6 +11,7 @@ pub(crate) struct InstallCommandConfig {
     pub(crate) bgee_log_folder: String,
     pub(crate) bgee_log_file: String,
     pub(crate) bg2ee_game_folder: String,
+    pub(crate) iwdee_game_folder: String,
     pub(crate) bg2ee_log_folder: String,
     pub(crate) bg2ee_log_file: String,
     pub(crate) eet_bgee_game_folder: String,

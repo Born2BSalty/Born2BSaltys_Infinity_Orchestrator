@@ -20,7 +20,6 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
 }
 
 fn render_name_row(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut OrchestratorApp) {
-    let mut name_changed = false;
     settings_row(
         ui,
         palette,
@@ -33,13 +32,10 @@ fn render_name_row(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut 
                 &mut orchestrator.redesign_settings.user_name,
                 &mut orchestrator.settings_screen_state.name_row_editing,
                 &mut orchestrator.settings_screen_state.name_row_buffer,
-                || name_changed = true,
+                || {},
             );
         },
     );
-    if name_changed {
-        orchestrator.redesign_settings_dirty = true;
-    }
 }
 
 fn render_theme_language_rows(
@@ -83,7 +79,6 @@ fn render_theme_row(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut
                     ThemeChoice::Light => ThemePalette::Light,
                     ThemeChoice::Dark => ThemePalette::Dark,
                 };
-                orchestrator.redesign_settings_dirty = true;
             }
         }
     });
@@ -116,7 +111,6 @@ fn render_language_row(
                 });
             if new_lang != current_lang {
                 orchestrator.redesign_settings.language = new_lang;
-                orchestrator.redesign_settings_dirty = true;
             }
             ui.add_space(8.0);
             ui.label(
@@ -145,8 +139,10 @@ fn render_validate_on_startup_row(
             toggle_row::render(ui, palette, "", &mut on, None, || changed = true);
             if changed {
                 orchestrator.redesign_settings.validate_paths_on_startup = on;
-                orchestrator.redesign_settings_dirty = true;
                 orchestrator.settings_screen_state.path_validation_results = if on {
+                    crate::app::compat_dlc_source::invalidate_source_check(
+                        &mut orchestrator.wizard_state.step1,
+                    );
                     crate::ui::settings::validate_now::run_now(&orchestrator.wizard_state.step1)
                 } else {
                     crate::ui::settings::state_settings::ValidationReport::default()
@@ -173,7 +169,6 @@ fn render_diagnostic_mode_row(
             if changed {
                 orchestrator.redesign_settings.diagnostic_mode = on;
                 orchestrator.dev_mode = orchestrator.dev_mode_cli_flag || on;
-                orchestrator.redesign_settings_dirty = true;
             }
         },
     );

@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step3ItemState, WizardState};
 use crate::platform_defaults::{compose_component_key, normalize_tp2_filename};
 
@@ -186,7 +187,7 @@ fn find_component_mut<'a>(
 ) -> Option<&'a mut Step3ItemState> {
     let tp_norm = normalize_tp2_filename(tp_file);
     let id_norm = component_id.trim();
-    let items = if state.step3.active_game_tab == "BGEE" {
+    let items = if game_authority::slot_for_tab(&state.step3.active_game_tab) == GameSlot::First {
         &mut state.step3.bgee_items
     } else {
         &mut state.step3.bg2ee_items

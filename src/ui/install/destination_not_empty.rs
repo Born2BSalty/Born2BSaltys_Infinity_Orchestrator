@@ -20,7 +20,6 @@ pub fn render(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     choice: Option<DestChoice>,
-    allow_partial: bool,
 ) -> Option<DestChoice> {
     ui.add_space(12.0);
 
@@ -69,7 +68,7 @@ pub fn render(
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
 
-            for (opt, label) in option_set(allow_partial) {
+            for (opt, label) in option_set() {
                 let is_active = choice == Some(opt);
                 if redesign_btn(
                     ui,
@@ -121,15 +120,11 @@ pub(crate) fn paint_warning_triangle(
     painter.circle_filled(egui::pos2(center.x, center.y + 3.6), 0.95, color);
 }
 
-fn option_set(allow_partial: bool) -> Vec<(DestChoice, &'static str)> {
-    let mut opts = vec![
+const fn option_set() -> [(DestChoice, &'static str); 2] {
+    [
         (DestChoice::Clear, "Clear contents"),
         (DestChoice::Backup, "Backup contents then proceed"),
-    ];
-    if allow_partial {
-        opts.push((DestChoice::Continue, "Continue partial installation"));
-    }
-    opts
+    ]
 }
 
 #[cfg(test)]
@@ -138,27 +133,20 @@ mod tests {
 
     #[test]
     fn option_labels_are_wireframe_verbatim() {
-        let opts = option_set(true);
         assert_eq!(
-            opts,
-            vec![
+            option_set(),
+            [
                 (DestChoice::Clear, "Clear contents"),
                 (DestChoice::Backup, "Backup contents then proceed"),
-                (DestChoice::Continue, "Continue partial installation"),
             ]
         );
     }
 
     #[test]
-    fn continue_option_hidden_when_partial_disallowed() {
-        let opts = option_set(false);
-        assert_eq!(
-            opts,
-            vec![
-                (DestChoice::Clear, "Clear contents"),
-                (DestChoice::Backup, "Backup contents then proceed"),
-            ]
+    fn continue_is_never_offered_as_a_destination_choice() {
+        assert!(
+            !option_set().iter().any(|(c, _)| *c == DestChoice::Continue),
+            "Continue partial installation was a dead path and is no longer offered"
         );
-        assert!(!opts.iter().any(|(c, _)| *c == DestChoice::Continue));
     }
 }

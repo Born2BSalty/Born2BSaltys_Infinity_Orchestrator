@@ -5,6 +5,7 @@ use std::sync::mpsc::Receiver;
 
 use tracing::warn;
 
+use crate::app::game_authority;
 use crate::app::modlist_share::import_modlist_share_code;
 use crate::app::state::WizardState;
 use crate::install_runtime::flag_policies::InstallWorkflow;
@@ -37,7 +38,7 @@ pub fn prepare_install_dirs_and_maybe_import(
     }
 
     import_modlist_share_code(wizard_state, share_code.trim())
-        .map_err(|err| format!("import_modlist_share_code failed: {err}"))?;
+        .map_err(|err| format!("Could not import the share code: {err}"))?;
 
     arm_explicit_reproduce(wizard_state);
 
@@ -60,10 +61,10 @@ fn arm_explicit_reproduce(state: &mut WizardState) {
     state.modlist_auto_build_waiting_for_install = false;
     state.reproduce_exact = true;
     state.current_step = 1;
-    state.step2.active_game_tab = if state.step1.game_install == "BGEE" {
-        "BGEE".to_string()
+    state.step2.active_game_tab = if state.step1.game_install == "EET" {
+        game_authority::TAB_BG2EE.to_string()
     } else {
-        "BG2EE".to_string()
+        game_authority::tabs_for_install(&state.step1.game_install)[0].to_string()
     };
 
     state.step2.scan_status = "Auto Build: preparing imported modlist".to_string();
@@ -82,6 +83,7 @@ pub(crate) fn drive_explicit_resolve(
         state,
         step2_update_check_rx,
         &loaded,
+        crate::app::app_step2_update_preview::UpdateCheckScope::Selection,
     );
 }
 
@@ -167,7 +169,7 @@ mod tests {
         );
 
         assert!(st.step1.generate_directory_enabled);
-        assert!(!st.step1.mods_folder.is_empty());
+        assert_ne!(st.step1.mods_folder.len(), 0);
         let _ = std::fs::remove_dir_all(&dest);
     }
 
@@ -226,6 +228,19 @@ mod tests {
         b.step1.game_install = "BGEE".to_string();
         arm_explicit_reproduce(&mut b);
         assert_eq!(b.step2.active_game_tab, "BGEE");
+    }
+
+    #[test]
+    fn auto_build_arms_iwdee_on_its_own_tab() {
+        let mut st = WizardState::default();
+        st.step1.game_install = "IWDEE".to_string();
+        arm_explicit_reproduce(&mut st);
+        assert_eq!(st.step2.active_game_tab, "IWDEE");
+
+        let mut b2 = WizardState::default();
+        b2.step1.game_install = "BG2EE".to_string();
+        arm_explicit_reproduce(&mut b2);
+        assert_eq!(b2.step2.active_game_tab, "BG2EE");
     }
 
     #[test]

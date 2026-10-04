@@ -165,11 +165,9 @@ pub(crate) fn render_console_panel(
             if response.clicked() {
                 console_view.request_input_focus = true;
             }
+            let revision = selected_console_revision(term, console_view);
             let selected_text = selected_console_text(term, console_view);
-            let selected_text_len = selected_text.len();
-            let should_auto_scroll = console_view.auto_scroll
-                && selected_text_len > console_view.last_selected_console_text_len;
-            console_view.last_selected_console_text_len = selected_text_len;
+            let should_auto_scroll = take_auto_scroll_request(console_view, revision);
             let mut child = ui.new_child(
                 egui::UiBuilder::new()
                     .max_rect(rect)
@@ -213,6 +211,28 @@ pub(crate) fn render_console_panel(
     });
 }
 
+fn take_auto_scroll_request(console_view: &mut Step5ConsoleViewState, revision: u64) -> bool {
+    let should_auto_scroll = console_view.auto_scroll
+        && (console_view.last_console_revision != Some(revision)
+            || console_view.last_filter != console_view.filter
+            || !console_view.last_auto_scroll);
+    console_view.last_console_revision = Some(revision);
+    console_view.last_filter = console_view.filter;
+    console_view.last_auto_scroll = console_view.auto_scroll;
+    should_auto_scroll
+}
+
+const fn selected_console_revision(
+    terminal: &EmbeddedTerminal,
+    console_view: &Step5ConsoleViewState,
+) -> u64 {
+    match console_view.filter {
+        ConsoleOutputFilter::General => terminal.output_revision(),
+        ConsoleOutputFilter::Important => terminal.important_revision(),
+        ConsoleOutputFilter::Installed => terminal.installed_revision(),
+    }
+}
+
 const fn selected_console_text<'a>(
     terminal: &'a EmbeddedTerminal,
     console_view: &Step5ConsoleViewState,
@@ -221,5 +241,89 @@ const fn selected_console_text<'a>(
         ConsoleOutputFilter::General => terminal.output_text(),
         ConsoleOutputFilter::Important => terminal.important_text(),
         ConsoleOutputFilter::Installed => terminal.installed_text(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{selected_console_revision, take_auto_scroll_request};
+    use crate::app::terminal::EmbeddedTerminal;
+    use crate::ui::step5::state_step5::{ConsoleOutputFilter, Step5ConsoleViewState};
+
+    #[test]
+    fn auto_scroll_follows_selected_view_revision() {
+        let mut term = EmbeddedTerminal::new().expect("terminal");
+        let general_view = Step5ConsoleViewState {
+            filter: ConsoleOutputFilter::General,
+            ..Step5ConsoleViewState::default()
+        };
+        let important_view = Step5ConsoleViewState {
+            filter: ConsoleOutputFilter::Important,
+            ..Step5ConsoleViewState::default()
+        };
+        let installed_view = Step5ConsoleViewState {
+            filter: ConsoleOutputFilter::Installed,
+            ..Step5ConsoleViewState::default()
+        };
+        let general_before = selected_console_revision(&term, &general_view);
+        let important_before = selected_console_revision(&term, &important_view);
+        let installed_before = selected_console_revision(&term, &installed_view);
+        term.echo_sent("hello");
+        assert_ne!(
+            selected_console_revision(&term, &general_view),
+            general_before
+        );
+        assert_ne!(
+            selected_console_revision(&term, &important_view),
+            important_before
+        );
+        assert_eq!(
+            selected_console_revision(&term, &installed_view),
+            installed_before
+        );
+    }
+
+    #[test]
+    fn auto_scroll_fires_on_new_revision() {
+        let mut console_view = Step5ConsoleViewState::default();
+        assert!(take_auto_scroll_request(&mut console_view, 1));
+    }
+
+    #[test]
+    fn auto_scroll_quiet_on_same_revision() {
+        let mut console_view = Step5ConsoleViewState::default();
+        assert!(take_auto_scroll_request(&mut console_view, 1));
+        assert!(!take_auto_scroll_request(&mut console_view, 1));
+    }
+
+    #[test]
+    fn auto_scroll_fires_on_filter_change() {
+        let mut console_view = Step5ConsoleViewState::default();
+        assert!(take_auto_scroll_request(&mut console_view, 1));
+        console_view.filter = ConsoleOutputFilter::Important;
+        assert!(take_auto_scroll_request(&mut console_view, 1));
+    }
+
+    #[test]
+    fn auto_scroll_fires_when_retoggled_on() {
+        let mut console_view = Step5ConsoleViewState::default();
+        assert!(take_auto_scroll_request(&mut console_view, 1));
+        console_view.auto_scroll = false;
+        assert!(!take_auto_scroll_request(&mut console_view, 1));
+        console_view.auto_scroll = true;
+        assert!(take_auto_scroll_request(&mut console_view, 1));
+    }
+
+    #[test]
+    fn auto_scroll_never_fires_when_off() {
+        let mut console_view = Step5ConsoleViewState {
+            auto_scroll: false,
+            ..Step5ConsoleViewState::default()
+        };
+        assert!(!take_auto_scroll_request(&mut console_view, 1));
+        assert!(!take_auto_scroll_request(&mut console_view, 2));
+        assert_eq!(console_view.last_console_revision, Some(2));
+        assert_eq!(console_view.last_filter, ConsoleOutputFilter::General);
+        assert!(!console_view.last_auto_scroll);
     }
 }
