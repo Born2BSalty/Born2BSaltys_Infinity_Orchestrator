@@ -11,8 +11,6 @@ mod step1_settings_to_state {
 
     impl From<Step1Settings> for Step1State {
         fn from(value: Step1Settings) -> Self {
-            let install_mode = install_mode_from_settings(&value);
-            let have_weidu_logs = install_mode_uses_logs(&install_mode);
             let mod_installer_binary =
                 resolve_mod_installer_binary_setting(&value.mod_installer_binary);
             let weidu_binary = resolve_weidu_binary_setting(&value.weidu_binary);
@@ -23,15 +21,9 @@ mod step1_settings_to_state {
                 usize_or_default(value.auto_answer_initial_delay_ms, 2000);
             let auto_answer_post_send_delay_ms =
                 usize_or_default(value.auto_answer_post_send_delay_ms, 5000);
-            let weidu_log_mode =
-                string_or_default(value.weidu_log_mode, "autolog,logapp,log-extern");
             let tick = u64_or_default(value.tick, 500);
             let lookback = usize_or_default(value.lookback, 10);
             Self {
-                dlc_source_check: crate::app::compat_dlc_source::DlcSourceCheck::default(),
-                game_install: value.game_install,
-                install_mode,
-                have_weidu_logs,
                 rust_log_debug: value.rust_log_debug,
                 rust_log_trace: value.rust_log_trace,
                 custom_scan_depth: value.custom_scan_depth,
@@ -43,34 +35,10 @@ mod step1_settings_to_state {
                 bio_full_debug: value.bio_full_debug,
                 tick_dev_enabled: value.tick_dev_enabled,
                 log_raw_output_dev: value.log_raw_output_dev,
-                weidu_log_mode_enabled: value.weidu_log_mode_enabled,
-                new_pre_eet_dir_enabled: value.new_pre_eet_dir_enabled,
-                new_eet_dir_enabled: value.new_eet_dir_enabled,
-                generate_directory_enabled: value.generate_directory_enabled,
-                prepare_target_dirs_before_install: value.prepare_target_dirs_before_install,
-                weidu_log_autolog: value.weidu_log_autolog,
-                weidu_log_logapp: value.weidu_log_logapp,
-                weidu_log_logextern: value.weidu_log_logextern,
-                weidu_log_log_component: value.weidu_log_log_component,
-                weidu_log_folder: value.weidu_log_folder,
                 mod_installer_binary,
                 bgee_game_folder: value.bgee_game_folder,
-                bgee_log_folder: value.bgee_log_folder,
-                bgee_log_file: value.bgee_log_file,
                 bg2ee_game_folder: value.bg2ee_game_folder,
-                bg2ee_log_folder: value.bg2ee_log_folder,
-                bg2ee_log_file: value.bg2ee_log_file,
                 iwdee_game_folder: value.iwdee_game_folder,
-                eet_bgee_game_folder: value.eet_bgee_game_folder,
-                eet_bgee_log_folder: value.eet_bgee_log_folder,
-                eet_bg2ee_game_folder: value.eet_bg2ee_game_folder,
-                eet_bg2ee_log_folder: value.eet_bg2ee_log_folder,
-                eet_pre_dir: value.eet_pre_dir,
-                eet_new_dir: value.eet_new_dir,
-                game: value.game,
-                log_file: value.log_file,
-                generate_directory: value.generate_directory,
-                mods_folder: value.mods_folder,
                 global_mods_folder: value.global_mods_folder,
                 weidu_binary,
                 language,
@@ -80,7 +48,6 @@ mod step1_settings_to_state {
                 timeout,
                 auto_answer_initial_delay_ms,
                 auto_answer_post_send_delay_ms,
-                weidu_log_mode,
                 strict_matching: value.strict_matching,
                 download: value.download,
                 download_archive: value.download_archive,
@@ -91,28 +58,9 @@ mod step1_settings_to_state {
                 tick,
                 lookback,
                 casefold: value.casefold,
-                backup_targets_before_eet_copy: value.backup_targets_before_eet_copy,
+                ..Self::default()
             }
         }
-    }
-
-    fn install_mode_from_settings(value: &Step1Settings) -> String {
-        if value.install_mode.trim().is_empty() {
-            Step1State::derive_install_mode_from_legacy(
-                value.have_weidu_logs,
-                value.download_archive,
-            )
-        } else {
-            Step1State::normalize_install_mode(&value.install_mode).to_string()
-        }
-    }
-
-    fn install_mode_uses_logs(install_mode: &str) -> bool {
-        matches!(
-            install_mode,
-            Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS
-                | Step1State::INSTALL_MODE_WEIDU_LOGS_REVIEW_EDIT
-        )
     }
 
     fn resolve_mod_installer_binary_setting(value: &str) -> String {
@@ -152,40 +100,105 @@ mod tests {
     use crate::app::state::Step1State;
     use crate::settings::model::Step1Settings;
 
+    fn per_list_fields_of(state: &Step1State) -> Step1State {
+        Step1State {
+            game_install: state.game_install.clone(),
+            install_mode: state.install_mode.clone(),
+            have_weidu_logs: state.have_weidu_logs,
+            weidu_log_mode_enabled: state.weidu_log_mode_enabled,
+            new_pre_eet_dir_enabled: state.new_pre_eet_dir_enabled,
+            new_eet_dir_enabled: state.new_eet_dir_enabled,
+            generate_directory_enabled: state.generate_directory_enabled,
+            prepare_target_dirs_before_install: state.prepare_target_dirs_before_install,
+            backup_targets_before_eet_copy: state.backup_targets_before_eet_copy,
+            weidu_log_autolog: state.weidu_log_autolog,
+            weidu_log_logapp: state.weidu_log_logapp,
+            weidu_log_logextern: state.weidu_log_logextern,
+            weidu_log_log_component: state.weidu_log_log_component,
+            weidu_log_folder: state.weidu_log_folder.clone(),
+            weidu_log_mode: state.weidu_log_mode.clone(),
+            bgee_log_folder: state.bgee_log_folder.clone(),
+            bgee_log_file: state.bgee_log_file.clone(),
+            bg2ee_log_folder: state.bg2ee_log_folder.clone(),
+            bg2ee_log_file: state.bg2ee_log_file.clone(),
+            eet_bgee_log_folder: state.eet_bgee_log_folder.clone(),
+            eet_bg2ee_log_folder: state.eet_bg2ee_log_folder.clone(),
+            eet_pre_dir: state.eet_pre_dir.clone(),
+            eet_new_dir: state.eet_new_dir.clone(),
+            game: state.game.clone(),
+            log_file: state.log_file.clone(),
+            generate_directory: state.generate_directory.clone(),
+            mods_folder: state.mods_folder.clone(),
+            eet_bgee_game_folder: state.eet_bgee_game_folder.clone(),
+            eet_bg2ee_game_folder: state.eet_bg2ee_game_folder.clone(),
+            ..Step1State::default()
+        }
+    }
+
     #[test]
     fn global_mods_folder_survives_settings_to_state() {
         let s = Step1Settings {
-            mods_folder: r"C:\old\mods".to_string(),
             global_mods_folder: r"C:\global\mods".to_string(),
             ..Step1Settings::default()
         };
         let state = Step1State::from(s);
         assert_eq!(state.global_mods_folder, r"C:\global\mods");
-        assert_eq!(state.mods_folder, r"C:\old\mods");
+        assert_eq!(state.mods_folder, "");
     }
 
     #[test]
-    fn global_mods_folder_survives_state_to_settings() {
-        let state = Step1State {
-            mods_folder: r"C:\old\mods".to_string(),
+    fn settings_to_state_fills_per_list_fields_from_defaults() {
+        let s = Step1Settings {
+            bgee_game_folder: r"D:\src\BGEE".to_string(),
             global_mods_folder: r"C:\global\mods".to_string(),
+            ..Step1Settings::default()
+        };
+        let state = Step1State::from(s);
+        assert_eq!(
+            per_list_fields_of(&state),
+            per_list_fields_of(&Step1State::default())
+        );
+        assert_eq!(
+            state.install_mode,
+            Step1State::INSTALL_MODE_BUILD_FROM_SCANNED_MODS
+        );
+        assert!(!state.have_weidu_logs);
+        assert_eq!(state.bgee_game_folder, r"D:\src\BGEE");
+    }
+
+    #[test]
+    fn state_to_settings_copies_globals_only() {
+        let state = Step1State {
+            mods_folder: r"C:\list\mods".to_string(),
+            generate_directory: r"C:\list\clone".to_string(),
+            prepare_target_dirs_before_install: true,
+            eet_bgee_game_folder: r"C:\old\eet".to_string(),
+            global_mods_folder: r"C:\global\mods".to_string(),
+            bgee_game_folder: r"D:\src\BGEE".to_string(),
             ..Step1State::default()
         };
         let s = Step1Settings::from(state);
         assert_eq!(s.global_mods_folder, r"C:\global\mods");
-        assert_eq!(s.mods_folder, r"C:\old\mods");
+        assert_eq!(s.bgee_game_folder, r"D:\src\BGEE");
+        let json = serde_json::to_string(&s).expect("serialize");
+        for key in [
+            "\"mods_folder\"",
+            "\"generate_directory\"",
+            "\"prepare_target_dirs_before_install\"",
+            "\"eet_bgee_game_folder\"",
+        ] {
+            assert!(!json.contains(key), "{key} must not be saved: {json}");
+        }
     }
 
     #[test]
     fn global_mods_folder_round_trips_settings_state_settings() {
         let original = Step1Settings {
-            mods_folder: r"C:\old\mods".to_string(),
             global_mods_folder: r"C:\global\mods".to_string(),
             ..Step1Settings::default()
         };
-        let round_tripped = Step1Settings::from(Step1State::from(original));
-        assert_eq!(round_tripped.global_mods_folder, r"C:\global\mods");
-        assert_eq!(round_tripped.mods_folder, r"C:\old\mods");
+        let round_tripped = Step1Settings::from(Step1State::from(original.clone()));
+        assert_eq!(round_tripped, original);
     }
 }
 
@@ -195,11 +208,7 @@ mod step1_state_to_settings {
 
     impl From<Step1State> for Step1Settings {
         fn from(value: Step1State) -> Self {
-            let have_weidu_logs = value.uses_source_weidu_logs();
             Self {
-                game_install: value.game_install,
-                install_mode: value.install_mode,
-                have_weidu_logs,
                 rust_log_debug: value.rust_log_debug,
                 rust_log_trace: value.rust_log_trace,
                 custom_scan_depth: value.custom_scan_depth,
@@ -211,34 +220,10 @@ mod step1_state_to_settings {
                 bio_full_debug: value.bio_full_debug,
                 tick_dev_enabled: value.tick_dev_enabled,
                 log_raw_output_dev: value.log_raw_output_dev,
-                weidu_log_mode_enabled: value.weidu_log_mode_enabled,
-                new_pre_eet_dir_enabled: value.new_pre_eet_dir_enabled,
-                new_eet_dir_enabled: value.new_eet_dir_enabled,
-                generate_directory_enabled: value.generate_directory_enabled,
-                prepare_target_dirs_before_install: value.prepare_target_dirs_before_install,
-                weidu_log_autolog: value.weidu_log_autolog,
-                weidu_log_logapp: value.weidu_log_logapp,
-                weidu_log_logextern: value.weidu_log_logextern,
-                weidu_log_log_component: value.weidu_log_log_component,
-                weidu_log_folder: value.weidu_log_folder,
                 mod_installer_binary: value.mod_installer_binary,
                 bgee_game_folder: value.bgee_game_folder,
-                bgee_log_folder: value.bgee_log_folder,
-                bgee_log_file: value.bgee_log_file,
                 bg2ee_game_folder: value.bg2ee_game_folder,
-                bg2ee_log_folder: value.bg2ee_log_folder,
-                bg2ee_log_file: value.bg2ee_log_file,
                 iwdee_game_folder: value.iwdee_game_folder,
-                eet_bgee_game_folder: value.eet_bgee_game_folder,
-                eet_bgee_log_folder: value.eet_bgee_log_folder,
-                eet_bg2ee_game_folder: value.eet_bg2ee_game_folder,
-                eet_bg2ee_log_folder: value.eet_bg2ee_log_folder,
-                eet_pre_dir: value.eet_pre_dir,
-                eet_new_dir: value.eet_new_dir,
-                game: value.game,
-                log_file: value.log_file,
-                generate_directory: value.generate_directory,
-                mods_folder: value.mods_folder,
                 global_mods_folder: value.global_mods_folder,
                 weidu_binary: value.weidu_binary,
                 language: value.language,
@@ -248,7 +233,6 @@ mod step1_state_to_settings {
                 timeout: value.timeout,
                 auto_answer_initial_delay_ms: value.auto_answer_initial_delay_ms,
                 auto_answer_post_send_delay_ms: value.auto_answer_post_send_delay_ms,
-                weidu_log_mode: value.weidu_log_mode,
                 strict_matching: value.strict_matching,
                 download: value.download,
                 download_archive: value.download_archive,
@@ -259,7 +243,6 @@ mod step1_state_to_settings {
                 tick: value.tick,
                 lookback: value.lookback,
                 casefold: value.casefold,
-                backup_targets_before_eet_copy: value.backup_targets_before_eet_copy,
             }
         }
     }

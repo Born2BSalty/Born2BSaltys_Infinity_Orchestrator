@@ -1,6 +1,6 @@
 [package]
 name = "bio"
-version = "1.0.1-beta"
+version = "1.0.2-beta"
 edition = "2024"
 build = "build.rs"
 authors = ["Born2BSalty"]
@@ -35,6 +35,7 @@ native-tls = "0.2"
 sevenz-rust2 = "0.20"
 unrar = "0.5.8"
 walkdir = "2.5.0"
+trash = "5.2.9"
 zip = "2.4.2"
 wait-timeout = "0.2.1"
 eframe = "0.31.1"

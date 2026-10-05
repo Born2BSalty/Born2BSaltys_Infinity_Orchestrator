@@ -580,10 +580,9 @@ mod tests {
     }
 
     #[test]
-    fn global_mods_folder_override_returns_none_when_both_mods_fields_empty() {
+    fn global_mods_folder_override_returns_none_when_the_global_folder_is_blank() {
         let settings = Step1Settings {
-            global_mods_folder: String::new(),
-            mods_folder: String::new(),
+            global_mods_folder: "   ".to_string(),
             ..Step1Settings::default()
         };
         let ctx = InstallStartCtx {

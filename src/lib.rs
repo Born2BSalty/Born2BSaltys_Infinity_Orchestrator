@@ -3,6 +3,8 @@
 
 #[path = "core/app/mod.rs"]
 pub mod app;
+#[path = "core/folder_trash.rs"]
+pub mod folder_trash;
 pub mod gallery_feed;
 #[path = "core/install/mod.rs"]
 pub mod install;

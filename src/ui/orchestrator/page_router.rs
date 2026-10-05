@@ -137,12 +137,17 @@ fn render_workspace(
             .cloned()
             .unwrap_or_default();
 
-        workspace_state_loader::populate_wizard_state_from_workspace(
+        if let Some(reason) = workspace_state_loader::populate_wizard_state_from_workspace(
             &workspace,
             &entry,
             &orchestrator.settings_store,
             &mut orchestrator.wizard_state,
-        );
+        ) {
+            orchestrator.notification_manager.error(format!(
+                "Couldn't set up the folders for \"{}\": {reason}",
+                entry.name
+            ));
+        }
 
         orchestrator.workspace_view.modlist_id = id.to_string();
         orchestrator
@@ -373,9 +378,8 @@ pub(crate) fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp
     orchestrator.active_install_modlist_id = None;
     orchestrator.install_screen_state.reset_to_gallery();
     orchestrator.wizard_state.reset_workflow_keep_step1();
-    crate::install_runtime::settings_sanitizer::sanitize_step1_for_settings_persistence(
+    crate::install_runtime::per_install_dirs::clear_per_install_fields(
         &mut orchestrator.wizard_state.step1,
-        &orchestrator.bio_settings_last_saved.step1,
     );
 }
 

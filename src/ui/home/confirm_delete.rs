@@ -9,10 +9,10 @@ pub fn delete_dialog_text(entry: &ModlistEntry) -> (String, String) {
     let title = format!("Delete \"{}\"?", entry.name);
     let dest = destination_display(entry);
     let body = format!(
-        "This will permanently remove:\n\
+        "This will remove:\n\
          \u{2022} the modlist's registry entry (it disappears from Home)\n\
-         \u{2022} the install folder on disk: {dest}\n\
-         \nThis action cannot be undone."
+         \u{2022} the install folder on disk, moved to the Recycle Bin: {dest}\n\
+         \nRemoving the registry entry cannot be undone."
     );
     (title, body)
 }
@@ -26,8 +26,7 @@ pub fn reinstall_dialog_text(entry: &ModlistEntry) -> (String, String) {
          install from scratch. Your component selection and order are \
          preserved; the modlist moves back to in-progress while the install \
          runs, then returns to installed when complete.\n\
-         \u{2022} existing files at: {dest} will be deleted\n\
-         \nThis action cannot be undone."
+         \u{2022} existing files at: {dest} will be moved to the Recycle Bin"
     );
     (title, body)
 }
@@ -97,17 +96,21 @@ mod tests {
     #[test]
     fn delete_body_is_wireframe_verbatim_shape() {
         let (_, b) = delete_dialog_text(&e("X", "C:\\BIO\\modlists\\x"));
-        assert!(b.starts_with("This will permanently remove:"));
-        assert!(b.contains("\u{2022} the modlist's registry entry (it disappears from Home)"));
-        assert!(b.contains("\u{2022} the install folder on disk: C:\\BIO\\modlists\\x"));
-        assert!(!b.contains("saved workspace"));
-        assert!(b.trim_end().ends_with("This action cannot be undone."));
+        assert_eq!(
+            b,
+            "This will remove:\n\
+             \u{2022} the modlist's registry entry (it disappears from Home)\n\
+             \u{2022} the install folder on disk, moved to the Recycle Bin: C:\\BIO\\modlists\\x\n\
+             \nRemoving the registry entry cannot be undone."
+        );
     }
 
     #[test]
     fn delete_body_shows_placeholder_when_dest_empty() {
         let (_, b) = delete_dialog_text(&e("X", ""));
-        assert!(b.contains("the install folder on disk: (no install folder set)"));
+        assert!(b.contains(
+            "the install folder on disk, moved to the Recycle Bin: (no install folder set)"
+        ));
     }
 
     #[test]
@@ -116,8 +119,10 @@ mod tests {
         assert_eq!(t, "Reinstall \"EET Mega\"?");
         assert!(b.starts_with("This will erase the current install folder"));
         assert!(b.contains("moves back to in-progress"));
-        assert!(b.contains("\u{2022} existing files at: /games/eet will be deleted"));
-        assert!(b.trim_end().ends_with("This action cannot be undone."));
+        assert!(b.ends_with(
+            "\n\u{2022} existing files at: /games/eet will be moved to the Recycle Bin"
+        ));
+        assert!(!b.contains("cannot be undone"));
     }
 
     #[test]

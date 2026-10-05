@@ -1082,18 +1082,9 @@ impl OrchestratorApp {
     }
 
     fn bio_settings_snapshot(&self) -> AppSettings {
-        let mut step1_clone = self.wizard_state.step1.clone();
-        crate::install_runtime::settings_sanitizer::sanitize_step1_for_settings_persistence(
-            &mut step1_clone,
-            &self.bio_settings_last_saved.step1,
-        );
-        let mut step1: crate::settings::model::Step1Settings = step1_clone.into();
-        step1
-            .game_install
-            .clone_from(&self.bio_settings_last_saved.step1.game_install);
         AppSettings {
             exe_fingerprint: self.exe_fingerprint.clone(),
-            step1,
+            step1: self.wizard_state.step1.clone().into(),
             general: self.redesign_settings.clone(),
         }
     }

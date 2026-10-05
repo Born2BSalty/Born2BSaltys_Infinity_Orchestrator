@@ -154,6 +154,7 @@ pub fn derive_per_install_dirs(
             wizard_state_step1.eet_new_dir = path_string(fin);
 
             wizard_state_step1.generate_directory_enabled = false;
+            wizard_state_step1.generate_directory.clear();
         }
 
         (None, Some(g)) => {
@@ -161,7 +162,9 @@ pub fn derive_per_install_dirs(
             wizard_state_step1.generate_directory = path_string(g);
 
             wizard_state_step1.new_pre_eet_dir_enabled = false;
+            wizard_state_step1.eet_pre_dir.clear();
             wizard_state_step1.new_eet_dir_enabled = false;
+            wizard_state_step1.eet_new_dir.clear();
         }
 
         _ => {
@@ -174,6 +177,38 @@ pub fn derive_per_install_dirs(
     }
 
     Ok(dirs)
+}
+
+pub fn clear_per_install_fields(step1: &mut Step1State) {
+    let defaults = Step1State::default();
+    step1.install_mode = defaults.install_mode;
+    step1.have_weidu_logs = defaults.have_weidu_logs;
+    step1.weidu_log_mode_enabled = defaults.weidu_log_mode_enabled;
+    step1.new_pre_eet_dir_enabled = defaults.new_pre_eet_dir_enabled;
+    step1.new_eet_dir_enabled = defaults.new_eet_dir_enabled;
+    step1.generate_directory_enabled = defaults.generate_directory_enabled;
+    step1.prepare_target_dirs_before_install = defaults.prepare_target_dirs_before_install;
+    step1.backup_targets_before_eet_copy = defaults.backup_targets_before_eet_copy;
+    step1.weidu_log_autolog = defaults.weidu_log_autolog;
+    step1.weidu_log_logapp = defaults.weidu_log_logapp;
+    step1.weidu_log_logextern = defaults.weidu_log_logextern;
+    step1.weidu_log_log_component = defaults.weidu_log_log_component;
+    step1.weidu_log_folder = defaults.weidu_log_folder;
+    step1.weidu_log_mode = defaults.weidu_log_mode;
+    step1.bgee_log_folder = defaults.bgee_log_folder;
+    step1.bgee_log_file = defaults.bgee_log_file;
+    step1.bg2ee_log_folder = defaults.bg2ee_log_folder;
+    step1.bg2ee_log_file = defaults.bg2ee_log_file;
+    step1.eet_bgee_log_folder = defaults.eet_bgee_log_folder;
+    step1.eet_bg2ee_log_folder = defaults.eet_bg2ee_log_folder;
+    step1.eet_pre_dir = defaults.eet_pre_dir;
+    step1.eet_new_dir = defaults.eet_new_dir;
+    step1.game = defaults.game;
+    step1.log_file = defaults.log_file;
+    step1.generate_directory = defaults.generate_directory;
+    step1.mods_folder = defaults.mods_folder;
+    step1.eet_bgee_game_folder = defaults.eet_bgee_game_folder;
+    step1.eet_bg2ee_game_folder = defaults.eet_bg2ee_game_folder;
 }
 
 pub fn cleanup_per_install_mods_folder(destination: &str) {
@@ -275,6 +310,7 @@ mod tests {
             !step1.generate_directory_enabled,
             "single-game clone must be cleared for EET (no stale leak)"
         );
+        assert_eq!(step1.generate_directory, "");
         assert_eq!(step1.bgee_game_folder, r"S:\src\BGEE", "source untouched");
         assert_eq!(step1.bg2ee_game_folder, r"S:\src\BG2EE", "source untouched");
 
@@ -310,6 +346,7 @@ mod tests {
             new_pre_eet_dir_enabled: true,
             new_eet_dir_enabled: true,
             eet_pre_dir: "stale".to_string(),
+            eet_new_dir: "stale".to_string(),
             ..Default::default()
         };
 
@@ -320,6 +357,8 @@ mod tests {
             !step1.new_pre_eet_dir_enabled && !step1.new_eet_dir_enabled,
             "EET clone flags cleared for single-game (no stale leak)"
         );
+        assert_eq!(step1.eet_pre_dir, "");
+        assert_eq!(step1.eet_new_dir, "");
         assert_eq!(step1.bgee_game_folder, r"S:\src\BGEE", "source untouched");
         assert_eq!(
             step1.generate_directory,
@@ -631,6 +670,59 @@ mod tests {
              clone + sync_install_mode_flags + reset_workflow_keep_step1"
         );
         let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn clear_per_install_fields_restores_defaults_and_keeps_globals() {
+        let stale = |name: &str| format!(r"D:\stale\{name}");
+        let mut step1 = Step1State {
+            game_install: "EET".to_string(),
+            bgee_game_folder: r"S:\src\BGEE".to_string(),
+            global_mods_folder: r"G:\mods".to_string(),
+            mods_archive_folder: r"G:\archive".to_string(),
+            install_mode: Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string(),
+            have_weidu_logs: true,
+            weidu_log_mode_enabled: false,
+            new_pre_eet_dir_enabled: true,
+            new_eet_dir_enabled: true,
+            generate_directory_enabled: true,
+            prepare_target_dirs_before_install: true,
+            backup_targets_before_eet_copy: true,
+            weidu_log_autolog: false,
+            weidu_log_logapp: false,
+            weidu_log_logextern: false,
+            weidu_log_log_component: true,
+            weidu_log_folder: stale("component_logs"),
+            weidu_log_mode: "log D:\\stale".to_string(),
+            bgee_log_folder: stale("bgee"),
+            bgee_log_file: stale("bgee.log"),
+            bg2ee_log_folder: stale("bg2ee"),
+            bg2ee_log_file: stale("bg2ee.log"),
+            eet_bgee_log_folder: stale("eet_bgee"),
+            eet_bg2ee_log_folder: stale("eet_bg2ee"),
+            eet_pre_dir: stale("pre"),
+            eet_new_dir: stale("new"),
+            game: "BG2EE".to_string(),
+            log_file: stale("log"),
+            generate_directory: stale("clone"),
+            mods_folder: stale("mods"),
+            eet_bgee_game_folder: stale("eet_bgee_src"),
+            eet_bg2ee_game_folder: stale("eet_bg2ee_src"),
+            ..Step1State::default()
+        };
+
+        clear_per_install_fields(&mut step1);
+
+        assert_eq!(
+            step1,
+            Step1State {
+                game_install: "EET".to_string(),
+                bgee_game_folder: r"S:\src\BGEE".to_string(),
+                global_mods_folder: r"G:\mods".to_string(),
+                mods_archive_folder: r"G:\archive".to_string(),
+                ..Step1State::default()
+            }
+        );
     }
 
     #[test]

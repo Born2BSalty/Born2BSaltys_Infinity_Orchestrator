@@ -33,6 +33,9 @@ fn main() -> Result<()> {
     bio::logging::setup::init(&cli.log_level)?;
 
     let settings_store = bio::settings::store::SettingsStore::new_default();
+    log_legacy_step1_outcome(bio::settings::legacy_step1::migrate_legacy_step1_in_file(
+        settings_store.path(),
+    ));
     match bio::settings::migrate_general::fold_legacy_general_settings(&settings_store) {
         bio::settings::migrate_general::LegacyGeneralOutcome::NoLegacyFile => {}
         bio::settings::migrate_general::LegacyGeneralOutcome::Merged => {
@@ -69,18 +72,6 @@ fn main() -> Result<()> {
         }
     }
 
-    match bio::settings::launch_cleanup::clear_unreachable_eet_sources_in_file(&settings_store) {
-        Ok(true) => tracing::info!(
-            target = "orchestrator",
-            "cleared unreachable EET source fields from bio_settings.json"
-        ),
-        Ok(false) => {}
-        Err(err) => tracing::warn!(
-            target = "orchestrator",
-            "clearing unreachable EET source fields from bio_settings.json failed: {err}"
-        ),
-    }
-
     bio::app::mod_downloads_migrate::migrate_source_files_at_launch();
 
     let options = eframe::NativeOptions {
@@ -104,6 +95,33 @@ fn main() -> Result<()> {
     .map_err(|err| anyhow!("failed to launch Infinity Orchestrator: {err}"))?;
 
     Ok(())
+}
+
+fn log_legacy_step1_outcome(
+    outcome: Result<bio::settings::legacy_step1::LegacyStep1Outcome, String>,
+) {
+    match outcome {
+        Ok(bio::settings::legacy_step1::LegacyStep1Outcome::NoChange) => {}
+        Ok(bio::settings::legacy_step1::LegacyStep1Outcome::Migrated {
+            moved_mods_folder,
+            stripped_keys,
+        }) => {
+            if let Some(folder) = moved_mods_folder {
+                tracing::info!(
+                    target = "orchestrator",
+                    "moved the legacy mods folder {folder} into the Global mods folder"
+                );
+            }
+            tracing::info!(
+                target = "orchestrator",
+                "removed {stripped_keys} per-list keys from bio_settings.json"
+            );
+        }
+        Err(err) => tracing::warn!(
+            target = "orchestrator",
+            "legacy Step 1 settings migration failed: {err}"
+        ),
+    }
 }
 
 fn app_icon() -> egui::IconData {

@@ -42,16 +42,6 @@ pub fn start_reinstall(modlist: &ModlistEntry, orchestrator: &mut OrchestratorAp
     st.parsed_preview = Some(preview);
     st.preview_cached = true;
 
-    let dest_flags = DestChoice::Clear.to_flags();
-    orchestrator
-        .wizard_state
-        .step1
-        .prepare_target_dirs_before_install = dest_flags.prepare_target_dirs_before_install;
-    orchestrator
-        .wizard_state
-        .step1
-        .backup_targets_before_eet_copy = dest_flags.backup_targets_before_eet_copy;
-
     crate::ui::install::page_install::refresh_source_compat_issue(
         &mut orchestrator.install_screen_state,
         &orchestrator.wizard_state.step1,
@@ -125,6 +115,8 @@ mod tests {
         assert_eq!(st.pipeline_kind, PipelineKind::Install);
         assert_eq!(app.nav, NavDestination::Install);
         assert_eq!(app.pending_reinstall_id.as_deref(), Some("REINSTALL0001"));
+        assert!(!app.wizard_state.step1.prepare_target_dirs_before_install);
+        assert!(!app.wizard_state.step1.backup_targets_before_eet_copy);
     }
 
     #[test]

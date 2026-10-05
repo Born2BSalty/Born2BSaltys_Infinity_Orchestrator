@@ -17,7 +17,7 @@ pub fn populate_wizard_state_from_workspace(
     entry: &ModlistEntry,
     settings_store: &SettingsStore,
     wizard_state: &mut WizardState,
-) {
+) -> Option<String> {
     wizard_state.step2.update_selected_popup_open = false;
     wizard_state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
     wizard_state.step2.weidu_log_import = None;
@@ -35,13 +35,16 @@ pub fn populate_wizard_state_from_workspace(
     )
     .to_string();
 
+    crate::install_runtime::per_install_dirs::clear_per_install_fields(&mut wizard_state.step1);
     sync_paths_from_settings(settings_store, wizard_state);
 
-    if let Err(err) = crate::install_runtime::per_install_dirs::derive_per_install_dirs(
+    let derive_failure = crate::install_runtime::per_install_dirs::derive_per_install_dirs(
         &mut wizard_state.step1,
         &entry.destination_folder,
         entry.game,
-    ) {
+    )
+    .err();
+    if let Some(err) = derive_failure.as_deref() {
         tracing::warn!(
             target = "orchestrator",
             "workspace cold-load re-derive failed: {err}"
@@ -85,6 +88,7 @@ pub fn populate_wizard_state_from_workspace(
     wizard_state.step3.bg2ee_anchor = None;
 
     wizard_state.step5 = crate::app::state::Step5State::default();
+    derive_failure
 }
 
 fn reset_scanned_step2_set(wizard_state: &mut WizardState) {
@@ -312,28 +316,7 @@ pub fn sync_paths_from_settings(settings_store: &SettingsStore, wizard_state: &m
     dst.bgee_game_folder = from.bgee_game_folder;
     dst.bg2ee_game_folder = from.bg2ee_game_folder;
     dst.iwdee_game_folder = from.iwdee_game_folder;
-    dst.eet_bgee_game_folder = from.eet_bgee_game_folder;
-    dst.eet_bg2ee_game_folder = from.eet_bg2ee_game_folder;
-
-    dst.bgee_log_folder = from.bgee_log_folder;
-    dst.bgee_log_file = from.bgee_log_file;
-    dst.bg2ee_log_folder = from.bg2ee_log_folder;
-    dst.bg2ee_log_file = from.bg2ee_log_file;
-    dst.eet_bgee_log_folder = from.eet_bgee_log_folder;
-    dst.eet_bg2ee_log_folder = from.eet_bg2ee_log_folder;
-    dst.weidu_log_folder = from.weidu_log_folder;
-    dst.log_file = from.log_file;
-
-    dst.eet_pre_dir = from.eet_pre_dir;
-    dst.eet_new_dir = from.eet_new_dir;
-    dst.generate_directory = from.generate_directory;
-
-    dst.mods_folder.clone_from(&from.mods_folder);
-    if from.global_mods_folder.trim().is_empty() && !from.mods_folder.trim().is_empty() {
-        dst.global_mods_folder = from.mods_folder;
-    } else {
-        dst.global_mods_folder = from.global_mods_folder;
-    }
+    dst.global_mods_folder = from.global_mods_folder;
     dst.mods_archive_folder = from.mods_archive_folder;
     dst.mods_backup_folder = from.mods_backup_folder;
 
@@ -1059,13 +1042,8 @@ mod tests {
 
     #[test]
     fn cold_load_rederives_per_install_dirs_from_entry_destination_not_settings() {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static C: AtomicU64 = AtomicU64::new(0);
-        let dest = std::env::temp_dir().join(format!(
-            "bio_workspace_loader_fix2_{}_{}",
-            std::process::id(),
-            C.fetch_add(1, Ordering::Relaxed)
-        ));
+        let root = TempRoot::named("bio_workspace_loader_fix2");
+        let dest = root.0.join("dest");
         let mut fork_entry = entry(Game::EET);
         fork_entry.destination_folder = dest.to_string_lossy().into_owned();
 
@@ -1073,40 +1051,101 @@ mod tests {
         ws.step1.mods_folder = "GLOBAL_SETTINGS_MODS".to_string();
         ws.step1.bg2ee_log_folder = "GLOBAL_SETTINGS_BG2EE_LOG".to_string();
 
-        populate_wizard_state_from_workspace(
+        let failure = populate_wizard_state_from_workspace(
             &ModlistWorkspaceState::default(),
             &fork_entry,
-            &SettingsStore::new_default(),
+            &SettingsStore::new_with_path(root.0.join("bio_settings.json")),
             &mut ws,
         );
 
-        let expected_mods = dest.join("mods");
+        assert_eq!(failure, None);
         assert_eq!(
             ws.step1.mods_folder,
-            expected_mods.to_string_lossy(),
-            "after cold-load, mods_folder MUST be rooted at entry.destination_folder \
-             (per-install per SPEC §13.12a), not the stale settings value that \
-             sync_paths_from_settings copied in just before"
+            dest.join("mods").to_string_lossy(),
+            "mods_folder is rooted at the list's destination"
         );
-        assert_ne!(
-            ws.step1.mods_folder, "GLOBAL_SETTINGS_MODS",
-            "the per-install re-derive must overwrite the global settings value"
-        );
-
-        let expected_bg2ee_log = dest.join("weidu_log_source").join("bg2ee");
         assert_eq!(
             ws.step1.bg2ee_log_folder,
-            expected_bg2ee_log.to_string_lossy(),
-            "bg2ee_log_folder MUST be <dest>/weidu_log_source/bg2ee (per-install), \
-             not the stale settings value — this is what made weidu.log writes \
-             land at the previous modlist's path before the fix"
+            dest.join("weidu_log_source")
+                .join("bg2ee")
+                .to_string_lossy(),
+            "bg2ee_log_folder is <dest>/weidu_log_source/bg2ee"
         );
-        assert_ne!(
-            ws.step1.bg2ee_log_folder, "GLOBAL_SETTINGS_BG2EE_LOG",
-            "the per-install re-derive must overwrite the global settings value"
+    }
+
+    #[test]
+    fn a_failed_derive_leaves_no_per_list_folder_live() {
+        let root = TempRoot::named("bio_loader_derive_fail");
+        let blocker = root.0.join("not_a_folder");
+        std::fs::write(&blocker, b"x").expect("write blocker file");
+        let mut list = entry(Game::BGEE);
+        list.name = "Unplugged".to_string();
+        list.destination_folder = blocker.join("dest").to_string_lossy().into_owned();
+
+        let mut ws = WizardState::default();
+        ws.step1.bgee_log_folder = r"D:\Games\BGEE Modded".to_string();
+        ws.step1.bg2ee_log_folder = r"D:\Games\BG2EE Modded".to_string();
+        ws.step1.eet_bgee_log_folder = r"D:\Games\EET pre".to_string();
+        ws.step1.eet_bg2ee_log_folder = r"D:\Games\EET new".to_string();
+        ws.step1.generate_directory = r"D:\Games\BGEE Modded".to_string();
+        ws.step1.eet_pre_dir = r"D:\Games\EET pre".to_string();
+        ws.step1.eet_new_dir = r"D:\Games\EET new".to_string();
+        ws.step1.prepare_target_dirs_before_install = true;
+        ws.step1.backup_targets_before_eet_copy = true;
+
+        let failure = populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &list,
+            &SettingsStore::new_with_path(root.0.join("bio_settings.json")),
+            &mut ws,
         );
 
-        let _ = std::fs::remove_dir_all(&dest);
+        assert!(failure.is_some(), "the derive failure is reported");
+        assert_eq!(ws.step1.bgee_log_folder, "");
+        assert_eq!(ws.step1.bg2ee_log_folder, "");
+        assert_eq!(ws.step1.eet_bgee_log_folder, "");
+        assert_eq!(ws.step1.eet_bg2ee_log_folder, "");
+        assert_eq!(ws.step1.generate_directory, "");
+        assert_eq!(ws.step1.eet_pre_dir, "");
+        assert_eq!(ws.step1.eet_new_dir, "");
+        assert!(!ws.step1.prepare_target_dirs_before_install);
+        assert!(!ws.step1.backup_targets_before_eet_copy);
+        assert_eq!(ws.step1.game_install, "BGEE");
+    }
+
+    #[test]
+    fn opening_a_list_copies_only_global_settings() {
+        use crate::settings::model::{AppSettings, Step1Settings};
+        let root = TempRoot::named("bio_loader_globals_only");
+        let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let settings = AppSettings {
+            step1: Step1Settings {
+                bgee_game_folder: root.path_of("src_bgee"),
+                mods_archive_folder: root.path_of("archive"),
+                ..Step1Settings::default()
+            },
+            ..AppSettings::default()
+        };
+        store.save(&settings).expect("save temp settings");
+        let mut list = entry(Game::BGEE);
+        list.destination_folder = root.path_of("dest");
+        let mut ws = WizardState::default();
+        ws.step1.eet_bgee_game_folder = r"D:\old\eet bgee".to_string();
+        ws.step1.eet_bg2ee_game_folder = r"D:\old\eet bg2ee".to_string();
+
+        let failure = populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &list,
+            &store,
+            &mut ws,
+        );
+
+        assert_eq!(failure, None);
+        assert_eq!(ws.step1.bgee_game_folder, root.path_of("src_bgee"));
+        assert_eq!(ws.step1.mods_archive_folder, root.path_of("archive"));
+        assert_eq!(ws.step1.global_mods_folder, "");
+        assert_eq!(ws.step1.eet_bgee_game_folder, "");
+        assert_eq!(ws.step1.eet_bg2ee_game_folder, "");
     }
 
     #[test]
