@@ -24,9 +24,11 @@ impl OrchestratorApp {
     }
 
     pub(crate) fn code_for_share(&mut self, id: &str) -> Option<String> {
-        let typed = self.share_name_buffer.trim();
+        let typed = self.share_name_buffer.trim().to_string();
         if !typed.is_empty() && self.redesign_settings.user_name.trim().is_empty() {
-            self.redesign_settings.user_name = typed.to_string();
+            self.notification_manager
+                .success(format!("Saved your name to Settings: {typed}"));
+            self.redesign_settings.user_name = typed;
         }
         self.share_name_buffer.clear();
 
@@ -124,6 +126,12 @@ mod tests {
 
         assert_eq!(app.redesign_settings.user_name, "@typed");
         assert_eq!(app.share_name_buffer, "");
+        let history = app.notification_manager.history();
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history.back().unwrap().text,
+            "Saved your name to Settings: @typed"
+        );
         let entry = app.registry.find("OWNLIST00001").unwrap();
         assert_eq!(entry.author.as_deref(), Some("@typed"));
         assert_eq!(entry.latest_share_code.as_deref(), Some(code.as_str()));
@@ -151,6 +159,7 @@ mod tests {
         let code = app.code_for_share("ASISLIST0001");
 
         assert_eq!(code, stored);
+        assert!(app.notification_manager.history().is_empty());
         let entry = app.registry.find("ASISLIST0001").unwrap();
         assert_eq!(entry.author.as_deref(), Some("@original"));
         assert_eq!(
