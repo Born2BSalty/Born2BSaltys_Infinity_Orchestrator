@@ -114,28 +114,30 @@ fn apply_share_dialog(
     entry: &crate::registry::model::ModlistEntry,
     palette: crate::ui::shared::redesign_tokens::ThemePalette,
 ) {
-    let code = entry
+    let has_code = entry
         .latest_share_code
         .as_deref()
-        .filter(|c| !c.trim().is_empty());
+        .is_some_and(|c| !c.trim().is_empty());
+    let needed = orchestrator.share_name_needed(&entry.id);
 
     let outcome = share_modlist_dialog::render(
         ctx,
         palette,
-        &ShareModlistDialog {
+        &mut ShareModlistDialog {
             id_salt: "workspace_step5",
             modlist_name: &entry.name,
-            has_code: code.is_some(),
+            has_code,
+            name_prompt: needed.then_some(&mut orchestrator.share_name_buffer),
         },
     );
 
     match outcome {
         ShareOutcome::ExportFile => {
-            if let Some(code) = code {
-                let unresolved = share_actions::unresolved_mods_for_code(code);
+            if let Some(code) = orchestrator.code_for_share(&entry.id) {
+                let unresolved = share_actions::unresolved_mods_for_code(&code);
                 share_actions::export_modlist_file(
                     &entry.name,
-                    code,
+                    &code,
                     &unresolved,
                     &mut orchestrator.notification_manager,
                 );
@@ -143,13 +145,14 @@ fn apply_share_dialog(
             orchestrator.workspace_step5.share_dialog_open = false;
         }
         ShareOutcome::CopyCode => {
-            if let Some(code) = code {
-                let unresolved = share_actions::unresolved_mods_for_code(code);
-                share_actions::copy_share_code(ctx, &entry.name, code, &unresolved);
+            if let Some(code) = orchestrator.code_for_share(&entry.id) {
+                let unresolved = share_actions::unresolved_mods_for_code(&code);
+                share_actions::copy_share_code(ctx, &entry.name, &code, &unresolved);
             }
             orchestrator.workspace_step5.share_dialog_open = false;
         }
         ShareOutcome::Closed => {
+            orchestrator.share_name_buffer.clear();
             orchestrator.workspace_step5.share_dialog_open = false;
         }
         ShareOutcome::Pending => {}

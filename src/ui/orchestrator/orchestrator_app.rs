@@ -311,6 +311,8 @@ pub struct OrchestratorApp {
 
     pub(crate) pending_folder_deletes: Vec<PendingFolderDelete>,
 
+    pub(crate) share_name_buffer: String,
+
     #[cfg(test)]
     pub(crate) isolated_test_config_root: Option<std::path::PathBuf>,
 }
@@ -453,6 +455,7 @@ impl OrchestratorApp {
             destination_prep_generation: 0,
             hash_progress: Arc::new(std::sync::Mutex::new(None)),
             pending_folder_deletes: Vec::new(),
+            share_name_buffer: String::new(),
             #[cfg(test)]
             isolated_test_config_root: None,
         };
@@ -1132,15 +1135,6 @@ impl OrchestratorApp {
                 self.bio_settings_last_saved = bio_snapshot;
             }
         }
-    }
-
-    pub(crate) fn ensure_creator_name(&mut self) -> bool {
-        if !self.redesign_settings.user_name.trim().is_empty() {
-            return true;
-        }
-        self.notification_manager
-            .error("Set your name in Settings > General before creating or sharing a modlist.");
-        false
     }
 
     fn refresh_path_validation_status(&mut self) {

@@ -322,6 +322,38 @@ mod tests {
         assert!(!evaluate(&app_state));
     }
 
+    #[test]
+    fn fork_completion_records_the_list_mods_folder() {
+        let mut app = OrchestratorApp::new_isolated_for_test("fork-completion-mods-folder");
+        let mods_folder = app
+            .isolated_test_config_root
+            .as_ref()
+            .expect("the isolated app owns a temp config root")
+            .join("fork mods")
+            .to_string_lossy()
+            .into_owned();
+        app.active_install_modlist_id = Some("FORKED000001".to_string());
+        app.wizard_state.step1.mods_folder.clone_from(&mods_folder);
+
+        persist_fork_resume_workspace_state(&mut app);
+
+        let in_memory = app
+            .workspace_state
+            .get("FORKED000001")
+            .expect("the fork's workspace is recorded");
+        assert_eq!(
+            in_memory.scratch_mods_folder.as_deref(),
+            Some(mods_folder.as_str())
+        );
+        let on_disk = WorkspaceStore::new_for_id("FORKED000001")
+            .load()
+            .expect("the fork's workspace is written");
+        assert_eq!(
+            on_disk.scratch_mods_folder.as_deref(),
+            Some(mods_folder.as_str())
+        );
+    }
+
     #[derive(Default)]
     struct RunningPhases {
         download: bool,
