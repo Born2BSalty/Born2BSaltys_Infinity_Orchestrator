@@ -8,6 +8,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::thread::{self, JoinHandle};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::folder_trash::move_folder_to_trash;
 use crate::ui::install::state_install::DestChoice;
 
 const BACKUP_PREFIX: &str = "_bio_backup";
@@ -98,7 +99,7 @@ pub fn prepare_destination(
     match choice {
         DestChoice::Clear => {
             let removed = count_children(dest)?;
-            fs::remove_dir_all(dest)?;
+            move_folder_to_trash(dest).map_err(io::Error::other)?;
             fs::create_dir_all(dest)?;
             Ok(DestinationPrepReport::Cleaned {
                 children_removed: removed,
@@ -316,20 +317,5 @@ mod tests {
         let r = prepare_destination(&path, Some(DestChoice::Clear));
         assert!(r.is_err(), "a file path is not a directory");
         let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn clear_does_not_route_through_recycle_bin() {
-        let dest = td("no_recycle_bin");
-        make_populated_dir(&dest);
-        let canary = dest.join("canary.bin");
-        fs::write(&canary, b"canary").unwrap();
-        let r = prepare_destination(&dest, Some(DestChoice::Clear)).expect("ok");
-        assert!(matches!(r, DestinationPrepReport::Cleaned { .. }));
-        assert!(
-            !canary.exists(),
-            "the canary file is permanently gone (no Recycle Bin restore)"
-        );
-        let _ = fs::remove_dir_all(&dest);
     }
 }

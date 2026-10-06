@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
+use crate::folder_trash::move_folder_to_trash;
 use crate::registry::errors::RegistryError;
 use crate::registry::model::{ModlistEntry, ModlistRegistry};
 use crate::registry::store::RegistryStore;
@@ -47,9 +48,7 @@ pub fn remove_entry_and_save(
 pub fn spawn_delete_folder_worker(dest: PathBuf) -> FolderDeleteReceiver {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let result = std::fs::remove_dir_all(&dest)
-            .map_err(|e| format!("remove_dir_all({}): {e}", dest.display()));
-        let _ = tx.send(result);
+        let _ = tx.send(move_folder_to_trash(&dest));
     });
     rx
 }

@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::app::state::Step1State;
+use crate::folder_trash::move_folder_to_trash;
 
 pub struct TargetPrepResult {
     pub backups: Vec<PathBuf>,
@@ -112,7 +113,7 @@ fn clean_target_dir_if_nonempty(target: &str) -> std::io::Result<Option<PathBuf>
         return Ok(None);
     }
 
-    fs::remove_dir_all(&target_path)?;
+    move_folder_to_trash(&target_path).map_err(std::io::Error::other)?;
     fs::create_dir_all(&target_path)?;
     Ok(Some(target_path))
 }

@@ -508,27 +508,29 @@ mod tests {
 
     #[test]
     fn global_notice_shows_only_while_the_effective_global_folder_is_blank() {
-        let saved = |global: &str, legacy: &str| Step1Settings {
+        let saved = |global: &str| Step1Settings {
             global_mods_folder: global.to_string(),
-            mods_folder: legacy.to_string(),
             ..Step1Settings::default()
         };
         assert_eq!(
-            global_mods_folder_missing_message(&saved("", "")),
+            global_mods_folder_missing_message(&saved("")),
             Some(GLOBAL_MODS_FOLDER_MISSING_MESSAGE)
         );
         assert_eq!(
-            global_mods_folder_missing_message(&saved("   ", "")),
+            global_mods_folder_missing_message(&saved("   ")),
             Some(GLOBAL_MODS_FOLDER_MISSING_MESSAGE)
         );
         assert_eq!(
-            global_mods_folder_missing_message(&saved("C:\\Games\\BIO\\mods\\extracted", "")),
+            global_mods_folder_missing_message(&saved("C:\\Games\\BIO\\mods\\extracted")),
             None
         );
+        let legacy_only: Step1Settings =
+            serde_json::from_str(r#"{"mods_folder":"C:\\Games\\BIO\\mods\\extracted"}"#)
+                .expect("deserialize legacy settings");
         assert_eq!(
-            global_mods_folder_missing_message(&saved("", "C:\\Games\\BIO\\mods\\extracted")),
-            None,
-            "the notice follows the same fallback the loader applies"
+            global_mods_folder_missing_message(&legacy_only),
+            Some(GLOBAL_MODS_FOLDER_MISSING_MESSAGE),
+            "a legacy mods folder is no longer a Global fallback"
         );
     }
 

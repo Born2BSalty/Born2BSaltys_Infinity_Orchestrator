@@ -132,7 +132,7 @@ mod tests {
         let store = SettingsStore::new_with_path(&main);
         let settings = AppSettings {
             step1: crate::settings::model::Step1Settings {
-                mods_folder: "M".to_string(),
+                global_mods_folder: "M".to_string(),
                 ..Default::default()
             },
             ..Default::default()
@@ -158,7 +158,7 @@ mod tests {
             reloaded.general.theme_palette,
             crate::settings::redesign_fields::ThemeChoice::Light
         );
-        assert_eq!(reloaded.step1.mods_folder, "M");
+        assert_eq!(reloaded.step1.global_mods_folder, "M");
         assert!(!legacy.exists());
         cleanup(&main, &legacy);
     }

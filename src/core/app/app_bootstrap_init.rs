@@ -7,7 +7,7 @@ use crate::app::state::Step1State;
 use crate::settings::model::AppSettings;
 use crate::settings::redesign_fields::RedesignSettings;
 use crate::settings::store::SettingsStore;
-use tracing::{info, warn};
+use tracing::warn;
 
 pub(crate) struct AppBootstrap {
     pub(crate) settings_store: SettingsStore,
@@ -30,22 +30,12 @@ pub(crate) fn initialize(dev_mode: bool) -> AppBootstrap {
 
     let settings_store = SettingsStore::new_default();
     let exe_fingerprint = current_exe_fingerprint();
-    let mut loaded = settings_store.load().unwrap_or_else(|err| {
+    let loaded = settings_store.load().unwrap_or_else(|err| {
         warn!(target = "orchestrator", "settings load failed: {err}");
         AppSettings::default()
     });
-    if let Some((old_bgee, old_bg2ee)) = loaded.step1.clear_unreachable_eet_sources() {
-        info!(
-            target = "orchestrator",
-            "ignoring unreachable EET source fields still present in settings: {:?}",
-            (old_bgee, old_bg2ee)
-        );
-    }
     let general = loaded.general;
     let mut step1 = Step1State::from(loaded.step1);
-    if step1.global_mods_folder.trim().is_empty() && !step1.mods_folder.trim().is_empty() {
-        step1.global_mods_folder.clone_from(&step1.mods_folder);
-    }
     if !dev_mode {
         scrub_dev_settings(&mut step1);
     }

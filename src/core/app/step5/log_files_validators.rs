@@ -14,6 +14,17 @@ use crate::platform_defaults::compose_weidu_log_path;
 use super::target_prep::paths_point_to_same_dir;
 
 pub fn validate_runtime_prep_paths(step1: &Step1State) -> Result<(), String> {
+    let has_copy_target = if step1.game_install == "EET" {
+        step1.new_pre_eet_dir_enabled && step1.new_eet_dir_enabled
+    } else {
+        step1.generate_directory_enabled
+    };
+    if !has_copy_target {
+        return Err(
+            "No game copy folder is set up for this install; BIO never installs into the source game folder"
+                .to_string(),
+        );
+    }
     let mut checks: Vec<(String, &str, &str)> = Vec::new();
     if step1.game_install == "EET" {
         if step1.new_pre_eet_dir_enabled {
@@ -323,6 +334,41 @@ mod tests {
         assert_eq!(
             validate_runtime_prep_paths(&step1),
             Err("The BG2EE game folder is not set. Set it in Settings \u{2192} Paths.".to_string())
+        );
+    }
+
+    #[test]
+    fn preflight_refuses_an_install_with_no_game_copy_target() {
+        let expected = Err(
+            "No game copy folder is set up for this install; BIO never installs into the source game folder"
+                .to_string(),
+        );
+        for game in ["BGEE", "BG2EE", "IWDEE"] {
+            let step1 = Step1State {
+                bgee_game_folder: "/games/bgee".to_string(),
+                game_install: game.to_string(),
+                ..Default::default()
+            };
+            assert_eq!(validate_runtime_prep_paths(&step1), expected, "{game}");
+        }
+        let eet_half = Step1State {
+            game_install: "EET".to_string(),
+            new_pre_eet_dir_enabled: true,
+            eet_pre_dir: "/some/pre".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(validate_runtime_prep_paths(&eet_half), expected);
+        let bgee_after_eet_derive = Step1State {
+            game_install: "BGEE".to_string(),
+            new_pre_eet_dir_enabled: true,
+            new_eet_dir_enabled: true,
+            eet_pre_dir: "/some/pre".to_string(),
+            eet_new_dir: "/some/new".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_runtime_prep_paths(&bgee_after_eet_derive),
+            expected
         );
     }
 
