@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::path::PathBuf;
+
 use eframe::egui;
 
 use crate::app::compat_dlc_source::{SourceNotice, SourceNoticeSeverity, SourceRemedy};
@@ -11,7 +13,8 @@ use crate::registry::destination_claim::{
 };
 use crate::registry::model::{Game, ModlistRegistry};
 use crate::settings::model::Step1Settings;
-use crate::ui::create::state_create::CreateScreenState;
+use crate::ui::create::create_log_import;
+use crate::ui::create::state_create::{CreateMode, CreateScreenState, LogCheck};
 use crate::ui::install::stage_review::{self, SourceWarningAction};
 use crate::ui::install::sub_flow_footer::{self, PrimaryBtn};
 use crate::ui::install::{destination_not_empty, destination_owned};
@@ -19,10 +22,13 @@ use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, redesign_box, redesign_btn, redesign_text_input, render_screen_title,
 };
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong, redesign_error,
-    redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
-    redesign_text_primary,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_strong, redesign_error, redesign_input_bg, redesign_shell_bg, redesign_success,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
+use crate::ui::workspace::state_workspace::WeiduLogImportForm;
+use crate::ui::workspace::step2::step2_log_confirm::weidu_log_import_rows;
+use crate::ui::workspace::step2::step2_log_import_dialog;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChooseOutcome {
@@ -48,6 +54,19 @@ const FORM_INPUT_MARGIN: egui::Margin = egui::Margin {
 const FORM_ROW_GAP_PX: f32 = 8.0;
 
 const GLOBAL_MODS_FOLDER_MISSING_MESSAGE: &str = "New lists work from the Global mods folder. Set one in Settings > Paths > Mods folder. Until then this list works from the mods folder inside its installation folder.";
+
+const LOGS_TITLE: &str = "From WeiDU logs";
+const LOGS_DESC: &str = "Pick an install's WeiDU logs. BIO ticks the components they list and can fetch the mods you don't have.";
+const SCRATCH_TITLE: &str = "From scratch";
+const SCRATCH_DESC: &str = "Scan your local mods folder, pick components, reorder, then install. Starts from an empty selection.";
+
+const LOG_ROWS_TOP_GAP_PX: f32 = 14.0;
+const LOG_ROW_GAP_PX: f32 = 8.0;
+const LOG_STATUS_INSET_PX: f32 = 120.0 + 8.0;
+const LOG_STATUS_TOP_GAP_PX: f32 = 4.0;
+const LOG_STATUS_GLYPH_GAP_PX: f32 = 4.0;
+const LOG_STATUS_SIZE: f32 = 12.0;
+const NOT_A_LOG_TEXT: &str = "not a WeiDU log";
 
 pub struct ChooseCtx<'a> {
     pub registry: &'a ModlistRegistry,
@@ -75,7 +94,7 @@ pub fn render(
             });
     });
 
-    let proceed_ok = !claim.blocks();
+    let proceed_ok = !claim.blocks() && logs_ready(state);
 
     let footer = sub_flow_footer::render(
         ui,
@@ -110,6 +129,19 @@ fn render_body(
 ) {
     render_title_row(ui, palette, outcome);
     render_setup_box(ui, palette, state, ctx, claim);
+    render_starting_point_boxes(ui, palette, state);
+    if state.mode == CreateMode::FromLogs {
+        render_log_rows(ui, palette, state);
+    }
+}
+
+fn logs_ready(state: &CreateScreenState) -> bool {
+    state.mode == CreateMode::FromScratch
+        || create_log_import::start_allowed(
+            &weidu_log_import_rows(state.game.to_legacy_string()),
+            state.first_check.as_ref(),
+            state.second_check.as_ref(),
+        )
 }
 
 fn render_title_row(ui: &mut egui::Ui, palette: ThemePalette, outcome: &mut ChooseOutcome) {
@@ -124,7 +156,9 @@ fn render_title_row(ui: &mut egui::Ui, palette: ThemePalette, outcome: &mut Choo
                     ui,
                     palette,
                     "Create your own modlist",
-                    Some("name your modlist, set destination + mods paths"),
+                    Some(
+                        "name your modlist, set destination + mods paths, then pick a starting point",
+                    ),
                 );
             },
         );
@@ -251,6 +285,163 @@ fn render_setup_box(
         {
             state.destination_choice = Some(picked);
         }
+    });
+}
+
+fn render_starting_point_boxes(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    state: &mut CreateScreenState,
+) {
+    ui.add_space(18.0);
+
+    ui.label(
+        egui::RichText::new("Choose one")
+            .size(14.0)
+            .family(egui::FontFamily::Name("poppins_medium".into()))
+            .color(redesign_text_muted(palette)),
+    );
+    ui.add_space(8.0);
+
+    let avail_w = ui.available_width();
+    let gap = 14.0;
+    let card_w = ((avail_w - gap) / 2.0).max(160.0);
+    let measured = selectable_box_natural_height(ui, card_w, LOGS_TITLE, LOGS_DESC).max(
+        selectable_box_natural_height(ui, card_w, SCRATCH_TITLE, SCRATCH_DESC),
+    );
+    let cards_key = ui.id().with("create_cards_equal_h");
+    let (prev_w, carry) = ui
+        .ctx()
+        .memory(|m| m.data.get_temp::<(f32, f32)>(cards_key))
+        .unwrap_or((0.0, 0.0));
+    let carry = if (prev_w - card_w).abs() > 0.5 {
+        0.0
+    } else {
+        carry
+    };
+    let box_h = measured.max(carry);
+
+    let mut h_logs = 0.0_f32;
+    let mut h_scratch = 0.0_f32;
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+
+        let (clicked, h) = selectable_box(
+            ui,
+            palette,
+            SelectableBoxSpec {
+                width: card_w,
+                min_h: box_h,
+                title: LOGS_TITLE,
+                desc: LOGS_DESC,
+                selected: state.mode == CreateMode::FromLogs,
+                id_salt: "create_box_logs",
+            },
+        );
+        if clicked {
+            state.mode = CreateMode::FromLogs;
+        }
+        h_logs = h;
+
+        let (clicked, h) = selectable_box(
+            ui,
+            palette,
+            SelectableBoxSpec {
+                width: card_w,
+                min_h: box_h,
+                title: SCRATCH_TITLE,
+                desc: SCRATCH_DESC,
+                selected: state.mode == CreateMode::FromScratch,
+                id_salt: "create_box_scratch",
+            },
+        );
+        if clicked {
+            state.mode = CreateMode::FromScratch;
+        }
+        h_scratch = h;
+    });
+
+    let diff = (h_logs - h_scratch).abs();
+    if diff > 0.5 {
+        ui.ctx()
+            .memory_mut(|m| m.data.insert_temp(cards_key, (card_w, box_h + diff)));
+        ui.ctx().request_repaint();
+    }
+}
+
+fn render_log_rows(ui: &mut egui::Ui, palette: ThemePalette, state: &mut CreateScreenState) {
+    ui.add_space(LOG_ROWS_TOP_GAP_PX);
+    let rows = weidu_log_import_rows(state.game.to_legacy_string());
+    for (index, row) in rows.iter().enumerate() {
+        if index > 0 {
+            ui.add_space(LOG_ROW_GAP_PX);
+        }
+        let before = picked_log(&state.log_form, row.first_slot).cloned();
+        step2_log_import_dialog::render_row(ui, palette, *row, &mut state.log_form, None);
+        let after = picked_log(&state.log_form, row.first_slot).cloned();
+        let check = log_check_slot(state, row.first_slot);
+        if before != after {
+            *check = after.as_deref().map(create_log_import::check_log);
+        }
+        if let Some(status) = *check {
+            render_log_status(ui, palette, status);
+        }
+    }
+    ui.add_space(LOG_ROW_GAP_PX);
+    step2_log_import_dialog::render_fetch_row(ui, palette, &mut state.log_form.fetch_missing);
+}
+
+const fn picked_log(form: &WeiduLogImportForm, first_slot: bool) -> Option<&PathBuf> {
+    if first_slot {
+        form.first.as_ref()
+    } else {
+        form.second.as_ref()
+    }
+}
+
+const fn log_check_slot(state: &mut CreateScreenState, first_slot: bool) -> &mut Option<LogCheck> {
+    if first_slot {
+        &mut state.first_check
+    } else {
+        &mut state.second_check
+    }
+}
+
+fn log_status_text(check: LogCheck) -> String {
+    match check {
+        LogCheck::Valid { components, mods } => {
+            format!("{components} components from {mods} mods")
+        }
+        LogCheck::NotALog => NOT_A_LOG_TEXT.to_string(),
+    }
+}
+
+fn render_log_status(ui: &mut egui::Ui, palette: ThemePalette, check: LogCheck) {
+    let valid = matches!(check, LogCheck::Valid { .. });
+    let color = if valid {
+        redesign_success(palette)
+    } else {
+        redesign_error(palette)
+    };
+    ui.add_space(LOG_STATUS_TOP_GAP_PX);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space(LOG_STATUS_INSET_PX);
+        if valid {
+            ui.label(
+                egui::RichText::new("\u{2713}")
+                    .size(LOG_STATUS_SIZE)
+                    .family(egui::FontFamily::Name("firacode_nerd".into()))
+                    .color(color),
+            );
+            ui.add_space(LOG_STATUS_GLYPH_GAP_PX);
+        }
+        ui.label(
+            egui::RichText::new(log_status_text(check))
+                .size(LOG_STATUS_SIZE)
+                .family(egui::FontFamily::Name("poppins_light".into()))
+                .color(color),
+        );
     });
 }
 
@@ -466,9 +657,199 @@ fn folder_input(
     changed
 }
 
+#[derive(Clone, Copy)]
+struct SelectableBoxSpec<'a> {
+    width: f32,
+    min_h: f32,
+    title: &'a str,
+    desc: &'a str,
+    selected: bool,
+    id_salt: &'a str,
+}
+
+fn selectable_box(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    spec: SelectableBoxSpec<'_>,
+) -> (bool, f32) {
+    let SelectableBoxSpec {
+        width,
+        min_h,
+        title,
+        desc,
+        selected,
+        id_salt,
+    } = spec;
+    let border_color = if selected {
+        redesign_accent(palette)
+    } else {
+        redesign_border_strong(palette)
+    };
+    let fill = if selected {
+        faint_accent_tint(palette)
+    } else {
+        redesign_shell_bg(palette)
+    };
+
+    let chassis = egui::Frame::default()
+        .fill(fill)
+        .stroke(egui::Stroke::new(REDESIGN_BORDER_WIDTH_PX, border_color))
+        .corner_radius(egui::CornerRadius::same(REDESIGN_BORDER_RADIUS_U8))
+        .inner_margin(egui::Margin {
+            left: SBOX_PAD_X,
+            right: SBOX_PAD_X,
+            top: SBOX_PAD_Y,
+            bottom: SBOX_PAD_Y,
+        });
+
+    let inner = ui.allocate_ui_with_layout(
+        egui::vec2(width, 0.0),
+        egui::Layout::top_down(egui::Align::LEFT),
+        |ui| {
+            chassis.show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.set_min_height(2.0f32.mul_add(-f32::from(SBOX_PAD_Y), min_h));
+                ui.spacing_mut().item_spacing.y = 0.0;
+                ui.label(
+                    egui::RichText::new(title)
+                        .size(SBOX_TITLE_SIZE)
+                        .family(egui::FontFamily::Name("poppins_light".into()))
+                        .color(redesign_text_primary(palette)),
+                );
+                ui.add_space(SBOX_TITLE_GAP);
+                ui.label(
+                    egui::RichText::new(desc)
+                        .size(SBOX_DESC_SIZE)
+                        .family(egui::FontFamily::Name("poppins_light".into()))
+                        .color(redesign_text_muted(palette)),
+                );
+            });
+        },
+    );
+
+    let card_h = inner.response.rect.height();
+    let resp = ui.interact(
+        inner.response.rect,
+        ui.make_persistent_id(("create_selectable_box", id_salt)),
+        egui::Sense::click(),
+    );
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    (resp.clicked(), card_h)
+}
+
+const SELECTED_TINT_NUMERATOR: u16 = 14;
+const SELECTED_TINT_DENOMINATOR: u16 = 100;
+
+fn faint_accent_tint(palette: ThemePalette) -> egui::Color32 {
+    let bg = redesign_shell_bg(palette);
+    let ac = redesign_accent(palette);
+    let mix = |b: u8, a: u8| -> u8 {
+        let background_weight = SELECTED_TINT_DENOMINATOR - SELECTED_TINT_NUMERATOR;
+        let mixed = (u16::from(b) * background_weight
+            + u16::from(a) * SELECTED_TINT_NUMERATOR
+            + SELECTED_TINT_DENOMINATOR / 2)
+            / SELECTED_TINT_DENOMINATOR;
+        u8::try_from(mixed).expect("mixed color channel is bounded")
+    };
+    egui::Color32::from_rgb(
+        mix(bg.r(), ac.r()),
+        mix(bg.g(), ac.g()),
+        mix(bg.b(), ac.b()),
+    )
+}
+
+const SBOX_PAD_X: i8 = 22;
+const SBOX_PAD_Y: i8 = 20;
+const SBOX_TITLE_SIZE: f32 = 18.0;
+const SBOX_TITLE_GAP: f32 = 8.0;
+const SBOX_DESC_SIZE: f32 = 13.0;
+
+fn selectable_box_natural_height(ui: &egui::Ui, card_w: f32, title: &str, desc: &str) -> f32 {
+    let inner_w = 2.0f32.mul_add(-f32::from(SBOX_PAD_X), card_w).max(1.0);
+    let title_h = wrapped_text_height(ui, title, SBOX_TITLE_SIZE, "poppins_light", inner_w);
+    let desc_h = wrapped_text_height(ui, desc, SBOX_DESC_SIZE, "poppins_light", inner_w);
+    2.0f32.mul_add(f32::from(SBOX_PAD_Y), title_h) + SBOX_TITLE_GAP + desc_h
+}
+
+fn wrapped_text_height(ui: &egui::Ui, text: &str, size: f32, family: &str, wrap_w: f32) -> f32 {
+    let font = egui::FontId::new(size, egui::FontFamily::Name(family.into()));
+    ui.fonts(|f| {
+        f.layout(text.to_string(), font, egui::Color32::PLACEHOLDER, wrap_w)
+            .size()
+            .y
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const _: () = assert!(SELECTED_TINT_NUMERATOR * 2 < SELECTED_TINT_DENOMINATOR);
+
+    #[test]
+    fn equalized_box_height_is_the_taller_boxs_natural_height() {
+        let nat = |title_h: f32, desc_h: f32| {
+            2.0f32.mul_add(f32::from(SBOX_PAD_Y), title_h) + SBOX_TITLE_GAP + desc_h
+        };
+        let short = nat(20.0, 40.0);
+        let tall = nat(20.0, 72.0);
+        let equalized = short.max(tall);
+        assert_f32_close(equalized, tall);
+        assert!(
+            equalized >= short,
+            "the shorter box is grown to match, never clipped"
+        );
+    }
+
+    #[test]
+    fn faint_accent_tint_is_opaque_and_near_shell_bg() {
+        for palette in [ThemePalette::Dark, ThemePalette::Light] {
+            let tint = faint_accent_tint(palette);
+            assert_eq!(tint.a(), 255, "the selected tint must be opaque");
+            let bg = redesign_shell_bg(palette);
+            let ac = redesign_accent(palette);
+            let expect = |b: u8, a: u8| -> u8 {
+                let background_weight = SELECTED_TINT_DENOMINATOR - SELECTED_TINT_NUMERATOR;
+                let mixed = (u16::from(b) * background_weight
+                    + u16::from(a) * SELECTED_TINT_NUMERATOR
+                    + SELECTED_TINT_DENOMINATOR / 2)
+                    / SELECTED_TINT_DENOMINATOR;
+                u8::try_from(mixed).expect("mixed color channel is bounded")
+            };
+            assert_eq!(tint.r(), expect(bg.r(), ac.r()));
+            assert_eq!(tint.g(), expect(bg.g(), ac.g()));
+            assert_eq!(tint.b(), expect(bg.b(), ac.b()));
+        }
+    }
+
+    #[test]
+    fn log_status_copy_names_components_and_mods() {
+        assert_eq!(
+            log_status_text(LogCheck::Valid {
+                components: 214,
+                mods: 61
+            }),
+            "214 components from 61 mods"
+        );
+        assert_eq!(log_status_text(LogCheck::NotALog), "not a WeiDU log");
+    }
+
+    #[test]
+    fn start_follows_the_log_rows_only_in_logs_mode() {
+        let mut state = CreateScreenState::new();
+        assert!(!logs_ready(&state), "EET with both rows empty");
+        state.second_check = Some(LogCheck::Valid {
+            components: 1,
+            mods: 1,
+        });
+        assert!(logs_ready(&state));
+        state.first_check = Some(LogCheck::NotALog);
+        assert!(!logs_ready(&state));
+        state.mode = CreateMode::FromScratch;
+        assert!(logs_ready(&state), "From scratch ignores the log rows");
+    }
 
     fn assert_f32_close(actual: f32, expected: f32) {
         assert!(

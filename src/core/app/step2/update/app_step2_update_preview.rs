@@ -16,6 +16,7 @@ use crate::app::state::{
 pub(crate) enum UpdateCheckScope {
     Selection,
     WholeFolder,
+    LogPending,
 }
 
 pub(crate) fn preview_update_selected(
@@ -65,6 +66,10 @@ pub(crate) fn preview_update_selected(
         update_requests,
     };
     let update_requests = apply_full_update_preview_state(state, preview, exact_log_mode);
+    if scope == UpdateCheckScope::LogPending {
+        state.step2.update_selected_last_selection_signature = None;
+        state.step2.update_selected_last_was_full_selection = false;
+    }
     start_full_update_preview_check(
         state,
         step2_update_check_rx,
@@ -234,6 +239,7 @@ fn mod_in_check_scope(
     match scope {
         UpdateCheckScope::Selection => mod_selected_for_update(mod_state),
         UpdateCheckScope::WholeFolder => true,
+        UpdateCheckScope::LogPending => false,
     }
 }
 
@@ -1121,6 +1127,54 @@ mod tests {
         assert_eq!(preview.update_requests.len(), 0);
         assert_eq!(preview.known.len(), 0);
         assert_eq!(preview.queued_tp2.len(), 0);
+    }
+
+    #[test]
+    fn the_log_pending_scope_checks_no_scanned_mod() {
+        let sources = archive_sources();
+        let mut state = WizardState::default();
+        state.step1.game_install = "EET".to_string();
+        let mut ticked = unticked_mod();
+        ticked.checked = true;
+        let mut locked = unticked_mod();
+        locked.update_locked = true;
+        state.step2.bgee_mods = vec![ticked];
+        state.step2.bg2ee_mods = vec![locked];
+        state.step2.log_pending_downloads = vec![crate::app::state::Step2LogPendingDownload {
+            game_tab: "BG2EE".to_string(),
+            tp_file: "missing/setup-missing.tp2".to_string(),
+            label: "Missing".to_string(),
+            requested_version: None,
+        }];
+        let mut preview = collect_full_update_preview(
+            &mut state,
+            &sources,
+            &BTreeMap::new(),
+            false,
+            UpdateCheckScope::LogPending,
+        );
+        assert_eq!(preview.update_requests.len(), 0);
+        assert_eq!(preview.known.len(), 0);
+        assert_eq!(preview.locked.len(), 0);
+        assert_eq!(preview.queued_tp2.len(), 0);
+
+        let mut pending_preview = PendingLogUpdatePreview {
+            known: &mut preview.known,
+            manual: &mut preview.manual,
+            manual_requests: &mut preview.manual_requests,
+            unknown: &mut preview.unknown,
+            update_requests: &mut preview.update_requests,
+        };
+        extend_log_pending_update_requests(
+            &state,
+            &sources,
+            &BTreeMap::new(),
+            &mut preview.queued_tp2,
+            &mut pending_preview,
+        );
+        assert_eq!(preview.unknown, vec!["Missing".to_string()]);
+        assert_eq!(preview.update_requests.len(), 0);
+        assert_eq!(preview.known.len(), 0);
     }
 
     #[test]

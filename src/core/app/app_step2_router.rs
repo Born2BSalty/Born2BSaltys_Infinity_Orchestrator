@@ -61,11 +61,16 @@ pub(crate) fn handle_step2_action(
         }
         Step2Action::PreviewUpdateSelected => {
             let loaded = mod_downloads::load_mod_download_sources();
+            let scope = if state.step2.versions_ui.log_pending_scope {
+                super::app_step2_update_preview::UpdateCheckScope::LogPending
+            } else {
+                super::app_step2_update_preview::UpdateCheckScope::WholeFolder
+            };
             super::app_step2_update_preview::preview_update_selected(
                 state,
                 step2_update_check_rx,
                 &loaded,
-                super::app_step2_update_preview::UpdateCheckScope::WholeFolder,
+                scope,
             );
         }
         Step2Action::PreviewUpdateSelectedMod => {
@@ -2494,6 +2499,46 @@ mod tests {
             ("BGEE".to_string(), "gadget.tp2".to_string()),
         );
         assert!(!state.step2.whole_folder_check_active);
+    }
+
+    #[test]
+    fn a_scoped_check_leaves_the_next_whole_folder_open_to_auto_check() {
+        use crate::app::app_step2_update_preview::{UpdateCheckScope, preview_update_selected};
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods.push(make_mod_state("gadget.tp2"));
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        let mut rx = None;
+
+        preview_update_selected(&mut state, &mut rx, &sources, UpdateCheckScope::LogPending);
+        assert!(state.step2.update_selected_has_run);
+        assert!(!state.step2.update_selected_last_was_full_selection);
+        assert_eq!(state.step2.update_selected_last_selection_signature, None);
+
+        state.step2.update_selected_popup_open = false;
+        super::open_update_popup(&mut state);
+        assert!(state.step2.versions_ui.auto_check_pending);
+    }
+
+    #[test]
+    fn a_whole_folder_check_still_counts_as_a_full_check() {
+        use crate::app::app_step2_update_preview::{UpdateCheckScope, preview_update_selected};
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods.push(make_mod_state("gadget.tp2"));
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        let mut rx = None;
+
+        preview_update_selected(&mut state, &mut rx, &sources, UpdateCheckScope::WholeFolder);
+        assert!(state.step2.update_selected_last_was_full_selection);
+        assert_eq!(
+            state.step2.update_selected_last_selection_signature,
+            Some(crate::app::state::update_selection_signature(&state.step2))
+        );
+
+        state.step2.update_selected_popup_open = false;
+        super::open_update_popup(&mut state);
+        assert!(!state.step2.versions_ui.auto_check_pending);
     }
 
     fn eefixpack_asset(tag: &str) -> crate::app::state::Step2UpdateAsset {

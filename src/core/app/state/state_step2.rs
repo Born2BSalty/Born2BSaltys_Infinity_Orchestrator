@@ -96,6 +96,8 @@ pub enum VersionsMenu {
     },
 }
 
+type VersionsDrawerFlag = bool;
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VersionsDrawerUi {
     pub(crate) search: String,
@@ -105,6 +107,7 @@ pub struct VersionsDrawerUi {
     pub(crate) sheet_just_opened: bool,
     pub(crate) menu: Option<VersionsMenu>,
     pub(crate) auto_check_pending: bool,
+    pub(crate) log_pending_scope: VersionsDrawerFlag,
     pub(crate) source_form: Option<SourceForm>,
     pub(crate) release_list: ReleaseListState,
     pub(crate) known: Option<KnownExtras>,

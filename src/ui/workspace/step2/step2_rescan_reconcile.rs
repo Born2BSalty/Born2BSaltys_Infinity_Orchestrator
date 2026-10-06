@@ -52,7 +52,8 @@ fn capture_tab(mods: &[Step2ModState]) -> Vec<RescanSelection> {
     out
 }
 
-pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
+#[must_use]
+pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) -> bool {
     let scanning_now = orchestrator.wizard_state.step2.is_scanning;
     let was_scanning = orchestrator.workspace_view.step2.was_scanning;
     orchestrator.workspace_view.step2.was_scanning = scanning_now;
@@ -60,9 +61,13 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     advance_pending_download_snapshot(orchestrator, was_scanning, scanning_now);
 
     if !completion_edge_fires(was_scanning, scanning_now) {
-        return;
+        return false;
     }
+    reconcile_completed_scan(orchestrator);
+    true
+}
 
+fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
     let modlist_id = orchestrator.workspace_view.modlist_id.trim().to_string();
     let current_source = orchestrator
         .workspace_state
@@ -875,6 +880,24 @@ mod tests {
         assert_eq!(snap.bg2ee.len(), 1, "bg2ee tab preserved");
         assert_eq!(snap.bgee[0].component_id, "1");
         assert_eq!(snap.bg2ee[0].component_id, "2");
+    }
+
+    #[test]
+    fn reconcile_reports_the_completion_edge() {
+        let mut app = OrchestratorApp::new_isolated_for_test("reconcileedge");
+        app.wizard_state.step2.is_scanning = true;
+        app.workspace_view.step2.was_scanning = false;
+        assert!(!reconcile_on_scan_complete(&mut app), "scan just started");
+        assert!(!reconcile_on_scan_complete(&mut app), "still scanning");
+
+        app.wizard_state.step2.is_scanning = false;
+        assert!(app.workspace_view.step2.rescan_snapshot.is_none());
+        assert!(app.wizard_state.step2.last_scan_report.is_none());
+        assert!(
+            reconcile_on_scan_complete(&mut app),
+            "the edge fires even though the later steps return early"
+        );
+        assert!(!reconcile_on_scan_complete(&mut app), "fires once");
     }
 
     #[test]

@@ -444,12 +444,14 @@ pub(crate) fn fetch_fraction(state: &WizardState, tp2_key: &str) -> Option<f32> 
 fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
     let mut seen = BTreeSet::<String>::new();
     let mut result = Vec::<CardBasis>::new();
+    let scanned_cards_shown = !state.step2.versions_ui.log_pending_scope;
 
     for mod_state in state
         .step2
         .bgee_mods
         .iter()
         .chain(state.step2.bg2ee_mods.iter())
+        .filter(|_| scanned_cards_shown)
     {
         let tp2_key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
         if tp2_key.is_empty() || !seen.insert(tp2_key.clone()) {
@@ -2228,6 +2230,42 @@ mod tests {
         assert_eq!(view.cards.len(), 2);
         assert_eq!(view.cards[0].name, "Alpha");
         assert_eq!(view.cards[1].name, "Zeta");
+    }
+
+    #[test]
+    fn the_log_pending_scope_lists_only_missing_mods() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("alpha.tp2", "Alpha", "~alpha.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .bg2ee_mods
+            .push(mod_state("zeta.tp2", "Zeta", "~zeta.tp2~ #0 #0 // 1.0"));
+        for (tp_file, label) in [("gone.tp2", "Gone"), ("lost.tp2", "Lost")] {
+            state
+                .step2
+                .log_pending_downloads
+                .push(Step2LogPendingDownload {
+                    game_tab: "BGEE".to_string(),
+                    tp_file: tp_file.to_string(),
+                    label: label.to_string(),
+                    requested_version: None,
+                });
+        }
+        assert_eq!(
+            build_versions_view(&state, &empty_tiers(), None)
+                .cards
+                .len(),
+            4
+        );
+
+        state.step2.versions_ui.log_pending_scope = true;
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        let names: Vec<&str> = view.cards.iter().map(|card| card.name.as_str()).collect();
+        assert_eq!(names, vec!["Gone", "Lost"]);
+        assert_eq!(view.locked_count, 0);
     }
 
     #[test]
