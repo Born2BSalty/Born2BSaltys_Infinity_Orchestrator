@@ -363,9 +363,6 @@ fn begin_import(orchestrator: &mut OrchestratorApp) -> Option<InstallStage> {
         orchestrator.install_screen_state.drawer.open = Some(DrawerKind::Install);
         return None;
     }
-    if !orchestrator.ensure_creator_name() {
-        return None;
-    }
     let preview = orchestrator.install_screen_state.parsed_preview.clone()?;
     let name = orchestrator.install_screen_state.review.name.clone();
     let destination = orchestrator
@@ -963,8 +960,33 @@ mod tests {
     }
 
     #[test]
-    fn begin_import_requires_creator_name() {
+    fn begin_import_without_a_name_forks() {
         use egui_toast::ToastKind;
+
+        struct AmbientRestore(Option<std::path::PathBuf>);
+
+        impl Drop for AmbientRestore {
+            fn drop(&mut self) {
+                crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+            }
+        }
+
+        struct DestRoot(std::path::PathBuf);
+
+        impl Drop for DestRoot {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient = AmbientRestore(crate::app::mod_downloads::active_modlist_dir());
+        let dest_root = DestRoot(std::env::temp_dir().join(format!(
+            "bio_pageinstalltest_noname_dest_{}",
+            std::process::id()
+        )));
 
         let entry = catalog::entries()
             .first()
@@ -976,34 +998,26 @@ mod tests {
         app.install_screen_state.import_code = code;
         app.install_screen_state.parsed_preview = Some(preview);
         app.install_screen_state.review.name = "Gate Test".to_string();
-        let tmp_dest = std::env::temp_dir()
-            .join("bio_pageinstalltest_gate_dest")
-            .to_string_lossy()
-            .to_string();
-        app.install_screen_state.destination = tmp_dest;
+        app.install_screen_state.destination = dest_root.0.to_string_lossy().into_owned();
         app.install_screen_state.stage = InstallStage::Details;
         app.redesign_settings.user_name.clear();
 
-        app.install_screen_state.drawer.open =
-            Some(crate::ui::install::state_install::DrawerKind::Install);
-        let stage_before = app.install_screen_state.stage;
         let stage = begin_import(&mut app);
 
-        assert_eq!(stage, None);
-        assert_eq!(app.install_screen_state.stage, stage_before);
+        assert_eq!(stage, Some(InstallStage::Downloading));
+        assert_eq!(app.registry.entries.len(), 1);
+        let forked = &app.registry.entries[0];
+        assert_eq!(forked.name, "Gate Test");
+        assert_eq!(forked.author, None);
         assert_eq!(
-            app.install_screen_state.drawer.open,
-            Some(crate::ui::install::state_install::DrawerKind::Install),
-            "a refused Begin Import must leave the Install drawer open"
+            app.active_install_modlist_id.as_deref(),
+            Some(forked.id.as_str())
         );
-        assert_eq!(app.registry.entries.len(), 0);
-        let history = app.notification_manager.history();
-        assert_eq!(history.len(), 1);
-        let record = history.back().unwrap();
-        assert_eq!(record.kind, ToastKind::Error);
-        assert_eq!(
-            record.text,
-            "Set your name in Settings > General before creating or sharing a modlist."
+        assert!(
+            app.notification_manager
+                .history()
+                .iter()
+                .all(|record| record.kind != ToastKind::Error)
         );
     }
 

@@ -3,16 +3,18 @@
 
 use eframe::egui;
 
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
+use crate::ui::orchestrator::widgets::{BtnOpts, InputOpts, redesign_btn, redesign_text_input};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_shell_bg, redesign_text_faint, redesign_text_muted, redesign_text_primary,
+    redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
+    redesign_text_primary,
 };
 
 pub struct ShareModlistDialog<'a> {
     pub id_salt: &'a str,
     pub modlist_name: &'a str,
     pub has_code: bool,
+    pub name_prompt: Option<&'a mut String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -30,7 +32,7 @@ const MAX_WIDTH_PX: f32 = 460.0;
 pub fn render(
     ctx: &egui::Context,
     palette: ThemePalette,
-    dialog: &ShareModlistDialog<'_>,
+    dialog: &mut ShareModlistDialog<'_>,
 ) -> ShareOutcome {
     let mut outcome = ShareOutcome::Pending;
 
@@ -58,13 +60,19 @@ pub fn render(
 
             render_header(ui, palette, dialog.modlist_name);
 
-            if let Some(choice) = render_export_choice(ui, palette, dialog.has_code) {
+            let prompt_blank = dialog.name_prompt.as_deref_mut().is_some_and(|name| {
+                render_name_prompt(ui, palette, name);
+                name.trim().is_empty()
+            });
+            let enabled = dialog.has_code && !prompt_blank;
+
+            if let Some(choice) = render_export_choice(ui, palette, enabled) {
                 outcome = choice;
             }
 
             ui.add_space(12.0);
 
-            if let Some(choice) = render_copy_choice(ui, palette, dialog.has_code) {
+            if let Some(choice) = render_copy_choice(ui, palette, enabled) {
                 outcome = choice;
             }
 
@@ -107,10 +115,54 @@ fn render_header(ui: &mut egui::Ui, palette: ThemePalette, modlist_name: &str) {
     ui.add_space(14.0);
 }
 
+fn render_name_prompt(ui: &mut egui::Ui, palette: ThemePalette, name: &mut String) {
+    ui.label(
+        egui::RichText::new("Your name")
+            .size(13.0)
+            .family(egui::FontFamily::Name("poppins_medium".into()))
+            .color(redesign_text_primary(palette)),
+    );
+    ui.add_space(4.0);
+    ui.label(
+        egui::RichText::new(
+            "Needed to share. You'll be credited as the author; saved to Settings.",
+        )
+        .size(12.0)
+        .family(egui::FontFamily::Name("poppins_light".into()))
+        .color(redesign_text_muted(palette)),
+    );
+    ui.add_space(6.0);
+    let margin = egui::Margin::symmetric(8, 4);
+    let _response = redesign_text_input(
+        ui,
+        palette,
+        InputOpts {
+            edit: egui::TextEdit::singleline(name)
+                .font(egui::FontId::new(
+                    14.0,
+                    egui::FontFamily::Name("poppins_medium".into()),
+                ))
+                .text_color(redesign_text_primary(palette))
+                .background_color(redesign_input_bg(palette))
+                .margin(margin)
+                .hint_text(
+                    egui::RichText::new("@yourhandle")
+                        .size(14.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into()))
+                        .color(redesign_text_faint(palette)),
+                ),
+            margin,
+            size: egui::vec2(ui.available_width(), 28.0),
+            border: None,
+        },
+    );
+    ui.add_space(14.0);
+}
+
 fn render_export_choice(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    has_code: bool,
+    enabled: bool,
 ) -> Option<ShareOutcome> {
     let clicked = redesign_btn(
         ui,
@@ -119,7 +171,7 @@ fn render_export_choice(
         BtnOpts {
             primary: true,
             block: true,
-            disabled: !has_code,
+            disabled: !enabled,
             ..Default::default()
         },
     )
@@ -141,7 +193,7 @@ fn render_export_choice(
 fn render_copy_choice(
     ui: &mut egui::Ui,
     palette: ThemePalette,
-    has_code: bool,
+    enabled: bool,
 ) -> Option<ShareOutcome> {
     let clicked = redesign_btn(
         ui,
@@ -149,7 +201,7 @@ fn render_copy_choice(
         "Copy share code",
         BtnOpts {
             block: true,
-            disabled: !has_code,
+            disabled: !enabled,
             ..Default::default()
         },
     )

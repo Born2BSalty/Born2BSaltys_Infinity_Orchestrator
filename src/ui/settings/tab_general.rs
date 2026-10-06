@@ -24,7 +24,7 @@ fn render_name_row(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut 
         ui,
         palette,
         "Your name",
-        "credited as the author on any modlists you create or share",
+        "credited as the author on modlists you share",
         |ui| {
             name_row::render(
                 ui,

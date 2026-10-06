@@ -597,6 +597,33 @@ mod tests {
     }
 
     #[test]
+    fn as_is_install_records_no_list_mods_folder() {
+        let mut app = OrchestratorApp::new_isolated_for_test("as-is-no-mods-folder");
+        app.install_screen_state.parsed_preview = Some(preview(
+            Some("Someone's run"),
+            "EET",
+            Some("@creator"),
+            vec![],
+        ));
+        app.install_screen_state.destination = "D:\\as is".to_string();
+
+        let (id, minted) = early_mint_modlist_id(&mut app, "D:\\as is", None)
+            .expect("registered")
+            .expect("minted");
+
+        assert!(minted);
+        let in_memory = app
+            .workspace_state
+            .get(&id)
+            .expect("the install's workspace is recorded");
+        assert_eq!(in_memory.scratch_mods_folder, None);
+        let on_disk = WorkspaceStore::new_for_id(&id)
+            .load()
+            .expect("the install's workspace is written");
+        assert_eq!(on_disk.scratch_mods_folder, None);
+    }
+
+    #[test]
     fn installing_into_an_owned_destination_replaces_the_old_entry() {
         let mut app = app_with_dest_entry("replace-dest", "D:\\dest", "EET Essentials");
         {

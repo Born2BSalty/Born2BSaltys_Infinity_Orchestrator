@@ -166,9 +166,6 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
         );
         return;
     }
-    if !orchestrator.ensure_creator_name() {
-        return;
-    }
     let game = orchestrator.create_screen_state.game;
     let dest = {
         let d = orchestrator.create_screen_state.destination.trim();
@@ -594,21 +591,34 @@ mod tests {
     }
 
     #[test]
-    fn start_scratch_requires_creator_name() {
+    fn start_scratch_without_a_name_creates_the_list() {
+        let dest = TempDestGuard::new("noname");
         let mut app = orch_for_create_test();
         app.create_screen_state.modlist_name = "No Author Build".to_string();
+        app.create_screen_state.destination = dest.as_string();
         app.redesign_settings.user_name.clear();
 
         start_scratch(&mut app);
 
-        assert_eq!(app.registry.entries.len(), 0);
-        let history = app.notification_manager.history();
-        assert_eq!(history.len(), 1);
-        let record = history.back().unwrap();
-        assert_eq!(record.kind, ToastKind::Error);
-        assert_eq!(
-            record.text,
-            "Set your name in Settings > General before creating or sharing a modlist."
+        assert_eq!(app.registry.entries.len(), 1);
+        let entry = &app.registry.entries[0];
+        assert_eq!(entry.name, "No Author Build");
+        assert_eq!(entry.author, None);
+        let workspace = app
+            .workspace_state
+            .get(&entry.id)
+            .expect("the workspace state is seeded");
+        assert!(
+            workspace
+                .scratch_mods_folder
+                .as_deref()
+                .is_some_and(|folder| !folder.trim().is_empty())
+        );
+        assert!(
+            app.notification_manager
+                .history()
+                .iter()
+                .all(|record| record.kind != ToastKind::Error)
         );
     }
 }

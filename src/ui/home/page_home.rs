@@ -281,39 +281,62 @@ fn render_edit_dialog(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
 
 fn close_share_dialog(orchestrator: &mut OrchestratorApp) {
     orchestrator.home_screen_state.share_target = None;
+    orchestrator.share_name_buffer.clear();
+}
+
+fn share_target_own_key(id: &str) -> egui::Id {
+    egui::Id::new(("home_share_target_is_own", id))
+}
+
+fn share_target_is_own(orchestrator: &OrchestratorApp, ctx: &egui::Context, id: &str) -> bool {
+    let key = share_target_own_key(id);
+    if let Some(own) = ctx.data(|d| d.get_temp::<bool>(key)) {
+        return own;
+    }
+    let own = orchestrator.list_is_own(id);
+    ctx.data_mut(|d| d.insert_temp(key, own));
+    own
 }
 
 fn render_share_dialog(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) {
     let Some(id) = orchestrator.home_screen_state.share_target.clone() else {
         return;
     };
-    let Some(entry) = orchestrator.registry.find(&id).cloned() else {
+    let Some((name, has_code)) = orchestrator.registry.find(&id).map(|entry| {
+        let has_code = entry
+            .latest_share_code
+            .as_deref()
+            .is_some_and(|c| !c.trim().is_empty());
+        (entry.name.clone(), has_code)
+    }) else {
         close_share_dialog(orchestrator);
         return;
     };
-
-    let code = entry
-        .latest_share_code
-        .as_deref()
-        .filter(|c| !c.trim().is_empty());
+    let needed = orchestrator.redesign_settings.user_name.trim().is_empty()
+        && share_target_is_own(orchestrator, ctx, &id);
 
     let outcome = share_modlist_dialog::render(
         ctx,
         orchestrator.theme_palette,
-        &ShareModlistDialog {
+        &mut ShareModlistDialog {
             id_salt: &id,
-            modlist_name: &entry.name,
-            has_code: code.is_some(),
+            modlist_name: &name,
+            has_code,
+            name_prompt: needed.then_some(&mut orchestrator.share_name_buffer),
         },
     );
 
+    if outcome != ShareOutcome::Pending {
+        ctx.data_mut(|d| d.remove::<bool>(share_target_own_key(&id)));
+    }
+
     match outcome {
         ShareOutcome::ExportFile => {
-            if let Some(code) = code {
-                let unresolved = share_actions::unresolved_mods_for_code(code);
+            if let Some(code) = orchestrator.code_for_share(&id) {
+                let unresolved = share_actions::unresolved_mods_for_code(&code);
                 share_actions::export_modlist_file(
-                    &entry.name,
-                    code,
+                    &name,
+                    &code,
                     &unresolved,
                     &mut orchestrator.notification_manager,
                 );
@@ -321,9 +344,9 @@ fn render_share_dialog(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) 
             close_share_dialog(orchestrator);
         }
         ShareOutcome::CopyCode => {
-            if let Some(code) = code {
-                let unresolved = share_actions::unresolved_mods_for_code(code);
-                share_actions::copy_share_code(ctx, &entry.name, code, &unresolved);
+            if let Some(code) = orchestrator.code_for_share(&id) {
+                let unresolved = share_actions::unresolved_mods_for_code(&code);
+                share_actions::copy_share_code(ctx, &name, &code, &unresolved);
             }
             close_share_dialog(orchestrator);
         }
