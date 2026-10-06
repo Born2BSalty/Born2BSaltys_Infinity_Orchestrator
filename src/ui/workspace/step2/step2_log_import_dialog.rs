@@ -10,7 +10,7 @@ use crate::ui::install::destination_not_empty::{
     WARN_BORDER, WARN_INK, paint_warning_triangle, warn_fill,
 };
 use crate::ui::orchestrator::widgets::drawer::{self, DrawerSpec, DrawerWidth};
-use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_height};
+use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_height, toggle_switch};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_text_muted,
     redesign_text_primary,
@@ -39,6 +39,7 @@ const EMPTY_PATH_TEXT: &str = "Click Choose\u{2026} to pick the log";
 const IMPORT_LABEL: &str = "Import";
 const CANCEL_LABEL: &str = "Cancel";
 const WARNING_TITLE: &str = "Selections will be replaced";
+const FETCH_LABEL: &str = "Fetch missing mods";
 
 #[must_use]
 pub const fn import_enabled(form: &WeiduLogImportForm) -> bool {
@@ -82,6 +83,8 @@ pub fn render(
                 render_row(ui, palette, *row, form, start);
             }
             enabled.set(import_enabled(form));
+            ui.add_space(ROW_GAP);
+            render_fetch_row(ui, palette, &mut form.fetch_missing);
             ui.add_space(16.0);
             render_warning_box(ui, &warning);
         },
@@ -134,7 +137,20 @@ fn render_warning_box(ui: &mut egui::Ui, warning: &str) {
         });
 }
 
-fn render_row(
+pub(crate) fn render_fetch_row(ui: &mut egui::Ui, palette: ThemePalette, fetch_missing: &mut bool) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = ROW_ITEM_GAP;
+        let _ = toggle_switch(ui, palette, fetch_missing);
+        ui.label(
+            egui::RichText::new(FETCH_LABEL)
+                .size(13.0)
+                .family(egui::FontFamily::Name("poppins_light".into()))
+                .color(redesign_text_primary(palette)),
+        );
+    });
+}
+
+pub(crate) fn render_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     row: WeiduLogImportRow,
@@ -259,15 +275,16 @@ mod tests {
         assert!(!import_enabled(&WeiduLogImportForm::default()));
         assert!(import_enabled(&WeiduLogImportForm {
             first: Some(PathBuf::from("bgee.log")),
-            second: None,
+            ..WeiduLogImportForm::default()
         }));
         assert!(import_enabled(&WeiduLogImportForm {
-            first: None,
             second: Some(PathBuf::from("bg2ee.log")),
+            ..WeiduLogImportForm::default()
         }));
         assert!(import_enabled(&WeiduLogImportForm {
             first: Some(PathBuf::from("bgee.log")),
             second: Some(PathBuf::from("bg2ee.log")),
+            fetch_missing: false,
         }));
     }
 }

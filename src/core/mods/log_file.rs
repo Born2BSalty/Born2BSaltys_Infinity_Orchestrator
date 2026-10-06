@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -46,6 +47,15 @@ impl LogFile {
         self.components.is_empty()
     }
 
+    #[must_use]
+    pub fn mod_count(&self) -> usize {
+        self.components
+            .iter()
+            .map(|component| component.tp_file.replace('\\', "/").to_ascii_lowercase())
+            .collect::<HashSet<_>>()
+            .len()
+    }
+
     #[cfg(test)]
     pub(crate) const fn from_components(components: Vec<Component>) -> Self {
         Self { components }
@@ -63,5 +73,16 @@ mod tests {
         assert_eq!(log.len(), 1);
         assert_eq!(log.components()[0].name, "");
         assert_eq!(log.components()[0].tp_file, "SETUP-D0QUESTPACK.TP2");
+    }
+
+    #[test]
+    fn mod_count_is_distinct_tp2_case_insensitive() {
+        let text = "~EEFIXPACK/SETUP-EEFIXPACK.TP2~ #0 #0 // Core Fixes: 1.0\n\
+                    ~eefixpack\\setup-eefixpack.tp2~ #0 #1 // Extra Fixes: 1.0\n\
+                    ~BG1UB/BG1UB.TP2~ #0 #0 // Ice Island: 1.0\n";
+        let log = LogFile::from_text(text).expect("log should parse");
+        assert_eq!(log.len(), 3);
+        assert_eq!(log.mod_count(), 2);
+        assert_eq!(LogFile::from_text("").expect("empty parses").mod_count(), 0);
     }
 }

@@ -19,6 +19,7 @@ pub mod screen_title;
 pub mod section_header;
 pub mod share_actions;
 pub mod tab_strip;
+pub mod toggle_switch;
 pub mod window_title;
 
 pub use btn::{BtnOpts, redesign_btn, redesign_btn_glyph, redesign_btn_height};
@@ -31,4 +32,5 @@ pub use pill::{PillTone, render as render_pill};
 pub use r_box::redesign_box;
 pub use screen_title::render as render_screen_title;
 pub use section_header::redesign_section_header;
+pub use toggle_switch::toggle_switch;
 pub use window_title::redesign_window_title;

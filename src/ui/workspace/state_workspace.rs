@@ -21,10 +21,21 @@ pub struct WorkspaceStep2State {
     pub pending_global_mods_scan: Option<()>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeiduLogImportForm {
     pub first: Option<PathBuf>,
     pub second: Option<PathBuf>,
+    pub fetch_missing: bool,
+}
+
+impl Default for WeiduLogImportForm {
+    fn default() -> Self {
+        Self {
+            first: None,
+            second: None,
+            fetch_missing: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,5 +213,13 @@ mod tests {
         assert_eq!(WorkspaceStep::Step4.label(), "Review");
         assert_eq!(WorkspaceStep::Step5.label(), "Install");
         assert_eq!(WorkspaceStep::Step3.step_kicker(), "Step 3");
+    }
+
+    #[test]
+    fn the_import_form_defaults_to_fetching_missing_mods() {
+        let form = WeiduLogImportForm::default();
+        assert!(form.fetch_missing);
+        assert_eq!(form.first, None);
+        assert_eq!(form.second, None);
     }
 }

@@ -466,6 +466,7 @@ fn render_weidu_log_import_form(
     let start_paths = WeiduLogImportForm {
         first: resolve_bgee_weidu_log_path(step1),
         second: resolve_bg2_weidu_log_path(step1),
+        ..WeiduLogImportForm::default()
     };
 
     let outcome = step2_log_import_dialog::render(
