@@ -781,7 +781,6 @@ fn render_card_list(
         .trim()
         .to_ascii_lowercase();
     let chip = orchestrator.wizard_state.step2.versions_ui.chip;
-    let open_menu = orchestrator.wizard_state.step2.versions_ui.menu.clone();
     let card_inner_width = (ui.available_width() - 32.0).max(0.0);
     let selector_width = (card_inner_width * 0.46).clamp(260.0, 460.0);
 
@@ -822,7 +821,6 @@ fn render_card_list(
         busy,
         body_action,
         anchor_for_menu,
-        open_menu: open_menu.as_ref(),
     };
 
     egui::ScrollArea::vertical()
@@ -857,7 +855,6 @@ struct ListRenderCtx<'a> {
     busy: bool,
     body_action: &'a mut Option<Step2Action>,
     anchor_for_menu: &'a mut Option<AnchorInfo>,
-    open_menu: Option<&'a VersionsMenu>,
 }
 
 fn render_group(
@@ -942,22 +939,37 @@ fn render_one_card(
         ui.ctx().request_repaint();
     }
 
-    let is_open_sources =
-        matches!(ctx.open_menu, Some(VersionsMenu::Sources { tp2 }) if tp2 == &card.tp2);
-    let is_open_kebab =
-        matches!(ctx.open_menu, Some(VersionsMenu::Kebab { tp2, .. }) if tp2 == &card.tp2);
-
-    if is_open_sources || (selector_clicked && card.source_id.is_some()) {
+    let live_menu = orchestrator.wizard_state.step2.versions_ui.menu.as_ref();
+    if card_owns_menu_anchor(live_menu, &card.tp2, MenuAnchorKind::Sources) {
         *ctx.anchor_for_menu = Some(AnchorInfo {
             rect: event.selector_rect,
             response: event.selector_response.clone(),
         });
     }
-    if is_open_kebab || kebab_clicked {
+    if card_owns_menu_anchor(live_menu, &card.tp2, MenuAnchorKind::Kebab) {
         *ctx.anchor_for_menu = Some(AnchorInfo {
             rect: event.kebab_rect,
             response: event.kebab_response.clone(),
         });
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuAnchorKind {
+    Sources,
+    Kebab,
+}
+
+#[must_use]
+fn card_owns_menu_anchor(
+    live_menu: Option<&VersionsMenu>,
+    card_tp2: &str,
+    kind: MenuAnchorKind,
+) -> bool {
+    match (live_menu, kind) {
+        (Some(VersionsMenu::Sources { tp2 }), MenuAnchorKind::Sources)
+        | (Some(VersionsMenu::Kebab { tp2, .. }), MenuAnchorKind::Kebab) => tp2 == card_tp2,
+        _ => false,
     }
 }
 
@@ -1330,6 +1342,100 @@ mod tests {
 
         step2.is_scanning = true;
         assert_eq!(header_button_label(&step2), "Scanning\u{2026}");
+    }
+
+    fn sources(tp2: &str) -> VersionsMenu {
+        VersionsMenu::Sources {
+            tp2: tp2.to_string(),
+        }
+    }
+
+    fn kebab(tp2: &str) -> VersionsMenu {
+        VersionsMenu::Kebab {
+            tp2: tp2.to_string(),
+            bookmark_label: None,
+        }
+    }
+
+    fn anchor_owner_after_frame(
+        open_before: Option<VersionsMenu>,
+        draw_order: &[&str],
+        click: Option<(&str, MenuAnchorKind)>,
+    ) -> (Option<VersionsMenu>, Option<(String, MenuAnchorKind)>) {
+        let mut live = open_before;
+        let mut owner = None;
+        for tp2 in draw_order {
+            if let Some((clicked_tp2, kind)) = click
+                && clicked_tp2 == *tp2
+            {
+                live = Some(match kind {
+                    MenuAnchorKind::Sources => sources(tp2),
+                    MenuAnchorKind::Kebab => kebab(tp2),
+                });
+            }
+            for kind in [MenuAnchorKind::Sources, MenuAnchorKind::Kebab] {
+                if card_owns_menu_anchor(live.as_ref(), tp2, kind) {
+                    owner = Some(((*tp2).to_string(), kind));
+                }
+            }
+        }
+        (live, owner)
+    }
+
+    #[test]
+    fn clicking_a_card_above_the_open_menu_claims_the_anchor() {
+        for kind in [MenuAnchorKind::Sources, MenuAnchorKind::Kebab] {
+            let (live, owner) =
+                anchor_owner_after_frame(Some(sources("a")), &["b", "a"], Some(("b", kind)));
+            assert_eq!(owner, Some(("b".to_string(), kind)));
+            assert!(card_owns_menu_anchor(live.as_ref(), "b", kind));
+            for other in [MenuAnchorKind::Sources, MenuAnchorKind::Kebab] {
+                assert!(!card_owns_menu_anchor(live.as_ref(), "a", other));
+            }
+        }
+    }
+
+    #[test]
+    fn clicking_a_card_below_the_open_menu_claims_the_anchor() {
+        for kind in [MenuAnchorKind::Sources, MenuAnchorKind::Kebab] {
+            let (_, owner) =
+                anchor_owner_after_frame(Some(kebab("a")), &["a", "b"], Some(("b", kind)));
+            assert_eq!(owner, Some(("b".to_string(), kind)));
+        }
+    }
+
+    #[test]
+    fn clicking_the_open_cards_own_selector_keeps_its_anchor() {
+        let (live, owner) = anchor_owner_after_frame(
+            Some(sources("a")),
+            &["b", "a", "c"],
+            Some(("a", MenuAnchorKind::Sources)),
+        );
+        assert_eq!(live, Some(sources("a")));
+        assert_eq!(owner, Some(("a".to_string(), MenuAnchorKind::Sources)));
+    }
+
+    #[test]
+    fn sources_open_on_one_card_then_kebab_on_another_moves_the_anchor() {
+        let (live, owner) = anchor_owner_after_frame(
+            Some(sources("a")),
+            &["b", "a"],
+            Some(("b", MenuAnchorKind::Kebab)),
+        );
+        assert_eq!(live, Some(kebab("b")));
+        assert_eq!(owner, Some(("b".to_string(), MenuAnchorKind::Kebab)));
+        assert!(!card_owns_menu_anchor(
+            live.as_ref(),
+            "b",
+            MenuAnchorKind::Sources
+        ));
+    }
+
+    #[test]
+    fn an_unclicked_frame_keeps_the_open_cards_anchor() {
+        let (_, owner) = anchor_owner_after_frame(Some(kebab("a")), &["b", "a", "c"], None);
+        assert_eq!(owner, Some(("a".to_string(), MenuAnchorKind::Kebab)));
+        assert!(!card_owns_menu_anchor(None, "a", MenuAnchorKind::Sources));
     }
 
     fn queue_test_card(tp2: &str, can_fetch: bool, locked: bool) -> VersionCard {
