@@ -125,15 +125,8 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) -> StageIns
         Some(PostInstallAction::ReturnToHome) => {
             outcome = StageInstallingOutcome::Nav(NavDestination::Home);
         }
-        Some(PostInstallAction::OpenInstallFolder) => {
-            let target = entry.unwrap_or_else(|| crate::registry::model::ModlistEntry {
-                name: name.clone(),
-                destination_folder: dest.clone(),
-                ..Default::default()
-            });
-            if let Err(msg) = operations::open_install_folder(&target) {
-                orchestrator.notification_manager.error(msg);
-            }
+        Some(PostInstallAction::OpenGameFolder) => {
+            open_game_folder_after_install(orchestrator, entry, &name, &dest);
         }
         None => {}
     }
@@ -159,6 +152,34 @@ pub(crate) const fn auto_start_should_fire(armed: bool, registered: bool, allowe
 #[must_use]
 pub(crate) const fn back_link_available(s5: &Step5State) -> bool {
     !(s5.start_install_requested || s5.prep_running || s5.install_running)
+}
+
+fn open_game_folder_after_install(
+    orchestrator: &mut OrchestratorApp,
+    entry: Option<crate::registry::model::ModlistEntry>,
+    name: &str,
+    dest: &str,
+) {
+    let preview_game = orchestrator
+        .install_screen_state
+        .parsed_preview
+        .as_ref()
+        .map(|preview| crate::registry::model::Game::from_legacy_string(&preview.game_install));
+    let target = entry.or_else(|| {
+        preview_game.map(|game| crate::registry::model::ModlistEntry {
+            name: name.to_string(),
+            destination_folder: dest.to_string(),
+            game,
+            ..Default::default()
+        })
+    });
+    let result = target.map_or_else(
+        || Err(format!("Couldn't find the game folder for \"{name}\".")),
+        |target| operations::open_game_folder(&target),
+    );
+    if let Err(msg) = result {
+        orchestrator.notification_manager.error(msg);
+    }
 }
 
 fn render_header(

@@ -22,7 +22,7 @@ pub enum ModlistCardActions {
     Resume,
     Open,
     ShareModlist,
-    OpenInstallFolder,
+    OpenGameFolder,
     Reinstall,
     Delete,
     EditModlist,
@@ -73,8 +73,8 @@ pub fn menu_entries(state: ModlistState, menu: CardMenu) -> Vec<CardMenuEntry> {
                 danger: false,
             },
             CardMenuEntry {
-                label: "Open install folder",
-                action: ModlistCardActions::OpenInstallFolder,
+                label: "Open game folder",
+                action: ModlistCardActions::OpenGameFolder,
                 danger: false,
             },
             CardMenuEntry {
@@ -95,8 +95,8 @@ pub fn menu_entries(state: ModlistState, menu: CardMenu) -> Vec<CardMenuEntry> {
         ],
         (ModlistState::Installed, CardMenu::DraftPicker) => vec![
             CardMenuEntry {
-                label: "Open install folder",
-                action: ModlistCardActions::OpenInstallFolder,
+                label: "Open game folder",
+                action: ModlistCardActions::OpenGameFolder,
                 danger: false,
             },
             CardMenuEntry {
@@ -378,7 +378,7 @@ mod tests {
             labels,
             [
                 "Share this modlist",
-                "Open install folder",
+                "Open game folder",
                 "Edit modlist",
                 "Reinstall",
                 "Delete"
@@ -398,6 +398,6 @@ mod tests {
     fn draft_picker_installed_hides_share_and_edit() {
         let entries = menu_entries(ModlistState::Installed, CardMenu::DraftPicker);
         let labels: Vec<&str> = entries.iter().map(|e| e.label).collect();
-        assert_eq!(labels, ["Open install folder", "Reinstall", "Delete"]);
+        assert_eq!(labels, ["Open game folder", "Reinstall", "Delete"]);
     }
 }
