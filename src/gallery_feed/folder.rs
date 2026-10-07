@@ -295,6 +295,14 @@ mod tests {
     }
 
     #[test]
+    fn gallery_folder_entries_all_pass_the_check() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("gallery");
+        let entries = subfolders(&root).len();
+        assert!(entries > 0);
+        assert_eq!(check_folder(&root), Ok(entries));
+    }
+
+    #[test]
     fn a_valid_folder_checks_as_one_entry() {
         let root = TempRoot::new();
         write_valid_entry(&root, "eet-essentials");
