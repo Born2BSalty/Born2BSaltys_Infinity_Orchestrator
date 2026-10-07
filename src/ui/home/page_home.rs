@@ -39,7 +39,7 @@ enum NavRequest {
 
 enum CardIntent {
     RequestShare(String),
-    OpenInstallFolder(String),
+    OpenGameFolder(String),
     RequestDelete(String),
     RequestReinstall(String),
     RequestEdit(String),
@@ -192,7 +192,7 @@ fn apply_card_intent(orchestrator: &mut OrchestratorApp, ctx: &egui::Context, in
         CardIntent::RequestShare(id) => {
             orchestrator.home_screen_state.share_target = Some(id);
         }
-        CardIntent::OpenInstallFolder(id) => open_install_folder_for(orchestrator, &id),
+        CardIntent::OpenGameFolder(id) => open_game_folder_for(orchestrator, &id),
         CardIntent::RequestDelete(id) => {
             orchestrator.home_screen_state.delete_target = Some(id);
         }
@@ -334,11 +334,11 @@ fn render_share_dialog(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) 
     }
 }
 
-fn open_install_folder_for(orchestrator: &mut OrchestratorApp, id: &str) {
+fn open_game_folder_for(orchestrator: &mut OrchestratorApp, id: &str) {
     let Some(entry) = orchestrator.registry.find(id).cloned() else {
         return;
     };
-    if let Err(msg) = operations::open_install_folder(&entry) {
+    if let Err(msg) = operations::open_game_folder(&entry) {
         orchestrator.notification_manager.error(msg);
     }
 }
@@ -507,8 +507,8 @@ fn render_card_list(
                         modlist_id: entry.id.clone(),
                     });
                 }
-                ModlistCardActions::Open | ModlistCardActions::OpenInstallFolder => {
-                    intent = Some(CardIntent::OpenInstallFolder(entry.id.clone()));
+                ModlistCardActions::Open | ModlistCardActions::OpenGameFolder => {
+                    intent = Some(CardIntent::OpenGameFolder(entry.id.clone()));
                 }
                 ModlistCardActions::ShareModlist => {
                     intent = Some(CardIntent::RequestShare(entry.id.clone()));

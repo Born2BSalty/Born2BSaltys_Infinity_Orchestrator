@@ -44,7 +44,7 @@ pub fn render(
         if redesign_btn(
             ui,
             palette,
-            "Open install folder",
+            "Open game folder",
             BtnOpts {
                 primary: true,
                 small: true,
@@ -53,7 +53,7 @@ pub fn render(
         )
         .clicked()
         {
-            action = Some(PostInstallAction::OpenInstallFolder);
+            action = Some(PostInstallAction::OpenGameFolder);
         }
     });
 

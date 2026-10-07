@@ -158,7 +158,7 @@ fn step5_text() -> HelpText {
                  where it stopped.",
             ),
             bullet(
-                "When it finishes, Open install folder shows the modded game and Return to \
+                "When it finishes, Open game folder shows the modded game and Return to \
                  Home goes back to your lists.",
             ),
         ],
@@ -231,7 +231,7 @@ fn installing_text() -> HelpText {
                  continues from the same mod. Leave the game folder alone while a run is \
                  active.",
             ),
-            bullet("When it finishes, Open install folder shows the modded game."),
+            bullet("When it finishes, Open game folder shows the modded game."),
         ],
     }
 }

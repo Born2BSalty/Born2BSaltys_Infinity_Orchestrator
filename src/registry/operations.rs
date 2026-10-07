@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
 use crate::folder_trash::move_folder_to_trash;
+use crate::install_runtime::per_install_dirs;
 use crate::registry::errors::RegistryError;
 use crate::registry::model::{ModlistEntry, ModlistRegistry};
 use crate::registry::store::RegistryStore;
@@ -156,25 +157,34 @@ pub fn share_code_for(id: &str, registry: &ModlistRegistry) -> Option<String> {
     registry.find(id).and_then(|e| e.latest_share_code.clone())
 }
 
-pub fn open_install_folder(entry: &ModlistEntry) -> Result<(), String> {
+pub fn game_folder_target(entry: &ModlistEntry) -> Result<PathBuf, String> {
     let dest = entry.destination_folder.trim();
     if dest.is_empty() {
-        return Err(format!("\"{}\" has no install folder set yet.", entry.name));
+        return Err(format!("\"{}\" has no game folder set yet.", entry.name));
     }
-    let path = Path::new(dest);
-    if !path.is_dir() {
-        return Err(format!(
-            "Install folder for \"{}\" not found on disk: {dest}",
+    let dirs = per_install_dirs::resolve(dest, entry.game);
+    let modded_game = dirs
+        .eet_clone_dirs
+        .map(|(_bgee, bg2ee)| bg2ee)
+        .or(dirs.single_game_clone_dir);
+    if let Some(game_dir) = modded_game.filter(|dir| dir.is_dir()) {
+        return Ok(game_dir);
+    }
+    let list_folder = PathBuf::from(dest);
+    if list_folder.is_dir() {
+        Ok(list_folder)
+    } else {
+        Err(format!(
+            "Game folder for \"{}\" not found on disk: {dest}",
             entry.name
-        ));
+        ))
     }
+}
 
-    open_path_in_file_manager(path).map_err(|e| {
-        format!(
-            "Couldn't open the install folder for \"{}\": {e}",
-            entry.name
-        )
-    })
+pub fn open_game_folder(entry: &ModlistEntry) -> Result<(), String> {
+    let target = game_folder_target(entry)?;
+    open_path_in_file_manager(&target)
+        .map_err(|e| format!("Couldn't open the game folder for \"{}\": {e}", entry.name))
 }
 
 fn open_path_in_file_manager(path: &Path) -> std::io::Result<()> {
@@ -303,25 +313,81 @@ mod tests {
         assert_eq!(share_code_for("NOPE00000000", &reg), None);
     }
 
-    #[test]
-    fn open_install_folder_errors_on_empty_dest_no_spawn() {
-        let e = entry("GGG000000000", "");
-        let res = open_install_folder(&e);
-        assert!(res.is_err());
-        assert!(res.unwrap_err().contains("no install folder"));
+    struct TempRoot(std::path::PathBuf);
+
+    impl TempRoot {
+        fn new(label: &str) -> Self {
+            Self(std::env::temp_dir().join(format!(
+                "bio_ops_game_folder_{}_{}_{label}",
+                std::process::id(),
+                TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+            )))
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn game_entry(game: Game, dest: &std::path::Path) -> ModlistEntry {
+        ModlistEntry {
+            game,
+            ..entry("GFT000000000", dest.to_str().unwrap())
+        }
     }
 
     #[test]
-    fn open_install_folder_errors_on_missing_dir() {
-        let missing = std::env::temp_dir().join(format!(
-            "bio_ops_open_missing_{}_{}",
-            std::process::id(),
-            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
-        let e = entry("HHH000000000", missing.to_str().unwrap());
-        let res = open_install_folder(&e);
-        assert!(res.is_err());
+    fn game_folder_target_is_the_single_game_clone_when_present() {
+        let root = TempRoot::new("single");
+        let clone = root.0.join(per_install_dirs::BGEE_CLONE_DIRNAME);
+        std::fs::create_dir_all(&clone).unwrap();
+        assert_eq!(
+            game_folder_target(&game_entry(Game::BGEE, &root.0)),
+            Ok(clone)
+        );
+    }
+
+    #[test]
+    fn game_folder_target_is_the_bg2ee_clone_for_eet() {
+        let root = TempRoot::new("eet");
+        let first_phase = root.0.join(per_install_dirs::BGEE_CLONE_DIRNAME);
+        let modded_game = root.0.join(per_install_dirs::BG2EE_CLONE_DIRNAME);
+        std::fs::create_dir_all(&first_phase).unwrap();
+        std::fs::create_dir_all(&modded_game).unwrap();
+        assert_eq!(
+            game_folder_target(&game_entry(Game::EET, &root.0)),
+            Ok(modded_game)
+        );
+    }
+
+    #[test]
+    fn game_folder_target_falls_back_to_the_list_folder_when_the_clone_is_missing() {
+        let root = TempRoot::new("no_clone");
+        std::fs::create_dir_all(&root.0).unwrap();
+        assert_eq!(
+            game_folder_target(&game_entry(Game::IWDEE, &root.0)),
+            Ok(root.0.clone())
+        );
+    }
+
+    #[test]
+    fn game_folder_target_errors_when_nothing_is_on_disk() {
+        let root = TempRoot::new("missing");
+        let res = game_folder_target(&game_entry(Game::EET, &root.0));
         assert!(res.unwrap_err().contains("not found on disk"));
+    }
+
+    #[test]
+    fn game_folder_target_errors_on_blank_destination() {
+        let e = entry("GGG000000000", "   ");
+        assert!(
+            game_folder_target(&e)
+                .unwrap_err()
+                .contains("no game folder")
+        );
+        assert!(open_game_folder(&e).unwrap_err().contains("no game folder"));
     }
 
     #[test]
