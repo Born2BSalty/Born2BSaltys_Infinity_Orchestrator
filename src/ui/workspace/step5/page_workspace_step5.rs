@@ -6,11 +6,10 @@ use std::sync::mpsc::TryRecvError;
 use tracing::warn;
 
 use crate::app::compat_dlc_source::residue_issue;
-use crate::app::state::Step1State;
 use crate::install_runtime::flag_policies::InstallWorkflow;
 use crate::install_runtime::install_concurrency;
 use crate::install_runtime::start_hooks::{self, InstallButtonVariant};
-use crate::registry::model::Game;
+use crate::registry::operations;
 use crate::ui::install::stage_review::{SourceWarningAction, render_source_notice};
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::{
@@ -90,12 +89,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, modlist_id:
         Some(PostInstallAction::ReturnToHome) => {
             orchestrator.nav = NavDestination::Home;
         }
-        Some(PostInstallAction::OpenInstallFolder) => {
-            if let Some(e) = entry.as_ref() {
-                let result = open_game_subfolder(e, &orchestrator.wizard_state.step1);
-                if let Err(msg) = result {
-                    orchestrator.notification_manager.error(msg);
-                }
+        Some(PostInstallAction::OpenGameFolder) => {
+            if let Some(e) = entry.as_ref()
+                && let Err(msg) = operations::open_game_folder(e)
+            {
+                orchestrator.notification_manager.error(msg);
             }
         }
         None => {}
@@ -114,28 +112,30 @@ fn apply_share_dialog(
     entry: &crate::registry::model::ModlistEntry,
     palette: crate::ui::shared::redesign_tokens::ThemePalette,
 ) {
-    let code = entry
+    let has_code = entry
         .latest_share_code
         .as_deref()
-        .filter(|c| !c.trim().is_empty());
+        .is_some_and(|c| !c.trim().is_empty());
+    let needed = orchestrator.share_name_needed(&entry.id);
 
     let outcome = share_modlist_dialog::render(
         ctx,
         palette,
-        &ShareModlistDialog {
+        &mut ShareModlistDialog {
             id_salt: "workspace_step5",
             modlist_name: &entry.name,
-            has_code: code.is_some(),
+            has_code,
+            name_prompt: needed.then_some(&mut orchestrator.share_name_buffer),
         },
     );
 
     match outcome {
         ShareOutcome::ExportFile => {
-            if let Some(code) = code {
-                let unresolved = share_actions::unresolved_mods_for_code(code);
+            if let Some(code) = orchestrator.code_for_share(&entry.id) {
+                let unresolved = share_actions::unresolved_mods_for_code(&code);
                 share_actions::export_modlist_file(
                     &entry.name,
-                    code,
+                    &code,
                     &unresolved,
                     &mut orchestrator.notification_manager,
                 );
@@ -143,13 +143,14 @@ fn apply_share_dialog(
             orchestrator.workspace_step5.share_dialog_open = false;
         }
         ShareOutcome::CopyCode => {
-            if let Some(code) = code {
-                let unresolved = share_actions::unresolved_mods_for_code(code);
-                share_actions::copy_share_code(ctx, &entry.name, code, &unresolved);
+            if let Some(code) = orchestrator.code_for_share(&entry.id) {
+                let unresolved = share_actions::unresolved_mods_for_code(&code);
+                share_actions::copy_share_code(ctx, &entry.name, &code, &unresolved);
             }
             orchestrator.workspace_step5.share_dialog_open = false;
         }
         ShareOutcome::Closed => {
+            orchestrator.share_name_buffer.clear();
             orchestrator.workspace_step5.share_dialog_open = false;
         }
         ShareOutcome::Pending => {}
@@ -391,65 +392,6 @@ fn pending_workspace_prep_matches_current(
         entry.destination_folder.trim(),
         Some(&pending.modlist_id),
     )
-}
-
-fn open_game_subfolder(
-    entry: &crate::registry::model::ModlistEntry,
-    step1: &Step1State,
-) -> Result<(), String> {
-    let dest = entry.destination_folder.trim();
-    if dest.is_empty() {
-        return Err(format!("\"{}\" has no install folder set yet.", entry.name));
-    }
-    let game_folder_name = match entry.game {
-        Game::BGEE => step1.bgee_game_folder.trim(),
-        Game::BG2EE => step1.bg2ee_game_folder.trim(),
-        Game::IWDEE => step1.iwdee_game_folder.trim(),
-        Game::EET => step1.eet_bg2ee_game_folder.trim(),
-    };
-    let candidate = if game_folder_name.is_empty() {
-        std::path::PathBuf::from(dest)
-    } else {
-        std::path::PathBuf::from(dest).join(game_folder_name)
-    };
-    let target = if candidate.is_dir() {
-        candidate
-    } else {
-        std::path::PathBuf::from(dest)
-    };
-    if !target.is_dir() {
-        return Err(format!(
-            "Install folder for \"{}\" not found on disk: {}",
-            entry.name,
-            target.display()
-        ));
-    }
-    open_in_file_manager(&target)
-        .map_err(|e| format!("Couldn't open the folder for \"{}\": {e}", entry.name))
-}
-
-fn open_in_file_manager(path: &std::path::Path) -> std::io::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(path)
-            .spawn()
-            .map(|_| ())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(path)
-            .spawn()
-            .map(|_| ())
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(path)
-            .spawn()
-            .map(|_| ())
-    }
 }
 
 fn clear_pending_destination_prep(orchestrator: &mut OrchestratorApp, modlist_id: &str) {

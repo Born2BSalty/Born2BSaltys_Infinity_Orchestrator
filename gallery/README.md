@@ -35,9 +35,9 @@ The BIO build embeds every folder's `entry.json`, `modlist.biolist` and `cover.p
 Drop a folder (`entry.json`, `modlist.biolist`, optional `cover.png`) into `gallery/`, commit, then build BIO.
 
 ```
-cargo run --release --bin gallery-index -- check gallery
+cargo test --lib gallery_folder
 ```
 
-`check` validates every folder; it is the same check CI runs on every pull request that touches `gallery/`.
+The test validates every folder; CI runs it on every pull request.
 
 Submissions arrive on the BIO Discord; the maintainer places the file here.

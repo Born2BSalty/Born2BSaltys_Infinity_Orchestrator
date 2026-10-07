@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::install_runtime::replaced_owners;
-use crate::install_runtime::start_hooks::{self, InstallButtonVariant};
+use crate::install_runtime::start_hooks;
 use crate::registry::destination_claim::{
     ClaimContext, DestinationClaim, resolve_destination_claim,
 };
@@ -225,11 +225,6 @@ pub fn register_and_write_install_start_artifacts(
         return false;
     };
 
-    let variant = InstallButtonVariant::from_step5_and_reinstall(
-        &orchestrator.wizard_state,
-        &modlist_id,
-        orchestrator.pending_reinstall_id.as_deref(),
-    );
     let chosen_code = orchestrator.install_screen_state.import_code.trim();
     let code_source = if chosen_code.is_empty() {
         orchestrator
@@ -248,7 +243,6 @@ pub fn register_and_write_install_start_artifacts(
         } = &mut *orchestrator;
         if let Err(err) = start_hooks::write_install_start_artifacts_with_code(
             &modlist_id,
-            variant,
             &code_source,
             registry,
             registry_store,
@@ -594,6 +588,33 @@ mod tests {
             ..Default::default()
         });
         app
+    }
+
+    #[test]
+    fn as_is_install_records_no_list_mods_folder() {
+        let mut app = OrchestratorApp::new_isolated_for_test("as-is-no-mods-folder");
+        app.install_screen_state.parsed_preview = Some(preview(
+            Some("Someone's run"),
+            "EET",
+            Some("@creator"),
+            vec![],
+        ));
+        app.install_screen_state.destination = "D:\\as is".to_string();
+
+        let (id, minted) = early_mint_modlist_id(&mut app, "D:\\as is", None)
+            .expect("registered")
+            .expect("minted");
+
+        assert!(minted);
+        let in_memory = app
+            .workspace_state
+            .get(&id)
+            .expect("the install's workspace is recorded");
+        assert_eq!(in_memory.scratch_mods_folder, None);
+        let on_disk = WorkspaceStore::new_for_id(&id)
+            .load()
+            .expect("the install's workspace is written");
+        assert_eq!(on_disk.scratch_mods_folder, None);
     }
 
     #[test]

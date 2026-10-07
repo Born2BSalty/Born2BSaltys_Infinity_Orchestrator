@@ -196,8 +196,4 @@ Edit this:
 
 mod_downloads_user.toml
 
-Do not manually edit the AppData copy of:
-
-mod_downloads_default.toml
-
-BIO can replace the default file when updating.
+The AppData copy of mod_downloads_default.toml is a reference copy of the built-in defaults that BIO rewrites at every launch and never reads, so editing it changes nothing.

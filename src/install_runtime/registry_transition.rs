@@ -8,7 +8,6 @@ use chrono::Utc;
 use tracing::warn;
 
 use crate::app::state::WizardState;
-use crate::install_runtime::import_code_writer;
 use crate::registry::model::{ModlistEntry, ModlistRegistry, ModlistState};
 use crate::registry::share_export::{self, ArchiveMeta, ShareMeta};
 use crate::registry::store::RegistryStore;
@@ -87,8 +86,7 @@ pub fn flip_to_installed(
     entry.mod_count = mod_count;
     entry.component_count = component_count;
 
-    let verified_code = new_code.clone();
-    entry.latest_share_code = Some(new_code);
+    entry.set_latest_share_code(new_code);
 
     entry.total_size_bytes = None;
 
@@ -100,26 +98,6 @@ pub fn flip_to_installed(
              SPEC §13.14)"
         );
         return None;
-    }
-
-    if destination.is_empty() {
-        warn!(
-            target = "orchestrator",
-            "flip_to_installed: modlist {id} has no destination_folder on \
-             clean exit — skipping the modlist-import-code.txt rewrite \
-             (nothing to write it next to; registry latest_share_code is \
-             canonical — SPEC §13.13)"
-        );
-    } else if let Err(err) =
-        import_code_writer::write_modlist_import_code_txt(Path::new(&destination), &verified_code)
-    {
-        warn!(
-            target = "orchestrator",
-            "flip_to_installed: rewriting modlist-import-code.txt to \
-             {destination} on clean exit failed: {err} (non-fatal — the \
-             registry holds the verified allow_auto_install=true code; the \
-             on-disk file stays the install-start draft — SPEC §13.13/§13.14)"
-        );
     }
 
     spawn_size_worker(id, destination)
@@ -297,6 +275,7 @@ mod tests {
     use super::*;
     use crate::app::state::{Step2ComponentState, Step2ModState, Step3ItemState};
     use crate::registry::model::{Game, ModlistEntry};
+    use crate::registry::share_code_file::IMPORT_CODE_FILENAME;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -659,6 +638,20 @@ mod tests {
         ))
     }
 
+    struct DestinationGuard(std::path::PathBuf);
+
+    impl DestinationGuard {
+        fn new(label: &str) -> Self {
+            Self(temp_destination(label))
+        }
+    }
+
+    impl Drop for DestinationGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     fn eet_state_with_leaves() -> WizardState {
         let mut s = WizardState::default();
         s.step1.game_install = "EET".to_string();
@@ -670,10 +663,11 @@ mod tests {
     #[test]
     fn flip_to_installed_rewrites_ondisk_import_code_with_true_bit() {
         let (store, store_path) = temp_registry_store("ondisk_rewrite");
-        let dest = temp_destination("rewrite");
+        let dest_guard = DestinationGuard::new("rewrite");
+        let dest = dest_guard.0.clone();
         std::fs::create_dir_all(&dest).unwrap();
 
-        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+        let draft_path = dest.join(IMPORT_CODE_FILENAME);
         std::fs::write(&draft_path, "BIO-MODLIST-V1:INSTALL-START-DRAFT").unwrap();
 
         let mut registry = ModlistRegistry::default();
@@ -715,16 +709,16 @@ mod tests {
         );
 
         let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
-        let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_file(&store_path);
     }
 
     #[test]
     fn flip_regenerates_the_code_even_when_a_held_code_exists() {
         let (store, store_path) = temp_registry_store("regen_over_held");
-        let dest = temp_destination("regen_over_held");
+        let dest_guard = DestinationGuard::new("regen_over_held");
+        let dest = dest_guard.0.clone();
         std::fs::create_dir_all(&dest).unwrap();
-        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+        let draft_path = dest.join(IMPORT_CODE_FILENAME);
 
         let mut registry = ModlistRegistry::default();
         registry.entries.push(ModlistEntry {
@@ -812,7 +806,6 @@ mod tests {
         );
 
         let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
-        let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_dir_all(&eet_pre_dir);
         let _ = std::fs::remove_dir_all(&eet_new_dir);
         let _ = std::fs::remove_dir_all(&first_game_order_log_dir);
@@ -823,9 +816,10 @@ mod tests {
     #[test]
     fn flip_falls_back_to_the_held_code_when_regeneration_fails() {
         let (store, store_path) = temp_registry_store("held_fallback");
-        let dest = temp_destination("held_fallback");
+        let dest_guard = DestinationGuard::new("held_fallback");
+        let dest = dest_guard.0.clone();
         std::fs::create_dir_all(&dest).unwrap();
-        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+        let draft_path = dest.join(IMPORT_CODE_FILENAME);
 
         let provenance = ShareMeta {
             allow_auto_install: false,
@@ -897,16 +891,16 @@ mod tests {
         assert_eq!(Some(on_disk.as_str()), entry.latest_share_code.as_deref());
 
         let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
-        let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_file(&store_path);
     }
 
     #[test]
     fn flip_to_installed_override_verbatim_fallback_on_undecodable_held_code() {
         let (store, store_path) = temp_registry_store("im_verbatim");
-        let dest = temp_destination("im_verbatim");
+        let dest_guard = DestinationGuard::new("im_verbatim");
+        let dest = dest_guard.0.clone();
         std::fs::create_dir_all(&dest).unwrap();
-        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+        let draft_path = dest.join(IMPORT_CODE_FILENAME);
 
         let mut registry = ModlistRegistry::default();
         registry.entries.push(ModlistEntry {
@@ -945,15 +939,15 @@ mod tests {
             "on-disk file == the verbatim held code"
         );
         let _ = rx.unwrap().recv_timeout(std::time::Duration::from_secs(5));
-        let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_file(&store_path);
     }
 
     #[test]
     fn ondisk_import_code_unchanged_on_non_clean_exit() {
-        let dest = temp_destination("noclean");
+        let dest_guard = DestinationGuard::new("noclean");
+        let dest = dest_guard.0.clone();
         std::fs::create_dir_all(&dest).unwrap();
-        let draft_path = dest.join(import_code_writer::IMPORT_CODE_FILENAME);
+        let draft_path = dest.join(IMPORT_CODE_FILENAME);
         std::fs::write(&draft_path, "BIO-MODLIST-V1:INSTALL-START-DRAFT").unwrap();
 
         assert_eq!(
@@ -991,7 +985,6 @@ mod tests {
             "entry not flipped on the regen-failure path"
         );
 
-        let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_file(&store_path);
     }
 
@@ -1075,7 +1068,8 @@ mod tests {
     #[test]
     fn fix_1d_paste_path_re_derives_step3_so_counts_are_non_zero() {
         let (store, store_path) = temp_registry_store("fix_1d_paste");
-        let dest = temp_destination("fix_1d_paste");
+        let dest_guard = DestinationGuard::new("fix_1d_paste");
+        let dest = dest_guard.0.clone();
         std::fs::create_dir_all(&dest).unwrap();
 
         let bgee_log_dir = dest.join("BGEE-logs");
@@ -1152,7 +1146,6 @@ mod tests {
         if let Some(rx) = rx {
             let _ = rx.recv_timeout(std::time::Duration::from_secs(5));
         }
-        let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_file(&store_path);
     }
 

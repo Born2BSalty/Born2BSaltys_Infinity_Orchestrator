@@ -225,3 +225,24 @@ mode = ["EET"]
 tab = ["bgee"]
 kind = "mismatch"
 message = "This EET component belongs on the BG2EE tab."
+
+[[rules]]
+mod = "c#brage"
+component_id = "0"
+mode = ["BGEE", "EET"]
+tab = ["BGEE", "BG2EE"]
+kind = "missing_dep"
+related_mod = "bgqe"
+related_component = "11"
+message = "Requires BGQE component 11: Brage's Sword."
+
+[[rules]]
+mod = "c#brage"
+component_id = "0"
+mode = ["BGEE", "EET"]
+tab = ["BGEE", "BG2EE"]
+kind = "order_block"
+related_mod = "bgqe"
+related_component = "11"
+position = "after"
+message = "Install this after BGQE component 11: Brage's Sword."

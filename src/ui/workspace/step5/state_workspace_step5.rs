@@ -6,7 +6,7 @@ use crate::registry::model::Game;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PostInstallAction {
     ReturnToHome,
-    OpenInstallFolder,
+    OpenGameFolder,
 }
 
 #[derive(Debug, Clone, Default)]

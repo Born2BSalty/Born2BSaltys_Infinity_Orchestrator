@@ -102,6 +102,23 @@ fn blocks_bg2ee_game_is_component_after_eet_core_is_checked() {
 }
 
 #[test]
+fn brage_file_check_or_game_check_is_not_flagged_on_eet() {
+    let guards = collect_requirement_guards(&[
+        "BEGIN @0",
+        "REQUIRE_PREDICATE (FILE_EXISTS_IN_GAME ~c#q13swd.itm~ OR GAME_IS ~tob bg2ee~ AND NOT GAME_IS ~bgt~) @9031",
+        "DESIGNATED 0",
+    ]);
+    assert_eq!(guards.len(), 1);
+
+    let context = mismatch_context("EET", "BG2EE", &[("eet", "0")]);
+    assert_eq!(
+        evaluate_requirement(&guards[0].eval_text, &context),
+        TriState::Unknown
+    );
+    assert!(preferred_guard_hit(&guards, &context).is_none());
+}
+
+#[test]
 fn upgrades_selected_negated_mod_guard_to_conflict() {
     let context = mismatch_context("BG2EE", "BG2EE", &[("foo", "1")]);
     let guards = vec![RequirementGuard {

@@ -10,6 +10,8 @@ pub mod operations;
 pub mod operations_create;
 pub mod operations_rename;
 pub mod persistence_cycle;
+pub mod share_author;
+pub mod share_code_file;
 pub mod share_export;
 pub mod store;
 pub mod store_workspace;

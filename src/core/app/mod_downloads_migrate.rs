@@ -17,6 +17,7 @@ use crate::app::mod_downloads::{
 
 const MOD_DOWNLOADS_DEFAULT_FILE_NAME: &str = "mod_downloads_default.toml";
 const COMPAT_RULES_DEFAULT_FILE_NAME: &str = "step2_compat_rules_default.toml";
+const REFERENCE_FILE_HEADER: &str = "# Reference copy of BIO's built-in defaults, provided for reference only.\n# BIO does not read this file. Edits here change nothing and are overwritten when BIO starts.";
 
 fn migrated_header() -> &'static str {
     mod_downloads::user_template_migrated_header()
@@ -339,22 +340,47 @@ fn modlists_root_dir() -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-fn remove_retired_config_file(name: &str) {
-    let Some(dir) = crate::platform_defaults::app_config_dir() else {
-        return;
-    };
+fn reference_file_text(embedded: &str) -> String {
+    format!("{REFERENCE_FILE_HEADER}\n\n{embedded}")
+}
+
+fn write_reference_file(dir: &Path, name: &str, embedded: &str) {
     let path = dir.join(name);
-    let is_regular_file = fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file());
-    if !is_regular_file {
-        return;
-    }
-    if let Err(err) = fs::remove_file(&path) {
+    if fs::symlink_metadata(&path).is_ok_and(|meta| !meta.file_type().is_file()) {
         warn!(
             target = "mod_downloads_migrate",
-            "remove {} failed: {err}",
+            "{} is not a regular file; leaving it as is",
+            path.display()
+        );
+        return;
+    }
+    let content = reference_file_text(embedded);
+    if fs::read_to_string(&path).is_ok_and(|existing| existing == content) {
+        return;
+    }
+    if let Err(err) = fs::create_dir_all(dir).and_then(|()| fs::write(&path, content)) {
+        warn!(
+            target = "mod_downloads_migrate",
+            "write {} failed: {err}",
             path.display()
         );
     }
+}
+
+fn write_reference_files() {
+    let Some(dir) = crate::platform_defaults::app_config_dir() else {
+        return;
+    };
+    write_reference_file(
+        &dir,
+        MOD_DOWNLOADS_DEFAULT_FILE_NAME,
+        mod_downloads::default_mod_downloads_content(),
+    );
+    write_reference_file(
+        &dir,
+        COMPAT_RULES_DEFAULT_FILE_NAME,
+        crate::app::compat_rules::default_step2_rules_content(),
+    );
 }
 
 pub fn migrate_source_files_at_launch() {
@@ -379,8 +405,7 @@ pub fn migrate_source_files_at_launch() {
         }
     }
 
-    remove_retired_config_file(MOD_DOWNLOADS_DEFAULT_FILE_NAME);
-    remove_retired_config_file(COMPAT_RULES_DEFAULT_FILE_NAME);
+    write_reference_files();
 }
 
 #[cfg(test)]
@@ -643,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    fn migration_launch_writes_backup_once_and_removes_default_file() {
+    fn migration_launch_writes_backup_once_and_writes_reference_files() {
         let root = MigrateTestRoot::new("launch");
         let user_path = root.path.join("mod_downloads_user.toml");
         fs::write(&user_path, FIXTURE_USER_TEXT).unwrap();
@@ -670,14 +695,7 @@ mod tests {
                 .is_file(),
             "the modlist tier must be backed up once"
         );
-        assert!(
-            !root.path.join("mod_downloads_default.toml").exists(),
-            "the retired default file must be removed"
-        );
-        assert!(
-            !root.path.join("step2_compat_rules_default.toml").exists(),
-            "the retired compat rules default file must be removed"
-        );
+        assert_reference_files_current(&root.path);
 
         let user_after_first = fs::read_to_string(&user_path).unwrap();
         let modlist_after_first = fs::read_to_string(&modlist_path).unwrap();
@@ -694,5 +712,52 @@ mod tests {
             modlist_after_first,
             "a second launch must not rewrite an already-migrated file"
         );
+        assert_reference_files_current(&root.path);
+    }
+
+    fn assert_reference_files_current(dir: &Path) {
+        let expected = [
+            (
+                "mod_downloads_default.toml",
+                mod_downloads::default_mod_downloads_content(),
+            ),
+            (
+                "step2_compat_rules_default.toml",
+                crate::app::compat_rules::default_step2_rules_content(),
+            ),
+        ];
+        for (name, embedded) in expected {
+            let text = fs::read_to_string(dir.join(name))
+                .unwrap_or_else(|err| panic!("{name} must be written at launch: {err}"));
+            assert!(
+                text.starts_with(
+                    "# Reference copy of BIO's built-in defaults, provided for reference only.\n# BIO does not read this file. Edits here change nothing and are overwritten when BIO starts.\n\n"
+                ),
+                "{name} must start with the reference header and a blank line"
+            );
+            assert_eq!(
+                text,
+                reference_file_text(embedded),
+                "{name} must hold the header followed by the embedded text unchanged"
+            );
+        }
+    }
+
+    #[test]
+    fn reference_files_are_rewritten_when_edited() {
+        let root = MigrateTestRoot::new("reference");
+
+        migrate_source_files_at_launch();
+        assert_reference_files_current(&root.path);
+
+        fs::write(root.path.join("mod_downloads_default.toml"), "# edited\n").unwrap();
+        fs::write(
+            root.path.join("step2_compat_rules_default.toml"),
+            "# edited\n",
+        )
+        .unwrap();
+
+        migrate_source_files_at_launch();
+        assert_reference_files_current(&root.path);
     }
 }

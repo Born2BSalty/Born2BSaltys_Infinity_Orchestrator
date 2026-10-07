@@ -7,6 +7,7 @@ pub mod nav_status;
 pub mod orchestrator_app;
 pub mod page_router;
 pub mod registry_error_panel;
+pub mod share_flow;
 pub mod stubs;
 pub mod widgets;
 
