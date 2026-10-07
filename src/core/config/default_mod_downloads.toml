@@ -3996,6 +3996,25 @@ tp2 = "c#sb_silber"
   pkg_linux = "lin,rar,zip"
   pkg_macos = "mac,rar,zip"
 
+[[mods]]
+name = "Brage's Redemption"
+tp2 = "c#brage"
+
+  [[mods.sources]]
+  id = "gitjas"
+  label = "Gitjas"
+  type = "github"
+  url = "https://github.com/Gitjas/Brages_Redemption"
+  repo = "Gitjas/Brages_Redemption"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
 #////////////////////////////////////////////////#
 #//                GraionDilach                //#
 #////////////////////////////////////////////////#
@@ -8179,25 +8198,6 @@ tp2 = "SpellFix_Visual_Effects"
   label = "Source"
   type = "url"
   url = "https://www.shsforums.net/files/file/1271-spellfix-visual-effects/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
-
-[[mods]]
-name = "Brage's Redemption"
-tp2 = "c#brage"
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.baldurs-gate.de/index.php?resources/brages-redemption.42/"
   repo = ""
   commit = ""
   tag = ""
