@@ -370,7 +370,7 @@ fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &s
     match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
         Ok(code) => {
             if let Some(entry_mut) = orchestrator.registry.find_mut(id) {
-                entry_mut.latest_share_code = Some(code);
+                entry_mut.set_latest_share_code(code);
             }
             orchestrator
                 .persistence_cycle
@@ -386,7 +386,7 @@ fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &s
                 && let Some(code) = entry_mut.latest_share_code.clone()
                 && let Ok(stamped) = share_export::set_packed_identity(&code, &meta)
             {
-                entry_mut.latest_share_code = Some(stamped);
+                entry_mut.set_latest_share_code(stamped);
                 orchestrator
                     .persistence_cycle
                     .mark_registry_dirty(Instant::now());
@@ -948,6 +948,52 @@ mod tests {
                 size: record.size,
                 hash: record.hash,
             }]
+        );
+    }
+
+    #[test]
+    fn save_draft_writes_the_code_file() {
+        use crate::registry::share_code_file::IMPORT_CODE_FILENAME;
+        let mut app = orch_with_entry("code file");
+        let destination = app
+            .isolated_test_config_root
+            .as_ref()
+            .expect("the isolated app owns a temp config root")
+            .join("install here");
+        std::fs::create_dir_all(&destination).unwrap();
+        app.registry
+            .find_mut("HDRTEST00000")
+            .unwrap()
+            .destination_folder = destination.to_string_lossy().into_owned();
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![counted_mod("alpha")];
+        app.wizard_state.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "ALPHA/ALPHA.TP2".to_string(),
+            component_id: "0".to_string(),
+            mod_name: "alpha".to_string(),
+            component_label: "0".to_string(),
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 1,
+            block_id: String::new(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+
+        let code = app
+            .registry
+            .find("HDRTEST00000")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("the rebake must mint a share code");
+        assert_eq!(
+            std::fs::read_to_string(destination.join(IMPORT_CODE_FILENAME))
+                .expect("the file is written"),
+            code
         );
     }
 

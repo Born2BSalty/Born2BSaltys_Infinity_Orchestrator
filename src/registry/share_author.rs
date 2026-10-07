@@ -5,6 +5,14 @@ use crate::registry::model::ModlistEntry;
 use crate::registry::share_export::{ShareMeta, set_packed_identity};
 use crate::registry::workspace_model::ModlistWorkspaceState;
 
+pub const USER_NAME_RULE_HINT: &str = "At least 2 characters, including a letter.";
+
+#[must_use]
+pub fn user_name_is_valid(name: &str) -> bool {
+    let trimmed = name.trim();
+    (2..=80).contains(&trimmed.chars().count()) && trimmed.chars().any(char::is_alphabetic)
+}
+
 #[must_use]
 pub fn workspace_marks_own_list(workspace: &ModlistWorkspaceState) -> bool {
     workspace
@@ -26,7 +34,7 @@ pub fn stamp_current_author(entry: &mut ModlistEntry, user_name: &str) -> bool {
         && let Ok(stamped) = set_packed_identity(&code, &ShareMeta::from_entry(entry, false))
         && stamped != code
     {
-        entry.latest_share_code = Some(stamped);
+        entry.set_latest_share_code(stamped);
         true
     } else {
         false
@@ -61,6 +69,22 @@ mod tests {
             author: author.map(str::to_string),
             latest_share_code: code,
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn user_name_rule_accepts_two_chars_with_a_letter() {
+        let eighty = "a".repeat(80);
+        for name in ["A7", "Jo", "Ян", "A@", " Jo ", eighty.as_str()] {
+            assert!(user_name_is_valid(name), "{name:?} must pass");
+        }
+    }
+
+    #[test]
+    fn user_name_rule_rejects_short_letterless_or_long() {
+        let eighty_one = "a".repeat(81);
+        for name in ["", "@", "77", "-", " a ", "@@", eighty_one.as_str()] {
+            assert!(!user_name_is_valid(name), "{name:?} must fail");
         }
     }
 

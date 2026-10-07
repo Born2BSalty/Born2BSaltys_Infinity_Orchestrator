@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::Path;
-
 use chrono::Utc;
 use tracing::warn;
 
 use crate::app::state::WizardState;
 use crate::install_runtime::flag_policies::{self, InstallWorkflow};
-use crate::install_runtime::import_code_writer;
 use crate::install_runtime::registry_transition;
 use crate::registry::model::ModlistRegistry;
 use crate::registry::share_export::{self, ShareMeta};
@@ -49,16 +46,22 @@ impl InstallButtonVariant {
     ) -> Self {
         Self::from_step5(state, pending_reinstall_id == Some(modlist_id))
     }
+}
 
-    #[must_use]
-    pub const fn writes_import_code(self) -> bool {
-        !matches!(self, Self::Resume)
+fn ensure_destination_exists(modlist_id: &str, destination: &str) {
+    if destination.is_empty() {
+        return;
+    }
+    if let Err(err) = std::fs::create_dir_all(destination) {
+        warn!(
+            target = "orchestrator",
+            "creating the destination {destination} for {modlist_id} at install start failed: {err}"
+        );
     }
 }
 
 pub fn write_install_start_artifacts(
     modlist_id: &str,
-    variant: InstallButtonVariant,
     wizard_state: &WizardState,
     registry: &mut ModlistRegistry,
     store: &RegistryStore,
@@ -77,7 +80,8 @@ pub fn write_install_start_artifacts(
     let entry_mut = registry
         .find_mut(modlist_id)
         .ok_or_else(|| format!("modlist {modlist_id} vanished from registry mid-hook"))?;
-    entry_mut.latest_share_code = Some(share_code.clone());
+    ensure_destination_exists(modlist_id, &destination);
+    entry_mut.set_latest_share_code(share_code);
 
     entry_mut.install_started_at = Some(Utc::now());
 
@@ -85,30 +89,11 @@ pub fn write_install_start_artifacts(
         .save(registry)
         .map_err(|err| format!("registry write at install start failed: {err}"))?;
 
-    if variant.writes_import_code() {
-        if destination.is_empty() {
-            warn!(
-                target = "orchestrator",
-                "modlist {modlist_id} has no destination_folder at install start — \
-                 skipping modlist-import-code.txt (nothing to write it next to)"
-            );
-        } else if let Err(err) =
-            import_code_writer::write_modlist_import_code_txt(Path::new(&destination), &share_code)
-        {
-            warn!(
-                target = "orchestrator",
-                "writing modlist-import-code.txt to {destination} failed: {err} \
-                 (non-fatal — the install proceeds; the registry holds the code)"
-            );
-        }
-    }
-
     Ok(())
 }
 
 pub fn write_install_start_artifacts_with_code(
     modlist_id: &str,
-    variant: InstallButtonVariant,
     code_source: &str,
     registry: &mut ModlistRegistry,
     store: &RegistryStore,
@@ -137,30 +122,13 @@ pub fn write_install_start_artifacts_with_code(
     let entry_mut = registry
         .find_mut(modlist_id)
         .ok_or_else(|| format!("modlist {modlist_id} vanished from registry mid-hook"))?;
-    entry_mut.latest_share_code = Some(share_code.clone());
+    ensure_destination_exists(modlist_id, &destination);
+    entry_mut.set_latest_share_code(share_code);
     entry_mut.install_started_at = Some(Utc::now());
 
     store
         .save(registry)
         .map_err(|err| format!("registry write at install start failed: {err}"))?;
-
-    if variant.writes_import_code() {
-        if destination.is_empty() {
-            warn!(
-                target = "orchestrator",
-                "modlist {modlist_id} has no destination_folder at install start — \
-                 skipping modlist-import-code.txt (nothing to write it next to)"
-            );
-        } else if let Err(err) =
-            import_code_writer::write_modlist_import_code_txt(Path::new(&destination), &share_code)
-        {
-            warn!(
-                target = "orchestrator",
-                "writing modlist-import-code.txt to {destination} failed: {err} \
-                 (non-fatal — the install proceeds; the registry holds the code)"
-            );
-        }
-    }
 
     Ok(())
 }
@@ -189,7 +157,7 @@ pub fn on_install_start(
 ) -> Result<(), String> {
     flag_policies::apply_flags(&mut wizard_state.step1, workflow, ctx.settings);
 
-    write_install_start_artifacts(modlist_id, variant, wizard_state, registry, store)?;
+    write_install_start_artifacts(modlist_id, wizard_state, registry, store)?;
 
     let destination = registry
         .find(modlist_id)
@@ -293,64 +261,6 @@ mod tests {
         assert_eq!(
             InstallButtonVariant::from_step5(&s, true),
             InstallButtonVariant::Reinstall
-        );
-    }
-
-    #[test]
-    fn import_code_write_matrix_matches_spec_13_13() {
-        assert!(InstallButtonVariant::Install.writes_import_code());
-        assert!(InstallButtonVariant::Restart.writes_import_code());
-        assert!(InstallButtonVariant::Reinstall.writes_import_code());
-        assert!(
-            !InstallButtonVariant::Resume.writes_import_code(),
-            "Resume Install must NOT overwrite modlist-import-code.txt \
-             (SPEC §13.13)"
-        );
-    }
-
-    fn matrix_row(
-        resume_available: bool,
-        has_run_once: bool,
-        reinstall: bool,
-    ) -> (InstallButtonVariant, bool) {
-        let mut s = WizardState::default();
-        s.step5.resume_available = resume_available;
-        s.step5.has_run_once = has_run_once;
-        let v = InstallButtonVariant::from_step5(&s, reinstall);
-        (v, v.writes_import_code())
-    }
-
-    #[test]
-    fn spec_13_13_matrix_holds_per_entry_point_and_variant() {
-        assert_eq!(
-            matrix_row(false, false, false),
-            (InstallButtonVariant::Install, true),
-            "Fresh Install (all non-reinstall entry points) ⇒ Install ⇒ write"
-        );
-
-        assert_eq!(
-            matrix_row(false, false, true),
-            (InstallButtonVariant::Reinstall, true),
-            "Reinstall ⇒ Reinstall ⇒ write/overwrite (SPEC §13.13)"
-        );
-
-        assert_eq!(
-            matrix_row(false, true, false),
-            (InstallButtonVariant::Restart, true),
-            "Restart Install (post force-cancel) ⇒ Restart ⇒ overwrite"
-        );
-
-        assert_eq!(
-            matrix_row(true, true, false),
-            (InstallButtonVariant::Resume, false),
-            "Resume Install (post graceful-cancel) ⇒ Resume ⇒ SKIP \
-             (prior attempt's modlist-import-code.txt preserved — SPEC §13.13)"
-        );
-
-        assert_eq!(
-            matrix_row(true, true, true),
-            (InstallButtonVariant::Reinstall, true),
-            "the reinstall flag wins over resume_available ⇒ Reinstall ⇒ write"
         );
     }
 
@@ -510,13 +420,7 @@ mod tests {
         let before = registry.find("MODLIST-ART-1").unwrap().clone();
         let s = WizardState::default();
 
-        let r = write_install_start_artifacts(
-            "MODLIST-ART-1",
-            InstallButtonVariant::Install,
-            &s,
-            &mut registry,
-            &store,
-        );
+        let r = write_install_start_artifacts("MODLIST-ART-1", &s, &mut registry, &store);
 
         assert!(
             r.is_err(),
@@ -546,13 +450,7 @@ mod tests {
         let mut registry = ModlistRegistry::default();
         let s = WizardState::default();
 
-        let r = write_install_start_artifacts(
-            "GHOST-MODLIST",
-            InstallButtonVariant::Reinstall,
-            &s,
-            &mut registry,
-            &store,
-        );
+        let r = write_install_start_artifacts("GHOST-MODLIST", &s, &mut registry, &store);
 
         let msg = r.expect_err("a missing registry entry must Err");
         assert!(
@@ -608,30 +506,6 @@ mod tests {
     }
 
     #[test]
-    fn on_install_start_and_helper_share_the_same_13_13_write_decision() {
-        for (resume, has_run_once, reinstall, expect_write) in [
-            (false, false, false, true),
-            (false, true, false, true),
-            (true, true, false, false),
-            (false, false, true, true),
-            (true, true, true, true),
-        ] {
-            let mut s = WizardState::default();
-            s.step5.resume_available = resume;
-            s.step5.has_run_once = has_run_once;
-            let variant = InstallButtonVariant::from_step5(&s, reinstall);
-            assert_eq!(
-                variant.writes_import_code(),
-                expect_write,
-                "the §13.13 write decision the factored helper + \
-                 on_install_start both use must match the matrix \
-                 (resume={resume}, has_run_once={has_run_once}, \
-                 reinstall={reinstall})"
-            );
-        }
-    }
-
-    #[test]
     fn write_install_start_artifacts_with_code_stamps_the_entry_identity_onto_a_carried_code() {
         use crate::app::modlist_share::{ForkAncestor, preview_modlist_share_code};
 
@@ -670,14 +544,8 @@ mod tests {
         )
         .expect("mint parent code");
 
-        write_install_start_artifacts_with_code(
-            "FORK-1",
-            InstallButtonVariant::Install,
-            &parent_code,
-            &mut registry,
-            &store,
-        )
-        .expect("hook ok");
+        write_install_start_artifacts_with_code("FORK-1", &parent_code, &mut registry, &store)
+            .expect("hook ok");
 
         let stored = registry
             .find("FORK-1")
@@ -697,5 +565,59 @@ mod tests {
         );
         assert!(!preview.allow_auto_install);
         assert_eq!(preview.bgee_entries, 1);
+    }
+
+    #[test]
+    fn install_start_creates_the_destination_and_writes_the_code_file() {
+        use crate::registry::share_code_file::IMPORT_CODE_FILENAME;
+
+        struct TempRoot(std::path::PathBuf);
+        impl Drop for TempRoot {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let root = TempRoot(std::env::temp_dir().join(format!(
+            "bio_start_hooks_code_file_{}_{}",
+            std::process::id(),
+            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        )));
+        let destination = root.0.join("install here");
+        let store = RegistryStore::new_with_path(root.0.join("registry.json"));
+        let mut registry = ModlistRegistry::default();
+        registry.entries.push(ModlistEntry {
+            id: "RESUME000001".to_string(),
+            name: "Resumed run".to_string(),
+            game: Game::BGEE,
+            state: ModlistState::InProgress,
+            destination_folder: destination.to_string_lossy().into_owned(),
+            ..Default::default()
+        });
+        let carried = crate::app::modlist_share::encode_share_payload_text(
+            r#"{
+                "format_version": 1,
+                "game_install": "BGEE",
+                "install_mode": "start_from_scratch",
+                "name": "Resumed run",
+                "weidu_logs": { "bgee": "~MOD/MOD.TP2~ #0 #0 // A component" }
+            }"#,
+        )
+        .expect("mint code");
+
+        write_install_start_artifacts_with_code("RESUME000001", &carried, &mut registry, &store)
+            .expect("hook ok");
+
+        let stored = registry
+            .find("RESUME000001")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("code stored");
+        assert_eq!(
+            std::fs::read_to_string(destination.join(IMPORT_CODE_FILENAME))
+                .expect("the file is written into the created destination"),
+            stored
+        );
     }
 }
