@@ -428,7 +428,15 @@ fn downloading_stage(
             }
             ForkDownloadOutcome::Import => {
                 let id = orchestrator.active_install_modlist_id.clone()?;
+                let labels = orchestrator
+                    .wizard_state
+                    .step2
+                    .skipped_manual_downloads
+                    .clone();
                 fork_route::extract_complete_route_to_workspace(orchestrator, id);
+                if !labels.is_empty() {
+                    warn_continued_without(orchestrator, &labels);
+                }
                 None
             }
             ForkDownloadOutcome::Stay => None,
@@ -452,13 +460,17 @@ fn open_workspace_or_reset_to_gallery(
         .skipped_manual_downloads
         .clone();
     fork_route::route_to_workspace(orchestrator, id);
+    warn_continued_without(orchestrator, &labels);
+    None
+}
+
+fn warn_continued_without(orchestrator: &mut OrchestratorApp, labels: &[String]) {
     let n = labels.len();
     let word = if n == 1 { "mod" } else { "mods" };
     orchestrator.notification_manager.warn_persistent(format!(
         "Continued without {n} {word}: {}",
         labels.join(", ")
     ));
-    None
 }
 
 fn installing_stage(

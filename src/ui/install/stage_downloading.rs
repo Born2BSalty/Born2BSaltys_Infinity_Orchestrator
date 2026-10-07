@@ -909,7 +909,10 @@ const fn manual_hold_entry_ready(orchestrator: &OrchestratorApp) -> bool {
             .update_selected_check_running
 }
 
-fn enter_manual_hold_once(orchestrator: &mut OrchestratorApp, inputs: &LivePipelineInputs) {
+pub(super) fn enter_manual_hold_once(
+    orchestrator: &mut OrchestratorApp,
+    inputs: &LivePipelineInputs,
+) {
     enter_manual_hold_once_with_poll(orchestrator, inputs, Duration::from_secs(2));
 }
 
@@ -1273,7 +1276,7 @@ fn set_manual_refusal(orchestrator: &mut OrchestratorApp, index: usize, reason: 
         .last_refusal = Some(reason);
 }
 
-fn pick_manual_file(orchestrator: &mut OrchestratorApp, index: usize) {
+pub(super) fn pick_manual_file(orchestrator: &mut OrchestratorApp, index: usize) {
     if orchestrator
         .wizard_state
         .step1
@@ -1344,7 +1347,7 @@ fn pick_manual_file(orchestrator: &mut OrchestratorApp, index: usize) {
     }
 }
 
-fn open_manual_page(orchestrator: &mut OrchestratorApp, index: usize) {
+pub(super) fn open_manual_page(orchestrator: &mut OrchestratorApp, index: usize) {
     let Some(url) = orchestrator
         .install_screen_state
         .manual_downloads
@@ -1404,7 +1407,7 @@ fn manual_continue_without_title(pending: usize) -> String {
     }
 }
 
-fn render_manual_confirm_dialog(
+pub(super) fn render_manual_confirm_dialog(
     ui: &egui::Ui,
     orchestrator: &mut OrchestratorApp,
     palette: ThemePalette,
