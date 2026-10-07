@@ -58,7 +58,7 @@ use crate::ui::shared::redesign_tokens::{REDESIGN_NAV_WIDTH_PX, ThemePalette};
 use crate::ui::shell::shell_chrome;
 use crate::ui::shell::shell_statusbar::RunningInstallStatus;
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
-use crate::ui::workspace::state_workspace::{WeiduLogImportForm, WorkspaceViewState};
+use crate::ui::workspace::state_workspace::WorkspaceViewState;
 use crate::ui::workspace::step5::state_workspace_step5::WorkspaceStep5State;
 
 const BIO_SETTINGS_DEBOUNCE_MS: u64 = 1000;
@@ -110,7 +110,7 @@ pub(crate) struct PendingCreateStart {
     pub(crate) name: String,
     pub(crate) destination: String,
     pub(crate) game: Game,
-    pub(crate) log_import: Option<WeiduLogImportForm>,
+    pub(crate) log_import: bool,
     pub(crate) worker: DestinationPrepWorker,
 }
 
@@ -1270,7 +1270,7 @@ impl eframe::App for OrchestratorApp {
         oauth_glue::poll_github_oauth_flow(self);
 
         self.poll_step2_channels();
-        self.reconcile_scan_and_apply_create_logs();
+        self.reconcile_scan_and_advance_log_imports();
         if self.step2_needs_repaint() {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
@@ -1427,10 +1427,11 @@ impl Drop for OrchestratorApp {
 }
 
 impl OrchestratorApp {
-    fn reconcile_scan_and_apply_create_logs(&mut self) {
+    fn reconcile_scan_and_advance_log_imports(&mut self) {
         let scan_completed =
             crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(self);
-        create_log_import::advance_create_log_import(self, scan_completed);
+        create_log_import::advance_create_log_import(self);
+        crate::ui::workspace::step2_log_glue::advance_queued_weidu_log_import(self, scan_completed);
     }
 
     fn drive_notifications(

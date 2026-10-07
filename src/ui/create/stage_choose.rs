@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::path::PathBuf;
-
 use eframe::egui;
 
 use crate::app::compat_dlc_source::{SourceNotice, SourceNoticeSeverity, SourceRemedy};
@@ -13,8 +11,7 @@ use crate::registry::destination_claim::{
 };
 use crate::registry::model::{Game, ModlistRegistry};
 use crate::settings::model::Step1Settings;
-use crate::ui::create::create_log_import;
-use crate::ui::create::state_create::{CreateMode, CreateScreenState, LogCheck};
+use crate::ui::create::state_create::{CreateMode, CreateScreenState};
 use crate::ui::install::stage_review::{self, SourceWarningAction};
 use crate::ui::install::sub_flow_footer::{self, PrimaryBtn};
 use crate::ui::install::{destination_not_empty, destination_owned};
@@ -23,12 +20,9 @@ use crate::ui::orchestrator::widgets::{
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
-    redesign_border_strong, redesign_error, redesign_input_bg, redesign_shell_bg, redesign_success,
+    redesign_border_strong, redesign_error, redesign_input_bg, redesign_shell_bg,
     redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
-use crate::ui::workspace::state_workspace::WeiduLogImportForm;
-use crate::ui::workspace::step2::step2_log_confirm::weidu_log_import_rows;
-use crate::ui::workspace::step2::step2_log_import_dialog;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChooseOutcome {
@@ -60,14 +54,6 @@ const LOGS_DESC: &str = "Pick an install's WeiDU logs. BIO ticks the components 
 const SCRATCH_TITLE: &str = "From scratch";
 const SCRATCH_DESC: &str = "Scan your local mods folder, pick components, reorder, then install. Starts from an empty selection.";
 
-const LOG_ROWS_TOP_GAP_PX: f32 = 14.0;
-const LOG_ROW_GAP_PX: f32 = 8.0;
-const LOG_STATUS_INSET_PX: f32 = 120.0 + 8.0;
-const LOG_STATUS_TOP_GAP_PX: f32 = 4.0;
-const LOG_STATUS_GLYPH_GAP_PX: f32 = 4.0;
-const LOG_STATUS_SIZE: f32 = 12.0;
-const NOT_A_LOG_TEXT: &str = "not a WeiDU log";
-
 pub struct ChooseCtx<'a> {
     pub registry: &'a ModlistRegistry,
     pub active_install_id: Option<&'a str>,
@@ -94,7 +80,7 @@ pub fn render(
             });
     });
 
-    let proceed_ok = !claim.blocks() && logs_ready(state);
+    let proceed_ok = !claim.blocks();
 
     let footer = sub_flow_footer::render(
         ui,
@@ -130,18 +116,6 @@ fn render_body(
     render_title_row(ui, palette, outcome);
     render_setup_box(ui, palette, state, ctx, claim);
     render_starting_point_boxes(ui, palette, state);
-    if state.mode == CreateMode::FromLogs {
-        render_log_rows(ui, palette, state);
-    }
-}
-
-fn logs_ready(state: &CreateScreenState) -> bool {
-    state.mode == CreateMode::FromScratch
-        || create_log_import::start_allowed(
-            &weidu_log_import_rows(state.game.to_legacy_string()),
-            state.first_check.as_ref(),
-            state.second_check.as_ref(),
-        )
 }
 
 fn render_title_row(ui: &mut egui::Ui, palette: ThemePalette, outcome: &mut ChooseOutcome) {
@@ -367,82 +341,6 @@ fn render_starting_point_boxes(
             .memory_mut(|m| m.data.insert_temp(cards_key, (card_w, box_h + diff)));
         ui.ctx().request_repaint();
     }
-}
-
-fn render_log_rows(ui: &mut egui::Ui, palette: ThemePalette, state: &mut CreateScreenState) {
-    ui.add_space(LOG_ROWS_TOP_GAP_PX);
-    let rows = weidu_log_import_rows(state.game.to_legacy_string());
-    for (index, row) in rows.iter().enumerate() {
-        if index > 0 {
-            ui.add_space(LOG_ROW_GAP_PX);
-        }
-        let before = picked_log(&state.log_form, row.first_slot).cloned();
-        step2_log_import_dialog::render_row(ui, palette, *row, &mut state.log_form, None);
-        let after = picked_log(&state.log_form, row.first_slot).cloned();
-        let check = log_check_slot(state, row.first_slot);
-        if before != after {
-            *check = after.as_deref().map(create_log_import::check_log);
-        }
-        if let Some(status) = *check {
-            render_log_status(ui, palette, status);
-        }
-    }
-    ui.add_space(LOG_ROW_GAP_PX);
-    step2_log_import_dialog::render_fetch_row(ui, palette, &mut state.log_form.fetch_missing);
-}
-
-const fn picked_log(form: &WeiduLogImportForm, first_slot: bool) -> Option<&PathBuf> {
-    if first_slot {
-        form.first.as_ref()
-    } else {
-        form.second.as_ref()
-    }
-}
-
-const fn log_check_slot(state: &mut CreateScreenState, first_slot: bool) -> &mut Option<LogCheck> {
-    if first_slot {
-        &mut state.first_check
-    } else {
-        &mut state.second_check
-    }
-}
-
-fn log_status_text(check: LogCheck) -> String {
-    match check {
-        LogCheck::Valid { components, mods } => {
-            format!("{components} components from {mods} mods")
-        }
-        LogCheck::NotALog => NOT_A_LOG_TEXT.to_string(),
-    }
-}
-
-fn render_log_status(ui: &mut egui::Ui, palette: ThemePalette, check: LogCheck) {
-    let valid = matches!(check, LogCheck::Valid { .. });
-    let color = if valid {
-        redesign_success(palette)
-    } else {
-        redesign_error(palette)
-    };
-    ui.add_space(LOG_STATUS_TOP_GAP_PX);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.add_space(LOG_STATUS_INSET_PX);
-        if valid {
-            ui.label(
-                egui::RichText::new("\u{2713}")
-                    .size(LOG_STATUS_SIZE)
-                    .family(egui::FontFamily::Name("firacode_nerd".into()))
-                    .color(color),
-            );
-            ui.add_space(LOG_STATUS_GLYPH_GAP_PX);
-        }
-        ui.label(
-            egui::RichText::new(log_status_text(check))
-                .size(LOG_STATUS_SIZE)
-                .family(egui::FontFamily::Name("poppins_light".into()))
-                .color(color),
-        );
-    });
 }
 
 fn render_missing_source_notice(
@@ -822,33 +720,6 @@ mod tests {
             assert_eq!(tint.g(), expect(bg.g(), ac.g()));
             assert_eq!(tint.b(), expect(bg.b(), ac.b()));
         }
-    }
-
-    #[test]
-    fn log_status_copy_names_components_and_mods() {
-        assert_eq!(
-            log_status_text(LogCheck::Valid {
-                components: 214,
-                mods: 61
-            }),
-            "214 components from 61 mods"
-        );
-        assert_eq!(log_status_text(LogCheck::NotALog), "not a WeiDU log");
-    }
-
-    #[test]
-    fn start_follows_the_log_rows_only_in_logs_mode() {
-        let mut state = CreateScreenState::new();
-        assert!(!logs_ready(&state), "EET with both rows empty");
-        state.second_check = Some(LogCheck::Valid {
-            components: 1,
-            mods: 1,
-        });
-        assert!(logs_ready(&state));
-        state.first_check = Some(LogCheck::NotALog);
-        assert!(!logs_ready(&state));
-        state.mode = CreateMode::FromScratch;
-        assert!(logs_ready(&state), "From scratch ignores the log rows");
     }
 
     fn assert_f32_close(actual: f32, expected: f32) {
