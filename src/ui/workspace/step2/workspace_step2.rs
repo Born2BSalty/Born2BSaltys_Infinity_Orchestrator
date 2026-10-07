@@ -15,11 +15,13 @@ use crate::ui::shared::redesign_tokens::{
 use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step2::action_step2::Step2Action;
 use crate::ui::workspace::state_workspace::WeiduLogImportForm;
-use crate::ui::workspace::step_action_dispatch;
-use crate::ui::workspace::step2::step2_log_import_dialog::{self, ImportOutcome};
+use crate::ui::workspace::step2::step2_log_import_dialog::{
+    self, ImportDrawerStatus, ImportOutcome,
+};
 use crate::ui::workspace::step2::{
     step2_global_mods_confirm, step2_rescan_reconcile, step2_search, step2_tab_row,
 };
+use crate::ui::workspace::{step_action_dispatch, step2_log_glue};
 
 const TITLE_H: f32 = 24.0;
 const TITLE_GAP: f32 = 8.0;
@@ -469,12 +471,22 @@ fn render_weidu_log_import_form(
         ..WeiduLogImportForm::default()
     };
 
+    let status = ImportDrawerStatus {
+        scanning: step2_log_glue::step2_scan_running(orchestrator),
+        queued: orchestrator.workspace_view.step2.weidu_log_import_queued,
+        replace_warning: step2_log_glue::list_has_selection(
+            &orchestrator.wizard_state.step2,
+            orchestrator.workspace_view.step2.rescan_snapshot.as_ref(),
+        ),
+    };
+
     let outcome = step2_log_import_dialog::render(
         ctx,
         orchestrator.theme_palette,
         &step1.game_install,
         &mut form,
         &start_paths,
+        status,
     );
 
     match outcome {
@@ -482,8 +494,14 @@ fn render_weidu_log_import_form(
             orchestrator.workspace_view.step2.weidu_log_import_form = Some(form);
             Some(Step2Action::ImportWeiduLogs)
         }
+        ImportOutcome::Queue => {
+            orchestrator.workspace_view.step2.weidu_log_import_form = Some(form);
+            orchestrator.workspace_view.step2.weidu_log_import_queued = true;
+            None
+        }
         ImportOutcome::Cancelled => {
             orchestrator.workspace_view.step2.weidu_log_import_form = None;
+            orchestrator.workspace_view.step2.weidu_log_import_queued = false;
             None
         }
         ImportOutcome::Pending => {

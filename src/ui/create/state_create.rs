@@ -3,19 +3,12 @@
 
 use crate::registry::model::Game;
 use crate::ui::install::state_install::DestChoice;
-use crate::ui::workspace::state_workspace::WeiduLogImportForm;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CreateMode {
     #[default]
     FromLogs,
     FromScratch,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LogCheck {
-    Valid { components: usize, mods: usize },
-    NotALog,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -31,9 +24,6 @@ pub struct CreateScreenState {
     pub load_draft_delete_target: Option<String>,
 
     pub mode: CreateMode,
-    pub log_form: WeiduLogImportForm,
-    pub first_check: Option<LogCheck>,
-    pub second_check: Option<LogCheck>,
 }
 
 impl CreateScreenState {
@@ -61,11 +51,6 @@ mod tests {
         assert_eq!(s.resumed_build_id, None);
         assert_eq!(s.load_draft_delete_target, None);
         assert_eq!(s.mode, CreateMode::FromLogs);
-        assert!(s.log_form.fetch_missing);
-        assert_eq!(s.log_form.first, None);
-        assert_eq!(s.log_form.second, None);
-        assert_eq!(s.first_check, None);
-        assert_eq!(s.second_check, None);
     }
 
     #[test]

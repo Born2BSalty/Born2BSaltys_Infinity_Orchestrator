@@ -17,7 +17,7 @@ use crate::registry::model::Game;
 use crate::registry::operations_create::create_modlist_with_author;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::{ModlistWorkspaceState, ModsSource};
-use crate::ui::create::create_log_import::{CreateLogImport, carried_form};
+use crate::ui::create::create_log_import::CreateLogImport;
 use crate::ui::create::destination_default::default_destination;
 use crate::ui::create::load_draft_dialog::{self, LoadDraftOutcome};
 use crate::ui::create::stage_choose::{self, ChooseOutcome};
@@ -30,8 +30,6 @@ use crate::ui::orchestrator::orchestrator_app::{
 };
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::shared::redesign_tokens::ThemePalette;
-use crate::ui::workspace::state_workspace::WeiduLogImportForm;
-use crate::ui::workspace::step2::step2_log_confirm::weidu_log_import_rows;
 
 enum CreateRequest {
     StartScratch,
@@ -202,13 +200,8 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
     finish_start_scratch(orchestrator, &name, game, &dest, log_import);
 }
 
-fn click_time_log_import(state: &CreateScreenState) -> Option<WeiduLogImportForm> {
-    (state.mode == CreateMode::FromLogs).then(|| {
-        carried_form(
-            &weidu_log_import_rows(state.game.to_legacy_string()),
-            &state.log_form,
-        )
-    })
+fn click_time_log_import(state: &CreateScreenState) -> bool {
+    state.mode == CreateMode::FromLogs
 }
 
 fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
@@ -331,7 +324,7 @@ fn finish_start_scratch(
     name: &str,
     game: Game,
     dest: &str,
-    log_import: Option<WeiduLogImportForm>,
+    log_import: bool,
 ) {
     let mut held = match scratch_claim(orchestrator, dest) {
         Ok(h) => h,
@@ -420,9 +413,8 @@ fn finish_start_scratch(
     }
 
     let new_id = entry.id;
-    orchestrator.create_log_import = log_import.map(|form| CreateLogImport {
+    orchestrator.create_log_import = log_import.then(|| CreateLogImport {
         modlist_id: new_id.clone(),
-        form,
     });
     clear_create_form(&mut orchestrator.create_screen_state);
     orchestrator.create_screen_state.resumed_build_id = Some(new_id.clone());
@@ -435,9 +427,6 @@ fn clear_create_form(state: &mut CreateScreenState) {
     state.modlist_name.clear();
     state.destination.clear();
     state.destination_choice = None;
-    state.log_form = WeiduLogImportForm::default();
-    state.first_check = None;
-    state.second_check = None;
 }
 
 fn create_scratch_mods_folder(destination: &str, game: Game) -> Result<String, String> {
@@ -474,7 +463,7 @@ mod tests {
             .unwrap_or_default();
         assert_eq!(global.trim().len(), 0, "isolated app has no mods folder");
 
-        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string(), None);
+        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string(), false);
 
         let fresh = app
             .registry
@@ -578,7 +567,7 @@ mod tests {
         std::fs::create_dir_all(&old_data_dir).expect("seed the old data dir");
         app.redesign_settings.user_name = "@tester".to_string();
 
-        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string(), None);
+        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string(), false);
 
         assert!(app.registry.find("OLD000000001").is_none());
         assert!(!old_data_dir.exists());
@@ -614,7 +603,7 @@ mod tests {
         std::fs::create_dir_all(&old_data_dir).expect("seed the old data dir");
         app.redesign_settings.user_name = "@tester".to_string();
 
-        finish_start_scratch(&mut app, "Fresh 2", Game::BGEE, &dest.as_string(), None);
+        finish_start_scratch(&mut app, "Fresh 2", Game::BGEE, &dest.as_string(), false);
 
         let restored = app
             .registry
@@ -634,13 +623,6 @@ mod tests {
         state.game = game;
         state.destination = dest.as_string();
         state.mode = mode;
-        state.log_form = WeiduLogImportForm {
-            first: Some(dest.0.join("bgee.log")),
-            second: Some(dest.0.join("bg2ee.log")),
-            fetch_missing: false,
-        };
-        state.first_check = Some(crate::ui::create::state_create::LogCheck::NotALog);
-        state.second_check = Some(crate::ui::create::state_create::LogCheck::NotALog);
         app
     }
 
@@ -663,57 +645,28 @@ mod tests {
         let id = new_list_id(&app);
         assert_eq!(
             app.create_log_import,
-            Some(CreateLogImport {
-                modlist_id: id,
-                form: WeiduLogImportForm {
-                    first: Some(dest.0.join("bgee.log")),
-                    second: None,
-                    fetch_missing: false,
-                },
-            })
+            Some(CreateLogImport { modlist_id: id })
         );
         let state = &app.create_screen_state;
         assert_eq!(state.mode, CreateMode::FromLogs);
-        assert_eq!(state.log_form, WeiduLogImportForm::default());
-        assert_eq!(state.first_check, None);
-        assert_eq!(state.second_check, None);
         assert_eq!(state.modlist_name.len(), 0);
     }
 
     #[test]
-    fn the_logs_are_frozen_at_the_start_click() {
-        let dest = TempDestGuard::new("frozen");
-        let mut app = app_ready_to_start(CreateMode::FromLogs, Game::BGEE, &dest);
-        app.nav = NavDestination::Create;
-        app.create_screen_state.destination_choice = Some(DestChoice::Clear);
+    fn start_in_logs_mode_needs_no_log() {
+        let dest = TempDestGuard::new("nolog");
+        let mut app = orch_for_create_test();
+        app.create_screen_state.modlist_name = "No Logs Yet".to_string();
+        app.create_screen_state.destination = dest.as_string();
+        assert_eq!(app.create_screen_state.mode, CreateMode::FromLogs);
 
         start_scratch(&mut app);
-        assert!(app.create_destination_prep_rx.is_some());
-
-        app.create_screen_state.mode = CreateMode::FromScratch;
-        app.create_screen_state.log_form.first = Some(dest.0.join("notes.txt"));
-
-        let deadline = Instant::now() + std::time::Duration::from_secs(10);
-        while app.create_destination_prep_rx.is_some() && Instant::now() < deadline {
-            poll_create_destination_prep(&mut app);
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
 
         let id = new_list_id(&app);
+        assert!(app.registry.find(&id).is_some());
         assert_eq!(
             app.create_log_import,
-            Some(CreateLogImport {
-                modlist_id: id,
-                form: WeiduLogImportForm {
-                    first: Some(dest.0.join("bgee.log")),
-                    second: None,
-                    fetch_missing: false,
-                },
-            })
-        );
-        assert_eq!(
-            app.create_screen_state.log_form,
-            WeiduLogImportForm::default()
+            Some(CreateLogImport { modlist_id: id })
         );
     }
 
@@ -727,10 +680,6 @@ mod tests {
         let _ = new_list_id(&app);
         assert_eq!(app.create_log_import, None);
         assert_eq!(app.create_screen_state.mode, CreateMode::FromScratch);
-        assert_eq!(
-            app.create_screen_state.log_form,
-            WeiduLogImportForm::default()
-        );
     }
 
     #[test]
