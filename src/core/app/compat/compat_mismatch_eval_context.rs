@@ -217,7 +217,6 @@ impl TriState {
     pub(super) const fn or(self, rhs: Self) -> Self {
         match (self, rhs) {
             (Self::True, _) | (_, Self::True) => Self::True,
-            (Self::Ignored, value) | (value, Self::Ignored) => value,
             (Self::False, Self::False) => Self::False,
             _ => Self::Unknown,
         }
