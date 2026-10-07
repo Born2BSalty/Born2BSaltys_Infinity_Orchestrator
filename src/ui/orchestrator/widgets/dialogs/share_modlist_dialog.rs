@@ -3,10 +3,11 @@
 
 use eframe::egui;
 
+use crate::registry::share_author::{USER_NAME_RULE_HINT, user_name_is_valid};
 use crate::ui::orchestrator::widgets::{BtnOpts, InputOpts, redesign_btn, redesign_text_input};
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
+    redesign_error, redesign_input_bg, redesign_shell_bg, redesign_text_faint, redesign_text_muted,
     redesign_text_primary,
 };
 
@@ -60,11 +61,11 @@ pub fn render(
 
             render_header(ui, palette, dialog.modlist_name);
 
-            let prompt_blank = dialog.name_prompt.as_deref_mut().is_some_and(|name| {
+            let prompt_invalid = dialog.name_prompt.as_deref_mut().is_some_and(|name| {
                 render_name_prompt(ui, palette, name);
-                name.trim().is_empty()
+                !user_name_is_valid(name)
             });
-            let enabled = dialog.has_code && !prompt_blank;
+            let enabled = dialog.has_code && !prompt_invalid;
 
             if let Some(choice) = render_export_choice(ui, palette, enabled) {
                 outcome = choice;
@@ -146,7 +147,7 @@ fn render_name_prompt(ui: &mut egui::Ui, palette: ThemePalette, name: &mut Strin
                 .background_color(redesign_input_bg(palette))
                 .margin(margin)
                 .hint_text(
-                    egui::RichText::new("@yourhandle")
+                    egui::RichText::new("e.g. Xgatt")
                         .size(14.0)
                         .family(egui::FontFamily::Name("poppins_medium".into()))
                         .color(redesign_text_faint(palette)),
@@ -156,7 +157,26 @@ fn render_name_prompt(ui: &mut egui::Ui, palette: ThemePalette, name: &mut Strin
             border: None,
         },
     );
+    ui.add_space(4.0);
+    render_user_name_rule(ui, palette, name);
     ui.add_space(14.0);
+}
+
+pub fn render_user_name_rule(ui: &mut egui::Ui, palette: ThemePalette, name: &str) {
+    let color = if !name.trim().is_empty() && !user_name_is_valid(name) {
+        redesign_error(palette)
+    } else {
+        redesign_text_muted(palette)
+    };
+    ui.add(
+        egui::Label::new(
+            egui::RichText::new(USER_NAME_RULE_HINT)
+                .size(12.0)
+                .family(egui::FontFamily::Name("poppins_light".into()))
+                .color(color),
+        )
+        .wrap_mode(egui::TextWrapMode::Extend),
+    );
 }
 
 fn render_export_choice(

@@ -44,7 +44,7 @@ pub fn edit_modlist(
     if let Some(code) = entry.latest_share_code.clone()
         && let Ok(stamped) = set_packed_identity(&code, &ShareMeta::from_entry(entry, false))
     {
-        entry.latest_share_code = Some(stamped);
+        entry.set_latest_share_code(stamped);
     }
 
     Ok(())
@@ -74,7 +74,7 @@ pub fn rename_modlist(
     if let Some(code) = entry.latest_share_code.clone()
         && let Ok(stamped) = set_packed_identity(&code, &ShareMeta::from_entry(entry, false))
     {
-        entry.latest_share_code = Some(stamped);
+        entry.set_latest_share_code(stamped);
     }
     Ok(())
 }
@@ -134,6 +134,47 @@ mod tests {
             preview.description.as_deref(),
             Some("BG2EE with the fixpack")
         );
+    }
+
+    #[test]
+    fn edit_modlist_rewrites_the_code_file() {
+        use crate::registry::share_code_file::IMPORT_CODE_FILENAME;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+        struct TempRoot(PathBuf);
+        impl Drop for TempRoot {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let root = TempRoot(std::env::temp_dir().join(format!(
+            "bio_edit_code_file_{}_{}",
+            std::process::id(),
+            TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+        )));
+        std::fs::create_dir_all(&root.0).expect("create the destination");
+        let file = root.0.join(IMPORT_CODE_FILENAME);
+        std::fs::write(&file, "BIO-MODLIST-V1:OLD").expect("seed the old file");
+        let mut r = reg_with("ABC000000000", "old name", &root.0.to_string_lossy());
+        r.find_mut("ABC000000000").unwrap().latest_share_code =
+            Some(minimal_share_code("old name"));
+
+        edit_modlist("ABC000000000", "New Name", "", &mut r).expect("edit ok");
+
+        let stored = r
+            .find("ABC000000000")
+            .unwrap()
+            .latest_share_code
+            .clone()
+            .expect("code kept");
+        let on_disk = std::fs::read_to_string(&file).expect("file present");
+        assert_eq!(on_disk, stored);
+        let preview =
+            crate::app::modlist_share::preview_modlist_share_code(&on_disk).expect("preview");
+        assert_eq!(preview.name.as_deref(), Some("New Name"));
     }
 
     #[test]

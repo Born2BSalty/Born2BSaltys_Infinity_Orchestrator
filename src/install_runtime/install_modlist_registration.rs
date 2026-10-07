@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::install_runtime::replaced_owners;
-use crate::install_runtime::start_hooks::{self, InstallButtonVariant};
+use crate::install_runtime::start_hooks;
 use crate::registry::destination_claim::{
     ClaimContext, DestinationClaim, resolve_destination_claim,
 };
@@ -225,11 +225,6 @@ pub fn register_and_write_install_start_artifacts(
         return false;
     };
 
-    let variant = InstallButtonVariant::from_step5_and_reinstall(
-        &orchestrator.wizard_state,
-        &modlist_id,
-        orchestrator.pending_reinstall_id.as_deref(),
-    );
     let chosen_code = orchestrator.install_screen_state.import_code.trim();
     let code_source = if chosen_code.is_empty() {
         orchestrator
@@ -248,7 +243,6 @@ pub fn register_and_write_install_start_artifacts(
         } = &mut *orchestrator;
         if let Err(err) = start_hooks::write_install_start_artifacts_with_code(
             &modlist_id,
-            variant,
             &code_source,
             registry,
             registry_store,

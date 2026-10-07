@@ -3,7 +3,9 @@
 
 use std::time::Instant;
 
-use crate::registry::share_author::{stamp_current_author, workspace_marks_own_list};
+use crate::registry::share_author::{
+    stamp_current_author, user_name_is_valid, workspace_marks_own_list,
+};
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 
@@ -25,7 +27,7 @@ impl OrchestratorApp {
 
     pub(crate) fn code_for_share(&mut self, id: &str) -> Option<String> {
         let typed = self.share_name_buffer.trim().to_string();
-        if !typed.is_empty() && self.redesign_settings.user_name.trim().is_empty() {
+        if user_name_is_valid(&typed) && self.redesign_settings.user_name.trim().is_empty() {
             self.notification_manager
                 .success(format!("Saved your name to Settings: {typed}"));
             self.redesign_settings.user_name = typed;
@@ -140,6 +142,50 @@ mod tests {
             app.persistence_cycle
                 .last_dirty_at
                 .contains_key(REGISTRY_DIRTY_KEY)
+        );
+    }
+
+    #[test]
+    fn code_for_share_rewrites_the_code_file_for_an_own_list() {
+        use crate::registry::share_code_file::IMPORT_CODE_FILENAME;
+        let mut app = app_with_entry("share-flow-code-file", "OWNLIST00003", Some("@old"));
+        let destination = app
+            .isolated_test_config_root
+            .as_ref()
+            .expect("the isolated app owns a temp config root")
+            .join("install here");
+        std::fs::create_dir_all(&destination).expect("create the destination");
+        let file = destination.join(IMPORT_CODE_FILENAME);
+        std::fs::write(&file, "BIO-MODLIST-V1:OLD").expect("seed the old file");
+        app.registry
+            .find_mut("OWNLIST00003")
+            .unwrap()
+            .destination_folder = destination.to_string_lossy().into_owned();
+        app.workspace_state
+            .insert("OWNLIST00003".to_string(), own_workspace());
+        app.redesign_settings.user_name = "Xgatt".to_string();
+
+        let code = app.code_for_share("OWNLIST00003").expect("a code to share");
+
+        assert_eq!(packed_author(&code).as_deref(), Some("Xgatt"));
+        assert_eq!(std::fs::read_to_string(&file).expect("file present"), code);
+    }
+
+    #[test]
+    fn code_for_share_does_not_save_an_invalid_typed_name() {
+        let mut app = app_with_entry("share-flow-invalid-name", "OWNLIST00004", None);
+        app.workspace_state
+            .insert("OWNLIST00004".to_string(), own_workspace());
+        app.redesign_settings.user_name.clear();
+        app.share_name_buffer = "@".to_string();
+
+        let _code = app.code_for_share("OWNLIST00004");
+
+        assert_eq!(app.redesign_settings.user_name, "");
+        assert!(app.notification_manager.history().is_empty());
+        assert_eq!(
+            app.registry.find("OWNLIST00004").unwrap().author.as_deref(),
+            None
         );
     }
 
