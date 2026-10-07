@@ -146,7 +146,7 @@ fn built_in_rules_load() -> &'static CompatRulesLoad {
     })
 }
 
-const fn default_step2_rules_content() -> &'static str {
+pub(crate) const fn default_step2_rules_content() -> &'static str {
     include_str!("../../config/default_step2_compat_rules.toml")
 }
 
