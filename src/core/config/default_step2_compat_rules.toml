@@ -246,3 +246,9 @@ related_mod = "bgqe"
 related_component = "11"
 position = "after"
 message = "Install this after BGQE component 11: Brage's Sword."
+
+[[rules]]
+mod = "ub"
+component_id = ["11", "16"]
+kind = "deprecated"
+message = "Not needed for BG2EE. For vanilla BG2, use the G3 Fixpack instead."
