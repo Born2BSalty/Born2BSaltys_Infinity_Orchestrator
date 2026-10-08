@@ -17,13 +17,34 @@ use crate::app::state::{Step2ComponentState, Step2ModState};
 use crate::mods::component::Component;
 use crate::mods::log_file::LogFile;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogLineOutcome {
+    Ticked(Vec<(usize, usize)>),
+    NoMod,
+    NoComponent(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogLineResult {
+    pub line: usize,
+    pub tp_file: String,
+    pub component_id: String,
+    pub outcome: LogLineOutcome,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LogApplyReport {
+    pub matched: usize,
+    pub lines: Vec<LogLineResult>,
+}
+
 pub fn apply_log_to_mods(
     mods: &mut [Step2ModState],
     log: &LogFile,
     tp2_allow: Option<&HashSet<String, RandomState>>,
     reset_before_apply: bool,
     next_order: &mut usize,
-) -> usize {
+) -> LogApplyReport {
     apply_log_to_mods_with_sources(
         mods,
         log,
@@ -41,31 +62,40 @@ pub(crate) fn apply_log_to_mods_with_sources(
     reset_before_apply: bool,
     next_order: &mut usize,
     mod_download_sources: &mod_downloads::ModDownloadsLoad,
-) -> usize {
+) -> LogApplyReport {
     if reset_before_apply {
         reset_mod_selection(mods);
     }
 
     let mod_lookup = build_mod_lookup(mods, mod_download_sources);
-    let mut matched = 0usize;
-    for installed in log.components() {
+    let mut report = LogApplyReport::default();
+    for (line, installed) in log.components().iter().enumerate() {
         if let Some(allow) = tp2_allow
             && !is_allowed_tp2(allow, installed)
         {
             continue;
         }
 
-        matched += apply_installed_component(
+        let outcome = apply_installed_component(
             mods,
             installed,
             &mod_lookup,
             mod_download_sources,
             next_order,
         );
+        if let LogLineOutcome::Ticked(targets) = &outcome {
+            report.matched += targets.len();
+        }
+        report.lines.push(LogLineResult {
+            line,
+            tp_file: installed.tp_file.clone(),
+            component_id: installed.component.clone(),
+            outcome,
+        });
     }
 
     update_mod_checked_state(mods);
-    matched
+    report
 }
 
 fn reset_mod_selection(mods: &mut [Step2ModState]) {
@@ -97,30 +127,41 @@ fn apply_installed_component(
     mod_lookup: &HashMap<String, Vec<usize>>,
     sources: &mod_downloads::ModDownloadsLoad,
     next_order: &mut usize,
-) -> usize {
+) -> LogLineOutcome {
     let target_mods = target_mods_for_installed(mods, installed, mod_lookup);
-    if target_mods.is_empty() {
-        return usize::from(apply_eet_end_fallback(mods, installed, next_order));
-    }
+    let Some(&first_target) = target_mods.first() else {
+        return apply_eet_end_fallback(mods, installed, next_order)
+            .map_or(LogLineOutcome::NoMod, |target| {
+                LogLineOutcome::Ticked(vec![target])
+            });
+    };
 
     let target_tp2_norm =
         normalize_path_key(format!("{}\\{}", installed.name, installed.tp_file).as_str());
     let target_name = normalize_component_name(&installed_component_display_name(installed));
-    let mut matched = 0usize;
+    let mut ticked = Vec::new();
     for mod_idx in target_mods {
-        matched += apply_installed_to_mod(
+        if let Some(component_idx) = apply_installed_to_mod(
             &mut mods[mod_idx],
             installed,
             &target_tp2_norm,
             &target_name,
             sources,
             next_order,
-        );
+        ) {
+            ticked.push((mod_idx, component_idx));
+        }
     }
-    if matched == 0 && apply_eet_end_fallback(mods, installed, next_order) {
-        matched += 1;
+    if ticked.is_empty()
+        && let Some(target) = apply_eet_end_fallback(mods, installed, next_order)
+    {
+        ticked.push(target);
     }
-    matched
+    if ticked.is_empty() {
+        LogLineOutcome::NoComponent(first_target)
+    } else {
+        LogLineOutcome::Ticked(ticked)
+    }
 }
 
 fn target_mods_for_installed(
@@ -158,9 +199,9 @@ fn apply_installed_to_mod(
     target_name: &str,
     sources: &mod_downloads::ModDownloadsLoad,
     next_order: &mut usize,
-) -> usize {
+) -> Option<usize> {
     let mod_tp_file = mod_state.tp_file.clone();
-    if apply_matching_component(
+    let by_id = apply_matching_component(
         &mut mod_state.components,
         installed,
         target_tp2_norm,
@@ -168,13 +209,11 @@ fn apply_installed_to_mod(
         sources,
         next_order,
         |component| component.component_id == installed.component,
-    ) {
-        return 1;
+    );
+    if by_id.is_some() || target_name.is_empty() {
+        return by_id;
     }
-    if target_name.is_empty() {
-        return 0;
-    }
-    usize::from(apply_matching_component(
+    apply_matching_component(
         &mut mod_state.components,
         installed,
         target_tp2_norm,
@@ -182,7 +221,7 @@ fn apply_installed_to_mod(
         sources,
         next_order,
         |component| normalize_component_name(&component.label) == target_name,
-    ))
+    )
 }
 
 fn apply_matching_component(
@@ -193,18 +232,18 @@ fn apply_matching_component(
     sources: &mod_downloads::ModDownloadsLoad,
     next_order: &mut usize,
     matches_component: impl Fn(&Step2ComponentState) -> bool,
-) -> bool {
-    for component in components {
+) -> Option<usize> {
+    for (idx, component) in components.iter_mut().enumerate() {
         if !component_targets_log_tp2(component, target_tp2_norm, mod_tp_file, sources) {
             continue;
         }
         if matches_component(component) {
             check_component(component, next_order);
             apply_wlb_inputs(component, installed.wlb_inputs.as_deref());
-            return true;
+            return Some(idx);
         }
     }
-    false
+    None
 }
 
 fn component_targets_log_tp2(
@@ -222,7 +261,7 @@ fn apply_eet_end_fallback(
     mods: &mut [Step2ModState],
     installed: &Component,
     next_order: &mut usize,
-) -> bool {
+) -> Option<(usize, usize)> {
     try_apply_eet_end_fallback(mods, installed, next_order, |component, next| {
         check_component(component, next);
         apply_wlb_inputs(component, installed.wlb_inputs.as_deref());
@@ -318,7 +357,7 @@ pub use super::log_apply_keys::normalize_path_key;
 
 #[cfg(test)]
 mod tests {
-    use super::apply_log_to_mods_with_sources;
+    use super::{LogApplyReport, LogLineOutcome, LogLineResult, apply_log_to_mods_with_sources};
     use crate::app::mod_downloads::{self, ModDownloadsLoad};
     use crate::app::state::{Step2ComponentState, Step2ModState};
     use crate::mods::log_file::LogFile;
@@ -402,7 +441,8 @@ mod tests {
             true,
             &mut next_order,
             &sources(block_head),
-        );
+        )
+        .matched;
         let checked = mods[0]
             .components
             .iter()
@@ -457,5 +497,160 @@ mod tests {
     fn a_different_mods_line_leaves_questpack_alone() {
         let line = r"~BG1UB\BG1UB.TP2~ #0 #3 // Angelo: v17.1";
         assert_eq!(apply(line, BLOCK_D0), (0, false));
+    }
+
+    fn report(mods: &mut [Step2ModState], text: &str, block_head: &str) -> LogApplyReport {
+        let mut next_order = 1;
+        apply_log_to_mods_with_sources(
+            mods,
+            &log(text),
+            None,
+            true,
+            &mut next_order,
+            &sources(block_head),
+        )
+    }
+
+    fn outcomes(report: &LogApplyReport) -> Vec<LogLineOutcome> {
+        report
+            .lines
+            .iter()
+            .map(|line| line.outcome.clone())
+            .collect()
+    }
+
+    #[test]
+    fn report_marks_a_ticked_line_with_its_target() {
+        let mut mods = vec![scanned_questpack()];
+        let line = quest_line(r"D0QUESTPACK\SETUP-D0QUESTPACK.TP2");
+        let report = report(&mut mods, &line, BLOCK_NO_ALIAS);
+        assert_eq!(
+            report.lines,
+            vec![LogLineResult {
+                line: 0,
+                tp_file: "SETUP-D0QUESTPACK.TP2".to_string(),
+                component_id: "5".to_string(),
+                outcome: LogLineOutcome::Ticked(vec![(0, 0)]),
+            }]
+        );
+        assert_eq!(report.matched, 1);
+    }
+
+    #[test]
+    fn report_marks_a_line_with_no_matching_mod() {
+        let mut mods = vec![scanned_questpack()];
+        let report = report(
+            &mut mods,
+            r"~BG1UB\BG1UB.TP2~ #0 #3 // Angelo: v17.1",
+            BLOCK_D0,
+        );
+        assert_eq!(outcomes(&report), vec![LogLineOutcome::NoMod]);
+        assert_eq!(report.lines[0].tp_file, "BG1UB.TP2");
+        assert_eq!(report.lines[0].component_id, "3");
+        assert_eq!(report.matched, 0);
+    }
+
+    #[test]
+    fn report_marks_a_line_whose_mod_lacks_the_component() {
+        let mut mods = vec![scanned_questpack(), scanned_questpack()];
+        mods[0].tp_file = "setup-other.tp2".to_string();
+        mods[0].tp2_path = "C:/mods/other/setup-other.tp2".to_string();
+        let line = r"~D0QUESTPACK\SETUP-D0QUESTPACK.TP2~ #0 #9 // Something else: v3.5";
+        let report = report(&mut mods, line, BLOCK_NO_ALIAS);
+        assert_eq!(outcomes(&report), vec![LogLineOutcome::NoComponent(1)]);
+        assert_eq!(report.matched, 0);
+    }
+
+    #[test]
+    fn report_follows_the_name_match_and_aliases() {
+        let mut mods = vec![scanned_questpack()];
+        let line = quest_line(r"QUESTPACK\QUESTPACK.TP2");
+        let through_alias = report(&mut mods, &line, BLOCK_D0);
+        assert_eq!(
+            outcomes(&through_alias),
+            vec![LogLineOutcome::Ticked(vec![(0, 0)])]
+        );
+
+        let mut mods = vec![scanned_questpack()];
+        mods[0].components.insert(0, component("1", ""));
+        mods[0].components[1].label = "Additional Shadow Thieves Content".to_string();
+        let renumbered =
+            r"~D0QUESTPACK\SETUP-D0QUESTPACK.TP2~ #0 #7 // Additional Shadow Thieves Content: v3.5";
+        let by_name = report(&mut mods, renumbered, BLOCK_NO_ALIAS);
+        assert_eq!(
+            outcomes(&by_name),
+            vec![LogLineOutcome::Ticked(vec![(0, 1)])]
+        );
+        assert!(mods[0].components[1].checked);
+    }
+
+    #[test]
+    fn eet_end_fallback_reports_its_target() {
+        let mut eet = scanned_questpack();
+        eet.name = "EET".to_string();
+        eet.tp_file = "EET.TP2".to_string();
+        eet.tp2_path = "C:/mods/EET/EET.TP2".to_string();
+        let mut end = component("0", "");
+        end.label = "EET end (last mod in install order) -> Standard installation".to_string();
+        eet.components = vec![end];
+        let mut mods = vec![scanned_questpack(), eet];
+        let line = r"~EET_END\EET_END.TP2~ #0 #0 // EET end (last mod in install order) -> Standard installation: v1.0";
+        let report = report(&mut mods, line, BLOCK_NO_ALIAS);
+        assert_eq!(
+            outcomes(&report),
+            vec![LogLineOutcome::Ticked(vec![(1, 0)])]
+        );
+        assert_eq!(report.matched, 1);
+        assert!(mods[1].components[0].checked);
+    }
+
+    #[test]
+    fn ticking_is_unchanged_by_the_report() {
+        let mut mods = vec![scanned_questpack()];
+        mods[0].components.push(component("6", ""));
+        let text = format!(
+            "{}\n~BG1UB\\BG1UB.TP2~ #0 #3 // Angelo: v17.1\n~D0QUESTPACK\\SETUP-D0QUESTPACK.TP2~ #0 #6 // Six: v3.5 // @wlb-inputs: 1,2\n~D0QUESTPACK\\SETUP-D0QUESTPACK.TP2~ #0 #9 // Nine: v3.5\n",
+            quest_line(r"D0QUESTPACK\SETUP-D0QUESTPACK.TP2")
+        );
+        let mut next_order = 1;
+        let report = apply_log_to_mods_with_sources(
+            &mut mods,
+            &log(&text),
+            None,
+            true,
+            &mut next_order,
+            &sources(BLOCK_NO_ALIAS),
+        );
+        assert_eq!(report.matched, 2);
+        assert_eq!(next_order, 3);
+        let orders = mods[0]
+            .components
+            .iter()
+            .map(|component| (component.checked, component.selected_order))
+            .collect::<Vec<_>>();
+        assert_eq!(orders, vec![(true, Some(1)), (true, Some(2))]);
+        assert!(
+            mods[0].components[1]
+                .raw_line
+                .ends_with("// @wlb-inputs: 1,2")
+        );
+        assert!(mods[0].checked);
+        assert_eq!(
+            outcomes(&report),
+            vec![
+                LogLineOutcome::Ticked(vec![(0, 0)]),
+                LogLineOutcome::NoMod,
+                LogLineOutcome::Ticked(vec![(0, 1)]),
+                LogLineOutcome::NoComponent(0),
+            ]
+        );
+        assert_eq!(
+            report
+                .lines
+                .iter()
+                .map(|line| line.line)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2, 3]
+        );
     }
 }

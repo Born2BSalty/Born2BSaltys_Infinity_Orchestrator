@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::app_step2_log::component_exclusion_reason;
 use crate::app::controller::step3_sync;
 use crate::app::state::{Step2ComponentState, Step2ModState};
 use crate::registry::workspace_model::ModsSource;
@@ -191,7 +192,7 @@ fn collect_unrestored(
         out.push(UnrestoredComponent {
             mod_name: reason_mod.name.clone(),
             component_id: entry.component_id.clone(),
-            reason: exclusion_reason(reason_component),
+            reason: component_exclusion_reason(reason_component),
         });
     }
     out
@@ -203,18 +204,6 @@ fn has_disabled_reason(component: &Step2ComponentState) -> bool {
         .as_deref()
         .map(str::trim)
         .is_some_and(|reason| !reason.is_empty())
-}
-
-fn exclusion_reason(component: &Step2ComponentState) -> String {
-    component
-        .disabled_reason
-        .as_deref()
-        .map(str::trim)
-        .filter(|reason| !reason.is_empty())
-        .map_or_else(
-            || "excluded by compatibility rules".to_string(),
-            std::string::ToString::to_string,
-        )
 }
 
 fn tp2_display_name(tp2_upper: &str) -> String {
@@ -236,17 +225,33 @@ fn format_unrestored_status(unrestored: &[UnrestoredComponent]) -> String {
 }
 
 fn format_unrestored_notification(unrestored: &[UnrestoredComponent]) -> String {
-    let mut lines = vec![format!(
-        "{} saved component(s) could not be restored",
-        unrestored.len()
-    )];
-    lines.extend(unrestored.iter().map(|entry| {
-        format!(
-            "{} #{}: {}",
-            entry.mod_name, entry.component_id, entry.reason
-        )
-    }));
-    lines.join("\n")
+    format_component_notification(
+        &format!(
+            "{} saved component(s) could not be restored",
+            unrestored.len()
+        ),
+        unrestored.iter().map(|entry| {
+            (
+                entry.mod_name.as_str(),
+                entry.component_id.as_str(),
+                entry.reason.as_str(),
+            )
+        }),
+    )
+}
+
+#[must_use]
+pub(crate) fn format_component_notification<'a>(
+    headline: &str,
+    lines: impl Iterator<Item = (&'a str, &'a str, &'a str)>,
+) -> String {
+    let mut out = vec![headline.to_string()];
+    out.extend(
+        lines.map(|(mod_name, component_id, reason)| {
+            format!("{mod_name} #{component_id}: {reason}")
+        }),
+    );
+    out.join("\n")
 }
 
 fn advance_pending_download_snapshot(
@@ -549,6 +554,25 @@ mod tests {
     fn tp2_display_name_strips_the_path() {
         assert_eq!(tp2_display_name("BG1UB/BG1UB.TP2"), "BG1UB.TP2");
         assert_eq!(tp2_display_name("MOD.TP2"), "MOD.TP2");
+    }
+
+    #[test]
+    fn format_component_notification_joins_headline_and_lines() {
+        assert_eq!(
+            format_component_notification(
+                "2 logged component(s) could not be ticked",
+                [
+                    ("SETUP-X.TP2", "1", "mod not on disk"),
+                    ("Y", "4", "component not in this version"),
+                ]
+                .into_iter(),
+            ),
+            "2 logged component(s) could not be ticked\nSETUP-X.TP2 #1: mod not on disk\nY #4: component not in this version"
+        );
+        assert_eq!(
+            format_component_notification("headline", std::iter::empty()),
+            "headline"
+        );
     }
 
     #[test]

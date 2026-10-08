@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -9,16 +8,17 @@ use rfd::FileDialog;
 
 use crate::app::app_step2_log::{
     apply_weidu_log_selection_from_path, resolve_bg2_weidu_log_path, resolve_bgee_weidu_log_path,
+    unticked_log_lines,
 };
 use crate::app::game_authority;
-use crate::app::mod_downloads::normalize_mod_download_tp2;
-use crate::app::state::{Step2State, WeiduLogImport};
+use crate::app::state::{Step2LogUnticked, Step2State, WeiduLogImport};
 use crate::app::step2_action::Step2Action;
 use crate::mods::log_file::LogFile;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{LogCheck, RescanSnapshot, WeiduLogImportForm};
 use crate::ui::workspace::step_action_dispatch::handle_step2_via_bio;
+use crate::ui::workspace::step2::step2_rescan_reconcile::format_component_notification;
 use crate::ui::workspace::versions::versions_drawer::close_versions_drawer;
 use crate::ui::workspace::workspace_header::save_draft;
 
@@ -119,6 +119,7 @@ pub fn import_weidu_logs(orchestrator: &mut OrchestratorApp, form: WeiduLogImpor
         first: form.first,
         second: form.second,
     };
+    orchestrator.wizard_state.step2.log_apply.lines.clear();
     apply_recorded_logs(orchestrator, &record);
     if !record_logs_parse(&record) {
         orchestrator.wizard_state.step2.weidu_log_import = None;
@@ -134,7 +135,7 @@ pub fn import_weidu_logs(orchestrator: &mut OrchestratorApp, form: WeiduLogImpor
     {
         orchestrator.wizard_state.step2.weidu_log_import = None;
         save_draft(orchestrator);
-        finish_weidu_log_import(orchestrator, &record);
+        finish_weidu_log_import(orchestrator);
         return;
     }
     orchestrator.wizard_state.step2.weidu_log_import = Some(record);
@@ -220,45 +221,25 @@ fn checked_component_count(step2: &Step2State) -> usize {
 }
 
 #[must_use]
-pub(crate) fn applied_toast_text(
-    selected: usize,
-    missing_mods: usize,
-    not_selectable: usize,
-) -> String {
-    let missing_part = if missing_mods > 0 {
-        format!(", {missing_mods} mods not on disk")
-    } else {
-        String::new()
-    };
-    let not_selectable_part = if not_selectable > 0 {
-        format!(", {not_selectable} components not selectable")
-    } else {
-        String::new()
-    };
-    format!("WeiDU logs applied: {selected} components selected{missing_part}{not_selectable_part}")
+fn applied_toast_text(selected: usize) -> String {
+    format!("WeiDU logs applied: {selected} components selected")
 }
 
-fn not_selectable_count(record: &WeiduLogImport, step2: &Step2State, selected: usize) -> usize {
-    let missing: HashSet<String> = step2
-        .log_pending_downloads
-        .iter()
-        .map(|pending| normalize_mod_download_tp2(&pending.tp_file))
-        .collect();
-    let on_disk_lines = record
-        .first
-        .iter()
-        .chain(record.second.iter())
-        .filter_map(|path| LogFile::from_path(path).ok())
-        .map(|log| {
-            log.components()
-                .iter()
-                .filter(|component| {
-                    !missing.contains(&normalize_mod_download_tp2(&component.tp_file))
-                })
-                .count()
-        })
-        .sum::<usize>();
-    on_disk_lines.saturating_sub(selected)
+#[must_use]
+fn unticked_toast_text(unticked: &[Step2LogUnticked]) -> Option<String> {
+    if unticked.is_empty() {
+        return None;
+    }
+    Some(format_component_notification(
+        &format!("{} logged component(s) could not be ticked", unticked.len()),
+        unticked.iter().map(|entry| {
+            (
+                entry.mod_name.as_str(),
+                entry.component_id.as_str(),
+                entry.reason.as_str(),
+            )
+        }),
+    ))
 }
 
 #[must_use]
@@ -311,20 +292,19 @@ fn settle_weidu_log_import_check(orchestrator: &mut OrchestratorApp) {
     if step2.log_pending_downloads.is_empty() {
         step2.weidu_log_import = None;
         save_draft(orchestrator);
-        finish_weidu_log_import(orchestrator, &record);
+        finish_weidu_log_import(orchestrator);
     }
 }
 
-fn finish_weidu_log_import(orchestrator: &mut OrchestratorApp, record: &WeiduLogImport) {
+fn finish_weidu_log_import(orchestrator: &mut OrchestratorApp) {
     close_versions_drawer(&mut orchestrator.wizard_state.step2);
     let step2 = &orchestrator.wizard_state.step2;
-    let selected = checked_component_count(step2);
-    let toast = applied_toast_text(
-        selected,
-        step2.log_pending_downloads.len(),
-        not_selectable_count(record, step2, selected),
-    );
+    let toast = applied_toast_text(checked_component_count(step2));
+    let unticked = unticked_toast_text(&unticked_log_lines(step2));
     orchestrator.notification_manager.success(toast);
+    if let Some(unticked) = unticked {
+        orchestrator.notification_manager.warn_persistent(unticked);
+    }
 }
 
 pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
@@ -356,7 +336,7 @@ pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
     apply_recorded_logs(orchestrator, &record);
     orchestrator.mark_workspace_dirty();
     save_draft(orchestrator);
-    finish_weidu_log_import(orchestrator, &record);
+    finish_weidu_log_import(orchestrator);
 }
 
 #[cfg(test)]
@@ -456,7 +436,7 @@ mod tests {
             "pending downloads: {:?}",
             step2.log_pending_downloads
         );
-        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
+        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts(0));
     }
 
     fn app_awaiting_the_forced_check(tag: &str, log_path: PathBuf) -> OrchestratorApp {
@@ -850,17 +830,74 @@ mod tests {
         assert!(!step2.weidu_log_import_awaiting_check);
         assert_eq!(step2.weidu_log_import, None);
         assert_eq!(step2.log_pending_downloads.len(), 1);
-        let toasts = toasts_since(&app, toasts_before);
-        assert_eq!(toasts.len(), 1, "toasts: {toasts:?}");
-        assert_eq!(toasts[0].0, egui_toast::ToastKind::Success);
-        assert!(
-            toasts[0].1.contains("1 mods not on disk"),
-            "toast: {}",
-            toasts[0].1
-        );
         assert_eq!(
-            toasts[0].1,
-            "WeiDU logs applied: 0 components selected, 1 mods not on disk"
+            toasts_since(&app, toasts_before),
+            missing_x_toasts(0),
+            "fetch off ends with the selected count and the unticked lines"
+        );
+    }
+
+    const MISSING_X_WARNING: &str = "2 logged component(s) could not be ticked\nSETUP-X.TP2 #1: mod not on disk\nSETUP-X.TP2 #2: mod not on disk";
+
+    fn missing_x_toasts(selected: usize) -> Vec<(egui_toast::ToastKind, String)> {
+        vec![
+            (
+                egui_toast::ToastKind::Success,
+                format!("WeiDU logs applied: {selected} components selected"),
+            ),
+            (
+                egui_toast::ToastKind::Warning,
+                MISSING_X_WARNING.to_string(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn finish_raises_a_persistent_warning_listing_unticked_lines() {
+        let root = TempRoot::new();
+        let log_path = root.write_log(
+            "weidu.log",
+            "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #9 // X nine\n~Y/SETUP-Y.TP2~ #0 #0 // Y\n",
+        );
+        let mut app = app_with_a_saved_list("logimport-unticked-warning", log_path);
+        app.wizard_state.step2.pending_weidu_log_reapply = true;
+        let toasts_before = app.notification_manager.history().len();
+
+        advance_pending_weidu_log_reapply(&mut app);
+
+        assert_eq!(
+            toasts_since(&app, toasts_before),
+            vec![
+                (
+                    egui_toast::ToastKind::Success,
+                    "WeiDU logs applied: 1 components selected".to_string()
+                ),
+                (
+                    egui_toast::ToastKind::Warning,
+                    "2 logged component(s) could not be ticked\nX #9: component not in this version\nSETUP-Y.TP2 #0: mod not on disk"
+                        .to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn finish_raises_no_warning_when_every_line_ticked() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = app_with_a_saved_list("logimport-all-ticked", log_path);
+        app.wizard_state.step2.pending_weidu_log_reapply = true;
+        let toasts_before = app.notification_manager.history().len();
+
+        advance_pending_weidu_log_reapply(&mut app);
+
+        assert_eq!(unticked_log_lines(&app.wizard_state.step2), Vec::new());
+        assert_eq!(
+            toasts_since(&app, toasts_before),
+            vec![(
+                egui_toast::ToastKind::Success,
+                "WeiDU logs applied: 2 components selected".to_string()
+            )]
         );
     }
 
@@ -895,6 +932,47 @@ mod tests {
             )]
         );
         assert_the_draft_was_saved_with_the_counts(&app);
+    }
+
+    #[test]
+    fn a_new_import_drops_lines_from_an_earlier_import() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = app_with_a_saved_list("logimport-drops-earlier", log_path.clone());
+        app.wizard_state.step2.update_selected_popup_open = false;
+        app.wizard_state.step2.log_apply.lines = vec![crate::app::state::Step2LogLine {
+            game_tab: "BG2EE".to_string(),
+            mod_label: "SETUP-Z.TP2".to_string(),
+            component_id: "0".to_string(),
+            outcome: crate::app::state::Step2LogLineOutcome::NoMod,
+        }];
+        let toasts_before = app.notification_manager.history().len();
+
+        import_weidu_logs(
+            &mut app,
+            WeiduLogImportForm {
+                first: Some(log_path),
+                ..WeiduLogImportForm::default()
+            },
+        );
+
+        assert!(
+            app.wizard_state
+                .step2
+                .log_apply
+                .lines
+                .iter()
+                .all(|line| line.game_tab != "BG2EE"),
+            "lines: {:?}",
+            app.wizard_state.step2.log_apply.lines
+        );
+        assert_eq!(
+            toasts_since(&app, toasts_before),
+            vec![(
+                egui_toast::ToastKind::Success,
+                "WeiDU logs applied: 2 components selected".to_string()
+            )]
+        );
     }
 
     #[test]
@@ -958,58 +1036,15 @@ mod tests {
     }
 
     #[test]
-    fn applied_toast_text_drops_zero_parts() {
+    fn the_success_toast_reads_only_the_selected_count() {
         assert_eq!(
-            applied_toast_text(5, 0, 0),
+            applied_toast_text(5),
             "WeiDU logs applied: 5 components selected"
         );
         assert_eq!(
-            applied_toast_text(5, 2, 0),
-            "WeiDU logs applied: 5 components selected, 2 mods not on disk"
+            applied_toast_text(0),
+            "WeiDU logs applied: 0 components selected"
         );
-        assert_eq!(
-            applied_toast_text(5, 0, 3),
-            "WeiDU logs applied: 5 components selected, 3 components not selectable"
-        );
-        assert_eq!(
-            applied_toast_text(5, 2, 3),
-            "WeiDU logs applied: 5 components selected, 2 mods not on disk, 3 components not selectable"
-        );
-    }
-
-    #[test]
-    fn not_selectable_counts_on_disk_lines_left_unticked() {
-        let root = TempRoot::new();
-        let first = root.write_log(
-            "bgee.log",
-            "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #2 // X two\n~Y/SETUP-Y.TP2~ #0 #0 // Y\n",
-        );
-        let second = root.write_log("bg2ee.log", "~x/setup-x.tp2~ #0 #3 // X three\n");
-        let unreadable = root.path.join("missing").join("weidu.log");
-        let record = WeiduLogImport {
-            first: Some(first),
-            second: Some(second),
-        };
-        let step2 = Step2State {
-            log_pending_downloads: vec![crate::app::state::Step2LogPendingDownload {
-                game_tab: "BGEE".to_string(),
-                tp_file: "Y/SETUP-Y.TP2".to_string(),
-                label: "Y".to_string(),
-                requested_version: None,
-            }],
-            ..Step2State::default()
-        };
-
-        assert_eq!(not_selectable_count(&record, &step2, 0), 3);
-        assert_eq!(not_selectable_count(&record, &step2, 2), 1);
-        assert_eq!(not_selectable_count(&record, &step2, 3), 0);
-        assert_eq!(not_selectable_count(&record, &step2, 7), 0);
-
-        let partly_unreadable = WeiduLogImport {
-            first: record.first,
-            second: Some(unreadable),
-        };
-        assert_eq!(not_selectable_count(&partly_unreadable, &step2, 1), 1);
     }
 
     #[test]
@@ -1145,13 +1180,7 @@ mod tests {
 
         assert!(!app.workspace_view.step2.weidu_log_import_queued);
         assert_eq!(app.workspace_view.step2.weidu_log_import_form, None);
-        assert_eq!(
-            toasts_since(&app, toasts_before),
-            vec![(
-                egui_toast::ToastKind::Success,
-                "WeiDU logs applied: 0 components selected, 1 mods not on disk".to_string()
-            )]
-        );
+        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts(0));
     }
 
     #[test]
@@ -1220,13 +1249,7 @@ mod tests {
 
         assert!(!app.workspace_view.step2.weidu_log_import_queued);
         assert_eq!(app.workspace_view.step2.weidu_log_import_form, None);
-        assert_eq!(
-            toasts_since(&app, toasts_before),
-            vec![(
-                egui_toast::ToastKind::Success,
-                "WeiDU logs applied: 0 components selected, 1 mods not on disk".to_string()
-            )]
-        );
+        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts(0));
 
         let mut app = app_with_a_queued_import("logimport-queue-noedge-noreport", log_path, true);
         app.wizard_state.step2.last_scan_report = None;
