@@ -197,7 +197,7 @@ fn should_include_event(event: &ParserEvent) -> bool {
     true
 }
 
-fn dedupe_and_join(lines: Vec<String>, max_items: usize) -> String {
+pub(super) fn dedupe_and_join(lines: Vec<String>, max_items: usize) -> String {
     let mut seen = BTreeSet::<String>::new();
     let mut out = Vec::<String>::new();
     for line in lines {

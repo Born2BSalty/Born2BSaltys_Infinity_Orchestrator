@@ -6,9 +6,11 @@ use std::path::Path;
 use self::model::ParserFlowNode;
 use super::PromptSummaryIndex;
 
+mod hidden_prompts;
 mod map_to_bio;
 mod model;
 mod runner;
+mod tra_lookup;
 
 #[must_use]
 pub fn collect_prompt_summary_index(
@@ -54,6 +56,7 @@ pub fn collect_prompt_summary_index(
         .map(|o| o.component_ids.len())
         .sum();
     index.parser_flow_preview = collect_flow_preview(&run.output.flow, 8);
+    hidden_prompts::merge_hidden_prompts(&mut index, tp2_path, preferred_lang, preferred_game);
     index
 }
 
