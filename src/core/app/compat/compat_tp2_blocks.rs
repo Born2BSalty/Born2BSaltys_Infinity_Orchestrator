@@ -38,6 +38,22 @@ pub(crate) fn collect_tp2_component_blocks<'a>(tp2_text: &'a str) -> Vec<(String
     out
 }
 
+pub(crate) fn tp2_preamble_code(tp2_text: &str) -> Vec<&str> {
+    let lines: Vec<&str> = tp2_text.lines().collect();
+    let mut state = LineState::Code;
+    let mut preamble = Vec::<&str>::new();
+    for (index, &line) in lines.iter().enumerate() {
+        let kept = kept_code(line, &mut state);
+        if component_begin_at(kept, &lines, index).is_some() {
+            break;
+        }
+        if !kept.is_empty() {
+            preamble.push(kept);
+        }
+    }
+    preamble
+}
+
 fn kept_code<'a>(line: &'a str, state: &mut LineState) -> &'a str {
     let trimmed = line.trim_start();
     match *state {
@@ -128,7 +144,7 @@ fn block_comment_open(text: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::collect_tp2_component_blocks;
+    use super::{collect_tp2_component_blocks, tp2_preamble_code};
 
     fn keys(lines: &[&str]) -> Vec<String> {
         collect_tp2_component_blocks(&lines.join("\n"))
@@ -265,5 +281,43 @@ mod tests {
         let blocks = collect_tp2_component_blocks(&text);
         assert_eq!(blocks[0].0, "0");
         assert!(blocks[0].1.contains(&line));
+    }
+
+    #[test]
+    fn the_preamble_stops_at_the_first_component() {
+        let fixture = [
+            "BACKUP ~x~",
+            "AUTHOR ~y~",
+            "ALWAYS",
+            "END",
+            "BEGIN ~A~",
+            "COPY ~a~ ~b~",
+            "BEGIN ~B~",
+        ];
+        let text = fixture.join("\n");
+        assert_eq!(
+            tp2_preamble_code(&text),
+            ["BACKUP ~x~", "AUTHOR ~y~", "ALWAYS", "END"]
+        );
+    }
+
+    #[test]
+    fn a_commented_out_begin_does_not_end_the_preamble() {
+        let fixture = [
+            "BACKUP ~x~",
+            "/* BEGIN ~Old~ */",
+            "/*",
+            "BEGIN ~Older~",
+            "*/",
+            "// BEGIN ~Oldest~",
+            "INCLUDE ~a.tpa~",
+            "BEGIN ~A~",
+            "INCLUDE ~b.tpa~",
+        ];
+        let text = fixture.join("\n");
+        let preamble = tp2_preamble_code(&text);
+        assert!(preamble.contains(&"INCLUDE ~a.tpa~"));
+        assert!(preamble.iter().all(|line| !line.contains("b.tpa")));
+        assert!(preamble.iter().all(|line| !line.contains("Older~")));
     }
 }
