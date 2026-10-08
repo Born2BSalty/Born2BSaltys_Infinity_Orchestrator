@@ -275,6 +275,15 @@ fn prepare_render(
     }
 }
 
+#[must_use]
+const fn versions_title(scoped: bool) -> &'static str {
+    if scoped {
+        "Versions (missing mods only)"
+    } else {
+        "Versions"
+    }
+}
+
 pub(crate) fn render(
     ctx: &egui::Context,
     orchestrator: &mut OrchestratorApp,
@@ -301,7 +310,7 @@ pub(crate) fn render(
 
     let spec = DrawerSpec {
         id_salt: "versions_drawer",
-        title: "Versions",
+        title: versions_title(step2.versions_ui.log_pending_scope),
         subtitle: &subtitle,
         width: DrawerWidth::Wide,
         header_button: Some(drawer::HeaderButton {
@@ -1323,6 +1332,12 @@ fn apply_sheet_outcome(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_scoped_window_is_titled_missing_mods_only() {
+        assert_eq!(versions_title(true), "Versions (missing mods only)");
+        assert_eq!(versions_title(false), "Versions");
+    }
 
     #[test]
     fn header_button_label_prefers_scanning_then_checking_then_fetching() {

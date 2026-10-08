@@ -26,8 +26,9 @@ pub(super) fn start_step2_scan(
     state.step2.is_scanning = true;
     state.step2.last_scan_report = None;
     state.step2.log_pending_downloads.clear();
-    state.step2.review_edit_bgee_log_applied = false;
-    state.step2.review_edit_bg2ee_log_applied = false;
+    state.step2.log_apply.lines.clear();
+    state.step2.log_apply.review_edit_bgee_applied = false;
+    state.step2.log_apply.review_edit_bg2ee_applied = false;
     state.step2.collapse_epoch = state.step2.collapse_epoch.saturating_add(1);
     step2_progress_queue.clear();
     *step2_scan_rx = Some(rx);

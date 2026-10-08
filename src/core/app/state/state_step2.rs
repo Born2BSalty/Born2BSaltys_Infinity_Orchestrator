@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::app::app_step2_update_source_refs::RemoteFileFacts;
+use crate::app::game_authority::GameSlot;
 use crate::app::github_forks_list::ForksListState;
 use crate::app::github_release_list::ReleaseListState;
 use crate::app::source_form::SourceForm;
@@ -229,6 +230,7 @@ pub struct Step2State<Flag = bool> {
     pub update_selected_refresh_target_game_tab: Option<String>,
     pub update_selected_refresh_target_tp_file: Option<String>,
     pub log_pending_downloads: Vec<Step2LogPendingDownload>,
+    pub log_apply: Step2LogApplyState,
     pub exact_log_mod_list_checked: Flag,
     pub pending_saved_log_apply: Flag,
     pub pending_saved_log_update_preview: Flag,
@@ -236,8 +238,6 @@ pub struct Step2State<Flag = bool> {
     pub weidu_log_import: Option<WeiduLogImport>,
     pub pending_weidu_log_reapply: Flag,
     pub weidu_log_import_awaiting_check: Flag,
-    pub review_edit_bgee_log_applied: Flag,
-    pub review_edit_bg2ee_log_applied: Flag,
     pub left_pane_ratio: f32,
     pub last_scan_report: Option<Step2ScanReport>,
     pub update_selected_manual_downloads: Vec<ManualDownloadRequest>,
@@ -332,6 +332,7 @@ impl Default for Step2State {
             update_selected_refresh_target_game_tab: None,
             update_selected_refresh_target_tp_file: None,
             log_pending_downloads: Vec::new(),
+            log_apply: Step2LogApplyState::default(),
             exact_log_mod_list_checked: false,
             pending_saved_log_apply: false,
             pending_saved_log_update_preview: false,
@@ -339,8 +340,6 @@ impl Default for Step2State {
             weidu_log_import: None,
             pending_weidu_log_reapply: false,
             weidu_log_import_awaiting_check: false,
-            review_edit_bgee_log_applied: false,
-            review_edit_bg2ee_log_applied: false,
             left_pane_ratio: 0.74,
             last_scan_report: None,
             update_selected_manual_downloads: Vec::new(),
@@ -384,6 +383,43 @@ pub struct Step2LogPendingDownload {
     pub tp_file: String,
     pub label: String,
     pub requested_version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step2LogUnticked {
+    pub game_tab: String,
+    pub mod_name: String,
+    pub component_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Step2LogTarget {
+    pub tree: GameSlot,
+    pub mod_index: usize,
+    pub component_index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Step2LogLineOutcome {
+    Ticked(Vec<Step2LogTarget>),
+    NoMod,
+    NoComponent { tree: GameSlot, mod_index: usize },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step2LogLine {
+    pub game_tab: String,
+    pub mod_label: String,
+    pub component_id: String,
+    pub outcome: Step2LogLineOutcome,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Step2LogApplyState {
+    pub review_edit_bgee_applied: bool,
+    pub review_edit_bg2ee_applied: bool,
+    pub lines: Vec<Step2LogLine>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use crate::app::added_mods;
-use crate::app::controller::log_apply::{apply_log_to_mods, normalize_path_key};
+use crate::app::controller::log_apply::{
+    LogApplyReport, LogLineOutcome, apply_log_to_mods, normalize_path_key,
+};
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads::{self, ModDownloadsLoad, SourceTier, SourceTiers};
-use crate::app::state::{Step1State, Step2LogPendingDownload, WizardState};
+use crate::app::state::{
+    Step1State, Step2ComponentState, Step2LogLine, Step2LogLineOutcome, Step2LogPendingDownload,
+    Step2LogTarget, Step2LogUnticked, Step2ModState, Step2State, WizardState,
+};
 use crate::mods::component::Component;
 use crate::mods::log_file::LogFile;
 
@@ -62,40 +68,8 @@ pub(crate) fn apply_weidu_log_selection_from_path(
             crate::app::compat_logic::clear_step2_compat_state(&mut state.step2.bg2ee_mods);
         }
     }
-    let matched = match (state.step1.game_install.as_str(), bgee) {
-        ("EET", true) => {
-            let picked_bgee = apply_log_to_mods(
-                &mut state.step2.bgee_mods,
-                &log,
-                None,
-                true,
-                &mut next_order,
-            );
-            let allow = HashSet::from([normalize_path_key(r"EET\EET.TP2")]);
-            let picked_eet_core = apply_log_to_mods(
-                &mut state.step2.bg2ee_mods,
-                &log,
-                Some(&allow),
-                false,
-                &mut next_order,
-            );
-            picked_bgee + picked_eet_core
-        }
-        (_, true) => apply_log_to_mods(
-            &mut state.step2.bgee_mods,
-            &log,
-            None,
-            true,
-            &mut next_order,
-        ),
-        _ => apply_log_to_mods(
-            &mut state.step2.bg2ee_mods,
-            &log,
-            None,
-            true,
-            &mut next_order,
-        ),
-    };
+    let mut logged = BTreeMap::new();
+    let matched = apply_log_to_trees(state, bgee, &log, &mut next_order, &mut logged);
     state.step2.next_selection_order = next_order;
     let compat_error = crate::app::compat_logic::apply_step2_compat_rules(
         &state.step1,
@@ -107,6 +81,7 @@ pub(crate) fn apply_weidu_log_selection_from_path(
     } else {
         "BG2EE"
     };
+    replace_tab_lines(&mut state.step2.log_apply.lines, label, logged);
     state
         .step2
         .log_pending_downloads
@@ -116,9 +91,9 @@ pub(crate) fn apply_weidu_log_selection_from_path(
         .log_pending_downloads
         .extend(build_log_pending_downloads(state, &log, label));
     if bgee {
-        state.step2.review_edit_bgee_log_applied = true;
+        state.step2.log_apply.review_edit_bgee_applied = true;
     } else {
-        state.step2.review_edit_bg2ee_log_applied = true;
+        state.step2.log_apply.review_edit_bg2ee_applied = true;
     }
     let pending = state.step2.log_pending_downloads.len();
     state.step2.scan_status = compat_error.map_or_else(
@@ -128,6 +103,209 @@ pub(crate) fn apply_weidu_log_selection_from_path(
         ),
     );
     state.clear_last_step2_sync_signature();
+}
+
+fn apply_log_to_trees(
+    state: &mut WizardState,
+    bgee: bool,
+    log: &LogFile,
+    next_order: &mut usize,
+    logged: &mut BTreeMap<usize, LoggedLine>,
+) -> usize {
+    match (state.step1.game_install.as_str(), bgee) {
+        ("EET", true) => {
+            let picked_bgee =
+                apply_log_to_mods(&mut state.step2.bgee_mods, log, None, true, next_order);
+            let allow = HashSet::from([normalize_path_key(r"EET\EET.TP2")]);
+            let picked_eet_core = apply_log_to_mods(
+                &mut state.step2.bg2ee_mods,
+                log,
+                Some(&allow),
+                false,
+                next_order,
+            );
+            merge_log_report(logged, GameSlot::First, picked_bgee)
+                + merge_log_report(logged, GameSlot::Second, picked_eet_core)
+        }
+        (_, true) => merge_log_report(
+            logged,
+            GameSlot::First,
+            apply_log_to_mods(&mut state.step2.bgee_mods, log, None, true, next_order),
+        ),
+        _ => merge_log_report(
+            logged,
+            GameSlot::Second,
+            apply_log_to_mods(&mut state.step2.bg2ee_mods, log, None, true, next_order),
+        ),
+    }
+}
+
+struct LoggedLine {
+    tp_file: String,
+    component_id: String,
+    outcome: Step2LogLineOutcome,
+}
+
+fn outcome_from_report(tree: GameSlot, outcome: LogLineOutcome) -> Step2LogLineOutcome {
+    match outcome {
+        LogLineOutcome::Ticked(targets) => Step2LogLineOutcome::Ticked(
+            targets
+                .into_iter()
+                .map(|(mod_index, component_index)| Step2LogTarget {
+                    tree,
+                    mod_index,
+                    component_index,
+                })
+                .collect(),
+        ),
+        LogLineOutcome::NoComponent(mod_index) => {
+            Step2LogLineOutcome::NoComponent { tree, mod_index }
+        }
+        LogLineOutcome::NoMod => Step2LogLineOutcome::NoMod,
+    }
+}
+
+fn merge_outcome(current: &mut Step2LogLineOutcome, other: Step2LogLineOutcome) {
+    match (current, other) {
+        (Step2LogLineOutcome::Ticked(targets), Step2LogLineOutcome::Ticked(more)) => {
+            targets.extend(more);
+        }
+        (Step2LogLineOutcome::Ticked(_), _)
+        | (
+            Step2LogLineOutcome::NoComponent { .. },
+            Step2LogLineOutcome::NoComponent { .. } | Step2LogLineOutcome::NoMod,
+        ) => {}
+        (current, other) => *current = other,
+    }
+}
+
+fn merge_log_report(
+    logged: &mut BTreeMap<usize, LoggedLine>,
+    tree: GameSlot,
+    report: LogApplyReport,
+) -> usize {
+    for result in report.lines {
+        let outcome = outcome_from_report(tree, result.outcome);
+        match logged.entry(result.line) {
+            Entry::Vacant(entry) => {
+                entry.insert(LoggedLine {
+                    tp_file: result.tp_file,
+                    component_id: result.component_id,
+                    outcome,
+                });
+            }
+            Entry::Occupied(mut entry) => merge_outcome(&mut entry.get_mut().outcome, outcome),
+        }
+    }
+    report.matched
+}
+
+fn replace_tab_lines(
+    list: &mut Vec<Step2LogLine>,
+    game_tab: &str,
+    logged: BTreeMap<usize, LoggedLine>,
+) {
+    list.retain(|line| line.game_tab != game_tab);
+    list.extend(logged.into_values().map(|line| Step2LogLine {
+        game_tab: game_tab.to_string(),
+        mod_label: tp2_file_name_upper(&line.tp_file),
+        component_id: line.component_id,
+        outcome: line.outcome,
+    }));
+    list.sort_by_key(|line| game_authority::slot_for_tab(&line.game_tab) != GameSlot::First);
+}
+
+fn tree_mods(step2: &Step2State, tree: GameSlot) -> &[Step2ModState] {
+    match tree {
+        GameSlot::First => &step2.bgee_mods,
+        GameSlot::Second => &step2.bg2ee_mods,
+    }
+}
+
+fn logged_component(
+    step2: &Step2State,
+    target: Step2LogTarget,
+) -> Option<(&Step2ModState, &Step2ComponentState)> {
+    let mod_state = tree_mods(step2, target.tree).get(target.mod_index)?;
+    Some((mod_state, mod_state.components.get(target.component_index)?))
+}
+
+#[must_use]
+pub fn unticked_log_lines(step2: &Step2State) -> Vec<Step2LogUnticked> {
+    step2
+        .log_apply
+        .lines
+        .iter()
+        .filter_map(|line| {
+            let (mod_name, reason) = unticked_reason(step2, line)?;
+            Some(Step2LogUnticked {
+                game_tab: line.game_tab.clone(),
+                mod_name,
+                component_id: line.component_id.clone(),
+                reason,
+            })
+        })
+        .collect()
+}
+
+fn not_on_disk(line: &Step2LogLine) -> (String, String) {
+    (line.mod_label.clone(), "mod not on disk".to_string())
+}
+
+fn unticked_reason(step2: &Step2State, line: &Step2LogLine) -> Option<(String, String)> {
+    match &line.outcome {
+        Step2LogLineOutcome::Ticked(targets) => {
+            let components = targets
+                .iter()
+                .filter_map(|target| logged_component(step2, *target))
+                .collect::<Vec<_>>();
+            if components.iter().any(|(_, component)| component.checked) {
+                return None;
+            }
+            Some(components.first().map_or_else(
+                || not_on_disk(line),
+                |(mod_state, component)| {
+                    (
+                        mod_state.name.clone(),
+                        component_exclusion_reason(component),
+                    )
+                },
+            ))
+        }
+        Step2LogLineOutcome::NoComponent { tree, mod_index } => {
+            Some(tree_mods(step2, *tree).get(*mod_index).map_or_else(
+                || not_on_disk(line),
+                |mod_state| {
+                    (
+                        mod_state.name.clone(),
+                        "component not in this version".to_string(),
+                    )
+                },
+            ))
+        }
+        Step2LogLineOutcome::NoMod => Some(not_on_disk(line)),
+    }
+}
+
+fn tp2_file_name_upper(tp_file: &str) -> String {
+    tp_file
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(tp_file)
+        .to_ascii_uppercase()
+}
+
+#[must_use]
+pub(crate) fn component_exclusion_reason(component: &Step2ComponentState) -> String {
+    component
+        .disabled_reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .map_or_else(
+            || "excluded by compatibility rules".to_string(),
+            std::string::ToString::to_string,
+        )
 }
 
 pub(crate) fn reseed_added_mod_pending_downloads(state: &mut WizardState) {
@@ -601,6 +779,310 @@ mod tests {
             state.step2.log_pending_downloads.is_empty(),
             "{:?}",
             state.step2.log_pending_downloads
+        );
+    }
+
+    fn scanned_component(component_id: &str) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: component_id.to_string(),
+            label: format!("Component {component_id}"),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked: false,
+            selected_order: None,
+        }
+    }
+
+    fn scanned_mod_with(name: &str, tp2_path: &str, component_ids: &[&str]) -> Step2ModState {
+        let mut mod_state = scanned_mod(tp2_path.rsplit('/').next().unwrap_or(tp2_path));
+        mod_state.name = name.to_string();
+        mod_state.tp2_path = tp2_path.to_string();
+        mod_state.components = component_ids
+            .iter()
+            .map(|id| scanned_component(id))
+            .collect();
+        mod_state
+    }
+
+    fn unticked(
+        game_tab: &str,
+        mod_name: &str,
+        component_id: &str,
+        reason: &str,
+    ) -> Step2LogUnticked {
+        Step2LogUnticked {
+            game_tab: game_tab.to_string(),
+            mod_name: mod_name.to_string(),
+            component_id: component_id.to_string(),
+            reason: reason.to_string(),
+        }
+    }
+
+    fn apply_log_text(state: &mut WizardState, root: &TempRoot, bgee: bool, text: &str) {
+        static LOG_COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = LOG_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = root.path.join(format!("weidu_{n}.log"));
+        std::fs::write(&path, text).expect("write log");
+        apply_weidu_log_selection_from_path(state, bgee, Some(path));
+    }
+
+    fn ambient_lock() -> std::sync::MutexGuard<'static, ()> {
+        mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn install_state(game_install: &str) -> WizardState {
+        WizardState {
+            step1: Step1State {
+                game_install: game_install.to_string(),
+                ..Step1State::default()
+            },
+            ..WizardState::default()
+        }
+    }
+
+    #[test]
+    fn eet_bgee_log_does_not_list_the_eet_core_line() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("EET");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1"])];
+        state.step2.bg2ee_mods = vec![scanned_mod_with("EET", "EET/EET.TP2", &["0"])];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~EET/EET.TP2~ #0 #0 // EET core\n~X/SETUP-X.TP2~ #0 #1 // X one\n",
+        );
+
+        assert!(state.step2.bg2ee_mods[0].components[0].checked);
+        assert_eq!(unticked_log_lines(&state.step2), Vec::new());
+    }
+
+    #[test]
+    fn eet_a_second_log_unticking_the_core_line_lists_it() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("EET");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1"])];
+        state.step2.bg2ee_mods = vec![
+            scanned_mod_with("EET", "EET/EET.TP2", &["0"]),
+            scanned_mod_with("Z", "Z/SETUP-Z.TP2", &["0"]),
+        ];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~EET/EET.TP2~ #0 #0 // EET core\n~X/SETUP-X.TP2~ #0 #1 // X one\n",
+        );
+        assert!(state.step2.bg2ee_mods[0].components[0].checked);
+        assert_eq!(unticked_log_lines(&state.step2), Vec::new());
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            false,
+            "~Z/SETUP-Z.TP2~ #0 #0 // Z zero\n",
+        );
+
+        let core = &state.step2.bg2ee_mods[0].components[0];
+        assert!(!core.checked);
+        assert!(state.step2.bgee_mods[0].components[0].checked);
+        assert!(state.step2.bg2ee_mods[1].components[0].checked);
+        assert_eq!(
+            unticked_log_lines(&state.step2),
+            vec![unticked(
+                "BGEE",
+                "EET",
+                "0",
+                &component_exclusion_reason(core)
+            )]
+        );
+    }
+
+    #[test]
+    fn judging_reads_the_current_trees() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1"])];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~X/SETUP-X.TP2~ #0 #1 // X one\n",
+        );
+        assert_eq!(unticked_log_lines(&state.step2), Vec::new());
+
+        state.step2.bgee_mods[0].components[0].checked = false;
+        assert_eq!(
+            unticked_log_lines(&state.step2),
+            vec![unticked(
+                "BGEE",
+                "X",
+                "1",
+                "excluded by compatibility rules"
+            )]
+        );
+
+        state.step2.bgee_mods[0].components[0].checked = true;
+        assert_eq!(unticked_log_lines(&state.step2), Vec::new());
+    }
+
+    #[test]
+    fn out_of_range_targets_judge_as_mod_not_on_disk() {
+        let mut step2 = Step2State::default();
+        let line = |outcome| Step2LogLine {
+            game_tab: "BGEE".to_string(),
+            mod_label: "SETUP-X.TP2".to_string(),
+            component_id: "1".to_string(),
+            outcome,
+        };
+        step2.log_apply.lines = vec![
+            line(Step2LogLineOutcome::Ticked(vec![Step2LogTarget {
+                tree: GameSlot::First,
+                mod_index: 3,
+                component_index: 0,
+            }])),
+            line(Step2LogLineOutcome::NoComponent {
+                tree: GameSlot::Second,
+                mod_index: 3,
+            }),
+        ];
+
+        assert_eq!(
+            unticked_log_lines(&step2),
+            vec![
+                unticked("BGEE", "SETUP-X.TP2", "1", "mod not on disk"),
+                unticked("BGEE", "SETUP-X.TP2", "1", "mod not on disk"),
+            ]
+        );
+    }
+
+    const FIXTURE_RULE_REASON: &str = "Fixture rule: not needed here.";
+
+    #[test]
+    fn a_compat_excluded_line_lists_the_rule_reason() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        std::fs::write(
+            ambient
+                .root
+                .path
+                .join("config")
+                .join("step2_compat_rules_user.toml"),
+            format!(
+                "[[rules]]\nmod = \"fixturemod\"\ncomponent_id = \"2\"\nkind = \"not_needed\"\nmessage = \"{FIXTURE_RULE_REASON}\"\n"
+            ),
+        )
+        .expect("write user compat rules");
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![scanned_mod_with(
+            "Fixture Mod",
+            "FIXTUREMOD/SETUP-FIXTUREMOD.TP2",
+            &["2"],
+        )];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~FIXTUREMOD/SETUP-FIXTUREMOD.TP2~ #0 #2 // Fixture two\n",
+        );
+
+        let component = &state.step2.bgee_mods[0].components[0];
+        assert!(!component.checked);
+        assert_eq!(
+            component.disabled_reason.as_deref().map(str::trim),
+            Some(FIXTURE_RULE_REASON)
+        );
+        assert_eq!(
+            unticked_log_lines(&state.step2),
+            vec![unticked("BGEE", "Fixture Mod", "2", FIXTURE_RULE_REASON)]
+        );
+    }
+
+    #[test]
+    fn reapplying_a_tab_replaces_its_unticked_lines() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("EET");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1"])];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            false,
+            "~W/SETUP-W.TP2~ #0 #3 // W\n",
+        );
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~Y/SETUP-Y.TP2~ #0 #0 // Y\n",
+        );
+        assert_eq!(
+            unticked_log_lines(&state.step2),
+            vec![
+                unticked("BGEE", "SETUP-Y.TP2", "0", "mod not on disk"),
+                unticked("BG2EE", "SETUP-W.TP2", "3", "mod not on disk"),
+            ]
+        );
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #7 // X seven\n~z/setup-z.tp2~ #0 #4 // Z\n",
+        );
+        assert_eq!(
+            unticked_log_lines(&state.step2),
+            vec![
+                unticked("BGEE", "X", "7", "component not in this version"),
+                unticked("BGEE", "SETUP-Z.TP2", "4", "mod not on disk"),
+                unticked("BG2EE", "SETUP-W.TP2", "3", "mod not on disk"),
+            ]
+        );
+    }
+
+    #[test]
+    fn every_line_ticked_lists_nothing() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1", "2"])];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #2 // X two\n",
+        );
+
+        assert_eq!(unticked_log_lines(&state.step2), Vec::new());
+        assert!(
+            state.step2.bgee_mods[0]
+                .components
+                .iter()
+                .all(|component| component.checked)
         );
     }
 
