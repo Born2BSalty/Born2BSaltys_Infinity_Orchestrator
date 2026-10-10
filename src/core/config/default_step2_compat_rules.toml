@@ -252,3 +252,19 @@ mod = "ub"
 component_id = ["11", "16"]
 kind = "deprecated"
 message = "Not needed for BG2EE. For vanilla BG2, use the G3 Fixpack instead."
+
+[[rules]]
+mod = "c0warlock"
+component_id = "0"
+kind = "conflict"
+related_mod = "artisans_warlock"
+related_component = "0"
+message = "C0Warlock and Artisans_Warlock are the same Warlock kit before and after its rename. Choose one."
+
+[[rules]]
+mod = "artisans_warlock"
+component_id = "0"
+kind = "conflict"
+related_mod = "c0warlock"
+related_component = "0"
+message = "Artisans_Warlock and C0Warlock are the same Warlock kit after and before its rename. Choose one."
