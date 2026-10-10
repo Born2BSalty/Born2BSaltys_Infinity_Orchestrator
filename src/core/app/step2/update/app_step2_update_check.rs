@@ -5,8 +5,8 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use chrono::Local;
 
 use crate::app::app_step2_update_policy::{
-    mark_update_available, mod_has_current_version, source_ref_is_update, source_ref_matches,
-    version_is_update,
+    mark_update_available, mod_has_current_version, mod_is_scanned, source_ref_is_update,
+    source_ref_matches, version_is_update,
 };
 use crate::app::app_step2_update_source_refs::{
     InstalledRefLookup, RemoteFileFacts, same_remote_file,
@@ -321,6 +321,9 @@ fn apply_successful_update_check_outcome(
         && !allow_log_missing_download
         && !has_current_version
     {
+        if mod_is_scanned(state, &outcome.game_tab, &outcome.tp_file) {
+            keep_in_sync_asset(state, outcome, tag, source_ref, uses_source_snapshot);
+        }
         return;
     }
     let should_apply_update_outcome = allow_source_ref_update
@@ -1213,6 +1216,48 @@ mod tests {
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].tp_file, "cdtweaks.tp2");
         assert_eq!(moved.step2.bgee_mods[0].package_marker, Some('+'));
+    }
+
+    fn check_cdtweaks_without_a_record(state: &mut WizardState<bool>) {
+        state.step1.have_weidu_logs = false;
+        state.step1.download_archive = false;
+        assert_eq!(state.step2.log_pending_downloads.len(), 0);
+        let lookup = InstalledRefLookup::from_files(
+            None,
+            crate::app::app_step2_update_source_refs::ModSourceRefsFile::default(),
+        );
+        let sources = crate::app::mod_downloads::ModDownloadsLoad::default();
+        apply_update_check_outcome(state, &cdtweaks_branch_outcome(), &sources, &lookup, false);
+    }
+
+    #[test]
+    fn a_versionless_branch_mod_on_disk_without_a_record_offers_fetch_again() {
+        let mut state = cdtweaks_state("");
+        state.step2.bgee_mods[0].components[0].raw_line =
+            "~cdtweaks.tp2~ #0 #0 // Tweaks".to_string();
+        assert!(!mod_has_current_version(&state, "BGEE", "cdtweaks.tp2"));
+        assert!(mod_is_scanned(&state, "BGEE", "cdtweaks.tp2"));
+
+        check_cdtweaks_without_a_record(&mut state);
+
+        let in_sync = &state.step2.update_selected_in_sync_assets;
+        assert_eq!(in_sync.len(), 1);
+        assert_eq!(in_sync[0].tp_file, "cdtweaks.tp2");
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
+        assert_eq!(state.step2.update_selected_update_sources.len(), 0);
+        assert_eq!(state.step2.update_selected_missing_sources.len(), 0);
+        assert_eq!(state.step2.bgee_mods[0].package_marker, None);
+    }
+
+    #[test]
+    fn a_branch_mod_not_on_disk_without_a_record_still_records_nothing() {
+        let mut state = WizardState::<bool>::default();
+        assert!(!mod_is_scanned(&state, "BGEE", "cdtweaks.tp2"));
+
+        check_cdtweaks_without_a_record(&mut state);
+
+        assert_eq!(state.step2.update_selected_in_sync_assets.len(), 0);
+        assert_eq!(state.step2.update_selected_update_assets.len(), 0);
     }
 
     #[test]

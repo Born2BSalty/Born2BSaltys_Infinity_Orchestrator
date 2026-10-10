@@ -91,6 +91,15 @@ pub(crate) fn mod_has_current_version(state: &WizardState, game_tab: &str, tp_fi
         })
 }
 
+pub(crate) fn mod_is_scanned(state: &WizardState, game_tab: &str, tp_file: &str) -> bool {
+    let mods = if game_authority::slot_for_tab(game_tab) == GameSlot::First {
+        &state.step2.bgee_mods
+    } else {
+        &state.step2.bg2ee_mods
+    };
+    mods.iter().any(|mod_state| mod_state.tp_file == tp_file)
+}
+
 pub(crate) fn version_is_update(
     state: &WizardState,
     game_tab: &str,

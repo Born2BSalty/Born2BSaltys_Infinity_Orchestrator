@@ -5576,7 +5576,6 @@ tp2 = "BardicWonders"
 [[mods]]
 name = "Warlock"
 tp2 = "Artisans_Warlock"
-aliases = ["C0Warlock"]
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5587,6 +5586,25 @@ aliases = ["C0Warlock"]
   commit = ""
   tag = ""
   branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
+[[mods]]
+name = "Warlock (C0Warlock, 3.0)"
+tp2 = "C0Warlock"
+
+  [[mods.sources]]
+  id = "theartisanbg"
+  label = "TheArtisanBG"
+  type = "github"
+  url = "https://github.com/TheArtisanBG/Warlock"
+  repo = "TheArtisanBG/Warlock"
+  commit = "67515c983c4c0c685514fb20edfdfe6c86e5aee1"
+  tag = ""
+  branch = ""
   channel = ""
   asset = ""
   pkg_windows = "wzp,rar,zip"
