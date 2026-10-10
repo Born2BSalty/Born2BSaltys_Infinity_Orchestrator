@@ -17,9 +17,11 @@ use crate::registry::model::Game;
 use crate::registry::operations_create::create_modlist_with_author;
 use crate::registry::store_workspace::WorkspaceStore;
 use crate::registry::workspace_model::{ModlistWorkspaceState, ModsSource};
+use crate::ui::create::create_log_import::CreateLogImport;
 use crate::ui::create::destination_default::default_destination;
 use crate::ui::create::load_draft_dialog::{self, LoadDraftOutcome};
 use crate::ui::create::stage_choose::{self, ChooseOutcome};
+use crate::ui::create::state_create::{CreateMode, CreateScreenState};
 use crate::ui::home::confirm_delete;
 use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::nav_destination::NavDestination;
@@ -176,6 +178,7 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
         }
     };
 
+    let log_import = click_time_log_import(&orchestrator.create_screen_state);
     let choice = orchestrator.create_screen_state.destination_choice;
     if destination_choice_requires_worker(choice) {
         let token = orchestrator.next_destination_prep_token(
@@ -188,12 +191,17 @@ fn start_scratch(orchestrator: &mut OrchestratorApp) {
             name,
             destination: dest.clone(),
             game,
+            log_import,
             worker: destination_prep::spawn_prepare_destination_worker(PathBuf::from(dest), choice),
         });
         return;
     }
 
-    finish_start_scratch(orchestrator, &name, game, &dest);
+    finish_start_scratch(orchestrator, &name, game, &dest, log_import);
+}
+
+fn click_time_log_import(state: &CreateScreenState) -> bool {
+    state.mode == CreateMode::FromLogs
 }
 
 fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
@@ -218,9 +226,10 @@ fn poll_create_destination_prep(orchestrator: &mut OrchestratorApp) {
                 let name = pending.name.clone();
                 let game = pending.game;
                 let destination = pending.destination.clone();
+                let log_import = pending.log_import;
                 orchestrator.complete_destination_prep_worker(pending.worker);
                 if still_current {
-                    finish_start_scratch(orchestrator, &name, game, &destination);
+                    finish_start_scratch(orchestrator, &name, game, &destination, log_import);
                 }
             }
         }
@@ -310,7 +319,13 @@ fn scratch_claim(
     }
 }
 
-fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Game, dest: &str) {
+fn finish_start_scratch(
+    orchestrator: &mut OrchestratorApp,
+    name: &str,
+    game: Game,
+    dest: &str,
+    log_import: bool,
+) {
     let mut held = match scratch_claim(orchestrator, dest) {
         Ok(h) => h,
         Err(msg) => {
@@ -398,13 +413,20 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
     }
 
     let new_id = entry.id;
-    orchestrator.create_screen_state.modlist_name.clear();
-    orchestrator.create_screen_state.destination.clear();
-    orchestrator.create_screen_state.destination_choice = None;
+    orchestrator.create_log_import = log_import.then(|| CreateLogImport {
+        modlist_id: new_id.clone(),
+    });
+    clear_create_form(&mut orchestrator.create_screen_state);
     orchestrator.create_screen_state.resumed_build_id = Some(new_id.clone());
     orchestrator.nav = NavDestination::Workspace {
         modlist_id: Some(new_id),
     };
+}
+
+fn clear_create_form(state: &mut CreateScreenState) {
+    state.modlist_name.clear();
+    state.destination.clear();
+    state.destination_choice = None;
 }
 
 fn create_scratch_mods_folder(destination: &str, game: Game) -> Result<String, String> {
@@ -441,7 +463,7 @@ mod tests {
             .unwrap_or_default();
         assert_eq!(global.trim().len(), 0, "isolated app has no mods folder");
 
-        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string());
+        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string(), false);
 
         let fresh = app
             .registry
@@ -506,11 +528,14 @@ mod tests {
 
     struct TempDestGuard(PathBuf);
 
+    static TEMP_DEST_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     impl TempDestGuard {
         fn new(tag: &str) -> Self {
             Self(std::env::temp_dir().join(format!(
-                "bio_create_scratch_test_{tag}_{}",
-                std::process::id()
+                "bio_create_scratch_test_{tag}_{}_{}",
+                std::process::id(),
+                TEMP_DEST_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             )))
         }
 
@@ -542,7 +567,7 @@ mod tests {
         std::fs::create_dir_all(&old_data_dir).expect("seed the old data dir");
         app.redesign_settings.user_name = "@tester".to_string();
 
-        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string());
+        finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string(), false);
 
         assert!(app.registry.find("OLD000000001").is_none());
         assert!(!old_data_dir.exists());
@@ -578,7 +603,7 @@ mod tests {
         std::fs::create_dir_all(&old_data_dir).expect("seed the old data dir");
         app.redesign_settings.user_name = "@tester".to_string();
 
-        finish_start_scratch(&mut app, "Fresh 2", Game::BGEE, &dest.as_string());
+        finish_start_scratch(&mut app, "Fresh 2", Game::BGEE, &dest.as_string(), false);
 
         let restored = app
             .registry
@@ -588,6 +613,73 @@ mod tests {
             .expect("the old owner is restored");
         assert_eq!(restored, 0);
         assert!(old_data_dir.exists());
+    }
+
+    fn app_ready_to_start(mode: CreateMode, game: Game, dest: &TempDestGuard) -> OrchestratorApp {
+        let mut app = orch_for_create_test();
+        app.redesign_settings.user_name = "@tester".to_string();
+        let state = &mut app.create_screen_state;
+        state.modlist_name = "From Logs".to_string();
+        state.game = game;
+        state.destination = dest.as_string();
+        state.mode = mode;
+        app
+    }
+
+    fn new_list_id(app: &OrchestratorApp) -> String {
+        match &app.nav {
+            NavDestination::Workspace {
+                modlist_id: Some(id),
+            } => id.clone(),
+            other => panic!("expected the new list's workspace, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn start_from_logs_leaves_a_note_for_the_new_list() {
+        let dest = TempDestGuard::new("fromlogs");
+        let mut app = app_ready_to_start(CreateMode::FromLogs, Game::BGEE, &dest);
+
+        start_scratch(&mut app);
+
+        let id = new_list_id(&app);
+        assert_eq!(
+            app.create_log_import,
+            Some(CreateLogImport { modlist_id: id })
+        );
+        let state = &app.create_screen_state;
+        assert_eq!(state.mode, CreateMode::FromLogs);
+        assert_eq!(state.modlist_name.len(), 0);
+    }
+
+    #[test]
+    fn start_in_logs_mode_needs_no_log() {
+        let dest = TempDestGuard::new("nolog");
+        let mut app = orch_for_create_test();
+        app.create_screen_state.modlist_name = "No Logs Yet".to_string();
+        app.create_screen_state.destination = dest.as_string();
+        assert_eq!(app.create_screen_state.mode, CreateMode::FromLogs);
+
+        start_scratch(&mut app);
+
+        let id = new_list_id(&app);
+        assert!(app.registry.find(&id).is_some());
+        assert_eq!(
+            app.create_log_import,
+            Some(CreateLogImport { modlist_id: id })
+        );
+    }
+
+    #[test]
+    fn start_from_scratch_leaves_no_note() {
+        let dest = TempDestGuard::new("fromscratch");
+        let mut app = app_ready_to_start(CreateMode::FromScratch, Game::EET, &dest);
+
+        start_scratch(&mut app);
+
+        let _ = new_list_id(&app);
+        assert_eq!(app.create_log_import, None);
+        assert_eq!(app.create_screen_state.mode, CreateMode::FromScratch);
     }
 
     #[test]

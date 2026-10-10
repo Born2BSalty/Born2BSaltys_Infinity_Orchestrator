@@ -37,6 +37,7 @@ use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::settings::model::AppSettings;
 use crate::settings::redesign_fields::{RedesignSettings, ThemeChoice};
 use crate::settings::store::SettingsStore;
+use crate::ui::create::create_log_import::{self, CreateLogImport};
 use crate::ui::create::state_create::CreateScreenState;
 use crate::ui::home::state_home::HomeScreenState;
 use crate::ui::install::state_install::InstallScreenState;
@@ -109,6 +110,7 @@ pub(crate) struct PendingCreateStart {
     pub(crate) name: String,
     pub(crate) destination: String,
     pub(crate) game: Game,
+    pub(crate) log_import: bool,
     pub(crate) worker: DestinationPrepWorker,
 }
 
@@ -251,6 +253,7 @@ pub struct OrchestratorApp {
     pub notification_manager: NotificationManager,
     pub install_screen_state: InstallScreenState,
     pub create_screen_state: CreateScreenState,
+    pub create_log_import: Option<CreateLogImport>,
 
     pub redesign_settings: RedesignSettings,
     pub settings_screen_state: SettingsScreenState,
@@ -412,6 +415,7 @@ impl OrchestratorApp {
             notification_manager: NotificationManager::new(),
             install_screen_state: InstallScreenState::default(),
             create_screen_state: CreateScreenState::new(),
+            create_log_import: None,
 
             redesign_settings,
             settings_screen_state: SettingsScreenState::default(),
@@ -1266,7 +1270,7 @@ impl eframe::App for OrchestratorApp {
         oauth_glue::poll_github_oauth_flow(self);
 
         self.poll_step2_channels();
-        crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(self);
+        self.reconcile_scan_and_advance_log_imports();
         if self.step2_needs_repaint() {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
@@ -1423,6 +1427,13 @@ impl Drop for OrchestratorApp {
 }
 
 impl OrchestratorApp {
+    fn reconcile_scan_and_advance_log_imports(&mut self) {
+        let scan_completed =
+            crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(self);
+        create_log_import::advance_create_log_import(self);
+        crate::ui::workspace::step2_log_glue::advance_queued_weidu_log_import(self, scan_completed);
+    }
+
     fn drive_notifications(
         &mut self,
         ctx: &egui::Context,

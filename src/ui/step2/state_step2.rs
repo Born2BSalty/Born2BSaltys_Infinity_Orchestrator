@@ -70,7 +70,8 @@ pub fn review_edit_scan_complete(state: &WizardState) -> bool {
 
 #[must_use]
 pub const fn review_edit_any_log_applied(state: &WizardState) -> bool {
-    state.step2.review_edit_bgee_log_applied || state.step2.review_edit_bg2ee_log_applied
+    state.step2.log_apply.review_edit_bgee_applied
+        || state.step2.log_apply.review_edit_bg2ee_applied
 }
 
 #[must_use]

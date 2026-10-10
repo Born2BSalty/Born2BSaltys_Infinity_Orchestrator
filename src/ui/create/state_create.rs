@@ -4,6 +4,13 @@
 use crate::registry::model::Game;
 use crate::ui::install::state_install::DestChoice;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CreateMode {
+    #[default]
+    FromLogs,
+    FromScratch,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct CreateScreenState {
     pub modlist_name: String,
@@ -15,6 +22,8 @@ pub struct CreateScreenState {
     pub resumed_build_id: Option<String>,
 
     pub load_draft_delete_target: Option<String>,
+
+    pub mode: CreateMode,
 }
 
 impl CreateScreenState {
@@ -41,6 +50,7 @@ mod tests {
         assert!(!s.load_draft_open);
         assert_eq!(s.resumed_build_id, None);
         assert_eq!(s.load_draft_delete_target, None);
+        assert_eq!(s.mode, CreateMode::FromLogs);
     }
 
     #[test]
