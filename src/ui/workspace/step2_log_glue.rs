@@ -1,25 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rfd::FileDialog;
 
 use crate::app::app_step2_log::{
-    apply_weidu_log_selection_from_path, resolve_bg2_weidu_log_path, resolve_bgee_weidu_log_path,
+    apply_weidu_log_selection_from_path, imported_log_path, logged_ticks_for_run,
+    refresh_logged_missing, reseed_added_mod_pending_downloads, resolve_bg2_weidu_log_path,
+    resolve_bgee_weidu_log_path, tab_for_slot, tick_arrived_logged_mods, ticked_log_line_count,
     unticked_log_lines,
 };
 use crate::app::game_authority;
-use crate::app::state::{Step2LogUnticked, Step2State, WeiduLogImport};
+use crate::app::state::{Step1State, Step2LogUnticked, Step2State};
 use crate::app::step2_action::Step2Action;
 use crate::mods::log_file::LogFile;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{LogCheck, RescanSnapshot, WeiduLogImportForm};
 use crate::ui::workspace::step_action_dispatch::handle_step2_via_bio;
-use crate::ui::workspace::step2::step2_rescan_reconcile::format_component_notification;
-use crate::ui::workspace::versions::versions_drawer::close_versions_drawer;
 use crate::ui::workspace::workspace_header::save_draft;
 
 pub fn apply_weidu_log_selection_for_orchestrator(orchestrator: &mut OrchestratorApp, bgee: bool) {
@@ -91,60 +92,247 @@ fn parse_failure(status: &str) -> Option<&str> {
     status.strip_prefix("Failed to parse log: ")
 }
 
-fn apply_recorded_log(orchestrator: &mut OrchestratorApp, bgee: bool, path: PathBuf) {
-    apply_picked_weidu_log(orchestrator, bgee, path);
-    let Some(reason) = parse_failure(&orchestrator.wizard_state.step2.scan_status) else {
-        return;
-    };
-    let tab = if bgee {
-        game_authority::first_slot_tab(&orchestrator.wizard_state.step1.game_install)
-    } else {
-        game_authority::TAB_BG2EE
-    };
-    let toast = format!("Could not read the {tab} WeiDU log: {reason}");
-    orchestrator.notification_manager.error(toast);
+fn slot_tab(orchestrator: &OrchestratorApp, first_slot: bool) -> &'static str {
+    tab_for_slot(&orchestrator.wizard_state.step1.game_install, first_slot)
 }
 
-fn apply_recorded_logs(orchestrator: &mut OrchestratorApp, record: &WeiduLogImport) {
-    if let Some(first) = record.first.clone() {
-        apply_recorded_log(orchestrator, true, first);
+fn apply_recorded_log(orchestrator: &mut OrchestratorApp, first_slot: bool, path: PathBuf) -> bool {
+    apply_picked_weidu_log(orchestrator, first_slot, path);
+    let Some(reason) = parse_failure(&orchestrator.wizard_state.step2.scan_status) else {
+        return true;
+    };
+    let toast = format!(
+        "Could not read the {} WeiDU log: {reason}",
+        slot_tab(orchestrator, first_slot)
+    );
+    orchestrator.notification_manager.error(toast);
+    false
+}
+
+fn picked_logs(first: Option<PathBuf>, second: Option<PathBuf>) -> Vec<(bool, PathBuf)> {
+    [(true, first), (false, second)]
+        .into_iter()
+        .filter_map(|(first_slot, path)| path.map(|path| (first_slot, path)))
+        .collect()
+}
+
+fn picked_logs_read(orchestrator: &mut OrchestratorApp, picked: &[(bool, PathBuf)]) -> bool {
+    for (first_slot, path) in picked {
+        if let Err(err) = LogFile::from_path(path) {
+            let toast = format!(
+                "Could not read the {} WeiDU log: {err}",
+                slot_tab(orchestrator, *first_slot)
+            );
+            orchestrator.notification_manager.error(toast);
+            return false;
+        }
     }
-    if let Some(second) = record.second.clone() {
-        apply_recorded_log(orchestrator, false, second);
+    true
+}
+
+fn same_file(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+struct StagedLog {
+    first_slot: bool,
+    target: PathBuf,
+    staged: Option<PathBuf>,
+}
+
+fn staged_log_path(target: &Path) -> PathBuf {
+    let mut name = target.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    target.with_file_name(name)
+}
+
+fn stage_imported_log(
+    step1: &Step1State,
+    first_slot: bool,
+    picked: &Path,
+) -> Result<StagedLog, String> {
+    let target = imported_log_path(step1, first_slot)
+        .ok_or_else(|| "the list has no WeiDU log folder".to_string())?;
+    if let Some(folder) = target.parent() {
+        std::fs::create_dir_all(folder).map_err(|err| err.to_string())?;
+    }
+    if same_file(picked, &target) {
+        return Ok(StagedLog {
+            first_slot,
+            target,
+            staged: None,
+        });
+    }
+    let staged = staged_log_path(&target);
+    if let Err(err) = std::fs::copy(picked, &staged) {
+        let _ = std::fs::remove_file(&staged);
+        return Err(err.to_string());
+    }
+    Ok(StagedLog {
+        first_slot,
+        target,
+        staged: Some(staged),
+    })
+}
+
+fn discard_staged_logs(staged: &[StagedLog]) {
+    for log in staged {
+        if let Some(path) = &log.staged {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+fn stage_imported_logs(
+    step1: &Step1State,
+    picked: Vec<(bool, PathBuf)>,
+) -> Result<Vec<StagedLog>, (bool, String)> {
+    let mut staged = Vec::new();
+    for (first_slot, path) in picked {
+        match stage_imported_log(step1, first_slot, &path) {
+            Ok(log) => staged.push(log),
+            Err(err) => {
+                discard_staged_logs(&staged);
+                return Err((first_slot, err));
+            }
+        }
+    }
+    Ok(staged)
+}
+
+fn commit_staged_logs(staged: &[StagedLog]) -> Result<Vec<(bool, PathBuf)>, (bool, String)> {
+    let mut kept = Vec::new();
+    for (index, log) in staged.iter().enumerate() {
+        if let Some(path) = &log.staged
+            && let Err(err) = std::fs::rename(path, &log.target)
+        {
+            discard_staged_logs(&staged[index..]);
+            return Err((log.first_slot, err.to_string()));
+        }
+        kept.push((log.first_slot, log.target.clone()));
+    }
+    Ok(kept)
+}
+
+fn keep_imported_logs(
+    orchestrator: &mut OrchestratorApp,
+    picked: Vec<(bool, PathBuf)>,
+) -> Option<Vec<(bool, PathBuf)>> {
+    let kept = stage_imported_logs(&orchestrator.wizard_state.step1, picked)
+        .and_then(|staged| commit_staged_logs(&staged));
+    match kept {
+        Ok(kept) => Some(kept),
+        Err((first_slot, err)) => {
+            let toast = format!(
+                "Could not save the {} WeiDU log: {err}",
+                slot_tab(orchestrator, first_slot)
+            );
+            orchestrator.notification_manager.error(toast);
+            None
+        }
     }
 }
 
 pub fn import_weidu_logs(orchestrator: &mut OrchestratorApp, form: WeiduLogImportForm) {
-    let record = WeiduLogImport {
-        first: form.first,
-        second: form.second,
+    let WeiduLogImportForm {
+        first,
+        second,
+        fetch_missing,
+        ..
+    } = form;
+    let picked = picked_logs(first, second);
+    if !picked_logs_read(orchestrator, &picked) {
+        return;
+    }
+    let Some(kept) = keep_imported_logs(orchestrator, picked) else {
+        return;
     };
     orchestrator.wizard_state.step2.log_apply.lines.clear();
-    apply_recorded_logs(orchestrator, &record);
-    if !record_logs_parse(&record) {
-        orchestrator.wizard_state.step2.weidu_log_import = None;
+    for (first_slot, path) in kept {
+        if !apply_recorded_log(orchestrator, first_slot, path) {
+            return;
+        }
+    }
+    refresh_logged_missing(&mut orchestrator.wizard_state);
+    reseed_added_mod_pending_downloads(&mut orchestrator.wizard_state);
+    orchestrator.mark_workspace_dirty();
+    save_draft(orchestrator);
+    announce_log_results(orchestrator);
+    if !fetch_missing || orchestrator.wizard_state.step2.logged_missing_count() == 0 {
+        return;
+    }
+    handle_step2_via_bio(Step2Action::OpenUpdatePopup, orchestrator);
+    let step2 = &mut orchestrator.wizard_state.step2;
+    step2.versions_ui.log_pending_scope = true;
+    step2.versions_ui.auto_check_pending = true;
+    step2.update_selected_has_run = false;
+}
+
+pub(crate) fn tick_arrived_logged_mods_and_announce(
+    orchestrator: &mut OrchestratorApp,
+    arrived: &BTreeSet<String>,
+) {
+    if !tick_arrived_logged_mods(&mut orchestrator.wizard_state, arrived) {
         return;
     }
     orchestrator.mark_workspace_dirty();
-    if !form.fetch_missing
-        || orchestrator
-            .wizard_state
-            .step2
-            .log_pending_downloads
-            .is_empty()
-    {
-        orchestrator.wizard_state.step2.weidu_log_import = None;
-        save_draft(orchestrator);
-        finish_weidu_log_import(orchestrator);
+    save_draft(orchestrator);
+    announce_log_results(orchestrator);
+}
+
+pub(crate) fn arm_pending_log_ticks(step2: &mut Step2State, download_was_running: bool) {
+    if download_was_running || !step2.update_selected_download_running {
         return;
     }
-    orchestrator.wizard_state.step2.weidu_log_import = Some(record);
-    handle_step2_via_bio(Step2Action::OpenUpdatePopup, orchestrator);
-    let step2 = &mut orchestrator.wizard_state.step2;
-    step2.versions_ui.auto_check_pending = true;
-    step2.update_selected_has_run = false;
-    step2.weidu_log_import_awaiting_check = true;
-    step2.versions_ui.log_pending_scope = true;
+    let arrived = logged_ticks_for_run(step2);
+    step2.pending_log_ticks.extend(arrived);
+}
+
+pub(crate) fn drop_log_ticks_outside_workspace(orchestrator: &mut OrchestratorApp) {
+    if !matches!(
+        orchestrator.nav,
+        NavDestination::Workspace {
+            modlist_id: Some(_)
+        }
+    ) {
+        orchestrator.wizard_state.step2.pending_log_ticks.clear();
+    }
+}
+
+pub(crate) const fn forget_import_callouts_on_scan_end(
+    orchestrator: &mut OrchestratorApp,
+    scan_ended: bool,
+) {
+    if !scan_ended && !step2_scan_running(orchestrator) {
+        return;
+    }
+    if let Some(form) = orchestrator
+        .workspace_view
+        .step2
+        .weidu_log_import_form
+        .as_mut()
+    {
+        form.first_callout = None;
+        form.second_callout = None;
+    }
+}
+
+fn announce_log_results(orchestrator: &mut OrchestratorApp) {
+    let step2 = &orchestrator.wizard_state.step2;
+    let applied = applied_toast_text(ticked_log_line_count(step2));
+    let unticked = grouped_unticked_text(&unticked_log_lines(step2));
+    orchestrator
+        .wizard_state
+        .step2
+        .scan_status
+        .clone_from(&applied);
+    orchestrator.notification_manager.success(applied);
+    if let Some(unticked) = unticked {
+        orchestrator.notification_manager.warn_persistent(unticked);
+    }
 }
 
 pub(crate) fn advance_queued_weidu_log_import(
@@ -183,16 +371,6 @@ pub(crate) fn advance_queued_weidu_log_import(
 }
 
 #[must_use]
-pub(crate) const fn weidu_log_reapply_ready(step2: &Step2State, scan_rx_live: bool) -> bool {
-    step2.pending_weidu_log_reapply
-        && !step2.is_scanning
-        && !scan_rx_live
-        && !step2.update_selected_check_running
-        && !step2.update_selected_download_running
-        && !step2.update_selected_extract_running
-}
-
-#[must_use]
 pub(crate) const fn step2_scan_running(orchestrator: &OrchestratorApp) -> bool {
     orchestrator.wizard_state.step2.is_scanning || orchestrator.step2_scan_rx.is_some()
 }
@@ -210,133 +388,38 @@ pub(crate) fn list_has_selection(step2: &Step2State, snapshot: Option<&RescanSna
 }
 
 #[must_use]
-fn checked_component_count(step2: &Step2State) -> usize {
-    step2
-        .bgee_mods
-        .iter()
-        .chain(step2.bg2ee_mods.iter())
-        .flat_map(|mod_state| mod_state.components.iter())
-        .filter(|component| component.checked)
-        .count()
-}
-
-#[must_use]
 fn applied_toast_text(selected: usize) -> String {
-    format!("WeiDU logs applied: {selected} components selected")
+    let plural = if selected == 1 { "" } else { "s" };
+    format!("WeiDU logs applied: {selected} component{plural} selected")
 }
 
 #[must_use]
-fn unticked_toast_text(unticked: &[Step2LogUnticked]) -> Option<String> {
+pub(crate) fn grouped_unticked_text(unticked: &[Step2LogUnticked]) -> Option<String> {
     if unticked.is_empty() {
         return None;
     }
-    Some(format_component_notification(
-        &format!("{} logged component(s) could not be ticked", unticked.len()),
-        unticked.iter().map(|entry| {
-            (
-                entry.mod_name.as_str(),
-                entry.component_id.as_str(),
-                entry.reason.as_str(),
-            )
-        }),
-    ))
-}
-
-#[must_use]
-pub(crate) const fn weidu_log_import_check_settled(step2: &Step2State, scan_rx_live: bool) -> bool {
-    step2.weidu_log_import.is_some()
-        && step2.weidu_log_import_awaiting_check
-        && !step2.pending_weidu_log_reapply
-        && step2.update_selected_popup_open
-        && !step2.versions_ui.auto_check_pending
-        && step2.update_selected_has_run
-        && !step2.update_selected_check_running
-        && !step2.update_selected_download_running
-        && !step2.update_selected_extract_running
-        && !step2.is_scanning
-        && !scan_rx_live
-}
-
-#[must_use]
-pub(crate) const fn weidu_log_import_check_found_nothing_to_fetch(step2: &Step2State) -> bool {
-    step2.update_selected_update_assets.is_empty()
-        && step2.update_selected_failed_sources.is_empty()
-        && step2
-            .update_selected_exact_version_failed_sources
-            .is_empty()
-}
-
-fn record_logs_parse(record: &WeiduLogImport) -> bool {
-    record
-        .first
-        .iter()
-        .chain(record.second.iter())
-        .all(|path| LogFile::from_path(path).is_ok())
-}
-
-fn settle_weidu_log_import_check(orchestrator: &mut OrchestratorApp) {
-    let step2 = &mut orchestrator.wizard_state.step2;
-    step2.weidu_log_import_awaiting_check = false;
-    if !weidu_log_import_check_found_nothing_to_fetch(step2) {
-        return;
-    }
-    let Some(record) = step2.weidu_log_import.clone() else {
-        return;
-    };
-    if !record_logs_parse(&record) {
-        return;
-    }
-    apply_recorded_logs(orchestrator, &record);
-    orchestrator.mark_workspace_dirty();
-    let step2 = &mut orchestrator.wizard_state.step2;
-    if step2.log_pending_downloads.is_empty() {
-        step2.weidu_log_import = None;
-        save_draft(orchestrator);
-        finish_weidu_log_import(orchestrator);
-    }
-}
-
-fn finish_weidu_log_import(orchestrator: &mut OrchestratorApp) {
-    close_versions_drawer(&mut orchestrator.wizard_state.step2);
-    let step2 = &orchestrator.wizard_state.step2;
-    let toast = applied_toast_text(checked_component_count(step2));
-    let unticked = unticked_toast_text(&unticked_log_lines(step2));
-    orchestrator.notification_manager.success(toast);
-    if let Some(unticked) = unticked {
-        orchestrator.notification_manager.warn_persistent(unticked);
-    }
-}
-
-pub fn advance_pending_weidu_log_reapply(orchestrator: &mut OrchestratorApp) {
-    if !matches!(
-        orchestrator.nav,
-        NavDestination::Workspace {
-            modlist_id: Some(_)
+    let mut groups: Vec<((&str, &str), Vec<&str>)> = Vec::new();
+    for entry in unticked {
+        let key = (entry.mod_name.as_str(), entry.reason.as_str());
+        if let Some((_, ids)) = groups.iter_mut().find(|(group, _)| *group == key) {
+            ids.push(entry.component_id.as_str());
+        } else {
+            groups.push((key, vec![entry.component_id.as_str()]));
         }
-    ) {
-        let step2 = &mut orchestrator.wizard_state.step2;
-        step2.weidu_log_import = None;
-        step2.pending_weidu_log_reapply = false;
-        step2.weidu_log_import_awaiting_check = false;
-        return;
     }
-    let scan_rx_live = orchestrator.step2_scan_rx.is_some();
-    if weidu_log_import_check_settled(&orchestrator.wizard_state.step2, scan_rx_live) {
-        settle_weidu_log_import_check(orchestrator);
-        return;
-    }
-    if !weidu_log_reapply_ready(&orchestrator.wizard_state.step2, scan_rx_live) {
-        return;
-    }
-    let record = orchestrator.wizard_state.step2.weidu_log_import.take();
-    orchestrator.wizard_state.step2.pending_weidu_log_reapply = false;
-    let Some(record) = record else {
-        return;
-    };
-    apply_recorded_logs(orchestrator, &record);
-    orchestrator.mark_workspace_dirty();
-    save_draft(orchestrator);
-    finish_weidu_log_import(orchestrator);
+    let mut lines = vec![format!(
+        "{} logged component(s) could not be ticked",
+        unticked.len()
+    )];
+    lines.extend(groups.into_iter().map(|((mod_name, reason), ids)| {
+        let ids = ids
+            .iter()
+            .map(|id| format!("#{id}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{mod_name}: {reason}: {ids}")
+    }));
+    Some(lines.join("\n"))
 }
 
 #[cfg(test)]
@@ -344,7 +427,12 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use crate::ui::workspace::state_workspace::RescanSelection;
+    use crate::app::state::{
+        LogPendingOrigin, Step2ComponentState, Step2ModState, Step2ScanReport, Step2UpdateAsset,
+    };
+    use crate::ui::workspace::state_workspace::{ImportCallout, RescanSelection};
+    use crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete;
+    use crate::ui::workspace::versions::versions_drawer::close_versions_drawer;
 
     struct TempRoot {
         path: PathBuf,
@@ -365,6 +453,10 @@ mod tests {
             std::fs::write(&path, text).expect("write log");
             path
         }
+
+        fn folder(&self, name: &str) -> String {
+            self.path.join(name).to_string_lossy().to_string()
+        }
     }
 
     impl Drop for TempRoot {
@@ -376,143 +468,14 @@ mod tests {
     const TWO_COMPONENT_LOG: &str =
         "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #2 // X two\n";
 
-    #[test]
-    fn reapply_waits_for_every_busy_flag() {
-        let mut step2 = Step2State {
-            pending_weidu_log_reapply: true,
-            ..Step2State::default()
-        };
-        assert!(weidu_log_reapply_ready(&step2, false));
-        assert!(!weidu_log_reapply_ready(&step2, true));
+    const ARRIVAL_LOG: &str = "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #2 // X two\n~Y/SETUP-Y.TP2~ #0 #0 // Y zero\n~Y/SETUP-Y.TP2~ #0 #3 // Y three\n";
 
-        step2.is_scanning = true;
-        assert!(!weidu_log_reapply_ready(&step2, false));
-        step2.is_scanning = false;
+    const LIST_ID: &str = "LOGIMPORTFLOW";
 
-        step2.update_selected_check_running = true;
-        assert!(!weidu_log_reapply_ready(&step2, false));
-        step2.update_selected_check_running = false;
-
-        step2.update_selected_download_running = true;
-        assert!(!weidu_log_reapply_ready(&step2, false));
-        step2.update_selected_download_running = false;
-
-        step2.update_selected_extract_running = true;
-        assert!(!weidu_log_reapply_ready(&step2, false));
-        step2.update_selected_extract_running = false;
-
-        assert!(weidu_log_reapply_ready(&step2, false));
-        step2.pending_weidu_log_reapply = false;
-        assert!(!weidu_log_reapply_ready(&step2, false));
-    }
-
-    #[test]
-    fn reapply_consumes_the_record_and_closes_the_drawer() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = OrchestratorApp::new_isolated_for_test("logimport-reapply");
-        app.nav = NavDestination::Workspace {
-            modlist_id: Some("LOGIMPORTFIX".to_string()),
-        };
-        app.wizard_state.step2.weidu_log_import = Some(WeiduLogImport {
-            first: Some(log_path),
-            second: None,
-        });
-        app.wizard_state.step2.pending_weidu_log_reapply = true;
-        app.wizard_state.step2.update_selected_popup_open = true;
-        let toasts_before = app.notification_manager.history().len();
-
-        advance_pending_weidu_log_reapply(&mut app);
-
-        let step2 = &app.wizard_state.step2;
-        assert_eq!(step2.weidu_log_import, None);
-        assert!(!step2.pending_weidu_log_reapply);
-        assert!(!step2.update_selected_popup_open);
-        assert!(
-            step2
-                .log_pending_downloads
-                .iter()
-                .any(|pending| pending.tp_file.eq_ignore_ascii_case("SETUP-X.TP2")),
-            "pending downloads: {:?}",
-            step2.log_pending_downloads
-        );
-        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts(0));
-    }
-
-    fn app_awaiting_the_forced_check(tag: &str, log_path: PathBuf) -> OrchestratorApp {
-        let mut app = OrchestratorApp::new_isolated_for_test(tag);
-        app.nav = NavDestination::Workspace {
-            modlist_id: Some("LOGIMPORTCHECK".to_string()),
-        };
-        let step2 = &mut app.wizard_state.step2;
-        step2.weidu_log_import = Some(WeiduLogImport {
-            first: Some(log_path),
-            second: None,
-        });
-        step2.weidu_log_import_awaiting_check = true;
-        step2.update_selected_popup_open = true;
-        step2.update_selected_has_run = true;
-        app
-    }
-
-    #[test]
-    fn import_with_nothing_to_fetch_reapplies_then_closes_the_drawer_and_toasts() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", "// log of current files installed\n");
-        let mut app = app_awaiting_the_forced_check("logimport-nofetch", log_path);
-        let toasts_before = app.notification_manager.history().len();
-
-        app.wizard_state.step2.update_selected_has_run = false;
-        advance_pending_weidu_log_reapply(&mut app);
-        assert!(app.wizard_state.step2.weidu_log_import_awaiting_check);
-
-        app.wizard_state.step2.update_selected_has_run = true;
-        app.wizard_state.step2.versions_ui.auto_check_pending = true;
-        advance_pending_weidu_log_reapply(&mut app);
-        assert!(app.wizard_state.step2.weidu_log_import_awaiting_check);
-
-        app.wizard_state.step2.versions_ui.auto_check_pending = false;
-        advance_pending_weidu_log_reapply(&mut app);
-        let step2 = &app.wizard_state.step2;
-        assert!(!step2.weidu_log_import_awaiting_check);
-        assert_eq!(step2.weidu_log_import, None);
-        assert!(!step2.update_selected_popup_open);
-        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
-    }
-
-    #[test]
-    fn import_check_with_a_missing_mod_keeps_the_drawer_and_the_record_once() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_awaiting_the_forced_check("logimport-missing", log_path);
-        let toasts_before = app.notification_manager.history().len();
-
-        advance_pending_weidu_log_reapply(&mut app);
-        let step2 = &app.wizard_state.step2;
-        assert!(!step2.weidu_log_import_awaiting_check);
-        assert!(step2.weidu_log_import.is_some());
-        assert!(step2.update_selected_popup_open);
-        assert!(
-            step2
-                .log_pending_downloads
-                .iter()
-                .any(|pending| pending.tp_file.eq_ignore_ascii_case("SETUP-X.TP2"))
-        );
-        assert_eq!(app.notification_manager.history().len(), toasts_before);
-
-        app.wizard_state.step2.log_pending_downloads.clear();
-        advance_pending_weidu_log_reapply(&mut app);
-        assert!(app.wizard_state.step2.weidu_log_import.is_some());
-        assert!(app.wizard_state.step2.update_selected_popup_open);
-        assert_eq!(app.notification_manager.history().len(), toasts_before);
-    }
-
-    const SAVE_DRAFT_ID: &str = "LOGIMPORTSAVE";
-
-    fn unchecked_component(component_id: &str) -> crate::app::state::Step2ComponentState {
-        crate::app::state::Step2ComponentState {
+    fn unchecked_component(component_id: &str) -> Step2ComponentState {
+        Step2ComponentState {
             component_id: component_id.to_string(),
-            label: format!("X {component_id}"),
+            label: format!("Component {component_id}"),
             weidu_group: None,
             collapsible_group: None,
             collapsible_group_is_umbrella: false,
@@ -534,11 +497,11 @@ mod tests {
         }
     }
 
-    fn scanned_x_mod() -> crate::app::state::Step2ModState {
-        crate::app::state::Step2ModState {
-            name: "X".to_string(),
-            tp_file: "SETUP-X.TP2".to_string(),
-            tp2_path: "X/SETUP-X.TP2".to_string(),
+    fn scanned_mod(name: &str, component_ids: &[&str]) -> Step2ModState {
+        Step2ModState {
+            name: name.to_string(),
+            tp_file: format!("SETUP-{name}.TP2"),
+            tp2_path: format!("{name}/SETUP-{name}.TP2"),
             readme_path: None,
             ini_path: None,
             web_url: None,
@@ -549,12 +512,253 @@ mod tests {
             mod_prompt_events: Vec::new(),
             checked: false,
             hidden_components: Vec::new(),
-            components: vec![unchecked_component("1"), unchecked_component("2")],
+            components: component_ids
+                .iter()
+                .map(|id| unchecked_component(id))
+                .collect(),
         }
     }
 
-    fn app_with_a_saved_list(tag: &str, log_path: PathBuf) -> OrchestratorApp {
+    fn scanned_x_mod() -> Step2ModState {
+        scanned_mod("X", &["1", "2"])
+    }
+
+    fn bgee_import_app(tag: &str, root: &TempRoot) -> OrchestratorApp {
         let mut app = OrchestratorApp::new_isolated_for_test(tag);
+        app.nav = NavDestination::Workspace {
+            modlist_id: Some(LIST_ID.to_string()),
+        };
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step1.bgee_log_folder = root.folder("slot_bgee");
+        app
+    }
+
+    fn eet_import_app(tag: &str, root: &TempRoot) -> OrchestratorApp {
+        let mut app = bgee_import_app(tag, root);
+        app.wizard_state.step1.game_install = "EET".to_string();
+        app.wizard_state.step1.eet_bgee_log_folder = root.folder("slot_eet_bgee");
+        app.wizard_state.step1.eet_bg2ee_log_folder = root.folder("slot_eet_bg2ee");
+        app
+    }
+
+    fn import_form(first: Option<PathBuf>, fetch_missing: bool) -> WeiduLogImportForm {
+        WeiduLogImportForm {
+            first,
+            fetch_missing,
+            ..WeiduLogImportForm::default()
+        }
+    }
+
+    fn toasts_since(app: &OrchestratorApp, before: usize) -> Vec<(egui_toast::ToastKind, String)> {
+        app.notification_manager
+            .history()
+            .iter()
+            .skip(before)
+            .map(|record| (record.kind, record.text.clone()))
+            .collect()
+    }
+
+    fn success_text(selected: &str) -> (egui_toast::ToastKind, String) {
+        (
+            egui_toast::ToastKind::Success,
+            format!("WeiDU logs applied: {selected} selected"),
+        )
+    }
+
+    const MISSING_X_WARNING: &str =
+        "2 logged component(s) could not be ticked\nSETUP-X.TP2: mod not on disk: #1, #2";
+
+    fn missing_x_toasts() -> Vec<(egui_toast::ToastKind, String)> {
+        vec![
+            success_text("0 components"),
+            (
+                egui_toast::ToastKind::Warning,
+                MISSING_X_WARNING.to_string(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn import_copies_each_log_to_its_tab_imported_log() {
+        let root = TempRoot::new();
+        let picked = root.write_log("picked_bgee.log", TWO_COMPONENT_LOG);
+        let mut app = bgee_import_app("logimport-copy-bgee", &root);
+
+        import_weidu_logs(&mut app, import_form(Some(picked.clone()), false));
+
+        let kept = imported_log_path(&app.wizard_state.step1, true).expect("BGEE slot");
+        assert!(kept.starts_with(&root.path), "{}", kept.display());
+        assert_eq!(
+            std::fs::read(&kept).expect("kept log"),
+            std::fs::read(&picked).expect("picked log")
+        );
+
+        let first = root.write_log("eet_bgee.log", TWO_COMPONENT_LOG);
+        let second = root.write_log("eet_bg2ee.log", "~Y/SETUP-Y.TP2~ #0 #0 // Y zero\n");
+        let mut app = eet_import_app("logimport-copy-eet", &root);
+        import_weidu_logs(
+            &mut app,
+            WeiduLogImportForm {
+                first: Some(first.clone()),
+                second: Some(second.clone()),
+                fetch_missing: false,
+                ..WeiduLogImportForm::default()
+            },
+        );
+
+        let step1 = &app.wizard_state.step1;
+        let first_kept = imported_log_path(step1, true).expect("EET first slot");
+        let second_kept = imported_log_path(step1, false).expect("EET second slot");
+        assert_ne!(first_kept, second_kept);
+        for (kept, picked) in [(first_kept, first), (second_kept, second)] {
+            assert!(kept.starts_with(&root.path), "{}", kept.display());
+            assert!(kept.ends_with("imported.log"), "{}", kept.display());
+            assert_eq!(
+                std::fs::read(&kept).expect("kept log"),
+                std::fs::read(&picked).expect("picked log")
+            );
+        }
+    }
+
+    #[test]
+    fn a_log_that_cannot_be_copied_stops_the_import() {
+        let root = TempRoot::new();
+        let picked = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let blocker = root.write_log("blocker", "a file, not a folder");
+        let mut app = bgee_import_app("logimport-copy-fails", &root);
+        app.wizard_state.step1.bgee_log_folder = blocker.join("slot").to_string_lossy().to_string();
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod()];
+        app.wizard_state.step2.bgee_mods[0].components[0].checked = true;
+        let trees_before = app.wizard_state.step2.bgee_mods.clone();
+        let toasts_before = app.notification_manager.history().len();
+
+        import_weidu_logs(&mut app, import_form(Some(picked), true));
+
+        assert_eq!(app.wizard_state.step2.bgee_mods, trees_before);
+        assert!(!app.wizard_state.step2.update_selected_popup_open);
+        let toasts = toasts_since(&app, toasts_before);
+        assert_eq!(toasts.len(), 1, "toasts: {toasts:?}");
+        assert_eq!(toasts[0].0, egui_toast::ToastKind::Error);
+        assert!(
+            toasts[0]
+                .1
+                .starts_with("Could not save the BGEE WeiDU log: "),
+            "toast: {}",
+            toasts[0].1
+        );
+    }
+
+    #[test]
+    fn a_failed_second_copy_leaves_the_first_imported_log_unchanged() {
+        let root = TempRoot::new();
+        let first = root.write_log("eet_bgee.log", TWO_COMPONENT_LOG);
+        let second = root.write_log("eet_bg2ee.log", "~Y/SETUP-Y.TP2~ #0 #0 // Y zero\n");
+        let mut app = eet_import_app("logimport-second-copy-fails", &root);
+        let first_kept = imported_log_path(&app.wizard_state.step1, true).expect("first slot");
+        let second_kept = imported_log_path(&app.wizard_state.step1, false).expect("second slot");
+        let earlier = "~Z/SETUP-Z.TP2~ #0 #5 // Z five\n";
+        std::fs::create_dir_all(first_kept.parent().expect("first folder")).expect("first folder");
+        std::fs::write(&first_kept, earlier).expect("earlier first log");
+        std::fs::create_dir_all(staged_log_path(&second_kept)).expect("blocking folder");
+        let toasts_before = app.notification_manager.history().len();
+
+        import_weidu_logs(
+            &mut app,
+            WeiduLogImportForm {
+                first: Some(first),
+                second: Some(second),
+                fetch_missing: false,
+                ..WeiduLogImportForm::default()
+            },
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(&first_kept).expect("first log"),
+            earlier
+        );
+        assert!(!staged_log_path(&first_kept).exists());
+        assert!(!second_kept.exists());
+        let toasts = toasts_since(&app, toasts_before);
+        assert_eq!(toasts.len(), 1, "toasts: {toasts:?}");
+        assert_eq!(toasts[0].0, egui_toast::ToastKind::Error);
+        assert!(
+            toasts[0]
+                .1
+                .starts_with("Could not save the BG2EE WeiDU log: "),
+            "toast: {}",
+            toasts[0].1
+        );
+    }
+
+    #[test]
+    fn import_toasts_at_once_even_with_missing_mods() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = bgee_import_app("logimport-toasts-at-once", &root);
+        let toasts_before = app.notification_manager.history().len();
+
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
+
+        assert!(app.wizard_state.step2.logged_missing_count() > 0);
+        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts());
+    }
+
+    #[test]
+    fn import_opens_versions_on_missing_only_with_the_switch_on_and_missing_mods() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+
+        let mut app = bgee_import_app("logimport-versions-on", &root);
+        app.wizard_state.step2.update_selected_has_run = true;
+        app.wizard_state
+            .step2
+            .update_selected_last_was_full_selection = true;
+        app.wizard_state
+            .step2
+            .update_selected_last_selection_signature = Some(
+            crate::app::state::update_selection_signature(&app.wizard_state.step2),
+        );
+        import_weidu_logs(&mut app, import_form(Some(log_path.clone()), true));
+        let step2 = &app.wizard_state.step2;
+        assert!(step2.update_selected_popup_open);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert!(step2.versions_ui.auto_check_pending);
+        assert!(!step2.update_selected_has_run);
+
+        let mut app = bgee_import_app("logimport-versions-switch-off", &root);
+        import_weidu_logs(&mut app, import_form(Some(log_path.clone()), false));
+        assert!(!app.wizard_state.step2.update_selected_popup_open);
+        assert!(!app.wizard_state.step2.versions_ui.log_pending_scope);
+
+        let mut app = bgee_import_app("logimport-versions-nothing-missing", &root);
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod()];
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
+        assert_eq!(app.wizard_state.step2.logged_missing_count(), 0);
+        assert!(!app.wizard_state.step2.update_selected_popup_open);
+        assert!(!app.wizard_state.step2.versions_ui.log_pending_scope);
+    }
+
+    #[test]
+    fn status_line_matches_the_green_toast() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = bgee_import_app("logimport-status-line", &root);
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod()];
+        let toasts_before = app.notification_manager.history().len();
+
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
+
+        let success = toasts_since(&app, toasts_before)
+            .into_iter()
+            .find(|(kind, _)| *kind == egui_toast::ToastKind::Success)
+            .expect("a green toast");
+        assert_eq!(app.wizard_state.step2.scan_status, success.1);
+    }
+
+    const SAVE_DRAFT_ID: &str = "LOGIMPORTSAVE";
+
+    fn app_with_a_saved_list(tag: &str, root: &TempRoot) -> OrchestratorApp {
+        let mut app = bgee_import_app(tag, root);
         app.nav = NavDestination::Workspace {
             modlist_id: Some(SAVE_DRAFT_ID.to_string()),
         };
@@ -568,14 +772,7 @@ mod tests {
                 ..Default::default()
             });
         app.workspace_view.modlist_id = SAVE_DRAFT_ID.to_string();
-        app.wizard_state.step1.game_install = "BGEE".to_string();
-        let step2 = &mut app.wizard_state.step2;
-        step2.bgee_mods = vec![scanned_x_mod()];
-        step2.weidu_log_import = Some(WeiduLogImport {
-            first: Some(log_path),
-            second: None,
-        });
-        step2.update_selected_popup_open = true;
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod()];
         app
     }
 
@@ -599,154 +796,78 @@ mod tests {
     }
 
     #[test]
-    fn reapply_saves_the_draft_and_writes_the_counts() {
+    fn import_with_nothing_missing_saves_the_draft_without_versions() {
         let root = TempRoot::new();
         let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_saved_list("logimport-reapply-save", log_path);
-        app.wizard_state.step2.pending_weidu_log_reapply = true;
+        let mut app = app_with_a_saved_list("logimport-nothing-missing", &root);
         let toasts_before = app.notification_manager.history().len();
 
-        advance_pending_weidu_log_reapply(&mut app);
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
 
-        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
-        assert_eq!(app.wizard_state.step2.log_pending_downloads.len(), 0);
-        assert_the_draft_was_saved_with_the_counts(&app);
-    }
-
-    #[test]
-    fn no_fetch_completion_saves_the_draft_and_writes_the_counts() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_saved_list("logimport-nofetch-save", log_path);
-        let step2 = &mut app.wizard_state.step2;
-        step2.weidu_log_import_awaiting_check = true;
-        step2.update_selected_has_run = true;
-        let toasts_before = app.notification_manager.history().len();
-
-        advance_pending_weidu_log_reapply(&mut app);
-
-        assert_eq!(app.notification_manager.history().len(), toasts_before + 1);
-        assert_eq!(app.wizard_state.step2.weidu_log_import, None);
-        assert_the_draft_was_saved_with_the_counts(&app);
-    }
-
-    #[test]
-    fn closing_the_drawer_drops_the_awaiting_check_flag() {
-        let mut step2 = Step2State {
-            weidu_log_import_awaiting_check: true,
-            update_selected_popup_open: true,
-            ..Step2State::default()
-        };
-        close_versions_drawer(&mut step2);
-        assert!(!step2.weidu_log_import_awaiting_check);
+        let step2 = &app.wizard_state.step2;
         assert!(!step2.update_selected_popup_open);
+        assert!(!step2.versions_ui.log_pending_scope);
+        assert_eq!(step2.logged_missing_count(), 0);
+        assert_eq!(
+            toasts_since(&app, toasts_before),
+            vec![success_text("2 components")]
+        );
+        assert_the_draft_was_saved_with_the_counts(&app);
     }
 
     #[test]
-    fn import_check_with_an_unreadable_log_keeps_the_drawer_and_the_record() {
+    fn a_new_import_drops_lines_from_an_earlier_import() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = app_with_a_saved_list("logimport-drops-earlier", &root);
+        app.wizard_state.step2.log_apply.lines = vec![crate::app::state::Step2LogLine {
+            game_tab: "BG2EE".to_string(),
+            mod_label: "SETUP-Z.TP2".to_string(),
+            component_id: "0".to_string(),
+            outcome: crate::app::state::Step2LogLineOutcome::NoMod,
+        }];
+        let toasts_before = app.notification_manager.history().len();
+
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
+
+        assert!(
+            app.wizard_state
+                .step2
+                .log_apply
+                .lines
+                .iter()
+                .all(|line| line.game_tab != "BG2EE"),
+            "lines: {:?}",
+            app.wizard_state.step2.log_apply.lines
+        );
+        assert_eq!(
+            toasts_since(&app, toasts_before),
+            vec![success_text("2 components")]
+        );
+    }
+
+    #[test]
+    fn an_unreadable_log_stops_the_import() {
         let root = TempRoot::new();
         let log_path = root.path.join("missing").join("weidu.log");
-        let mut app = app_awaiting_the_forced_check("logimport-unreadable", log_path);
+        let mut app = bgee_import_app("logimport-unreadable-stops", &root);
         let toasts_before = app.notification_manager.history().len();
 
-        advance_pending_weidu_log_reapply(&mut app);
-        let step2 = &app.wizard_state.step2;
-        assert!(!step2.weidu_log_import_awaiting_check);
-        assert!(step2.weidu_log_import.is_some());
-        assert!(step2.update_selected_popup_open);
-        assert_eq!(app.notification_manager.history().len(), toasts_before);
-    }
-
-    #[test]
-    fn import_check_with_failures_keeps_the_drawer_open() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", "// log of current files installed\n");
-        let mut app = app_awaiting_the_forced_check("logimport-failed", log_path);
-        app.wizard_state.step2.update_selected_failed_sources = vec!["x".to_string()];
-        let toasts_before = app.notification_manager.history().len();
-
-        advance_pending_weidu_log_reapply(&mut app);
-        let step2 = &app.wizard_state.step2;
-        assert!(!step2.weidu_log_import_awaiting_check);
-        assert!(step2.weidu_log_import.is_some());
-        assert!(step2.update_selected_popup_open);
-        assert_eq!(app.notification_manager.history().len(), toasts_before);
-    }
-
-    #[test]
-    fn import_records_both_paths_and_opens_the_drawer() {
-        let root = TempRoot::new();
-        let first = root.write_log("bgee.log", TWO_COMPONENT_LOG);
-        let second = root.write_log("bg2ee.log", TWO_COMPONENT_LOG);
-        let mut app = OrchestratorApp::new_isolated_for_test("logimport-import");
-        app.wizard_state.step1.game_install = "EET".to_string();
-
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(first.clone()),
-                second: Some(second.clone()),
-                ..WeiduLogImportForm::default()
-            },
-        );
-
-        assert_eq!(
-            app.wizard_state.step2.weidu_log_import,
-            Some(WeiduLogImport {
-                first: Some(first),
-                second: Some(second),
-            })
-        );
-        assert!(app.wizard_state.step2.update_selected_popup_open);
-        assert!(app.wizard_state.step2.versions_ui.log_pending_scope);
-    }
-
-    #[test]
-    fn import_forces_the_source_check_even_when_the_selection_looks_fresh() {
-        let root = TempRoot::new();
-        let first = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = OrchestratorApp::new_isolated_for_test("logimport-forces-check");
-        let step2 = &mut app.wizard_state.step2;
-        step2.update_selected_has_run = true;
-        step2.update_selected_last_was_full_selection = true;
-        step2.update_selected_last_selection_signature =
-            Some(crate::app::state::update_selection_signature(step2));
-
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(first),
-                ..WeiduLogImportForm::default()
-            },
-        );
-
-        assert!(app.wizard_state.step2.versions_ui.auto_check_pending);
-        assert!(app.wizard_state.step2.weidu_log_import_awaiting_check);
-        assert!(!app.wizard_state.step2.update_selected_has_run);
-    }
-
-    #[test]
-    fn reapply_outside_a_workspace_drops_the_record() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = OrchestratorApp::new_isolated_for_test("logimport-outside-workspace");
-        app.nav = NavDestination::Home;
-        app.wizard_state.step2.weidu_log_import = Some(WeiduLogImport {
-            first: Some(log_path),
-            second: None,
-        });
-        app.wizard_state.step2.pending_weidu_log_reapply = true;
-        app.wizard_state.step2.update_selected_popup_open = true;
-        let toasts_before = app.notification_manager.history().len();
-
-        advance_pending_weidu_log_reapply(&mut app);
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
 
         let step2 = &app.wizard_state.step2;
-        assert_eq!(step2.weidu_log_import, None);
-        assert!(!step2.pending_weidu_log_reapply);
-        assert!(step2.update_selected_popup_open);
-        assert_eq!(step2.log_pending_downloads.len(), 0);
-        assert_eq!(app.notification_manager.history().len(), toasts_before);
+        assert!(!step2.update_selected_popup_open);
+        assert!(!step2.versions_ui.log_pending_scope);
+        let kept = imported_log_path(&app.wizard_state.step1, true).expect("slot");
+        assert!(!kept.exists(), "no log is kept: {}", kept.display());
+        let toasts = toasts_since(&app, toasts_before);
+        assert_eq!(toasts.len(), 1, "toasts: {toasts:?}");
+        assert_eq!(toasts[0].0, egui_toast::ToastKind::Error);
+        assert!(
+            toasts[0].1.starts_with("Could not read the BGEE WeiDU log"),
+            "toast: {}",
+            toasts[0].1
+        );
     }
 
     #[test]
@@ -762,25 +883,15 @@ mod tests {
     fn a_log_that_fails_to_parse_raises_an_error_toast() {
         let root = TempRoot::new();
         let broken = root.write_log("weidu.log", "~not a weidu log\n");
-        let mut app = OrchestratorApp::new_isolated_for_test("logimport-parse-failure");
-        app.wizard_state.step1.game_install = "BGEE".to_string();
+        let mut app = bgee_import_app("logimport-parse-failure", &root);
         let toasts_before = app.notification_manager.history().len();
 
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(broken),
-                ..WeiduLogImportForm::default()
-            },
-        );
+        import_weidu_logs(&mut app, import_form(Some(broken), true));
 
-        let errors = app
-            .notification_manager
-            .history()
-            .iter()
-            .skip(toasts_before)
-            .filter(|record| record.kind == egui_toast::ToastKind::Error)
-            .map(|record| record.text.clone())
+        let errors = toasts_since(&app, toasts_before)
+            .into_iter()
+            .filter(|(kind, _)| *kind == egui_toast::ToastKind::Error)
+            .map(|(_, text)| text)
             .collect::<Vec<_>>();
         assert_eq!(errors.len(), 1, "errors: {errors:?}");
         assert!(
@@ -790,260 +901,50 @@ mod tests {
         );
     }
 
-    fn toasts_since(app: &OrchestratorApp, before: usize) -> Vec<(egui_toast::ToastKind, String)> {
-        app.notification_manager
-            .history()
-            .iter()
-            .skip(before)
-            .map(|record| (record.kind, record.text.clone()))
-            .collect()
-    }
-
-    fn bgee_import_app(tag: &str) -> OrchestratorApp {
-        let mut app = OrchestratorApp::new_isolated_for_test(tag);
-        app.nav = NavDestination::Workspace {
-            modlist_id: Some("LOGIMPORTFLOW".to_string()),
-        };
-        app.wizard_state.step1.game_install = "BGEE".to_string();
-        app
-    }
-
     #[test]
-    fn import_with_fetch_off_completes_without_versions() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = bgee_import_app("logimport-fetch-off");
-        let toasts_before = app.notification_manager.history().len();
-
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(log_path),
-                fetch_missing: false,
-                ..WeiduLogImportForm::default()
-            },
-        );
-
-        let step2 = &app.wizard_state.step2;
-        assert!(!step2.update_selected_popup_open);
-        assert!(!step2.versions_ui.log_pending_scope);
-        assert!(!step2.weidu_log_import_awaiting_check);
-        assert_eq!(step2.weidu_log_import, None);
-        assert_eq!(step2.log_pending_downloads.len(), 1);
-        assert_eq!(
-            toasts_since(&app, toasts_before),
-            missing_x_toasts(0),
-            "fetch off ends with the selected count and the unticked lines"
-        );
-    }
-
-    const MISSING_X_WARNING: &str = "2 logged component(s) could not be ticked\nSETUP-X.TP2 #1: mod not on disk\nSETUP-X.TP2 #2: mod not on disk";
-
-    fn missing_x_toasts(selected: usize) -> Vec<(egui_toast::ToastKind, String)> {
-        vec![
-            (
-                egui_toast::ToastKind::Success,
-                format!("WeiDU logs applied: {selected} components selected"),
-            ),
-            (
-                egui_toast::ToastKind::Warning,
-                MISSING_X_WARNING.to_string(),
-            ),
-        ]
-    }
-
-    #[test]
-    fn finish_raises_a_persistent_warning_listing_unticked_lines() {
-        let root = TempRoot::new();
-        let log_path = root.write_log(
-            "weidu.log",
-            "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #9 // X nine\n~Y/SETUP-Y.TP2~ #0 #0 // Y\n",
-        );
-        let mut app = app_with_a_saved_list("logimport-unticked-warning", log_path);
-        app.wizard_state.step2.pending_weidu_log_reapply = true;
-        let toasts_before = app.notification_manager.history().len();
-
-        advance_pending_weidu_log_reapply(&mut app);
-
-        assert_eq!(
-            toasts_since(&app, toasts_before),
-            vec![
-                (
-                    egui_toast::ToastKind::Success,
-                    "WeiDU logs applied: 1 components selected".to_string()
-                ),
-                (
-                    egui_toast::ToastKind::Warning,
-                    "2 logged component(s) could not be ticked\nX #9: component not in this version\nSETUP-Y.TP2 #0: mod not on disk"
-                        .to_string()
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn finish_raises_no_warning_when_every_line_ticked() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_saved_list("logimport-all-ticked", log_path);
-        app.wizard_state.step2.pending_weidu_log_reapply = true;
-        let toasts_before = app.notification_manager.history().len();
-
-        advance_pending_weidu_log_reapply(&mut app);
-
-        assert_eq!(unticked_log_lines(&app.wizard_state.step2), Vec::new());
-        assert_eq!(
-            toasts_since(&app, toasts_before),
-            vec![(
-                egui_toast::ToastKind::Success,
-                "WeiDU logs applied: 2 components selected".to_string()
-            )]
-        );
-    }
-
-    #[test]
-    fn import_with_nothing_missing_completes_without_versions() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_saved_list("logimport-nothing-missing", log_path.clone());
-        app.wizard_state.step2.update_selected_popup_open = false;
-        let toasts_before = app.notification_manager.history().len();
-
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(log_path),
-                ..WeiduLogImportForm::default()
-            },
-        );
-
-        let step2 = &app.wizard_state.step2;
-        assert!(!step2.update_selected_popup_open);
-        assert!(!step2.versions_ui.log_pending_scope);
-        assert!(!step2.versions_ui.auto_check_pending);
-        assert_eq!(step2.weidu_log_import, None);
-        assert_eq!(step2.log_pending_downloads.len(), 0);
-        let toasts = toasts_since(&app, toasts_before);
-        assert_eq!(
-            toasts,
-            vec![(
-                egui_toast::ToastKind::Success,
-                "WeiDU logs applied: 2 components selected".to_string()
-            )]
-        );
-        assert_the_draft_was_saved_with_the_counts(&app);
-    }
-
-    #[test]
-    fn a_new_import_drops_lines_from_an_earlier_import() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_saved_list("logimport-drops-earlier", log_path.clone());
-        app.wizard_state.step2.update_selected_popup_open = false;
-        app.wizard_state.step2.log_apply.lines = vec![crate::app::state::Step2LogLine {
-            game_tab: "BG2EE".to_string(),
-            mod_label: "SETUP-Z.TP2".to_string(),
-            component_id: "0".to_string(),
-            outcome: crate::app::state::Step2LogLineOutcome::NoMod,
-        }];
-        let toasts_before = app.notification_manager.history().len();
-
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(log_path),
-                ..WeiduLogImportForm::default()
-            },
-        );
-
-        assert!(
-            app.wizard_state
-                .step2
-                .log_apply
-                .lines
-                .iter()
-                .all(|line| line.game_tab != "BG2EE"),
-            "lines: {:?}",
-            app.wizard_state.step2.log_apply.lines
-        );
-        assert_eq!(
-            toasts_since(&app, toasts_before),
-            vec![(
-                egui_toast::ToastKind::Success,
-                "WeiDU logs applied: 2 components selected".to_string()
-            )]
-        );
-    }
-
-    #[test]
-    fn import_with_missing_mods_opens_versions_scoped_to_them() {
-        let root = TempRoot::new();
-        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = bgee_import_app("logimport-missing-scoped");
-        let toasts_before = app.notification_manager.history().len();
-
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(log_path.clone()),
-                ..WeiduLogImportForm::default()
-            },
-        );
-
-        let step2 = &app.wizard_state.step2;
-        assert!(step2.update_selected_popup_open);
-        assert!(step2.versions_ui.log_pending_scope);
-        assert!(step2.versions_ui.auto_check_pending);
-        assert!(step2.weidu_log_import_awaiting_check);
-        assert_eq!(
-            step2.weidu_log_import,
-            Some(WeiduLogImport {
-                first: Some(log_path),
-                second: None,
-            })
-        );
-        assert_eq!(toasts_since(&app, toasts_before), Vec::new());
-    }
-
-    #[test]
-    fn an_unreadable_log_stops_the_import() {
-        let root = TempRoot::new();
-        let log_path = root.path.join("missing").join("weidu.log");
-        let mut app = bgee_import_app("logimport-unreadable-stops");
-        let toasts_before = app.notification_manager.history().len();
-
-        import_weidu_logs(
-            &mut app,
-            WeiduLogImportForm {
-                first: Some(log_path),
-                ..WeiduLogImportForm::default()
-            },
-        );
-
-        let step2 = &app.wizard_state.step2;
-        assert!(!step2.update_selected_popup_open);
-        assert!(!step2.versions_ui.log_pending_scope);
-        assert!(!step2.weidu_log_import_awaiting_check);
-        assert_eq!(step2.weidu_log_import, None);
-        let toasts = toasts_since(&app, toasts_before);
-        assert_eq!(toasts.len(), 1, "toasts: {toasts:?}");
-        assert_eq!(toasts[0].0, egui_toast::ToastKind::Error);
-        assert!(
-            toasts[0].1.starts_with("Could not read the BGEE WeiDU log"),
-            "toast: {}",
-            toasts[0].1
-        );
-    }
-
-    #[test]
-    fn the_success_toast_reads_only_the_selected_count() {
+    fn the_success_toast_names_the_selected_count() {
         assert_eq!(
             applied_toast_text(5),
             "WeiDU logs applied: 5 components selected"
         );
         assert_eq!(
+            applied_toast_text(1),
+            "WeiDU logs applied: 1 component selected"
+        );
+        assert_eq!(
             applied_toast_text(0),
             "WeiDU logs applied: 0 components selected"
+        );
+    }
+
+    fn unticked(mod_name: &str, component_id: &str, reason: &str) -> Step2LogUnticked {
+        Step2LogUnticked {
+            game_tab: "BGEE".to_string(),
+            mod_name: mod_name.to_string(),
+            component_id: component_id.to_string(),
+            reason: reason.to_string(),
+        }
+    }
+
+    #[test]
+    fn grouped_toast_lists_every_component_per_mod_and_reason() {
+        assert_eq!(grouped_unticked_text(&[]), None);
+        let entries = [
+            unticked("SETUP-Y.TP2", "0", "mod not on disk"),
+            unticked("X", "9", "component not in this version"),
+            unticked("SETUP-Y.TP2", "3", "mod not on disk"),
+            unticked("X", "4", "excluded by compatibility rules"),
+            unticked("SETUP-Y.TP2", "12", "mod not on disk"),
+            unticked("X", "11", "component not in this version"),
+        ];
+        assert_eq!(
+            grouped_unticked_text(&entries).as_deref(),
+            Some(
+                "6 logged component(s) could not be ticked\n\
+                 SETUP-Y.TP2: mod not on disk: #0, #3, #12\n\
+                 X: component not in this version: #9, #11\n\
+                 X: excluded by compatibility rules: #4"
+            )
         );
     }
 
@@ -1056,6 +957,265 @@ mod tests {
         step2.versions_ui.log_pending_scope = true;
         close_versions_drawer(&mut step2);
         assert!(!step2.versions_ui.log_pending_scope);
+    }
+
+    fn selection(tp2_upper: &str, component_id: &str, order: usize) -> RescanSelection {
+        RescanSelection {
+            tp2_upper: tp2_upper.to_string(),
+            component_id: component_id.to_string(),
+            selected_order: Some(order),
+            wlb_inputs: None,
+        }
+    }
+
+    fn app_before_the_fetch(tag: &str, root: &TempRoot) -> OrchestratorApp {
+        let mut app = bgee_import_app(tag, root);
+        let slot = PathBuf::from(&app.wizard_state.step1.bgee_log_folder);
+        std::fs::create_dir_all(&slot).expect("slot folder");
+        std::fs::write(slot.join("imported.log"), ARRIVAL_LOG).expect("imported log");
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod(), scanned_mod("Z", &["5"])];
+        crate::app::app_step2_log::refresh_logged_missing(&mut app.wizard_state);
+        app
+    }
+
+    fn y_key() -> String {
+        crate::app::mod_downloads::normalize_mod_download_tp2("SETUP-Y.TP2")
+    }
+
+    fn finish_the_rescan_with_y_on_disk(app: &mut OrchestratorApp) {
+        app.wizard_state.step2.bgee_mods = vec![
+            scanned_x_mod(),
+            scanned_mod("Y", &["0", "3"]),
+            scanned_mod("Z", &["5"]),
+        ];
+        app.workspace_view.step2.rescan_snapshot = Some(RescanSnapshot {
+            bgee: vec![
+                selection("SETUP-X.TP2", "1", 1),
+                selection("SETUP-Z.TP2", "5", 2),
+            ],
+            bg2ee: Vec::new(),
+        });
+        app.workspace_view.step2.was_scanning = true;
+        app.wizard_state.step2.is_scanning = false;
+        app.wizard_state.step2.last_scan_report = Some(Step2ScanReport::default());
+        assert!(reconcile_on_scan_complete(app));
+    }
+
+    fn checked_ids(app: &OrchestratorApp, name: &str) -> Vec<String> {
+        app.wizard_state
+            .step2
+            .bgee_mods
+            .iter()
+            .filter(|mod_state| mod_state.name == name)
+            .flat_map(|mod_state| mod_state.components.iter())
+            .filter(|component| component.checked)
+            .map(|component| component.component_id.clone())
+            .collect()
+    }
+
+    fn asset(tp_file: &str) -> Step2UpdateAsset {
+        Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+            label: tp_file.to_string(),
+            source_id: "primary".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{tp_file}.zip"),
+            asset_url: format!("https://example.test/{tp_file}.zip"),
+            installed_source_ref: None,
+        }
+    }
+
+    #[test]
+    fn a_fetch_ticks_only_the_arrived_logged_mods() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-fetch-ticks", &root);
+        assert_eq!(
+            app.wizard_state.step2.logged_missing_keys(),
+            BTreeSet::from([y_key()])
+        );
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from([y_key()]);
+        let toasts_before = app.notification_manager.history().len();
+
+        finish_the_rescan_with_y_on_disk(&mut app);
+
+        assert_eq!(checked_ids(&app, "Y"), vec!["0", "3"]);
+        assert_eq!(
+            checked_ids(&app, "X"),
+            vec!["1"],
+            "X #2 was unticked by hand and stays unticked"
+        );
+        assert_eq!(
+            checked_ids(&app, "Z"),
+            vec!["5"],
+            "a hand tick outside the log stays ticked"
+        );
+        assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
+        let toasts = toasts_since(&app, toasts_before);
+        assert_eq!(toasts, vec![success_text("2 components")]);
+        assert_eq!(app.wizard_state.step2.scan_status, toasts[0].1);
+    }
+
+    #[test]
+    fn a_fetch_from_the_all_scope_also_ticks_arrived_logged_mods() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-fetch-all-scope", &root);
+        let step2 = &mut app.wizard_state.step2;
+        step2.update_selected_update_assets = vec![asset("SETUP-Z.TP2"), asset("SETUP-Y.TP2")];
+        step2.update_selected_download_scope = None;
+        step2.update_selected_download_running = true;
+        arm_pending_log_ticks(step2, false);
+        assert_eq!(step2.pending_log_ticks, BTreeSet::from([y_key()]));
+
+        step2.pending_log_ticks.clear();
+        step2.update_selected_download_scope = Some("z".to_string());
+        arm_pending_log_ticks(step2, false);
+        assert!(
+            step2.pending_log_ticks.is_empty(),
+            "a card fetch of a mod on disk ticks nothing"
+        );
+
+        step2.update_selected_download_scope = None;
+        arm_pending_log_ticks(step2, true);
+        assert!(
+            step2.pending_log_ticks.is_empty(),
+            "a refused start leaves the ticks down"
+        );
+        arm_pending_log_ticks(step2, false);
+        step2.update_selected_download_running = false;
+
+        finish_the_rescan_with_y_on_disk(&mut app);
+        assert_eq!(checked_ids(&app, "Y"), vec!["0", "3"]);
+    }
+
+    #[test]
+    fn a_failed_fetch_ticks_nothing_and_clears_the_pending_ticks() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-fetch-fails", &root);
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from([y_key()]);
+        app.wizard_state.step2.update_selected_download_running = true;
+        let (tx, rx) = std::sync::mpsc::channel();
+        drop(tx);
+        let mut rx = Some(rx);
+        let _ = crate::app::app_step2_update_download::poll_step2_update_download(
+            &mut app.wizard_state,
+            &mut rx,
+        );
+        assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
+        let toasts_before = app.notification_manager.history().len();
+
+        finish_the_rescan_with_y_on_disk(&mut app);
+
+        assert_eq!(checked_ids(&app, "Y"), Vec::<String>::new());
+        assert!(
+            toasts_since(&app, toasts_before)
+                .iter()
+                .all(|(kind, _)| *kind != egui_toast::ToastKind::Success)
+        );
+    }
+
+    fn end_the_scan(app: &mut OrchestratorApp, report: Option<Step2ScanReport>) {
+        app.wizard_state.step2.bgee_mods = vec![
+            scanned_x_mod(),
+            scanned_mod("Y", &["0", "3"]),
+            scanned_mod("Z", &["5"]),
+        ];
+        app.workspace_view.step2.was_scanning = true;
+        app.wizard_state.step2.is_scanning = false;
+        app.wizard_state.step2.last_scan_report = report;
+        assert!(reconcile_on_scan_complete(app));
+    }
+
+    #[test]
+    fn a_cancelled_rescan_keeps_the_pending_log_ticks_for_the_next_scan() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-cancelled-rescan", &root);
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from([y_key()]);
+        app.workspace_view.step2.rescan_snapshot = Some(RescanSnapshot {
+            bgee: vec![selection("SETUP-X.TP2", "1", 1)],
+            bg2ee: Vec::new(),
+        });
+
+        end_the_scan(&mut app, None);
+
+        assert_eq!(
+            app.wizard_state.step2.pending_log_ticks,
+            BTreeSet::from([y_key()])
+        );
+        assert_eq!(checked_ids(&app, "Y"), Vec::<String>::new());
+
+        finish_the_rescan_with_y_on_disk(&mut app);
+
+        assert_eq!(checked_ids(&app, "Y"), vec!["0", "3"]);
+        assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
+    }
+
+    #[test]
+    fn a_fetch_after_a_cancelled_rescan_keeps_the_earlier_pending_ticks() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-fetch-after-cancel", &root);
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from([y_key()]);
+        end_the_scan(&mut app, None);
+
+        let step2 = &mut app.wizard_state.step2;
+        step2.update_selected_update_assets = vec![asset("SETUP-Z.TP2")];
+        step2.update_selected_download_scope = Some("z".to_string());
+        step2.update_selected_download_running = true;
+        arm_pending_log_ticks(step2, false);
+        assert_eq!(step2.pending_log_ticks, BTreeSet::from([y_key()]));
+        step2.update_selected_download_running = false;
+
+        finish_the_rescan_with_y_on_disk(&mut app);
+
+        assert_eq!(checked_ids(&app, "Y"), vec!["0", "3"]);
+        assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
+    }
+
+    #[test]
+    fn the_log_tick_runs_without_a_rescan_snapshot() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-tick-no-snapshot", &root);
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from([y_key()]);
+        assert!(app.workspace_view.step2.rescan_snapshot.is_none());
+
+        end_the_scan(&mut app, Some(Step2ScanReport::default()));
+
+        assert_eq!(checked_ids(&app, "Y"), vec!["0", "3"]);
+        assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
+    }
+
+    #[test]
+    fn pending_log_ticks_are_dropped_outside_a_workspace() {
+        let mut app = OrchestratorApp::new_isolated_for_test("logimport-ticks-outside");
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from(["y".to_string()]);
+        app.nav = NavDestination::Workspace {
+            modlist_id: Some(LIST_ID.to_string()),
+        };
+        drop_log_ticks_outside_workspace(&mut app);
+        assert!(!app.wizard_state.step2.pending_log_ticks.is_empty());
+
+        app.nav = NavDestination::Home;
+        drop_log_ticks_outside_workspace(&mut app);
+        assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
+    }
+
+    #[test]
+    fn added_mod_entries_are_never_counted_as_missing_from_logs() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-added-not-counted", &root);
+        app.wizard_state.step2.log_pending_downloads.push(
+            crate::app::state::Step2LogPendingDownload {
+                game_tab: "BGEE".to_string(),
+                tp_file: "gadget.tp2".to_string(),
+                label: "Gadget".to_string(),
+                requested_version: None,
+                origin: LogPendingOrigin::AddedMod,
+            },
+        );
+        assert_eq!(
+            app.wizard_state.step2.logged_missing_keys(),
+            BTreeSet::from([y_key()])
+        );
     }
 
     #[test]
@@ -1135,17 +1295,16 @@ mod tests {
         ));
     }
 
-    const QUEUE_LIST_ID: &str = "LOGIMPORTFLOW";
-
-    fn app_with_a_queued_import(tag: &str, log_path: PathBuf, queued: bool) -> OrchestratorApp {
-        let mut app = bgee_import_app(tag);
-        app.workspace_view.loaded_workspace_id = Some(QUEUE_LIST_ID.to_string());
+    fn app_with_a_queued_import(
+        tag: &str,
+        root: &TempRoot,
+        log_path: PathBuf,
+        queued: bool,
+    ) -> OrchestratorApp {
+        let mut app = bgee_import_app(tag, root);
+        app.workspace_view.loaded_workspace_id = Some(LIST_ID.to_string());
         let view = &mut app.workspace_view.step2;
-        view.weidu_log_import_form = Some(WeiduLogImportForm {
-            first: Some(log_path),
-            fetch_missing: false,
-            ..WeiduLogImportForm::default()
-        });
+        view.weidu_log_import_form = Some(import_form(Some(log_path), false));
         view.weidu_log_import_queued = queued;
         app
     }
@@ -1154,10 +1313,9 @@ mod tests {
     fn a_queued_import_waits_while_the_scan_runs() {
         let root = TempRoot::new();
         let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_queued_import("logimport-queue-wait", log_path, true);
+        let mut app = app_with_a_queued_import("logimport-queue-wait", &root, log_path, true);
         app.wizard_state.step2.is_scanning = true;
-        app.wizard_state.step2.last_scan_report =
-            Some(crate::app::state::Step2ScanReport::default());
+        app.wizard_state.step2.last_scan_report = Some(Step2ScanReport::default());
         let toasts_before = app.notification_manager.history().len();
 
         advance_queued_weidu_log_import(&mut app, false);
@@ -1171,23 +1329,22 @@ mod tests {
     fn a_queued_import_runs_on_a_finished_scan() {
         let root = TempRoot::new();
         let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_queued_import("logimport-queue-run", log_path, true);
-        app.wizard_state.step2.last_scan_report =
-            Some(crate::app::state::Step2ScanReport::default());
+        let mut app = app_with_a_queued_import("logimport-queue-run", &root, log_path, true);
+        app.wizard_state.step2.last_scan_report = Some(Step2ScanReport::default());
         let toasts_before = app.notification_manager.history().len();
 
         advance_queued_weidu_log_import(&mut app, true);
 
         assert!(!app.workspace_view.step2.weidu_log_import_queued);
         assert_eq!(app.workspace_view.step2.weidu_log_import_form, None);
-        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts(0));
+        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts());
     }
 
     #[test]
     fn a_cancelled_scan_clears_the_wait_and_keeps_the_drawer() {
         let root = TempRoot::new();
         let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_queued_import("logimport-queue-cancel", log_path, true);
+        let mut app = app_with_a_queued_import("logimport-queue-cancel", &root, log_path, true);
         app.wizard_state.step2.last_scan_report = None;
         let toasts_before = app.notification_manager.history().len();
 
@@ -1203,9 +1360,8 @@ mod tests {
     fn no_queue_means_no_import_on_scan_end() {
         let root = TempRoot::new();
         let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_queued_import("logimport-queue-none", log_path, false);
-        app.wizard_state.step2.last_scan_report =
-            Some(crate::app::state::Step2ScanReport::default());
+        let mut app = app_with_a_queued_import("logimport-queue-none", &root, log_path, false);
+        app.wizard_state.step2.last_scan_report = Some(Step2ScanReport::default());
         let toasts_before = app.notification_manager.history().len();
 
         advance_queued_weidu_log_import(&mut app, true);
@@ -1220,9 +1376,8 @@ mod tests {
     fn a_queued_import_is_dropped_when_leaving_the_list() {
         let root = TempRoot::new();
         let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_queued_import("logimport-queue-leave", log_path, true);
-        app.wizard_state.step2.last_scan_report =
-            Some(crate::app::state::Step2ScanReport::default());
+        let mut app = app_with_a_queued_import("logimport-queue-leave", &root, log_path, true);
+        app.wizard_state.step2.last_scan_report = Some(Step2ScanReport::default());
         app.nav = NavDestination::Home;
         let toasts_before = app.notification_manager.history().len();
 
@@ -1230,7 +1385,6 @@ mod tests {
 
         assert!(!app.workspace_view.step2.weidu_log_import_queued);
         assert_eq!(app.workspace_view.step2.weidu_log_import_form, None);
-        assert_eq!(app.wizard_state.step2.weidu_log_import, None);
         assert_eq!(app.wizard_state.step2.log_pending_downloads.len(), 0);
         assert_eq!(toasts_since(&app, toasts_before), Vec::new());
     }
@@ -1239,9 +1393,9 @@ mod tests {
     fn a_queued_import_ends_when_no_scan_is_running_without_an_edge() {
         let root = TempRoot::new();
         let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
-        let mut app = app_with_a_queued_import("logimport-queue-noedge", log_path.clone(), true);
-        app.wizard_state.step2.last_scan_report =
-            Some(crate::app::state::Step2ScanReport::default());
+        let mut app =
+            app_with_a_queued_import("logimport-queue-noedge", &root, log_path.clone(), true);
+        app.wizard_state.step2.last_scan_report = Some(Step2ScanReport::default());
         assert!(!step2_scan_running(&app));
         let toasts_before = app.notification_manager.history().len();
 
@@ -1249,9 +1403,10 @@ mod tests {
 
         assert!(!app.workspace_view.step2.weidu_log_import_queued);
         assert_eq!(app.workspace_view.step2.weidu_log_import_form, None);
-        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts(0));
+        assert_eq!(toasts_since(&app, toasts_before), missing_x_toasts());
 
-        let mut app = app_with_a_queued_import("logimport-queue-noedge-noreport", log_path, true);
+        let mut app =
+            app_with_a_queued_import("logimport-queue-noedge-noreport", &root, log_path, true);
         app.wizard_state.step2.last_scan_report = None;
         let toasts_before = app.notification_manager.history().len();
 
@@ -1261,5 +1416,57 @@ mod tests {
         assert!(app.workspace_view.step2.weidu_log_import_form.is_some());
         assert_eq!(app.wizard_state.step2.log_pending_downloads.len(), 0);
         assert_eq!(toasts_since(&app, toasts_before), Vec::new());
+    }
+
+    fn app_with_drawer_callouts(tag: &str) -> (OrchestratorApp, ImportCallout) {
+        let mut app = OrchestratorApp::new_isolated_for_test(tag);
+        let callout = ImportCallout::Counted(crate::app::app_step2_log::LogShortfall {
+            missing_mods: 1,
+            unselectable_components: 2,
+        });
+        app.workspace_view.step2.weidu_log_import_form = Some(WeiduLogImportForm {
+            first_callout: Some(callout),
+            second_callout: Some(ImportCallout::Unreadable),
+            ..WeiduLogImportForm::default()
+        });
+        (app, callout)
+    }
+
+    fn drawer_callouts(app: &OrchestratorApp) -> (Option<ImportCallout>, Option<ImportCallout>) {
+        let form = app
+            .workspace_view
+            .step2
+            .weidu_log_import_form
+            .as_ref()
+            .expect("the drawer stays");
+        (form.first_callout, form.second_callout)
+    }
+
+    #[test]
+    fn a_cancelled_or_running_scan_forgets_the_drawer_callouts() {
+        let (mut app, _) = app_with_drawer_callouts("logimport-callouts-cancelled");
+        app.workspace_view.step2.was_scanning = true;
+        app.wizard_state.step2.is_scanning = false;
+        app.wizard_state.step2.last_scan_report = None;
+        let ended = reconcile_on_scan_complete(&mut app);
+        forget_import_callouts_on_scan_end(&mut app, ended);
+        assert_eq!(drawer_callouts(&app), (None, None));
+
+        let (mut app, _) = app_with_drawer_callouts("logimport-callouts-running");
+        app.wizard_state.step2.is_scanning = true;
+        forget_import_callouts_on_scan_end(&mut app, false);
+        assert_eq!(drawer_callouts(&app), (None, None));
+    }
+
+    #[test]
+    fn a_finished_scan_forgets_the_drawer_callouts() {
+        let (mut app, shortfall) = app_with_drawer_callouts("logimport-callouts-forgotten");
+
+        forget_import_callouts_on_scan_end(&mut app, false);
+        let form = app.workspace_view.step2.weidu_log_import_form.clone();
+        assert_eq!(form.and_then(|form| form.first_callout), Some(shortfall));
+
+        forget_import_callouts_on_scan_end(&mut app, true);
+        assert_eq!(drawer_callouts(&app), (None, None));
     }
 }

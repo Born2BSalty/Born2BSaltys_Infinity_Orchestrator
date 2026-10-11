@@ -42,12 +42,21 @@ pub(crate) fn handle_step2_action(
         }
         Step2Action::OpenUpdatePopup => open_update_popup(state),
         Step2Action::DownloadUpdates => {
-            start_workspace_download(state, step2_update_download_rx, None);
+            start_workspace_download(state, step2_update_download_rx, None, &HashSet::new());
+        }
+        Step2Action::DownloadMissingFromLogs => {
+            let skipped = super::app_step2_log::missing_scope_skipped_assets(&state.step2);
+            start_workspace_download(state, step2_update_download_rx, None, &skipped);
         }
         Step2Action::DownloadUpdateFor { tp2 } => {
             if !crate::app::state::update_pipeline_busy(&state.step2) {
                 let promoted = promote_in_sync_assets(&mut state.step2, &tp2);
-                if !start_workspace_download(state, step2_update_download_rx, Some(tp2)) {
+                if !start_workspace_download(
+                    state,
+                    step2_update_download_rx,
+                    Some(tp2),
+                    &HashSet::new(),
+                ) {
                     demote_in_sync_assets(&mut state.step2, &promoted);
                 }
             }
@@ -96,8 +105,7 @@ pub(crate) fn handle_step2_action(
         } => open_compat_for_component(state, game_tab, tp_file, component_id, component_key),
         Step2Action::SelectBgeeViaLog
         | Step2Action::SelectBg2eeViaLog
-        | Step2Action::ImportWeiduLogs
-        | Step2Action::DownloadUpdatesAndApplyLogs => {}
+        | Step2Action::ImportWeiduLogs => {}
         other => handle_step2_download_source_action(state, step2_update_check_rx, other),
     }
 }
@@ -108,12 +116,13 @@ fn start_workspace_download(
         Receiver<super::app_step2_update_download::Step2UpdateDownloadEvent>,
     >,
     scope_tp2: Option<String>,
+    skipped: &HashSet<usize>,
 ) -> bool {
     match super::app_step2_update_download::start_step2_update_download_scoped(
         state,
         step2_update_download_rx,
         scope_tp2,
-        &HashSet::new(),
+        skipped,
         DownloadOrigin::Workspace,
     ) {
         Ok(()) => true,
@@ -519,6 +528,7 @@ fn push_new_mod_pending_download(
             tp_file: format!("{}.tp2", form.tp2),
             label,
             requested_version: None,
+            origin: crate::app::state::LogPendingOrigin::AddedMod,
         });
     recorded
 }
@@ -2306,6 +2316,7 @@ mod tests {
                 tp_file: "Widget.tp2".to_string(),
                 label: "Widget".to_string(),
                 requested_version: None,
+                origin: crate::app::state::LogPendingOrigin::AddedMod,
             }]
         );
         let written =
@@ -2479,6 +2490,7 @@ mod tests {
                 tp_file: "widget.tp2".to_string(),
                 label: "Widget".to_string(),
                 requested_version: None,
+                origin: crate::app::state::LogPendingOrigin::WeiduLog,
             });
         state.step2.bgee_mods.push(make_mod_state("gadget.tp2"));
         let sources = crate::app::mod_downloads::ModDownloadsLoad::default();

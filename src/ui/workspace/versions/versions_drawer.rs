@@ -9,7 +9,7 @@ use eframe::egui;
 use crate::app::app_step2_router::NEW_MOD_CARD_KEY;
 use crate::app::mod_downloads;
 use crate::app::state::{
-    Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
+    ScopePillCounts, Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
     exact_log_ready_to_install, update_pipeline_busy,
 };
 use crate::app::step2_action::Step2Action;
@@ -259,6 +259,7 @@ fn prepare_render(
 
     ensure_known_extras(orchestrator);
     clear_idle_fetching_tp2(&mut orchestrator.wizard_state.step2);
+    settle_versions_scope(&mut orchestrator.wizard_state.step2);
     let tiers = cached_source_tiers(ctx);
     let view = scan_stable_view(orchestrator, &tiers);
 
@@ -275,13 +276,81 @@ fn prepare_render(
     }
 }
 
-#[must_use]
-const fn versions_title(scoped: bool) -> &'static str {
-    if scoped {
-        "Versions (missing mods only)"
-    } else {
-        "Versions"
+const VERSIONS_TITLE: &str = "Versions";
+const ALL_MODS_PILL: &str = "All mods";
+const MISSING_FROM_LOGS_PILL: &str = "Missing from logs";
+
+fn settle_versions_scope(step2: &mut Step2State) {
+    if update_pipeline_busy(step2) {
+        return;
     }
+    if step2.versions_ui.log_pending_scope && step2.logged_missing_count() == 0 {
+        set_versions_scope(step2, false);
+    }
+}
+
+fn set_versions_scope(step2: &mut Step2State, missing_only: bool) {
+    if step2.versions_ui.log_pending_scope == missing_only {
+        return;
+    }
+    step2.versions_ui.log_pending_scope = missing_only;
+    step2.versions_ui.scan_view_cache = None;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ScopePills {
+    all_count: usize,
+    missing_count: usize,
+    missing_selected: bool,
+}
+
+fn scope_pills(step2: &mut Step2State, view: &VersionsView) -> Option<ScopePills> {
+    if !update_pipeline_busy(step2) {
+        let missing = step2.logged_missing_count();
+        step2.versions_ui.shown_scope_counts = (missing > 0).then_some(ScopePillCounts {
+            all: view.all_scope_count,
+            missing,
+        });
+    }
+    let counts = step2.versions_ui.shown_scope_counts?;
+    Some(ScopePills {
+        all_count: counts.all,
+        missing_count: counts.missing,
+        missing_selected: step2.versions_ui.log_pending_scope,
+    })
+}
+
+fn render_scope_pills(
+    ui: &mut egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+    palette: ThemePalette,
+    pills: Option<ScopePills>,
+) {
+    let Some(pills) = pills else {
+        return;
+    };
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        if render_filter_chip(
+            ui,
+            palette,
+            ALL_MODS_PILL,
+            pills.all_count,
+            !pills.missing_selected,
+        ) {
+            set_versions_scope(&mut orchestrator.wizard_state.step2, false);
+        }
+        if render_filter_chip(
+            ui,
+            palette,
+            MISSING_FROM_LOGS_PILL,
+            pills.missing_count,
+            pills.missing_selected,
+        ) {
+            set_versions_scope(&mut orchestrator.wizard_state.step2, true);
+        }
+    });
+    ui.add_space(10.0);
 }
 
 pub(crate) fn render(
@@ -301,16 +370,12 @@ pub(crate) fn render(
         header,
     } = prepare_render(ctx, orchestrator, action);
     let busy = header.busy;
-    let step2 = &orchestrator.wizard_state.step2;
-    let extract_progress = step2
-        .update_selected_extract_running
-        .then_some(step2.update_selected_extract_progress)
-        .flatten();
-    let apply_logs = step2.weidu_log_import.is_some();
+    let flags = footer_flags(&orchestrator.wizard_state.step2);
+    let pills = scope_pills(&mut orchestrator.wizard_state.step2, &view);
 
     let spec = DrawerSpec {
         id_salt: "versions_drawer",
-        title: versions_title(step2.versions_ui.log_pending_scope),
+        title: VERSIONS_TITLE,
         subtitle: &subtitle,
         width: DrawerWidth::Wide,
         header_button: Some(drawer::HeaderButton {
@@ -335,6 +400,7 @@ pub(crate) fn render(
         palette,
         &spec,
         |ui| {
+            render_scope_pills(ui, orchestrator, palette, pills);
             if view.log_missing_count > 0 {
                 render_log_strip(ui, palette, view.log_missing_count);
             }
@@ -363,8 +429,7 @@ pub(crate) fn render(
                 fetch_count: view.fetch_count,
                 busy,
                 fetching: header.fetching,
-                extract_progress,
-                apply_logs,
+                flags,
                 report_text: &header.report_text,
                 outcome: &mut footer,
             };
@@ -417,7 +482,6 @@ fn close_drawer(orchestrator: &mut OrchestratorApp) {
 
 pub(crate) fn close_versions_drawer(step2: &mut Step2State) {
     step2.update_selected_popup_open = false;
-    step2.weidu_log_import_awaiting_check = false;
     step2.versions_ui = VersionsDrawerUi::default();
     step2.update_selected_confirm_latest_fallback_open = false;
     versions_sheets::clear_editor_state(step2);
@@ -1015,10 +1079,27 @@ struct FooterCtx<'a> {
     fetch_count: usize,
     busy: bool,
     fetching: bool,
-    extract_progress: Option<(usize, usize)>,
-    apply_logs: bool,
+    flags: FooterFlags,
     report_text: &'a str,
     outcome: &'a mut FooterOutcome,
+}
+
+#[derive(Clone, Copy)]
+struct FooterFlags {
+    extract_progress: Option<(usize, usize)>,
+    ticks_logged: bool,
+    missing_scope: bool,
+}
+
+fn footer_flags(step2: &Step2State) -> FooterFlags {
+    FooterFlags {
+        extract_progress: step2
+            .update_selected_extract_running
+            .then_some(step2.update_selected_extract_progress)
+            .flatten(),
+        ticks_logged: crate::app::app_step2_log::fetch_set_ticks_logged(step2),
+        missing_scope: step2.versions_ui.log_pending_scope,
+    }
 }
 
 fn open_new_mod_sheet(ctx: &egui::Context, orchestrator: &mut OrchestratorApp) {
@@ -1035,7 +1116,7 @@ pub(crate) fn footer_primary_label(
     fetch_count: usize,
     fetching: bool,
     extract_progress: Option<(usize, usize)>,
-    apply_logs: bool,
+    ticks_logged: bool,
 ) -> String {
     if let Some((done, total)) = extract_progress {
         format!("Extracting {done} / {total}\u{2026}")
@@ -1047,12 +1128,20 @@ pub(crate) fn footer_primary_label(
         format!(
             "Fetch {fetch_count} mod{}{}",
             if fetch_count == 1 { "" } else { "s" },
-            if apply_logs {
-                " & apply WeiDU logs"
+            if ticks_logged {
+                " & tick logged components"
             } else {
                 ""
             }
         )
+    }
+}
+
+const fn footer_fetch_action(missing_scope: bool) -> Step2Action {
+    if missing_scope {
+        Step2Action::DownloadMissingFromLogs
+    } else {
+        Step2Action::DownloadUpdates
     }
 }
 
@@ -1061,8 +1150,8 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
     let primary_label = footer_primary_label(
         fetch_count,
         footer.fetching,
-        footer.extract_progress,
-        footer.apply_logs,
+        footer.flags.extract_progress,
+        footer.flags.ticks_logged,
     );
     let primary_disabled = fetch_count == 0 || footer.busy;
     if redesign_btn(
@@ -1079,11 +1168,7 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
     .clicked()
         && !primary_disabled
     {
-        footer.outcome.action = Some(if footer.apply_logs {
-            Step2Action::DownloadUpdatesAndApplyLogs
-        } else {
-            Step2Action::DownloadUpdates
-        });
+        footer.outcome.action = Some(footer_fetch_action(footer.flags.missing_scope));
     }
     if redesign_btn(
         ui,
@@ -1332,12 +1417,7 @@ fn apply_sheet_outcome(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_scoped_window_is_titled_missing_mods_only() {
-        assert_eq!(versions_title(true), "Versions (missing mods only)");
-        assert_eq!(versions_title(false), "Versions");
-    }
+    use crate::app::state::{LogPendingOrigin, Step2LogPendingDownload, Step2UpdateAsset};
 
     #[test]
     fn header_button_label_prefers_scanning_then_checking_then_fetching() {
@@ -1496,6 +1576,7 @@ mod tests {
             attention_count: 0,
             locked_count: 0,
             log_missing_count: 0,
+            all_scope_count: 2,
         };
         let mut versions_ui = VersionsDrawerUi {
             fetch_queue: ["r", "s"].map(str::to_string).to_vec(),
@@ -1520,6 +1601,7 @@ mod tests {
             attention_count: 0,
             locked_count: 0,
             log_missing_count: 0,
+            all_scope_count: 3,
         };
         let mut versions_ui = VersionsDrawerUi {
             fetch_queue: ["y", "z", "x", "x"].map(str::to_string).to_vec(),
@@ -1553,15 +1635,38 @@ mod tests {
         );
     }
 
+    fn pending(tp_file: &str, origin: LogPendingOrigin) -> Step2LogPendingDownload {
+        Step2LogPendingDownload {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+            label: tp_file.to_string(),
+            requested_version: None,
+            origin,
+        }
+    }
+
+    fn fetch_asset(tp_file: &str) -> Step2UpdateAsset {
+        Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+            label: tp_file.to_string(),
+            source_id: "primary".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{tp_file}.zip"),
+            asset_url: format!("https://example.test/{tp_file}.zip"),
+            installed_source_ref: None,
+        }
+    }
+
     #[test]
-    fn footer_label_names_the_log_apply_only_with_a_record() {
+    fn footer_names_the_tick_only_when_a_logged_missing_mod_is_fetched() {
         assert_eq!(
             footer_primary_label(3, false, None, true),
-            "Fetch 3 mods & apply WeiDU logs"
+            "Fetch 3 mods & tick logged components"
         );
         assert_eq!(
             footer_primary_label(1, false, None, true),
-            "Fetch 1 mod & apply WeiDU logs"
+            "Fetch 1 mod & tick logged components"
         );
         assert_eq!(footer_primary_label(3, false, None, false), "Fetch 3 mods");
         assert_eq!(
@@ -1571,6 +1676,122 @@ mod tests {
         assert_eq!(
             footer_primary_label(0, false, None, true),
             "Nothing to fetch"
+        );
+
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("added.tp2", LogPendingOrigin::AddedMod),
+            ],
+            update_selected_update_assets: vec![fetch_asset("on-disk.tp2")],
+            ..Step2State::default()
+        };
+        assert!(!crate::app::app_step2_log::fetch_set_ticks_logged(&step2));
+        step2
+            .update_selected_update_assets
+            .push(fetch_asset("added.tp2"));
+        assert!(!crate::app::app_step2_log::fetch_set_ticks_logged(&step2));
+        step2
+            .update_selected_update_assets
+            .push(fetch_asset("SETUP-GONE.TP2"));
+        assert!(crate::app::app_step2_log::fetch_set_ticks_logged(&step2));
+
+        assert_eq!(
+            footer_fetch_action(true),
+            Step2Action::DownloadMissingFromLogs
+        );
+        assert_eq!(footer_fetch_action(false), Step2Action::DownloadUpdates);
+    }
+
+    fn view_with_all_count(all_scope_count: usize) -> VersionsView {
+        VersionsView {
+            cards: Vec::new(),
+            fetch_count: 0,
+            attention_count: 0,
+            locked_count: 0,
+            log_missing_count: 0,
+            all_scope_count,
+        }
+    }
+
+    #[test]
+    fn pills_hide_and_scope_returns_to_all_when_nothing_is_missing() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("added.tp2", LogPendingOrigin::AddedMod),
+            ],
+            ..Step2State::default()
+        };
+        step2.versions_ui.log_pending_scope = true;
+        settle_versions_scope(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(
+            scope_pills(&mut step2, &view_with_all_count(7)),
+            Some(ScopePills {
+                all_count: 7,
+                missing_count: 1,
+                missing_selected: true,
+            })
+        );
+
+        step2
+            .log_pending_downloads
+            .retain(|entry| entry.origin == LogPendingOrigin::AddedMod);
+        settle_versions_scope(&mut step2);
+        assert!(!step2.versions_ui.log_pending_scope);
+        assert_eq!(scope_pills(&mut step2, &view_with_all_count(7)), None);
+    }
+
+    const fn missing_pills(all_count: usize, missing_count: usize) -> ScopePills {
+        ScopePills {
+            all_count,
+            missing_count,
+            missing_selected: true,
+        }
+    }
+
+    #[test]
+    fn the_missing_scope_survives_a_fetch_and_its_rescan() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("SETUP-LATER.TP2", LogPendingOrigin::WeiduLog),
+            ],
+            ..Step2State::default()
+        };
+        step2.versions_ui.log_pending_scope = true;
+        settle_versions_scope(&mut step2);
+        assert_eq!(
+            scope_pills(&mut step2, &view_with_all_count(7)),
+            Some(missing_pills(7, 2))
+        );
+
+        step2.update_selected_download_running = true;
+        step2.log_pending_downloads.clear();
+        settle_versions_scope(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(
+            scope_pills(&mut step2, &view_with_all_count(0)),
+            Some(missing_pills(7, 2))
+        );
+
+        step2.update_selected_download_running = false;
+        step2.is_scanning = true;
+        settle_versions_scope(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(
+            scope_pills(&mut step2, &view_with_all_count(0)),
+            Some(missing_pills(7, 2))
+        );
+
+        step2.is_scanning = false;
+        step2.log_pending_downloads = vec![pending("SETUP-LATER.TP2", LogPendingOrigin::WeiduLog)];
+        settle_versions_scope(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(
+            scope_pills(&mut step2, &view_with_all_count(8)),
+            Some(missing_pills(8, 1))
         );
     }
 }

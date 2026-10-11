@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::app::app_step2_log::LogShortfall;
 use crate::app::state::Step2Selection;
 use crate::registry::model::Game;
 
@@ -28,6 +29,22 @@ pub enum LogCheck {
     NotALog,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportCallout {
+    Counted(LogShortfall),
+    Unreadable,
+}
+
+impl ImportCallout {
+    #[must_use]
+    pub const fn shortfall(self) -> Option<LogShortfall> {
+        match self {
+            Self::Counted(shortfall) => Some(shortfall),
+            Self::Unreadable => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeiduLogImportForm {
     pub first: Option<PathBuf>,
@@ -35,6 +52,8 @@ pub struct WeiduLogImportForm {
     pub fetch_missing: bool,
     pub first_check: Option<LogCheck>,
     pub second_check: Option<LogCheck>,
+    pub first_callout: Option<ImportCallout>,
+    pub second_callout: Option<ImportCallout>,
 }
 
 impl Default for WeiduLogImportForm {
@@ -45,6 +64,8 @@ impl Default for WeiduLogImportForm {
             fetch_missing: true,
             first_check: None,
             second_check: None,
+            first_callout: None,
+            second_callout: None,
         }
     }
 }

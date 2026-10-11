@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::BTreeSet;
+
 use crate::app::app_step2_log::component_exclusion_reason;
 use crate::app::controller::step3_sync;
-use crate::app::state::{Step2ComponentState, Step2ModState};
+use crate::app::state::{Step2ComponentState, Step2ModState, Step2State};
 use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
+use crate::ui::workspace::step2_log_glue;
 use crate::ui::workspace::workspace_state_loader::{extract_wlb_inputs, reattach_wlb_inputs};
 
 pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
@@ -78,13 +81,14 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
         workspace.last_rescanned_mods_source = current_source;
     }
 
-    let Some(snapshot) = orchestrator.workspace_view.step2.rescan_snapshot.take() else {
-        return;
-    };
-
+    let snapshot = orchestrator.workspace_view.step2.rescan_snapshot.take();
     if orchestrator.wizard_state.step2.last_scan_report.is_none() {
         return;
     }
+    let Some(snapshot) = snapshot else {
+        tick_settled_log_ticks(orchestrator);
+        return;
+    };
 
     reapply_snapshot(
         &snapshot.bgee,
@@ -118,6 +122,8 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
     );
     orchestrator.wizard_state.step2.next_selection_order = max_order + 1;
 
+    tick_settled_log_ticks(orchestrator);
+
     if std::mem::take(&mut orchestrator.workspace_view.step2.resume_pending) {
         orchestrator.wizard_state.step3.bgee_items =
             step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bgee_mods);
@@ -134,6 +140,18 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
     orchestrator
         .notification_manager
         .warn_persistent(format_unrestored_notification(&unrestored));
+}
+
+fn take_settled_log_ticks(step2: &mut Step2State) -> BTreeSet<String> {
+    if step2.update_selected_download_running || step2.update_selected_extract_running {
+        return BTreeSet::new();
+    }
+    std::mem::take(&mut step2.pending_log_ticks)
+}
+
+fn tick_settled_log_ticks(orchestrator: &mut OrchestratorApp) {
+    let arrived_log_mods = take_settled_log_ticks(&mut orchestrator.wizard_state.step2);
+    step2_log_glue::tick_arrived_logged_mods_and_announce(orchestrator, &arrived_log_mods);
 }
 
 struct UnrestoredComponent {

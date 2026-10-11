@@ -30,21 +30,19 @@ pub fn dispatch_step2(action: Step2Action, orchestrator: &mut OrchestratorApp) {
             }
         }
 
-        Step2Action::DownloadUpdates => {
+        Step2Action::DownloadUpdates
+        | Step2Action::DownloadMissingFromLogs
+        | Step2Action::DownloadUpdateFor { .. } => {
             step2_rescan_reconcile::arm_post_download_snapshot(orchestrator);
-            handle_step2_via_bio(Step2Action::DownloadUpdates, orchestrator);
-            orchestrator.mark_workspace_dirty();
-        }
-        Step2Action::DownloadUpdatesAndApplyLogs => {
-            handle_step2_via_bio(Step2Action::DownloadUpdates, orchestrator);
-            let step2 = &mut orchestrator.wizard_state.step2;
-            step2.pending_weidu_log_reapply = step2.update_selected_download_running;
-            orchestrator.mark_workspace_dirty();
-        }
-
-        Step2Action::DownloadUpdateFor { tp2 } => {
-            step2_rescan_reconcile::arm_post_download_snapshot(orchestrator);
-            handle_step2_via_bio(Step2Action::DownloadUpdateFor { tp2 }, orchestrator);
+            let download_was_running = orchestrator
+                .wizard_state
+                .step2
+                .update_selected_download_running;
+            handle_step2_via_bio(action, orchestrator);
+            step2_log_glue::arm_pending_log_ticks(
+                &mut orchestrator.wizard_state.step2,
+                download_was_running,
+            );
             orchestrator.mark_workspace_dirty();
         }
 
@@ -104,19 +102,18 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_download_and_apply_leaves_the_flag_down_and_no_snapshot() {
-        let mut app = OrchestratorApp::new_isolated_for_test("download-and-apply-arms-reapply");
-        app.wizard_state.step2.pending_weidu_log_reapply = true;
+    fn the_missing_scope_fetch_arms_the_rescan_snapshot_and_no_ticks_when_refused() {
+        let mut app = OrchestratorApp::new_isolated_for_test("download-missing-arms-snapshot");
 
-        dispatch_step2(Step2Action::DownloadUpdatesAndApplyLogs, &mut app);
+        dispatch_step2(Step2Action::DownloadMissingFromLogs, &mut app);
 
         assert!(!app.wizard_state.step2.update_selected_download_running);
-        assert!(!app.wizard_state.step2.pending_weidu_log_reapply);
+        assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
         assert!(
             app.workspace_view
                 .step2
                 .pending_update_download_snapshot
-                .is_none()
+                .is_some()
         );
     }
 }

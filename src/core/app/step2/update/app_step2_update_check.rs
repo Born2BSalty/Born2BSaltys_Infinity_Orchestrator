@@ -1501,6 +1501,7 @@ mod tests {
                 tp_file: QUESTPACK_TP2.to_string(),
                 label: "d0questpack".to_string(),
                 requested_version: None,
+                origin: crate::app::state::LogPendingOrigin::WeiduLog,
             });
 
         apply_update_check_outcome(

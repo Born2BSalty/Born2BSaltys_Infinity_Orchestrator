@@ -55,6 +55,7 @@ pub(crate) fn preview_update_selected(
         &selected_source_ids,
         &mut queued_tp2,
         &mut pending_preview,
+        scope,
     );
 
     let preview = FullUpdatePreviewResult {
@@ -811,11 +812,17 @@ fn extend_log_pending_update_requests(
     selected_source_ids: &BTreeMap<String, String>,
     queued_tp2: &mut HashSet<String>,
     pending_preview: &mut PendingLogUpdatePreview<'_>,
+    scope: UpdateCheckScope,
 ) {
     let include_all_tabs = state.step1.game_install == "EET";
     let game_tab = state.step2.active_game_tab.as_str();
     for pending in &state.step2.log_pending_downloads {
         if !include_all_tabs && pending.game_tab != game_tab {
+            continue;
+        }
+        if scope == UpdateCheckScope::LogPending
+            && pending.origin != crate::app::state::LogPendingOrigin::WeiduLog
+        {
             continue;
         }
         let tp2_key = mod_downloads::normalize_mod_download_tp2(&pending.tp_file);
@@ -1145,6 +1152,7 @@ mod tests {
             tp_file: "missing/setup-missing.tp2".to_string(),
             label: "Missing".to_string(),
             requested_version: None,
+            origin: crate::app::state::LogPendingOrigin::WeiduLog,
         }];
         let mut preview = collect_full_update_preview(
             &mut state,
@@ -1171,10 +1179,86 @@ mod tests {
             &BTreeMap::new(),
             &mut preview.queued_tp2,
             &mut pending_preview,
+            UpdateCheckScope::LogPending,
         );
         assert_eq!(preview.unknown, vec!["Missing".to_string()]);
         assert_eq!(preview.update_requests.len(), 0);
         assert_eq!(preview.known.len(), 0);
+    }
+
+    fn pending_entry(
+        tp_file: &str,
+        label: &str,
+        origin: crate::app::state::LogPendingOrigin,
+    ) -> crate::app::state::Step2LogPendingDownload {
+        crate::app::state::Step2LogPendingDownload {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+            label: label.to_string(),
+            requested_version: None,
+            origin,
+        }
+    }
+
+    fn pending_check_unknowns(state: &WizardState, scope: UpdateCheckScope) -> Vec<String> {
+        let mut known = Vec::new();
+        let mut manual = Vec::new();
+        let mut manual_requests = Vec::new();
+        let mut unknown = Vec::new();
+        let mut update_requests = Vec::new();
+        let mut pending_preview = PendingLogUpdatePreview {
+            known: &mut known,
+            manual: &mut manual,
+            manual_requests: &mut manual_requests,
+            unknown: &mut unknown,
+            update_requests: &mut update_requests,
+        };
+        extend_log_pending_update_requests(
+            state,
+            &ModDownloadsLoad::default(),
+            &BTreeMap::new(),
+            &mut HashSet::new(),
+            &mut pending_preview,
+            scope,
+        );
+        unknown
+    }
+
+    #[test]
+    fn the_missing_scope_lists_and_checks_only_log_entries() {
+        use crate::app::state::LogPendingOrigin;
+
+        let mut state = WizardState::default();
+        state.step2.active_game_tab = "BGEE".to_string();
+        state.step2.bgee_mods = vec![unticked_mod()];
+        state.step2.log_pending_downloads = vec![
+            pending_entry("gone/setup-gone.tp2", "Gone", LogPendingOrigin::WeiduLog),
+            pending_entry("added.tp2", "Added", LogPendingOrigin::AddedMod),
+        ];
+
+        assert_eq!(
+            pending_check_unknowns(&state, UpdateCheckScope::LogPending),
+            vec!["Gone".to_string()]
+        );
+        assert_eq!(
+            pending_check_unknowns(&state, UpdateCheckScope::WholeFolder),
+            vec!["Gone".to_string(), "Added".to_string()]
+        );
+
+        let tiers = mod_downloads::source_tiers_from_texts("", "", "");
+        state.step2.versions_ui.log_pending_scope = true;
+        let missing = crate::app::versions_view::build_versions_view(&state, &tiers, None);
+        let names: Vec<&str> = missing
+            .cards
+            .iter()
+            .map(|card| card.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["Gone"]);
+
+        state.step2.versions_ui.log_pending_scope = false;
+        let all = crate::app::versions_view::build_versions_view(&state, &tiers, None);
+        assert!(all.cards.iter().any(|card| card.name == "Added"));
+        assert_eq!(missing.all_scope_count, all.cards.len());
     }
 
     #[test]

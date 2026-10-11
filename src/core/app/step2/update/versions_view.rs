@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::app::mod_downloads::{self, ModDownloadSource, SourceTier, SourceTiers};
 use crate::app::mod_source_history::{self, BookmarkEntry, HistoryEntry, ModSourceHistoryStore};
-use crate::app::state::{Step2ModState, Step2UpdateAsset, WizardState};
+use crate::app::state::{LogPendingOrigin, Step2ModState, Step2UpdateAsset, WizardState};
 use crate::parser::weidu_version::{parse_version, version_phrase};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -205,6 +205,7 @@ pub(crate) struct VersionsView {
     pub(crate) attention_count: usize,
     pub(crate) locked_count: usize,
     pub(crate) log_missing_count: usize,
+    pub(crate) all_scope_count: usize,
 }
 
 struct CardBasis {
@@ -240,6 +241,7 @@ pub(crate) fn build_versions_view(
         attention_count,
         locked_count,
         log_missing_count,
+        all_scope_count: all_scope_card_count(state),
     };
     refresh_fetch_phase(&mut view, state);
     view
@@ -476,6 +478,9 @@ fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
     }
 
     for pending in &state.step2.log_pending_downloads {
+        if !scanned_cards_shown && pending.origin != LogPendingOrigin::WeiduLog {
+            continue;
+        }
         let tp2_key = mod_downloads::normalize_mod_download_tp2(&pending.tp_file);
         if tp2_key.is_empty() || !seen.insert(tp2_key.clone()) {
             continue;
@@ -495,6 +500,25 @@ fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
             .cmp(&b.name.to_ascii_lowercase())
     });
     result
+}
+
+fn all_scope_card_count(state: &WizardState) -> usize {
+    state
+        .step2
+        .bgee_mods
+        .iter()
+        .chain(state.step2.bg2ee_mods.iter())
+        .map(|mod_state| mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file))
+        .chain(
+            state
+                .step2
+                .log_pending_downloads
+                .iter()
+                .map(|pending| mod_downloads::normalize_mod_download_tp2(&pending.tp_file)),
+        )
+        .filter(|key| !key.is_empty())
+        .collect::<BTreeSet<_>>()
+        .len()
 }
 
 fn mod_display_name(mod_state: &Step2ModState) -> String {
@@ -1759,6 +1783,7 @@ mod tests {
                 tp_file: "pending.tp2".to_string(),
                 label: "Pending".to_string(),
                 requested_version: None,
+                origin: LogPendingOrigin::WeiduLog,
             });
         state
             .step2
@@ -1991,6 +2016,7 @@ mod tests {
                 tp_file: "manual.tp2".to_string(),
                 label: "Manual".to_string(),
                 requested_version: None,
+                origin: LogPendingOrigin::WeiduLog,
             });
         let text = "[[mods]]\nname = \"Manual\"\ntp2 = \"manual.tp2\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  label = \"Site\"\n  type = \"url\"\n  url = \"https://example.test/page\"\n  default = true\n";
         let tiers = mod_downloads::source_tiers_from_texts(text, "", "");
@@ -2243,7 +2269,11 @@ mod tests {
             .step2
             .bg2ee_mods
             .push(mod_state("zeta.tp2", "Zeta", "~zeta.tp2~ #0 #0 // 1.0"));
-        for (tp_file, label) in [("gone.tp2", "Gone"), ("lost.tp2", "Lost")] {
+        for (tp_file, label, origin) in [
+            ("gone.tp2", "Gone", LogPendingOrigin::WeiduLog),
+            ("added.tp2", "Added", LogPendingOrigin::AddedMod),
+            ("lost.tp2", "Lost", LogPendingOrigin::WeiduLog),
+        ] {
             state
                 .step2
                 .log_pending_downloads
@@ -2252,20 +2282,18 @@ mod tests {
                     tp_file: tp_file.to_string(),
                     label: label.to_string(),
                     requested_version: None,
+                    origin,
                 });
         }
-        assert_eq!(
-            build_versions_view(&state, &empty_tiers(), None)
-                .cards
-                .len(),
-            4
-        );
+        let all = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(all.cards.len(), all.all_scope_count);
 
         state.step2.versions_ui.log_pending_scope = true;
         let view = build_versions_view(&state, &empty_tiers(), None);
         let names: Vec<&str> = view.cards.iter().map(|card| card.name.as_str()).collect();
         assert_eq!(names, vec!["Gone", "Lost"]);
         assert_eq!(view.locked_count, 0);
+        assert_eq!(view.all_scope_count, all.cards.len());
     }
 
     #[test]

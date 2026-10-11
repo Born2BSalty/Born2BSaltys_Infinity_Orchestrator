@@ -14,16 +14,16 @@ mod state_wizard;
 
 pub use state_step1::Step1State;
 pub use state_step2::{
-    DownloadOrigin, ManualDownloadReason, ManualDownloadRequest, PromptPopupMode,
+    DownloadOrigin, LogPendingOrigin, ManualDownloadReason, ManualDownloadRequest, PromptPopupMode,
     Step2ComponentState, Step2DiscoveredFork, Step2HiddenComponentAudit, Step2LogLine,
     Step2LogLineOutcome, Step2LogPendingDownload, Step2LogTarget, Step2LogUnticked, Step2ModState,
     Step2ScanReport, Step2Selection, Step2State, Step2Tp2ProbeReport, Step2UpdateAsset,
-    Step2UpdateRetryRequest, WeiduLogImport, exact_log_ready_to_install,
-    push_manual_download_request, update_selection_signature,
+    Step2UpdateRetryRequest, exact_log_ready_to_install, push_manual_download_request,
+    update_selection_signature,
 };
 pub use state_step2::{
-    VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, update_pipeline_busy,
-    update_selection_stale,
+    ScopePillCounts, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
+    update_pipeline_busy, update_selection_stale,
 };
 pub use state_step3::{Step3ItemState, Step3State};
 pub use state_step5::{ResumeTargets, Step5State};

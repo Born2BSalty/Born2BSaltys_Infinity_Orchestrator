@@ -98,6 +98,11 @@ pub(crate) fn apply_log_to_mods_with_sources(
     report
 }
 
+#[must_use]
+pub fn log_line_allow_keys(installed: &Component) -> Vec<String> {
+    log_lookup_keys(installed.name.as_str(), installed.tp_file.as_str())
+}
+
 fn reset_mod_selection(mods: &mut [Step2ModState]) {
     for mod_state in mods {
         for component in &mut mod_state.components {

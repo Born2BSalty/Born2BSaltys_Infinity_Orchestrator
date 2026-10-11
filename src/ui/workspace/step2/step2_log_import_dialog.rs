@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui;
 
+use crate::app::app_step2_log::LogShortfall;
 use crate::ui::install::destination_not_empty::{
     WARN_BORDER, WARN_INK, paint_warning_triangle, warn_fill,
 };
@@ -42,6 +43,16 @@ pub struct ImportDrawerStatus {
     pub scanning: bool,
     pub queued: bool,
     pub replace_warning: bool,
+    pub first_callout: Option<LogShortfall>,
+    pub second_callout: Option<LogShortfall>,
+}
+
+#[derive(Clone, Copy)]
+struct RowEnv<'a> {
+    start: Option<&'a Path>,
+    locked: bool,
+    scanning: bool,
+    callout: Option<LogShortfall>,
 }
 
 const ID_SALT: &str = "weidu_log_import_drawer";
@@ -56,7 +67,8 @@ const IMPORT_WHEN_SCAN_FINISHES_LABEL: &str = "Import when scan finishes";
 const WAITING_LABEL: &str = "Waiting for the scan\u{2026}";
 const CANCEL_LABEL: &str = "Cancel";
 const WARNING_TITLE: &str = "Selections will be replaced";
-const FETCH_LABEL: &str = "Fetch missing mods";
+const FETCH_LABEL: &str = "Check sources for missing mods";
+const CALLOUT_WAITS_FOR_SCAN_TEXT: &str = "Missing mods are counted when the scan finishes.";
 const LOG_STATUS_INSET_PX: f32 = ROW_LABEL_W + ROW_ITEM_GAP;
 const LOG_STATUS_TOP_GAP_PX: f32 = 4.0;
 const LOG_STATUS_GLYPH_GAP_PX: f32 = 4.0;
@@ -121,12 +133,18 @@ pub fn render(
                 if index > 0 {
                     ui.add_space(ROW_GAP);
                 }
-                let start = if row.first_slot {
-                    start_paths.first.as_deref()
+                let (start, callout) = if row.first_slot {
+                    (start_paths.first.as_deref(), status.first_callout)
                 } else {
-                    start_paths.second.as_deref()
+                    (start_paths.second.as_deref(), status.second_callout)
                 };
-                render_checked_row(ui, palette, *row, form, start, locked);
+                let env = RowEnv {
+                    start,
+                    locked,
+                    scanning: status.scanning,
+                    callout,
+                };
+                render_checked_row(ui, palette, *row, form, env);
             }
             enabled.set(import_enabled(form));
             ui.add_space(ROW_GAP);
@@ -209,22 +227,77 @@ fn render_checked_row(
     palette: ThemePalette,
     row: WeiduLogImportRow,
     form: &mut WeiduLogImportForm,
-    start: Option<&Path>,
-    locked: bool,
+    env: RowEnv<'_>,
 ) {
-    let (slot, check) = if row.first_slot {
-        (&mut form.first, &mut form.first_check)
+    let (slot, check, callout) = if row.first_slot {
+        (
+            &mut form.first,
+            &mut form.first_check,
+            &mut form.first_callout,
+        )
     } else {
-        (&mut form.second, &mut form.second_check)
+        (
+            &mut form.second,
+            &mut form.second_check,
+            &mut form.second_callout,
+        )
     };
     let before = slot.clone();
-    render_row(ui, palette, row, slot, start, locked);
-    if *slot != before {
+    render_row(ui, palette, row, slot, env.start, env.locked);
+    let changed = *slot != before;
+    if changed {
         *check = slot.as_deref().map(step2_log_glue::check_log);
+        *callout = None;
     }
-    if let Some(status) = *check {
-        render_log_status(ui, palette, status);
+    let Some(status) = *check else {
+        return;
+    };
+    render_log_status(ui, palette, status);
+    if !matches!(status, LogCheck::Valid { .. }) || changed {
+        return;
     }
+    if let Some(text) = callout_line(env.scanning, env.callout) {
+        render_callout(ui, palette, &text);
+    }
+}
+
+const fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 { "" } else { "s" }
+}
+
+fn callout_line(scanning: bool, callout: Option<LogShortfall>) -> Option<String> {
+    if scanning {
+        Some(CALLOUT_WAITS_FOR_SCAN_TEXT.to_string())
+    } else {
+        callout.and_then(callout_text)
+    }
+}
+
+#[must_use]
+fn callout_text(shortfall: LogShortfall) -> Option<String> {
+    let mods = shortfall.missing_mods;
+    let components = shortfall.unselectable_components;
+    (components > 0).then(|| {
+        format!(
+            "{mods} mod{} missing, {components} component{} will not be selected",
+            plural_suffix(mods),
+            plural_suffix(components)
+        )
+    })
+}
+
+fn render_callout(ui: &mut egui::Ui, palette: ThemePalette, text: &str) {
+    ui.add_space(LOG_STATUS_TOP_GAP_PX);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space(LOG_STATUS_INSET_PX);
+        ui.label(
+            egui::RichText::new(text)
+                .size(LOG_STATUS_SIZE)
+                .family(egui::FontFamily::Name("poppins_light".into()))
+                .color(redesign_text_muted(palette)),
+        );
+    });
 }
 
 fn render_row(
@@ -424,6 +497,7 @@ mod tests {
             fetch_missing: false,
             first_check: Some(VALID),
             second_check: Some(LogCheck::NotALog),
+            ..WeiduLogImportForm::default()
         }));
         assert!(import_enabled(&WeiduLogImportForm {
             first: Some(PathBuf::from("bgee.log")),
@@ -431,6 +505,7 @@ mod tests {
             fetch_missing: false,
             first_check: Some(VALID),
             second_check: Some(VALID),
+            ..WeiduLogImportForm::default()
         }));
     }
 
@@ -448,6 +523,44 @@ mod tests {
             footer_label(FooterMode::Waiting),
             "Waiting for the scan\u{2026}"
         );
+    }
+
+    const fn shortfall(missing_mods: usize, unselectable_components: usize) -> LogShortfall {
+        LogShortfall {
+            missing_mods,
+            unselectable_components,
+        }
+    }
+
+    #[test]
+    fn callout_waits_for_the_scan() {
+        let waiting = Some(CALLOUT_WAITS_FOR_SCAN_TEXT.to_string());
+        assert_eq!(callout_line(true, None), waiting);
+        assert_eq!(callout_line(true, Some(shortfall(3, 25))), waiting);
+        assert_eq!(callout_line(true, Some(shortfall(0, 0))), waiting);
+        assert_eq!(
+            CALLOUT_WAITS_FOR_SCAN_TEXT,
+            "Missing mods are counted when the scan finishes."
+        );
+    }
+
+    #[test]
+    fn callout_names_missing_mods_and_hides_when_nothing_is_left_out() {
+        assert_eq!(
+            callout_line(false, Some(shortfall(3, 25))).as_deref(),
+            Some("3 mods missing, 25 components will not be selected")
+        );
+        assert_eq!(
+            callout_line(false, Some(shortfall(1, 1))).as_deref(),
+            Some("1 mod missing, 1 component will not be selected")
+        );
+        assert_eq!(
+            callout_line(false, Some(shortfall(0, 2))).as_deref(),
+            Some("0 mods missing, 2 components will not be selected")
+        );
+        assert_eq!(callout_line(false, Some(shortfall(2, 0))), None);
+        assert_eq!(callout_line(false, None), None);
+        assert_eq!(FETCH_LABEL, "Check sources for missing mods");
     }
 
     #[test]

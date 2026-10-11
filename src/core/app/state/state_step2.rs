@@ -2,13 +2,13 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::app::app_step2_update_source_refs::RemoteFileFacts;
 use crate::app::game_authority::GameSlot;
 use crate::app::github_forks_list::ForksListState;
 use crate::app::github_release_list::ReleaseListState;
+use crate::app::mod_downloads::normalize_mod_download_tp2;
 use crate::app::source_form::SourceForm;
 use crate::app::step2_action::ModSourceEditDestination;
 use crate::app::versions_view::{KnownExtras, VersionsView};
@@ -20,10 +20,10 @@ pub enum DownloadOrigin {
     InstallPipeline,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct WeiduLogImport {
-    pub first: Option<PathBuf>,
-    pub second: Option<PathBuf>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogPendingOrigin {
+    WeiduLog,
+    AddedMod,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,6 +99,12 @@ pub enum VersionsMenu {
 
 type VersionsDrawerFlag = bool;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScopePillCounts {
+    pub(crate) all: usize,
+    pub(crate) missing: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VersionsDrawerUi {
     pub(crate) search: String,
@@ -109,6 +115,7 @@ pub struct VersionsDrawerUi {
     pub(crate) menu: Option<VersionsMenu>,
     pub(crate) auto_check_pending: bool,
     pub(crate) log_pending_scope: VersionsDrawerFlag,
+    pub(crate) shown_scope_counts: Option<ScopePillCounts>,
     pub(crate) source_form: Option<SourceForm>,
     pub(crate) release_list: ReleaseListState,
     pub(crate) known: Option<KnownExtras>,
@@ -235,9 +242,7 @@ pub struct Step2State<Flag = bool> {
     pub pending_saved_log_apply: Flag,
     pub pending_saved_log_update_preview: Flag,
     pub pending_saved_log_download: Flag,
-    pub weidu_log_import: Option<WeiduLogImport>,
-    pub pending_weidu_log_reapply: Flag,
-    pub weidu_log_import_awaiting_check: Flag,
+    pub pending_log_ticks: BTreeSet<String>,
     pub left_pane_ratio: f32,
     pub last_scan_report: Option<Step2ScanReport>,
     pub update_selected_manual_downloads: Vec<ManualDownloadRequest>,
@@ -337,9 +342,7 @@ impl Default for Step2State {
             pending_saved_log_apply: false,
             pending_saved_log_update_preview: false,
             pending_saved_log_download: false,
-            weidu_log_import: None,
-            pending_weidu_log_reapply: false,
-            weidu_log_import_awaiting_check: false,
+            pending_log_ticks: BTreeSet::new(),
             left_pane_ratio: 0.74,
             last_scan_report: None,
             update_selected_manual_downloads: Vec::new(),
@@ -353,6 +356,23 @@ impl Default for Step2State {
             update_selected_last_checked_at: None,
             versions_ui: VersionsDrawerUi::default(),
         }
+    }
+}
+
+impl Step2State {
+    #[must_use]
+    pub fn logged_missing_keys(&self) -> BTreeSet<String> {
+        self.log_pending_downloads
+            .iter()
+            .filter(|pending| pending.origin == LogPendingOrigin::WeiduLog)
+            .map(|pending| normalize_mod_download_tp2(&pending.tp_file))
+            .filter(|key| !key.is_empty())
+            .collect()
+    }
+
+    #[must_use]
+    pub fn logged_missing_count(&self) -> usize {
+        self.logged_missing_keys().len()
     }
 }
 
@@ -383,6 +403,7 @@ pub struct Step2LogPendingDownload {
     pub tp_file: String,
     pub label: String,
     pub requested_version: Option<String>,
+    pub origin: LogPendingOrigin,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
