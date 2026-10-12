@@ -21,6 +21,7 @@ pub fn populate_wizard_state_from_workspace(
     wizard_state.step2.update_selected_popup_open = false;
     wizard_state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
     wizard_state.step2.pending_log_ticks.clear();
+    wizard_state.step3.pending_log_placements.clear();
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
     wizard_state.step2.active_game_tab = game_authority::normalized_tab(
         &wizard_state.step1.game_install,

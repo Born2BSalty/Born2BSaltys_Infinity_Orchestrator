@@ -122,14 +122,14 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
     );
     orchestrator.wizard_state.step2.next_selection_order = max_order + 1;
 
-    tick_settled_log_ticks(orchestrator);
-
     if std::mem::take(&mut orchestrator.workspace_view.step2.resume_pending) {
         orchestrator.wizard_state.step3.bgee_items =
             step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bgee_mods);
         orchestrator.wizard_state.step3.bg2ee_items =
             step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bg2ee_mods);
     }
+
+    tick_settled_log_ticks(orchestrator);
 
     if unrestored.is_empty() {
         orchestrator.workspace_view.step2.rescan_drop_warning = None;

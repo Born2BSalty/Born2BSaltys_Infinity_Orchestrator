@@ -299,6 +299,11 @@ pub(crate) fn drop_log_ticks_outside_workspace(orchestrator: &mut OrchestratorAp
         }
     ) {
         orchestrator.wizard_state.step2.pending_log_ticks.clear();
+        orchestrator
+            .wizard_state
+            .step3
+            .pending_log_placements
+            .clear();
     }
 }
 
@@ -433,6 +438,7 @@ mod tests {
     use crate::ui::workspace::state_workspace::{ImportCallout, RescanSelection};
     use crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete;
     use crate::ui::workspace::versions::versions_drawer::close_versions_drawer;
+    use crate::ui::workspace::workspace_state_loader::sync_step3_from_step2_if_changed;
 
     struct TempRoot {
         path: PathBuf,
@@ -1188,15 +1194,170 @@ mod tests {
     fn pending_log_ticks_are_dropped_outside_a_workspace() {
         let mut app = OrchestratorApp::new_isolated_for_test("logimport-ticks-outside");
         app.wizard_state.step2.pending_log_ticks = BTreeSet::from(["y".to_string()]);
+        app.wizard_state.step3.queue_log_placement(
+            game_authority::GameSlot::First,
+            vec![pair("Y", "0")],
+            BTreeSet::from([pair("Y", "0")]),
+        );
         app.nav = NavDestination::Workspace {
             modlist_id: Some(LIST_ID.to_string()),
         };
         drop_log_ticks_outside_workspace(&mut app);
         assert!(!app.wizard_state.step2.pending_log_ticks.is_empty());
+        assert_eq!(app.wizard_state.step3.pending_log_placements.len(), 1);
 
         app.nav = NavDestination::Home;
         drop_log_ticks_outside_workspace(&mut app);
         assert!(app.wizard_state.step2.pending_log_ticks.is_empty());
+        assert_eq!(app.wizard_state.step3.pending_log_placements.len(), 0);
+    }
+
+    const PLACEMENT_LOG: &str = "~A/SETUP-A.TP2~ #0 #0 // A zero\n~B/SETUP-B.TP2~ #0 #0 // B zero\n~B/SETUP-B.TP2~ #0 #1 // B one\n~A/SETUP-A.TP2~ #0 #1 // A one\n~C/SETUP-C.TP2~ #0 #0 // C zero\n~D/SETUP-D.TP2~ #0 #5 // D five\n";
+
+    fn ticked_mod(name: &str, component_ids: &[&str], first_order: usize) -> Step2ModState {
+        let mut mod_state = scanned_mod(name, component_ids);
+        for (offset, component) in mod_state.components.iter_mut().enumerate() {
+            component.checked = true;
+            component.selected_order = Some(first_order + offset);
+        }
+        mod_state.checked = true;
+        mod_state
+    }
+
+    fn app_with_step3_before_the_arrival(
+        tag: &str,
+        root: &TempRoot,
+        log: &str,
+        on_disk: Vec<Step2ModState>,
+    ) -> OrchestratorApp {
+        let mut app = app_with_a_saved_list(tag, root);
+        let slot = PathBuf::from(&app.wizard_state.step1.bgee_log_folder);
+        std::fs::create_dir_all(&slot).expect("slot folder");
+        std::fs::write(slot.join("imported.log"), log).expect("imported log");
+        let last_order = on_disk
+            .iter()
+            .flat_map(|mod_state| mod_state.components.iter())
+            .filter_map(|component| component.selected_order)
+            .max()
+            .unwrap_or(0);
+        app.wizard_state.step2.bgee_mods = on_disk;
+        app.wizard_state.step2.next_selection_order = last_order + 1;
+        sync_step3_from_step2_if_changed(&mut app.wizard_state);
+        app
+    }
+
+    fn arrive(app: &mut OrchestratorApp, name: &str, component_ids: &[&str]) {
+        app.wizard_state
+            .step2
+            .bgee_mods
+            .push(scanned_mod(name, component_ids));
+        let key =
+            crate::app::mod_downloads::normalize_mod_download_tp2(&format!("SETUP-{name}.TP2"));
+        tick_arrived_logged_mods_and_announce(app, &BTreeSet::from([key]));
+    }
+
+    fn step3_children(app: &OrchestratorApp) -> Vec<(String, String)> {
+        app.wizard_state
+            .step3
+            .bgee_items
+            .iter()
+            .filter(|item| !item.is_parent)
+            .map(|item| (item.tp_file.clone(), item.component_id.clone()))
+            .collect()
+    }
+
+    fn pair(name: &str, component_id: &str) -> (String, String) {
+        (format!("SETUP-{name}.TP2"), component_id.to_string())
+    }
+
+    fn app_after_b_arrives(tag: &str, root: &TempRoot) -> OrchestratorApp {
+        let mut app = app_with_step3_before_the_arrival(
+            tag,
+            root,
+            PLACEMENT_LOG,
+            vec![ticked_mod("A", &["0", "1"], 1), ticked_mod("C", &["0"], 3)],
+        );
+        assert_eq!(
+            step3_children(&app),
+            vec![pair("A", "0"), pair("A", "1"), pair("C", "0")]
+        );
+        arrive(&mut app, "B", &["0", "1"]);
+        app
+    }
+
+    #[test]
+    fn arrived_components_take_their_log_position_in_step3() {
+        let root = TempRoot::new();
+        let app = app_after_b_arrives("logimport-placement-order", &root);
+
+        assert_eq!(
+            step3_children(&app),
+            vec![
+                pair("A", "0"),
+                pair("B", "0"),
+                pair("B", "1"),
+                pair("A", "1"),
+                pair("C", "0"),
+            ]
+        );
+        assert_eq!(app.wizard_state.step3.pending_log_placements.len(), 0);
+    }
+
+    #[test]
+    fn a_later_fetch_that_ticks_nothing_keeps_the_placement() {
+        let root = TempRoot::new();
+        let mut app = app_after_b_arrives("logimport-placement-later-fetch", &root);
+        let placed = step3_children(&app);
+
+        arrive(&mut app, "D", &["0"]);
+
+        assert_eq!(step3_children(&app), placed);
+    }
+
+    #[test]
+    fn an_arrival_with_no_earlier_logged_component_goes_first() {
+        let root = TempRoot::new();
+        let mut app = app_with_step3_before_the_arrival(
+            "logimport-placement-first",
+            &root,
+            "~B/SETUP-B.TP2~ #0 #0 // B zero\n~A/SETUP-A.TP2~ #0 #0 // A zero\n",
+            vec![ticked_mod("A", &["0"], 1)],
+        );
+
+        arrive(&mut app, "B", &["0"]);
+
+        assert_eq!(step3_children(&app).first(), Some(&pair("B", "0")));
+    }
+
+    #[test]
+    fn a_drag_after_the_placement_stays() {
+        let root = TempRoot::new();
+        let mut app = app_after_b_arrives("logimport-placement-drag", &root);
+        let items = std::mem::take(&mut app.wizard_state.step3.bgee_items);
+        let (b_rows, other_rows): (Vec<_>, Vec<_>) = items
+            .into_iter()
+            .partition(|item| item.tp_file == "SETUP-B.TP2");
+        app.wizard_state.step3.bgee_items = b_rows.into_iter().chain(other_rows).collect();
+        let next_order = app.wizard_state.step2.next_selection_order;
+        app.wizard_state
+            .step2
+            .bgee_mods
+            .push(ticked_mod("D", &["0"], next_order));
+        app.wizard_state.step2.next_selection_order = next_order + 1;
+
+        sync_step3_from_step2_if_changed(&mut app.wizard_state);
+
+        assert_eq!(
+            step3_children(&app),
+            vec![
+                pair("B", "0"),
+                pair("B", "1"),
+                pair("A", "0"),
+                pair("A", "1"),
+                pair("C", "0"),
+                pair("D", "0"),
+            ]
+        );
     }
 
     #[test]

@@ -235,26 +235,123 @@ pub(crate) fn refresh_logged_missing(state: &mut WizardState) {
     }
 }
 
+type ComponentPair = (String, String);
+
+struct LogDryRun {
+    first: Vec<Step2ModState>,
+    second: Vec<Step2ModState>,
+    logged: BTreeMap<usize, LoggedLine>,
+}
+
+impl LogDryRun {
+    fn of(state: &WizardState, first_slot: bool, log: &LogFile) -> Self {
+        let mut first = state.step2.bgee_mods.clone();
+        let mut second = state.step2.bg2ee_mods.clone();
+        let trees = TreePair {
+            game_install: &state.step1.game_install,
+            first: &mut first,
+            second: &mut second,
+        };
+        let mode = ApplyMode {
+            allow: None,
+            reset: true,
+        };
+        let mut next_order = 0;
+        let mut logged = BTreeMap::new();
+        apply_log_to_tree_pair(trees, first_slot, log, mode, &mut next_order, &mut logged);
+        Self {
+            first,
+            second,
+            logged,
+        }
+    }
+
+    fn log_order(&self, tree: GameSlot) -> Vec<ComponentPair> {
+        let mods = match tree {
+            GameSlot::First => &self.first,
+            GameSlot::Second => &self.second,
+        };
+        let mut seen = HashSet::new();
+        ticked_targets(&self.logged)
+            .filter(|target| target.tree == tree)
+            .filter_map(|target| component_pair(mods, target))
+            .filter(|pair| seen.insert(pair.clone()))
+            .collect()
+    }
+}
+
+fn ticked_targets(
+    logged: &BTreeMap<usize, LoggedLine>,
+) -> impl Iterator<Item = Step2LogTarget> + '_ {
+    logged
+        .values()
+        .flat_map(|line| match &line.outcome {
+            Step2LogLineOutcome::Ticked(targets) => targets.as_slice(),
+            Step2LogLineOutcome::NoComponent { .. } | Step2LogLineOutcome::NoMod => &[],
+        })
+        .copied()
+}
+
+fn component_pair(mods: &[Step2ModState], target: Step2LogTarget) -> Option<ComponentPair> {
+    let mod_state = mods.get(target.mod_index)?;
+    let component = mod_state.components.get(target.component_index)?;
+    Some((
+        mod_state.tp_file.to_ascii_uppercase(),
+        component.component_id.clone(),
+    ))
+}
+
+fn checked_components(mods: &[Step2ModState]) -> HashSet<(usize, usize)> {
+    mods.iter()
+        .enumerate()
+        .flat_map(|(mod_index, mod_state)| {
+            mod_state
+                .components
+                .iter()
+                .enumerate()
+                .filter(|(_, component)| component.checked)
+                .map(move |(component_index, _)| (mod_index, component_index))
+        })
+        .collect()
+}
+
+fn ticked_pairs(mods: &[Step2ModState]) -> HashSet<ComponentPair> {
+    mods.iter()
+        .flat_map(|mod_state| {
+            mod_state
+                .components
+                .iter()
+                .filter(|component| component.checked)
+                .map(|component| {
+                    (
+                        mod_state.tp_file.to_ascii_uppercase(),
+                        component.component_id.clone(),
+                    )
+                })
+        })
+        .collect()
+}
+
+fn drop_unticked_placements(state: &mut WizardState) {
+    let ticked_first = ticked_pairs(&state.step2.bgee_mods);
+    let ticked_second = ticked_pairs(&state.step2.bg2ee_mods);
+    state.step3.pending_log_placements.retain_mut(|placement| {
+        let ticked = match placement.tree {
+            GameSlot::First => &ticked_first,
+            GameSlot::Second => &ticked_second,
+        };
+        placement.placed.retain(|pair| ticked.contains(pair));
+        !placement.placed.is_empty()
+    });
+}
+
 #[must_use]
 pub(crate) fn log_import_shortfall(
     state: &WizardState,
     first_slot: bool,
     log: &LogFile,
 ) -> LogShortfall {
-    let mut first = state.step2.bgee_mods.clone();
-    let mut second = state.step2.bg2ee_mods.clone();
-    let trees = TreePair {
-        game_install: &state.step1.game_install,
-        first: &mut first,
-        second: &mut second,
-    };
-    let mode = ApplyMode {
-        allow: None,
-        reset: true,
-    };
-    let mut next_order = 0;
-    let mut logged = BTreeMap::new();
-    apply_log_to_tree_pair(trees, first_slot, log, mode, &mut next_order, &mut logged);
+    let LogDryRun { logged, .. } = LogDryRun::of(state, first_slot, log);
     let unselectable_components = logged
         .values()
         .filter(|line| !matches!(line.outcome, Step2LogLineOutcome::Ticked(_)))
@@ -331,6 +428,9 @@ pub(crate) fn tick_logged_mods(
             crate::app::compat_logic::clear_step2_compat_state(&mut state.step2.bg2ee_mods);
         }
     }
+    let dry_run = LogDryRun::of(state, first_slot, log);
+    let checked_first = checked_components(&state.step2.bgee_mods);
+    let checked_second = checked_components(&state.step2.bg2ee_mods);
     let mut next_order = state.step2.next_selection_order;
     let mut logged = BTreeMap::new();
     let trees = TreePair {
@@ -345,6 +445,24 @@ pub(crate) fn tick_logged_mods(
     let matched =
         apply_log_to_tree_pair(trees, first_slot, log, mode, &mut next_order, &mut logged);
     state.step2.next_selection_order = next_order;
+    for (tree, checked_before) in [
+        (GameSlot::First, &checked_first),
+        (GameSlot::Second, &checked_second),
+    ] {
+        let ticked_tree = tree_mods(&state.step2, tree);
+        let placed = ticked_targets(&logged)
+            .filter(|target| {
+                target.tree == tree
+                    && !checked_before.contains(&(target.mod_index, target.component_index))
+            })
+            .filter_map(|target| component_pair(ticked_tree, target))
+            .collect::<BTreeSet<_>>();
+        if !placed.is_empty() {
+            state
+                .step3
+                .queue_log_placement(tree, dry_run.log_order(tree), placed);
+        }
+    }
     let label = tab_for_slot(&state.step1.game_install, first_slot);
     replace_tab_lines(&mut state.step2.log_apply.lines, label, logged);
     matched
@@ -385,7 +503,7 @@ pub(crate) fn tick_arrived_logged_mods(
             "compat rules load failed after the logged tick: {err}"
         );
     }
-    state.clear_last_step2_sync_signature();
+    drop_unticked_placements(state);
     true
 }
 
@@ -1578,6 +1696,30 @@ mod tests {
             &BTreeSet::from(["eet".to_string()])
         ));
         assert!(state.step2.bg2ee_mods[0].components[0].checked);
+    }
+
+    #[test]
+    fn a_placement_whose_components_ended_unticked_is_dropped() {
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![scanned_mod_with("Y", "Y/SETUP-Y.TP2", &["0", "1"])];
+        state.step2.bgee_mods[0].components[1].checked = true;
+        let y = |component_id: &str| ("SETUP-Y.TP2".to_string(), component_id.to_string());
+        state.step3.queue_log_placement(
+            GameSlot::First,
+            vec![y("0"), y("1")],
+            BTreeSet::from([y("0"), y("1")]),
+        );
+        state
+            .step3
+            .queue_log_placement(GameSlot::First, vec![y("0")], BTreeSet::from([y("0")]));
+
+        drop_unticked_placements(&mut state);
+
+        assert_eq!(state.step3.pending_log_placements.len(), 1);
+        assert_eq!(
+            state.step3.pending_log_placements[0].placed,
+            BTreeSet::from([y("1")])
+        );
     }
 
     #[test]
