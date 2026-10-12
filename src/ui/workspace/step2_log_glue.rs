@@ -21,7 +21,10 @@ use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{LogCheck, RescanSnapshot, WeiduLogImportForm};
 use crate::ui::workspace::step_action_dispatch::handle_step2_via_bio;
+use crate::ui::workspace::versions::versions_drawer::close_versions_drawer;
 use crate::ui::workspace::workspace_header::save_draft;
+
+const UNTICKED_WARNING_SLOT: &str = "weidu-log-unticked";
 
 pub fn apply_weidu_log_selection_for_orchestrator(orchestrator: &mut OrchestratorApp, bgee: bool) {
     let (current, tab) = if bgee {
@@ -278,9 +281,17 @@ pub(crate) fn tick_arrived_logged_mods_and_announce(
     if !tick_arrived_logged_mods(&mut orchestrator.wizard_state, arrived) {
         return;
     }
+    refresh_logged_missing(&mut orchestrator.wizard_state);
     orchestrator.mark_workspace_dirty();
     save_draft(orchestrator);
     announce_log_results(orchestrator);
+    let step2 = &mut orchestrator.wizard_state.step2;
+    if step2.update_selected_popup_open
+        && step2.versions_ui.fetch_queue.is_empty()
+        && step2.logged_missing_count() == 0
+    {
+        close_versions_drawer(step2);
+    }
 }
 
 pub(crate) fn arm_pending_log_ticks(step2: &mut Step2State, download_was_running: bool) {
@@ -335,9 +346,9 @@ fn announce_log_results(orchestrator: &mut OrchestratorApp) {
         .scan_status
         .clone_from(&applied);
     orchestrator.notification_manager.success(applied);
-    if let Some(unticked) = unticked {
-        orchestrator.notification_manager.warn_persistent(unticked);
-    }
+    orchestrator
+        .notification_manager
+        .replace_persistent_warning(UNTICKED_WARNING_SLOT, unticked);
 }
 
 pub(crate) fn advance_queued_weidu_log_import(
@@ -431,13 +442,14 @@ pub(crate) fn grouped_unticked_text(unticked: &[Step2LogUnticked]) -> Option<Str
 mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    use eframe::egui;
+
     use super::*;
     use crate::app::state::{
         LogPendingOrigin, Step2ComponentState, Step2ModState, Step2ScanReport, Step2UpdateAsset,
     };
     use crate::ui::workspace::state_workspace::{ImportCallout, RescanSelection};
     use crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete;
-    use crate::ui::workspace::versions::versions_drawer::close_versions_drawer;
     use crate::ui::workspace::workspace_state_loader::sync_step3_from_step2_if_changed;
 
     struct TempRoot {
@@ -742,6 +754,84 @@ mod tests {
         assert_eq!(app.wizard_state.step2.logged_missing_count(), 0);
         assert!(!app.wizard_state.step2.update_selected_popup_open);
         assert!(!app.wizard_state.step2.versions_ui.log_pending_scope);
+    }
+
+    fn toasts_on_screen(app: &mut OrchestratorApp, ctx: &egui::Context) -> Vec<String> {
+        crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            app.notification_manager
+                .show(ctx, crate::ui::shared::redesign_tokens::ThemePalette::Dark);
+        });
+        let id = crate::ui::orchestrator::widgets::notification::toasts_id();
+        ctx.data_mut(|d| d.get_temp::<Vec<egui_toast::Toast>>(id))
+            .unwrap_or_default()
+            .iter()
+            .map(|toast| toast.text.text().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn the_fetch_tick_closes_versions_and_the_import_warning() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = bgee_import_app("logimport-fetch-closes", &root);
+        let ctx = egui::Context::default();
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
+        assert!(app.wizard_state.step2.update_selected_popup_open);
+        assert!(toasts_on_screen(&mut app, &ctx).contains(&MISSING_X_WARNING.to_string()));
+
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod()];
+        tick_arrived_logged_mods_and_announce(&mut app, &BTreeSet::from([x_key()]));
+
+        assert!(!app.wizard_state.step2.update_selected_popup_open);
+        assert!(!app.wizard_state.step2.versions_ui.log_pending_scope);
+        assert!(!toasts_on_screen(&mut app, &ctx).contains(&MISSING_X_WARNING.to_string()));
+    }
+
+    fn x_key() -> String {
+        crate::app::mod_downloads::normalize_mod_download_tp2("SETUP-X.TP2")
+    }
+
+    #[test]
+    fn versions_stays_open_while_logged_mods_are_still_missing() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", ARRIVAL_LOG);
+        let mut app = bgee_import_app("logimport-fetch-keeps-open", &root);
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
+        assert_eq!(app.wizard_state.step2.logged_missing_count(), 2);
+
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod()];
+        app.wizard_state.step2.log_pending_downloads.clear();
+        tick_arrived_logged_mods_and_announce(&mut app, &BTreeSet::from([x_key()]));
+
+        assert_eq!(
+            app.wizard_state.step2.logged_missing_keys(),
+            BTreeSet::from([y_key()])
+        );
+        assert!(app.wizard_state.step2.update_selected_popup_open);
+        assert!(app.wizard_state.step2.versions_ui.log_pending_scope);
+    }
+
+    #[test]
+    fn versions_stays_open_while_a_fetch_is_queued() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = bgee_import_app("logimport-fetch-queued", &root);
+        import_weidu_logs(&mut app, import_form(Some(log_path), true));
+        app.wizard_state
+            .step2
+            .versions_ui
+            .toggle_queued("setup-other.tp2");
+
+        app.wizard_state.step2.bgee_mods = vec![scanned_x_mod()];
+        tick_arrived_logged_mods_and_announce(&mut app, &BTreeSet::from([x_key()]));
+
+        assert_eq!(app.wizard_state.step2.logged_missing_count(), 0);
+        assert!(app.wizard_state.step2.update_selected_popup_open);
+        assert_eq!(
+            app.wizard_state.step2.versions_ui.fetch_queue,
+            vec!["setup-other.tp2".to_string()]
+        );
     }
 
     #[test]

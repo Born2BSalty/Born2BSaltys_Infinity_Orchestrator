@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 use eframe::egui;
@@ -53,6 +53,10 @@ pub struct NotificationRecord {
 struct ViewAllRequest {
     kind: ToastKind,
     text: String,
+}
+
+pub(crate) fn toasts_id() -> egui::Id {
+    egui::Id::new("bio_toasts")
 }
 
 fn view_all_request_id() -> egui::Id {
@@ -131,6 +135,8 @@ fn hidden_after_row_breaks(preview: &TextPreview, row_breaks: usize) -> usize {
 #[derive(Default)]
 pub struct NotificationManager {
     pending: Vec<(ToastKind, String, bool)>,
+    closing: Vec<String>,
+    slots: HashMap<&'static str, String>,
     history: VecDeque<NotificationRecord>,
     pub history_open: bool,
     view_all: Option<ViewAllRequest>,
@@ -158,6 +164,17 @@ impl NotificationManager {
         self.push(ToastKind::Warning, text.into(), true);
     }
 
+    pub fn replace_persistent_warning(&mut self, slot: &'static str, text: Option<String>) {
+        if let Some(previous) = self.slots.remove(slot) {
+            self.pending.retain(|(_, pending, _)| *pending != previous);
+            self.closing.push(previous);
+        }
+        if let Some(text) = text {
+            self.slots.insert(slot, text.clone());
+            self.warn_persistent(text);
+        }
+    }
+
     pub fn error(&mut self, text: impl Into<String>) {
         self.push(ToastKind::Error, text.into(), false);
     }
@@ -180,7 +197,8 @@ impl NotificationManager {
     }
 
     pub fn show(&mut self, ctx: &egui::Context, palette: ThemePalette) {
-        let mut toasts = Toasts::new()
+        self.close_replaced(ctx);
+        let mut toasts = Toasts::with_id(toasts_id())
             .anchor(
                 egui::Align2::RIGHT_BOTTOM,
                 egui::pos2(-TOAST_OFFSET_RIGHT, -TOAST_OFFSET_BOTTOM),
@@ -231,6 +249,20 @@ impl NotificationManager {
             self.view_all = Some(request);
         }
         self.render_view_all_window(ctx, palette);
+    }
+
+    fn close_replaced(&mut self, ctx: &egui::Context) {
+        if self.closing.is_empty() {
+            return;
+        }
+        let closing = std::mem::take(&mut self.closing);
+        ctx.data_mut(|d| {
+            for toast in d.get_temp_mut_or_default::<Vec<Toast>>(toasts_id()) {
+                if closing.iter().any(|text| toast.text.text() == text) {
+                    toast.close();
+                }
+            }
+        });
     }
 
     #[must_use]
@@ -839,6 +871,49 @@ mod tests {
         assert_eq!(*kind, ToastKind::Warning);
         assert!(*persistent, "warn_persistent must set persistent flag");
         assert_eq!(mgr.history().back().unwrap().kind, ToastKind::Warning);
+    }
+
+    fn shown_toasts(ctx: &egui::Context) -> Vec<String> {
+        ctx.data_mut(|d| d.get_temp::<Vec<Toast>>(toasts_id()))
+            .unwrap_or_default()
+            .iter()
+            .map(|toast| toast.text.text().to_string())
+            .collect()
+    }
+
+    fn show_a_frame(ctx: &egui::Context, mgr: &mut NotificationManager) {
+        crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            mgr.show(ctx, ThemePalette::Dark);
+        });
+    }
+
+    #[test]
+    fn a_replaced_warning_closes_the_one_on_screen() {
+        let ctx = egui::Context::default();
+        let mut mgr = NotificationManager::new();
+        mgr.warn_persistent("other");
+        mgr.replace_persistent_warning("log", Some("first".to_string()));
+        show_a_frame(&ctx, &mut mgr);
+        assert_eq!(shown_toasts(&ctx), vec!["other", "first"]);
+
+        mgr.replace_persistent_warning("log", Some("second".to_string()));
+        show_a_frame(&ctx, &mut mgr);
+        assert_eq!(shown_toasts(&ctx), vec!["other", "second"]);
+
+        mgr.replace_persistent_warning("log", None);
+        show_a_frame(&ctx, &mut mgr);
+        assert_eq!(shown_toasts(&ctx), vec!["other"]);
+    }
+
+    #[test]
+    fn a_warning_replaced_before_it_shows_never_shows() {
+        let ctx = egui::Context::default();
+        let mut mgr = NotificationManager::new();
+        mgr.replace_persistent_warning("log", Some("first".to_string()));
+        mgr.replace_persistent_warning("log", Some("second".to_string()));
+        show_a_frame(&ctx, &mut mgr);
+        assert_eq!(shown_toasts(&ctx), vec!["second"]);
     }
 
     #[test]
