@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -9,7 +10,7 @@ use eframe::egui;
 use crate::app::app_step2_router::NEW_MOD_CARD_KEY;
 use crate::app::mod_downloads;
 use crate::app::state::{
-    ScopePillCounts, Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
+    Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
     exact_log_ready_to_install, update_pipeline_busy,
 };
 use crate::app::step2_action::Step2Action;
@@ -260,6 +261,7 @@ fn prepare_render(
     ensure_known_extras(orchestrator);
     clear_idle_fetching_tp2(&mut orchestrator.wizard_state.step2);
     settle_versions_scope(&mut orchestrator.wizard_state.step2);
+    hold_missing_keys(&mut orchestrator.wizard_state.step2);
     let tiers = cached_source_tiers(ctx);
     let view = scan_stable_view(orchestrator, &tiers);
 
@@ -277,7 +279,6 @@ fn prepare_render(
 }
 
 const VERSIONS_TITLE: &str = "Versions";
-const ALL_MODS_PILL: &str = "All mods";
 const MISSING_FROM_LOGS_PILL: &str = "Missing from logs";
 
 fn settle_versions_scope(step2: &mut Step2State) {
@@ -289,68 +290,75 @@ fn settle_versions_scope(step2: &mut Step2State) {
     }
 }
 
-fn set_versions_scope(step2: &mut Step2State, missing_only: bool) {
-    if step2.versions_ui.log_pending_scope == missing_only {
-        return;
-    }
+const fn set_versions_scope(step2: &mut Step2State, missing_only: bool) {
     step2.versions_ui.log_pending_scope = missing_only;
-    step2.versions_ui.scan_view_cache = None;
+}
+
+fn hold_missing_keys(step2: &mut Step2State) {
+    if !update_pipeline_busy(step2) || step2.versions_ui.shown_missing_keys.is_empty() {
+        step2.versions_ui.shown_missing_keys = step2.logged_missing_keys();
+    }
+}
+
+fn missing_filter(versions_ui: &VersionsDrawerUi) -> Option<&BTreeSet<String>> {
+    versions_ui
+        .log_pending_scope
+        .then_some(&versions_ui.shown_missing_keys)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ScopePills {
-    all_count: usize,
-    missing_count: usize,
-    missing_selected: bool,
+enum ChipPick {
+    Missing,
+    Filter(VersionsChip),
 }
 
-fn scope_pills(step2: &mut Step2State, view: &VersionsView) -> Option<ScopePills> {
-    if !update_pipeline_busy(step2) {
-        let missing = step2.logged_missing_count();
-        step2.versions_ui.shown_scope_counts = (missing > 0).then_some(ScopePillCounts {
-            all: view.all_scope_count,
-            missing,
-        });
+fn chip_active(versions_ui: &VersionsDrawerUi, pick: ChipPick) -> bool {
+    match pick {
+        ChipPick::Missing => versions_ui.log_pending_scope,
+        ChipPick::Filter(chip) => !versions_ui.log_pending_scope && versions_ui.chip == chip,
     }
-    let counts = step2.versions_ui.shown_scope_counts?;
-    Some(ScopePills {
-        all_count: counts.all,
-        missing_count: counts.missing,
-        missing_selected: step2.versions_ui.log_pending_scope,
-    })
 }
 
-fn render_scope_pills(
-    ui: &mut egui::Ui,
-    orchestrator: &mut OrchestratorApp,
-    palette: ThemePalette,
-    pills: Option<ScopePills>,
-) {
-    let Some(pills) = pills else {
-        return;
-    };
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 10.0;
-        if render_filter_chip(
-            ui,
-            palette,
-            ALL_MODS_PILL,
-            pills.all_count,
-            !pills.missing_selected,
-        ) {
-            set_versions_scope(&mut orchestrator.wizard_state.step2, false);
+const fn pick_chip(step2: &mut Step2State, pick: ChipPick) {
+    match pick {
+        ChipPick::Missing => set_versions_scope(step2, true),
+        ChipPick::Filter(chip) => {
+            set_versions_scope(step2, false);
+            step2.versions_ui.chip = chip;
         }
-        if render_filter_chip(
-            ui,
-            palette,
-            MISSING_FROM_LOGS_PILL,
-            pills.missing_count,
-            pills.missing_selected,
-        ) {
-            set_versions_scope(&mut orchestrator.wizard_state.step2, true);
-        }
-    });
-    ui.add_space(10.0);
+    }
+}
+
+const fn chip_matches(card: &VersionCard, chip: VersionsChip) -> bool {
+    match chip {
+        VersionsChip::All => true,
+        VersionsChip::Fetch => matches!(card.status, versions_view::CardStatus::Fetch),
+        VersionsChip::Attention => matches!(card.status, versions_view::CardStatus::Attention),
+        VersionsChip::Locked => card.locked,
+    }
+}
+
+fn card_passes(
+    card: &VersionCard,
+    search: &str,
+    chip: VersionsChip,
+    missing: Option<&BTreeSet<String>>,
+) -> bool {
+    let matches_search = search.is_empty() || card.name.to_ascii_lowercase().contains(search);
+    let matches_filter =
+        missing.map_or_else(|| chip_matches(card, chip), |keys| keys.contains(&card.tp2));
+    matches_search && matches_filter
+}
+
+fn footer_fetch_count(view: &VersionsView, missing: Option<&BTreeSet<String>>) -> usize {
+    missing.map_or(view.fetch_count, |keys| {
+        view.cards
+            .iter()
+            .filter(|card| {
+                matches!(card.status, versions_view::CardStatus::Fetch) && keys.contains(&card.tp2)
+            })
+            .count()
+    })
 }
 
 pub(crate) fn render(
@@ -371,7 +379,10 @@ pub(crate) fn render(
     } = prepare_render(ctx, orchestrator, action);
     let busy = header.busy;
     let flags = footer_flags(&orchestrator.wizard_state.step2);
-    let pills = scope_pills(&mut orchestrator.wizard_state.step2, &view);
+    let fetch_count = footer_fetch_count(
+        &view,
+        missing_filter(&orchestrator.wizard_state.step2.versions_ui),
+    );
 
     let spec = DrawerSpec {
         id_salt: "versions_drawer",
@@ -400,7 +411,6 @@ pub(crate) fn render(
         palette,
         &spec,
         |ui| {
-            render_scope_pills(ui, orchestrator, palette, pills);
             if view.log_missing_count > 0 {
                 render_log_strip(ui, palette, view.log_missing_count);
             }
@@ -426,7 +436,7 @@ pub(crate) fn render(
         },
         |ui| {
             let mut footer_ctx = FooterCtx {
-                fetch_count: view.fetch_count,
+                fetch_count,
                 busy,
                 fetching: header.fetching,
                 flags,
@@ -700,14 +710,41 @@ fn render_filter_row(
     palette: ThemePalette,
     view: &VersionsView,
 ) {
-    let chip = orchestrator.wizard_state.step2.versions_ui.chip;
-    let total = view.cards.len();
+    let missing_count = orchestrator
+        .wizard_state
+        .step2
+        .versions_ui
+        .shown_missing_keys
+        .len();
+    let missing_chip =
+        (missing_count > 0).then_some((MISSING_FROM_LOGS_PILL, missing_count, ChipPick::Missing));
+    let chips: Vec<(&str, usize, ChipPick)> = missing_chip
+        .into_iter()
+        .chain([
+            (
+                "Fetch",
+                view.fetch_count,
+                ChipPick::Filter(VersionsChip::Fetch),
+            ),
+            (
+                "Attention",
+                view.attention_count,
+                ChipPick::Filter(VersionsChip::Attention),
+            ),
+            (
+                "Locked",
+                view.locked_count,
+                ChipPick::Filter(VersionsChip::Locked),
+            ),
+            ("All", view.cards.len(), ChipPick::Filter(VersionsChip::All)),
+        ])
+        .collect();
     let item_spacing = 10.0_f32;
-    let pills_width = filter_chip_width(ui, "Fetch", view.fetch_count)
-        + filter_chip_width(ui, "Attention", view.attention_count)
-        + filter_chip_width(ui, "Locked", view.locked_count)
-        + filter_chip_width(ui, "All", total);
-    let gaps = item_spacing * 4.0;
+    let pills_width: f32 = chips
+        .iter()
+        .map(|(label, count, _)| filter_chip_width(ui, label, *count))
+        .sum();
+    let gaps = item_spacing * f32::from(u16::try_from(chips.len()).unwrap_or(u16::MAX));
     let search_box_width = (ui.available_width() - pills_width - gaps).clamp(160.0, 280.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = item_spacing;
@@ -717,35 +754,11 @@ fn render_filter_row(
             &mut orchestrator.wizard_state.step2.versions_ui.search,
             search_box_width,
         );
-        if render_filter_chip(
-            ui,
-            palette,
-            "Fetch",
-            view.fetch_count,
-            chip == VersionsChip::Fetch,
-        ) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::Fetch;
-        }
-        if render_filter_chip(
-            ui,
-            palette,
-            "Attention",
-            view.attention_count,
-            chip == VersionsChip::Attention,
-        ) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::Attention;
-        }
-        if render_filter_chip(
-            ui,
-            palette,
-            "Locked",
-            view.locked_count,
-            chip == VersionsChip::Locked,
-        ) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::Locked;
-        }
-        if render_filter_chip(ui, palette, "All", total, chip == VersionsChip::All) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::All;
+        for (label, count, pick) in chips {
+            let active = chip_active(&orchestrator.wizard_state.step2.versions_ui, pick);
+            if render_filter_chip(ui, palette, label, count, active) {
+                pick_chip(&mut orchestrator.wizard_state.step2, pick);
+            }
         }
     });
     ui.add_space(12.0);
@@ -853,20 +866,13 @@ fn render_card_list(
         .search
         .trim()
         .to_ascii_lowercase();
-    let chip = orchestrator.wizard_state.step2.versions_ui.chip;
+    let versions_ui = &orchestrator.wizard_state.step2.versions_ui;
+    let chip = versions_ui.chip;
+    let missing = missing_filter(versions_ui);
     let card_inner_width = (ui.available_width() - 32.0).max(0.0);
     let selector_width = (card_inner_width * 0.46).clamp(260.0, 460.0);
 
-    let matches_chip = |card: &VersionCard| match chip {
-        VersionsChip::All => true,
-        VersionsChip::Fetch => matches!(card.status, versions_view::CardStatus::Fetch),
-        VersionsChip::Attention => matches!(card.status, versions_view::CardStatus::Attention),
-        VersionsChip::Locked => card.locked,
-    };
-    let pass = |card: &VersionCard| {
-        (search.is_empty() || card.name.to_ascii_lowercase().contains(&search))
-            && matches_chip(card)
-    };
+    let pass = |card: &VersionCard| card_passes(card, &search, chip, missing);
 
     let fetch_cards: Vec<&VersionCard> = view
         .cards
@@ -1576,7 +1582,6 @@ mod tests {
             attention_count: 0,
             locked_count: 0,
             log_missing_count: 0,
-            all_scope_count: 2,
         };
         let mut versions_ui = VersionsDrawerUi {
             fetch_queue: ["r", "s"].map(str::to_string).to_vec(),
@@ -1601,7 +1606,6 @@ mod tests {
             attention_count: 0,
             locked_count: 0,
             log_missing_count: 0,
-            all_scope_count: 3,
         };
         let mut versions_ui = VersionsDrawerUi {
             fetch_queue: ["y", "z", "x", "x"].map(str::to_string).to_vec(),
@@ -1703,19 +1707,17 @@ mod tests {
         assert_eq!(footer_fetch_action(false), Step2Action::DownloadUpdates);
     }
 
-    fn view_with_all_count(all_scope_count: usize) -> VersionsView {
-        VersionsView {
-            cards: Vec::new(),
-            fetch_count: 0,
-            attention_count: 0,
-            locked_count: 0,
-            log_missing_count: 0,
-            all_scope_count,
-        }
+    fn settle_and_hold(step2: &mut Step2State) {
+        settle_versions_scope(step2);
+        hold_missing_keys(step2);
+    }
+
+    fn keys(items: &[&str]) -> BTreeSet<String> {
+        items.iter().map(|item| (*item).to_string()).collect()
     }
 
     #[test]
-    fn pills_hide_and_scope_returns_to_all_when_nothing_is_missing() {
+    fn the_missing_chip_shows_only_while_logged_mods_are_missing() {
         let mut step2 = Step2State {
             log_pending_downloads: vec![
                 pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
@@ -1724,35 +1726,20 @@ mod tests {
             ..Step2State::default()
         };
         step2.versions_ui.log_pending_scope = true;
-        settle_versions_scope(&mut step2);
+        settle_and_hold(&mut step2);
         assert!(step2.versions_ui.log_pending_scope);
-        assert_eq!(
-            scope_pills(&mut step2, &view_with_all_count(7)),
-            Some(ScopePills {
-                all_count: 7,
-                missing_count: 1,
-                missing_selected: true,
-            })
-        );
+        assert_eq!(step2.versions_ui.shown_missing_keys, keys(&["gone"]));
 
         step2
             .log_pending_downloads
             .retain(|entry| entry.origin == LogPendingOrigin::AddedMod);
-        settle_versions_scope(&mut step2);
+        settle_and_hold(&mut step2);
         assert!(!step2.versions_ui.log_pending_scope);
-        assert_eq!(scope_pills(&mut step2, &view_with_all_count(7)), None);
-    }
-
-    const fn missing_pills(all_count: usize, missing_count: usize) -> ScopePills {
-        ScopePills {
-            all_count,
-            missing_count,
-            missing_selected: true,
-        }
+        assert!(step2.versions_ui.shown_missing_keys.is_empty());
     }
 
     #[test]
-    fn the_missing_scope_survives_a_fetch_and_its_rescan() {
+    fn the_missing_chip_holds_while_the_pipeline_is_busy() {
         let mut step2 = Step2State {
             log_pending_downloads: vec![
                 pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
@@ -1761,37 +1748,124 @@ mod tests {
             ..Step2State::default()
         };
         step2.versions_ui.log_pending_scope = true;
-        settle_versions_scope(&mut step2);
-        assert_eq!(
-            scope_pills(&mut step2, &view_with_all_count(7)),
-            Some(missing_pills(7, 2))
-        );
+        settle_and_hold(&mut step2);
+        let both = keys(&["gone", "later"]);
+        assert_eq!(step2.versions_ui.shown_missing_keys, both);
 
         step2.update_selected_download_running = true;
         step2.log_pending_downloads.clear();
-        settle_versions_scope(&mut step2);
+        settle_and_hold(&mut step2);
         assert!(step2.versions_ui.log_pending_scope);
-        assert_eq!(
-            scope_pills(&mut step2, &view_with_all_count(0)),
-            Some(missing_pills(7, 2))
-        );
+        assert_eq!(step2.versions_ui.shown_missing_keys, both);
 
         step2.update_selected_download_running = false;
         step2.is_scanning = true;
-        settle_versions_scope(&mut step2);
+        settle_and_hold(&mut step2);
         assert!(step2.versions_ui.log_pending_scope);
-        assert_eq!(
-            scope_pills(&mut step2, &view_with_all_count(0)),
-            Some(missing_pills(7, 2))
-        );
+        assert_eq!(step2.versions_ui.shown_missing_keys, both);
 
         step2.is_scanning = false;
         step2.log_pending_downloads = vec![pending("SETUP-LATER.TP2", LogPendingOrigin::WeiduLog)];
-        settle_versions_scope(&mut step2);
+        settle_and_hold(&mut step2);
         assert!(step2.versions_ui.log_pending_scope);
-        assert_eq!(
-            scope_pills(&mut step2, &view_with_all_count(8)),
-            Some(missing_pills(8, 1))
-        );
+        assert_eq!(step2.versions_ui.shown_missing_keys, keys(&["later"]));
+    }
+
+    #[test]
+    fn opening_on_missing_while_the_pipeline_is_busy_shows_the_missing_mods() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog)],
+            ..Step2State::default()
+        };
+        step2.update_selected_download_running = true;
+        step2.versions_ui.log_pending_scope = true;
+
+        settle_and_hold(&mut step2);
+
+        assert_eq!(step2.versions_ui.shown_missing_keys, keys(&["gone"]));
+    }
+
+    #[test]
+    fn the_missing_scope_lists_only_missing_mods() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("added.tp2", LogPendingOrigin::AddedMod),
+            ],
+            ..Step2State::default()
+        };
+        step2.versions_ui.log_pending_scope = true;
+        settle_and_hold(&mut step2);
+        let missing = missing_filter(&step2.versions_ui);
+        assert!(missing.is_some());
+
+        let gone = queue_test_card("gone", true, false);
+        let added = queue_test_card("added", true, false);
+        let scanned = refetch_test_card("alpha", true);
+        for chip in [
+            VersionsChip::All,
+            VersionsChip::Fetch,
+            VersionsChip::Attention,
+            VersionsChip::Locked,
+        ] {
+            assert!(card_passes(&gone, "", chip, missing));
+            assert!(!card_passes(&added, "", chip, missing));
+            assert!(!card_passes(&scanned, "", chip, missing));
+        }
+        assert!(card_passes(&gone, "go", VersionsChip::All, missing));
+        assert!(!card_passes(&gone, "zz", VersionsChip::All, missing));
+
+        assert!(card_passes(&scanned, "", VersionsChip::Locked, None));
+        assert!(!card_passes(&gone, "", VersionsChip::Locked, None));
+    }
+
+    #[test]
+    fn the_footer_counts_only_missing_fetches_in_the_missing_scope() {
+        let mut view = VersionsView {
+            cards: vec![
+                queue_test_card("gone", true, false),
+                queue_test_card("on-disk", true, false),
+                refetch_test_card("later", false),
+            ],
+            fetch_count: 0,
+            attention_count: 0,
+            locked_count: 0,
+            log_missing_count: 0,
+        };
+        view.fetch_count = view
+            .cards
+            .iter()
+            .filter(|card| matches!(card.status, versions_view::CardStatus::Fetch))
+            .count();
+        let missing = keys(&["gone", "later"]);
+        assert_eq!(footer_fetch_count(&view, Some(&missing)), 1);
+        assert_eq!(footer_fetch_count(&view, None), view.fetch_count);
+    }
+
+    #[test]
+    fn picking_another_chip_leaves_the_missing_scope() {
+        let mut step2 = Step2State::default();
+        step2.versions_ui.chip = VersionsChip::Attention;
+        pick_chip(&mut step2, ChipPick::Missing);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert!(chip_active(&step2.versions_ui, ChipPick::Missing));
+        assert!(!chip_active(
+            &step2.versions_ui,
+            ChipPick::Filter(VersionsChip::Attention)
+        ));
+
+        for chip in [
+            VersionsChip::Fetch,
+            VersionsChip::Attention,
+            VersionsChip::Locked,
+            VersionsChip::All,
+        ] {
+            pick_chip(&mut step2, ChipPick::Missing);
+            pick_chip(&mut step2, ChipPick::Filter(chip));
+            assert!(!step2.versions_ui.log_pending_scope);
+            assert_eq!(step2.versions_ui.chip, chip);
+            assert!(chip_active(&step2.versions_ui, ChipPick::Filter(chip)));
+            assert!(!chip_active(&step2.versions_ui, ChipPick::Missing));
+        }
     }
 }

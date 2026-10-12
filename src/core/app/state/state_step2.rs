@@ -99,12 +99,6 @@ pub enum VersionsMenu {
 
 type VersionsDrawerFlag = bool;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ScopePillCounts {
-    pub(crate) all: usize,
-    pub(crate) missing: usize,
-}
-
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VersionsDrawerUi {
     pub(crate) search: String,
@@ -115,7 +109,7 @@ pub struct VersionsDrawerUi {
     pub(crate) menu: Option<VersionsMenu>,
     pub(crate) auto_check_pending: bool,
     pub(crate) log_pending_scope: VersionsDrawerFlag,
-    pub(crate) shown_scope_counts: Option<ScopePillCounts>,
+    pub(crate) shown_missing_keys: BTreeSet<String>,
     pub(crate) source_form: Option<SourceForm>,
     pub(crate) release_list: ReleaseListState,
     pub(crate) known: Option<KnownExtras>,

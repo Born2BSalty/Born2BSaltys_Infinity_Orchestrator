@@ -1225,7 +1225,7 @@ mod tests {
     }
 
     #[test]
-    fn the_missing_scope_lists_and_checks_only_log_entries() {
+    fn the_missing_scope_checks_only_log_entries() {
         use crate::app::state::LogPendingOrigin;
 
         let mut state = WizardState::default();
@@ -1244,21 +1244,6 @@ mod tests {
             pending_check_unknowns(&state, UpdateCheckScope::WholeFolder),
             vec!["Gone".to_string(), "Added".to_string()]
         );
-
-        let tiers = mod_downloads::source_tiers_from_texts("", "", "");
-        state.step2.versions_ui.log_pending_scope = true;
-        let missing = crate::app::versions_view::build_versions_view(&state, &tiers, None);
-        let names: Vec<&str> = missing
-            .cards
-            .iter()
-            .map(|card| card.name.as_str())
-            .collect();
-        assert_eq!(names, vec!["Gone"]);
-
-        state.step2.versions_ui.log_pending_scope = false;
-        let all = crate::app::versions_view::build_versions_view(&state, &tiers, None);
-        assert!(all.cards.iter().any(|card| card.name == "Added"));
-        assert_eq!(missing.all_scope_count, all.cards.len());
     }
 
     #[test]

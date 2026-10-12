@@ -22,8 +22,8 @@ pub use state_step2::{
     update_selection_signature,
 };
 pub use state_step2::{
-    ScopePillCounts, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
-    update_pipeline_busy, update_selection_stale,
+    VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, update_pipeline_busy,
+    update_selection_stale,
 };
 pub use state_step3::{Step3ItemState, Step3State};
 pub use state_step5::{ResumeTargets, Step5State};

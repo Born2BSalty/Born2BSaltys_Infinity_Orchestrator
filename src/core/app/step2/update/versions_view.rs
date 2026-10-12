@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::app::mod_downloads::{self, ModDownloadSource, SourceTier, SourceTiers};
 use crate::app::mod_source_history::{self, BookmarkEntry, HistoryEntry, ModSourceHistoryStore};
-use crate::app::state::{LogPendingOrigin, Step2ModState, Step2UpdateAsset, WizardState};
+use crate::app::state::{Step2ModState, Step2UpdateAsset, WizardState};
 use crate::parser::weidu_version::{parse_version, version_phrase};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -205,7 +205,6 @@ pub(crate) struct VersionsView {
     pub(crate) attention_count: usize,
     pub(crate) locked_count: usize,
     pub(crate) log_missing_count: usize,
-    pub(crate) all_scope_count: usize,
 }
 
 struct CardBasis {
@@ -241,7 +240,6 @@ pub(crate) fn build_versions_view(
         attention_count,
         locked_count,
         log_missing_count,
-        all_scope_count: all_scope_card_count(state),
     };
     refresh_fetch_phase(&mut view, state);
     view
@@ -446,14 +444,12 @@ pub(crate) fn fetch_fraction(state: &WizardState, tp2_key: &str) -> Option<f32> 
 fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
     let mut seen = BTreeSet::<String>::new();
     let mut result = Vec::<CardBasis>::new();
-    let scanned_cards_shown = !state.step2.versions_ui.log_pending_scope;
 
     for mod_state in state
         .step2
         .bgee_mods
         .iter()
         .chain(state.step2.bg2ee_mods.iter())
-        .filter(|_| scanned_cards_shown)
     {
         let tp2_key = mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file);
         if tp2_key.is_empty() || !seen.insert(tp2_key.clone()) {
@@ -478,9 +474,6 @@ fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
     }
 
     for pending in &state.step2.log_pending_downloads {
-        if !scanned_cards_shown && pending.origin != LogPendingOrigin::WeiduLog {
-            continue;
-        }
         let tp2_key = mod_downloads::normalize_mod_download_tp2(&pending.tp_file);
         if tp2_key.is_empty() || !seen.insert(tp2_key.clone()) {
             continue;
@@ -500,25 +493,6 @@ fn collect_card_basis(state: &WizardState) -> Vec<CardBasis> {
             .cmp(&b.name.to_ascii_lowercase())
     });
     result
-}
-
-fn all_scope_card_count(state: &WizardState) -> usize {
-    state
-        .step2
-        .bgee_mods
-        .iter()
-        .chain(state.step2.bg2ee_mods.iter())
-        .map(|mod_state| mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file))
-        .chain(
-            state
-                .step2
-                .log_pending_downloads
-                .iter()
-                .map(|pending| mod_downloads::normalize_mod_download_tp2(&pending.tp_file)),
-        )
-        .filter(|key| !key.is_empty())
-        .collect::<BTreeSet<_>>()
-        .len()
 }
 
 fn mod_display_name(mod_state: &Step2ModState) -> String {
@@ -1194,7 +1168,7 @@ mod tests {
         DownloadPoll, Step2UpdateDownloadEvent, poll_step2_update_download,
     };
     use crate::app::mod_downloads;
-    use crate::app::state::{Step2ComponentState, Step2LogPendingDownload};
+    use crate::app::state::{LogPendingOrigin, Step2ComponentState, Step2LogPendingDownload};
 
     fn component(id: &str, raw_line: &str) -> Step2ComponentState {
         Step2ComponentState {
@@ -2259,7 +2233,7 @@ mod tests {
     }
 
     #[test]
-    fn the_log_pending_scope_lists_only_missing_mods() {
+    fn other_chips_count_the_whole_folder_in_the_missing_scope() {
         let mut state = WizardState::default();
         state
             .step2
@@ -2286,14 +2260,14 @@ mod tests {
                 });
         }
         let all = build_versions_view(&state, &empty_tiers(), None);
-        assert_eq!(all.cards.len(), all.all_scope_count);
 
         state.step2.versions_ui.log_pending_scope = true;
         let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(view, all);
         let names: Vec<&str> = view.cards.iter().map(|card| card.name.as_str()).collect();
-        assert_eq!(names, vec!["Gone", "Lost"]);
-        assert_eq!(view.locked_count, 0);
-        assert_eq!(view.all_scope_count, all.cards.len());
+        for name in ["Alpha", "Zeta", "Gone", "Added", "Lost"] {
+            assert!(names.contains(&name), "{name} missing from {names:?}");
+        }
     }
 
     #[test]
