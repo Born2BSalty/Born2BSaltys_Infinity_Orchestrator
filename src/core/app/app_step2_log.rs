@@ -210,6 +210,16 @@ pub(crate) fn imported_log_path(step1: &Step1State, first_slot: bool) -> Option<
     (!folder.is_empty()).then(|| PathBuf::from(folder).join(IMPORTED_LOG_FILE_NAME))
 }
 
+#[must_use]
+pub(crate) fn imported_log_paths(step1: &Step1State) -> Vec<(&'static str, PathBuf)> {
+    list_log_slots(&step1.game_install)
+        .into_iter()
+        .filter_map(|(tab, first_slot)| {
+            imported_log_path(step1, first_slot).map(|path| (tab, path))
+        })
+        .collect()
+}
+
 fn read_imported_log(step1: &Step1State, first_slot: bool) -> Option<LogFile> {
     let path = imported_log_path(step1, first_slot)?;
     if !path.is_file() {
@@ -218,8 +228,13 @@ fn read_imported_log(step1: &Step1State, first_slot: bool) -> Option<LogFile> {
     LogFile::from_path(&path).ok()
 }
 
+#[must_use]
+pub(crate) fn tracks_imported_logs(state: &WizardState) -> bool {
+    !state.step1.installs_exactly_from_weidu_logs() && !state.modlist_auto_build_active
+}
+
 pub(crate) fn refresh_logged_missing(state: &mut WizardState) {
-    if state.step1.installs_exactly_from_weidu_logs() || state.modlist_auto_build_active {
+    if !tracks_imported_logs(state) {
         return;
     }
     state

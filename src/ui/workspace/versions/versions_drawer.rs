@@ -10,7 +10,7 @@ use eframe::egui;
 use crate::app::app_step2_router::NEW_MOD_CARD_KEY;
 use crate::app::mod_downloads;
 use crate::app::state::{
-    Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
+    Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, WizardState,
     exact_log_ready_to_install, update_pipeline_busy,
 };
 use crate::app::step2_action::Step2Action;
@@ -21,11 +21,12 @@ use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, clipboard, redesign_btn, redesign_text_input,
 };
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_accent, redesign_border_strong,
-    redesign_input_bg, redesign_pill_text, redesign_shell_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_accent, redesign_accent_hover,
+    redesign_border_strong, redesign_input_bg, redesign_pill_text, redesign_shell_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 use crate::ui::step2::update_check_popup_report_step2::build_popup_report;
+use crate::ui::workspace::step2_log_glue::forget_imported_logs;
 
 use super::{versions_card, versions_form, versions_icons, versions_menus, versions_sheets};
 
@@ -412,7 +413,7 @@ pub(crate) fn render(
         &spec,
         |ui| {
             if view.log_missing_count > 0 {
-                render_log_strip(ui, palette, view.log_missing_count);
+                render_log_strip(ui, orchestrator, palette, view.log_missing_count);
             }
             if header.retry_count > 0 {
                 render_exact_version_miss_strip(
@@ -682,16 +683,162 @@ fn subtitle_text(orchestrator: &OrchestratorApp, modlist_name: &str, mod_count: 
     format!("{modlist_name} \u{00B7} {mod_count} {mods_word} \u{00B7} {status}")
 }
 
-fn render_log_strip(ui: &mut egui::Ui, palette: ThemePalette, n: usize) {
+const FORGET_LOGS_LINK: &str = "Forget imported logs";
+
+fn log_strip_text(n: usize, imported: bool) -> String {
     let word = if n == 1 { "mod" } else { "mods" };
     let verb = if n == 1 { "is" } else { "are" };
+    if imported {
+        format!("{n} {word} from your imported logs {verb} not on disk")
+    } else {
+        format!("{n} {word} {verb} not on disk yet")
+    }
+}
+
+fn imported_missing_count(state: &WizardState) -> usize {
+    if crate::app::app_step2_log::tracks_imported_logs(state) {
+        state.step2.versions_ui.shown_missing_keys.len()
+    } else {
+        0
+    }
+}
+
+const fn forget_link_enabled(step2: &Step2State) -> bool {
+    !update_pipeline_busy(step2)
+}
+
+fn muted_strip_label(ui: &mut egui::Ui, palette: ThemePalette, text: impl Into<String>) {
     ui.label(
-        egui::RichText::new(format!("{n} {word} {verb} not on disk yet"))
+        egui::RichText::new(text)
             .size(12.0)
             .family(egui::FontFamily::Name("poppins_light".into()))
             .color(redesign_text_muted(palette)),
     );
+}
+
+fn render_log_strip(
+    ui: &mut egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+    palette: ThemePalette,
+    n: usize,
+) {
+    let logged = imported_missing_count(&orchestrator.wizard_state);
+    if logged == 0 {
+        muted_strip_label(ui, palette, log_strip_text(n, false));
+        ui.add_space(8.0);
+        return;
+    }
+    let step2 = &orchestrator.wizard_state.step2;
+    let enabled = forget_link_enabled(step2);
+    let confirm_open = step2.versions_ui.forget_logs_confirm_open;
+    ui.horizontal(|ui| {
+        if confirm_open {
+            render_forget_logs_confirm_inline(ui, orchestrator, palette, !enabled);
+        } else {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            muted_strip_label(ui, palette, log_strip_text(logged, true));
+            muted_strip_label(ui, palette, " \u{00B7} ");
+            if forget_link(ui, palette, FORGET_LOGS_LINK, enabled).clicked() && enabled {
+                orchestrator
+                    .wizard_state
+                    .step2
+                    .versions_ui
+                    .forget_logs_confirm_open = true;
+            }
+        }
+    });
     ui.add_space(8.0);
+}
+
+fn render_forget_logs_confirm_inline(
+    ui: &mut egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+    palette: ThemePalette,
+    busy: bool,
+) {
+    muted_strip_label(
+        ui,
+        palette,
+        "Forget imported logs? Your selections stay as they are.",
+    );
+    if redesign_btn(
+        ui,
+        palette,
+        "Forget logs",
+        BtnOpts {
+            primary: true,
+            small: true,
+            disabled: busy,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && !busy
+    {
+        orchestrator
+            .wizard_state
+            .step2
+            .versions_ui
+            .forget_logs_confirm_open = false;
+        forget_imported_logs(orchestrator);
+    }
+    if redesign_btn(
+        ui,
+        palette,
+        "Cancel",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked()
+    {
+        orchestrator
+            .wizard_state
+            .step2
+            .versions_ui
+            .forget_logs_confirm_open = false;
+    }
+}
+
+fn forget_link(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    text: &str,
+    enabled: bool,
+) -> egui::Response {
+    let font = egui::FontId::new(12.0, egui::FontFamily::Name("poppins_light".into()));
+    let color = if enabled {
+        redesign_accent(palette)
+    } else {
+        redesign_text_muted(palette)
+    };
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font.clone(), color);
+    let sense = if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(galley.size(), sense);
+
+    if ui.is_rect_visible(rect) {
+        let painted_color = if enabled && response.hovered() {
+            redesign_accent_hover(palette)
+        } else {
+            color
+        };
+        ui.painter().text(
+            rect.left_center(),
+            egui::Align2::LEFT_CENTER,
+            text,
+            font,
+            painted_color,
+        );
+    }
+
+    response
 }
 
 fn filter_chip_width(ui: &egui::Ui, label: &str, count: usize) -> f32 {
@@ -1840,6 +1987,70 @@ mod tests {
         let missing = keys(&["gone", "later"]);
         assert_eq!(footer_fetch_count(&view, Some(&missing)), 1);
         assert_eq!(footer_fetch_count(&view, None), view.fetch_count);
+    }
+
+    #[test]
+    fn the_forget_link_is_inert_while_the_pipeline_is_busy() {
+        assert!(forget_link_enabled(&Step2State::default()));
+        let busy_states = [
+            Step2State {
+                update_selected_download_running: true,
+                ..Step2State::default()
+            },
+            Step2State {
+                update_selected_check_running: true,
+                ..Step2State::default()
+            },
+            Step2State {
+                is_scanning: true,
+                ..Step2State::default()
+            },
+        ];
+        for step2 in &busy_states {
+            assert!(!forget_link_enabled(step2));
+        }
+    }
+
+    #[test]
+    fn only_imported_logs_offer_the_forget_link() {
+        let mut state = WizardState::default();
+        state.step2.log_pending_downloads = vec![
+            pending("SETUP-ADDED.TP2", LogPendingOrigin::AddedMod),
+            pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+        ];
+        settle_and_hold(&mut state.step2);
+        assert_eq!(imported_missing_count(&state), 1);
+        assert_eq!(
+            log_strip_text(1, true),
+            "1 mod from your imported logs is not on disk"
+        );
+
+        state.step2.log_pending_downloads =
+            vec![pending("SETUP-ADDED.TP2", LogPendingOrigin::AddedMod)];
+        settle_and_hold(&mut state.step2);
+        assert_eq!(imported_missing_count(&state), 0);
+        assert_eq!(log_strip_text(1, false), "1 mod is not on disk yet");
+
+        state.step2.log_pending_downloads =
+            vec![pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog)];
+        settle_and_hold(&mut state.step2);
+        state.step1.install_mode =
+            crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        assert_eq!(imported_missing_count(&state), 0);
+        state.step1.install_mode = String::new();
+        state.modlist_auto_build_active = true;
+        assert_eq!(imported_missing_count(&state), 0);
+    }
+
+    #[test]
+    fn closing_versions_cancels_the_forget_confirm() {
+        let mut step2 = Step2State {
+            update_selected_popup_open: true,
+            ..Step2State::default()
+        };
+        step2.versions_ui.forget_logs_confirm_open = true;
+        close_versions_drawer(&mut step2);
+        assert!(!step2.versions_ui.forget_logs_confirm_open);
     }
 
     #[test]

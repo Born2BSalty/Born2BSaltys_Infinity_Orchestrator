@@ -110,6 +110,7 @@ pub struct VersionsDrawerUi {
     pub(crate) auto_check_pending: bool,
     pub(crate) log_pending_scope: VersionsDrawerFlag,
     pub(crate) shown_missing_keys: BTreeSet<String>,
+    pub(crate) forget_logs_confirm_open: VersionsDrawerFlag,
     pub(crate) source_form: Option<SourceForm>,
     pub(crate) release_list: ReleaseListState,
     pub(crate) known: Option<KnownExtras>,

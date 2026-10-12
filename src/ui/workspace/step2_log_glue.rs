@@ -8,10 +8,10 @@ use std::time::Instant;
 use rfd::FileDialog;
 
 use crate::app::app_step2_log::{
-    apply_weidu_log_selection_from_path, imported_log_path, logged_ticks_for_run,
-    refresh_logged_missing, reseed_added_mod_pending_downloads, resolve_bg2_weidu_log_path,
-    resolve_bgee_weidu_log_path, tab_for_slot, tick_arrived_logged_mods, ticked_log_line_count,
-    unticked_log_lines,
+    apply_weidu_log_selection_from_path, imported_log_path, imported_log_paths,
+    logged_ticks_for_run, refresh_logged_missing, reseed_added_mod_pending_downloads,
+    resolve_bg2_weidu_log_path, resolve_bgee_weidu_log_path, tab_for_slot,
+    tick_arrived_logged_mods, ticked_log_line_count, unticked_log_lines,
 };
 use crate::app::game_authority;
 use crate::app::state::{Step1State, Step2LogUnticked, Step2State};
@@ -315,6 +315,40 @@ pub(crate) fn drop_log_ticks_outside_workspace(orchestrator: &mut OrchestratorAp
             .step3
             .pending_log_placements
             .clear();
+    }
+}
+
+pub(crate) fn forget_imported_logs(orchestrator: &mut OrchestratorApp) {
+    let mut every_log_forgotten = true;
+    for (tab, path) in imported_log_paths(&orchestrator.wizard_state.step1) {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                every_log_forgotten = false;
+                orchestrator
+                    .notification_manager
+                    .error(format!("Could not forget the {tab} WeiDU log: {err}"));
+            }
+        }
+    }
+    refresh_logged_missing(&mut orchestrator.wizard_state);
+    orchestrator.wizard_state.step2.pending_log_ticks.clear();
+    orchestrator
+        .wizard_state
+        .step3
+        .pending_log_placements
+        .clear();
+    let versions_ui = &mut orchestrator.wizard_state.step2.versions_ui;
+    versions_ui.log_pending_scope = false;
+    versions_ui.shown_missing_keys.clear();
+    orchestrator
+        .notification_manager
+        .replace_persistent_warning(UNTICKED_WARNING_SLOT, None);
+    if every_log_forgotten {
+        orchestrator
+            .notification_manager
+            .success("Imported WeiDU logs forgotten");
     }
 }
 
@@ -1719,5 +1753,88 @@ mod tests {
 
         forget_import_callouts_on_scan_end(&mut app, true);
         assert_eq!(drawer_callouts(&app), (None, None));
+    }
+
+    #[test]
+    fn forgetting_deletes_the_kept_log_and_clears_the_missing_list() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-forget-clears", &root);
+        let kept = imported_log_path(&app.wizard_state.step1, true).expect("slot");
+        assert!(kept.is_file());
+        let install_log = kept.with_file_name("weidu.log");
+        std::fs::write(&install_log, ARRIVAL_LOG).expect("install log");
+        assert!(app.wizard_state.step2.logged_missing_count() > 0);
+        app.wizard_state.step2.bgee_mods[0].components[0].checked = true;
+        let x_before = checked_ids(&app, "X");
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from([y_key()]);
+        app.wizard_state.step3.queue_log_placement(
+            game_authority::GameSlot::First,
+            vec![pair("Y", "0")],
+            BTreeSet::from([pair("Y", "0")]),
+        );
+        app.wizard_state.step2.versions_ui.log_pending_scope = true;
+
+        forget_imported_logs(&mut app);
+
+        assert!(!kept.exists());
+        assert!(
+            install_log.is_file(),
+            "the install's weidu.log is never touched"
+        );
+        let step2 = &app.wizard_state.step2;
+        assert_eq!(step2.logged_missing_count(), 0);
+        assert!(step2.pending_log_ticks.is_empty());
+        assert_eq!(app.wizard_state.step3.pending_log_placements.len(), 0);
+        assert!(!step2.versions_ui.log_pending_scope);
+        assert!(step2.versions_ui.shown_missing_keys.is_empty());
+        assert_eq!(checked_ids(&app, "X"), x_before);
+    }
+
+    #[test]
+    fn forgetting_deletes_both_eet_logs() {
+        let root = TempRoot::new();
+        let mut app = eet_import_app("logimport-forget-eet", &root);
+        let kept: Vec<PathBuf> = [true, false]
+            .into_iter()
+            .map(|first_slot| {
+                imported_log_path(&app.wizard_state.step1, first_slot).expect("EET slot")
+            })
+            .collect();
+        for path in &kept {
+            std::fs::create_dir_all(path.parent().expect("slot folder")).expect("slot folder");
+            std::fs::write(path, TWO_COMPONENT_LOG).expect("imported log");
+        }
+
+        forget_imported_logs(&mut app);
+
+        for path in &kept {
+            assert!(!path.exists(), "{}", path.display());
+        }
+    }
+
+    #[test]
+    fn a_fetch_after_forgetting_ticks_nothing() {
+        let root = TempRoot::new();
+        let mut app = app_before_the_fetch("logimport-forget-then-fetch", &root);
+        app.wizard_state.step2.pending_log_ticks = BTreeSet::from([y_key()]);
+
+        forget_imported_logs(&mut app);
+        finish_the_rescan_with_y_on_disk(&mut app);
+
+        assert_eq!(checked_ids(&app, "Y"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn forgetting_closes_the_unticked_warning() {
+        let root = TempRoot::new();
+        let log_path = root.write_log("weidu.log", TWO_COMPONENT_LOG);
+        let mut app = bgee_import_app("logimport-forget-warning", &root);
+        let ctx = egui::Context::default();
+        import_weidu_logs(&mut app, import_form(Some(log_path), false));
+        assert!(toasts_on_screen(&mut app, &ctx).contains(&MISSING_X_WARNING.to_string()));
+
+        forget_imported_logs(&mut app);
+
+        assert!(!toasts_on_screen(&mut app, &ctx).contains(&MISSING_X_WARNING.to_string()));
     }
 }
