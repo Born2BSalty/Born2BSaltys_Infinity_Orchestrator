@@ -29,6 +29,10 @@ pub(in crate::app) fn single_related_target(rule: &CompatRule) -> Option<(String
     }
 }
 
+pub(in crate::app) fn first_related_target(rule: &CompatRule) -> Option<(String, Option<String>)> {
+    related_targets(rule).into_iter().next()
+}
+
 pub(in crate::app) fn matched_related_target(
     rule: &CompatRule,
     current_tp_file: &str,

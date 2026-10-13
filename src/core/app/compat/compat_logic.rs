@@ -11,9 +11,9 @@ use super::compat_missing_dep_scan::apply_step2_scan_missing_dep;
 use super::compat_path_scan::apply_step2_scan_path_requirement;
 use super::compat_rule_runtime::{
     active_item_order, clear_kind_matches, collect_step2_active_items, compat_component_matches,
-    compat_mod_matches, direct_rule_applies, kind_disables_selection, match_kind_matches,
-    matched_related_target, mode_matches, non_empty, normalize_kind, normalize_mod_key,
-    relation_rule_applies, single_related_target, tab_matches,
+    compat_mod_matches, direct_rule_applies, first_related_target, kind_disables_selection,
+    match_kind_matches, matched_related_target, mode_matches, non_empty, normalize_kind,
+    normalize_mod_key, relation_rule_applies, single_related_target, tab_matches,
 };
 use super::compat_rules::{CompatRule, compat_rule_source_path, load_rules};
 
@@ -137,7 +137,8 @@ fn apply_relation_rules_to_tab(
                     rule,
                     &tp_file,
                     component,
-                    matched_related_target(rule, &tp_file, &component_id, &active_items),
+                    matched_related_target(rule, &tp_file, &component_id, &active_items)
+                        .or_else(|| first_related_target(rule)),
                 );
             }
         }
@@ -323,4 +324,162 @@ fn rule_debug_line(rule: &CompatRule) -> String {
         parts.push(format!("message={message}"));
     }
     parts.join(" | ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_relation_rules_to_tab;
+    use crate::app::compat_rules::{CompatRule, CompatRulesFile, default_step2_rules_content};
+    use crate::app::state::{Step1State, Step2ComponentState, Step2ModState};
+
+    fn component(component_id: &str, checked: bool) -> Step2ComponentState {
+        Step2ComponentState {
+            component_id: component_id.to_string(),
+            label: format!("Component {component_id}"),
+            weidu_group: None,
+            collapsible_group: None,
+            collapsible_group_is_umbrella: false,
+            collapsible_group_combinable: false,
+            raw_line: String::new(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            is_meta_mode_component: false,
+            disabled: false,
+            compat_kind: None,
+            compat_source: None,
+            compat_related_mod: None,
+            compat_related_component: None,
+            compat_graph: None,
+            compat_evidence: None,
+            disabled_reason: None,
+            checked,
+            selected_order: checked.then_some(1),
+        }
+    }
+
+    fn mod_with(name: &str, components: Vec<Step2ComponentState>) -> Step2ModState {
+        Step2ModState {
+            name: name.to_string(),
+            tp_file: format!("SETUP-{name}.TP2"),
+            tp2_path: format!("{name}/SETUP-{name}.TP2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: components.iter().any(|component| component.checked),
+            hidden_components: Vec::new(),
+            components,
+        }
+    }
+
+    fn rules_from(content: &str) -> Vec<CompatRule> {
+        toml::from_str::<CompatRulesFile>(content)
+            .expect("rules parse")
+            .rules
+            .into_iter()
+            .map(|mut rule| {
+                rule.loaded_from = Some("test rules".to_string());
+                rule
+            })
+            .collect()
+    }
+
+    fn dependent_issue(mods: &[Step2ModState]) -> &Step2ComponentState {
+        &mods[0].components[0]
+    }
+
+    #[test]
+    fn a_rule_driven_missing_dependency_names_the_unticked_target() {
+        let rules = rules_from(
+            r#"
+[[rules]]
+mod = "dependent"
+component_id = "0"
+kind = "missing_dep"
+related_mod = "target"
+related_component = "11"
+message = "Requires target component 11."
+"#,
+        );
+        let mut mods = vec![
+            mod_with("dependent", vec![component("0", true)]),
+            mod_with("target", vec![component("11", false)]),
+        ];
+
+        apply_relation_rules_to_tab(&Step1State::default(), "BGEE", &rules, &mut mods);
+
+        let issue = dependent_issue(&mods);
+        assert_eq!(issue.compat_kind.as_deref(), Some("missing_dep"));
+        assert_eq!(issue.compat_related_mod.as_deref(), Some("target"));
+        assert_eq!(issue.compat_related_component.as_deref(), Some("11"));
+    }
+
+    #[test]
+    fn a_rule_driven_conflict_still_names_the_ticked_target() {
+        let rules = rules_from(
+            r#"
+[[rules]]
+mod = "dependent"
+component_id = "0"
+kind = "conflict"
+related_mod = "target"
+related_component = ["5", "11"]
+message = "Conflicts with target."
+"#,
+        );
+        let mut mods = vec![
+            mod_with("dependent", vec![component("0", true)]),
+            mod_with("target", vec![component("5", false), component("11", true)]),
+        ];
+
+        apply_relation_rules_to_tab(&Step1State::default(), "BGEE", &rules, &mut mods);
+
+        let issue = dependent_issue(&mods);
+        assert_eq!(issue.compat_kind.as_deref(), Some("conflict"));
+        assert_eq!(issue.compat_related_mod.as_deref(), Some("target"));
+        assert_eq!(issue.compat_related_component.as_deref(), Some("11"));
+    }
+
+    fn has_garrick_rule(
+        rules: &[CompatRule],
+        kind: &str,
+        related_component: &str,
+        position: Option<&str>,
+    ) -> bool {
+        rules.iter().any(|rule| {
+            rule.r#mod.trimmed_items() == ["garrick-tt"]
+                && rule
+                    .component_id
+                    .as_ref()
+                    .is_some_and(|ids| ids.trimmed_items() == ["0"])
+                && rule.kind == kind
+                && rule
+                    .related_mod
+                    .as_ref()
+                    .is_some_and(|mods| mods.trimmed_items() == ["bg1npc"])
+                && rule
+                    .related_component
+                    .as_ref()
+                    .is_some_and(|ids| ids.trimmed_items() == [related_component])
+                && rule.position.as_deref() == position
+        })
+    }
+
+    #[test]
+    fn garrick_tt_requires_and_follows_bg1npc_banters_and_pids() {
+        let rules = rules_from(default_step2_rules_content());
+        assert!(has_garrick_rule(&rules, "missing_dep", "10", None));
+        assert!(has_garrick_rule(&rules, "missing_dep", "200", None));
+        assert!(has_garrick_rule(&rules, "order_block", "10", Some("after")));
+        assert!(has_garrick_rule(
+            &rules,
+            "order_block",
+            "200",
+            Some("after")
+        ));
+    }
 }

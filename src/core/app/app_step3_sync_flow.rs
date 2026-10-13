@@ -270,4 +270,90 @@ mod tests {
             vec![pair("A", "0"), pair("C", "0"), pair("B", "0")]
         );
     }
+
+    fn logged_component(name: &str, selected_order: Option<usize>) -> Step2ComponentState {
+        let mut logged = component("0", selected_order);
+        logged.raw_line = format!("~{name}\\SETUP-{name}.TP2~ #0 #0 // Component 0");
+        logged
+    }
+
+    fn state_with_a_b_c_ticked_and_d_unticked() -> WizardState {
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![
+            mod_with("A", vec![logged_component("A", Some(1))]),
+            mod_with("B", vec![logged_component("B", Some(2))]),
+            mod_with("C", vec![logged_component("C", Some(3))]),
+            mod_with("D", vec![logged_component("D", None)]),
+        ];
+        state.step2.next_selection_order = 4;
+        sync_step3_from_step2(&mut state);
+        state
+    }
+
+    fn untick_a_and_tick_d(state: &mut WizardState) {
+        state.step2.bgee_mods[0].components[0].checked = false;
+        state.step2.bgee_mods[0].components[0].selected_order = None;
+        state.step2.bgee_mods[0].checked = false;
+        let next_order = state.step2.next_selection_order;
+        state.step2.bgee_mods[3].components[0].checked = true;
+        state.step2.bgee_mods[3].components[0].selected_order = Some(next_order);
+        state.step2.bgee_mods[3].checked = true;
+        state.step2.next_selection_order = next_order + 1;
+    }
+
+    fn set_answer_on_b(state: &mut WizardState, answer: &str) {
+        state.step3.prompt_edit_tp2_file = "SETUP-B.TP2".to_string();
+        state.step3.prompt_edit_component_id = "0".to_string();
+        crate::app::step3_prompt_edit::save_wlb_answer(state, answer).expect("answer saved");
+    }
+
+    fn b_raw_line(state: &WizardState) -> String {
+        state
+            .step3
+            .bgee_items
+            .iter()
+            .find(|item| !item.is_parent && item.mod_name == "B")
+            .map(|item| item.raw_line.clone())
+            .expect("B stays in Step 3")
+    }
+
+    #[test]
+    fn a_step3_prompt_answer_keeps_its_row_in_place_across_a_step2_change() {
+        let mut state = state_with_a_b_c_ticked_and_d_unticked();
+        set_answer_on_b(&mut state, "y,2");
+        let edited_line = b_raw_line(&state);
+
+        untick_a_and_tick_d(&mut state);
+        sync_step3_from_step2(&mut state);
+
+        assert_eq!(
+            children(&state),
+            vec![pair("B", "0"), pair("C", "0"), pair("D", "0")]
+        );
+        assert_eq!(b_raw_line(&state), edited_line);
+        assert!(edited_line.contains("@wlb-inputs: y,2"));
+    }
+
+    #[test]
+    fn clearing_a_step3_prompt_answer_keeps_its_row_in_place_across_a_step2_change() {
+        let mut state = state_with_a_b_c_ticked_and_d_unticked();
+        set_answer_on_b(&mut state, "y,2");
+        sync_step3_from_step2(&mut state);
+        crate::app::step3_prompt_edit::apply_prompt_actions(
+            &mut state,
+            &[crate::app::step3_prompt_edit::PromptActionRequest::Clear {
+                tp_file: "SETUP-B.TP2".to_string(),
+                component_id: "0".to_string(),
+            }],
+        );
+
+        untick_a_and_tick_d(&mut state);
+        sync_step3_from_step2(&mut state);
+
+        assert_eq!(
+            children(&state),
+            vec![pair("B", "0"), pair("C", "0"), pair("D", "0")]
+        );
+        assert!(!b_raw_line(&state).contains("@wlb-inputs"));
+    }
 }

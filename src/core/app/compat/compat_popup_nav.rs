@@ -640,4 +640,36 @@ mod tests {
         assert!(state.step2.compat_popup_open);
         assert_eq!(state.current_step, 1);
     }
+
+    #[test]
+    fn a_missing_dependency_lands_on_its_unticked_component() {
+        let mut state = state_seeded_on(1);
+        state.step2.bgee_mods[0].components = ["10", "11"]
+            .into_iter()
+            .map(|id| Step2ComponentState {
+                raw_line: format!("~REQ.TP2~ #0 #{id}"),
+                ..component(id, id == "10", "missing_dep")
+            })
+            .collect();
+        let issue = CompatIssue {
+            kind: "missing_dep".to_string(),
+            related_component: Some(11),
+            ..related_issue("req")
+        };
+
+        let outcome = jump_to_related(&mut state, &issue);
+
+        assert_eq!(outcome, Some(RelatedJumpOutcome::LandedOnStep2));
+        match state.step2.selected.as_ref() {
+            Some(Step2Selection::Component {
+                tp_file,
+                component_id,
+                ..
+            }) => {
+                assert_eq!(tp_file, "req.tp2");
+                assert_eq!(component_id, "11");
+            }
+            other => panic!("expected a component selection, got {other:?}"),
+        }
+    }
 }

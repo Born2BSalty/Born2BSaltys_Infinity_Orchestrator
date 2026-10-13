@@ -248,6 +248,48 @@ position = "after"
 message = "Install this after BGQE component 11: Brage's Sword."
 
 [[rules]]
+mod = "garrick-tt"
+component_id = "0"
+mode = ["BGEE", "EET"]
+tab = ["BGEE", "BG2EE"]
+kind = "missing_dep"
+related_mod = "bg1npc"
+related_component = "10"
+message = "Requires BG1NPC components 10 and 200: Banters, Quests, and Interjections; Player-Initiated Dialogues (PIDs)."
+
+[[rules]]
+mod = "garrick-tt"
+component_id = "0"
+mode = ["BGEE", "EET"]
+tab = ["BGEE", "BG2EE"]
+kind = "missing_dep"
+related_mod = "bg1npc"
+related_component = "200"
+message = "Requires BG1NPC components 10 and 200: Banters, Quests, and Interjections; Player-Initiated Dialogues (PIDs)."
+
+[[rules]]
+mod = "garrick-tt"
+component_id = "0"
+mode = ["BGEE", "EET"]
+tab = ["BGEE", "BG2EE"]
+kind = "order_block"
+related_mod = "bg1npc"
+related_component = "10"
+position = "after"
+message = "Install this after BG1NPC components 10 and 200: Banters, Quests, and Interjections; Player-Initiated Dialogues (PIDs)."
+
+[[rules]]
+mod = "garrick-tt"
+component_id = "0"
+mode = ["BGEE", "EET"]
+tab = ["BGEE", "BG2EE"]
+kind = "order_block"
+related_mod = "bg1npc"
+related_component = "200"
+position = "after"
+message = "Install this after BG1NPC components 10 and 200: Banters, Quests, and Interjections; Player-Initiated Dialogues (PIDs)."
+
+[[rules]]
 mod = "ub"
 component_id = ["11", "16"]
 kind = "deprecated"
