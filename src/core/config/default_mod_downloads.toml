@@ -13,6 +13,7 @@
 name = "Improved Archer Kit"
 tp2 = "A7#ImprovedArcher"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -33,6 +34,7 @@ aliases = []
 name = "Achievements!"
 tp2 = "A7-Achievements"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -53,6 +55,7 @@ aliases = []
 name = "Banter Accelerator for Enhanced Edition"
 tp2 = "A7-BanterAccelerator"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -73,6 +76,7 @@ aliases = []
 name = "Convenient Enhanced Edition NPCs"
 tp2 = "A7-ConvenientEENPCs"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -93,6 +97,7 @@ aliases = []
 name = "Golem Construction for Spellcasters"
 tp2 = "A7-GolemConstruction"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -113,6 +118,7 @@ aliases = []
 name = "Improved Shamanic Dance"
 tp2 = "A7#ImprovedShamanicDance"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -133,6 +139,7 @@ aliases = []
 name = "Magic Store of Vergadain"
 tp2 = "A7-MagicStore"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -174,6 +181,7 @@ config_files = ["A7-MultiKits.ini"]
 name = "Test Your Mettle!"
 tp2 = "A7-TestYourMettle"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -194,6 +202,7 @@ aliases = []
 name = "Wares Of The Planes"
 tp2 = "A7-WaresOfThePlanes"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -214,6 +223,7 @@ aliases = []
 name = "DLC Merger"
 tp2 = "DlcMerger"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -234,6 +244,7 @@ aliases = []
 name = "Reveal Hidden Gameplay Options"
 tp2 = "HiddenGameplayOptions"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -254,6 +265,7 @@ aliases = []
 name = "High Quality Soundclips"
 tp2 = "HQ_SoundClips_BG2EE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -274,6 +286,7 @@ aliases = []
 name = "Lighting Pack"
 tp2 = "LightingPack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "argent77"
@@ -298,6 +311,7 @@ aliases = []
 name = "Ajantis BG1 Expansion Modification"
 tp2 = "ajantisbg1"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -318,6 +332,7 @@ aliases = []
 name = "Alternatives"
 tp2 = "Alternatives"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -338,6 +353,7 @@ aliases = []
 name = "Angelo NPC"
 tp2 = "Angelo"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -358,6 +374,7 @@ aliases = []
 name = "Anishai NPC"
 tp2 = "Anishai"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -378,6 +395,7 @@ aliases = []
 name = "Aran Whitehand"
 tp2 = "aranw"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -398,6 +416,7 @@ aliases = []
 name = "The BG1NPC Project"
 tp2 = "BG1NPC"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -418,6 +437,7 @@ aliases = []
 name = "BG1 NPC Music"
 tp2 = "bg1npcmusic"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -438,6 +458,7 @@ aliases = []
 name = "Baldur's Gate Mini Quests and Encounters Modification"
 tp2 = "bgqe"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -458,6 +479,7 @@ aliases = []
 name = "Balduran's Seatower"
 tp2 = "bst"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -478,6 +500,7 @@ aliases = []
 name = "Another Fine Hell"
 tp2 = "c#anotherfinehell"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -498,6 +521,7 @@ aliases = []
 name = "Endless BG1 Mod"
 tp2 = "c#endlessbg1"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -518,6 +542,7 @@ aliases = []
 name = "Grey the Dog NPC"
 tp2 = "c#greythedog"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -538,6 +563,7 @@ aliases = []
 name = "The Boareskyr Bridge Scene"
 tp2 = "c#sodboabri"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -558,6 +584,7 @@ aliases = []
 name = "Jastey's Tweaks"
 tp2 = "c#sodtweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -578,6 +605,7 @@ aliases = []
 name = "Infinity Collection Portrait Pack"
 tp2 = "cd_icpp"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -598,6 +626,7 @@ aliases = []
 name = "Lore From Learning"
 tp2 = "cdlore"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -639,6 +668,7 @@ config_files = ["cdtweaks.ini", "gttweaks.ini"]
 name = "Coran's BG Extended Friendship Talks"
 tp2 = "coranbgfriend"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -659,6 +689,7 @@ aliases = []
 name = "Cowled Menace"
 tp2 = "CowledMenace"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -679,6 +710,7 @@ aliases = []
 name = "Crossmod Banter Pack"
 tp2 = "crossmodbg2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -699,6 +731,7 @@ aliases = []
 name = "Restored Rhynn Lanthorn"
 tp2 = "dw_lanthorn"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -719,6 +752,7 @@ aliases = []
 name = "Talents of Faerun"
 tp2 = "dw_talents"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -739,6 +773,7 @@ aliases = []
 name = "EE Fixpack"
 tp2 = "eefixpack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -759,6 +794,7 @@ aliases = []
 name = "Baldur's Gate: Enhanced Edition Trilogy"
 tp2 = "eet"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -779,6 +815,7 @@ aliases = []
 name = "Enhanced Edition Trilogy (End)"
 tp2 = "EET_END"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -799,6 +836,7 @@ aliases = []
 name = "G3 Anniversary"
 tp2 = "G3ANNIVERSARY"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -819,6 +857,7 @@ aliases = []
 name = "G3 Community Item Pack"
 tp2 = "G3CIP"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -839,6 +878,7 @@ aliases = []
 name = "Gavin NPC"
 tp2 = "gavin_bg2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -859,6 +899,7 @@ aliases = []
 name = "Haldamir"
 tp2 = "haldamir"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -879,6 +920,7 @@ aliases = []
 name = "Imoen 4 Ever"
 tp2 = "imoen_forever"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -899,6 +941,7 @@ aliases = []
 name = "Item Revisions"
 tp2 = "item_rev"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -919,6 +962,7 @@ aliases = []
 name = "IWDification"
 tp2 = "iwdification"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -939,6 +983,7 @@ aliases = []
 name = "Berelinde's Keldorn Romance"
 tp2 = "keldorn_rom"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -959,6 +1004,7 @@ aliases = []
 name = "Kivan of Shilmista"
 tp2 = "Kivan"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -979,6 +1025,7 @@ aliases = []
 name = "Mur'Neth NPC"
 tp2 = "mur'neth"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -999,6 +1046,7 @@ aliases = []
 name = "NPC Tweak"
 tp2 = "npc_tweak"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1019,6 +1067,7 @@ aliases = []
 name = "Romantic Encounters"
 tp2 = "RE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1039,6 +1088,7 @@ aliases = []
 name = "Sarah NPC Romance"
 tp2 = "sarahtob"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1059,6 +1109,7 @@ aliases = []
 name = "Shards of Ice"
 tp2 = "shardsofice"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1079,6 +1130,7 @@ aliases = []
 name = "SoD to BG2 Item Upgrade"
 tp2 = "sod2bg2_iu"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1099,6 +1151,7 @@ aliases = []
 name = "Road to Discovery"
 tp2 = "sodrtd"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1119,6 +1172,7 @@ aliases = []
 name = "Song and Silence"
 tp2 = "song_and_silence"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1139,6 +1193,7 @@ aliases = []
 name = "Spell Revisions"
 tp2 = "spell_rev"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1159,6 +1214,7 @@ aliases = []
 name = "SP Collection"
 tp2 = "SPSTUFF"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1200,6 +1256,7 @@ config_files = ["stratagems.ini"]
 name = "The Calling"
 tp2 = "thecalling"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1220,6 +1277,7 @@ aliases = []
 name = "Transitions"
 tp2 = "transitions"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1240,6 +1298,7 @@ aliases = []
 name = "Improved Horns of Valhalla"
 tp2 = "valhorn"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1260,6 +1319,7 @@ aliases = []
 name = "Wheels of Prophecy"
 tp2 = "wheels"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -1284,6 +1344,7 @@ aliases = []
 name = "Assassinations"
 tp2 = "assassinations"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1304,6 +1365,7 @@ aliases = []
 name = "Back to Brynnlaw"
 tp2 = "BackBrynnlaw"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1324,6 +1386,7 @@ aliases = []
 name = "Banter Packs"
 tp2 = "banterpack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1344,6 +1407,7 @@ aliases = []
 name = "BG1 Unfinished Business"
 tp2 = "bg1ub"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1364,6 +1428,7 @@ aliases = []
 name = "Branwen BG2 NPC"
 tp2 = "branwen"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1384,6 +1449,7 @@ aliases = []
 name = "Coran NPC"
 tp2 = "coran"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1404,6 +1470,7 @@ aliases = []
 name = "Dungeon Crawl"
 tp2 = "DC"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1424,6 +1491,7 @@ aliases = []
 name = "De'Arnise Romance"
 tp2 = "deArnise"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1444,6 +1512,7 @@ aliases = []
 name = "Indira NPC"
 tp2 = "IndiNPC"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1464,6 +1533,7 @@ aliases = []
 name = "Item Upgrade"
 tp2 = "itemupgrade"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1484,6 +1554,7 @@ aliases = []
 name = "Kelsey NPC"
 tp2 = "kelsey"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1504,6 +1575,7 @@ aliases = []
 name = "Keto NPC"
 tp2 = "keto"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1524,6 +1596,7 @@ aliases = []
 name = "Bioware NPC Flirt Packs"
 tp2 = "npcflirt"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1544,6 +1617,7 @@ aliases = []
 name = "QuestPack"
 tp2 = "d0questpack"
 aliases = ["questpack"]
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1564,6 +1638,7 @@ aliases = ["questpack"]
 name = "The Reunion"
 tp2 = "Reunion"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1584,6 +1659,7 @@ aliases = []
 name = "The Sellswords"
 tp2 = "Sellswords"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1604,6 +1680,7 @@ aliases = []
 name = "The Lure of the Sirine's Call"
 tp2 = "SirinesCall"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1624,6 +1701,7 @@ aliases = []
 name = "Tiax NPC"
 tp2 = "Tiax"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1644,6 +1722,7 @@ aliases = []
 name = "Turnabout"
 tp2 = "Turnabout"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1664,6 +1743,7 @@ aliases = []
 name = "Unfinished Business"
 tp2 = "ub"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1684,6 +1764,7 @@ aliases = []
 name = "Under-Represented Items"
 tp2 = "underrep"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1704,6 +1785,7 @@ aliases = []
 name = "Xan NPC"
 tp2 = "Xan"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1724,6 +1806,7 @@ aliases = []
 name = "Xan's Friendship Path"
 tp2 = "XanBG1Friend"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "pocket-plane-group"
@@ -1748,6 +1831,7 @@ aliases = []
 name = "The Drizzt Saga"
 tp2 = "DrizztSaga"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -1768,6 +1852,7 @@ aliases = []
 name = "The Picture Standard"
 tp2 = "thepicturestandard"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "mattygroove"
@@ -1792,6 +1877,7 @@ aliases = []
 name = "Alcool"
 tp2 = "ALCOOL"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1812,6 +1898,7 @@ aliases = []
 name = "Askaria Quest"
 tp2 = "ASKARIA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1832,6 +1919,7 @@ aliases = []
 name = "Aerie in BG:EE"
 tp2 = "BG1Aerie"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1852,6 +1940,7 @@ aliases = []
 name = "Chaos Knight & Jacob NPC"
 tp2 = "CHAOSKNIGHT"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1872,6 +1961,7 @@ aliases = []
 name = "Chatty Imoen"
 tp2 = "ChattyImoen"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1892,6 +1982,7 @@ aliases = []
 name = "CoM Encounters"
 tp2 = "com_encounters"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1912,6 +2003,7 @@ aliases = []
 name = "Dark Horizons"
 tp2 = "DarkHorizons"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1932,6 +2024,7 @@ aliases = []
 name = "Dark Horizons BG:EE"
 tp2 = "darkhorizonsbgee"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1952,6 +2045,7 @@ aliases = []
 name = "DGItems"
 tp2 = "DGITEMS"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1972,6 +2066,7 @@ aliases = []
 name = "Garrick: Tales of a Troubadour"
 tp2 = "garrick-tt"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -1992,6 +2087,7 @@ aliases = []
 name = "IWD Item Pack"
 tp2 = "IWDITEMPACK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2012,6 +2108,7 @@ aliases = []
 name = "Jaheira Recast"
 tp2 = "jaheirarecast"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gate-project"
@@ -2032,6 +2129,7 @@ aliases = []
 name = "T'Was a Slow Boat from Kara-Tur"
 tp2 = "karatur"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gate-project"
@@ -2052,6 +2150,7 @@ aliases = []
 name = "Klatu Tweaks and Fixes"
 tp2 = "klatu"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2072,6 +2171,7 @@ aliases = []
 name = "IWD Item Pack"
 tp2 = "malek-iwditempack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2092,6 +2192,7 @@ aliases = []
 name = "NWN2 Soundsets"
 tp2 = "NWN2SOUNDSETS"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2112,6 +2213,7 @@ aliases = []
 name = "Return to Trademeet: Item Pack"
 tp2 = "RTTITEMPACK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2132,6 +2234,7 @@ aliases = []
 name = "Saradas Magic"
 tp2 = "saradas_magic"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2152,6 +2255,7 @@ aliases = []
 name = "Sir Renal"
 tp2 = "sir_renal"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2172,6 +2276,7 @@ aliases = []
 name = "SoD Dialog Banters"
 tp2 = "SoDDialogBanters"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2192,6 +2297,7 @@ aliases = []
 name = "Vampire Tales"
 tp2 = "vampiretales"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "the-gate-project"
@@ -2216,6 +2322,7 @@ aliases = []
 name = "Reduce Save Compression"
 tp2 = "B3-ReduceSaveCompression"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -2236,6 +2343,7 @@ aliases = []
 name = "Revert Pathfinding"
 tp2 = "bubb_revert_pathfinding"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bubb13"
@@ -2257,6 +2365,7 @@ aliases = []
 name = "Bubb's Spell Menu Extended"
 tp2 = "bubb_spell_menu_extended"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bubb13"
@@ -2277,6 +2386,7 @@ aliases = []
 name = "EEex"
 tp2 = "eeex"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bubb13"
@@ -2301,6 +2411,7 @@ aliases = []
 name = "LeUI"
 tp2 = "LeUI"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "r-e-d"
@@ -2321,6 +2432,7 @@ aliases = []
 name = "Lefreut's Enhanced UI (SoD skin)"
 tp2 = "LeUI-SoD"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "r-e-d"
@@ -2345,6 +2457,7 @@ aliases = []
 name = "EE UI Tweaks"
 tp2 = "eeuitweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "r-e-d"
@@ -2369,6 +2482,7 @@ aliases = []
 name = "Big Metal Unit"
 tp2 = "D2-MIRA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "d2-mods"
@@ -2389,6 +2503,7 @@ aliases = []
 name = "Portrait Gender Separator"
 tp2 = "D2-PORTRAIT-SEPARATOR"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -2409,6 +2524,7 @@ aliases = []
 name = "D2 Weapon"
 tp2 = "D2-WEAPON"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "d2-mods"
@@ -2429,6 +2545,7 @@ aliases = []
 name = "D2 Workshop Kits"
 tp2 = "d2-workshopkits"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "d2-mods"
@@ -2449,6 +2566,7 @@ aliases = []
 name = "Kit Mule"
 tp2 = "KITMULE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "d2-mods"
@@ -2473,6 +2591,7 @@ aliases = []
 name = "Infinity Innovations: Items"
 tp2 = "iiItemMod"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "btigi"
@@ -2493,6 +2612,7 @@ aliases = []
 name = "Infinity Innovations: Key Names"
 tp2 = "iiKeyNames"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "btigi"
@@ -2517,6 +2637,7 @@ aliases = []
 name = "BG:EE Classic Movies"
 tp2 = "BGEEClassicMovies"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -2537,6 +2658,7 @@ aliases = []
 name = "Hammers"
 tp2 = "hammers"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "Sampsca"
@@ -2561,6 +2683,7 @@ aliases = []
 name = "Unusual Oddities Shop"
 tp2 = "abystore"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2581,6 +2704,7 @@ aliases = []
 name = "Jan's Alchemy"
 tp2 = "alchemy"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2601,6 +2725,7 @@ aliases = []
 name = "Arath NPC"
 tp2 = "arath"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2621,6 +2746,7 @@ aliases = []
 name = "Bank of Baldur's Gate"
 tp2 = "bank_of_baldurs_gate"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2641,6 +2767,7 @@ aliases = []
 name = "Baldur's Gate Graphics Overhaul"
 tp2 = "BGGO"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -2661,6 +2788,7 @@ aliases = []
 name = "Bolsa Merchant"
 tp2 = "Bolsa"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "SpellholdStudios"
@@ -2681,6 +2809,7 @@ aliases = []
 name = "Worldmap"
 tp2 = "bp-bgt-worldmap"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "SpellholdStudios"
@@ -2701,6 +2830,7 @@ aliases = []
 name = "Beyond the Law"
 tp2 = "btl"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2721,6 +2851,7 @@ aliases = []
 name = "Cernd Friendship"
 tp2 = "cernd"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2741,6 +2872,7 @@ aliases = []
 name = "Darron the Vendor"
 tp2 = "Darron"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2761,6 +2893,7 @@ aliases = []
 name = "Red Dragon Summoning Spell"
 tp2 = "DRAGONSUMMON"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2781,6 +2914,7 @@ aliases = []
 name = "Demon Summoning Ritual"
 tp2 = "dsr"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2801,6 +2935,7 @@ aliases = []
 name = "Fade NPC"
 tp2 = "Fade"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2821,6 +2956,7 @@ aliases = []
 name = "Super Firkraag"
 tp2 = "firkraag"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2841,6 +2977,7 @@ aliases = []
 name = "Expanded Thief Stronghold"
 tp2 = "gbthfkp"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2861,6 +2998,7 @@ aliases = []
 name = "Haer'dalis Friendship"
 tp2 = "haerdalis_friendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -2881,6 +3019,7 @@ aliases = []
 name = "Heart of the Wood"
 tp2 = "heartwood"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "SpellholdStudios"
@@ -2901,6 +3040,7 @@ aliases = []
 name = "IEP Extended Banters"
 tp2 = "iepbanters"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -2921,6 +3061,7 @@ aliases = []
 name = "Imnesvale"
 tp2 = "imnesvale"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2941,6 +3082,7 @@ aliases = []
 name = "Imoen Friendship"
 tp2 = "imoenfriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2961,6 +3103,7 @@ aliases = []
 name = "Isra NPC for BG"
 tp2 = "Isra"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -2981,6 +3124,7 @@ aliases = []
 name = "Isra NPC"
 tp2 = "isra_bg2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3001,6 +3145,7 @@ aliases = []
 name = "Korgan's Redemption"
 tp2 = "Korgan"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3021,6 +3166,7 @@ aliases = []
 name = "Korgan Friendship"
 tp2 = "korganfriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3041,6 +3187,7 @@ aliases = []
 name = "Lucy the Wyvern"
 tp2 = "lucy"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3061,6 +3208,7 @@ aliases = []
 name = "Mazzy Friendship"
 tp2 = "Mazzy"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3081,6 +3229,7 @@ aliases = []
 name = "Minsc Friendship"
 tp2 = "minscfriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3101,6 +3250,7 @@ aliases = []
 name = "Neera Expansion"
 tp2 = "Neera"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3121,6 +3271,7 @@ aliases = []
 name = "Nephele NPC"
 tp2 = "NEPHELE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3141,6 +3292,7 @@ aliases = []
 name = "Region of Terror"
 tp2 = "RoT"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3161,6 +3313,7 @@ aliases = []
 name = "Ruad Ro'fhessa"
 tp2 = "ruad"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3181,6 +3334,7 @@ aliases = []
 name = "Rupert the Dye Merchant"
 tp2 = "rupert"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3201,6 +3355,7 @@ aliases = []
 name = "Saradas Magic 2"
 tp2 = "saradas_magic_2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3221,6 +3376,7 @@ aliases = []
 name = "Sarevok Friendship"
 tp2 = "sarevokfriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3241,6 +3397,7 @@ aliases = []
 name = "The Minotaur and Lilacor"
 tp2 = "slandor"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3261,6 +3418,7 @@ aliases = []
 name = "The Slithering Menace"
 tp2 = "snakes"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3281,6 +3439,7 @@ aliases = []
 name = "Silver Star NPC"
 tp2 = "STAR"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3301,6 +3460,7 @@ aliases = []
 name = "Stuff of the Magi"
 tp2 = "stuffofthemagi"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3321,6 +3481,7 @@ aliases = []
 name = "The Sword of Noober"
 tp2 = "tnoober"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3341,6 +3502,7 @@ aliases = []
 name = "Valygar Friendship"
 tp2 = "valygarfriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3361,6 +3523,7 @@ aliases = []
 name = "Viconia Friendship"
 tp2 = "viconia"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3381,6 +3544,7 @@ aliases = []
 name = "Yeslick NPC"
 tp2 = "yeslicknpc"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3401,6 +3565,7 @@ aliases = []
 name = "Yoshimo Friendship"
 tp2 = "yoshimo"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3425,6 +3590,7 @@ aliases = []
 name = "Adrian NPC"
 tp2 = "Adrian"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3445,6 +3611,7 @@ aliases = []
 name = "Almateria's Restoration Project"
 tp2 = "arestorationp"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3465,6 +3632,7 @@ aliases = []
 name = "Dace"
 tp2 = "Dace"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3485,6 +3653,7 @@ aliases = []
 name = "Darian NPC"
 tp2 = "Darian"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3505,6 +3674,7 @@ aliases = []
 name = "Dorn Friendship"
 tp2 = "DornFriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3525,6 +3695,7 @@ aliases = []
 name = "Dark Side of the Sword Coast"
 tp2 = "DSotSC"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellholdstudios"
@@ -3545,6 +3716,7 @@ aliases = []
 name = "Edwin Romance"
 tp2 = "edwinromance"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3565,6 +3737,7 @@ aliases = []
 name = "Fading Promises"
 tp2 = "fadingpromises"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3585,6 +3758,7 @@ aliases = []
 name = "Faren NPC"
 tp2 = "FAREN"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3605,6 +3779,7 @@ aliases = []
 name = "Hexxat Friendship"
 tp2 = "HexxatFriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3625,6 +3800,7 @@ aliases = []
 name = "Infinity Sounds"
 tp2 = "infinitysounds"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3645,6 +3821,7 @@ aliases = []
 name = "Jaheira Friendship"
 tp2 = "JaheiraFriendship"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3665,6 +3842,7 @@ aliases = []
 name = "The Longer Road"
 tp2 = "LongerRoad"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3685,6 +3863,7 @@ aliases = []
 name = "Nathaniel NPC"
 tp2 = "Nathaniel"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3705,6 +3884,7 @@ aliases = []
 name = "Nostalgia Pack"
 tp2 = "NostalgiaPack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3725,6 +3905,7 @@ aliases = []
 name = "Northern Tales of the Sword Coast"
 tp2 = "ntotsc"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3745,6 +3926,7 @@ aliases = []
 name = "Rolles Safyer"
 tp2 = "Rolles"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3765,6 +3947,7 @@ aliases = []
 name = "Tashia NPC"
 tp2 = "tashia"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3785,6 +3968,7 @@ aliases = []
 name = "The Darkest Day"
 tp2 = "TDDZ"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "spellhold-studios"
@@ -3809,6 +3993,7 @@ aliases = []
 name = "Infinity UI++"
 tp2 = "infinity_ui"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "renegade0"
@@ -3829,6 +4014,7 @@ aliases = []
 name = "More Style for Mages"
 tp2 = "msfm"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "renegade0"
@@ -3849,6 +4035,7 @@ aliases = []
 name = "Remastered Spell Icons"
 tp2 = "remastered_spell_icons"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "renegade0"
@@ -3873,6 +4060,7 @@ aliases = []
 name = "EE Cosmetic Enhancements"
 tp2 = "ee_cosmetic_enhancements"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "daerostrollkiller"
@@ -3893,6 +4081,7 @@ aliases = []
 name = "Trollkiller's Items, Spells, and Kitpack"
 tp2 = "k0_iskp"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "daerostrollkiller"
@@ -3917,6 +4106,7 @@ aliases = []
 name = "Made in Heaven: Encounters & Quests"
 tp2 = "mih_eq"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "angelgryph"
@@ -3937,6 +4127,7 @@ aliases = []
 name = "Made in Heaven: Fixes & Restorations"
 tp2 = "mih_fr"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "angelgryph"
@@ -3957,6 +4148,7 @@ aliases = []
 name = "Made in Heaven: Item Pack"
 tp2 = "mih_ip"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "angelgryph"
@@ -3977,6 +4169,7 @@ aliases = []
 name = "Made in Heaven: Meta-Mod"
 tp2 = "mih_metamod"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "angelgryph"
@@ -3997,6 +4190,7 @@ aliases = []
 name = "Made in Heaven: Spell Pack"
 tp2 = "mih_sp"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "angelgryph"
@@ -4017,6 +4211,7 @@ aliases = []
 name = "Made in Heaven: Tweaks"
 tp2 = "mih_tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "angelgryph"
@@ -4041,6 +4236,7 @@ aliases = []
 name = "Bonus Pack in Baldur's Gate"
 tp2 = "BP_in_BG"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "unearthedarcana"
@@ -4061,6 +4257,7 @@ aliases = []
 name = "5E Spellcasting"
 tp2 = "d5_5e_casting"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "unearthedarcana"
@@ -4081,6 +4278,7 @@ aliases = []
 name = "Faiths and Powers"
 tp2 = "Faiths_and_Powers"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "unearthedarcana"
@@ -4101,6 +4299,7 @@ aliases = []
 name = "Might & Guile"
 tp2 = "might_and_guile"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "unearthedarcana"
@@ -4121,6 +4320,7 @@ aliases = []
 name = "NPC Enhanced Edition Adjustments"
 tp2 = "npc_ee"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "unearthedarcana"
@@ -4141,6 +4341,7 @@ aliases = []
 name = "Will to Power"
 tp2 = "Will_to_Power"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "unearthedarcana"
@@ -4165,6 +4366,7 @@ aliases = []
 name = "Ascalon's Questpack"
 tp2 = "AC_QUEST"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gitjas"
@@ -4185,6 +4387,7 @@ aliases = []
 name = "Brandock the Mage"
 tp2 = "BrandockTheMage"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gitjas"
@@ -4205,6 +4408,7 @@ aliases = []
 name = "Adalon's Blood"
 tp2 = "c#sb_silber"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gitjas"
@@ -4225,6 +4429,7 @@ aliases = []
 name = "Brage's Redemption"
 tp2 = "c#brage"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gitjas"
@@ -4249,6 +4454,7 @@ aliases = []
 name = "BGEE Leveling Spawns"
 tp2 = "bgeespawn"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4269,6 +4475,7 @@ aliases = []
 name = "Extra Enhanced Expanded Encounters!"
 tp2 = "ExtraExpandedEnhancedEncounters"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4289,6 +4496,7 @@ aliases = []
 name = "ZG BG2 Voices"
 tp2 = "zg_bg2_voices"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4309,6 +4517,7 @@ aliases = []
 name = "ZG BG Voices"
 tp2 = "zg_bg_voices"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4329,6 +4538,7 @@ aliases = []
 name = "ZG BG NPC Voices"
 tp2 = "zg_bgnpc_voices"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4349,6 +4559,7 @@ aliases = []
 name = "ZG IWD2 Voices"
 tp2 = "zg_iwd2_voices"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4369,6 +4580,7 @@ aliases = []
 name = "ZG IWD Voices"
 tp2 = "zg_iwd_voices"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4389,6 +4601,7 @@ aliases = []
 name = "ZG NWN Voices"
 tp2 = "zg_nwn_voices"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4409,6 +4622,7 @@ aliases = []
 name = "Planescape Torment Voice Pack for EE 2.6"
 tp2 = "zg_pst_voices"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4429,6 +4643,7 @@ aliases = []
 name = "ZG Tweaks"
 tp2 = "zgtweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "graiondilach"
@@ -4453,6 +4668,7 @@ aliases = []
 name = "Gorgon"
 tp2 = "gorgon"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "totalmilk90"
@@ -4477,6 +4693,7 @@ aliases = []
 name = "Blackhearts"
 tp2 = "Blackhearts"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "a-wizard-did-it"
@@ -4501,6 +4718,7 @@ aliases = []
 name = "Loron's Return"
 tp2 = "AJOCMOD"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4521,6 +4739,7 @@ aliases = []
 name = "Ariena NPC"
 tp2 = "ARIENA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4541,6 +4760,7 @@ aliases = []
 name = "Azengaard Encounter"
 tp2 = "AZENGAARD"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4561,6 +4781,7 @@ aliases = []
 name = "Secret of Bonehill"
 tp2 = "BONEHILLEET"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4581,6 +4802,7 @@ aliases = []
 name = "Candlekeep Memories"
 tp2 = "CANDLEMEM"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4601,6 +4823,7 @@ aliases = []
 name = "Chloe NPC"
 tp2 = "chloe"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4621,6 +4844,7 @@ aliases = []
 name = "Corwin NPC"
 tp2 = "CORWINEET"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4641,6 +4865,7 @@ aliases = []
 name = "Civil Disobedience"
 tp2 = "DISOBEDIENCE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4661,6 +4886,7 @@ aliases = []
 name = "Drow Library"
 tp2 = "DROWLIB"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4681,6 +4907,7 @@ aliases = []
 name = "Ehlastra ToB"
 tp2 = "EHLASTRA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4701,6 +4928,7 @@ aliases = []
 name = "Finch NPC"
 tp2 = "finchnpc"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4721,6 +4949,7 @@ aliases = []
 name = "Holly the Elf"
 tp2 = "HOLLYELF"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4741,6 +4970,7 @@ aliases = []
 name = "Improved Asylum"
 tp2 = "impasylum"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4761,6 +4991,7 @@ aliases = []
 name = "Kido the Jester"
 tp2 = "KIDO"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4781,6 +5012,7 @@ aliases = []
 name = "Kim NPC"
 tp2 = "kimnpc"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4801,6 +5033,7 @@ aliases = []
 name = "Kindrek NPC"
 tp2 = "KINDREK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4821,6 +5054,7 @@ aliases = []
 name = "The Broken Lanthorn"
 tp2 = "LENSHUNT"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4841,6 +5075,7 @@ aliases = []
 name = "Expanded Mage Stronghold"
 tp2 = "MAGESTRONGHOLD_EET"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4861,6 +5096,7 @@ aliases = []
 name = "Of Elves and Artefacts"
 tp2 = "MALTESE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4881,6 +5117,7 @@ aliases = []
 name = "Melynda the Mute"
 tp2 = "MELYNDA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4901,6 +5138,7 @@ aliases = []
 name = "Rose NPC"
 tp2 = "ROSERE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4921,6 +5159,7 @@ aliases = []
 name = "Ryberg NPC (Speak with the Dead)"
 tp2 = "RYBERG"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4941,6 +5180,7 @@ aliases = []
 name = "Shine on Caelar"
 tp2 = "SHINEONCAELAR"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4961,6 +5201,7 @@ aliases = []
 name = "SoD Banter Restoration"
 tp2 = "SODBANTER"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -4981,6 +5222,7 @@ aliases = []
 name = "Solaufein"
 tp2 = "SOLAUFEIN"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -5001,6 +5243,7 @@ aliases = []
 name = "Shadows Over Soubar"
 tp2 = "SOS"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -5021,6 +5264,7 @@ aliases = []
 name = "Touch the Moon NPC"
 tp2 = "TOUCHED"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -5041,6 +5285,7 @@ aliases = []
 name = "Tsujatha NPC"
 tp2 = "Tsujatha"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -5061,6 +5306,7 @@ aliases = []
 name = "Valen NPC"
 tp2 = "valen"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -5081,6 +5327,7 @@ aliases = []
 name = "The Vault"
 tp2 = "VAULTEET"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -5101,6 +5348,7 @@ aliases = []
 name = "Yasraena NPC"
 tp2 = "YASRAENA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -5125,6 +5373,7 @@ aliases = []
 name = "Out, Brief Candlekeep!"
 tp2 = "OUT, BRIEF CANDLEKEEP!"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "endarire"
@@ -5145,6 +5394,7 @@ aliases = []
 name = "The Undying"
 tp2 = "TheUndying"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "endarire"
@@ -5165,6 +5415,7 @@ aliases = []
 name = "Throne of Bhaal Revisited"
 tp2 = "tobr"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "endarire"
@@ -5185,6 +5436,7 @@ aliases = []
 name = "Zelink NPC"
 tp2 = "ZELINK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "endarire"
@@ -5209,6 +5461,7 @@ aliases = []
 name = "Jini Romance"
 tp2 = "Jini"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "black-wyrm-lair"
@@ -5229,6 +5482,7 @@ aliases = []
 name = "Rjali NPC"
 tp2 = "RJALI"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "black-wyrm-lair"
@@ -5249,6 +5503,7 @@ aliases = []
 name = "The Grey Clan Episode One"
 tp2 = "TGC1e"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "black-wyrm-lair"
@@ -5269,6 +5524,7 @@ aliases = []
 name = "Tower of Deception"
 tp2 = "TOD"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "black-wyrm-lair"
@@ -5289,6 +5545,7 @@ aliases = []
 name = "Tortured Souls Lite"
 tp2 = "TORTUREDSOULSLITE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "black-wyrm-lair"
@@ -5309,6 +5566,7 @@ aliases = []
 name = "Improved Volcano! Pack"
 tp2 = "VOLCANO"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "black-wyrm-lair"
@@ -5333,6 +5591,7 @@ aliases = []
 name = "The Stone of Askavar"
 tp2 = "soa"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "red-carnelian"
@@ -5357,6 +5616,7 @@ aliases = []
 name = "Blood and Faith"
 tp2 = "BLOODFAITH"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "glittergear"
@@ -5377,6 +5637,7 @@ aliases = []
 name = "Dead Gardens"
 tp2 = "DeadGardens"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "glittergear"
@@ -5397,6 +5658,7 @@ aliases = []
 name = "Fowl Wish"
 tp2 = "FowlWish"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "glittergear"
@@ -5417,6 +5679,7 @@ aliases = []
 name = "Gone Nuts"
 tp2 = "GoneNuts"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "glittergear"
@@ -5441,6 +5704,7 @@ aliases = []
 name = "Ascension"
 tp2 = "ascension"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gibberlings3"
@@ -5461,6 +5725,7 @@ aliases = []
 name = "Hidden Adventures"
 tp2 = "hiddenadventure"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gitjas"
@@ -5481,6 +5746,7 @@ aliases = []
 name = "Tales of Anegh"
 tp2 = "TOA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "whiteagnus"
@@ -5505,6 +5771,7 @@ aliases = []
 name = "Derat's Archery"
 tp2 = "Derats_Archery"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "deratiseur"
@@ -5525,6 +5792,7 @@ aliases = []
 name = "Derat's Illo"
 tp2 = "Derats_Illo"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "deratiseur"
@@ -5545,6 +5813,7 @@ aliases = []
 name = "Derat's Ogre"
 tp2 = "Derats_Ogre"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "deratiseur"
@@ -5565,6 +5834,7 @@ aliases = []
 name = "Derat's Todd"
 tp2 = "Derats_Todd"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "deratiseur"
@@ -5589,6 +5859,7 @@ aliases = []
 name = "Heroes Thieves and Moneylenders"
 tp2 = "HerThiMoney"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "austin-bg"
@@ -5613,6 +5884,7 @@ aliases = []
 name = "Call of the Lost Goddess"
 tp2 = "Godcall"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "aciferbg"
@@ -5633,6 +5905,7 @@ aliases = []
 name = "Loretakers"
 tp2 = "Loretakers"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "aciferbg"
@@ -5653,6 +5926,7 @@ aliases = []
 name = "Throne of the Mad God"
 tp2 = "ThroneoftheMadGod"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "aciferbg"
@@ -5673,6 +5947,7 @@ aliases = []
 name = "Tidings"
 tp2 = "Tidings"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "aciferbg"
@@ -5697,6 +5972,7 @@ aliases = []
 name = "Autumn's Twilight"
 tp2 = "AUTUMNS_TWILIGHT"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "evancauteren"
@@ -5721,6 +5997,7 @@ aliases = []
 name = "Artisans Caravans"
 tp2 = "ArtisansCaravans"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5741,6 +6018,7 @@ aliases = []
 name = "The-Artisan-s-Armory"
 tp2 = "Setup-Artisans_Armory"
 aliases = []
+config_files = []
 
 [[mods.sources]]
 id = "theartisanbg"
@@ -5761,6 +6039,7 @@ pkg_macos = "mac,rar,zip"
 name = "The Artisan's Kitpack"
 tp2 = "ArtisansKitpack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5781,6 +6060,7 @@ aliases = []
 name = "Artisan-HLAs"
 tp2 = "Artisans_HLAs"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5801,6 +6081,7 @@ aliases = []
 name = "The Artisan's Kitpack NPC"
 tp2 = "ArtisansKitpack_npc"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5821,6 +6102,7 @@ aliases = []
 name = "The Artisan's Kitpack Tweak"
 tp2 = "ArtisansKitpack_tweak"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5842,6 +6124,7 @@ aliases = []
 name = "Aura BG1 BG2 EET"
 tp2 = "Aura_BG1_2_EET"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5862,6 +6145,7 @@ aliases = []
 name = "Bardic Wonders"
 tp2 = "BardicWonders"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5882,6 +6166,7 @@ aliases = []
 name = "Warlock"
 tp2 = "Artisans_Warlock"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5902,6 +6187,7 @@ aliases = []
 name = "Warlock (C0Warlock, 3.0)"
 tp2 = "C0Warlock"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5922,6 +6208,7 @@ aliases = []
 name = "Candlekeep Revisited"
 tp2 = "candlekeep_revisited"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5942,6 +6229,7 @@ aliases = []
 name = "Drake NPC"
 tp2 = "Drake"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -5962,6 +6250,7 @@ aliases = []
 name = "AionZ's House   Rules"
 tp2 = "HouseTweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "TheArtisanBG"
@@ -5982,6 +6271,7 @@ aliases = []
 name = "Kvel BG1"
 tp2 = "Kvel_BG1"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6002,6 +6292,7 @@ aliases = []
 name = "Pai'Na NPC"
 tp2 = "paina"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6022,6 +6313,7 @@ aliases = []
 name = "Pocket Wardrobe"
 tp2 = "POCKETWARDROBE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6042,6 +6334,7 @@ aliases = []
 name = "Shadow Magic"
 tp2 = "shadowadept"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6062,6 +6355,7 @@ aliases = []
 name = "Sirene NPC"
 tp2 = "Sirene"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6082,6 +6376,7 @@ aliases = []
 name = "Sirene NPC"
 tp2 = "Sirene_BG2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6102,6 +6397,7 @@ aliases = []
 name = "SoA Extended"
 tp2 = "SoAExtended"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "theartisanbg"
@@ -6122,6 +6418,7 @@ aliases = []
 name = "Mazzy Romance"
 tp2 = "Setup-Artisans_MazzyRom"
 aliases = []
+config_files = []
 
 [[mods.sources]]
 id = "theartisanbg"
@@ -6146,6 +6443,7 @@ pkg_macos = "mac,rar,zip"
 name = "Lichdom"
 tp2 = "LICHDOM"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "lca-eet"
@@ -6170,6 +6468,7 @@ aliases = []
 name = "Emily"
 tp2 = "Emily"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6190,6 +6489,7 @@ aliases = []
 name = "Helga"
 tp2 = "Helga"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6210,6 +6510,7 @@ aliases = []
 name = "Kale"
 tp2 = "Kale"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6230,6 +6531,7 @@ aliases = []
 name = "Nalia at Last"
 tp2 = "Nalia_at_Last"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6250,6 +6552,7 @@ aliases = []
 name = "Recorder"
 tp2 = "Recorder"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6270,6 +6573,7 @@ aliases = []
 name = "Skitia NPCs"
 tp2 = "SkitiaNPCs"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6290,6 +6594,7 @@ aliases = []
 name = "Skitia Romance Tweak"
 tp2 = "SkitiaRomanceTweak"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6310,6 +6615,7 @@ aliases = []
 name = "Vienxay"
 tp2 = "Vienxay"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6330,6 +6636,7 @@ aliases = []
 name = "Wings"
 tp2 = "Wings"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "skitia"
@@ -6354,6 +6661,7 @@ aliases = []
 name = "Alora NPC"
 tp2 = "Alora"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gwendolynefreddy"
@@ -6374,6 +6682,7 @@ aliases = []
 name = "BuTcHeRy"
 tp2 = "butchery"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gwendolynefreddy"
@@ -6398,6 +6707,7 @@ aliases = []
 name = "Baeloth"
 tp2 = "BAEBG2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -6422,6 +6732,7 @@ aliases = []
 name = "Alassa NPC"
 tp2 = "alassa"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "plutonium-x"
@@ -6446,6 +6757,7 @@ aliases = []
 name = "Orelios NPC"
 tp2 = "ORELIOS"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "paulamigrate"
@@ -6466,6 +6778,7 @@ aliases = []
 name = "Saerileth NPC"
 tp2 = "Saerileth"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "paulamigrate"
@@ -6486,6 +6799,7 @@ aliases = []
 name = "Uldar NPC"
 tp2 = "ULDAR"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "paulamigrate"
@@ -6510,6 +6824,7 @@ aliases = []
 name = "Dusk NPC"
 tp2 = "DUSK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "ramospabloa"
@@ -6534,6 +6849,7 @@ aliases = []
 name = "Lena NPC"
 tp2 = "LENA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "gungorenu"
@@ -6558,6 +6874,7 @@ aliases = []
 name = "Neera Banters"
 tp2 = "NeeraBanters"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "droideck"
@@ -6582,6 +6899,7 @@ aliases = []
 name = "All Things Mazzy"
 tp2 = "AllThingsMazzy"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "ratatoskr589"
@@ -6606,6 +6924,7 @@ aliases = []
 name = "Thalantyr Item Upgrade"
 tp2 = "thalan"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "crevsdaak"
@@ -6630,6 +6949,7 @@ aliases = []
 name = "Thalantyr Extended"
 tp2 = "mod-thalantyr-ex"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bardezanavatar"
@@ -6654,6 +6974,7 @@ aliases = []
 name = "Customs"
 tp2 = "customs"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "cgordon"
@@ -6678,6 +6999,7 @@ aliases = []
 name = "Can I Stab You"
 tp2 = "ZS_CanIStabYou"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "szaumoor"
@@ -6698,6 +7020,7 @@ aliases = []
 name = "Consumables"
 tp2 = "ZS_Consumables"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "szaumoor"
@@ -6718,6 +7041,7 @@ aliases = []
 name = "ZS Item Pack"
 tp2 = "ZS_ITEMPACK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "szaumoor"
@@ -6738,6 +7062,7 @@ aliases = []
 name = "Shadowdancer Overhaul"
 tp2 = "ZS_ShadowdancerOverhaul"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "szaumoor"
@@ -6758,6 +7083,7 @@ aliases = []
 name = "ZSTweaks"
 tp2 = "ZSTweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "szaumoor"
@@ -6782,6 +7108,7 @@ aliases = []
 name = "SubtleD's Item Tweaks"
 tp2 = "SubtleD_Item_Tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "subtledoctor"
@@ -6802,6 +7129,7 @@ aliases = []
 name = "SubtleD's Spell Tweaks"
 tp2 = "SubtleD_Spell_Tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "subtledoctor"
@@ -6822,6 +7150,7 @@ aliases = []
 name = "SubtleD's Stat Overhauls"
 tp2 = "SubtleD_Stat_Overhauls"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "subtledoctor"
@@ -6846,6 +7175,7 @@ aliases = []
 name = "Tome and Blood"
 tp2 = "TomeAndBlood"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "aquadrizzt"
@@ -6870,6 +7200,7 @@ aliases = []
 name = "aTweaks (Your PnP Tweak Pack)"
 tp2 = "aTweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "fredrik"
@@ -6890,6 +7221,7 @@ aliases = []
 name = "Randomiser"
 tp2 = "randomiser"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "fredriklindgren"
@@ -6910,6 +7242,7 @@ aliases = []
 name = "Rogue Rebalancing"
 tp2 = "RR"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "CamDawg"
@@ -6934,6 +7267,7 @@ aliases = []
 name = "Epic Thieving"
 tp2 = "EpicThieving"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "olvynchuru"
@@ -6954,6 +7288,7 @@ aliases = []
 name = "Olvyn Spells"
 tp2 = "MESpells"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "olvynchuru"
@@ -6974,6 +7309,7 @@ aliases = []
 name = "ME Tweaks"
 tp2 = "METweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "olvynchuru"
@@ -6998,6 +7334,7 @@ aliases = []
 name = "Tweaks and Tricks"
 tp2 = "tnt"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bgforgenet"
@@ -7018,6 +7355,7 @@ aliases = []
 name = "Unique Artifacts"
 tp2 = "UA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bgforgenet"
@@ -7038,6 +7376,7 @@ aliases = []
 name = "Wild Mage Additions"
 tp2 = "wildmage"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bgforgenet"
@@ -7062,6 +7401,7 @@ aliases = []
 name = "Baldur's Gate: Enhanced Edition Trilogy Tweaks (EET Tweaks)"
 tp2 = "EET_Tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "k4thos"
@@ -7086,6 +7426,7 @@ aliases = []
 name = "Jimfix"
 tp2 = "jimfix"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "anotherdole"
@@ -7110,6 +7451,7 @@ aliases = []
 name = "Bart Tweaks"
 tp2 = "Bart_Tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "bartymae"
@@ -7134,6 +7476,7 @@ aliases = []
 name = "M7 Tweaks"
 tp2 = "m7tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "flamewing"
@@ -7158,6 +7501,7 @@ aliases = []
 name = "Themed Tweaks"
 tp2 = "themed_tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "lzenner"
@@ -7182,6 +7526,7 @@ aliases = []
 name = "AW PF Soundsets"
 tp2 = "AW_PF_SOUNDSETS"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "arvendor"
@@ -7206,6 +7551,7 @@ aliases = []
 name = "Portraits Portraits Everywhere"
 tp2 = "PPE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "smeagolheart"
@@ -7230,6 +7576,7 @@ aliases = []
 name = "Dual to Kit"
 tp2 = "DUAL_TO_KIT"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "mleduque"
@@ -7254,6 +7601,7 @@ aliases = []
 name = "New Travel System Between BG City Areas"
 tp2 = "BG_Travel"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "zed-nocear"
@@ -7278,6 +7626,7 @@ aliases = []
 name = "BuffBot"
 tp2 = "buffbot"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "chrizhermann"
@@ -7302,6 +7651,7 @@ aliases = []
 name = "Unofficial Item Pack"
 tp2 = "Item_Pack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "dau1makan"
@@ -7326,6 +7676,7 @@ aliases = []
 name = "Ophysia BG1"
 tp2 = "OphysiaBG1"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "llewren"
@@ -7350,6 +7701,7 @@ aliases = []
 name = "XGTCumulativeCasterLevels"
 tp2 = "XGTCumulativeCasterLevels"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "xgatt"
@@ -7370,6 +7722,7 @@ aliases = []
 name = "XGTCustomizableXPGain"
 tp2 = "XGTCustomizableXPGain"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "xgatt"
@@ -7390,6 +7743,7 @@ aliases = []
 name = "wl_HouseRules"
 tp2 = "wl_HouseRules"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "xgatt"
@@ -7414,6 +7768,7 @@ aliases = []
 name = "Arcane Treasury"
 tp2 = "AL_ITEM_PACK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "alexander12-creator"
@@ -7438,6 +7793,7 @@ aliases = []
 name = "Druid Grove Makeover"
 tp2 = "DRUIDGROVEMAKEOVER"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "thisisulb"
@@ -7462,6 +7818,7 @@ aliases = []
 name = "JA Adventure Pack"
 tp2 = "JA#BGT_ADVPACK"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "weigo87"
@@ -7486,6 +7843,7 @@ aliases = []
 name = "RandomRolls"
 tp2 = "randomrolls"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "drake127"
@@ -7510,6 +7868,7 @@ aliases = []
 name = "HPS Portraits Project"
 tp2 = "hps_portraits_project"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "holdenbg"
@@ -7534,6 +7893,7 @@ aliases = []
 name = "Tenya Thermidor"
 tp2 = "TenyaThermidor"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7554,6 +7914,7 @@ aliases = []
 name = "Sentrizeal Animation Pack"
 tp2 = "Sentrizeal_AA_Pack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7578,6 +7939,7 @@ aliases = []
 name = "Verr'Sza"
 tp2 = "VERRSZA"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7598,6 +7960,7 @@ aliases = []
 name = "White"
 tp2 = "White"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7618,6 +7981,7 @@ aliases = []
 name = "Sir Arkanis for SoD"
 tp2 = "ArkanisSoD"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7638,6 +8002,7 @@ aliases = []
 name = "Shades of the Sword Coast"
 tp2 = "SotSC"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7658,6 +8023,7 @@ aliases = []
 name = "The Vanishing of Skie Silvershield"
 tp2 = "TheVanishingOfSkieSilvershield"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7678,6 +8044,7 @@ aliases = []
 name = "Colours of Infinity: Tales of the Deep Gardens"
 tp2 = "TotDG"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7698,6 +8065,7 @@ aliases = []
 name = "Colours of Infinity: The White Queen"
 tp2 = "WhiteQueen"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7718,6 +8086,7 @@ aliases = []
 name = "Colours of Infinity: I Shall Never Forget"
 tp2 = "l#isnf"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7738,6 +8107,7 @@ aliases = []
 name = "Eilistraee's Song"
 tp2 = "eilistraee"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7758,6 +8128,7 @@ aliases = []
 name = "Athkatlan Grounds: Southern Edge"
 tp2 = "SouthernEdge"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7778,6 +8149,7 @@ aliases = []
 name = "Athkatlan Grounds: The Ooze's Lounge"
 tp2 = "Ooze"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7798,6 +8170,7 @@ aliases = []
 name = "Athkatlan Grounds: The Tangled Oak Isle"
 tp2 = "TangledIsle"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7818,6 +8191,7 @@ aliases = []
 name = "Athkatlan Grounds: Bridge's Block"
 tp2 = "BridgesBlock"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7838,6 +8212,7 @@ aliases = []
 name = "Athkatlan Grounds: Alabaster Sands"
 tp2 = "AlabasterSands"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7858,6 +8233,7 @@ aliases = []
 name = "The Journey to the Whin Hill"
 tp2 = "WhinHill"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7878,6 +8254,7 @@ aliases = []
 name = "The Dreadful Tales: The Bloodied Stings of Barovia"
 tp2 = "BloodiedStingsOfBarovia"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7898,6 +8275,7 @@ aliases = []
 name = "The Dreadful Tales: In Love, Undeath"
 tp2 = "InLoveUndeath"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7918,6 +8296,7 @@ aliases = []
 name = "The Dreadful Tales: Juniper and the Stone Leech"
 tp2 = "l#juniperstone"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7938,6 +8317,7 @@ aliases = []
 name = "Bristlelick BG1EE NPC"
 tp2 = "Bristlelick"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7958,6 +8338,7 @@ aliases = []
 name = "Faldorn"
 tp2 = "FALDORNBG2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7978,6 +8359,7 @@ aliases = []
 name = "Skie: The Cost of One Girl's Soul"
 tp2 = "SkieCost"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -7998,6 +8380,7 @@ aliases = []
 name = "Colours of Infinity: Yvette Romance"
 tp2 = "l#coi-yvette"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8018,6 +8401,7 @@ aliases = []
 name = "Dvaradime BG2EE NPC"
 tp2 = "l#dvaradime"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8038,6 +8422,7 @@ aliases = []
 name = "Fhaugy"
 tp2 = "l#fhaugy"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8058,6 +8443,7 @@ aliases = []
 name = "Gahesh"
 tp2 = "GAHESH"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8078,6 +8464,7 @@ aliases = []
 name = "Petsy NPC"
 tp2 = "Petsy"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8098,6 +8485,7 @@ aliases = []
 name = "Varshoon"
 tp2 = "l#varshoon"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8118,6 +8506,7 @@ aliases = []
 name = "Verr'Sza"
 tp2 = "l#verrszabg2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8138,6 +8527,7 @@ aliases = []
 name = "Walahnan"
 tp2 = "l#walahnanbg2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8158,6 +8548,7 @@ aliases = []
 name = "Will of the Wisp"
 tp2 = "willowisp"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8178,6 +8569,7 @@ aliases = []
 name = "Dynaheir"
 tp2 = "DYNBG2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8198,6 +8590,7 @@ aliases = []
 name = "Return of Xzar and Montaron"
 tp2 = "XZARMONT"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8218,6 +8611,7 @@ aliases = []
 name = "Yoshimo Romance"
 tp2 = "YoshimoRomance"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8238,6 +8632,7 @@ aliases = []
 name = "Wilson Chronicles"
 tp2 = "l#wilson"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8258,6 +8653,7 @@ aliases = []
 name = "Cernd Romance"
 tp2 = "CerndRomance"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8278,6 +8674,7 @@ aliases = []
 name = "Weasels!"
 tp2 = "Weasels!"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8298,6 +8695,7 @@ aliases = []
 name = "Of Heirlooms and Classes"
 tp2 = "OfHeirloomsAndClasses"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8318,6 +8716,7 @@ aliases = []
 name = "Hephernaan BG2"
 tp2 = "hephernaanbg2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8338,6 +8737,7 @@ aliases = []
 name = "Dvaradime"
 tp2 = "Dvaradime"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8358,6 +8758,7 @@ aliases = []
 name = "Innershade"
 tp2 = "Innershade"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8378,6 +8779,7 @@ aliases = []
 name = "I Shall Never Forget"
 tp2 = "ISNF"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8398,6 +8800,7 @@ aliases = []
 name = "Juniper and the Stone Leech"
 tp2 = "JuniperAndTheStoneLeech"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8418,6 +8821,7 @@ aliases = []
 name = "Khalid BG2"
 tp2 = "KhalidBG2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8438,6 +8842,7 @@ aliases = []
 name = "Walahnan"
 tp2 = "l#walahnanbg1ee"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8462,6 +8867,7 @@ aliases = []
 name = "Fight the Heavens"
 tp2 = "fight-the-heavens"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8482,6 +8888,7 @@ aliases = []
 name = "Crucible"
 tp2 = "crucible.tp2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8502,6 +8909,7 @@ aliases = []
 name = "Forgotten Armament"
 tp2 = "forgotten-armament"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8522,6 +8930,7 @@ aliases = []
 name = "morpheus562's Kitpack"
 tp2 = "morpheus562-s-kitpack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8542,6 +8951,7 @@ aliases = []
 name = "Skills and Abilities"
 tp2 = "skills-and-abilities"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8562,6 +8972,7 @@ aliases = []
 name = "Tactics Remix"
 tp2 = "tactics-remix"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8582,6 +8993,7 @@ aliases = []
 name = "Enhanced Powergaming Scripts"
 tp2 = "enhanced-powergaming-scripts"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "morpheus-mart"
@@ -8602,6 +9014,7 @@ aliases = []
 name = "Continuous NPCs"
 tp2 = "continuous-npcs"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "morpheus-mart"
@@ -8626,6 +9039,7 @@ aliases = []
 name = "Auto Loot"
 tp2 = "AutoLoot"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8646,6 +9060,7 @@ aliases = []
 name = "SpellFix Visual Effects"
 tp2 = "SpellFix_Visual_Effects"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8666,6 +9081,7 @@ aliases = []
 name = "Baldur's Gate Romantic Encounters Modification (BG1RE)"
 tp2 = "bg1re"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8686,6 +9102,7 @@ aliases = []
 name = "Cliffette's History"
 tp2 = "cliffhistory"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8706,6 +9123,7 @@ aliases = []
 name = "Cliffette's Keyring"
 tp2 = "CLIFFKEY"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8726,6 +9144,7 @@ aliases = []
 name = "Every Mod and Dog"
 tp2 = "emad"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8746,6 +9165,7 @@ aliases = []
 name = "Fishing for Trouble"
 tp2 = "FishingForTrouble"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8766,6 +9186,7 @@ aliases = []
 name = "Mercenaries of the Sword Coast"
 tp2 = "mercenaries"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8786,6 +9207,7 @@ aliases = []
 name = "Freedom's Reign"
 tp2 = "FR_ROV"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8806,6 +9228,7 @@ aliases = []
 name = "TeamBG's Armours for EET"
 tp2 = "BGeeARWe"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8826,6 +9249,7 @@ aliases = []
 name = "Fix Wheels of Prophecy"
 tp2 = "c7-fixwheels"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8846,6 +9270,7 @@ aliases = []
 name = "Valerie NPC for BG"
 tp2 = "valerie"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8866,6 +9291,7 @@ aliases = []
 name = "Glam NPC Pack"
 tp2 = "glamnpcpack"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8886,6 +9312,7 @@ aliases = []
 name = "Solaufein's Rescue"
 tp2 = "jasteys_solaufein"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8906,6 +9333,7 @@ aliases = []
 name = "Sir Ajantis NPC"
 tp2 = "ajantisbg2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8926,6 +9354,7 @@ aliases = []
 name = "Amber"
 tp2 = "amber"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8946,6 +9375,7 @@ aliases = []
 name = "Auren Aseph NPC"
 tp2 = "aurenaseph"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8966,6 +9396,7 @@ aliases = []
 name = "Tyris Flare NPC"
 tp2 = "tyrisflare"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -8986,6 +9417,7 @@ aliases = []
 name = "Sheena"
 tp2 = "Sheena"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9006,6 +9438,7 @@ aliases = []
 name = "Evandra"
 tp2 = "evandra"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9026,6 +9459,7 @@ aliases = []
 name = "Zakrion"
 tp2 = "Zakrion_BG2"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9046,6 +9480,7 @@ aliases = []
 name = "Afaaq, the Djinni Companion"
 tp2 = "a7-djinnicompanion"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9066,6 +9501,7 @@ aliases = []
 name = "Neh'taniel NPC"
 tp2 = "Neh'taniel"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9086,6 +9522,7 @@ aliases = []
 name = "Calin NPC"
 tp2 = "calin"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9106,6 +9543,7 @@ aliases = []
 name = "Navarra NPC"
 tp2 = "navarra"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9126,6 +9564,7 @@ aliases = []
 name = "Haer'Dalis Romance"
 tp2 = "haerdalisromance"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9146,6 +9585,7 @@ aliases = []
 name = "The Beaurin Legacy"
 tp2 = "TheBeaurinLegacy"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9166,6 +9606,7 @@ aliases = []
 name = "Jan Quest"
 tp2 = "JanQuest"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9186,6 +9627,7 @@ aliases = []
 name = "Sarevok Romance"
 tp2 = "sarevokromance"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9206,6 +9648,7 @@ aliases = []
 name = "Yoshimo's Remorse"
 tp2 = "yoshimosremorse"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9226,6 +9669,7 @@ aliases = []
 name = "BG2 Romance Expanded"
 tp2 = "OWRomanceExpanded"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9246,6 +9690,7 @@ aliases = []
 name = "Garrick's Infatuation"
 tp2 = "garrick_flirt"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9266,6 +9711,7 @@ aliases = []
 name = "G-Minion"
 tp2 = "gminion"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9286,6 +9732,7 @@ aliases = []
 name = "Disrupting Torch"
 tp2 = "DisruptingTorch"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9306,6 +9753,7 @@ aliases = []
 name = "Improved Rods"
 tp2 = "IMPROVEDRODS"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9326,6 +9774,7 @@ aliases = []
 name = "Trials of the Luremaster"
 tp2 = "A7-TotLM-BG2EE"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9346,6 +9795,7 @@ aliases = []
 name = "Seducer Kit"
 tp2 = "SEDUCERKIT"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9366,6 +9816,7 @@ aliases = []
 name = "Bardic Appraisal"
 tp2 = "cd_bardic_appraisal"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9386,6 +9837,7 @@ aliases = []
 name = "Pathfinder Hit Dice"
 tp2 = "PathfinderHitDice"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9406,6 +9858,7 @@ aliases = []
 name = "TB Tweaks"
 tp2 = "tb#tweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9426,6 +9879,7 @@ aliases = []
 name = "JTweaks"
 tp2 = "jtweaks"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9446,6 +9900,7 @@ aliases = []
 name = "Ultravision"
 tp2 = "Ultravision"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9466,6 +9921,7 @@ aliases = []
 name = "Allow Stacking Potions"
 tp2 = "Allow_Stacking_Potions"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9486,6 +9942,7 @@ aliases = []
 name = "Trap Overhaul"
 tp2 = "Trap_Overhaul"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9506,6 +9963,7 @@ aliases = []
 name = "AC Miscellaneous Tweaks"
 tp2 = "ac-miscellaneous"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9526,6 +9984,7 @@ aliases = []
 name = "Sequencer Colored Text"
 tp2 = "Sequencer_ColoredText"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9546,6 +10005,7 @@ aliases = []
 name = "Blink Dogs and Phase Spiders"
 tp2 = "BLINK DOGS AND PHASE SPIDERS"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9566,6 +10026,7 @@ aliases = []
 name = "Purist Demiliches (Polylich)"
 tp2 = "polylich"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
@@ -9586,6 +10047,7 @@ aliases = []
 name = "PaintBG Portrait Pack"
 tp2 = "PaintBG"
 aliases = []
+config_files = []
 
   [[mods.sources]]
   id = "primary"
