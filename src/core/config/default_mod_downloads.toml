@@ -7083,7 +7083,7 @@ config_files = []
 name = "ZSTweaks"
 tp2 = "ZSTweaks"
 aliases = []
-config_files = []
+config_files = ["configurations/zstweaks_prefixes.txt", "configurations/zstweaks_prefs.txt"]
 
   [[mods.sources]]
   id = "szaumoor"
