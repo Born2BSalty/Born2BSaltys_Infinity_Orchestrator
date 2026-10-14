@@ -1873,6 +1873,25 @@ tp2 = "DGITEMS"
   pkg_macos = "mac,rar,zip"
 
 [[mods]]
+name = "GARRICK-TT"
+tp2 = "garrick-tt"
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/Garrick_Tales-of-a-Troubadour"
+  repo = "The-Gate-Project/Garrick_Tales-of-a-Troubadour"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
+[[mods]]
 name = "IWD Item Pack"
 tp2 = "IWDITEMPACK"
 
