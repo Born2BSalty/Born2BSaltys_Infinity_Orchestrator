@@ -1873,7 +1873,7 @@ tp2 = "DGITEMS"
   pkg_macos = "mac,rar,zip"
 
 [[mods]]
-name = "GARRICK-TT"
+name = "Garrick: Tales of a Troubadour"
 tp2 = "garrick-tt"
 
   [[mods.sources]]
