@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::app::app_step2_log::LogShortfall;
 use crate::app::state::Step2Selection;
 use crate::registry::model::Game;
 
@@ -17,14 +18,56 @@ pub struct WorkspaceStep2State {
     pub rescan_drop_warning: Option<String>,
     pub resume_pending: bool,
     pub weidu_log_import_form: Option<WeiduLogImportForm>,
+    pub weidu_log_import_queued: WorkspaceFlag,
     pub pending_update_download_snapshot: Option<RescanSnapshot>,
     pub pending_global_mods_scan: Option<()>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogCheck {
+    Valid { components: usize, mods: usize },
+    NotALog,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportCallout {
+    Counted(LogShortfall),
+    Unreadable,
+}
+
+impl ImportCallout {
+    #[must_use]
+    pub const fn shortfall(self) -> Option<LogShortfall> {
+        match self {
+            Self::Counted(shortfall) => Some(shortfall),
+            Self::Unreadable => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeiduLogImportForm {
     pub first: Option<PathBuf>,
     pub second: Option<PathBuf>,
+    pub fetch_missing: bool,
+    pub first_check: Option<LogCheck>,
+    pub second_check: Option<LogCheck>,
+    pub first_callout: Option<ImportCallout>,
+    pub second_callout: Option<ImportCallout>,
+}
+
+impl Default for WeiduLogImportForm {
+    fn default() -> Self {
+        Self {
+            first: None,
+            second: None,
+            fetch_missing: true,
+            first_check: None,
+            second_check: None,
+            first_callout: None,
+            second_callout: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,5 +245,16 @@ mod tests {
         assert_eq!(WorkspaceStep::Step4.label(), "Review");
         assert_eq!(WorkspaceStep::Step5.label(), "Install");
         assert_eq!(WorkspaceStep::Step3.step_kicker(), "Step 3");
+    }
+
+    #[test]
+    fn the_import_form_defaults_to_fetching_missing_mods() {
+        let form = WeiduLogImportForm::default();
+        assert!(form.fetch_missing);
+        assert_eq!(form.first, None);
+        assert_eq!(form.second, None);
+        assert_eq!(form.first_check, None);
+        assert_eq!(form.second_check, None);
+        assert!(!WorkspaceStep2State::default().weidu_log_import_queued);
     }
 }

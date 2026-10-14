@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -9,7 +10,7 @@ use eframe::egui;
 use crate::app::app_step2_router::NEW_MOD_CARD_KEY;
 use crate::app::mod_downloads;
 use crate::app::state::{
-    Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet,
+    Step2State, VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, WizardState,
     exact_log_ready_to_install, update_pipeline_busy,
 };
 use crate::app::step2_action::Step2Action;
@@ -20,11 +21,12 @@ use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, clipboard, redesign_btn, redesign_text_input,
 };
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_accent, redesign_border_strong,
-    redesign_input_bg, redesign_pill_text, redesign_shell_bg, redesign_text_faint,
-    redesign_text_muted, redesign_text_primary,
+    REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_accent, redesign_accent_hover,
+    redesign_border_strong, redesign_input_bg, redesign_pill_text, redesign_shell_bg,
+    redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 use crate::ui::step2::update_check_popup_report_step2::build_popup_report;
+use crate::ui::workspace::step2_log_glue::forget_imported_logs;
 
 use super::{versions_card, versions_form, versions_icons, versions_menus, versions_sheets};
 
@@ -259,6 +261,8 @@ fn prepare_render(
 
     ensure_known_extras(orchestrator);
     clear_idle_fetching_tp2(&mut orchestrator.wizard_state.step2);
+    settle_versions_scope(&mut orchestrator.wizard_state.step2);
+    hold_missing_keys(&mut orchestrator.wizard_state.step2);
     let tiers = cached_source_tiers(ctx);
     let view = scan_stable_view(orchestrator, &tiers);
 
@@ -273,6 +277,89 @@ fn prepare_render(
         subtitle,
         header,
     }
+}
+
+const VERSIONS_TITLE: &str = "Versions";
+const MISSING_FROM_LOGS_PILL: &str = "Missing from logs";
+
+fn settle_versions_scope(step2: &mut Step2State) {
+    if update_pipeline_busy(step2) {
+        return;
+    }
+    if step2.versions_ui.log_pending_scope && step2.logged_missing_count() == 0 {
+        set_versions_scope(step2, false);
+    }
+}
+
+const fn set_versions_scope(step2: &mut Step2State, missing_only: bool) {
+    step2.versions_ui.log_pending_scope = missing_only;
+}
+
+fn hold_missing_keys(step2: &mut Step2State) {
+    if !update_pipeline_busy(step2) || step2.versions_ui.shown_missing_keys.is_empty() {
+        step2.versions_ui.shown_missing_keys = step2.logged_missing_keys();
+    }
+}
+
+fn missing_filter(versions_ui: &VersionsDrawerUi) -> Option<&BTreeSet<String>> {
+    versions_ui
+        .log_pending_scope
+        .then_some(&versions_ui.shown_missing_keys)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChipPick {
+    Missing,
+    Filter(VersionsChip),
+}
+
+fn chip_active(versions_ui: &VersionsDrawerUi, pick: ChipPick) -> bool {
+    match pick {
+        ChipPick::Missing => versions_ui.log_pending_scope,
+        ChipPick::Filter(chip) => !versions_ui.log_pending_scope && versions_ui.chip == chip,
+    }
+}
+
+const fn pick_chip(step2: &mut Step2State, pick: ChipPick) {
+    match pick {
+        ChipPick::Missing => set_versions_scope(step2, true),
+        ChipPick::Filter(chip) => {
+            set_versions_scope(step2, false);
+            step2.versions_ui.chip = chip;
+        }
+    }
+}
+
+const fn chip_matches(card: &VersionCard, chip: VersionsChip) -> bool {
+    match chip {
+        VersionsChip::All => true,
+        VersionsChip::Fetch => matches!(card.status, versions_view::CardStatus::Fetch),
+        VersionsChip::Attention => matches!(card.status, versions_view::CardStatus::Attention),
+        VersionsChip::Locked => card.locked,
+    }
+}
+
+fn card_passes(
+    card: &VersionCard,
+    search: &str,
+    chip: VersionsChip,
+    missing: Option<&BTreeSet<String>>,
+) -> bool {
+    let matches_search = search.is_empty() || card.name.to_ascii_lowercase().contains(search);
+    let matches_filter =
+        missing.map_or_else(|| chip_matches(card, chip), |keys| keys.contains(&card.tp2));
+    matches_search && matches_filter
+}
+
+fn footer_fetch_count(view: &VersionsView, missing: Option<&BTreeSet<String>>) -> usize {
+    missing.map_or(view.fetch_count, |keys| {
+        view.cards
+            .iter()
+            .filter(|card| {
+                matches!(card.status, versions_view::CardStatus::Fetch) && keys.contains(&card.tp2)
+            })
+            .count()
+    })
 }
 
 pub(crate) fn render(
@@ -292,16 +379,15 @@ pub(crate) fn render(
         header,
     } = prepare_render(ctx, orchestrator, action);
     let busy = header.busy;
-    let step2 = &orchestrator.wizard_state.step2;
-    let extract_progress = step2
-        .update_selected_extract_running
-        .then_some(step2.update_selected_extract_progress)
-        .flatten();
-    let apply_logs = step2.weidu_log_import.is_some();
+    let flags = footer_flags(&orchestrator.wizard_state.step2);
+    let fetch_count = footer_fetch_count(
+        &view,
+        missing_filter(&orchestrator.wizard_state.step2.versions_ui),
+    );
 
     let spec = DrawerSpec {
         id_salt: "versions_drawer",
-        title: "Versions",
+        title: VERSIONS_TITLE,
         subtitle: &subtitle,
         width: DrawerWidth::Wide,
         header_button: Some(drawer::HeaderButton {
@@ -327,7 +413,7 @@ pub(crate) fn render(
         &spec,
         |ui| {
             if view.log_missing_count > 0 {
-                render_log_strip(ui, palette, view.log_missing_count);
+                render_log_strip(ui, orchestrator, palette, view.log_missing_count);
             }
             if header.retry_count > 0 {
                 render_exact_version_miss_strip(
@@ -351,11 +437,10 @@ pub(crate) fn render(
         },
         |ui| {
             let mut footer_ctx = FooterCtx {
-                fetch_count: view.fetch_count,
+                fetch_count,
                 busy,
                 fetching: header.fetching,
-                extract_progress,
-                apply_logs,
+                flags,
                 report_text: &header.report_text,
                 outcome: &mut footer,
             };
@@ -408,7 +493,6 @@ fn close_drawer(orchestrator: &mut OrchestratorApp) {
 
 pub(crate) fn close_versions_drawer(step2: &mut Step2State) {
     step2.update_selected_popup_open = false;
-    step2.weidu_log_import_awaiting_check = false;
     step2.versions_ui = VersionsDrawerUi::default();
     step2.update_selected_confirm_latest_fallback_open = false;
     versions_sheets::clear_editor_state(step2);
@@ -599,16 +683,162 @@ fn subtitle_text(orchestrator: &OrchestratorApp, modlist_name: &str, mod_count: 
     format!("{modlist_name} \u{00B7} {mod_count} {mods_word} \u{00B7} {status}")
 }
 
-fn render_log_strip(ui: &mut egui::Ui, palette: ThemePalette, n: usize) {
+const FORGET_LOGS_LINK: &str = "Forget imported logs";
+
+fn log_strip_text(n: usize, imported: bool) -> String {
     let word = if n == 1 { "mod" } else { "mods" };
     let verb = if n == 1 { "is" } else { "are" };
+    if imported {
+        format!("{n} {word} from your imported logs {verb} not on disk")
+    } else {
+        format!("{n} {word} {verb} not on disk yet")
+    }
+}
+
+fn imported_missing_count(state: &WizardState) -> usize {
+    if crate::app::app_step2_log::tracks_imported_logs(state) {
+        state.step2.versions_ui.shown_missing_keys.len()
+    } else {
+        0
+    }
+}
+
+const fn forget_link_enabled(step2: &Step2State) -> bool {
+    !update_pipeline_busy(step2)
+}
+
+fn muted_strip_label(ui: &mut egui::Ui, palette: ThemePalette, text: impl Into<String>) {
     ui.label(
-        egui::RichText::new(format!("{n} {word} {verb} not on disk yet"))
+        egui::RichText::new(text)
             .size(12.0)
             .family(egui::FontFamily::Name("poppins_light".into()))
             .color(redesign_text_muted(palette)),
     );
+}
+
+fn render_log_strip(
+    ui: &mut egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+    palette: ThemePalette,
+    n: usize,
+) {
+    let logged = imported_missing_count(&orchestrator.wizard_state);
+    if logged == 0 {
+        muted_strip_label(ui, palette, log_strip_text(n, false));
+        ui.add_space(8.0);
+        return;
+    }
+    let step2 = &orchestrator.wizard_state.step2;
+    let enabled = forget_link_enabled(step2);
+    let confirm_open = step2.versions_ui.forget_logs_confirm_open;
+    ui.horizontal(|ui| {
+        if confirm_open {
+            render_forget_logs_confirm_inline(ui, orchestrator, palette, !enabled);
+        } else {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            muted_strip_label(ui, palette, log_strip_text(logged, true));
+            muted_strip_label(ui, palette, " \u{00B7} ");
+            if forget_link(ui, palette, FORGET_LOGS_LINK, enabled).clicked() && enabled {
+                orchestrator
+                    .wizard_state
+                    .step2
+                    .versions_ui
+                    .forget_logs_confirm_open = true;
+            }
+        }
+    });
     ui.add_space(8.0);
+}
+
+fn render_forget_logs_confirm_inline(
+    ui: &mut egui::Ui,
+    orchestrator: &mut OrchestratorApp,
+    palette: ThemePalette,
+    busy: bool,
+) {
+    muted_strip_label(
+        ui,
+        palette,
+        "Forget imported logs? Your selections stay as they are.",
+    );
+    if redesign_btn(
+        ui,
+        palette,
+        "Forget logs",
+        BtnOpts {
+            primary: true,
+            small: true,
+            disabled: busy,
+            ..Default::default()
+        },
+    )
+    .clicked()
+        && !busy
+    {
+        orchestrator
+            .wizard_state
+            .step2
+            .versions_ui
+            .forget_logs_confirm_open = false;
+        forget_imported_logs(orchestrator);
+    }
+    if redesign_btn(
+        ui,
+        palette,
+        "Cancel",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .clicked()
+    {
+        orchestrator
+            .wizard_state
+            .step2
+            .versions_ui
+            .forget_logs_confirm_open = false;
+    }
+}
+
+fn forget_link(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    text: &str,
+    enabled: bool,
+) -> egui::Response {
+    let font = egui::FontId::new(12.0, egui::FontFamily::Name("poppins_light".into()));
+    let color = if enabled {
+        redesign_accent(palette)
+    } else {
+        redesign_text_muted(palette)
+    };
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font.clone(), color);
+    let sense = if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(galley.size(), sense);
+
+    if ui.is_rect_visible(rect) {
+        let painted_color = if enabled && response.hovered() {
+            redesign_accent_hover(palette)
+        } else {
+            color
+        };
+        ui.painter().text(
+            rect.left_center(),
+            egui::Align2::LEFT_CENTER,
+            text,
+            font,
+            painted_color,
+        );
+    }
+
+    response
 }
 
 fn filter_chip_width(ui: &egui::Ui, label: &str, count: usize) -> f32 {
@@ -627,14 +857,41 @@ fn render_filter_row(
     palette: ThemePalette,
     view: &VersionsView,
 ) {
-    let chip = orchestrator.wizard_state.step2.versions_ui.chip;
-    let total = view.cards.len();
+    let missing_count = orchestrator
+        .wizard_state
+        .step2
+        .versions_ui
+        .shown_missing_keys
+        .len();
+    let missing_chip =
+        (missing_count > 0).then_some((MISSING_FROM_LOGS_PILL, missing_count, ChipPick::Missing));
+    let chips: Vec<(&str, usize, ChipPick)> = missing_chip
+        .into_iter()
+        .chain([
+            (
+                "Fetch",
+                view.fetch_count,
+                ChipPick::Filter(VersionsChip::Fetch),
+            ),
+            (
+                "Attention",
+                view.attention_count,
+                ChipPick::Filter(VersionsChip::Attention),
+            ),
+            (
+                "Locked",
+                view.locked_count,
+                ChipPick::Filter(VersionsChip::Locked),
+            ),
+            ("All", view.cards.len(), ChipPick::Filter(VersionsChip::All)),
+        ])
+        .collect();
     let item_spacing = 10.0_f32;
-    let pills_width = filter_chip_width(ui, "Fetch", view.fetch_count)
-        + filter_chip_width(ui, "Attention", view.attention_count)
-        + filter_chip_width(ui, "Locked", view.locked_count)
-        + filter_chip_width(ui, "All", total);
-    let gaps = item_spacing * 4.0;
+    let pills_width: f32 = chips
+        .iter()
+        .map(|(label, count, _)| filter_chip_width(ui, label, *count))
+        .sum();
+    let gaps = item_spacing * f32::from(u16::try_from(chips.len()).unwrap_or(u16::MAX));
     let search_box_width = (ui.available_width() - pills_width - gaps).clamp(160.0, 280.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = item_spacing;
@@ -644,35 +901,11 @@ fn render_filter_row(
             &mut orchestrator.wizard_state.step2.versions_ui.search,
             search_box_width,
         );
-        if render_filter_chip(
-            ui,
-            palette,
-            "Fetch",
-            view.fetch_count,
-            chip == VersionsChip::Fetch,
-        ) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::Fetch;
-        }
-        if render_filter_chip(
-            ui,
-            palette,
-            "Attention",
-            view.attention_count,
-            chip == VersionsChip::Attention,
-        ) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::Attention;
-        }
-        if render_filter_chip(
-            ui,
-            palette,
-            "Locked",
-            view.locked_count,
-            chip == VersionsChip::Locked,
-        ) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::Locked;
-        }
-        if render_filter_chip(ui, palette, "All", total, chip == VersionsChip::All) {
-            orchestrator.wizard_state.step2.versions_ui.chip = VersionsChip::All;
+        for (label, count, pick) in chips {
+            let active = chip_active(&orchestrator.wizard_state.step2.versions_ui, pick);
+            if render_filter_chip(ui, palette, label, count, active) {
+                pick_chip(&mut orchestrator.wizard_state.step2, pick);
+            }
         }
     });
     ui.add_space(12.0);
@@ -780,20 +1013,13 @@ fn render_card_list(
         .search
         .trim()
         .to_ascii_lowercase();
-    let chip = orchestrator.wizard_state.step2.versions_ui.chip;
+    let versions_ui = &orchestrator.wizard_state.step2.versions_ui;
+    let chip = versions_ui.chip;
+    let missing = missing_filter(versions_ui);
     let card_inner_width = (ui.available_width() - 32.0).max(0.0);
     let selector_width = (card_inner_width * 0.46).clamp(260.0, 460.0);
 
-    let matches_chip = |card: &VersionCard| match chip {
-        VersionsChip::All => true,
-        VersionsChip::Fetch => matches!(card.status, versions_view::CardStatus::Fetch),
-        VersionsChip::Attention => matches!(card.status, versions_view::CardStatus::Attention),
-        VersionsChip::Locked => card.locked,
-    };
-    let pass = |card: &VersionCard| {
-        (search.is_empty() || card.name.to_ascii_lowercase().contains(&search))
-            && matches_chip(card)
-    };
+    let pass = |card: &VersionCard| card_passes(card, &search, chip, missing);
 
     let fetch_cards: Vec<&VersionCard> = view
         .cards
@@ -1006,10 +1232,27 @@ struct FooterCtx<'a> {
     fetch_count: usize,
     busy: bool,
     fetching: bool,
-    extract_progress: Option<(usize, usize)>,
-    apply_logs: bool,
+    flags: FooterFlags,
     report_text: &'a str,
     outcome: &'a mut FooterOutcome,
+}
+
+#[derive(Clone, Copy)]
+struct FooterFlags {
+    extract_progress: Option<(usize, usize)>,
+    ticks_logged: bool,
+    missing_scope: bool,
+}
+
+fn footer_flags(step2: &Step2State) -> FooterFlags {
+    FooterFlags {
+        extract_progress: step2
+            .update_selected_extract_running
+            .then_some(step2.update_selected_extract_progress)
+            .flatten(),
+        ticks_logged: crate::app::app_step2_log::fetch_set_ticks_logged(step2),
+        missing_scope: step2.versions_ui.log_pending_scope,
+    }
 }
 
 fn open_new_mod_sheet(ctx: &egui::Context, orchestrator: &mut OrchestratorApp) {
@@ -1026,7 +1269,7 @@ pub(crate) fn footer_primary_label(
     fetch_count: usize,
     fetching: bool,
     extract_progress: Option<(usize, usize)>,
-    apply_logs: bool,
+    ticks_logged: bool,
 ) -> String {
     if let Some((done, total)) = extract_progress {
         format!("Extracting {done} / {total}\u{2026}")
@@ -1038,12 +1281,20 @@ pub(crate) fn footer_primary_label(
         format!(
             "Fetch {fetch_count} mod{}{}",
             if fetch_count == 1 { "" } else { "s" },
-            if apply_logs {
-                " & apply WeiDU logs"
+            if ticks_logged {
+                " & tick logged components"
             } else {
                 ""
             }
         )
+    }
+}
+
+const fn footer_fetch_action(missing_scope: bool) -> Step2Action {
+    if missing_scope {
+        Step2Action::DownloadMissingFromLogs
+    } else {
+        Step2Action::DownloadUpdates
     }
 }
 
@@ -1052,8 +1303,8 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
     let primary_label = footer_primary_label(
         fetch_count,
         footer.fetching,
-        footer.extract_progress,
-        footer.apply_logs,
+        footer.flags.extract_progress,
+        footer.flags.ticks_logged,
     );
     let primary_disabled = fetch_count == 0 || footer.busy;
     if redesign_btn(
@@ -1070,11 +1321,7 @@ fn render_footer(ui: &mut egui::Ui, palette: ThemePalette, footer: &mut FooterCt
     .clicked()
         && !primary_disabled
     {
-        footer.outcome.action = Some(if footer.apply_logs {
-            Step2Action::DownloadUpdatesAndApplyLogs
-        } else {
-            Step2Action::DownloadUpdates
-        });
+        footer.outcome.action = Some(footer_fetch_action(footer.flags.missing_scope));
     }
     if redesign_btn(
         ui,
@@ -1323,6 +1570,7 @@ fn apply_sheet_outcome(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::state::{LogPendingOrigin, Step2LogPendingDownload, Step2UpdateAsset};
 
     #[test]
     fn header_button_label_prefers_scanning_then_checking_then_fetching() {
@@ -1538,15 +1786,38 @@ mod tests {
         );
     }
 
+    fn pending(tp_file: &str, origin: LogPendingOrigin) -> Step2LogPendingDownload {
+        Step2LogPendingDownload {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+            label: tp_file.to_string(),
+            requested_version: None,
+            origin,
+        }
+    }
+
+    fn fetch_asset(tp_file: &str) -> Step2UpdateAsset {
+        Step2UpdateAsset {
+            game_tab: "BGEE".to_string(),
+            tp_file: tp_file.to_string(),
+            label: tp_file.to_string(),
+            source_id: "primary".to_string(),
+            tag: "v1".to_string(),
+            asset_name: format!("{tp_file}.zip"),
+            asset_url: format!("https://example.test/{tp_file}.zip"),
+            installed_source_ref: None,
+        }
+    }
+
     #[test]
-    fn footer_label_names_the_log_apply_only_with_a_record() {
+    fn footer_names_the_tick_only_when_a_logged_missing_mod_is_fetched() {
         assert_eq!(
             footer_primary_label(3, false, None, true),
-            "Fetch 3 mods & apply WeiDU logs"
+            "Fetch 3 mods & tick logged components"
         );
         assert_eq!(
             footer_primary_label(1, false, None, true),
-            "Fetch 1 mod & apply WeiDU logs"
+            "Fetch 1 mod & tick logged components"
         );
         assert_eq!(footer_primary_label(3, false, None, false), "Fetch 3 mods");
         assert_eq!(
@@ -1557,5 +1828,255 @@ mod tests {
             footer_primary_label(0, false, None, true),
             "Nothing to fetch"
         );
+
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("added.tp2", LogPendingOrigin::AddedMod),
+            ],
+            update_selected_update_assets: vec![fetch_asset("on-disk.tp2")],
+            ..Step2State::default()
+        };
+        assert!(!crate::app::app_step2_log::fetch_set_ticks_logged(&step2));
+        step2
+            .update_selected_update_assets
+            .push(fetch_asset("added.tp2"));
+        assert!(!crate::app::app_step2_log::fetch_set_ticks_logged(&step2));
+        step2
+            .update_selected_update_assets
+            .push(fetch_asset("SETUP-GONE.TP2"));
+        assert!(crate::app::app_step2_log::fetch_set_ticks_logged(&step2));
+
+        assert_eq!(
+            footer_fetch_action(true),
+            Step2Action::DownloadMissingFromLogs
+        );
+        assert_eq!(footer_fetch_action(false), Step2Action::DownloadUpdates);
+    }
+
+    fn settle_and_hold(step2: &mut Step2State) {
+        settle_versions_scope(step2);
+        hold_missing_keys(step2);
+    }
+
+    fn keys(items: &[&str]) -> BTreeSet<String> {
+        items.iter().map(|item| (*item).to_string()).collect()
+    }
+
+    #[test]
+    fn the_missing_chip_shows_only_while_logged_mods_are_missing() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("added.tp2", LogPendingOrigin::AddedMod),
+            ],
+            ..Step2State::default()
+        };
+        step2.versions_ui.log_pending_scope = true;
+        settle_and_hold(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(step2.versions_ui.shown_missing_keys, keys(&["gone"]));
+
+        step2
+            .log_pending_downloads
+            .retain(|entry| entry.origin == LogPendingOrigin::AddedMod);
+        settle_and_hold(&mut step2);
+        assert!(!step2.versions_ui.log_pending_scope);
+        assert!(step2.versions_ui.shown_missing_keys.is_empty());
+    }
+
+    #[test]
+    fn the_missing_chip_holds_while_the_pipeline_is_busy() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("SETUP-LATER.TP2", LogPendingOrigin::WeiduLog),
+            ],
+            ..Step2State::default()
+        };
+        step2.versions_ui.log_pending_scope = true;
+        settle_and_hold(&mut step2);
+        let both = keys(&["gone", "later"]);
+        assert_eq!(step2.versions_ui.shown_missing_keys, both);
+
+        step2.update_selected_download_running = true;
+        step2.log_pending_downloads.clear();
+        settle_and_hold(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(step2.versions_ui.shown_missing_keys, both);
+
+        step2.update_selected_download_running = false;
+        step2.is_scanning = true;
+        settle_and_hold(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(step2.versions_ui.shown_missing_keys, both);
+
+        step2.is_scanning = false;
+        step2.log_pending_downloads = vec![pending("SETUP-LATER.TP2", LogPendingOrigin::WeiduLog)];
+        settle_and_hold(&mut step2);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert_eq!(step2.versions_ui.shown_missing_keys, keys(&["later"]));
+    }
+
+    #[test]
+    fn opening_on_missing_while_the_pipeline_is_busy_shows_the_missing_mods() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog)],
+            ..Step2State::default()
+        };
+        step2.update_selected_download_running = true;
+        step2.versions_ui.log_pending_scope = true;
+
+        settle_and_hold(&mut step2);
+
+        assert_eq!(step2.versions_ui.shown_missing_keys, keys(&["gone"]));
+    }
+
+    #[test]
+    fn the_missing_scope_lists_only_missing_mods() {
+        let mut step2 = Step2State {
+            log_pending_downloads: vec![
+                pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+                pending("added.tp2", LogPendingOrigin::AddedMod),
+            ],
+            ..Step2State::default()
+        };
+        step2.versions_ui.log_pending_scope = true;
+        settle_and_hold(&mut step2);
+        let missing = missing_filter(&step2.versions_ui);
+        assert!(missing.is_some());
+
+        let gone = queue_test_card("gone", true, false);
+        let added = queue_test_card("added", true, false);
+        let scanned = refetch_test_card("alpha", true);
+        for chip in [
+            VersionsChip::All,
+            VersionsChip::Fetch,
+            VersionsChip::Attention,
+            VersionsChip::Locked,
+        ] {
+            assert!(card_passes(&gone, "", chip, missing));
+            assert!(!card_passes(&added, "", chip, missing));
+            assert!(!card_passes(&scanned, "", chip, missing));
+        }
+        assert!(card_passes(&gone, "go", VersionsChip::All, missing));
+        assert!(!card_passes(&gone, "zz", VersionsChip::All, missing));
+
+        assert!(card_passes(&scanned, "", VersionsChip::Locked, None));
+        assert!(!card_passes(&gone, "", VersionsChip::Locked, None));
+    }
+
+    #[test]
+    fn the_footer_counts_only_missing_fetches_in_the_missing_scope() {
+        let mut view = VersionsView {
+            cards: vec![
+                queue_test_card("gone", true, false),
+                queue_test_card("on-disk", true, false),
+                refetch_test_card("later", false),
+            ],
+            fetch_count: 0,
+            attention_count: 0,
+            locked_count: 0,
+            log_missing_count: 0,
+        };
+        view.fetch_count = view
+            .cards
+            .iter()
+            .filter(|card| matches!(card.status, versions_view::CardStatus::Fetch))
+            .count();
+        let missing = keys(&["gone", "later"]);
+        assert_eq!(footer_fetch_count(&view, Some(&missing)), 1);
+        assert_eq!(footer_fetch_count(&view, None), view.fetch_count);
+    }
+
+    #[test]
+    fn the_forget_link_is_inert_while_the_pipeline_is_busy() {
+        assert!(forget_link_enabled(&Step2State::default()));
+        let busy_states = [
+            Step2State {
+                update_selected_download_running: true,
+                ..Step2State::default()
+            },
+            Step2State {
+                update_selected_check_running: true,
+                ..Step2State::default()
+            },
+            Step2State {
+                is_scanning: true,
+                ..Step2State::default()
+            },
+        ];
+        for step2 in &busy_states {
+            assert!(!forget_link_enabled(step2));
+        }
+    }
+
+    #[test]
+    fn only_imported_logs_offer_the_forget_link() {
+        let mut state = WizardState::default();
+        state.step2.log_pending_downloads = vec![
+            pending("SETUP-ADDED.TP2", LogPendingOrigin::AddedMod),
+            pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog),
+        ];
+        settle_and_hold(&mut state.step2);
+        assert_eq!(imported_missing_count(&state), 1);
+        assert_eq!(
+            log_strip_text(1, true),
+            "1 mod from your imported logs is not on disk"
+        );
+
+        state.step2.log_pending_downloads =
+            vec![pending("SETUP-ADDED.TP2", LogPendingOrigin::AddedMod)];
+        settle_and_hold(&mut state.step2);
+        assert_eq!(imported_missing_count(&state), 0);
+        assert_eq!(log_strip_text(1, false), "1 mod is not on disk yet");
+
+        state.step2.log_pending_downloads =
+            vec![pending("SETUP-GONE.TP2", LogPendingOrigin::WeiduLog)];
+        settle_and_hold(&mut state.step2);
+        state.step1.install_mode =
+            crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        assert_eq!(imported_missing_count(&state), 0);
+        state.step1.install_mode = String::new();
+        state.modlist_auto_build_active = true;
+        assert_eq!(imported_missing_count(&state), 0);
+    }
+
+    #[test]
+    fn closing_versions_cancels_the_forget_confirm() {
+        let mut step2 = Step2State {
+            update_selected_popup_open: true,
+            ..Step2State::default()
+        };
+        step2.versions_ui.forget_logs_confirm_open = true;
+        close_versions_drawer(&mut step2);
+        assert!(!step2.versions_ui.forget_logs_confirm_open);
+    }
+
+    #[test]
+    fn picking_another_chip_leaves_the_missing_scope() {
+        let mut step2 = Step2State::default();
+        step2.versions_ui.chip = VersionsChip::Attention;
+        pick_chip(&mut step2, ChipPick::Missing);
+        assert!(step2.versions_ui.log_pending_scope);
+        assert!(chip_active(&step2.versions_ui, ChipPick::Missing));
+        assert!(!chip_active(
+            &step2.versions_ui,
+            ChipPick::Filter(VersionsChip::Attention)
+        ));
+
+        for chip in [
+            VersionsChip::Fetch,
+            VersionsChip::Attention,
+            VersionsChip::Locked,
+            VersionsChip::All,
+        ] {
+            pick_chip(&mut step2, ChipPick::Missing);
+            pick_chip(&mut step2, ChipPick::Filter(chip));
+            assert!(!step2.versions_ui.log_pending_scope);
+            assert_eq!(step2.versions_ui.chip, chip);
+            assert!(chip_active(&step2.versions_ui, ChipPick::Filter(chip)));
+            assert!(!chip_active(&step2.versions_ui, ChipPick::Missing));
+        }
     }
 }

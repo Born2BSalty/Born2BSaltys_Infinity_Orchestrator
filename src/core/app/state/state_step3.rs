@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::BTreeSet;
+
+use crate::app::game_authority::GameSlot;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step3LogPlacement {
+    pub tree: GameSlot,
+    pub log_order: Vec<(String, String)>,
+    pub placed: BTreeSet<(String, String)>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step3ItemState {
     pub tp_file: String,
@@ -63,6 +74,22 @@ pub struct Step3State<Flag = bool> {
     pub prompt_edit_answer: String,
     pub prompt_edit_json: String,
     pub prompt_edit_status: String,
+    pub pending_log_placements: Vec<Step3LogPlacement>,
+}
+
+impl<Flag> Step3State<Flag> {
+    pub fn queue_log_placement(
+        &mut self,
+        tree: GameSlot,
+        log_order: Vec<(String, String)>,
+        placed: BTreeSet<(String, String)>,
+    ) {
+        self.pending_log_placements.push(Step3LogPlacement {
+            tree,
+            log_order,
+            placed,
+        });
+    }
 }
 
 impl Default for Step3State {
@@ -113,6 +140,7 @@ impl Default for Step3State {
             prompt_edit_answer: String::new(),
             prompt_edit_json: String::new(),
             prompt_edit_status: String::new(),
+            pending_log_placements: Vec::new(),
         }
     }
 }

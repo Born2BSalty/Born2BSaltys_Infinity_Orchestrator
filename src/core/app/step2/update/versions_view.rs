@@ -1168,7 +1168,7 @@ mod tests {
         DownloadPoll, Step2UpdateDownloadEvent, poll_step2_update_download,
     };
     use crate::app::mod_downloads;
-    use crate::app::state::{Step2ComponentState, Step2LogPendingDownload};
+    use crate::app::state::{LogPendingOrigin, Step2ComponentState, Step2LogPendingDownload};
 
     fn component(id: &str, raw_line: &str) -> Step2ComponentState {
         Step2ComponentState {
@@ -1757,6 +1757,7 @@ mod tests {
                 tp_file: "pending.tp2".to_string(),
                 label: "Pending".to_string(),
                 requested_version: None,
+                origin: LogPendingOrigin::WeiduLog,
             });
         state
             .step2
@@ -1989,6 +1990,7 @@ mod tests {
                 tp_file: "manual.tp2".to_string(),
                 label: "Manual".to_string(),
                 requested_version: None,
+                origin: LogPendingOrigin::WeiduLog,
             });
         let text = "[[mods]]\nname = \"Manual\"\ntp2 = \"manual.tp2\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  label = \"Site\"\n  type = \"url\"\n  url = \"https://example.test/page\"\n  default = true\n";
         let tiers = mod_downloads::source_tiers_from_texts(text, "", "");
@@ -2228,6 +2230,44 @@ mod tests {
         assert_eq!(view.cards.len(), 2);
         assert_eq!(view.cards[0].name, "Alpha");
         assert_eq!(view.cards[1].name, "Zeta");
+    }
+
+    #[test]
+    fn other_chips_count_the_whole_folder_in_the_missing_scope() {
+        let mut state = WizardState::default();
+        state
+            .step2
+            .bgee_mods
+            .push(mod_state("alpha.tp2", "Alpha", "~alpha.tp2~ #0 #0 // 1.0"));
+        state
+            .step2
+            .bg2ee_mods
+            .push(mod_state("zeta.tp2", "Zeta", "~zeta.tp2~ #0 #0 // 1.0"));
+        for (tp_file, label, origin) in [
+            ("gone.tp2", "Gone", LogPendingOrigin::WeiduLog),
+            ("added.tp2", "Added", LogPendingOrigin::AddedMod),
+            ("lost.tp2", "Lost", LogPendingOrigin::WeiduLog),
+        ] {
+            state
+                .step2
+                .log_pending_downloads
+                .push(Step2LogPendingDownload {
+                    game_tab: "BGEE".to_string(),
+                    tp_file: tp_file.to_string(),
+                    label: label.to_string(),
+                    requested_version: None,
+                    origin,
+                });
+        }
+        let all = build_versions_view(&state, &empty_tiers(), None);
+
+        state.step2.versions_ui.log_pending_scope = true;
+        let view = build_versions_view(&state, &empty_tiers(), None);
+        assert_eq!(view, all);
+        let names: Vec<&str> = view.cards.iter().map(|card| card.name.as_str()).collect();
+        for name in ["Alpha", "Zeta", "Gone", "Added", "Lost"] {
+            assert!(names.contains(&name), "{name} missing from {names:?}");
+        }
     }
 
     #[test]

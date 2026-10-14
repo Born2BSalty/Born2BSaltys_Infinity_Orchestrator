@@ -19,7 +19,7 @@ pub enum Step2Action {
     PreviewUpdateSelected,
     PreviewUpdateSelectedMod,
     DownloadUpdates,
-    DownloadUpdatesAndApplyLogs,
+    DownloadMissingFromLogs,
     DownloadUpdateFor {
         tp2: String,
     },

@@ -66,8 +66,18 @@ fn step2_text(created_from_mods: bool) -> HelpText {
     ];
     if created_from_mods {
         bullets.push(bullet(
-            "Each game tab keeps its own selection. \"Select <game> via WeiDU Log\" ticks \
-             everything listed in an existing weidu.log.",
+            "Each game tab keeps its own selection. \"Import from WeiDU Logs\u{2026}\" ticks \
+             every logged component whose mod is on disk and keeps the logs with the list.",
+        ));
+        bullets.push(bullet(
+            "While those logs name mods that are not on disk, Versions\u{2026} shows a \
+             \"Missing from logs\" filter, and the import opens it when \"Check sources for \
+             missing mods\" is on. Fetching those mods ticks their logged components and \
+             places them in Step 3 at their position in the log.",
+        ));
+        bullets.push(bullet(
+            "\"Forget imported logs\" in Versions\u{2026} stops tracking the logs: your \
+             selections stay, and the missing mods are no longer offered.",
         ));
         bullets.push(bullet(
             "To learn how to add mods, use the \"?\" next to Rescan Mods.",
@@ -277,7 +287,19 @@ mod tests {
         let from_mods = help_text(HelpPage::Step2 {
             created_from_mods: true,
         });
-        assert_eq!(from_mods.bullets.len(), 6);
+        assert!(from_mods.bullets.len() > modify_fork.bullets.len());
+    }
+
+    #[test]
+    fn step2_help_names_forget_imported_logs() {
+        let names_forget = |created_from_mods| {
+            help_text(HelpPage::Step2 { created_from_mods })
+                .bullets
+                .iter()
+                .any(|bullet| bullet.body.contains("Forget imported logs"))
+        };
+        assert!(names_forget(true));
+        assert!(!names_forget(false));
     }
 
     #[test]

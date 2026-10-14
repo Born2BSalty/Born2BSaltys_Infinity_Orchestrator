@@ -20,9 +20,8 @@ pub fn populate_wizard_state_from_workspace(
 ) -> Option<String> {
     wizard_state.step2.update_selected_popup_open = false;
     wizard_state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
-    wizard_state.step2.weidu_log_import = None;
-    wizard_state.step2.pending_weidu_log_reapply = false;
-    wizard_state.step2.weidu_log_import_awaiting_check = false;
+    wizard_state.step2.pending_log_ticks.clear();
+    wizard_state.step3.pending_log_placements.clear();
     wizard_state.step1.game_install = entry.game.to_legacy_string().to_string();
     wizard_state.step2.active_game_tab = game_authority::normalized_tab(
         &wizard_state.step1.game_install,
@@ -1407,17 +1406,13 @@ mod tests {
     }
 
     #[test]
-    fn opening_a_list_drops_a_waiting_log_import() {
+    fn opening_a_list_drops_pending_log_ticks() {
         let root = TempRoot::named("bio_loader_logimport");
         let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
         let mut list = entry(Game::EET);
         list.destination_folder = root.path_of("dest");
         let mut ws = WizardState::default();
-        ws.step2.weidu_log_import = Some(crate::app::state::WeiduLogImport {
-            first: Some(root.0.join("weidu.log")),
-            second: None,
-        });
-        ws.step2.pending_weidu_log_reapply = true;
+        ws.step2.pending_log_ticks = std::collections::BTreeSet::from(["x".to_string()]);
 
         populate_wizard_state_from_workspace(
             &ModlistWorkspaceState::default(),
@@ -1426,8 +1421,7 @@ mod tests {
             &mut ws,
         );
 
-        assert_eq!(ws.step2.weidu_log_import, None);
-        assert!(!ws.step2.pending_weidu_log_reapply);
+        assert!(ws.step2.pending_log_ticks.is_empty());
     }
 
     #[test]

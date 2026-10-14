@@ -3,7 +3,11 @@
 
 use eframe::egui;
 
-use crate::app::app_step2_log::{resolve_bg2_weidu_log_path, resolve_bgee_weidu_log_path};
+use crate::app::app_step2_log::{
+    log_import_shortfall, resolve_bg2_weidu_log_path, resolve_bgee_weidu_log_path,
+};
+use crate::app::state::WizardState;
+use crate::mods::log_file::LogFile;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::orchestrator::widgets::dialogs::confirm_dialog::{self, ConfirmOutcome};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
@@ -14,12 +18,14 @@ use crate::ui::shared::redesign_tokens::{
 };
 use crate::ui::shared::tab_open_seam::paint_active_tab_seam_cover;
 use crate::ui::step2::action_step2::Step2Action;
-use crate::ui::workspace::state_workspace::WeiduLogImportForm;
-use crate::ui::workspace::step_action_dispatch;
-use crate::ui::workspace::step2::step2_log_import_dialog::{self, ImportOutcome};
+use crate::ui::workspace::state_workspace::{ImportCallout, LogCheck, WeiduLogImportForm};
+use crate::ui::workspace::step2::step2_log_import_dialog::{
+    self, ImportDrawerStatus, ImportOutcome,
+};
 use crate::ui::workspace::step2::{
     step2_global_mods_confirm, step2_rescan_reconcile, step2_search, step2_tab_row,
 };
+use crate::ui::workspace::{step_action_dispatch, step2_log_glue};
 
 const TITLE_H: f32 = 24.0;
 const TITLE_GAP: f32 = 8.0;
@@ -462,10 +468,26 @@ fn render_weidu_log_import_form(
         .step2
         .weidu_log_import_form
         .clone()?;
+    let scanning = step2_log_glue::step2_scan_running(orchestrator);
+    if !scanning {
+        fill_import_callouts(&orchestrator.wizard_state, &mut form);
+    }
     let step1 = &orchestrator.wizard_state.step1;
     let start_paths = WeiduLogImportForm {
         first: resolve_bgee_weidu_log_path(step1),
         second: resolve_bg2_weidu_log_path(step1),
+        ..WeiduLogImportForm::default()
+    };
+
+    let status = ImportDrawerStatus {
+        scanning,
+        queued: orchestrator.workspace_view.step2.weidu_log_import_queued,
+        replace_warning: step2_log_glue::list_has_selection(
+            &orchestrator.wizard_state.step2,
+            orchestrator.workspace_view.step2.rescan_snapshot.as_ref(),
+        ),
+        first_callout: form.first_callout.and_then(ImportCallout::shortfall),
+        second_callout: form.second_callout.and_then(ImportCallout::shortfall),
     };
 
     let outcome = step2_log_import_dialog::render(
@@ -474,6 +496,7 @@ fn render_weidu_log_import_form(
         &step1.game_install,
         &mut form,
         &start_paths,
+        status,
     );
 
     match outcome {
@@ -481,14 +504,40 @@ fn render_weidu_log_import_form(
             orchestrator.workspace_view.step2.weidu_log_import_form = Some(form);
             Some(Step2Action::ImportWeiduLogs)
         }
+        ImportOutcome::Queue => {
+            orchestrator.workspace_view.step2.weidu_log_import_form = Some(form);
+            orchestrator.workspace_view.step2.weidu_log_import_queued = true;
+            None
+        }
         ImportOutcome::Cancelled => {
             orchestrator.workspace_view.step2.weidu_log_import_form = None;
+            orchestrator.workspace_view.step2.weidu_log_import_queued = false;
             None
         }
         ImportOutcome::Pending => {
             orchestrator.workspace_view.step2.weidu_log_import_form = Some(form);
             None
         }
+    }
+}
+
+fn fill_import_callouts(state: &WizardState, form: &mut WeiduLogImportForm) {
+    for first_slot in [true, false] {
+        let (path, check, callout) = if first_slot {
+            (&form.first, form.first_check, &mut form.first_callout)
+        } else {
+            (&form.second, form.second_check, &mut form.second_callout)
+        };
+        if callout.is_some() || !matches!(check, Some(LogCheck::Valid { .. })) {
+            continue;
+        }
+        *callout = Some(
+            path.as_deref()
+                .and_then(|path| LogFile::from_path(path).ok())
+                .map_or(ImportCallout::Unreadable, |log| {
+                    ImportCallout::Counted(log_import_shortfall(state, first_slot, &log))
+                }),
+        );
     }
 }
 
@@ -547,6 +596,140 @@ mod tests {
 
     fn approx_eq(a: f32, b: f32) -> bool {
         (a - b).abs() < 0.01
+    }
+
+    struct CalloutRoot(std::path::PathBuf);
+
+    impl CalloutRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "bio_import_callout_test_{}_{}",
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&path).expect("create temp root");
+            Self(path)
+        }
+    }
+
+    impl Drop for CalloutRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn scanned_mod(name: &str, component_ids: &[&str]) -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: name.to_string(),
+            tp_file: format!("SETUP-{name}.TP2"),
+            tp2_path: format!("{name}/SETUP-{name}.TP2"),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: false,
+            hidden_components: Vec::new(),
+            components: component_ids
+                .iter()
+                .map(|id| crate::app::state::Step2ComponentState {
+                    component_id: (*id).to_string(),
+                    label: format!("Component {id}"),
+                    weidu_group: None,
+                    collapsible_group: None,
+                    collapsible_group_is_umbrella: false,
+                    collapsible_group_combinable: false,
+                    raw_line: String::new(),
+                    prompt_summary: None,
+                    prompt_events: Vec::new(),
+                    is_meta_mode_component: false,
+                    disabled: false,
+                    compat_kind: None,
+                    compat_source: None,
+                    compat_related_mod: None,
+                    compat_related_component: None,
+                    compat_graph: None,
+                    compat_evidence: None,
+                    disabled_reason: None,
+                    checked: false,
+                    selected_order: None,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn callout_counts_missing_mods_and_unselectable_components() {
+        let root = CalloutRoot::new();
+        let log_path = root.0.join("weidu.log");
+        std::fs::write(
+            &log_path,
+            "~X/SETUP-X.TP2~ #0 #1 // X one\n~X/SETUP-X.TP2~ #0 #7 // X seven\n\
+             ~Y/SETUP-Y.TP2~ #0 #0 // Y zero\n~Y/SETUP-Y.TP2~ #0 #3 // Y three\n\
+             ~W/SETUP-W.TP2~ #0 #2 // W two\n",
+        )
+        .expect("write log");
+        let mut app = OrchestratorApp::new_isolated_for_test("import-callout-counts");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step2.bgee_mods = vec![scanned_mod("X", &["1"])];
+        let mut form = WeiduLogImportForm {
+            first: Some(log_path),
+            first_check: Some(LogCheck::Valid {
+                components: 5,
+                mods: 3,
+            }),
+            ..WeiduLogImportForm::default()
+        };
+
+        fill_import_callouts(&app.wizard_state, &mut form);
+
+        assert_eq!(
+            form.first_callout,
+            Some(ImportCallout::Counted(
+                crate::app::app_step2_log::LogShortfall {
+                    missing_mods: 2,
+                    unselectable_components: 4,
+                }
+            ))
+        );
+        assert_eq!(form.second_callout, None);
+
+        let cached = form.first_callout;
+        app.wizard_state.step2.bgee_mods.clear();
+        fill_import_callouts(&app.wizard_state, &mut form);
+        assert_eq!(form.first_callout, cached, "the callout is kept per path");
+    }
+
+    #[test]
+    fn a_row_that_can_no_longer_be_read_is_read_once() {
+        let root = CalloutRoot::new();
+        let log_path = root.0.join("weidu.log");
+        let app = OrchestratorApp::new_isolated_for_test("import-callout-unreadable");
+        let mut form = WeiduLogImportForm {
+            first: Some(log_path.clone()),
+            first_check: Some(LogCheck::Valid {
+                components: 1,
+                mods: 1,
+            }),
+            ..WeiduLogImportForm::default()
+        };
+
+        fill_import_callouts(&app.wizard_state, &mut form);
+        assert_eq!(form.first_callout, Some(ImportCallout::Unreadable));
+        assert_eq!(ImportCallout::Unreadable.shortfall(), None);
+
+        std::fs::write(&log_path, "~X/SETUP-X.TP2~ #0 #1 // X one\n").expect("write log");
+        fill_import_callouts(&app.wizard_state, &mut form);
+        assert_eq!(
+            form.first_callout,
+            Some(ImportCallout::Unreadable),
+            "the failed read is kept until the path changes or a scan ends"
+        );
     }
 
     fn content_rect(width: f32) -> egui::Rect {

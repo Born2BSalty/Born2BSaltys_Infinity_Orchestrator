@@ -73,9 +73,11 @@ pub(crate) fn save_wlb_answer(state: &mut WizardState, answer: &str) -> Result<(
         return Err("Save failed: component not found in current Step 3 tab.".to_string());
     };
     item.raw_line = set_wlb_inputs(&effective_raw_line(item), &answer);
+    let edited = item.clone();
+    mirror_raw_line_to_step2(state, &edited);
     state.step5.last_status_text = format!(
         "Saved @wlb-inputs on weidu line for {} #{}",
-        item.mod_name, item.component_id
+        edited.mod_name, edited.component_id
     );
     state.step3.prompt_edit_open = false;
     Ok(())
@@ -94,6 +96,8 @@ pub(crate) fn save_json_entry(state: &mut WizardState, raw_json: &str) -> Result
     } else {
         item.raw_line = strip_wlb_marker(&effective_raw_line(item));
     }
+    let edited = item.clone();
+    mirror_raw_line_to_step2(state, &edited);
     Ok("Saved to weidu line.".to_string())
 }
 
@@ -104,6 +108,8 @@ pub(crate) fn delete_prompt_data_from_editor(state: &mut WizardState) -> Result<
         return Err("Delete failed: component not found in current Step 3 tab.".to_string());
     };
     item.raw_line = strip_wlb_marker(&effective_raw_line(item));
+    let edited = item.clone();
+    mirror_raw_line_to_step2(state, &edited);
     Ok("Deleted from weidu line.".to_string())
 }
 
@@ -173,10 +179,33 @@ fn open_json_editor(
 fn clear_prompt_data(state: &mut WizardState, tp_file: &str, component_id: &str) {
     if let Some(item) = find_component_mut(state, tp_file, component_id) {
         item.raw_line = strip_wlb_marker(&effective_raw_line(item));
+        let edited = item.clone();
+        mirror_raw_line_to_step2(state, &edited);
         state.step5.last_status_text = format!(
             "Cleared @wlb-inputs for {} #{}",
-            item.mod_name, item.component_id
+            edited.mod_name, edited.component_id
         );
+    }
+}
+
+fn mirror_raw_line_to_step2(state: &mut WizardState, edited: &Step3ItemState) {
+    let mods = if game_authority::slot_for_tab(&state.step3.active_game_tab) == GameSlot::First {
+        &mut state.step2.bgee_mods
+    } else {
+        &mut state.step2.bg2ee_mods
+    };
+    let tp_norm = normalize_tp2_filename(&edited.tp_file);
+    let id_norm = edited.component_id.trim();
+    let matching_component = mods
+        .iter_mut()
+        .filter(|mod_state| {
+            mod_state.name.eq_ignore_ascii_case(&edited.mod_name)
+                && normalize_tp2_filename(&mod_state.tp_file) == tp_norm
+        })
+        .flat_map(|mod_state| mod_state.components.iter_mut())
+        .find(|component| component.component_id.trim() == id_norm);
+    if let Some(component) = matching_component {
+        component.raw_line.clone_from(&edited.raw_line);
     }
 }
 

@@ -642,7 +642,8 @@ fn log_missing_downloads_enabled(state: &WizardState) -> bool {
     state.step2.whole_folder_check_active
         || state.step1.installs_exactly_from_weidu_logs()
         || state.step1.bootstraps_from_weidu_logs()
-        || ((state.step2.review_edit_bgee_log_applied || state.step2.review_edit_bg2ee_log_applied)
+        || ((state.step2.log_apply.review_edit_bgee_applied
+            || state.step2.log_apply.review_edit_bg2ee_applied)
             && !state.step2.log_pending_downloads.is_empty())
 }
 
@@ -1500,6 +1501,7 @@ mod tests {
                 tp_file: QUESTPACK_TP2.to_string(),
                 label: "d0questpack".to_string(),
                 requested_version: None,
+                origin: crate::app::state::LogPendingOrigin::WeiduLog,
             });
 
         apply_update_check_outcome(

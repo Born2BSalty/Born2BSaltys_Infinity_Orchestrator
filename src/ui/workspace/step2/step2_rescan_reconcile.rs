@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::BTreeSet;
+
+use crate::app::app_step2_log::component_exclusion_reason;
 use crate::app::controller::step3_sync;
-use crate::app::state::{Step2ComponentState, Step2ModState};
+use crate::app::state::{Step2ComponentState, Step2ModState, Step2State};
 use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
+use crate::ui::workspace::step2_log_glue;
 use crate::ui::workspace::workspace_state_loader::{extract_wlb_inputs, reattach_wlb_inputs};
 
 pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
@@ -52,7 +56,8 @@ fn capture_tab(mods: &[Step2ModState]) -> Vec<RescanSelection> {
     out
 }
 
-pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
+#[must_use]
+pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) -> bool {
     let scanning_now = orchestrator.wizard_state.step2.is_scanning;
     let was_scanning = orchestrator.workspace_view.step2.was_scanning;
     orchestrator.workspace_view.step2.was_scanning = scanning_now;
@@ -60,9 +65,13 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     advance_pending_download_snapshot(orchestrator, was_scanning, scanning_now);
 
     if !completion_edge_fires(was_scanning, scanning_now) {
-        return;
+        return false;
     }
+    reconcile_completed_scan(orchestrator);
+    true
+}
 
+fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
     let modlist_id = orchestrator.workspace_view.modlist_id.trim().to_string();
     let current_source = orchestrator
         .workspace_state
@@ -72,13 +81,14 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
         workspace.last_rescanned_mods_source = current_source;
     }
 
-    let Some(snapshot) = orchestrator.workspace_view.step2.rescan_snapshot.take() else {
-        return;
-    };
-
+    let snapshot = orchestrator.workspace_view.step2.rescan_snapshot.take();
     if orchestrator.wizard_state.step2.last_scan_report.is_none() {
         return;
     }
+    let Some(snapshot) = snapshot else {
+        tick_settled_log_ticks(orchestrator);
+        return;
+    };
 
     reapply_snapshot(
         &snapshot.bgee,
@@ -119,6 +129,8 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
             step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bg2ee_mods);
     }
 
+    tick_settled_log_ticks(orchestrator);
+
     if unrestored.is_empty() {
         orchestrator.workspace_view.step2.rescan_drop_warning = None;
         return;
@@ -128,6 +140,18 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) {
     orchestrator
         .notification_manager
         .warn_persistent(format_unrestored_notification(&unrestored));
+}
+
+fn take_settled_log_ticks(step2: &mut Step2State) -> BTreeSet<String> {
+    if step2.update_selected_download_running || step2.update_selected_extract_running {
+        return BTreeSet::new();
+    }
+    std::mem::take(&mut step2.pending_log_ticks)
+}
+
+fn tick_settled_log_ticks(orchestrator: &mut OrchestratorApp) {
+    let arrived_log_mods = take_settled_log_ticks(&mut orchestrator.wizard_state.step2);
+    step2_log_glue::tick_arrived_logged_mods_and_announce(orchestrator, &arrived_log_mods);
 }
 
 struct UnrestoredComponent {
@@ -186,7 +210,7 @@ fn collect_unrestored(
         out.push(UnrestoredComponent {
             mod_name: reason_mod.name.clone(),
             component_id: entry.component_id.clone(),
-            reason: exclusion_reason(reason_component),
+            reason: component_exclusion_reason(reason_component),
         });
     }
     out
@@ -198,18 +222,6 @@ fn has_disabled_reason(component: &Step2ComponentState) -> bool {
         .as_deref()
         .map(str::trim)
         .is_some_and(|reason| !reason.is_empty())
-}
-
-fn exclusion_reason(component: &Step2ComponentState) -> String {
-    component
-        .disabled_reason
-        .as_deref()
-        .map(str::trim)
-        .filter(|reason| !reason.is_empty())
-        .map_or_else(
-            || "excluded by compatibility rules".to_string(),
-            std::string::ToString::to_string,
-        )
 }
 
 fn tp2_display_name(tp2_upper: &str) -> String {
@@ -231,17 +243,33 @@ fn format_unrestored_status(unrestored: &[UnrestoredComponent]) -> String {
 }
 
 fn format_unrestored_notification(unrestored: &[UnrestoredComponent]) -> String {
-    let mut lines = vec![format!(
-        "{} saved component(s) could not be restored",
-        unrestored.len()
-    )];
-    lines.extend(unrestored.iter().map(|entry| {
-        format!(
-            "{} #{}: {}",
-            entry.mod_name, entry.component_id, entry.reason
-        )
-    }));
-    lines.join("\n")
+    format_component_notification(
+        &format!(
+            "{} saved component(s) could not be restored",
+            unrestored.len()
+        ),
+        unrestored.iter().map(|entry| {
+            (
+                entry.mod_name.as_str(),
+                entry.component_id.as_str(),
+                entry.reason.as_str(),
+            )
+        }),
+    )
+}
+
+#[must_use]
+pub(crate) fn format_component_notification<'a>(
+    headline: &str,
+    lines: impl Iterator<Item = (&'a str, &'a str, &'a str)>,
+) -> String {
+    let mut out = vec![headline.to_string()];
+    out.extend(
+        lines.map(|(mod_name, component_id, reason)| {
+            format!("{mod_name} #{component_id}: {reason}")
+        }),
+    );
+    out.join("\n")
 }
 
 fn advance_pending_download_snapshot(
@@ -544,6 +572,25 @@ mod tests {
     fn tp2_display_name_strips_the_path() {
         assert_eq!(tp2_display_name("BG1UB/BG1UB.TP2"), "BG1UB.TP2");
         assert_eq!(tp2_display_name("MOD.TP2"), "MOD.TP2");
+    }
+
+    #[test]
+    fn format_component_notification_joins_headline_and_lines() {
+        assert_eq!(
+            format_component_notification(
+                "2 logged component(s) could not be ticked",
+                [
+                    ("SETUP-X.TP2", "1", "mod not on disk"),
+                    ("Y", "4", "component not in this version"),
+                ]
+                .into_iter(),
+            ),
+            "2 logged component(s) could not be ticked\nSETUP-X.TP2 #1: mod not on disk\nY #4: component not in this version"
+        );
+        assert_eq!(
+            format_component_notification("headline", std::iter::empty()),
+            "headline"
+        );
     }
 
     #[test]
@@ -875,6 +922,24 @@ mod tests {
         assert_eq!(snap.bg2ee.len(), 1, "bg2ee tab preserved");
         assert_eq!(snap.bgee[0].component_id, "1");
         assert_eq!(snap.bg2ee[0].component_id, "2");
+    }
+
+    #[test]
+    fn reconcile_reports_the_completion_edge() {
+        let mut app = OrchestratorApp::new_isolated_for_test("reconcileedge");
+        app.wizard_state.step2.is_scanning = true;
+        app.workspace_view.step2.was_scanning = false;
+        assert!(!reconcile_on_scan_complete(&mut app), "scan just started");
+        assert!(!reconcile_on_scan_complete(&mut app), "still scanning");
+
+        app.wizard_state.step2.is_scanning = false;
+        assert!(app.workspace_view.step2.rescan_snapshot.is_none());
+        assert!(app.wizard_state.step2.last_scan_report.is_none());
+        assert!(
+            reconcile_on_scan_complete(&mut app),
+            "the edge fires even though the later steps return early"
+        );
+        assert!(!reconcile_on_scan_complete(&mut app), "fires once");
     }
 
     #[test]

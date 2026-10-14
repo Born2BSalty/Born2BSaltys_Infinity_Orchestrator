@@ -769,7 +769,7 @@ impl OrchestratorApp {
             &mut self.step2_update_check_rx,
             &mut self.step2_update_download_rx,
         );
-        crate::ui::workspace::step2_log_glue::advance_pending_weidu_log_reapply(self);
+        crate::ui::workspace::step2_log_glue::drop_log_ticks_outside_workspace(self);
         self.reseed_added_mods_when_settled(seed_watch);
     }
 
@@ -809,6 +809,7 @@ impl OrchestratorApp {
             return;
         }
         let id = id.clone();
+        crate::app::app_step2_log::refresh_logged_missing(&mut self.wizard_state);
         crate::app::app_step2_log::reseed_added_mod_pending_downloads(&mut self.wizard_state);
         self.added_mods_seeded_for = Some(id);
     }
@@ -872,7 +873,7 @@ impl OrchestratorApp {
                     None,
                 );
                 if !started {
-                    self.wizard_state.step2.pending_weidu_log_reapply = false;
+                    self.wizard_state.step2.pending_log_ticks.clear();
                 }
                 tracing::info!(target = "orchestrator", started, "workspace extract start");
             }
@@ -1266,7 +1267,7 @@ impl eframe::App for OrchestratorApp {
         oauth_glue::poll_github_oauth_flow(self);
 
         self.poll_step2_channels();
-        crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(self);
+        self.reconcile_scan_and_advance_log_imports();
         if self.step2_needs_repaint() {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
@@ -1423,6 +1424,16 @@ impl Drop for OrchestratorApp {
 }
 
 impl OrchestratorApp {
+    fn reconcile_scan_and_advance_log_imports(&mut self) {
+        let scan_completed =
+            crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(self);
+        crate::ui::workspace::step2_log_glue::forget_import_callouts_on_scan_end(
+            self,
+            scan_completed,
+        );
+        crate::ui::workspace::step2_log_glue::advance_queued_weidu_log_import(self, scan_completed);
+    }
+
     fn drive_notifications(
         &mut self,
         ctx: &egui::Context,

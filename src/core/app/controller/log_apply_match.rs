@@ -81,9 +81,9 @@ pub(in crate::app::controller) fn try_apply_eet_end_fallback(
     installed: &Component,
     next_order: &mut usize,
     check_component: impl Fn(&mut Step2ComponentState, &mut usize),
-) -> bool {
+) -> Option<(usize, usize)> {
     if !is_eet_end_line(installed) {
-        return false;
+        return None;
     }
     let expected_name =
         normalize_component_name("EET end (last mod in install order) -> Standard installation");
@@ -102,7 +102,7 @@ pub(in crate::app::controller) fn try_apply_eet_end_fallback(
             if normalize_component_name(component.label.as_str()) == expected_name {
                 if component.component_id == "0" {
                     check_component(component, next_order);
-                    return true;
+                    return Some((mod_idx, idx));
                 }
                 if name_only_candidate.is_none() {
                     name_only_candidate = Some((mod_idx, idx));
@@ -115,9 +115,9 @@ pub(in crate::app::controller) fn try_apply_eet_end_fallback(
         && let Some(component) = mod_state.components.get_mut(comp_idx)
     {
         check_component(component, next_order);
-        return true;
+        return Some((mod_idx, comp_idx));
     }
-    false
+    None
 }
 
 pub(in crate::app::controller) fn is_allowed_tp2(

@@ -16,8 +16,8 @@ pub(super) use matches::{
     match_kind_matches, mode_matches, non_empty, normalize_kind, normalize_mod_key, tab_matches,
 };
 pub(super) use relations::{
-    direct_rule_applies, game_dir_for_tab, matched_related_target, relation_rule_applies,
-    single_related_target,
+    direct_rule_applies, first_related_target, game_dir_for_tab, matched_related_target,
+    relation_rule_applies, single_related_target,
 };
 
 #[cfg(test)]
