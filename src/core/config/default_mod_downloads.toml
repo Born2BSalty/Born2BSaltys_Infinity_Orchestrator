@@ -7906,6 +7906,31 @@ config_files = []
   pkg_linux = "lin,rar,zip"
   pkg_macos = "mac,rar,zip"
 
+#////////////////////////////////////////////////#
+#//                  shohysie                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Modern Military Supplies"
+tp2 = "mms"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "shohysie"
+  label = "Shohysie"
+  type = "github"
+  url = "https://github.com/shohysie/Modern_Military_Supplies"
+  repo = "shohysie/Modern_Military_Supplies"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                              Direct Archive Downloads                               //#
 #/////////////////////////////////////////////////////////////////////////////////////////#
