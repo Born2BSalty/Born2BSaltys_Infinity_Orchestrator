@@ -4715,27 +4715,6 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
-name = "Loron's Return"
-tp2 = "AJOCMOD"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/AjocMod"
-  repo = "RoxanneSHS/AjocMod"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Ariena NPC"
 tp2 = "ARIENA"
 aliases = []
@@ -4988,27 +4967,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Kim NPC"
-tp2 = "kimnpc"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/Kim_Pirate"
-  repo = "RoxanneSHS/Kim_Pirate"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Kindrek NPC"
 tp2 = "KINDREK"
 aliases = []
@@ -5219,27 +5177,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Shadows Over Soubar"
-tp2 = "SOS"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/SoS-EE"
-  repo = "RoxanneSHS/SoS-EE"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Touch the Moon NPC"
 tp2 = "TOUCHED"
 aliases = []
@@ -5251,27 +5188,6 @@ config_files = []
   type = "github"
   url = "https://github.com/RoxanneSHS/Touchstone"
   repo = "RoxanneSHS/Touchstone"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Tsujatha NPC"
-tp2 = "Tsujatha"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/Tsujatha"
-  repo = "RoxanneSHS/Tsujatha"
   commit = ""
   tag = ""
   branch = ""
@@ -7935,6 +7851,162 @@ config_files = []
   type = "github"
   url = "https://github.com/RoxanneSHS/Finch"
   repo = "RoxanneSHS/Finch"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//      Spellhold-Studios & RoxanneSHS        //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Shadows Over Soubar"
+tp2 = "SOS"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Shadows-over-Soubar"
+  repo = "Spellhold-Studios/Shadows-over-Soubar"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+  [[mods.sources]]
+  id = "roxanneshs"
+  label = "RoxanneSHS"
+  type = "github"
+  url = "https://github.com/RoxanneSHS/SoS-EE"
+  repo = "RoxanneSHS/SoS-EE"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ajoc's Minimod"
+tp2 = "AJOCMOD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/AjocMod"
+  repo = "Spellhold-Studios/AjocMod"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+  [[mods.sources]]
+  id = "roxanneshs"
+  label = "RoxanneSHS"
+  type = "github"
+  url = "https://github.com/RoxanneSHS/AjocMod"
+  repo = "RoxanneSHS/AjocMod"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//       Plutonium-X & RoxanneSHS              //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Tsujatha"
+tp2 = "Tsujatha"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/NPC_Tsujatha"
+  repo = "Plutonium-X/NPC_Tsujatha"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+  [[mods.sources]]
+  id = "roxanneshs"
+  label = "RoxanneSHS"
+  type = "github"
+  url = "https://github.com/RoxanneSHS/Tsujatha"
+  repo = "RoxanneSHS/Tsujatha"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//          11jo & RoxanneSHS                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Kim NPC"
+tp2 = "kimnpc"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "11jo"
+  label = "11jo"
+  type = "github"
+  url = "https://github.com/11jo/Kim_NPC"
+  repo = "11jo/Kim_NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+  [[mods.sources]]
+  id = "roxanneshs"
+  label = "RoxanneSHS"
+  type = "github"
+  url = "https://github.com/RoxanneSHS/Kim_Pirate"
+  repo = "RoxanneSHS/Kim_Pirate"
   commit = ""
   tag = ""
   branch = ""
