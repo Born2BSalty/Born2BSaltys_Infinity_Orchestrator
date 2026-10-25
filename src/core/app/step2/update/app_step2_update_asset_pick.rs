@@ -136,6 +136,7 @@ fn asset_matches_pkg(name: &str, pkg: &str) -> bool {
                 && !lower.contains("source code")
         }
         "rar" => has_extension(name, "rar"),
+        "7z" => has_extension(name, "7z"),
         "iemod" => has_extension(name, "iemod"),
         _ => false,
     }
@@ -263,4 +264,28 @@ fn has_suffix_ignore_ascii_case(name: &str, suffix: &str) -> bool {
     trimmed
         .get(start..)
         .is_some_and(|tail| tail.eq_ignore_ascii_case(suffix))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_release_asset_for_pkg_list;
+
+    #[test]
+    fn package_rules_can_select_a_seven_zip_asset() {
+        let assets = [
+            ("example-source.zip", "https://example.test/source.zip"),
+            ("example-release.7z", "https://example.test/release.7z"),
+        ];
+
+        let picked = pick_release_asset_for_pkg_list(&assets, "wzp,rar,7z,zip");
+
+        assert_eq!(
+            picked,
+            Some((
+                String::new(),
+                "example-release.7z".to_string(),
+                "https://example.test/release.7z".to_string(),
+            ))
+        );
+    }
 }

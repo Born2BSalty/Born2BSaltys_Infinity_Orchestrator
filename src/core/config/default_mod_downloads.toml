@@ -26,9 +26,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Achievements!"
@@ -47,9 +47,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Banter Accelerator for Enhanced Edition"
@@ -68,9 +68,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Convenient Enhanced Edition NPCs"
@@ -89,9 +89,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Golem Construction for Spellcasters"
@@ -110,9 +110,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Improved Shamanic Dance"
@@ -131,9 +131,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Magic Store of Vergadain"
@@ -152,9 +152,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "A7 MultiKits"
@@ -173,9 +173,9 @@ config_files = ["A7-MultiKits.ini"]
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Test Your Mettle!"
@@ -194,9 +194,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Wares Of The Planes"
@@ -215,9 +215,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "DLC Merger"
@@ -236,9 +236,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "w64zip,w32zip,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "macarmzip,macx64zip,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Reveal Hidden Gameplay Options"
@@ -257,9 +257,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "High Quality Soundclips"
@@ -278,9 +278,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Lighting Pack"
@@ -299,9 +299,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                Gibberlings3                //#
@@ -324,9 +324,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Alternatives"
@@ -345,9 +345,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Angelo NPC"
@@ -366,9 +366,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Anishai NPC"
@@ -387,9 +387,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Aran Whitehand"
@@ -408,9 +408,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The BG1NPC Project"
@@ -429,9 +429,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "BG1 NPC Music"
@@ -450,9 +450,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Baldur's Gate Mini Quests and Encounters Modification"
@@ -471,9 +471,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Balduran's Seatower"
@@ -492,9 +492,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Another Fine Hell"
@@ -513,9 +513,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Endless BG1 Mod"
@@ -534,9 +534,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Grey the Dog NPC"
@@ -555,9 +555,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Boareskyr Bridge Scene"
@@ -576,9 +576,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Jastey's Tweaks"
@@ -597,9 +597,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Infinity Collection Portrait Pack"
@@ -618,9 +618,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Lore From Learning"
@@ -639,9 +639,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Tweaks Anthology"
@@ -660,9 +660,9 @@ config_files = ["cdtweaks.ini", "gttweaks.ini"]
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Coran's BG Extended Friendship Talks"
@@ -681,9 +681,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Cowled Menace"
@@ -702,9 +702,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Crossmod Banter Pack"
@@ -723,9 +723,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Restored Rhynn Lanthorn"
@@ -744,9 +744,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Talents of Faerun"
@@ -765,9 +765,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "EE Fixpack"
@@ -786,9 +786,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Baldur's Gate: Enhanced Edition Trilogy"
@@ -807,9 +807,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Enhanced Edition Trilogy (End)"
@@ -828,9 +828,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "G3 Anniversary"
@@ -849,9 +849,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "G3 Community Item Pack"
@@ -870,9 +870,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Gavin NPC"
@@ -891,9 +891,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Haldamir"
@@ -912,9 +912,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Imoen 4 Ever"
@@ -933,9 +933,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Item Revisions"
@@ -954,9 +954,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "IWDification"
@@ -975,9 +975,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Berelinde's Keldorn Romance"
@@ -996,9 +996,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kivan of Shilmista"
@@ -1017,9 +1017,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Mur'Neth NPC"
@@ -1038,9 +1038,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "NPC Tweak"
@@ -1059,9 +1059,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Romantic Encounters"
@@ -1080,9 +1080,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sarah NPC Romance"
@@ -1101,9 +1101,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Shards of Ice"
@@ -1122,9 +1122,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SoD to BG2 Item Upgrade"
@@ -1143,9 +1143,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Road to Discovery"
@@ -1164,9 +1164,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Song and Silence"
@@ -1185,9 +1185,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Spell Revisions"
@@ -1206,9 +1206,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SP Collection"
@@ -1227,9 +1227,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sword Coast Stratagems"
@@ -1248,9 +1248,9 @@ config_files = ["stratagems.ini"]
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Calling"
@@ -1269,9 +1269,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Transitions"
@@ -1290,9 +1290,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Improved Horns of Valhalla"
@@ -1311,9 +1311,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Wheels of Prophecy"
@@ -1332,9 +1332,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//             Pocket-Plane-Group             //#
@@ -1357,9 +1357,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Back to Brynnlaw"
@@ -1378,9 +1378,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Banter Packs"
@@ -1399,9 +1399,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "BG1 Unfinished Business"
@@ -1420,9 +1420,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Branwen BG2 NPC"
@@ -1441,9 +1441,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Coran NPC"
@@ -1462,9 +1462,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dungeon Crawl"
@@ -1483,9 +1483,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "De'Arnise Romance"
@@ -1504,9 +1504,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Indira NPC"
@@ -1525,9 +1525,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Item Upgrade"
@@ -1546,9 +1546,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kelsey NPC"
@@ -1567,9 +1567,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Keto NPC"
@@ -1588,9 +1588,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Bioware NPC Flirt Packs"
@@ -1609,9 +1609,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "QuestPack"
@@ -1630,9 +1630,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Reunion"
@@ -1651,9 +1651,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Sellswords"
@@ -1672,9 +1672,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Lure of the Sirine's Call"
@@ -1693,9 +1693,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tiax NPC"
@@ -1714,9 +1714,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Turnabout"
@@ -1735,9 +1735,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Unfinished Business"
@@ -1756,9 +1756,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Under-Represented Items"
@@ -1777,9 +1777,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Xan NPC"
@@ -1798,9 +1798,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Xan's Friendship Path"
@@ -1819,9 +1819,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                MattyGroove                 //#
@@ -1844,9 +1844,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//              The-Gate-Project              //#
@@ -1869,9 +1869,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Askaria Quest"
@@ -1890,9 +1890,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Aerie in BG:EE"
@@ -1911,9 +1911,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Chaos Knight & Jacob NPC"
@@ -1932,9 +1932,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Chatty Imoen"
@@ -1953,9 +1953,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "CoM Encounters"
@@ -1974,9 +1974,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dark Horizons"
@@ -1995,9 +1995,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dark Horizons BG:EE"
@@ -2016,9 +2016,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "DGItems"
@@ -2037,9 +2037,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Garrick: Tales of a Troubadour"
@@ -2058,9 +2058,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "IWD Item Pack"
@@ -2079,9 +2079,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Jaheira Recast"
@@ -2100,9 +2100,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "T'Was a Slow Boat from Kara-Tur"
@@ -2121,9 +2121,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Klatu Tweaks and Fixes"
@@ -2142,9 +2142,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "IWD Item Pack"
@@ -2163,9 +2163,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "NWN2 Soundsets"
@@ -2184,9 +2184,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Return to Trademeet: Item Pack"
@@ -2205,9 +2205,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Saradas Magic"
@@ -2226,9 +2226,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sir Renal"
@@ -2247,9 +2247,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SoD Dialog Banters"
@@ -2268,9 +2268,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Vampire Tales"
@@ -2289,9 +2289,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                   Bubb13                   //#
@@ -2314,9 +2314,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Revert Pathfinding"
@@ -2335,9 +2335,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = "Mod-bubb_revert_pathfinding.zip"
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
   subdir_require = "v2.6"
 
 [[mods]]
@@ -2357,9 +2357,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "EEex"
@@ -2378,9 +2378,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                   r-e-d                    //#
@@ -2403,9 +2403,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Lefreut's Enhanced UI (SoD skin)"
@@ -2424,9 +2424,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//               AncientCowboy                //#
@@ -2449,9 +2449,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  D2-mods                   //#
@@ -2474,9 +2474,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Portrait Gender Separator"
@@ -2495,9 +2495,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "D2 Weapon"
@@ -2516,9 +2516,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "D2 Workshop Kits"
@@ -2537,9 +2537,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kit Mule"
@@ -2558,9 +2558,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                   btigi                    //#
@@ -2583,9 +2583,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Infinity Innovations: Key Names"
@@ -2604,9 +2604,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  Sampsca                   //#
@@ -2629,9 +2629,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Hammers"
@@ -2650,9 +2650,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//              SpellholdStudios              //#
@@ -2675,9 +2675,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Jan's Alchemy"
@@ -2696,9 +2696,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Arath NPC"
@@ -2717,9 +2717,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Bank of Baldur's Gate"
@@ -2738,9 +2738,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Baldur's Gate Graphics Overhaul"
@@ -2759,9 +2759,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Bolsa Merchant"
@@ -2780,9 +2780,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Worldmap"
@@ -2801,9 +2801,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Beyond the Law"
@@ -2822,9 +2822,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Cernd Friendship"
@@ -2843,9 +2843,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Darron the Vendor"
@@ -2864,9 +2864,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Red Dragon Summoning Spell"
@@ -2885,9 +2885,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Demon Summoning Ritual"
@@ -2906,9 +2906,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Fade NPC"
@@ -2927,9 +2927,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Super Firkraag"
@@ -2948,9 +2948,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Expanded Thief Stronghold"
@@ -2969,9 +2969,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Haer'dalis Friendship"
@@ -2990,9 +2990,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Heart of the Wood"
@@ -3011,9 +3011,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "IEP Extended Banters"
@@ -3032,9 +3032,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Imnesvale"
@@ -3053,9 +3053,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Imoen Friendship"
@@ -3074,9 +3074,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Isra NPC for BG"
@@ -3095,9 +3095,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Isra NPC"
@@ -3116,9 +3116,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Korgan's Redemption"
@@ -3137,9 +3137,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Korgan Friendship"
@@ -3158,9 +3158,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Lucy the Wyvern"
@@ -3179,9 +3179,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Mazzy Friendship"
@@ -3200,9 +3200,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Minsc Friendship"
@@ -3221,9 +3221,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Neera Expansion"
@@ -3242,9 +3242,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Nephele NPC"
@@ -3263,9 +3263,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Region of Terror"
@@ -3284,9 +3284,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ruad Ro'fhessa"
@@ -3305,9 +3305,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Rupert the Dye Merchant"
@@ -3326,9 +3326,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Saradas Magic 2"
@@ -3347,9 +3347,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sarevok Friendship"
@@ -3368,9 +3368,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Minotaur and Lilacor"
@@ -3389,9 +3389,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Slithering Menace"
@@ -3410,9 +3410,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Silver Star NPC"
@@ -3431,9 +3431,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Stuff of the Magi"
@@ -3452,9 +3452,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Sword of Noober"
@@ -3473,9 +3473,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Valygar Friendship"
@@ -3494,9 +3494,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Viconia Friendship"
@@ -3515,9 +3515,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Yeslick NPC"
@@ -3536,9 +3536,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Yoshimo Friendship"
@@ -3557,9 +3557,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//             Spellhold-Studios              //#
@@ -3582,9 +3582,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Almateria's Restoration Project"
@@ -3603,9 +3603,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dace"
@@ -3624,9 +3624,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Darian NPC"
@@ -3645,9 +3645,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dorn Friendship"
@@ -3666,9 +3666,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dark Side of the Sword Coast"
@@ -3687,9 +3687,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Edwin Romance"
@@ -3708,9 +3708,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Fading Promises"
@@ -3729,9 +3729,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Faren NPC"
@@ -3750,9 +3750,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Hexxat Friendship"
@@ -3771,9 +3771,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Infinity Sounds"
@@ -3792,9 +3792,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Jaheira Friendship"
@@ -3813,9 +3813,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Longer Road"
@@ -3834,9 +3834,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Nathaniel NPC"
@@ -3855,9 +3855,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Nostalgia Pack"
@@ -3876,9 +3876,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Northern Tales of the Sword Coast"
@@ -3897,9 +3897,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Rolles Safyer"
@@ -3918,9 +3918,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tashia NPC"
@@ -3939,9 +3939,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Darkest Day"
@@ -3960,9 +3960,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
   [[mods]]
 name = "Adventures in Papperland"
@@ -3981,9 +3981,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 Renegade0                  //#
@@ -4006,9 +4006,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "More Style for Mages"
@@ -4027,9 +4027,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Remastered Spell Icons"
@@ -4048,9 +4048,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//             DaerosTrollkiller              //#
@@ -4073,9 +4073,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Trollkiller's Items, Spells, and Kitpack"
@@ -4094,9 +4094,9 @@ config_files = []
   branch = ""
   channel = "preonly"
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 AngelGryph                 //#
@@ -4119,9 +4119,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Made in Heaven: Fixes & Restorations"
@@ -4140,9 +4140,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Made in Heaven: Item Pack"
@@ -4161,9 +4161,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Made in Heaven: Meta-Mod"
@@ -4182,9 +4182,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Made in Heaven: Spell Pack"
@@ -4203,9 +4203,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Made in Heaven: Tweaks"
@@ -4224,9 +4224,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//              UnearthedArcana               //#
@@ -4249,9 +4249,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "5E Spellcasting"
@@ -4270,9 +4270,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Faiths and Powers"
@@ -4291,9 +4291,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Might & Guile"
@@ -4312,9 +4312,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "NPC Enhanced Edition Adjustments"
@@ -4333,9 +4333,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Will to Power"
@@ -4354,9 +4354,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                   Gitjas                   //#
@@ -4379,9 +4379,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Brandock the Mage"
@@ -4400,9 +4400,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Adalon's Blood"
@@ -4421,9 +4421,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Brage's Redemption"
@@ -4442,9 +4442,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                GraionDilach                //#
@@ -4467,9 +4467,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Extra Enhanced Expanded Encounters!"
@@ -4488,9 +4488,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZG BG2 Voices"
@@ -4509,9 +4509,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZG BG Voices"
@@ -4530,9 +4530,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZG BG NPC Voices"
@@ -4551,9 +4551,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZG IWD2 Voices"
@@ -4572,9 +4572,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZG IWD Voices"
@@ -4593,9 +4593,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZG NWN Voices"
@@ -4614,9 +4614,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Planescape Torment Voice Pack for EE 2.6"
@@ -4635,9 +4635,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZG Tweaks"
@@ -4656,9 +4656,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                TotalMilk90                 //#
@@ -4681,9 +4681,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//              A-Wizard-Did-It               //#
@@ -4706,9 +4706,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 RoxanneSHS                 //#
@@ -4731,9 +4731,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ariena NPC"
@@ -4752,9 +4752,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Azengaard Encounter"
@@ -4773,9 +4773,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Secret of Bonehill"
@@ -4794,9 +4794,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Candlekeep Memories"
@@ -4815,9 +4815,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Chloe NPC"
@@ -4836,9 +4836,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Corwin NPC"
@@ -4857,9 +4857,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Civil Disobedience"
@@ -4878,9 +4878,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Drow Library"
@@ -4899,9 +4899,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ehlastra ToB"
@@ -4920,9 +4920,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Holly the Elf"
@@ -4941,9 +4941,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Improved Asylum"
@@ -4962,9 +4962,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kido the Jester"
@@ -4983,9 +4983,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kim NPC"
@@ -5004,9 +5004,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kindrek NPC"
@@ -5025,9 +5025,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Broken Lanthorn"
@@ -5046,9 +5046,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Expanded Mage Stronghold"
@@ -5067,9 +5067,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Of Elves and Artefacts"
@@ -5088,9 +5088,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Melynda the Mute"
@@ -5109,9 +5109,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Rose NPC"
@@ -5130,9 +5130,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ryberg NPC (Speak with the Dead)"
@@ -5151,9 +5151,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Shine on Caelar"
@@ -5172,9 +5172,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SoD Banter Restoration"
@@ -5193,9 +5193,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Solaufein"
@@ -5214,9 +5214,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Shadows Over Soubar"
@@ -5235,9 +5235,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Touch the Moon NPC"
@@ -5256,9 +5256,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tsujatha NPC"
@@ -5277,9 +5277,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Valen NPC"
@@ -5298,9 +5298,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Vault"
@@ -5319,9 +5319,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Yasraena NPC"
@@ -5340,9 +5340,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  Endarire                  //#
@@ -5365,9 +5365,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Undying"
@@ -5386,9 +5386,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Throne of Bhaal Revisited"
@@ -5407,9 +5407,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Zelink NPC"
@@ -5428,9 +5428,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//              Black-Wyrm-Lair               //#
@@ -5453,9 +5453,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Rjali NPC"
@@ -5474,9 +5474,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Grey Clan Episode One"
@@ -5495,9 +5495,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tower of Deception"
@@ -5516,9 +5516,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tortured Souls Lite"
@@ -5537,9 +5537,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Improved Volcano! Pack"
@@ -5558,9 +5558,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//               red-carnelian                //#
@@ -5583,9 +5583,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                Glittergear                 //#
@@ -5608,9 +5608,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dead Gardens"
@@ -5629,9 +5629,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Fowl Wish"
@@ -5650,9 +5650,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Gone Nuts"
@@ -5671,9 +5671,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 whiteagnus                 //#
@@ -5696,9 +5696,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Hidden Adventures"
@@ -5717,9 +5717,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tales of Anegh"
@@ -5738,9 +5738,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 Deratiseur                 //#
@@ -5763,9 +5763,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Derat's Illo"
@@ -5784,9 +5784,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Derat's Ogre"
@@ -5805,9 +5805,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Derat's Todd"
@@ -5826,9 +5826,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 Austin-BG                  //#
@@ -5851,9 +5851,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  AciferBG                  //#
@@ -5876,9 +5876,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Loretakers"
@@ -5897,9 +5897,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Throne of the Mad God"
@@ -5918,9 +5918,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tidings"
@@ -5939,9 +5939,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                evancauteren                //#
@@ -5964,9 +5964,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                TheArtisanBG                //#
@@ -5989,9 +5989,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The-Artisan-s-Armory"
@@ -6010,9 +6010,9 @@ tag = ""
 branch = ""
 channel = ""
 asset = ""
-pkg_windows = "wzp,rar,zip"
-pkg_linux = "lin,rar,zip"
-pkg_macos = "mac,rar,zip"
+pkg_windows = "wzp,rar,7z,zip"
+pkg_linux = "lin,rar,7z,zip"
+pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Artisan's Kitpack"
@@ -6031,9 +6031,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Artisan-HLAs"
@@ -6052,9 +6052,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Artisan's Kitpack NPC"
@@ -6073,9 +6073,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Artisan's Kitpack Tweak"
@@ -6094,9 +6094,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
   subdir_require = "ArtisansKitpack_tweak"
 
 [[mods]]
@@ -6116,9 +6116,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Bardic Wonders"
@@ -6137,9 +6137,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Warlock"
@@ -6158,9 +6158,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Warlock (C0Warlock, 3.0)"
@@ -6179,9 +6179,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Candlekeep Revisited"
@@ -6200,9 +6200,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Drake NPC"
@@ -6221,9 +6221,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "AionZ's House   Rules"
@@ -6242,9 +6242,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kvel BG1"
@@ -6263,9 +6263,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Pai'Na NPC"
@@ -6284,9 +6284,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Pocket Wardrobe"
@@ -6305,9 +6305,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Shadow Magic"
@@ -6326,9 +6326,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sirene NPC"
@@ -6347,9 +6347,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sirene NPC"
@@ -6368,9 +6368,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SoA Extended"
@@ -6389,9 +6389,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Mazzy Romance"
@@ -6410,9 +6410,9 @@ tag = ""
 branch = ""
 channel = ""
 asset = ""
-pkg_windows = "wzp,rar,zip"
-pkg_linux = "lin,rar,zip"
-pkg_macos = "mac,rar,zip"
+pkg_windows = "wzp,rar,7z,zip"
+pkg_linux = "lin,rar,7z,zip"
+pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  LCA-EET                   //#
@@ -6435,9 +6435,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                   Skitia                   //#
@@ -6460,9 +6460,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Helga"
@@ -6481,9 +6481,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Kale"
@@ -6502,9 +6502,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Nalia at Last"
@@ -6523,9 +6523,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Recorder"
@@ -6544,9 +6544,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Skitia NPCs"
@@ -6565,9 +6565,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Skitia Romance Tweak"
@@ -6586,9 +6586,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Vienxay"
@@ -6607,9 +6607,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Wings"
@@ -6628,9 +6628,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//              GwendolyneFreddy              //#
@@ -6653,9 +6653,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "BuTcHeRy"
@@ -6674,9 +6674,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 dark0dave                  //#
@@ -6699,9 +6699,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                Plutonium-X                 //#
@@ -6724,9 +6724,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                PaulaMigrate                //#
@@ -6749,9 +6749,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Saerileth NPC"
@@ -6770,9 +6770,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Uldar NPC"
@@ -6791,9 +6791,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                RamosPabloA                 //#
@@ -6816,9 +6816,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 gungorenu                  //#
@@ -6841,9 +6841,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  droideck                  //#
@@ -6866,9 +6866,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                Ratatoskr589                //#
@@ -6891,9 +6891,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 CrevsDaak                  //#
@@ -6916,9 +6916,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//               BardezAnAvatar               //#
@@ -6941,9 +6941,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  cgordon                   //#
@@ -6966,9 +6966,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  szaumoor                  //#
@@ -6991,9 +6991,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Consumables"
@@ -7012,9 +7012,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZS Item Pack"
@@ -7033,9 +7033,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Shadowdancer Overhaul"
@@ -7054,9 +7054,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ZSTweaks"
@@ -7075,9 +7075,9 @@ config_files = ["configurations/zstweaks_prefixes.txt", "configurations/zstweaks
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                subtledoctor                //#
@@ -7100,9 +7100,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SubtleD's Spell Tweaks"
@@ -7121,9 +7121,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SubtleD's Stat Overhauls"
@@ -7142,9 +7142,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 aquadrizzt                 //#
@@ -7167,9 +7167,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//              FredrikLindgren               //#
@@ -7192,9 +7192,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Randomiser"
@@ -7213,9 +7213,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Rogue Rebalancing"
@@ -7234,9 +7234,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 OlvynChuru                 //#
@@ -7259,9 +7259,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Olvyn Spells"
@@ -7280,9 +7280,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "ME Tweaks"
@@ -7301,9 +7301,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 BGforgeNet                 //#
@@ -7326,9 +7326,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Unique Artifacts"
@@ -7347,9 +7347,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Wild Mage Additions"
@@ -7368,9 +7368,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                   K4thos                   //#
@@ -7393,9 +7393,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                AnotherDole                 //#
@@ -7418,9 +7418,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  BartyMae                  //#
@@ -7443,9 +7443,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 flamewing                  //#
@@ -7468,9 +7468,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  lzenner                   //#
@@ -7493,9 +7493,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  Arvendor                  //#
@@ -7518,9 +7518,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                smeagolheart                //#
@@ -7543,9 +7543,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  mleduque                  //#
@@ -7568,9 +7568,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 zed-nocear                 //#
@@ -7593,9 +7593,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                Chrizhermann                //#
@@ -7618,9 +7618,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 Dau1makan                  //#
@@ -7643,9 +7643,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  Llewren                   //#
@@ -7668,9 +7668,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                   Xgatt                    //#
@@ -7693,9 +7693,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "XGTCustomizableXPGain"
@@ -7714,9 +7714,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "wl_HouseRules"
@@ -7735,9 +7735,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//            Alexander12-creator             //#
@@ -7760,9 +7760,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                 thisisulb                  //#
@@ -7785,9 +7785,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  weigo87                   //#
@@ -7810,9 +7810,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  drake127                  //#
@@ -7835,9 +7835,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  HoldenBG                  //#
@@ -7860,9 +7860,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//       Black-Wyrm-Lair & MattyGroove        //#
@@ -7885,9 +7885,9 @@ config_files = []
   branch = "master"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
   [[mods.sources]]
   id = "mattygroove"
@@ -7900,9 +7900,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//      pocket-plane-group & roxanneshs       //#
@@ -7925,9 +7925,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
   [[mods.sources]]
   id = "roxanneshs"
@@ -7940,9 +7940,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
 #//                  shohysie                  //#
@@ -7965,9 +7965,9 @@ config_files = []
   branch = "main"
   channel = ""
   asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                              Direct Archive Downloads                               //#
@@ -7990,9 +7990,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sentrizeal Animation Pack"
@@ -8011,9 +8011,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                                    Weaselmods                                       //#
@@ -8036,9 +8036,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "White"
@@ -8057,9 +8057,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sir Arkanis for SoD"
@@ -8078,9 +8078,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Shades of the Sword Coast"
@@ -8099,9 +8099,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Vanishing of Skie Silvershield"
@@ -8120,9 +8120,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Colours of Infinity: Tales of the Deep Gardens"
@@ -8141,9 +8141,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Colours of Infinity: The White Queen"
@@ -8162,9 +8162,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Colours of Infinity: I Shall Never Forget"
@@ -8183,9 +8183,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Eilistraee's Song"
@@ -8204,9 +8204,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Athkatlan Grounds: Southern Edge"
@@ -8225,9 +8225,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Athkatlan Grounds: The Ooze's Lounge"
@@ -8246,9 +8246,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Athkatlan Grounds: The Tangled Oak Isle"
@@ -8267,9 +8267,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Athkatlan Grounds: Bridge's Block"
@@ -8288,9 +8288,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Athkatlan Grounds: Alabaster Sands"
@@ -8309,9 +8309,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Journey to the Whin Hill"
@@ -8330,9 +8330,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Dreadful Tales: The Bloodied Stings of Barovia"
@@ -8351,9 +8351,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Dreadful Tales: In Love, Undeath"
@@ -8372,9 +8372,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Dreadful Tales: Juniper and the Stone Leech"
@@ -8393,9 +8393,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Bristlelick BG1EE NPC"
@@ -8414,9 +8414,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Faldorn"
@@ -8435,9 +8435,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Skie: The Cost of One Girl's Soul"
@@ -8456,9 +8456,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Colours of Infinity: Yvette Romance"
@@ -8477,9 +8477,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dvaradime BG2EE NPC"
@@ -8498,9 +8498,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Fhaugy"
@@ -8519,9 +8519,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Gahesh"
@@ -8540,9 +8540,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Petsy NPC"
@@ -8561,9 +8561,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Varshoon"
@@ -8582,9 +8582,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Verr'Sza"
@@ -8603,9 +8603,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Walahnan"
@@ -8624,9 +8624,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Will of the Wisp"
@@ -8645,9 +8645,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dynaheir"
@@ -8666,9 +8666,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Return of Xzar and Montaron"
@@ -8687,9 +8687,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Yoshimo Romance"
@@ -8708,9 +8708,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Wilson Chronicles"
@@ -8729,9 +8729,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Cernd Romance"
@@ -8750,9 +8750,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Weasels!"
@@ -8771,9 +8771,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Of Heirlooms and Classes"
@@ -8792,9 +8792,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Hephernaan BG2"
@@ -8813,9 +8813,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Dvaradime"
@@ -8834,9 +8834,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Innershade"
@@ -8855,9 +8855,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "I Shall Never Forget"
@@ -8876,9 +8876,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Juniper and the Stone Leech"
@@ -8897,9 +8897,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Khalid BG2"
@@ -8918,9 +8918,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Walahnan"
@@ -8939,9 +8939,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                                   Morpheus-Mart                                     //#
@@ -8964,9 +8964,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Crucible"
@@ -8985,9 +8985,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Forgotten Armament"
@@ -9006,9 +9006,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "morpheus562's Kitpack"
@@ -9027,9 +9027,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Skills and Abilities"
@@ -9048,9 +9048,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tactics Remix"
@@ -9069,9 +9069,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Enhanced Powergaming Scripts"
@@ -9090,9 +9090,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Continuous NPCs"
@@ -9111,9 +9111,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                                  Source Pages                                       //#
@@ -9136,9 +9136,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SpellFix Visual Effects"
@@ -9157,9 +9157,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Baldur's Gate Romantic Encounters Modification (BG1RE)"
@@ -9178,9 +9178,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Cliffette's History"
@@ -9199,9 +9199,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Cliffette's Keyring"
@@ -9220,9 +9220,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Every Mod and Dog"
@@ -9241,9 +9241,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Fishing for Trouble"
@@ -9262,9 +9262,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Mercenaries of the Sword Coast"
@@ -9283,9 +9283,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Freedom's Reign"
@@ -9304,9 +9304,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "TeamBG's Armours for EET"
@@ -9325,9 +9325,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Fix Wheels of Prophecy"
@@ -9346,9 +9346,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Valerie NPC for BG"
@@ -9367,9 +9367,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Glam NPC Pack"
@@ -9388,9 +9388,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Solaufein's Rescue"
@@ -9409,9 +9409,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sir Ajantis NPC"
@@ -9430,9 +9430,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Amber"
@@ -9451,9 +9451,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Auren Aseph NPC"
@@ -9472,9 +9472,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tyris Flare NPC"
@@ -9493,9 +9493,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sheena"
@@ -9514,9 +9514,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Evandra"
@@ -9535,9 +9535,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Zakrion"
@@ -9556,9 +9556,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Afaaq, the Djinni Companion"
@@ -9577,9 +9577,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Neh'taniel NPC"
@@ -9598,9 +9598,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Calin NPC"
@@ -9619,9 +9619,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Navarra NPC"
@@ -9640,9 +9640,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Haer'Dalis Romance"
@@ -9661,9 +9661,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Beaurin Legacy"
@@ -9682,9 +9682,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Jan Quest"
@@ -9703,9 +9703,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sarevok Romance"
@@ -9724,9 +9724,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Yoshimo's Remorse"
@@ -9745,9 +9745,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "BG2 Romance Expanded"
@@ -9766,9 +9766,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Garrick's Infatuation"
@@ -9787,9 +9787,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "G-Minion"
@@ -9808,9 +9808,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Disrupting Torch"
@@ -9829,9 +9829,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Improved Rods"
@@ -9850,9 +9850,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Trials of the Luremaster"
@@ -9871,9 +9871,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Seducer Kit"
@@ -9892,9 +9892,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Bardic Appraisal"
@@ -9913,9 +9913,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Pathfinder Hit Dice"
@@ -9934,9 +9934,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "TB Tweaks"
@@ -9955,9 +9955,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "JTweaks"
@@ -9976,9 +9976,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ultravision"
@@ -9997,9 +9997,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Allow Stacking Potions"
@@ -10018,9 +10018,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Trap Overhaul"
@@ -10039,9 +10039,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "AC Miscellaneous Tweaks"
@@ -10060,9 +10060,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sequencer Colored Text"
@@ -10081,9 +10081,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Blink Dogs and Phase Spiders"
@@ -10102,9 +10102,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Purist Demiliches (Polylich)"
@@ -10123,9 +10123,9 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "PaintBG Portrait Pack"
@@ -10144,6 +10144,6 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
-  pkg_windows = ""
-  pkg_linux = ""
-  pkg_macos = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"

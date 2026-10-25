@@ -4,6 +4,10 @@
 use crate::app::mod_downloads::{self, ModDownloadSource, ModDownloadTp2Rename};
 use crate::app::step2_action::ModSourceEditDestination;
 
+const DEFAULT_PKG_WINDOWS: &str = "wzp,rar,7z,zip";
+const DEFAULT_PKG_LINUX: &str = "lin,rar,7z,zip";
+const DEFAULT_PKG_MACOS: &str = "mac,rar,7z,zip";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SourceKind {
     GitHub,
@@ -191,9 +195,18 @@ pub(crate) fn from_source(
         allow_pre: details.allow_pre,
         release: details.release,
         asset: details.asset,
-        pkg_windows: source.pkg_windows.clone().unwrap_or_default(),
-        pkg_linux: source.pkg_linux.clone().unwrap_or_default(),
-        pkg_macos: source.pkg_macos.clone().unwrap_or_default(),
+        pkg_windows: source
+            .pkg_windows
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PKG_WINDOWS.to_string()),
+        pkg_linux: source
+            .pkg_linux
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PKG_LINUX.to_string()),
+        pkg_macos: source
+            .pkg_macos
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PKG_MACOS.to_string()),
         aliases_text: source.aliases.join(", "),
         subdir_require: source.subdir_require.clone().unwrap_or_default(),
         config_files: source.config_files.clone(),
@@ -255,6 +268,10 @@ pub(crate) fn to_source(form: &SourceForm) -> ModDownloadSource {
 }
 
 fn apply_follow(source: &mut ModDownloadSource, form: &SourceForm) {
+    source.pkg_windows = non_empty_owned(&form.pkg_windows);
+    source.pkg_linux = non_empty_owned(&form.pkg_linux);
+    source.pkg_macos = non_empty_owned(&form.pkg_macos);
+
     match form.follow {
         Follow::Commit => source.commit = non_empty_owned(&form.commit),
         Follow::Tag => source.tag = non_empty_owned(&form.tag),
@@ -272,20 +289,12 @@ fn apply_release(source: &mut ModDownloadSource, form: &SourceForm) {
     let release = form.release.trim();
     if release.is_empty() {
         source.channel = release_newest_channel(form);
-        source.pkg_windows = non_empty_owned(&form.pkg_windows);
-        source.pkg_linux = non_empty_owned(&form.pkg_linux);
-        source.pkg_macos = non_empty_owned(&form.pkg_macos);
         source.asset.clone_from(&form.kept.asset);
         return;
     }
     match &form.asset {
         AssetPick::SourceZip => source.tag = Some(release.to_string()),
-        AssetPick::BestForOs => {
-            source.release = Some(release.to_string());
-            source.pkg_windows.clone_from(&form.kept.pkg_windows);
-            source.pkg_linux.clone_from(&form.kept.pkg_linux);
-            source.pkg_macos.clone_from(&form.kept.pkg_macos);
-        }
+        AssetPick::BestForOs => source.release = Some(release.to_string()),
         AssetPick::Named(name) => {
             source.release = Some(release.to_string());
             source.asset = non_empty_owned(name);
@@ -492,9 +501,9 @@ mod tests {
             allow_pre: false,
             release: String::new(),
             asset: AssetPick::SourceZip,
-            pkg_windows: String::new(),
-            pkg_linux: String::new(),
-            pkg_macos: String::new(),
+            pkg_windows: DEFAULT_PKG_WINDOWS.to_string(),
+            pkg_linux: DEFAULT_PKG_LINUX.to_string(),
+            pkg_macos: DEFAULT_PKG_MACOS.to_string(),
             aliases_text: "alt1, alt2".to_string(),
             subdir_require: "core".to_string(),
             config_files: Vec::new(),
@@ -519,41 +528,58 @@ mod tests {
         from_source(&source, form.identity, form.save_to, &form.card_key)
     }
 
+    fn with_saved_packages(mut form: SourceForm) -> SourceForm {
+        form.kept.pkg_windows = non_empty_owned(&form.pkg_windows);
+        form.kept.pkg_linux = non_empty_owned(&form.pkg_linux);
+        form.kept.pkg_macos = non_empty_owned(&form.pkg_macos);
+        form
+    }
+
     #[test]
     fn form_round_trips_every_follow_kind() {
         let commit_form = base_form_with(|f| {
             f.follow = Follow::Commit;
             f.commit = "abcdef1234".to_string();
         });
-        assert_eq!(round_trip(&commit_form), commit_form);
+        assert_eq!(round_trip(&commit_form), with_saved_packages(commit_form));
 
         let tag_form = base_form_with(|f| {
             f.follow = Follow::Tag;
             f.tag = "v1.0".to_string();
         });
-        assert_eq!(round_trip(&tag_form), tag_form);
+        assert_eq!(round_trip(&tag_form), with_saved_packages(tag_form));
 
         let branch_form = base_form_with(|f| {
             f.follow = Follow::Branch;
             f.branch = "main".to_string();
         });
-        assert_eq!(round_trip(&branch_form), branch_form);
+        assert_eq!(round_trip(&branch_form), with_saved_packages(branch_form));
 
         let default_branch_form = base_form_with(|f| f.follow = Follow::Branch);
-        assert_eq!(round_trip(&default_branch_form), default_branch_form);
+        assert_eq!(
+            round_trip(&default_branch_form),
+            with_saved_packages(default_branch_form)
+        );
 
         let newest_off = base_form_with(|f| {
             f.follow = Follow::Release;
             f.pkg_windows = "win.zip".to_string();
             f.kept.pkg_windows = Some("win.zip".to_string());
         });
-        assert_eq!(round_trip(&newest_off), newest_off);
+        let mut newest_off_expected = newest_off.clone();
+        newest_off_expected.kept.pkg_linux = Some(DEFAULT_PKG_LINUX.to_string());
+        newest_off_expected.kept.pkg_macos = Some(DEFAULT_PKG_MACOS.to_string());
+        assert_eq!(round_trip(&newest_off), newest_off_expected);
 
         let newest_on = base_form_with(|f| {
             f.follow = Follow::Release;
             f.allow_pre = true;
         });
-        assert_eq!(round_trip(&newest_on), newest_on);
+        let mut newest_on_expected = newest_on.clone();
+        newest_on_expected.kept.pkg_windows = Some(DEFAULT_PKG_WINDOWS.to_string());
+        newest_on_expected.kept.pkg_linux = Some(DEFAULT_PKG_LINUX.to_string());
+        newest_on_expected.kept.pkg_macos = Some(DEFAULT_PKG_MACOS.to_string());
+        assert_eq!(round_trip(&newest_on), newest_on_expected);
 
         let best_for_os = base_form_with(|f| {
             f.follow = Follow::Release;
@@ -562,14 +588,21 @@ mod tests {
             f.pkg_windows = "win.zip".to_string();
             f.kept.pkg_windows = Some("win.zip".to_string());
         });
-        assert_eq!(round_trip(&best_for_os), best_for_os);
+        let mut best_for_os_expected = best_for_os.clone();
+        best_for_os_expected.kept.pkg_linux = Some(DEFAULT_PKG_LINUX.to_string());
+        best_for_os_expected.kept.pkg_macos = Some(DEFAULT_PKG_MACOS.to_string());
+        assert_eq!(round_trip(&best_for_os), best_for_os_expected);
 
         let named_asset = base_form_with(|f| {
             f.follow = Follow::Release;
             f.release = "v2.0".to_string();
             f.asset = AssetPick::Named("linux.tar.gz".to_string());
         });
-        assert_eq!(round_trip(&named_asset), named_asset);
+        let mut named_asset_expected = named_asset.clone();
+        named_asset_expected.kept.pkg_windows = Some(DEFAULT_PKG_WINDOWS.to_string());
+        named_asset_expected.kept.pkg_linux = Some(DEFAULT_PKG_LINUX.to_string());
+        named_asset_expected.kept.pkg_macos = Some(DEFAULT_PKG_MACOS.to_string());
+        assert_eq!(round_trip(&named_asset), named_asset_expected);
 
         let weasel = base_form(SourceKind::WeaselMods);
         assert_eq!(round_trip(&weasel), weasel);
@@ -611,6 +644,25 @@ mod tests {
         let source = to_source(&form);
         assert_eq!(source.tag.as_deref(), Some("v35.17"));
         assert!(source.release.is_none());
+        assert_eq!(source.pkg_windows.as_deref(), Some(DEFAULT_PKG_WINDOWS));
+        assert_eq!(source.pkg_linux.as_deref(), Some(DEFAULT_PKG_LINUX));
+        assert_eq!(source.pkg_macos.as_deref(), Some(DEFAULT_PKG_MACOS));
+    }
+
+    #[test]
+    fn tag_keeps_packages() {
+        let form = base_form_with(|f| {
+            f.follow = Follow::Tag;
+            f.tag = "v1.1".to_string();
+            f.pkg_windows = "windows.7z".to_string();
+            f.pkg_linux = "linux.tar.xz".to_string();
+            f.pkg_macos = "mac.zip".to_string();
+        });
+        let source = to_source(&form);
+        assert_eq!(source.tag.as_deref(), Some("v1.1"));
+        assert_eq!(source.pkg_windows.as_deref(), Some("windows.7z"));
+        assert_eq!(source.pkg_linux.as_deref(), Some("linux.tar.xz"));
+        assert_eq!(source.pkg_macos.as_deref(), Some("mac.zip"));
     }
 
     #[test]
@@ -619,8 +671,8 @@ mod tests {
             f.follow = Follow::Release;
             f.release = "v35.17".to_string();
             f.asset = AssetPick::BestForOs;
-            f.kept.pkg_windows = Some("win.zip".to_string());
-            f.kept.pkg_linux = Some("linux.tar.gz".to_string());
+            f.pkg_windows = "win.zip".to_string();
+            f.pkg_linux = "linux.tar.gz".to_string();
         });
         let source = to_source(&form);
         assert_eq!(source.release.as_deref(), Some("v35.17"));
@@ -639,6 +691,9 @@ mod tests {
         let source = to_source(&form);
         assert_eq!(source.release.as_deref(), Some("v35.17"));
         assert_eq!(source.asset.as_deref(), Some("win-stratagems.exe"));
+        assert_eq!(source.pkg_windows.as_deref(), Some(DEFAULT_PKG_WINDOWS));
+        assert_eq!(source.pkg_linux.as_deref(), Some(DEFAULT_PKG_LINUX));
+        assert_eq!(source.pkg_macos.as_deref(), Some(DEFAULT_PKG_MACOS));
     }
 
     #[test]
