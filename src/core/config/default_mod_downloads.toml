@@ -1828,27 +1828,6 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
-name = "The Drizzt Saga"
-tp2 = "DrizztSaga"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "GitHub"
-  type = "github"
-  url = "https://github.com/MattyGroove/DrizztSaga"
-  repo = "MattyGroove/DrizztSaga"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
-
-[[mods]]
 name = "The Picture Standard"
 tp2 = "thepicturestandard"
 aliases = []
@@ -3985,27 +3964,6 @@ config_files = []
   pkg_linux = "lin,rar,zip"
   pkg_macos = "mac,rar,zip"
 
-  [[mods]]
-name = "Adventures in Papperland"
-tp2 = "aip"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "spellhold-studios"
-  label = "Spellhold-Studios"
-  type = "github"
-  url = "https://github.com/Spellhold-Studios/Adventures-in-Papperland"
-  repo = "Spellhold-Studios/Adventures-in-Papperland"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
-
 #////////////////////////////////////////////////#
 #//                 Renegade0                  //#
 #////////////////////////////////////////////////#
@@ -4936,27 +4894,6 @@ config_files = []
   type = "github"
   url = "https://github.com/RoxanneSHS/Ehlastra"
   repo = "RoxanneSHS/Ehlastra"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,zip"
-  pkg_linux = "lin,rar,zip"
-  pkg_macos = "mac,rar,zip"
-
-[[mods]]
-name = "Finch NPC"
-tp2 = "finchnpc"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "roxanneshs"
-  label = "RoxanneSHS"
-  type = "github"
-  url = "https://github.com/RoxanneSHS/Finch"
-  repo = "RoxanneSHS/Finch"
   commit = ""
   tag = ""
   branch = ""
@@ -7897,6 +7834,86 @@ config_files = []
   type = "github"
   url = "https://github.com/HoldenBG/HPS-Portraits-Project-1.0"
   repo = "HoldenBG/HPS-Portraits-Project-1.0"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
+#////////////////////////////////////////////////#
+#//       Black-Wyrm-Lair & MattyGroove        //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "The Drizzt Saga"
+tp2 = "DrizztSaga"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "black-wyrm-lair"
+  label = "Black Wyrm Lair"
+  type = "github"
+  url = "https://github.com/Black-Wyrm-Lair/Drizzt-Saga"
+  repo = "Black-Wyrm-Lair/Drizzt-Saga"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
+  [[mods.sources]]
+  id = "mattygroove"
+  label = "MattyGroove legacy"
+  type = "github"
+  url = "https://github.com/MattyGroove/DrizztSaga"
+  repo = "MattyGroove/DrizztSaga"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
+#////////////////////////////////////////////////#
+#//      pocket-plane-group & roxanneshs       //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Finch NPC"
+tp2 = "finchnpc"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "pocket-plane-group"
+  label = "Pocket Plane Group"
+  type = "github"
+  url = "https://github.com/Pocket-Plane-Group/Finch_NPC"
+  repo = "Pocket-Plane-Group/Finch_NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
+  [[mods.sources]]
+  id = "roxanneshs"
+  label = "RoxanneSHS legacy"
+  type = "github"
+  url = "https://github.com/RoxanneSHS/Finch"
+  repo = "RoxanneSHS/Finch"
   commit = ""
   tag = ""
   branch = ""
