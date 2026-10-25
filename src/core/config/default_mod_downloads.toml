@@ -3964,6 +3964,27 @@ config_files = []
   pkg_linux = "lin,rar,zip"
   pkg_macos = "mac,rar,zip"
 
+  [[mods]]
+name = "Adventures in Papperland"
+tp2 = "aip"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Adventures-in-Papperland"
+  repo = "Spellhold-Studios/Adventures-in-Papperland"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,zip"
+  pkg_linux = "lin,rar,zip"
+  pkg_macos = "mac,rar,zip"
+
 #////////////////////////////////////////////////#
 #//                 Renegade0                  //#
 #////////////////////////////////////////////////#
