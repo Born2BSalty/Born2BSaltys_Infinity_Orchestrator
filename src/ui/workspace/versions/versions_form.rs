@@ -714,7 +714,7 @@ fn render_release_list_body(
                     {
                         if render_release_row(ui, palette, release, form.release == release.tag) {
                             form.release.clone_from(&release.tag);
-                            form.asset = AssetPick::SourceZip;
+                            form.asset = AssetPick::BestForOs;
                             selected = true;
                         }
                     }
@@ -955,15 +955,6 @@ fn render_asset_dropdown(
                 if menu_check_item(
                     ui,
                     palette,
-                    "Source code (zip)",
-                    matches!(form.asset, AssetPick::SourceZip),
-                ) {
-                    form.asset = AssetPick::SourceZip;
-                    set_menu_open(ctx, id, false);
-                }
-                if menu_check_item(
-                    ui,
-                    palette,
                     "Best for this OS",
                     matches!(form.asset, AssetPick::BestForOs),
                 ) {
@@ -977,6 +968,15 @@ fn render_asset_dropdown(
                         form.asset = AssetPick::Named(asset.name.clone());
                         set_menu_open(ctx, id, false);
                     }
+                }
+                if menu_check_item(
+                    ui,
+                    palette,
+                    "Source code (zip)",
+                    matches!(form.asset, AssetPick::SourceZip),
+                ) {
+                    form.asset = AssetPick::SourceZip;
+                    set_menu_open(ctx, id, false);
                 }
             });
         });
