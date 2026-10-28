@@ -26,5 +26,5 @@ pub use state_step2::{
     update_selection_stale,
 };
 pub use state_step3::{Step3ItemState, Step3State};
-pub use state_step5::{ResumeTargets, Step5State};
+pub use state_step5::{BasicInstallToolVersionLookup, ResumeTargets, Step5State};
 pub use state_wizard::WizardState;

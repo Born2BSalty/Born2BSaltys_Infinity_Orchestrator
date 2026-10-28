@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod auto_answer;
+pub mod basic_install_report;
 pub mod command_config;
 pub mod diagnostics;
 pub mod install_flow;

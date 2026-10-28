@@ -97,6 +97,9 @@ impl WizardState {
             modlist_share_forked_from: Vec::new(),
             modlist_auto_build_active: false,
             modlist_auto_build_waiting_for_install: false,
+            pending_install_choice: None,
+            pending_install_source: None,
+            pending_install_choice_modlist_id: None,
             reproduce_exact: false,
             last_step2_sync_signature: None,
             step1_clean_confirm_open: false,
@@ -133,6 +136,9 @@ impl WizardState {
         self.clear_modlist_share_provenance();
         self.modlist_auto_build_active = false;
         self.modlist_auto_build_waiting_for_install = false;
+        self.pending_install_choice = None;
+        self.pending_install_source = None;
+        self.pending_install_choice_modlist_id = None;
         self.reproduce_exact = false;
         self.last_step2_sync_signature = None;
         self.step1_clean_confirm_open = false;

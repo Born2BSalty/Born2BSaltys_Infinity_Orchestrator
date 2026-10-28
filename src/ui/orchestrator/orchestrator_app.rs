@@ -994,6 +994,11 @@ impl OrchestratorApp {
             || self.workspace_destination_prep_rx.is_some()
             || self.wizard_state.step5.prep_running
             || self.wizard_state.step5.install_running
+            || self
+                .wizard_state
+                .step5
+                .basic_install_tool_versions
+                .is_some()
             || self.wizard_state.modlist_auto_build_active
     }
 

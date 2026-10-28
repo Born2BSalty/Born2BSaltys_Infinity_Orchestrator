@@ -147,3 +147,139 @@ BEGIN @150 DESIGNATED 150 GROUP @1 LABEL Morpheus562sKitpackBattlerager3
         assert!(!group.is_umbrella);
     }
 }
+
+fn questpack_translation_collision_fixture() -> (&'static str, Vec<ScannedComponent>) {
+    let tp2_text = r"
+BEGIN @39
+SUBCOMPONENT @6
+DESIGNATED 4
+
+BEGIN @40
+SUBCOMPONENT @6
+DESIGNATED 401
+
+BEGIN @2
+DESIGNATED 6
+
+BEGIN @11
+DESIGNATED 11
+SUBCOMPONENT @13
+
+BEGIN @12
+DESIGNATED 12
+SUBCOMPONENT @13
+
+BEGIN @17
+DESIGNATED 13
+";
+    let components = vec![
+        component(
+            "4",
+            "Miscellaneous Enhancements -> With Additional Random Encounters",
+        ),
+        component(
+            "401",
+            "Miscellaneous Enhancements -> Without Additional Random Encounters",
+        ),
+        component("6", "Alternative Harper/Xzar Plot"),
+        component(
+            "11",
+            "Improved Oasis II -> IO2 Dialogue & Combat Enhancement",
+        ),
+        component("12", "Improved Oasis II -> IO2 Dialogue Enhancement Only"),
+        component("13", "Saving Sanik In Brynnlaw"),
+    ];
+    (tp2_text, components)
+}
+
+#[test]
+fn questpack_translation_references_do_not_create_unrelated_parents() {
+    let (tp2_text, components) = questpack_translation_collision_fixture();
+    let groups = detect_derived_collapsible_groups("setup-d0questpack.tp2", tp2_text, &components);
+
+    for component in &components {
+        assert!(
+            !groups.contains_key(&component.component_id),
+            "component #{} must not acquire a parent family from a translation ID collision",
+            component.component_id,
+        );
+    }
+}
+
+#[test]
+fn questpack_selection_preserves_independent_components_and_radio_choices() {
+    use crate::app::state::Step2ModState;
+    use crate::ui::step2::tree_selection_rules_step2::{
+        enforce_collapsible_group_umbrella_rules, enforce_subcomponent_single_select,
+    };
+    use std::collections::{HashMap, HashSet};
+
+    let (tp2_text, components) = questpack_translation_collision_fixture();
+    let groups = detect_derived_collapsible_groups("setup-d0questpack.tp2", tp2_text, &components);
+    let states =
+        super::super::component_states_for(components, &HashMap::new(), &groups, &HashSet::new());
+    let initial = Step2ModState {
+        name: "Quest Pack".to_string(),
+        tp_file: "setup-d0questpack.tp2".to_string(),
+        tp2_path: String::new(),
+        readme_path: None,
+        ini_path: None,
+        web_url: None,
+        package_marker: None,
+        latest_checked_version: None,
+        update_locked: false,
+        mod_prompt_summary: None,
+        mod_prompt_events: Vec::new(),
+        checked: false,
+        hidden_components: Vec::new(),
+        components: states,
+    };
+    let select = |state: &mut Step2ModState, id: &str| {
+        let index = state
+            .components
+            .iter()
+            .position(|c| c.component_id == id)
+            .unwrap();
+        state.components[index].checked = true;
+        state.components[index].selected_order = Some(index + 1);
+        enforce_subcomponent_single_select(state, index);
+        enforce_collapsible_group_umbrella_rules(state, index);
+    };
+    let checked = |state: &Step2ModState, id: &str| {
+        state
+            .components
+            .iter()
+            .find(|c| c.component_id == id)
+            .unwrap()
+            .checked
+    };
+
+    for (choice, independent) in [("4", "6"), ("401", "6"), ("11", "13"), ("12", "13")] {
+        for (first, second) in [(choice, independent), (independent, choice)] {
+            let mut state = initial.clone();
+            select(&mut state, first);
+            select(&mut state, second);
+            assert!(
+                checked(&state, first) && checked(&state, second),
+                "#{first} and #{second} must coexist"
+            );
+        }
+    }
+    for (first, second, independent) in [
+        ("4", "401", "6"),
+        ("401", "4", "6"),
+        ("11", "12", "13"),
+        ("12", "11", "13"),
+    ] {
+        let mut state = initial.clone();
+        select(&mut state, independent);
+        select(&mut state, first);
+        select(&mut state, second);
+        assert!(!checked(&state, first), "#{second} must replace #{first}");
+        assert!(checked(&state, second));
+        assert!(
+            checked(&state, independent),
+            "#{independent} must stay selected"
+        );
+    }
+}

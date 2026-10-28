@@ -18,6 +18,15 @@ pub fn populate_wizard_state_from_workspace(
     settings_store: &SettingsStore,
     wizard_state: &mut WizardState,
 ) -> Option<String> {
+    if wizard_state
+        .pending_install_choice_modlist_id
+        .as_deref()
+        .is_some_and(|id| id != entry.id)
+    {
+        wizard_state.pending_install_choice = None;
+        wizard_state.pending_install_source = None;
+        wizard_state.pending_install_choice_modlist_id = None;
+    }
     wizard_state.step2.update_selected_popup_open = false;
     wizard_state.step2.versions_ui = crate::app::state::VersionsDrawerUi::default();
     wizard_state.step2.pending_log_ticks.clear();

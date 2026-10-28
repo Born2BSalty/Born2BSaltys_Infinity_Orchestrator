@@ -7,12 +7,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::log_files::{
     TargetPrepResult, begin_new_run, copy_weidu_logs_for_diagnostics,
-    prepare_target_dirs_before_install, validate_resume_paths, validate_runtime_prep_paths,
-    verify_targets_prepared,
+    prepare_target_dirs_before_install, prune_old_diagnostics, validate_resume_paths,
+    validate_runtime_prep_paths, verify_targets_prepared,
 };
 use crate::app::compat_step3_rules;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::{Step1State, WizardState};
+use crate::app::step5::basic_install_report;
 use crate::app::step5::command_config::build_install_command_config;
 use crate::app::terminal::EmbeddedTerminal;
 use crate::install::step5_command_install::build_install_invocation;
@@ -111,6 +112,7 @@ pub fn prepare_start_request(
     if let Some(reason) = step3_install_block_reason(state) {
         state.step5.last_status_text.clone_from(&reason);
         term.append_marker(&reason);
+        basic_install_report::update(state, "blocked", Some(term));
         return None;
     }
 
@@ -137,6 +139,7 @@ pub fn prepare_start_request(
         Err(err) => {
             state.step5.last_status_text = format!("Preflight check failed: {err}");
             term.append_marker(&format!("Preflight check failed: {err}"));
+            basic_install_report::update(state, "preflight_failed", Some(term));
             false
         }
     };
@@ -214,6 +217,7 @@ pub fn apply_completed_prep(
             state.step5.prep_cleaned_paths.clear();
             state.step5.last_status_text.clone_from(&err);
             term.append_marker(&err);
+            basic_install_report::update(state, "preparation_failed", Some(term));
             false
         }
     }
@@ -231,13 +235,22 @@ pub fn start_install_process(
         restart_mode,
     } = pending;
 
-    let run_id = begin_new_run(&mut state.step5);
+    let run_id = state
+        .step5
+        .diagnostics_run_id
+        .clone()
+        .unwrap_or_else(|| begin_new_run(&mut state.step5));
     term.configure_from_step1(&state.step1, Some(&run_id));
     copy_weidu_logs_for_diagnostics(&state.step1, &run_id);
+    basic_install_report::update(state, "starting", Some(term));
 
     match term.start_process(program.as_str(), &args) {
         Ok(()) => {
+            prune_old_diagnostics(Some(&run_id));
             apply_start_metadata(state, resume_mode, restart_mode, &args);
+            state.pending_install_choice = None;
+            state.pending_install_source = None;
+            state.pending_install_choice_modlist_id = None;
             state.step5.prep_running = false;
             state.step5.run_counter = state.step5.run_counter.saturating_add(1);
             state.step5.active_run_id = Some(state.step5.run_counter);
@@ -276,11 +289,13 @@ pub fn start_install_process(
             state.step5.restart_args = args;
             let install_config = build_install_command_config(&state.step1);
             state.step5.resume_targets = capture_resume_targets(&install_config);
+            basic_install_report::update(state, "running", Some(term));
         }
         Err(err) => {
             state.step2.scan_status = format!("Install start failed: {err}");
-            state.step5.last_status_text = "Start failed".to_string();
+            state.step5.last_status_text = format!("Install start failed: {err}");
             state.step5.prep_running = false;
+            basic_install_report::update(state, "start_failed", Some(term));
         }
     }
 }
@@ -408,3 +423,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "install_flow_retention_tests.rs"]
+mod retention_tests;

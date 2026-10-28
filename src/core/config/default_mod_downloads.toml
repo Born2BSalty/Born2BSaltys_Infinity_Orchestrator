@@ -329,6 +329,27 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
+name = "Sir Ajantis NPC"
+tp2 = "ajantisbg2"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Ajantis_BG2"
+  repo = "Gibberlings3/Ajantis_BG2"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Alternatives"
 tp2 = "Alternatives"
 aliases = []
@@ -1981,28 +2002,7 @@ config_files = []
 [[mods]]
 name = "Dark Horizons"
 tp2 = "DarkHorizons"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "the-gate-project"
-  label = "The-Gate-Project"
-  type = "github"
-  url = "https://github.com/The-Gate-Project/DarkHorizons"
-  repo = "The-Gate-Project/DarkHorizons"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Dark Horizons BG:EE"
-tp2 = "darkhorizonsbgee"
-aliases = []
+aliases = ["darkhorizonsbgee"]
 config_files = []
 
   [[mods.sources]]
@@ -2137,27 +2137,6 @@ config_files = []
   type = "github"
   url = "https://github.com/The-Gate-Project/klatu-tweaks-and-fixes"
   repo = "The-Gate-Project/klatu-tweaks-and-fixes"
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "IWD Item Pack"
-tp2 = "malek-iwditempack"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "the-gate-project"
-  label = "The-Gate-Project"
-  type = "github"
-  url = "https://github.com/The-Gate-Project/IWD_Item-Pack"
-  repo = "The-Gate-Project/IWD_Item-Pack"
   commit = ""
   tag = ""
   branch = ""
@@ -7781,6 +7760,56 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//                  Mirrabbo                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Imoen Romance"
+tp2 = "ImoenRomance"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "mirrabbo"
+  label = "Mirrabbo"
+  type = "github"
+  url = "https://github.com/Mirrabbo/Imoen-Romance-Mod"
+  repo = "Mirrabbo/Imoen-Romance-Mod"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                    trow                    //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Living Clara"
+tp2 = "LivingClara"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/LivingClara"
+  repo = "trow/LivingClara"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//       Black-Wyrm-Lair & MattyGroove        //#
 #////////////////////////////////////////////////#
 
@@ -8113,6 +8142,846 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
+name = "Aeon"
+tp2 = "Aeon"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/aeon/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Arszyk's Wonderful Decay"
+tp2 = "ArszyksWonderfulDecay"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/arszyk/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Below & Below Inn"
+tp2 = "InnBB"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/below-below-inn/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Bethany"
+tp2 = "Bethany"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/bethany/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Dendjelion"
+tp2 = "Dendjelion"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/dendjelion/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Dusky"
+tp2 = "Dusky"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/dusky-iwdee-npc/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Eldoth for SoD"
+tp2 = "EldothSoD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/eldoth-for-sod/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "FindIt-IWD"
+tp2 = "FindIt-IWD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/findit-iwd/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "ForgeIt-IWD"
+tp2 = "ForgeIt-IWD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/forgeit-iwd/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Foundling: Between the Shades"
+tp2 = "Foundling"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/foundling-between-the-shades/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Fyalvara"
+tp2 = "fyalvara"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/fyalvara/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Hommet"
+tp2 = "hommet"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/hommet/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ina"
+tp2 = "Ina"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/ina/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "L'anna"
+tp2 = "lanna"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/lanna/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "LavaIt!"
+tp2 = "LavaIt!"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/lavait/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Lhannd"
+tp2 = "Lhannd"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/lhannd/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mother Lost for SoD"
+tp2 = "MotherSoD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/mother-lost-for-sod/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Night of the Blinking Dead"
+tp2 = "BlinkingDead"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/night-of-the-blinking-dead/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Oak-Maw"
+tp2 = "OakMaw"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/oak-maw/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Of Paths and Ways"
+tp2 = "OfPathsAndWays"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/of-paths-and-ways/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Orra"
+tp2 = "Orra"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/orra/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Quayle BG2"
+tp2 = "Quayle"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/quayle-bg2/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Siamorphe’s Weaponry"
+tp2 = "SiamorphesWeaponry"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/siamorphes-weaponry/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Snowytoes Hamlet"
+tp2 = "Snowytoes"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/snowytoes-hamlet/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Swylif Thicc"
+tp2 = "Swylif"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/swylif-thicc/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "T'viy"
+tp2 = "Tviy"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/tviy/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Tale of Our Lady Dreamless"
+tp2 = "OurLady"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/tale-of-our-lady-dreamless/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Terror of the Skineater"
+tp2 = "Skineater"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/terror-of-the-skineater/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Ink Gallery"
+tp2 = "InkGallery"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/the-ink-gallery/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Life and Heroism of Jimothy the Raccoon"
+tp2 = "Jimothy"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/the-life-and-heroism-of-jimothy-the-raccoon/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Rediscovery of Kuldahar"
+tp2 = "kuldahar"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/the-rediscovery-of-kuldahar/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The War of Bloom and Rot"
+tp2 = "TheWarOfBloomAndRot"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/the-war-of-bloom-and-rot/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Tipps"
+tp2 = "tipps"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/tipps/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Tsuki BG2"
+tp2 = "TsukiBG2"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/tsuki-bg2/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Urchin"
+tp2 = "Urchin"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/urchin/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Viconia Revamped"
+tp2 = "ViconiaRevamped"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/viconia-revamped/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Vito"
+tp2 = "Vito"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/vito/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Xikâsz's Grove of Chaos"
+tp2 = "GroveOfChaos"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/xikaszs-grove-of-chaos/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Shar-Teel BG2EE"
+tp2 = "SharTeelBG2EE"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/shar-teel-bg2ee/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Faldorn for SoD"
+tp2 = "FaldornSoD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Weaselmods"
+  type = "page"
+  url = "https://downloads.weaselmods.net/download/faldorn-for-sod/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "White"
 tp2 = "White"
 aliases = []
@@ -8228,27 +9097,6 @@ config_files = []
   label = "Weaselmods"
   type = "page"
   url = "https://downloads.weaselmods.net/download/the-white-queen/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Colours of Infinity: I Shall Never Forget"
-tp2 = "l#isnf"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Weaselmods"
-  type = "page"
-  url = "https://downloads.weaselmods.net/download/i-shall-never-forget/"
   repo = ""
   commit = ""
   tag = ""
@@ -8449,27 +9297,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "The Dreadful Tales: Juniper and the Stone Leech"
-tp2 = "l#juniperstone"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Weaselmods"
-  type = "page"
-  url = "https://downloads.weaselmods.net/download/juniper-and-the-stone-leech/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Bristlelick BG1EE NPC"
 tp2 = "Bristlelick"
 aliases = []
@@ -8534,7 +9361,7 @@ config_files = []
 
 [[mods]]
 name = "Colours of Infinity: Yvette Romance"
-tp2 = "l#coi-yvette"
+tp2 = "Yvette"
 aliases = []
 config_files = []
 
@@ -8554,29 +9381,8 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Dvaradime BG2EE NPC"
-tp2 = "l#dvaradime"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Weaselmods"
-  type = "page"
-  url = "https://downloads.weaselmods.net/download/dvaradime/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Fhaugy"
-tp2 = "l#fhaugy"
+tp2 = "Fhaugy"
 aliases = []
 config_files = []
 
@@ -8639,7 +9445,7 @@ config_files = []
 
 [[mods]]
 name = "Varshoon"
-tp2 = "l#varshoon"
+tp2 = "Varshoon"
 aliases = []
 config_files = []
 
@@ -8659,8 +9465,8 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Verr'Sza"
-tp2 = "l#verrszabg2"
+name = "Verr'Sza BG2EE"
+tp2 = "VerrBG2"
 aliases = []
 config_files = []
 
@@ -8681,7 +9487,7 @@ config_files = []
 
 [[mods]]
 name = "Walahnan"
-tp2 = "l#walahnanbg2"
+tp2 = "WalahnanBG2"
 aliases = []
 config_files = []
 
@@ -8723,7 +9529,7 @@ config_files = []
 
 [[mods]]
 name = "Dynaheir"
-tp2 = "DYNBG2"
+tp2 = "DynaheirBG2EE"
 aliases = []
 config_files = []
 
@@ -8744,7 +9550,7 @@ config_files = []
 
 [[mods]]
 name = "Return of Xzar and Montaron"
-tp2 = "XZARMONT"
+tp2 = "XzarAndMontaron"
 aliases = []
 config_files = []
 
@@ -8786,7 +9592,7 @@ config_files = []
 
 [[mods]]
 name = "Wilson Chronicles"
-tp2 = "l#wilson"
+tp2 = "WilsonChronicles"
 aliases = []
 config_files = []
 
@@ -8996,7 +9802,7 @@ config_files = []
 
 [[mods]]
 name = "Walahnan"
-tp2 = "l#walahnanbg1ee"
+tp2 = "Walahnan"
 aliases = []
 config_files = []
 
@@ -9475,27 +10281,6 @@ config_files = []
   label = "Source"
   type = "url"
   url = "https://www.baldurs-gate.de/index.php?resources/jasteys-solaufein-npc-mod-for-bgii-solaufeins-rescue.13/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Sir Ajantis NPC"
-tp2 = "ajantisbg2"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.gibberlings3.net/mods/npcs/ajantis-bg2/"
   repo = ""
   commit = ""
   tag = ""

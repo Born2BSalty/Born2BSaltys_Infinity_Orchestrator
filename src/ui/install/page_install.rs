@@ -329,6 +329,11 @@ fn begin_install(orchestrator: &mut OrchestratorApp) -> InstallStage {
             }
         }
     }
+    orchestrator.wizard_state.pending_install_choice = Some("Install as provided".to_string());
+    orchestrator.wizard_state.pending_install_source = Some(install_source_label(
+        orchestrator.install_screen_state.review.origin,
+    ));
+    orchestrator.wizard_state.pending_install_choice_modlist_id = None;
 
     if let Some(reinstall_id) = orchestrator.pending_reinstall_id.clone() {
         let OrchestratorApp {
@@ -387,7 +392,15 @@ fn begin_import(orchestrator: &mut OrchestratorApp) -> Option<InstallStage> {
             choice,
         },
     ) {
-        Ok(_) => Some(InstallStage::Downloading),
+        Ok(_) => {
+            orchestrator.wizard_state.pending_install_choice =
+                Some("Review and modify".to_string());
+            orchestrator.wizard_state.pending_install_source = Some(install_source_label(
+                orchestrator.install_screen_state.review.origin,
+            ));
+            orchestrator.wizard_state.pending_install_choice_modlist_id = None;
+            Some(InstallStage::Downloading)
+        }
         Err(err) => {
             warn!(
                 target = "orchestrator",
@@ -409,6 +422,9 @@ fn downloading_stage(
         PipelineKind::Install => {
             match stage_downloading::render_live(ui, orchestrator, DownloadScreenCopy::INSTALL) {
                 DownloadingOutcome::Cancel => {
+                    orchestrator.wizard_state.pending_install_choice = None;
+                    orchestrator.wizard_state.pending_install_source = None;
+                    orchestrator.wizard_state.pending_install_choice_modlist_id = None;
                     orchestrator.reset_install_screen_to_gallery();
                     Some(InstallRequest::Stage(InstallStage::Gallery))
                 }
@@ -423,6 +439,9 @@ fn downloading_stage(
         }
         PipelineKind::Fork => match stage_fork_download::render_live(ui, orchestrator) {
             ForkDownloadOutcome::Cancel => {
+                orchestrator.wizard_state.pending_install_choice = None;
+                orchestrator.wizard_state.pending_install_source = None;
+                orchestrator.wizard_state.pending_install_choice_modlist_id = None;
                 orchestrator.reset_install_screen_to_gallery();
                 Some(InstallRequest::Stage(InstallStage::Gallery))
             }
@@ -451,6 +470,9 @@ fn open_workspace_or_reset_to_gallery(
         orchestrator
             .notification_manager
             .error("The install lost track of its modlist; start it again from the gallery.");
+        orchestrator.wizard_state.pending_install_choice = None;
+        orchestrator.wizard_state.pending_install_source = None;
+        orchestrator.wizard_state.pending_install_choice_modlist_id = None;
         orchestrator.reset_install_screen_to_gallery();
         return Some(InstallRequest::Stage(InstallStage::Gallery));
     };
@@ -462,6 +484,15 @@ fn open_workspace_or_reset_to_gallery(
     fork_route::route_to_workspace(orchestrator, id);
     warn_continued_without(orchestrator, &labels);
     None
+}
+
+fn install_source_label(origin: ReviewOrigin) -> String {
+    match origin {
+        ReviewOrigin::Details => "Gallery modlist".to_string(),
+        ReviewOrigin::Paste => "Pasted share code".to_string(),
+        ReviewOrigin::File => "Imported file".to_string(),
+        ReviewOrigin::Reinstall => "Reinstall".to_string(),
+    }
 }
 
 fn warn_continued_without(orchestrator: &mut OrchestratorApp, labels: &[String]) {

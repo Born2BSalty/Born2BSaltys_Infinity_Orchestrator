@@ -2510,12 +2510,12 @@ fn paint_indeterminate_bar(ui: &egui::Ui, palette: ThemePalette, track: egui::Re
     let t = f32_from_f64(ui.input(|i| i.time));
     let block = (track.width() * 0.28).max(8.0);
     let travel = (track.width() - block).max(0.0);
-    let phase = (t / 1.6).fract(); // 0..1
+    let phase = (t / 1.6).fract();
     let tri = if phase < 0.5 {
         phase * 2.0
     } else {
         phase.mul_add(-2.0, 2.0)
-    }; // 0→1→0
+    };
     let x = travel.mul_add(tri, track.left());
     let block_rect = egui::Rect::from_min_size(
         egui::pos2(x, track.top()),
@@ -3082,8 +3082,8 @@ mod tests {
 
         let extracting = DownloadProgress {
             rows: vec![
-                row("a", ModDownloadStatus::Staged),     // extracted
-                row("b", ModDownloadStatus::Extracting), // not yet
+                row("a", ModDownloadStatus::Staged),
+                row("b", ModDownloadStatus::Extracting),
             ],
             ..Default::default()
         };
@@ -3149,7 +3149,7 @@ mod tests {
     fn extract_starts_at_exactly_zero_even_with_skipped_mods() {
         let p = DownloadProgress {
             rows: vec![
-                row("a", ModDownloadStatus::Extracting), // fetched, not yet extracted
+                row("a", ModDownloadStatus::Extracting),
                 row("b", ModDownloadStatus::Extracting),
             ],
             skipped: vec![skipped("c1", Some(1000)), skipped("c2", Some(2000))],
