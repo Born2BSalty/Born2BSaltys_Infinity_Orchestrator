@@ -456,7 +456,7 @@ mod tests {
             ["Selected workspace", "Local default", "Local custom"]
         );
         let archive = crate::app::modlist_biolist::build_biolist(&code).expect("BIO transport");
-        assert!(!archive.is_empty());
+        assert_ne!(archive, [] as [u8; 0]);
     }
 
     #[test]
@@ -498,7 +498,7 @@ mod tests {
         let entry = app.registry.find("PHRASEERR001").expect("entry");
         assert_eq!(entry.latest_share_code, original);
         assert_eq!(entry.author.as_deref(), Some("@original"));
-        assert!(app.redesign_settings.user_name.is_empty());
+        assert_eq!(app.redesign_settings.user_name, "");
         assert_eq!(app.share_name_buffer, "@candidate");
         assert_eq!(
             std::fs::read_to_string(file).expect("preserved file"),

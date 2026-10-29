@@ -528,7 +528,10 @@ mod tests {
             assert_eq!(snapshot.bgee[0].tp2_upper, expected.tp2);
             assert_eq!(snapshot.bgee[0].language, expected.language);
             assert_eq!(snapshot.bgee[0].wlb_inputs, expected.wlb_inputs);
-            assert!(snapshot.bg2ee.is_empty());
+            assert_eq!(
+                snapshot.bg2ee,
+                [] as [crate::ui::workspace::state_workspace::RescanSelection; 0]
+            );
         }
     }
 }

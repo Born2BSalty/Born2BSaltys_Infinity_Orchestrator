@@ -37,7 +37,10 @@ fn manual_wlb_checked_writer_preserves_blank_unicode_and_reports_both_errors() {
 fn manual_wlb_checked_send_without_child_is_error_and_records_nothing() {
     let mut terminal = EmbeddedTerminal::new().expect("terminal without process");
     assert!(terminal.try_send_line("answer").is_err());
-    assert!(terminal.take_confirmed_answers().is_empty());
+    assert_eq!(
+        terminal.take_confirmed_answers(),
+        [] as [crate::app::step5::answer_capture::ConfirmedAnswers; 0]
+    );
     assert!(terminal.current_capture_occurrence().is_none());
 }
 
@@ -79,11 +82,17 @@ fn manual_wlb_terminal_reconstructs_chunks_preserves_carry_on_clear_and_drains_o
             .expect("sent")
     );
     terminal.update_important_lines("SUCCESSFULLY INSTAL");
-    assert!(terminal.take_confirmed_answers().is_empty());
+    assert_eq!(
+        terminal.take_confirmed_answers(),
+        [] as [crate::app::step5::answer_capture::ConfirmedAnswers; 0]
+    );
     terminal.update_important_lines("LED Label\n");
     terminal.invalidate_capture();
     assert_eq!(terminal.take_confirmed_answers()[0].answers, ["answer"]);
-    assert!(terminal.take_confirmed_answers().is_empty());
+    assert_eq!(
+        terminal.take_confirmed_answers(),
+        [] as [crate::app::step5::answer_capture::ConfirmedAnswers; 0]
+    );
 }
 
 fn replay_fixture(phase: bool, language_collision: bool) -> EmbeddedTerminal {
@@ -156,7 +165,10 @@ fn manual_wlb_batch_replay_uses_explicit_current_context_without_capture_owner()
         terminal.peek_next_scripted_input_for_current(),
         Some("second")
     );
-    assert!(terminal.take_confirmed_answers().is_empty());
+    assert_eq!(
+        terminal.take_confirmed_answers(),
+        [] as [crate::app::step5::answer_capture::ConfirmedAnswers; 0]
+    );
 }
 
 #[test]
@@ -189,7 +201,10 @@ fn manual_wlb_batch_failed_write_preserves_typed_queue() {
         Some("first")
     );
     assert!(terminal.current_capture_occurrence().is_none());
-    assert!(terminal.take_confirmed_answers().is_empty());
+    assert_eq!(
+        terminal.take_confirmed_answers(),
+        [] as [crate::app::step5::answer_capture::ConfirmedAnswers; 0]
+    );
 }
 
 #[test]

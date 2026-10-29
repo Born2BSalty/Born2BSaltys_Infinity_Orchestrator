@@ -25,17 +25,17 @@ fn parser_sharing_payload_and_preview_preserve_unicode_and_spaces() {
         phrases
     );
     let legacy = parser_sharing_code(None);
-    assert!(
+    assert_eq!(
         decode_share_payload(&legacy)
             .expect("legacy payload")
-            .parser_choice_phrases
-            .is_empty()
+            .parser_choice_phrases,
+        [] as [String; 0]
     );
-    assert!(
+    assert_eq!(
         preview_modlist_share_code(&legacy)
             .expect("legacy preview")
-            .parser_choice_phrases
-            .is_empty()
+            .parser_choice_phrases,
+        [] as [String; 0]
     );
 }
 
@@ -101,11 +101,10 @@ fn parser_sharing_injected_export_sources_union_wizard_before_local() {
             .parser_choice_phrases,
         ["Imported", "Shared", "Default", " Custom 世界 "]
     );
-    assert!(
-        ShareExportSources::default()
-            .parser_choice_phrases
-            .is_empty()
+    assert_eq!(
+        ShareExportSources::default().parser_choice_phrases,
+        [] as [String; 0]
     );
     state.reset_workflow_keep_step1();
-    assert!(state.parser_choice_phrases.is_empty());
+    assert_eq!(state.parser_choice_phrases, [] as [String; 0]);
 }

@@ -70,7 +70,10 @@ fn manual_wlb_current_run_mixed_prefix_commits_only_on_unique_success_once() {
         prompt(&mut session, block, position, false);
         send(&mut session, value, origin);
     }
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
     finish(&mut session, &component, ComponentOutcome::Success);
     session.invalidate();
     let confirmed = session.take_confirmed_answers();
@@ -78,7 +81,10 @@ fn manual_wlb_current_run_mixed_prefix_commits_only_on_unique_success_once() {
     assert_eq!(confirmed[0].run, run());
     assert_eq!(confirmed[0].component, component);
     assert_eq!(confirmed[0].answers, ["A", "B", ""]);
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
 }
 
 #[test]
@@ -107,9 +113,12 @@ fn manual_wlb_ambiguous_repeat_fails_closed_with_warning() {
         let _ = session.record_sent(&occurrence, "second", AnswerOrigin::Manual);
     }
     finish(&mut session, &component, ComponentOutcome::Success);
-    assert!(session.take_confirmed_answers().is_empty());
-    assert!(!session.take_warnings().is_empty());
-    assert!(session.take_warnings().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
+    assert_ne!(session.take_warnings(), [] as [String; 0]);
+    assert_eq!(session.take_warnings(), [] as [String; 0]);
 }
 
 #[test]
@@ -122,7 +131,10 @@ fn manual_wlb_failed_cancelled_script_only_and_stale_sends_never_confirm() {
         let stale = session.current_occurrence().expect("prompt");
         send(&mut session, "discard", AnswerOrigin::Manual);
         finish(&mut session, &component, outcome);
-        assert!(session.take_confirmed_answers().is_empty());
+        assert_eq!(
+            session.take_confirmed_answers(),
+            [] as [ConfirmedAnswers; 0]
+        );
         begin(&mut session, &component);
         prompt(&mut session, "New attempt?", 2, false);
         assert!(
@@ -132,7 +144,10 @@ fn manual_wlb_failed_cancelled_script_only_and_stale_sends_never_confirm() {
         );
         send(&mut session, "automatic", AnswerOrigin::Scripted);
         finish(&mut session, &component, ComponentOutcome::Success);
-        assert!(session.take_confirmed_answers().is_empty());
+        assert_eq!(
+            session.take_confirmed_answers(),
+            [] as [ConfirmedAnswers; 0]
+        );
     }
 }
 
@@ -333,14 +348,20 @@ fn manual_wlb_stream_orders_paired_headers_and_mixed_actual_prefix() {
         );
         send(&mut session, answer, origin);
     }
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
     session.observe_line("SUCCESSFULLY INSTALLED Label");
     session.invalidate();
     let answers = session.take_confirmed_answers();
     assert_eq!(answers.len(), 1);
     assert_eq!(answers[0].answers, ["script", "json", "manual"]);
     assert_eq!(answers[0].component, component);
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
 }
 
 #[test]
@@ -365,8 +386,8 @@ fn manual_wlb_stream_retry_replaces_and_ambiguous_repeat_suppresses() {
         if explicit_retry {
             assert_eq!(confirmed[0].answers, ["right"]);
         } else {
-            assert!(confirmed.is_empty());
-            assert!(!session.take_warnings().is_empty());
+            assert_eq!(confirmed, [] as [ConfirmedAnswers; 0]);
+            assert_ne!(session.take_warnings(), [] as [String; 0]);
         }
     }
 }
@@ -391,7 +412,10 @@ fn manual_wlb_stream_unknown_phase_wrong_language_and_unproven_success_are_ineli
             "SUCCESSFULLY INSTALLED Unknown"
         });
         session.invalidate();
-        assert!(session.take_confirmed_answers().is_empty());
+        assert_eq!(
+            session.take_confirmed_answers(),
+            [] as [ConfirmedAnswers; 0]
+        );
     }
 }
 
@@ -448,7 +472,10 @@ fn manual_wlb_scripted_failed_send_keeps_queue_and_capture_empty() {
         terminal.peek_next_scripted_input_for_current(),
         Some("first")
     );
-    assert!(terminal.take_confirmed_answers().is_empty());
+    assert_eq!(
+        terminal.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
 }
 
 #[test]
@@ -477,7 +504,10 @@ fn manual_wlb_stream_batch_with_multiple_frozen_owners_suppresses_capture() {
     stream_prompt(&mut session, "Ambiguous owner?");
     assert!(session.current_occurrence().is_none());
     session.observe_line("SUCCESSFULLY INSTALLED One");
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
 }
 
 #[test]
@@ -490,7 +520,10 @@ fn manual_wlb_stream_retry_without_successful_replacement_never_confirms_rejecte
     session.observe_line("Invalid answer, please retry");
     stream_prompt(&mut session, "Question?");
     session.observe_line("SUCCESSFULLY INSTALLED Label");
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
 }
 
 #[test]
@@ -502,7 +535,10 @@ fn manual_wlb_stream_rejection_without_new_header_cannot_confirm() {
     send(&mut session, "rejected", AnswerOrigin::Manual);
     session.observe_line("Invalid answer, please retry");
     session.observe_line("SUCCESSFULLY INSTALLED Label");
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
 }
 
 #[test]
@@ -541,7 +577,7 @@ fn manual_wlb_stream_rejection_distinct_replacement_clears_manual_provenance() {
             assert_eq!(confirmed.len(), 1);
             assert_eq!(confirmed[0].answers, ["prefix", "accepted"]);
         } else {
-            assert!(confirmed.is_empty());
+            assert_eq!(confirmed, [] as [ConfirmedAnswers; 0]);
         }
     }
 }
@@ -611,7 +647,10 @@ fn manual_wlb_real_checked_completion_saves_and_exports_actual_manual_answers() 
     );
     assert_eq!(answers[0].component, official_key(1008));
     assert_eq!(answers[0].answers, ["1"]);
-    assert!(session.take_confirmed_answers().is_empty());
+    assert_eq!(
+        session.take_confirmed_answers(),
+        [] as [ConfirmedAnswers; 0]
+    );
 
     let mut state = state();
     state.step1.game_install = "BGEE".to_string();
@@ -675,7 +714,10 @@ fn manual_wlb_real_checked_completion_keeps_same_mod_component_attempts_separate
         session.observe_line(&format!(
             "[INFO mod_installer::parser] SUCCESSFULLY INSTALLED Bardic Wonders: {label}"
         ));
-        assert!(session.take_confirmed_answers().is_empty());
+        assert_eq!(
+            session.take_confirmed_answers(),
+            [] as [ConfirmedAnswers; 0]
+        );
         session.observe_line(&format!(
             "[INFO mod_installer::installers] Installed mod {component}"
         ));
@@ -731,6 +773,9 @@ fn manual_wlb_real_checked_completion_does_not_bless_failed_or_scripted_attempts
         session.observe_line(&format!(
             "[INFO mod_installer::installers] Installed mod {component}"
         ));
-        assert!(session.take_confirmed_answers().is_empty());
+        assert_eq!(
+            session.take_confirmed_answers(),
+            [] as [ConfirmedAnswers; 0]
+        );
     }
 }

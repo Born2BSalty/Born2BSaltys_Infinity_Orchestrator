@@ -1490,7 +1490,7 @@ mod parser_sharing_tests {
             &SettingsStore::new_default(),
             &mut wizard,
         );
-        assert!(wizard.parser_choice_phrases.is_empty());
+        assert_eq!(wizard.parser_choice_phrases, [] as [String; 0]);
     }
     #[test]
     fn parser_sharing_real_store_roundtrip_keeps_explicit_clear_over_stale_code() {
@@ -1529,7 +1529,7 @@ mod parser_sharing_tests {
             let reopened = store.load().expect("reopen explicit clear");
             assert_eq!(reopened.parser_choice_phrases, Some(Vec::new()));
             populate_wizard_state_from_workspace(&reopened, &entry, &settings, &mut wizard);
-            assert!(wizard.parser_choice_phrases.is_empty());
+            assert_eq!(wizard.parser_choice_phrases, [] as [String; 0]);
         }
         std::fs::remove_dir_all(root).expect("fixture cleanup");
     }

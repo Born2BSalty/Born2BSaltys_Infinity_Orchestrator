@@ -412,7 +412,7 @@ mod parser_sharing_tests {
             |state, _, _| {
                 spawned.set(true);
                 assert!(!state.step5.prep_ran);
-                assert!(state.step5.prep_cleaned_paths.is_empty());
+                assert_eq!(state.step5.prep_cleaned_paths, [] as [String; 0]);
                 assert_eq!(
                     state.step5.basic_install_mod_installer_version,
                     "mod_installer 15.0.1"
