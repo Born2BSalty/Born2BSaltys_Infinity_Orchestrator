@@ -18,6 +18,25 @@ pub fn populate_wizard_state_from_workspace(
     settings_store: &SettingsStore,
     wizard_state: &mut WizardState,
 ) -> Option<String> {
+    let phrase_result = workspace.parser_choice_phrases.as_ref().map_or_else(
+        || {
+            workspace
+                .last_share_code
+                .as_deref()
+                .or(entry.latest_share_code.as_deref())
+                .filter(|code| !code.trim().is_empty())
+                .map(crate::app::modlist_share::decode_share_payload)
+                .transpose()
+                .map(|payload| {
+                    payload.map_or_else(Vec::new, |payload| payload.parser_choice_phrases)
+                })
+        },
+        |phrases| {
+            crate::app::mod_installer_parser::validate_phrases(phrases).map(|()| phrases.clone())
+        },
+    );
+    let phrase_failure = phrase_result.as_ref().err().cloned();
+    wizard_state.parser_choice_phrases = phrase_result.unwrap_or_default();
     if wizard_state
         .pending_install_choice_modlist_id
         .as_deref()
@@ -96,7 +115,7 @@ pub fn populate_wizard_state_from_workspace(
     wizard_state.step3.bg2ee_anchor = None;
 
     wizard_state.step5 = crate::app::state::Step5State::default();
-    derive_failure
+    derive_failure.or(phrase_failure)
 }
 
 fn reset_scanned_step2_set(wizard_state: &mut WizardState) {
@@ -120,14 +139,18 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
         }
     }
     for (position, item) in order.iter().enumerate() {
-        let want_tp2 = item.tp2.to_ascii_uppercase();
+        let want_tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp2);
         let want_id = item.id.to_string();
         for mod_state in mods.iter_mut() {
-            if mod_state.tp_file.to_ascii_uppercase() != want_tp2 {
+            if crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) != want_tp2
+            {
                 continue;
             }
             for component in &mut mod_state.components {
-                if component.component_id == want_id {
+                if component.component_id == want_id
+                    && crate::app::wlb_inputs::parse_identity(&component.raw_line)
+                        .is_some_and(|identity| identity.language == item.language)
+                {
                     component.checked = true;
                     component.selected_order = Some(position + 1);
                     if let Some(inputs) = item.wlb_inputs.as_deref() {
@@ -140,39 +163,15 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
 }
 
 pub(crate) fn extract_wlb_inputs(raw_line: &str) -> Option<String> {
-    crate::mods::component::Component::parse_weidu_line(raw_line)
-        .ok()
-        .and_then(|c| c.wlb_inputs)
+    crate::app::wlb_inputs::marker_spec(raw_line)
+        .filter(|spec| !spec.is_empty())
+        .map(str::to_string)
 }
 
 pub(crate) fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &str) {
-    let inputs = inputs.trim();
-    if inputs.is_empty() {
-        return;
+    if let Ok(line) = crate::app::wlb_inputs::replace_marker(&component.raw_line, inputs) {
+        component.raw_line = line;
     }
-    let base = strip_wlb_marker(&component.raw_line);
-    component.raw_line = format!("{base} // @wlb-inputs: {inputs}");
-}
-
-pub(crate) fn strip_wlb_marker(raw_line: &str) -> String {
-    let marker = "@wlb-inputs:";
-    let lower = raw_line.to_ascii_lowercase();
-    lower.find(marker).map_or_else(
-        || raw_line.trim().to_string(),
-        |start| {
-            let mut head = raw_line[..start].to_string();
-            while head.ends_with(' ') || head.ends_with('\t') {
-                head.pop();
-            }
-            if head.ends_with("//") {
-                head.truncate(head.len().saturating_sub(2));
-                while head.ends_with(' ') || head.ends_with('\t') {
-                    head.pop();
-                }
-            }
-            head
-        },
-    )
 }
 
 fn recompute_mod_checked(mods: &mut [Step2ModState]) {
@@ -265,6 +264,7 @@ pub fn extract_workspace_state_from_wizard(
         step3_group_collapse,
         prompt_overrides: prior.prompt_overrides.clone(),
         last_share_code: prior.last_share_code.clone(),
+        parser_choice_phrases: Some(wizard_state.parser_choice_phrases.clone()),
         scratch_mods_folder: prior.scratch_mods_folder.clone(),
         dev_scanned_mods_folder: prior.dev_scanned_mods_folder.clone(),
         pending_destination_prep: prior.pending_destination_prep,
@@ -279,11 +279,13 @@ fn order_from_items(items: &[Step3ItemState]) -> Vec<ComponentRef> {
         .filter(|item| !item.is_parent && item.component_id != PARENT_PLACEHOLDER_ID)
         .filter_map(|item| {
             let id = item.component_id.trim().parse::<i64>().ok()?;
+            let language = crate::app::wlb_inputs::parse_identity(&item.raw_line)
+                .map_or(0, |identity| identity.language);
             let wlb_inputs = extract_wlb_inputs(&item.raw_line);
             Some(ComponentRef {
                 tp2: item.tp_file.clone(),
                 id,
-                language: 0,
+                language,
                 wlb_inputs,
             })
         })
@@ -1442,5 +1444,93 @@ mod tests {
             &root.path_of("global"),
         );
         assert_eq!(ws.step1.mods_folder, root.path_of("scratch"));
+    }
+}
+
+#[cfg(test)]
+mod parser_sharing_tests {
+    use super::*;
+
+    #[test]
+    fn parser_sharing_extraction_persists_clear_and_loading_replaces_workspace_phrases() {
+        let mut wizard = WizardState {
+            parser_choice_phrases: vec!["First workspace".to_string()],
+            ..Default::default()
+        };
+        let first = extract_workspace_state_from_wizard(&wizard, &ModlistWorkspaceState::default());
+        assert_eq!(
+            first.parser_choice_phrases,
+            Some(vec!["First workspace".to_string()])
+        );
+        let second = ModlistWorkspaceState {
+            parser_choice_phrases: Some(vec!["Second workspace".to_string()]),
+            ..Default::default()
+        };
+        let entry = ModlistEntry {
+            id: "parser-sharing-fixture".to_string(),
+            game: Game::BGEE,
+            ..Default::default()
+        };
+        populate_wizard_state_from_workspace(
+            &second,
+            &entry,
+            &SettingsStore::new_default(),
+            &mut wizard,
+        );
+        assert_eq!(wizard.parser_choice_phrases, ["Second workspace"]);
+        wizard.parser_choice_phrases.clear();
+        let cleared = extract_workspace_state_from_wizard(&wizard, &first);
+        assert_eq!(cleared.parser_choice_phrases, Some(Vec::new()));
+        wizard
+            .parser_choice_phrases
+            .push("Unrelated workspace".to_string());
+        populate_wizard_state_from_workspace(
+            &cleared,
+            &entry,
+            &SettingsStore::new_default(),
+            &mut wizard,
+        );
+        assert!(wizard.parser_choice_phrases.is_empty());
+    }
+    #[test]
+    fn parser_sharing_real_store_roundtrip_keeps_explicit_clear_over_stale_code() {
+        use crate::registry::store_workspace::WorkspaceStore;
+        let root = std::env::temp_dir().join(format!(
+            "bio_parser_clear_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let store = WorkspaceStore::new_with_path(root.join("workspace.json"));
+        let settings = SettingsStore::new_with_path(root.join("settings.json"));
+        let code = crate::app::modlist_share::encode_share_payload_text(r#"{"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":""},"parser_choice_phrases":["Stale code"]}"#).expect("retained code");
+        let entry = ModlistEntry {
+            latest_share_code: Some(code.clone()),
+            ..Default::default()
+        };
+        for retained in [None, Some(code)] {
+            let workspace = ModlistWorkspaceState {
+                parser_choice_phrases: Some(vec!["Phrase only".to_string()]),
+                last_share_code: retained,
+                ..Default::default()
+            };
+            store.save(&workspace).expect("save phrase only");
+            let loaded = store.load().expect("load phrase only");
+            assert_eq!(
+                loaded.parser_choice_phrases,
+                workspace.parser_choice_phrases
+            );
+            let mut wizard = WizardState::default();
+            wizard.parser_choice_phrases.clear();
+            let cleared = extract_workspace_state_from_wizard(&wizard, &loaded);
+            store.save(&cleared).expect("save explicit clear");
+            let reopened = store.load().expect("reopen explicit clear");
+            assert_eq!(reopened.parser_choice_phrases, Some(Vec::new()));
+            populate_wizard_state_from_workspace(&reopened, &entry, &settings, &mut wizard);
+            assert!(wizard.parser_choice_phrases.is_empty());
+        }
+        std::fs::remove_dir_all(root).expect("fixture cleanup");
     }
 }

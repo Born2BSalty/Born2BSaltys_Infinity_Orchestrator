@@ -145,6 +145,18 @@ pub fn prompt_context(
 }
 
 pub fn send_manual_input(state: &mut WizardState, term: &mut EmbeddedTerminal, reply: &str) {
+    let occurrence = term.current_capture_occurrence();
+    if let Err(error) = term.try_send_line(reply) {
+        state.step5.last_status_text = error;
+        return;
+    }
+    if let Some(occurrence) = occurrence {
+        let _ = term.record_capture_sent(
+            &occurrence,
+            reply,
+            super::answer_capture::AnswerOrigin::Manual,
+        );
+    }
     if let Some(prompt_info) = term.current_prompt_info() {
         let ctx = prompt_context(
             term,
@@ -159,7 +171,6 @@ pub fn send_manual_input(state: &mut WizardState, term: &mut EmbeddedTerminal, r
         );
         state.step5.last_auto_prompt_key = Some(prompt_info.key);
     }
-    term.send_line(reply);
     term.echo_sent(reply);
 }
 

@@ -371,6 +371,7 @@ pub(crate) fn reset_completed_install_runtime(orchestrator: &mut OrchestratorApp
         crate::ui::step5::state_step5::Step5ConsoleViewState::default();
     orchestrator.step5_prep_rx = None;
     orchestrator.step5_pending_start = None;
+    orchestrator.step5_preparation_workspace = None;
     orchestrator.abandon_install_destination_prep();
     orchestrator.abandon_workspace_destination_prep();
     orchestrator.install_running_since = None;
@@ -476,6 +477,7 @@ mod tests {
     fn snap() -> RescanSnapshot {
         RescanSnapshot {
             bgee: vec![RescanSelection {
+                language: 0,
                 tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                 component_id: "0".to_string(),
                 selected_order: Some(1),

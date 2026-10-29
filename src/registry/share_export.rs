@@ -113,6 +113,123 @@ fn pack_meta_onto_base(base: &str, meta: &ShareMeta) -> Result<String, String> {
     })
 }
 
+pub(crate) fn enrich_share_code_with_phrases(
+    code: &str,
+    phrases: &[String],
+) -> Result<String, String> {
+    let mut result: Result<(), String> = Ok(());
+    let code = rewrite_payload(code, |obj| {
+        result = (|| {
+            let existing: Vec<String> = obj.get("parser_choice_phrases").map_or_else(
+                || Ok(Vec::new()),
+                |value| {
+                    serde_json::from_value(value.clone())
+                        .map_err(|err| format!("Invalid parser phrases: {err}"))
+                },
+            )?;
+            let combined = crate::app::mod_installer_parser::union_phrases(&[&existing, phrases])?;
+            if !combined.is_empty() {
+                obj.insert(
+                    "parser_choice_phrases".to_string(),
+                    serde_json::json!(combined),
+                );
+            }
+            Ok(())
+        })();
+    })?;
+    result?;
+    Ok(code)
+}
+
+pub(crate) fn overlay_workspace_wlb(
+    code: &str,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+) -> Result<String, String> {
+    let mut result = Ok(());
+    let mut changed = false;
+    let output = rewrite_payload(code, |obj| {
+        let original = obj.clone();
+        result = overlay_workspace_logs(obj, workspace);
+        changed = *obj != original;
+    })?;
+    result?;
+    Ok(if changed { output } else { code.to_string() })
+}
+
+fn overlay_workspace_logs(
+    obj: &mut serde_json::Map<String, Value>,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+) -> Result<(), String> {
+    let iwdee = obj.get("game_install").and_then(Value::as_str) == Some("IWDEE");
+    let first = if iwdee {
+        ("iwdee", &workspace.order_iwdee)
+    } else {
+        ("bgee", &workspace.order_bgee)
+    };
+    for (slot, order) in [first, ("bg2ee", &workspace.order_bg2ee)] {
+        let mut identities = Vec::new();
+        for item in order {
+            let identity = crate::app::wlb_inputs::WlbIdentity {
+                normalized_tp2: crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp2),
+                component_id: item.id,
+                language: item.language,
+            };
+            if identities.contains(&identity) {
+                return Err(format!(
+                    "Duplicate workspace WLB component in {slot}: {} #{}",
+                    item.tp2, item.id
+                ));
+            }
+            identities.push(identity);
+        }
+        if !order.iter().any(|item| item.wlb_inputs.is_some()) {
+            continue;
+        }
+        let logs = obj
+            .get_mut("weidu_logs")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| "Share code has no WeiDU logs for WLB answers.".to_string())?;
+        let text = logs
+            .get(slot)
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("Share code has no {slot} log for WLB answers."))?;
+        let mut lines: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
+        for (item, identity) in order.iter().zip(identities) {
+            let Some(spec) = item.wlb_inputs.as_deref() else {
+                continue;
+            };
+            let matches: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter_map(|(index, line)| {
+                    (crate::app::wlb_inputs::parse_identity(line).as_ref() == Some(&identity))
+                        .then_some(index)
+                })
+                .collect();
+            let [index] = matches.as_slice() else {
+                return Err(format!(
+                    "WLB answers require exactly one {slot} row for {} #{} language {}.",
+                    item.tp2, item.id, item.language
+                ));
+            };
+            let line = &lines[*index];
+            let (body, ending) = line.strip_suffix("\r\n").map_or_else(
+                || {
+                    line.strip_suffix('\n')
+                        .map_or((line.as_str(), ""), |body| (body, "\n"))
+                },
+                |body| (body, "\r\n"),
+            );
+            lines[*index] = format!(
+                "{}{ending}",
+                crate::app::wlb_inputs::replace_marker(body, spec)?
+            );
+        }
+        logs.insert(slot.to_string(), Value::String(lines.concat()));
+    }
+    Ok(())
+}
+
 fn rewrite_payload(
     code: &str,
     edit: impl FnOnce(&mut serde_json::Map<String, Value>),
@@ -1190,3 +1307,7 @@ mod tests {
         assert!(v.get("forked_from").is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "parser_sharing_tests.rs"]
+mod parser_sharing_tests;

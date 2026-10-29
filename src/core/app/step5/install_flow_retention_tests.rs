@@ -233,6 +233,11 @@ fn process_attempt(success: bool) {
     fs::write(&current, "current diagnostics").unwrap();
     state.step1.log_raw_output_dev = true;
     let pending = PendingInstallStart {
+        run_token: 0,
+        step1: state.step1.clone(),
+        phrases: Vec::new(),
+        diagnostics_run_id: state.step5.diagnostics_run_id.clone(),
+        executable_identity: None,
         program: if success {
             std::env::current_exe().unwrap()
         } else {

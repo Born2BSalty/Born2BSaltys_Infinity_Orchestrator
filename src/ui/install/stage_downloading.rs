@@ -2580,6 +2580,20 @@ fn box_frame(palette: ThemePalette) -> egui::Frame {
 
 #[cfg(test)]
 mod tests {
+
+    struct AmbientGuard(Option<std::path::PathBuf>);
+
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
     use super::*;
     use std::collections::BTreeMap;
 
@@ -3633,6 +3647,10 @@ mod tests {
 
     #[test]
     fn gallery_install_into_an_owned_folder_replaces_that_list() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let dest = ClaimRouteDestGuard::new("gallery-replace");
         let dest_s = dest.as_string();
         let mut app =
@@ -3686,6 +3704,10 @@ mod tests {
 
     #[test]
     fn fork_route_adopts_the_fork_it_minted() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let dest = ClaimRouteDestGuard::new("fork-adopt");
         let dest_s = dest.as_string();
         let mut app =
@@ -3723,6 +3745,10 @@ mod tests {
 
     #[test]
     fn reinstall_route_adopts_the_reinstalled_list() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let dest = ClaimRouteDestGuard::new("reinstall-adopt");
         let dest_s = dest.as_string();
         let mut app =
@@ -3759,6 +3785,10 @@ mod tests {
 
     #[test]
     fn arming_into_a_folder_another_install_is_using_is_refused() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let dest = ClaimRouteDestGuard::new("busy-refused");
         let dest_s = dest.as_string();
         let mut app =
@@ -3801,6 +3831,10 @@ mod tests {
 
     #[test]
     fn arming_with_no_preview_on_an_owned_folder_is_refused_and_both_lists_survive() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let dest = ClaimRouteDestGuard::new("noprev-refused");
         let dest_s = dest.as_string();
         let mut app =

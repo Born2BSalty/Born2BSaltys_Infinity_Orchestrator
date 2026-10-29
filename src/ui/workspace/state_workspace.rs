@@ -74,6 +74,7 @@ impl Default for WeiduLogImportForm {
 pub struct RescanSelection {
     pub tp2_upper: String,
     pub component_id: String,
+    pub language: u8,
     pub selected_order: Option<usize>,
     pub wlb_inputs: Option<String>,
 }

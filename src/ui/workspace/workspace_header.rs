@@ -331,10 +331,19 @@ pub(crate) fn save_draft(orchestrator: &mut OrchestratorApp) {
                 .persistence_cycle
                 .last_saved_workspaces
                 .insert(id.clone(), extracted);
-            orchestrator.workspace_view.save_draft_flash_until =
-                Some(Instant::now() + Duration::from_millis(SAVE_FLASH_MS));
             write_selection_counts(orchestrator, &id);
-            rebake_share_code_after_save_draft(orchestrator, &id);
+            match rebake_share_code_after_save_draft(orchestrator, &id) {
+                Ok(()) => {
+                    orchestrator.workspace_view.save_draft_flash_until =
+                        Some(Instant::now() + Duration::from_millis(SAVE_FLASH_MS));
+                }
+                Err(err) => {
+                    orchestrator.workspace_view.save_draft_flash_until = None;
+                    orchestrator.notification_manager.error(format!(
+                        "Draft saved, but the share code could not be updated: {err}"
+                    ));
+                }
+            }
         }
         Err(err) => {
             warn!(target = "orchestrator", "save draft for {id} failed: {err}");
@@ -360,39 +369,75 @@ fn write_selection_counts(orchestrator: &mut OrchestratorApp, id: &str) {
         .mark_registry_dirty(Instant::now());
 }
 
-fn rebake_share_code_after_save_draft(orchestrator: &mut OrchestratorApp, id: &str) {
+fn rebake_share_code_after_save_draft(
+    orchestrator: &mut OrchestratorApp,
+    id: &str,
+) -> Result<(), String> {
     let Some(entry) = orchestrator.registry.find(id) else {
-        return;
+        return Ok(());
     };
     let meta = ShareMeta::from_entry(entry, false).with_archive_meta(
         share_export::archive_meta_for_draft(&orchestrator.wizard_state),
     );
-    match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
-        Ok(code) => {
-            if let Some(entry_mut) = orchestrator.registry.find_mut(id) {
-                entry_mut.set_latest_share_code(code);
-            }
-            orchestrator
-                .persistence_cycle
-                .mark_registry_dirty(Instant::now());
-        }
+    let code = match share_export::pack_meta(&orchestrator.wizard_state, &meta) {
+        Ok(code) => code,
         Err(err) => {
             tracing::debug!(
                 target = "orchestrator",
-                "save draft: share code re-bake for {id} skipped ({err}); \
-                 existing code retained"
+                "save draft: share code re-bake for {id} skipped ({err}); using existing code"
             );
-            if let Some(entry_mut) = orchestrator.registry.find_mut(id)
-                && let Some(code) = entry_mut.latest_share_code.clone()
-                && let Ok(stamped) = share_export::set_packed_identity(&code, &meta)
-            {
-                entry_mut.set_latest_share_code(stamped);
-                orchestrator
-                    .persistence_cycle
-                    .mark_registry_dirty(Instant::now());
-            }
+            let Some(code) = orchestrator
+                .registry
+                .find(id)
+                .and_then(|entry| entry.latest_share_code.as_deref())
+            else {
+                return Err(err);
+            };
+            let local = crate::app::mod_installer_parser::capture_local_choice_phrases()?;
+            let phrases = crate::app::mod_installer_parser::union_phrases(&[
+                &orchestrator.wizard_state.parser_choice_phrases,
+                &local,
+            ])?;
+            let workspace = workspace_state_loader::extract_workspace_state_from_wizard(
+                &orchestrator.wizard_state,
+                &orchestrator
+                    .workspace_state
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+            let overlaid = share_export::overlay_workspace_wlb(code, &workspace)?;
+            let enriched = share_export::enrich_share_code_with_phrases(&overlaid, &phrases)?;
+            share_export::set_packed_identity(&enriched, &meta)?
         }
+    };
+    let mut workspace = orchestrator
+        .workspace_state
+        .get(id)
+        .cloned()
+        .unwrap_or_default();
+    workspace.last_share_code = Some(code.clone());
+    let store = orchestrator
+        .workspace_stores
+        .entry(id.to_string())
+        .or_insert_with(|| WorkspaceStore::new_for_id(id));
+    store
+        .save(&workspace)
+        .map_err(|err| format!("Saving draft share code failed: {err}"))?;
+    orchestrator
+        .persistence_cycle
+        .last_saved_workspaces
+        .insert(id.to_string(), workspace.clone());
+    orchestrator
+        .workspace_state
+        .insert(id.to_string(), workspace);
+    if let Some(entry) = orchestrator.registry.find_mut(id) {
+        entry.set_latest_share_code(code);
+        orchestrator
+            .persistence_cycle
+            .mark_registry_dirty(Instant::now());
     }
+    Ok(())
 }
 
 fn render_fork_info_popup(
@@ -774,7 +819,7 @@ mod tests {
         let sentinel = "BIO-MODLIST-V1:SENTINEL-UNCHANGED";
         let mut app = orch_with_entry_and_code("My Modlist", sentinel);
 
-        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+        assert!(rebake_share_code_after_save_draft(&mut app, "HDRTEST00000").is_err());
 
         assert_eq!(
             app.registry
@@ -804,7 +849,7 @@ mod tests {
         let mut app = orch_with_entry_and_code("EET Essentials +++", &code);
         app.registry.find_mut("HDRTEST00000").unwrap().author = Some("Xgatt".to_string());
 
-        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000").expect("valid draft");
 
         let stamped = app
             .registry
@@ -824,7 +869,7 @@ mod tests {
     fn rebake_is_noop_for_missing_entry() {
         let mut app = orch_with_entry_and_code("X", "BIO-MODLIST-V1:NOTOUCH");
 
-        rebake_share_code_after_save_draft(&mut app, "DOES-NOT-EXIST");
+        rebake_share_code_after_save_draft(&mut app, "DOES-NOT-EXIST").expect("missing entry");
 
         assert_eq!(
             app.registry
@@ -931,7 +976,7 @@ mod tests {
         std::fs::create_dir_all(refs_path.parent().unwrap()).unwrap();
         std::fs::write(&refs_path, toml::to_string_pretty(&refs_file).unwrap()).unwrap();
 
-        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000").expect("valid draft");
 
         let code = app
             .registry
@@ -981,7 +1026,7 @@ mod tests {
             parent_placeholder: false,
         }];
 
-        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000");
+        rebake_share_code_after_save_draft(&mut app, "HDRTEST00000").expect("valid draft");
 
         let code = app
             .registry
@@ -1045,5 +1090,92 @@ mod tests {
         app.wizard_state.step2.bgee_mods.clear();
         save_draft(&mut app);
         assert_eq!(counts_of(&app), (2, 2));
+    }
+
+    #[test]
+    fn manual_wlb_draft_fallback_overlays_and_preserves_opaque_metadata() {
+        use std::io::Read;
+        let original = serde_json::json!({"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":"~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: stale"},"future_key":{"opaque":[42,"世界"]},"parser_choice_phrases":["Embedded"],"archive_meta":[{"name":"archive.zip","size":42,"hash":"abc"}],"allow_auto_install":false,"forked_from":[{"name":"Root","author":"@root"}]});
+        let code = crate::app::modlist_share::encode_share_payload_text(&original.to_string())
+            .expect("code");
+        let mut app = orch_with_entry_and_code("Captured", &code);
+        app.registry
+            .find_mut("HDRTEST00000")
+            .expect("entry")
+            .forked_from = vec![crate::app::modlist_share::ForkAncestor {
+            name: "Root".to_string(),
+            author: "@root".to_string(),
+        }];
+
+        let root = app
+            .isolated_test_config_root
+            .as_ref()
+            .expect("isolated root")
+            .clone();
+        std::fs::create_dir_all(&root).expect("fixture directory");
+        let parser = root.join("missing-parser.json");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step1.install_mode =
+            crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        app.wizard_state.step1.bgee_log_folder =
+            root.join("missing-logs").to_string_lossy().into_owned();
+        app.wizard_state.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "MOD/MOD.TP2".to_string(),
+            component_id: "17".to_string(),
+            mod_name: "Mod".to_string(),
+            component_label: "Label".to_string(),
+            raw_line: "~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: bio-json-v1:[\"a,b\",\"\"]"
+                .to_string(),
+            prompt_summary: None,
+            prompt_events: vec![],
+            selected_order: 1,
+            block_id: "MOD".to_string(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+
+        let result = crate::app::mod_installer_parser::with_parser_path_for_test(&parser, || {
+            rebake_share_code_after_save_draft(&mut app, "HDRTEST00000")
+        });
+        result.expect("draft fallback");
+        let updated = app
+            .registry
+            .find("HDRTEST00000")
+            .expect("entry")
+            .latest_share_code
+            .as_ref()
+            .expect("code");
+        let bytes = crate::app::modlist_share::base64url_decode(
+            updated.strip_prefix("BIO-MODLIST-V1:").expect("prefix"),
+        )
+        .expect("base64");
+        let mut text = String::new();
+        flate2::read::ZlibDecoder::new(bytes.as_slice())
+            .read_to_string(&mut text)
+            .expect("inflate");
+        let payload: serde_json::Value = serde_json::from_str(&text).expect("JSON");
+        for field in [
+            "future_key",
+            "archive_meta",
+            "forked_from",
+            "parser_choice_phrases",
+            "allow_auto_install",
+        ] {
+            assert_eq!(payload[field], original[field]);
+        }
+        assert!(
+            payload["weidu_logs"]["bgee"]
+                .as_str()
+                .expect("log")
+                .contains("bio-json-v1:")
+        );
+        assert_eq!(
+            app.workspace_state
+                .get("HDRTEST00000")
+                .expect("workspace")
+                .last_share_code
+                .as_ref(),
+            Some(updated)
+        );
     }
 }

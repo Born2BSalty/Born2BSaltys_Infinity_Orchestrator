@@ -332,21 +332,33 @@ fn render_share_dialog(orchestrator: &mut OrchestratorApp, ctx: &egui::Context) 
 
     match outcome {
         ShareOutcome::ExportFile => {
-            if let Some(code) = orchestrator.code_for_share(&id) {
-                let unresolved = share_actions::unresolved_mods_for_code(&code);
-                share_actions::export_modlist_file(
-                    &name,
-                    &code,
-                    &unresolved,
-                    &mut orchestrator.notification_manager,
-                );
+            match orchestrator.code_for_share(&id) {
+                Ok(Some(code)) => {
+                    let unresolved = share_actions::unresolved_mods_for_code(&code);
+                    share_actions::export_modlist_file(
+                        &name,
+                        &code,
+                        &unresolved,
+                        &mut orchestrator.notification_manager,
+                    );
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    orchestrator.notification_manager.error(err);
+                }
             }
             close_share_dialog(orchestrator);
         }
         ShareOutcome::CopyCode => {
-            if let Some(code) = orchestrator.code_for_share(&id) {
-                let unresolved = share_actions::unresolved_mods_for_code(&code);
-                share_actions::copy_share_code(ctx, &name, &code, &unresolved);
+            match orchestrator.code_for_share(&id) {
+                Ok(Some(code)) => {
+                    let unresolved = share_actions::unresolved_mods_for_code(&code);
+                    share_actions::copy_share_code(ctx, &name, &code, &unresolved);
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    orchestrator.notification_manager.error(err);
+                }
             }
             close_share_dialog(orchestrator);
         }

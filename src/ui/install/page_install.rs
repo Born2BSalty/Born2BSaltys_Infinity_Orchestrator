@@ -654,6 +654,7 @@ mod tests {
         app.wizard_state.step1.game_install = "BGEE".to_string();
         assert!(refresh_source_check(&mut app.wizard_state.step1));
         app.install_screen_state.parsed_preview = Some(ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: String::new(),
             game_install: "BGEE".to_string(),
             game_version: None,
@@ -707,6 +708,7 @@ mod tests {
 
         let mut app = orch_for_install_test();
         app.install_screen_state.parsed_preview = Some(ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: String::new(),
             game_install: "BGEE".to_string(),
             game_version: None,
@@ -753,6 +755,7 @@ mod tests {
 
         fn preview(game_install: &str) -> ModlistSharePreview {
             ModlistSharePreview {
+                parser_choice_phrases: Vec::new(),
                 bio_version: String::new(),
                 game_install: game_install.to_string(),
                 game_version: None,
@@ -830,6 +833,7 @@ mod tests {
         game_version: Option<&str>,
     ) -> crate::app::modlist_share::ModlistSharePreview {
         crate::app::modlist_share::ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: String::new(),
             game_install: game_install.to_string(),
             game_version: game_version.map(str::to_string),
@@ -1381,6 +1385,7 @@ mod tests {
 
         app.install_screen_state.import_code = "BIO-MODLIST-V1:STUB".to_string();
         app.install_screen_state.parsed_preview = Some(ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: String::new(),
             game_install: "BGEE".to_string(),
             game_version: None,

@@ -11,3 +11,8 @@ pub mod prompt_memory;
 pub mod readiness;
 pub mod scripted;
 pub mod scripted_inputs;
+
+#[cfg(test)]
+mod answer_capture_tests;
+
+pub mod answer_capture;

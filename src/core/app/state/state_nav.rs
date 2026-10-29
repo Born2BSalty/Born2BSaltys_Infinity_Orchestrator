@@ -91,6 +91,7 @@ impl WizardState {
             modlist_import_preview_source_overrides: String::new(),
             modlist_import_preview_installed_refs: String::new(),
             modlist_import_preview_mod_configs: String::new(),
+            parser_choice_phrases: Vec::new(),
             modlist_share_name: None,
             modlist_share_author: None,
             modlist_share_description: None,
@@ -134,6 +135,7 @@ impl WizardState {
         self.modlist_import_preview_installed_refs.clear();
         self.modlist_import_preview_mod_configs.clear();
         self.clear_modlist_share_provenance();
+        self.parser_choice_phrases.clear();
         self.modlist_auto_build_active = false;
         self.modlist_auto_build_waiting_for_install = false;
         self.pending_install_choice = None;

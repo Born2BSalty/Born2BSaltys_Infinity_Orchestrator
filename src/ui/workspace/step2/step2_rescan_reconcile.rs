@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use crate::app::app_step2_log::component_exclusion_reason;
 use crate::app::controller::step3_sync;
 use crate::app::state::{Step2ComponentState, Step2ModState, Step2State};
+use crate::app::wlb_inputs::parse_identity;
 use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
@@ -44,9 +45,13 @@ fn capture_tab(mods: &[Step2ModState]) -> Vec<RescanSelection> {
         let tp2_upper = mod_state.tp_file.to_ascii_uppercase();
         for component in &mod_state.components {
             if component.checked {
+                let Some(identity) = parse_identity(&component.raw_line) else {
+                    continue;
+                };
                 out.push(RescanSelection {
                     tp2_upper: tp2_upper.clone(),
                     component_id: component.component_id.clone(),
+                    language: identity.language,
                     selected_order: component.selected_order,
                     wlb_inputs: extract_wlb_inputs(&component.raw_line),
                 });
@@ -186,7 +191,7 @@ fn collect_unrestored(
                     .iter()
                     .map(move |component| (*mod_state, component))
             })
-            .filter(|(_, component)| component.component_id == entry.component_id)
+            .filter(|(_, component)| matches_selection(entry, component))
             .collect::<Vec<_>>();
         let Some(first_match) = matched_components.first().copied() else {
             out.push(UnrestoredComponent {
@@ -320,6 +325,12 @@ const fn completion_edge_fires(was_scanning: bool, scanning_now: bool) -> bool {
     was_scanning && !scanning_now
 }
 
+fn matches_selection(entry: &RescanSelection, component: &Step2ComponentState) -> bool {
+    component.component_id == entry.component_id
+        && parse_identity(&component.raw_line)
+            .is_some_and(|identity| identity.language == entry.language)
+}
+
 fn reapply_snapshot(snapshot: &[RescanSelection], mods: &mut [Step2ModState]) {
     for entry in snapshot {
         for mod_state in mods.iter_mut() {
@@ -327,7 +338,7 @@ fn reapply_snapshot(snapshot: &[RescanSelection], mods: &mut [Step2ModState]) {
                 continue;
             }
             for component in &mut mod_state.components {
-                if component.component_id == entry.component_id {
+                if matches_selection(entry, component) {
                     component.checked = true;
                     component.selected_order = entry.selected_order;
                     if let Some(inputs) = entry.wlb_inputs.as_deref() {
@@ -366,7 +377,7 @@ mod tests {
             collapsible_group: None,
             collapsible_group_is_umbrella: false,
             collapsible_group_combinable: false,
-            raw_line: String::new(),
+            raw_line: format!("~FIXTURE/FIXTURE.TP2~ #0 #{id} // Fixture"),
             prompt_summary: None,
             prompt_events: Vec::new(),
             is_meta_mode_component: false,
@@ -383,7 +394,12 @@ mod tests {
         }
     }
 
-    fn mod_state(tp: &str, comps: Vec<Step2ComponentState>) -> Step2ModState {
+    fn mod_state(tp: &str, mut comps: Vec<Step2ComponentState>) -> Step2ModState {
+        for component in &mut comps {
+            if component.raw_line.starts_with("~FIXTURE/FIXTURE.TP2~") {
+                component.raw_line = format!("~{tp}~ #0 #{} // Fixture", component.component_id);
+            }
+        }
         Step2ModState {
             name: tp.to_string(),
             tp_file: tp.to_string(),
@@ -419,12 +435,14 @@ mod tests {
     fn reapply_restores_checked_and_order_and_reports_drops() {
         let snapshot = vec![
             RescanSelection {
+                language: 0,
                 tp2_upper: "EEFIXPACK.TP2".to_string(),
                 component_id: "0".to_string(),
                 selected_order: Some(2),
                 wlb_inputs: None,
             },
             RescanSelection {
+                language: 0,
                 tp2_upper: "GONEMOD.TP2".to_string(),
                 component_id: "1".to_string(),
                 selected_order: Some(1),
@@ -449,6 +467,7 @@ mod tests {
     #[test]
     fn unrestored_reports_component_excluded_by_compatibility_with_its_reason() {
         let snapshot = vec![RescanSelection {
+            language: 0,
             tp2_upper: "OLIRP.TP2".to_string(),
             component_id: "7".to_string(),
             selected_order: Some(1),
@@ -475,6 +494,7 @@ mod tests {
     #[test]
     fn unrestored_reason_comes_from_the_first_match_that_carries_one() {
         let snapshot = vec![RescanSelection {
+            language: 0,
             tp2_upper: "MOD.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: None,
@@ -495,6 +515,7 @@ mod tests {
     #[test]
     fn unrestored_falls_back_to_generic_exclusion_reason() {
         let snapshot = vec![RescanSelection {
+            language: 0,
             tp2_upper: "MOD.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: None,
@@ -510,12 +531,14 @@ mod tests {
     fn unrestored_distinguishes_missing_mod_from_missing_component() {
         let snapshot = vec![
             RescanSelection {
+                language: 0,
                 tp2_upper: "GONE.TP2".to_string(),
                 component_id: "0".to_string(),
                 selected_order: None,
                 wlb_inputs: None,
             },
             RescanSelection {
+                language: 0,
                 tp2_upper: "MOD.TP2".to_string(),
                 component_id: "9".to_string(),
                 selected_order: None,
@@ -533,6 +556,7 @@ mod tests {
     #[test]
     fn unrestored_is_empty_when_every_saved_component_survives() {
         let snapshot = vec![RescanSelection {
+            language: 0,
             tp2_upper: "MOD.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: Some(1),
@@ -625,12 +649,14 @@ mod tests {
         let snapshot = RescanSnapshot {
             bgee: vec![
                 RescanSelection {
+                    language: 0,
                     tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                     component_id: "11".to_string(),
                     selected_order: Some(1),
                     wlb_inputs: None,
                 },
                 RescanSelection {
+                    language: 0,
                     tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                     component_id: "0".to_string(),
                     selected_order: Some(2),
@@ -817,6 +843,7 @@ mod tests {
         WorkspaceStep2State {
             pending_update_download_snapshot: Some(RescanSnapshot {
                 bgee: vec![RescanSelection {
+                    language: 0,
                     tp2_upper: bgee_tp2.to_ascii_uppercase(),
                     component_id: component_id.to_string(),
                     selected_order: Some(1),
@@ -900,12 +927,14 @@ mod tests {
         let mut view = WorkspaceStep2State {
             pending_update_download_snapshot: Some(RescanSnapshot {
                 bgee: vec![RescanSelection {
+                    language: 0,
                     tp2_upper: "BGEE_MOD.TP2".to_string(),
                     component_id: "1".to_string(),
                     selected_order: Some(1),
                     wlb_inputs: None,
                 }],
                 bg2ee: vec![RescanSelection {
+                    language: 0,
                     tp2_upper: "BG2EE_MOD.TP2".to_string(),
                     component_id: "2".to_string(),
                     selected_order: Some(2),
@@ -948,5 +977,28 @@ mod tests {
         advance_pending_download_snapshot_state(&mut view, false, true, false);
         assert!(view.rescan_snapshot.is_none());
         assert!(!view.was_scanning);
+    }
+
+    #[test]
+    fn manual_wlb_rescan_preserves_nonzero_language_and_rejects_other_language() {
+        let mut original = comp("17", true, Some(3));
+        original.raw_line =
+            "~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: bio-json-v1:[\"a,b\",\"\"]".to_string();
+        let snapshot = capture_tab(&[mod_state("MOD/MOD.TP2", vec![original])]);
+        assert_eq!(snapshot[0].language, 2);
+        let mut correct = comp("17", false, None);
+        correct.raw_line = "~MOD/MOD.TP2~ #2 #17 // Correct".to_string();
+        let mut other = comp("17", false, None);
+        other.raw_line = "~MOD/MOD.TP2~ #0 #17 // Other".to_string();
+        let mut mods = vec![mod_state("MOD/MOD.TP2", vec![correct, other])];
+        reapply_snapshot(&snapshot, &mut mods);
+        assert!(mods[0].components[0].checked);
+        assert_eq!(mods[0].components[0].selected_order, Some(3));
+        assert!(mods[0].components[0].raw_line.contains("bio-json-v1:"));
+        assert!(!mods[0].components[1].checked);
+        assert!(!mods[0].components[1].raw_line.contains("@wlb-inputs"));
+        assert!(collect_unrestored(&snapshot, &mods).is_empty());
+        mods[0].components.remove(0);
+        assert_eq!(collect_unrestored(&snapshot, &mods).len(), 1);
     }
 }

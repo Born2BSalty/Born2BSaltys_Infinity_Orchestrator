@@ -35,21 +35,15 @@ pub fn maybe_trigger_resume_scan(
 
     orchestrator.wizard_state.step1.mods_folder = folder;
 
-    let mut bgee = snapshot_from_order(&workspace.order_bgee);
-    if !workspace.order_iwdee.is_empty() {
-        let base = bgee.len();
-        for (i, sel) in snapshot_from_order(&workspace.order_iwdee)
-            .into_iter()
-            .enumerate()
-        {
-            bgee.push(RescanSelection {
-                selected_order: Some(base + i + 1),
-                ..sel
-            });
-        }
-    }
+    let first_order = if orchestrator.wizard_state.step1.game_install == "IWDEE"
+        && !workspace.order_iwdee.is_empty()
+    {
+        &workspace.order_iwdee
+    } else {
+        &workspace.order_bgee
+    };
     let snapshot = RescanSnapshot {
-        bgee,
+        bgee: snapshot_from_order(first_order),
         bg2ee: snapshot_from_order(&workspace.order_bg2ee),
     };
 
@@ -122,6 +116,7 @@ fn snapshot_from_order(order: &[ComponentRef]) -> Vec<RescanSelection> {
         .map(|(i, c)| RescanSelection {
             tp2_upper: c.tp2.to_ascii_uppercase(),
             component_id: c.id.to_string(),
+            language: c.language,
             selected_order: Some(i + 1),
             wlb_inputs: c.wlb_inputs.clone(),
         })
@@ -479,5 +474,61 @@ mod tests {
             ws.step3.bgee_items.iter().any(|i| i.is_parent),
             "BIO's build_step3_items emitted the parent header row"
         );
+    }
+
+    #[test]
+    fn manual_wlb_resume_iwdee_prefers_canonical_and_falls_back_without_duplicates() {
+        for canonical in [false, true] {
+            let mut app = OrchestratorApp::new_isolated_for_test(if canonical {
+                "manual-wlb-iwdee-canonical"
+            } else {
+                "manual-wlb-iwdee-fallback"
+            });
+            app.wizard_state.step1.game_install = "IWDEE".to_string();
+            let legacy = ComponentRef {
+                tp2: "OLD/OLD.TP2".to_string(),
+                id: 1,
+                language: 0,
+                wlb_inputs: Some("old".to_string()),
+            };
+            let current = ComponentRef {
+                tp2: "MOD/MOD.TP2".to_string(),
+                id: 17,
+                language: 2,
+                wlb_inputs: Some("bio-json-v1:[\"a,b\",\"\"]".to_string()),
+            };
+            let workspace = ModlistWorkspaceState {
+                mods_source: ModsSource::InstallationFolder,
+                scratch_mods_folder: Some(
+                    std::env::temp_dir()
+                        .join(format!(
+                            "bio-wlb-no-scan-{}-{canonical}",
+                            std::process::id()
+                        ))
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                order_bgee: vec![legacy.clone()],
+                order_iwdee: if canonical {
+                    vec![current.clone()]
+                } else {
+                    vec![]
+                },
+                ..Default::default()
+            };
+            maybe_trigger_resume_scan(&mut app, &workspace);
+            let snapshot = app
+                .workspace_view
+                .step2
+                .rescan_snapshot
+                .as_ref()
+                .expect("armed snapshot");
+            assert_eq!(snapshot.bgee.len(), 1);
+            let expected = if canonical { current } else { legacy };
+            assert_eq!(snapshot.bgee[0].tp2_upper, expected.tp2);
+            assert_eq!(snapshot.bgee[0].language, expected.language);
+            assert_eq!(snapshot.bgee[0].wlb_inputs, expected.wlb_inputs);
+            assert!(snapshot.bg2ee.is_empty());
+        }
     }
 }

@@ -66,9 +66,12 @@ fn late_tool_versions_preserve_final_failure_report_and_previous_runs() {
     assert!(first.is_file());
     state.step5.last_status_text = "Install start failed: missing executable".to_string();
     update(&mut state, "start_failed", None);
-    state.step5.basic_install_tool_versions = Some(BasicInstallToolVersionLookup(Arc::new(
-        Mutex::new(Some(("installer 1.0".to_string(), "WeiDU 249".to_string()))),
-    )));
+    state.step5.basic_install_mod_installer_version = "installer 1.0".to_string();
+    state.step5.basic_install_tool_versions =
+        Some(BasicInstallToolVersionLookup(Arc::new(Mutex::new(Some((
+            "must not overwrite verified installer".to_string(),
+            "WeiDU 249".to_string(),
+        ))))));
     poll(&mut state, None);
     let report = fs::read_to_string(&first).unwrap();
     for expected in [

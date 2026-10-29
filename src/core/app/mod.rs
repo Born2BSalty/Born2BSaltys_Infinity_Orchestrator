@@ -104,6 +104,7 @@ pub mod github_forks_list;
 pub mod github_release_list;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
+pub mod mod_installer_parser;
 pub mod mod_source_history;
 #[path = "step2/update/mod_update_locks.rs"]
 pub mod mod_update_locks;
@@ -156,3 +157,7 @@ pub mod terminal;
 pub mod tp2_component_begin;
 #[path = "step2/update/versions_view.rs"]
 pub mod versions_view;
+pub mod wlb_inputs;
+
+#[cfg(test)]
+mod wlb_inputs_tests;

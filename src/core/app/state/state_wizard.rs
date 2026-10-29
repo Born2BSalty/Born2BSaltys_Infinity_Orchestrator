@@ -27,6 +27,7 @@ pub struct WizardState<Flag = bool> {
     pub modlist_import_preview_source_overrides: String,
     pub modlist_import_preview_installed_refs: String,
     pub modlist_import_preview_mod_configs: String,
+    pub(crate) parser_choice_phrases: Vec<String>,
     pub(crate) modlist_share_name: Option<String>,
     pub(crate) modlist_share_author: Option<String>,
     pub(crate) modlist_share_description: Option<String>,

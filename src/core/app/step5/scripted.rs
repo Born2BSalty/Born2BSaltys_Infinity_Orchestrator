@@ -15,12 +15,27 @@ pub(super) fn send_scripted(
     prompt_cycle_signature: &str,
     now_ms: u64,
 ) -> bool {
-    let Some(scripted) = term.take_next_scripted_input_for_current() else {
+    let Some(scripted) = term
+        .peek_next_scripted_input_for_current()
+        .map(str::to_string)
+    else {
         return false;
     };
+    let occurrence = term.current_capture_occurrence();
+    if let Err(error) = term.try_send_line(&scripted) {
+        state.step5.last_status_text = error;
+        return false;
+    }
+    term.take_next_scripted_input_for_current();
+    if let Some(occurrence) = occurrence {
+        let _ = term.record_capture_sent(
+            &occurrence,
+            &scripted,
+            super::answer_capture::AnswerOrigin::Scripted,
+        );
+    }
     let ctx = super::auto_answer::prompt_context(term, prompt_kind.to_string(), "bio_inputs");
     prompt_memory::remember_answer_with_context(prompt_key, &scripted, preview_line, &ctx);
-    term.send_line(&scripted);
     term.echo_sent(&scripted);
     term.append_marker(&format!(
         "Scripted @wlb-input sent {}",
@@ -96,7 +111,18 @@ pub(super) fn try_send_json_fallback(
         return false;
     };
     let matched_label = prompt_memory::display_name(prompt_key);
-    term.send_line(&answer);
+    let occurrence = term.current_capture_occurrence();
+    if let Err(error) = term.try_send_line(&answer) {
+        state.step5.last_status_text = error;
+        return false;
+    }
+    if let Some(occurrence) = occurrence {
+        let _ = term.record_capture_sent(
+            &occurrence,
+            &answer,
+            super::answer_capture::AnswerOrigin::JsonFallback,
+        );
+    }
     term.echo_sent(&answer);
     let ctx = super::auto_answer::prompt_context(term, prompt_kind.to_string(), "json_fallback");
     prompt_memory::remember_answer_with_context(prompt_key, &answer, preview_line, &ctx);

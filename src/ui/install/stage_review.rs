@@ -857,6 +857,7 @@ mod tests {
     #[test]
     fn display_name_prefers_the_typed_name_then_the_code_then_the_fallback() {
         let mut preview = crate::app::modlist_share::ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: String::new(),
             game_install: "EET".to_string(),
             game_version: None,

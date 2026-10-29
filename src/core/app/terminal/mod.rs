@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::step5::answer_capture::{CaptureComponentKey, CaptureSession};
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::process::{Child, ChildStdin};
@@ -57,6 +58,9 @@ pub struct EmbeddedTerminal {
     boundary_event_count: u64,
     boundary_scan_tail: String,
     child_env: Vec<(String, String)>,
+    capture_session: Option<CaptureSession>,
+    typed_scripted_inputs: Vec<(CaptureComponentKey, VecDeque<String>)>,
+    exit_pending: Option<i32>,
     scripted_inputs_by_component: HashMap<String, VecDeque<String>>,
     current_component_key: Option<String>,
     current_component_tp2: Option<String>,
@@ -93,6 +97,9 @@ impl EmbeddedTerminal {
             boundary_event_count: 0,
             boundary_scan_tail: String::new(),
             child_env: Vec::new(),
+            capture_session: None,
+            typed_scripted_inputs: Vec::new(),
+            exit_pending: None,
             scripted_inputs_by_component: HashMap::new(),
             current_component_key: None,
             current_component_tp2: None,
@@ -111,3 +118,6 @@ impl EmbeddedTerminal {
         })
     }
 }
+
+#[cfg(test)]
+mod answer_capture_tests;

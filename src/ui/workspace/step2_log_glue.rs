@@ -566,7 +566,11 @@ mod tests {
             hidden_components: Vec::new(),
             components: component_ids
                 .iter()
-                .map(|id| unchecked_component(id))
+                .map(|id| {
+                    let mut component = unchecked_component(id);
+                    component.raw_line = format!("~{name}/SETUP-{name}.TP2~ #0 #{id} // Fixture");
+                    component
+                })
                 .collect(),
         }
     }
@@ -1091,6 +1095,7 @@ mod tests {
 
     fn selection(tp2_upper: &str, component_id: &str, order: usize) -> RescanSelection {
         RescanSelection {
+            language: 0,
             tp2_upper: tp2_upper.to_string(),
             component_id: component_id.to_string(),
             selected_order: Some(order),
@@ -1553,6 +1558,7 @@ mod tests {
 
     fn one_selection() -> RescanSelection {
         RescanSelection {
+            language: 0,
             tp2_upper: "SETUP-X.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: Some(0),

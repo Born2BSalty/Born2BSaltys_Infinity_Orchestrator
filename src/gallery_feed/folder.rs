@@ -473,3 +473,24 @@ mod tests {
         assert_eq!(check_folder(&root.0), Ok(1));
     }
 }
+
+#[cfg(test)]
+mod parser_sharing_tests {
+    use super::*;
+
+    #[test]
+    fn parser_sharing_folder_accepts_enriched_canonical_archive() {
+        let code = crate::registry::share_export::enrich_share_code_with_phrases(
+            &crate::ui::install::gallery::catalog::entries()[0].code,
+            &["Imported 世界".to_string()],
+        )
+        .expect("enrich");
+        let bytes = modlist_biolist::build_biolist(&code).expect("BIO export");
+        assert_eq!(compare_biolist(&bytes, &code), Ok(()));
+        let original_bytes = modlist_biolist::build_biolist(
+            &crate::ui::install::gallery::catalog::entries()[0].code,
+        )
+        .expect("original archive");
+        assert!(compare_biolist(&original_bytes, &code).is_err());
+    }
+}

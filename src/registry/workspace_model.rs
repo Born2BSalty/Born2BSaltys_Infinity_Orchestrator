@@ -55,6 +55,9 @@ pub struct ModlistWorkspaceState {
 
     pub last_share_code: Option<String>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) parser_choice_phrases: Option<Vec<String>>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scratch_mods_folder: Option<String>,
 
@@ -80,6 +83,10 @@ impl ModlistWorkspaceState {
             && self.step3_group_collapse.is_empty()
             && self.prompt_overrides.is_empty()
             && self.last_share_code.is_none()
+            && self
+                .parser_choice_phrases
+                .as_ref()
+                .is_none_or(Vec::is_empty)
             && self.scratch_mods_folder.is_none()
             && self.dev_scanned_mods_folder.is_none()
             && self.pending_destination_prep.is_none()

@@ -22,6 +22,9 @@ const FAILURE_TAIL_CHARS: usize = 12_000;
 const TOOL_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn begin(state: &mut WizardState, run_id: &str) {
+    state.step5.basic_install_tool_versions = None;
+    state.step5.basic_install_mod_installer_version = "collecting...".to_string();
+    state.step5.basic_install_weidu_version = "collecting...".to_string();
     let Some(path) = report_path(&state.step1, run_id) else {
         state.step5.basic_install_report_path = None;
         return;
@@ -30,16 +33,10 @@ pub fn begin(state: &mut WizardState, run_id: &str) {
         let _ = fs::create_dir_all(parent);
     }
     state.step5.basic_install_report_path = Some(path);
-    state.step5.basic_install_mod_installer_version = "collecting...".to_string();
-    state.step5.basic_install_weidu_version = "collecting...".to_string();
     state.step5.basic_install_workspace_case_sensitive =
         filesystem_case_sensitivity(state.step5.basic_install_report_path.as_deref()).to_string();
     state.step5.basic_install_report_state = "starting".to_string();
-    start_tool_version_lookup(
-        &mut state.step5,
-        state.step1.mod_installer_binary.clone(),
-        state.step1.weidu_binary.clone(),
-    );
+    start_tool_version_lookup(&mut state.step5, state.step1.weidu_binary.clone());
     write(state, "starting", None);
 }
 
@@ -55,11 +52,10 @@ pub fn poll(state: &mut WizardState, terminal: Option<&EmbeddedTerminal>) {
     let Ok(mut results) = results.0.lock() else {
         return;
     };
-    let Some((mod_installer, weidu)) = results.take() else {
+    let Some((_, weidu)) = results.take() else {
         return;
     };
     drop(results);
-    state.step5.basic_install_mod_installer_version = mod_installer;
     state.step5.basic_install_weidu_version = weidu;
     state.step5.basic_install_tool_versions = None;
     let report_state = state.step5.basic_install_report_state.clone();
@@ -345,29 +341,21 @@ fn command_version(mut command: Command, timeout: Duration) -> String {
     }
 }
 
-fn start_tool_version_lookup(
-    step5: &mut Step5State,
-    mod_installer_path: String,
-    weidu_path: String,
-) {
+fn start_tool_version_lookup(step5: &mut Step5State, weidu_path: String) {
     let results = Arc::new(Mutex::new(None));
     let worker_results = Arc::clone(&results);
     let spawn_result = std::thread::Builder::new()
         .name("bio-tool-version-report".to_string())
         .spawn(move || {
-            let mod_installer = tool_version(&mod_installer_path);
             let weidu = tool_version(&weidu_path);
             if let Ok(mut result) = worker_results.lock() {
-                *result = Some((mod_installer, weidu));
+                *result = Some((String::new(), weidu));
             }
         });
     match spawn_result {
         Ok(_) => step5.basic_install_tool_versions = Some(BasicInstallToolVersionLookup(results)),
         Err(error) => {
             let message = format!("version lookup failed: {error}");
-            step5
-                .basic_install_mod_installer_version
-                .clone_from(&message);
             step5.basic_install_weidu_version = message;
             step5.basic_install_tool_versions = None;
         }

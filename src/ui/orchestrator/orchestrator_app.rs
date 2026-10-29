@@ -15,8 +15,7 @@ use crate::app::app_step1_github_oauth::GitHubOAuthFlowResult;
 use crate::app::app_step2_update_download::DownloadPoll;
 use crate::app::state::{DownloadOrigin, WizardState};
 use crate::app::step2_worker::Step2ScanEvent;
-use crate::app::step5::install_flow::PendingInstallStart;
-use crate::app::step5::log_files::TargetPrepResult;
+use crate::app::step5::install_flow::{InstallPreparation, PendingInstallStart};
 use crate::app::terminal::EmbeddedTerminal;
 use crate::app::{
     app_step2_saved_log_flow, app_step2_scan, app_step2_update_check, app_step2_update_download,
@@ -98,6 +97,8 @@ impl PostInstallResetGate {
         matches!(self, Self::Pending)
     }
 }
+
+pub(crate) struct Step5PreparationWorkspace(Option<String>);
 
 pub(crate) struct PendingFolderDelete {
     pub(crate) modlist_name: String,
@@ -281,8 +282,9 @@ pub struct OrchestratorApp {
     pub step5_terminal: Option<EmbeddedTerminal>,
     pub step5_terminal_error: Option<String>,
     pub step5_console_view: Step5ConsoleViewState,
-    pub(crate) step5_prep_rx: Option<Receiver<Result<TargetPrepResult, String>>>,
+    pub(crate) step5_prep_rx: Option<Receiver<Result<InstallPreparation, String>>>,
     pub(crate) step5_pending_start: Option<PendingInstallStart>,
+    pub(crate) step5_preparation_workspace: Option<Step5PreparationWorkspace>,
 
     pub(crate) step2_scan_rx: Option<Receiver<Step2ScanEvent>>,
     pub(crate) step2_cancel: Option<Arc<AtomicBool>>,
@@ -436,6 +438,7 @@ impl OrchestratorApp {
             step5_console_view: Step5ConsoleViewState::default(),
             step5_prep_rx: None,
             step5_pending_start: None,
+            step5_preparation_workspace: None,
 
             step2_scan_rx: None,
             step2_cancel: None,
@@ -609,6 +612,16 @@ impl OrchestratorApp {
         );
         if rx.is_some() {
             self.install_size_worker_rx = rx;
+        }
+        if let Some(code) = self
+            .registry
+            .find(&id)
+            .and_then(|entry| entry.latest_share_code.clone())
+            && let Some(workspace) = self.workspace_state.get_mut(&id)
+        {
+            workspace.last_share_code = Some(code);
+            self.persistence_cycle
+                .mark_workspace_dirty(&id, Instant::now());
         }
 
         if !from_workspace {
@@ -960,12 +973,49 @@ impl OrchestratorApp {
     }
 
     fn poll_step5_before_render(&mut self) -> bool {
+        if self
+            .step5_preparation_workspace
+            .as_ref()
+            .is_some_and(|workspace| workspace.0 != self.workspace_view.loaded_workspace_id)
+        {
+            self.step5_prep_rx = None;
+            self.step5_pending_start = None;
+            self.wizard_state.step5.prep_running = false;
+            self.step5_preparation_workspace = None;
+        }
+        let owner = self
+            .workspace_view
+            .loaded_workspace_id
+            .clone()
+            .or_else(|| self.active_install_modlist_id.clone());
+        if self
+            .wizard_state
+            .step5
+            .capture_run
+            .as_ref()
+            .is_some_and(|run| run.workspace_id != owner)
+        {
+            self.wizard_state.step5.capture_run = None;
+            if let Some(term) = self.step5_terminal.as_mut() {
+                term.invalidate_capture();
+            }
+        }
+        if self.wizard_state.step5.capture_run.is_none()
+            && let Some(term) = self.step5_terminal.as_mut()
+        {
+            term.invalidate_capture();
+        }
+        let revision = self.wizard_state.step5.capture_revision;
         let mut step5_requested_repaint = false;
         step5_requested_repaint |= app_step5_flow::poll_step5_terminal(
             &mut self.wizard_state,
             &mut self.step5_terminal,
             &mut self.step5_terminal_error,
         );
+        if self.wizard_state.step5.capture_revision != revision {
+            self.persist_captured_answers();
+        }
+        let prior_run = self.wizard_state.step5.active_run_id;
         step5_requested_repaint |= app_step5_flow::poll_step5_prep(
             &mut self.wizard_state,
             &mut self.step5_prep_rx,
@@ -973,17 +1023,73 @@ impl OrchestratorApp {
             &mut self.step5_terminal_error,
             &mut self.step5_pending_start,
         );
+        if self.wizard_state.step5.active_run_id != prior_run {
+            self.bind_capture_owner();
+        }
         step5_requested_repaint
     }
 
+    fn bind_capture_owner(&mut self) {
+        let owner = self
+            .workspace_view
+            .loaded_workspace_id
+            .clone()
+            .or_else(|| self.active_install_modlist_id.clone());
+        if let Some(run) = self.wizard_state.step5.capture_run.as_mut() {
+            run.workspace_id = owner;
+            let session = crate::app::step5::answer_capture::CaptureSession::new(
+                run.clone(),
+                crate::app::step5::answer_capture::frozen_components(&self.wizard_state),
+            );
+            if let Some(term) = self.step5_terminal.as_mut() {
+                term.set_capture_session(session);
+            }
+        }
+    }
+
+    fn persist_captured_answers(&mut self) {
+        let Some(id) = self
+            .wizard_state
+            .step5
+            .capture_run
+            .as_ref()
+            .and_then(|run| run.workspace_id.clone())
+        else {
+            return;
+        };
+        let prior = self.workspace_state.get(&id).cloned().unwrap_or_default();
+        let captured =
+            crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+                &self.wizard_state,
+                &prior,
+            );
+        self.workspace_state.insert(id.clone(), captured);
+        self.workspace_stores
+            .entry(id.clone())
+            .or_insert_with(|| WorkspaceStore::new_for_id(&id));
+        self.persistence_cycle
+            .mark_workspace_dirty(&id, Instant::now());
+        self.flush_all_now();
+    }
+
     fn start_step5_after_render(&mut self) -> bool {
-        app_step5_flow::start_if_requested(
+        let prior_run = self.wizard_state.step5.active_run_id;
+        let started = app_step5_flow::start_if_requested(
             &mut self.wizard_state,
             &mut self.step5_terminal,
             &mut self.step5_terminal_error,
             &mut self.step5_prep_rx,
             &mut self.step5_pending_start,
-        )
+        );
+        if self.wizard_state.step5.active_run_id != prior_run {
+            self.bind_capture_owner();
+        }
+        if started {
+            self.step5_preparation_workspace = Some(Step5PreparationWorkspace(
+                self.workspace_view.loaded_workspace_id.clone(),
+            ));
+        }
+        started
     }
 
     fn step5_needs_repaint(&self) -> bool {
