@@ -24,7 +24,6 @@ pub(crate) fn render_list_pane(
     palette: ThemePalette,
 ) {
     let selection_before = selection_snapshot(state);
-    let answers_before = crate::ui::step2::installer_answers_step2::checked_snapshot(state);
     ui.scope_builder(egui::UiBuilder::new().max_rect(left_rect), |ui| {
         ui.set_clip_rect(left_rect);
         egui::Frame::group(ui.style())
@@ -58,9 +57,6 @@ pub(crate) fn render_list_pane(
         )
     {
         state.step2.scan_status = format!("Compat rules load failed: {err}");
-    }
-    if selection_changed {
-        crate::ui::step2::installer_answers_step2::open_newly_selected(state, &answers_before);
     }
 }
 
@@ -128,12 +124,7 @@ fn render_mods_scroll_content(
     state.step2.next_selection_order = next_selection_order;
     state.step2.jump_to_selected_requested = jump_to_selected_requested;
     if let Some((title, text)) = prompt_popup {
-        let opened = state.step2.selected.clone().is_some_and(|selection| {
-            crate::ui::step2::installer_answers_step2::open_selected(state, &selection)
-        });
-        if !opened {
-            crate::ui::step2::prompt_popup_step2::open_text_prompt_popup(state, title, text);
-        }
+        crate::ui::step2::prompt_popup_step2::open_text_prompt_popup(state, title, text);
     }
 }
 

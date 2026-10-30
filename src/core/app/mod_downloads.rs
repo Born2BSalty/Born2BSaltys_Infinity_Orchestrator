@@ -1967,19 +1967,12 @@ mod tests {
                 continue;
             };
             let normalized = channel.trim().to_ascii_lowercase();
-            assert_ne!(
-                normalized, "pre-release",
-                "{:?} still uses pre-release",
-                overlay.tp2
-            );
-            assert_ne!(
-                normalized, "release",
-                "{:?} still uses release",
-                overlay.tp2
-            );
-            assert_ne!(
-                normalized, "releases",
-                "{:?} still uses releases",
+            assert!(
+                matches!(
+                    normalized.as_str(),
+                    "" | "pre-release" | "preonly" | "master" | "ifeellucky"
+                ),
+                "{:?} uses unsupported channel {channel:?}",
                 overlay.tp2
             );
         }

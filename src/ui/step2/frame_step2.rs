@@ -214,7 +214,6 @@ fn render_step2_content(
         crate::ui::shared::redesign_tokens::ThemePalette::Dark,
     );
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, state);
-    crate::ui::step2::installer_answers_panel_step2::render(ui.ctx(), state, palette);
 }
 
 fn draw_splitter_lines(ui: &egui::Ui, layout: &Step2Layout) {

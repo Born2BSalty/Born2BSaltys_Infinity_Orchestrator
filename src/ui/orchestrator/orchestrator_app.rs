@@ -61,12 +61,6 @@ use crate::ui::workspace::step5::state_workspace_step5::WorkspaceStep5State;
 
 const BIO_SETTINGS_DEBOUNCE_MS: u64 = 1000;
 
-#[derive(Debug, Clone, Default)]
-pub struct ToolVersionCache {
-    pub weidu_version: Option<String>,
-    pub mod_installer_version: Option<String>,
-}
-
 struct RegistryLoad {
     registry: ModlistRegistry,
     registry_error: Option<RegistryError>,
@@ -256,7 +250,6 @@ pub struct OrchestratorApp {
     pub redesign_settings: RedesignSettings,
     pub settings_screen_state: SettingsScreenState,
     pub(crate) github_auth_rx: Option<Receiver<GitHubOAuthFlowResult>>,
-    pub tool_version_cache: ToolVersionCache,
     pub accounts_stub_hint: Option<String>,
     pub bio_settings_last_saved: AppSettings,
     pub bio_settings_last_dirty_at: Option<Instant>,
@@ -418,7 +411,6 @@ impl OrchestratorApp {
             redesign_settings,
             settings_screen_state: SettingsScreenState::default(),
             github_auth_rx: None,
-            tool_version_cache: ToolVersionCache::default(),
             accounts_stub_hint: None,
             bio_settings_last_saved: bio_settings_snapshot,
             bio_settings_last_dirty_at: None,

@@ -5,6 +5,8 @@ pub mod block_selection_step3;
 pub mod content_step3;
 pub mod format_step3;
 pub mod frame_step3;
+pub mod installer_answers_panel_step3;
+pub mod installer_answers_step3;
 pub mod list_rows_step3;
 pub mod list_step3;
 pub mod move_selection_step3;

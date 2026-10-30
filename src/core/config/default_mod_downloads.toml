@@ -10,6 +10,300 @@
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "A7-TextureConvert"
+tp2 = "A7-TextureConvert"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-TextureConvert"
+  repo = "Argent77/A7-TextureConvert"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Bags of Torment"
+tp2 = "BagsOfTorment"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-BagsOfTorment"
+  repo = "Argent77/A7-BagsOfTorment"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Custom Kits: Spellsword"
+tp2 = "A7-CustomKits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-CustomKits"
+  repo = "Argent77/A7-CustomKits"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "DLC Builder"
+tp2 = "DlcBuilder"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-DlcBuilder"
+  repo = "Argent77/A7-DlcBuilder"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Fix area-related crashes"
+tp2 = "A7-BiffedAreasFix"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-BiffedAreasFix"
+  repo = "Argent77/A7-BiffedAreasFix"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Freely resizeable combat log for PST:EE"
+tp2 = "A7-ResizeableCombatLog"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-ResizeableCombatLog"
+  repo = "Argent77/A7-ResizeableCombatLog"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Level Up Icon Tweaks"
+tp2 = "A7-LevelUpTweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-LevelUpTweaks"
+  repo = "Argent77/A7-LevelUpTweaks"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mirror Game Maps"
+tp2 = "MirrorMaps"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/Mirror-Game-Maps"
+  repo = "Argent77/Mirror-Game-Maps"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "NPC Generator"
+tp2 = "A7-NPCGenerator"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-NPCGenerator"
+  repo = "Argent77/A7-NPCGenerator"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Protagonist-Be-Gone!"
+tp2 = "A7-Protagonist-Be-Gone"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-Protagonist-Be-Gone"
+  repo = "Argent77/A7-Protagonist-Be-Gone"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "PS:T Unfinished Business - Reloaded"
+tp2 = "PST-UB-reloaded"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/PST-UB-reloaded"
+  repo = "Argent77/PST-UB-reloaded"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Recolored character's toolbar buttons for BG:EE and BG2:EE"
+tp2 = "recoloredbuttons"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-recoloredbuttons"
+  repo = "Argent77/A7-recoloredbuttons"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Skip Chateau Irenicus"
+tp2 = "SkipChateauIrenicus"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-SkipChateauIrenicus"
+  repo = "Argent77/A7-SkipChateauIrenicus"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Chaos Sorcerer: A Wild Magic Kit for Sorcerers"
+tp2 = "A7-ChaosSorcerer"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-ChaosSorcerer"
+  repo = "Argent77/A7-ChaosSorcerer"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Miscellaneous Tweaks"
 tp2 = "A7-MiscTweaks"
 aliases = []
@@ -348,6 +642,741 @@ config_files = []
 #////////////////////////////////////////////////#
 #//                Gibberlings3                //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Ajantis Portrait Pack"
+tp2 = "ajantisportraitpack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Ajantis_Portrait_Pack"
+  repo = "Gibberlings3/Ajantis_Portrait_Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Bardic Appraisal"
+tp2 = "cd_appraiser"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Bardic_Appraisal"
+  repo = "Gibberlings3/Bardic_Appraisal"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "berelinde's Dragon Age: Origins Style Portraits"
+tp2 = "da_portraits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Dragon_Age_Origins_Style_Portraits"
+  repo = "Gibberlings3/Dragon_Age_Origins_Style_Portraits"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BG1 NPC Portrait Pack"
+tp2 = "bg1npc_portrait_pack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/BG1NPC_Portrait_Pack"
+  repo = "Gibberlings3/BG1NPC_Portrait_Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BG2 creature inventory checker"
+tp2 = "BG2_Creature_Inventory_Checker"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/BG2_Creature_Inventory_Checker"
+  repo = "Gibberlings3/BG2_Creature_Inventory_Checker"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BG2 FixPack"
+tp2 = "bg2fixpack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/BG2-Fixpack"
+  repo = "Gibberlings3/BG2-Fixpack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BGII Alternate Soundtrack"
+tp2 = "AceAltMusic"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/BG2_Alternate_Soundtrack"
+  repo = "Gibberlings3/BG2_Alternate_Soundtrack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Blonde Imoen"
+tp2 = "blondeimmy"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/BlondeImoen"
+  repo = "Gibberlings3/BlondeImoen"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Continuous NPC Portraits"
+tp2 = "cdportraits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Continuous_NPC_Portraits"
+  repo = "Gibberlings3/Continuous_NPC_Portraits"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Corthala Romantique"
+tp2 = "corthalaromantique"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Corthala_Romantique"
+  repo = "Gibberlings3/Corthala_Romantique"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Description Icons for IWD Items"
+tp2 = "cd_iwd_desc"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/iwd_description_icons"
+  repo = "Gibberlings3/iwd_description_icons"
+  commit = ""
+  tag = ""
+  branch = "pre-release"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "EE Soundset Tool"
+tp2 = "cd_soundsets"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/EE_soundset_tool"
+  repo = "Gibberlings3/EE_soundset_tool"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Framed"
+tp2 = "framed"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/framed"
+  repo = "Gibberlings3/framed"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Full Plate and Packing Steel"
+tp2 = "fullplate"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Full_Plate_and_Packing_Steel"
+  repo = "Gibberlings3/Full_Plate_and_Packing_Steel"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "G3 Debugging Suite"
+tp2 = "G3_Debugging_Suite"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/G3_Debugging_Suite"
+  repo = "Gibberlings3/G3_Debugging_Suite"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Geomantic Sorcerer Kit"
+tp2 = "druidsor"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Geomantic_Sorcerer"
+  repo = "Gibberlings3/Geomantic_Sorcerer"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Hannah's Portrait Pack"
+tp2 = "hannah_portraits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Hannahs_Portrait_Pack"
+  repo = "Gibberlings3/Hannahs_Portrait_Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Icewind Dale Crossmod Banter Pack"
+tp2 = "iwdcrossmodpack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/iwdcrossmod"
+  repo = "Gibberlings3/iwdcrossmod"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Icewind Dale Fixpack"
+tp2 = "iwdfixpack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/iwdfixpack"
+  repo = "Gibberlings3/iwdfixpack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Item Upgrade for Icewind Dale"
+tp2 = "iu_iwd"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/itemupgrade_iwd"
+  repo = "Gibberlings3/itemupgrade_iwd"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IWD-in-BG2 Fixpack/Tweaks"
+tp2 = "ice_tutu_tweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/IWD-in-BG2_Fixpack"
+  repo = "Gibberlings3/IWD-in-BG2_Fixpack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IWD2 Tweak pack"
+tp2 = "iwd2tweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/iwd2tweaks"
+  repo = "Gibberlings3/iwd2tweaks"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IWDification translate"
+tp2 = "iwdification_translate"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/iwdification_translator"
+  repo = "Gibberlings3/iwdification_translator"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IWDSpells"
+tp2 = "dw_iwdspells"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/IWDSpells"
+  repo = "Gibberlings3/IWDSpells"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "P&P Celestials"
+tp2 = "celestials"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/PnP_Celestials"
+  repo = "Gibberlings3/PnP_Celestials"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Plasmocat's \"Picks of the Litter\" Portrait Pack"
+tp2 = "picks_of_the_litter"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Plasmocats_Picks_of_the_Litter_Portrait_Pack"
+  repo = "Gibberlings3/Plasmocats_Picks_of_the_Litter_Portrait_Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Plasmocat's BG NPC Portraits in BG2 Style"
+tp2 = "plasmobg1bg2"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Plasmocats_BG_NPC_Portraits_in_BG2_Style"
+  repo = "Gibberlings3/Plasmocats_BG_NPC_Portraits_in_BG2_Style"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Plasmocat's Portrait Pack"
+tp2 = "plasmoportraits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Plasmocats_Portrait_Pack"
+  repo = "Gibberlings3/Plasmocats_Portrait_Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "RoorenArt's Portrait Pack"
+tp2 = "roorenart_bg2"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/roorenart_bg2"
+  repo = "Gibberlings3/roorenart_bg2"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Bullet Sponge (BS) Mod"
+tp2 = "cd_bs"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/bullet_sponge"
+  repo = "Gibberlings3/bullet_sponge"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Divine Remix"
+tp2 = "divine_remix"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Divine_Remix"
+  repo = "Gibberlings3/Divine_Remix"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The IWD2 NPC Project"
+tp2 = "iwd2npc"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/IWD2_NPC_Project"
+  repo = "Gibberlings3/IWD2_NPC_Project"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Totemic Cernd"
+tp2 = "totemiccernd"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Totemic_Cernd"
+  repo = "Gibberlings3/Totemic_Cernd"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Unfinished Business for Icewind Dale"
+tp2 = "ub_iwd"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/iwd_unfinished_business"
+  repo = "Gibberlings3/iwd_unfinished_business"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Widescreen"
+tp2 = "widescreen"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/widescreen"
+  repo = "Gibberlings3/widescreen"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Sword and Fist"
@@ -2932,6 +3961,27 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "Smiling Imp's Cross Banter Mod"
+tp2 = "SmilingImpCrossBanterMod"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellholdstudios"
+  label = "SpellholdStudios"
+  type = "github"
+  url = "https://github.com/SpellholdStudios/SmilingImpCrossBanterMod"
+  repo = "SpellholdStudios/SmilingImpCrossBanterMod"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Unusual Oddities Shop"
 tp2 = "abystore"
 aliases = []
@@ -4422,6 +5472,1245 @@ config_files = []
   branch = ""
   channel = ""
   asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "1pp: animation fixes for IWD: TotLM"
+tp2 = "1pp_iwd_fixes"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/1pp-IWD-Fixes"
+  repo = "Spellhold-Studios/1pp-IWD-Fixes"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "AC's Miscellaneous Tweaks"
+tp2 = "miscellaneous"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/AC-Miscellaneous-Tweaks"
+  repo = "Spellhold-Studios/AC-Miscellaneous-Tweaks"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Allison"
+tp2 = "allison"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Allison-One-Day-NPC"
+  repo = "Spellhold-Studios/Allison-One-Day-NPC"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Almateria's IWD2 Fixpack"
+tp2 = "iwd2fixpack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Almateria-IWD2-Fixpack"
+  repo = "Spellhold-Studios/Almateria-IWD2-Fixpack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Arnel Nalia Romance Revision"
+tp2 = "luvnalia"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Arnel-Nalia-Romance-Revision"
+  repo = "Spellhold-Studios/Arnel-Nalia-Romance-Revision"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Aurora NPC for BG2:TOB"
+tp2 = "tobaurora"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Aurora-NPC"
+  repo = "Spellhold-Studios/Aurora-NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Baldur's Gate Trilogy"
+tp2 = "bgt"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/BGT-WeiDU"
+  repo = "Spellhold-Studios/BGT-WeiDU"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Baldur's Goth"
+tp2 = "bgoth"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Baldurs-Goth"
+  repo = "Spellhold-Studios/Baldurs-Goth"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BG2 Improved GUI"
+tp2 = "bg2improvedgui"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/BG2-Improved-GUI"
+  repo = "Spellhold-Studios/BG2-Improved-GUI"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BGSpawn System"
+tp2 = "BGSpawn"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/BGSpawn"
+  repo = "Spellhold-Studios/BGSpawn"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BGT Spawn Tweak"
+tp2 = "spawntweak"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/BGT-Spawn-Tweak"
+  repo = "Spellhold-Studios/BGT-Spawn-Tweak"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BGT Tweak Pack"
+tp2 = "bgttweak"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/BGT-Tweak-Pack"
+  repo = "Spellhold-Studios/BGT-Tweak-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Big Picture Balancer"
+tp2 = "bp-balancer"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/BP-Balancer"
+  repo = "Spellhold-Studios/BP-Balancer"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Conductor Kit for Bards"
+tp2 = "conductor"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Conductor-Kit"
+  repo = "Spellhold-Studios/Conductor-Kit"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Enkida's Portrait Pack"
+tp2 = "eportraits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Enkida-Portrait-Pack"
+  repo = "Spellhold-Studios/Enkida-Portrait-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Epic Endeavours"
+tp2 = "eeconv"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Epic-Endeavours"
+  repo = "Spellhold-Studios/Epic-Endeavours"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Exnem's Addon"
+tp2 = "exnem"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Exnem-Vault"
+  repo = "Spellhold-Studios/Exnem-Vault"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Generalized Biffing"
+tp2 = "generalized_biffing"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Generalized-Biffing"
+  repo = "Spellhold-Studios/Generalized-Biffing"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "GhostDog's PS:T UI"
+tp2 = "GhostDog's-PST-UI"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/GhostDog-PST-UI"
+  repo = "Spellhold-Studios/GhostDog-PST-UI"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Golden Horse Mercenary Company"
+tp2 = "golden_horse"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Golden-Horse"
+  repo = "Spellhold-Studios/Golden-Horse"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "GUI Switcher"
+tp2 = "guiswitcher"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/GUI-Switcher"
+  repo = "Spellhold-Studios/GUI-Switcher"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Hidden Kits"
+tp2 = "HideKt"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Hidden-Kits"
+  repo = "Spellhold-Studios/Hidden-Kits"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ilmatar's Portrait Pack"
+tp2 = "IlmatarPack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Ilmatar-Portrait-Pack"
+  repo = "Spellhold-Studios/Ilmatar-Portrait-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Improved HaerDalis Swords"
+tp2 = "swordap"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/HaerDalis-Swords"
+  repo = "Spellhold-Studios/HaerDalis-Swords"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Infinity Animations"
+tp2 = "infinityanimations"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Infinity-Animations"
+  repo = "Spellhold-Studios/Infinity-Animations"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Iylos NPC"
+tp2 = "iylos"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Iylos-NPC"
+  repo = "Spellhold-Studios/Iylos-NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mazzy the Paladin"
+tp2 = "mtp"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Mazzy-the-Paladin"
+  repo = "Spellhold-Studios/Mazzy-the-Paladin"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "NPC Damage"
+tp2 = "npcdamage"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/NPC-Damage"
+  repo = "Spellhold-Studios/NPC-Damage"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "One Pixel Productions"
+tp2 = "1pp"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/1pp"
+  repo = "Spellhold-Studios/1pp"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Phaere NPC Portraits for BG2"
+tp2 = "phaere_ports"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Phaere-NPC-Portraits-BG2"
+  repo = "Spellhold-Studios/Phaere-NPC-Portraits-BG2"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Planescape: Torment Ultimate WeiDU Fixpack"
+tp2 = "pst-fix"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/PST-Ultimate-Fixpack"
+  repo = "Spellhold-Studios/PST-Ultimate-Fixpack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "PS:T Unfinished Business"
+tp2 = "pst-ub"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/PST-Unfinished-Business"
+  repo = "Spellhold-Studios/PST-Unfinished-Business"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Psionics Unleashed"
+tp2 = "w_psionics_unleashed"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Psionics-Unleashed"
+  repo = "Spellhold-Studios/Psionics-Unleashed"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Qwinn's Planescape: Torment Tweak Pack"
+tp2 = "pst-tweak"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/PST-Tweak-Pack"
+  repo = "Spellhold-Studios/PST-Tweak-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Redemption"
+tp2 = "redemption"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Redemption"
+  repo = "Spellhold-Studios/Redemption"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Refinements"
+tp2 = "refinements"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Refinements"
+  repo = "Spellhold-Studios/Refinements"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Return to Trademeet"
+tp2 = "rtt"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Return-to-Trademeet"
+  repo = "Spellhold-Studios/Return-to-Trademeet"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Return to Trademeet Kitpack"
+tp2 = "kitrtt"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/RTT-Kit-Pack"
+  repo = "Spellhold-Studios/RTT-Kit-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Rough World"
+tp2 = "k9RoughWorld"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Rough-World"
+  repo = "Spellhold-Studios/Rough-World"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "RPG Dungeon Kit Pack"
+tp2 = "RPG-KP"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/RPG-Dungeon-Kit-Pack"
+  repo = "Spellhold-Studios/RPG-Dungeon-Kit-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Semi Multi Clerics"
+tp2 = "semi_multi_clerics"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Semi-Multi-Clerics"
+  repo = "Spellhold-Studios/Semi-Multi-Clerics"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Spellhold Gauntlet"
+tp2 = "spgaunt"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Spellhold-Gauntlet"
+  repo = "Spellhold-Studios/Spellhold-Gauntlet"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Stutter Debug Tool"
+tp2 = "stutterdebug"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Stutter-Debug-Tool"
+  repo = "Spellhold-Studios/Stutter-Debug-Tool"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Tethyr Forest Patch"
+tp2 = "tethyrforestpatch"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Tethyr-Forest-Patch"
+  repo = "Spellhold-Studios/Tethyr-Forest-Patch"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Big Picture"
+tp2 = "bp"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Big-Picture"
+  repo = "Spellhold-Studios/Big-Picture"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The bigg Quest Pack"
+tp2 = "tb#quest"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/The-Bigg-Quest-Pack"
+  repo = "Spellhold-Studios/The-Bigg-Quest-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Jerry Zinger Show"
+tp2 = "jz"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Jerry-Zinger-Show"
+  repo = "Spellhold-Studios/Jerry-Zinger-Show"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The RPG Solaufein Flirt Pack for BG2"
+tp2 = "rpgsolaflirtpack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Solaufein-Flirt-Pack"
+  repo = "Spellhold-Studios/Solaufein-Flirt-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "TobEx AfterLife"
+tp2 = "TobEx_AfterLife"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/TobEx-AfterLife"
+  repo = "Spellhold-Studios/TobEx-AfterLife"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Trovador REO"
+tp2 = "trovador"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Trovador-REO"
+  repo = "Spellhold-Studios/Trovador-REO"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Vault"
+tp2 = "vault"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Vault"
+  repo = "Spellhold-Studios/Vault"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "W_GUI"
+tp2 = "w_gui"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/W_GUI"
+  repo = "Spellhold-Studios/W_GUI"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "wonnimchunha's Portrait Mod"
+tp2 = "wonnimchunha"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/wonnimchunha-Portrait-Mod"
+  repo = "Spellhold-Studios/wonnimchunha-Portrait-Mod"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Xulaye"
+tp2 = "xulaye"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Xulaye-NPC"
+  repo = "Spellhold-Studios/Xulaye-NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Yikari"
+tp2 = "yikari"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Yikari-NPC"
+  repo = "Spellhold-Studios/Yikari-NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Yovaneth's Scripts: ysSeries"
+tp2 = "ysSeries"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Yovaneth-Scripts"
+  repo = "Spellhold-Studios/Yovaneth-Scripts"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = "ysseries11.zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Yovaneth's Scripts: btSeries"
+tp2 = "btSeries"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Yovaneth-Scripts"
+  repo = "Spellhold-Studios/Yovaneth-Scripts"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = "btSeries100.zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Yovaneth's Scripts: Slim gSeries"
+tp2 = "slimgSeries"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Yovaneth-Scripts"
+  repo = "Spellhold-Studios/Yovaneth-Scripts"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = "sgseries23.zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Yovaneth's Scripts: i2Series"
+tp2 = "i2Series"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Yovaneth-Scripts"
+  repo = "Spellhold-Studios/Yovaneth-Scripts"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = "i2series09.zip"
   pkg_windows = "wzp,rar,7z,zip"
   pkg_linux = "lin,rar,7z,zip"
   pkg_macos = "mac,rar,7z,zip"
@@ -6087,6 +8376,136 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//                Sebastian-c4                //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Celtic Bard"
+tp2 = "c4CelticBard"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "sebastian-c4"
+  label = "Sebastian-c4"
+  type = "github"
+  url = "https://github.com/Sebastian-c4/Celtic_Bard"
+  repo = "Sebastian-c4/Celtic_Bard"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Eternal Force"
+tp2 = "c4EternalForce"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "sebastian-c4"
+  label = "Sebastian-c4"
+  type = "github"
+  url = "https://github.com/Sebastian-c4/EternalForce"
+  repo = "Sebastian-c4/EternalForce"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Improved Kits"
+tp2 = "c4ImprovedKits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "sebastian-c4"
+  label = "Sebastian-c4"
+  type = "github"
+  url = "https://github.com/Sebastian-c4/Improved_Kits"
+  repo = "Sebastian-c4/Improved_Kits"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kits Rework"
+tp2 = "c4Q06KitPack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "sebastian-c4"
+  label = "Sebastian-c4"
+  type = "github"
+  url = "https://github.com/Sebastian-c4/Qin06Kits_Rework"
+  repo = "Sebastian-c4/Qin06Kits_Rework"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Pretty Spells"
+tp2 = "PrettySpells"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "sebastian-c4"
+  label = "Sebastian-c4"
+  type = "github"
+  url = "https://github.com/Sebastian-c4/PrettySpells"
+  repo = "Sebastian-c4/PrettySpells"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Weapon Style Rebalance"
+tp2 = "c4WSREE"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "sebastian-c4"
+  label = "Sebastian-c4"
+  type = "github"
+  url = "https://github.com/Sebastian-c4/Weapon_Style_Rebalance"
+  repo = "Sebastian-c4/Weapon_Style_Rebalance"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//              Black-Wyrm-Lair               //#
 #////////////////////////////////////////////////#
 
@@ -6470,6 +8889,363 @@ config_files = []
 #////////////////////////////////////////////////#
 #//                 Deratiseur                 //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "AutoRest"
+tp2 = "Derats_AutoRest"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/AutoRest"
+  repo = "Deratiseur/AutoRest"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Bidules pour moddeurs"
+tp2 = "Derats_Thingies"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Thingies"
+  repo = "Deratiseur/Thingies"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "CrossClass Powerkits"
+tp2 = "Derats_Powerkits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/CrossClass"
+  repo = "Deratiseur/CrossClass"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Derat's Absolute Wacky Adventurers Pack"
+tp2 = "Derats_dawap"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/DAWAP"
+  repo = "Deratiseur/DAWAP"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Derat's Absolute Wacky Adventurers Pack - all kits installer (TOUT alternative)"
+tp2 = "Derats_dawap_TOUT"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/DAWAP"
+  repo = "Deratiseur/DAWAP"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Deratiseur's Unused Kits Pack"
+tp2 = "Derats_kits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/DUKP"
+  repo = "Deratiseur/DUKP"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Follower_It"
+tp2 = "Derats_Follower_it"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Follower_It"
+  repo = "Deratiseur/Follower_It"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Illumisfhityroc"
+tp2 = "Derats_Illum"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Illumisfhityroc"
+  repo = "Deratiseur/Illumisfhityroc"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IWD Bonus merchants"
+tp2 = "Derats_IWD_Bonus"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/IWD_Bonus"
+  repo = "Deratiseur/IWD_Bonus"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IWDisateur"
+tp2 = "Derats_IWDisateur"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/IWD_Convertiseur"
+  repo = "Deratiseur/IWD_Convertiseur"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Jazon le revenant"
+tp2 = "derats_jazon"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Jazon"
+  repo = "Deratiseur/Jazon"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kensaïsateur"
+tp2 = "Derats_kensai"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Kensai"
+  repo = "Deratiseur/Kensai"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kri'binn l'araignée semi-mécanique"
+tp2 = "Derats_KriBinn"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Gilbertus"
+  repo = "Deratiseur/Gilbertus"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kurosaï le combineur"
+tp2 = "Derats_Combino"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Combino"
+  repo = "Deratiseur/Combino"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Levelling Changer"
+tp2 = "Derats_levelling"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Levelling"
+  repo = "Deratiseur/Levelling"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mods_Tweaker"
+tp2 = "Derats_Mods_Tweaker"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Mods_Tweaker"
+  repo = "Deratiseur/Mods_Tweaker"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Oops le magicien"
+tp2 = "Derats_Oops"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Oops"
+  repo = "Deratiseur/Oops"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Interplan"
@@ -7646,6 +10422,27 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "Rodeur de l'ombre"
+tp2 = "fr_ombre"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gwendolynefreddy"
+  label = "GwendolyneFreddy"
+  type = "github"
+  url = "https://github.com/GwendolyneFreddy/Rodeur_Ombre"
+  repo = "GwendolyneFreddy/Rodeur_Ombre"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Alora NPC"
 tp2 = "Alora"
 aliases = []
@@ -7681,6 +10478,27 @@ config_files = []
   commit = ""
   tag = ""
   branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kitanya"
+tp2 = "kitanya"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gwendolynefreddy"
+  label = "GwendolyneFreddy"
+  type = "github"
+  url = "https://github.com/GwendolyneFreddy/Kitanya_NPC"
+  repo = "GwendolyneFreddy/Kitanya_NPC"
+  commit = ""
+  tag = ""
+  branch = "master"
   channel = ""
   asset = ""
   pkg_windows = "wzp,rar,7z,zip"
@@ -7811,6 +10629,930 @@ config_files = []
 #////////////////////////////////////////////////#
 #//                Plutonium-X                 //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Au service d'Oghma"
+tp2 = "thoghma"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/Quete_Oghma"
+  repo = "Plutonium-X/Quete_Oghma"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Auramaster Druid Kit"
+tp2 = "AMDK"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Auramaster"
+  repo = "Plutonium-X/KIT_Auramaster"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Auror Kit for the Ranger Class"
+tp2 = "AurorKit"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Aurore"
+  repo = "Plutonium-X/KIT_Aurore"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Banana! NPC Mod"
+tp2 = "Banana"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Banana"
+  repo = "Plutonium-X/1D_NPC_Banana"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Cassius"
+tp2 = "Cassius"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Cassius"
+  repo = "Plutonium-X/1D_NPC_Cassius"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Chantelame"
+tp2 = "Px_Chantelame"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Chantelame"
+  repo = "Plutonium-X/KIT_Chantelame"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Chantelame runique"
+tp2 = "run"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Runic"
+  repo = "Plutonium-X/KIT_Runic"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Chiara NPC"
+tp2 = "Chiara"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Chiara"
+  repo = "Plutonium-X/1D_NPC_Chiara"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Enhanced Fairy Dragon"
+tp2 = "fairydragon"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/MISC_Fairy"
+  repo = "Plutonium-X/MISC_Fairy"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Gemma"
+tp2 = "Gemma"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Gemma"
+  repo = "Plutonium-X/1D_NPC_Gemma"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Hendak le barbare"
+tp2 = "Hendak"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/NPC_Hendak"
+  repo = "Plutonium-X/NPC_Hendak"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Homeward Bound"
+tp2 = "homewardbound"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/MISC_Homeward"
+  repo = "Plutonium-X/MISC_Homeward"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Horace"
+tp2 = "Horace"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Horace"
+  repo = "Plutonium-X/1D_NPC_Horace"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Improved Summons"
+tp2 = "ImprovedSummons"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/SORTS_Summons"
+  repo = "Plutonium-X/SORTS_Summons"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kalah"
+tp2 = "Kalah"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/QUETE_KALAH"
+  repo = "Plutonium-X/QUETE_KALAH"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kit de Mutant de gelée"
+tp2 = "SB"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Slime"
+  repo = "Plutonium-X/KIT_Slime"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Larsha NPC"
+tp2 = "Larsha"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Larsha"
+  repo = "Plutonium-X/1D_NPC_Larsha"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Lion Warrior kit"
+tp2 = "JL#ZULU"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Lion"
+  repo = "Plutonium-X/KIT_Lion"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Malthis"
+tp2 = "Malthis"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Malthis"
+  repo = "Plutonium-X/1D_NPC_Malthis"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mawgul NPC"
+tp2 = "MawgulNPC"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Mawgul"
+  repo = "Plutonium-X/1D_NPC_Mawgul"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mersetek le Joaillier"
+tp2 = "merskstore"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/SHOP_Mersetek"
+  repo = "Plutonium-X/SHOP_Mersetek"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mhoram"
+tp2 = "mhoram"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Mhoram"
+  repo = "Plutonium-X/1D_NPC_Mhoram"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Moddie the vixen"
+tp2 = "FoxMonster"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Moddie"
+  repo = "Plutonium-X/1D_NPC_Moddie"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Monk Overhaul"
+tp2 = "mnkoverhaul"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Moine_Rev"
+  repo = "Plutonium-X/KIT_Moine_Rev"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ninafer"
+tp2 = "Nina"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Ninafer"
+  repo = "Plutonium-X/1D_NPC_Ninafer"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Pirate Kit"
+tp2 = "Pirate"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Pirate"
+  repo = "Plutonium-X/KIT_Pirate"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Planar Sphere Teleporter"
+tp2 = "PlanarTeleport"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/MISC_Planar-teleport"
+  repo = "Plutonium-X/MISC_Planar-teleport"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Prestige Kitpack"
+tp2 = "PPK"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Prestige"
+  repo = "Plutonium-X/KIT_Prestige"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Prêtre de Bhaal"
+tp2 = "P!Bhaal"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Bhaal"
+  repo = "Plutonium-X/KIT_Bhaal"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Prêtre de Mystra"
+tp2 = "Mystra"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Mystra"
+  repo = "Plutonium-X/KIT_Mystra"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Revised Battles"
+tp2 = "RevisedBattles"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/FIGHT_Battles"
+  repo = "Plutonium-X/FIGHT_Battles"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ribald's Genie"
+tp2 = "RGenie"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/MISC_Genie"
+  repo = "Plutonium-X/MISC_Genie"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "RiskBreaker"
+tp2 = "RBK"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Riskbreaker"
+  repo = "Plutonium-X/KIT_Riskbreaker"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Rycerz Światłości"
+tp2 = "Rycerz"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Lumiere"
+  repo = "Plutonium-X/KIT_Lumiere"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Sarevok's True Power"
+tp2 = "TIGER"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/GAMEPLAY_Sarevok"
+  repo = "Plutonium-X/GAMEPLAY_Sarevok"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Sigil's Birthday Mod"
+tp2 = "sigil_bd_mod"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/MISC_Sigil"
+  repo = "Plutonium-X/MISC_Sigil"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Slightly Improved Ilyich"
+tp2 = "SlightlyImprovedIlyich"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/FIGHT_Light_Ilyich"
+  repo = "Plutonium-X/FIGHT_Light_Ilyich"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Tactics kits"
+tp2 = "Tactics-Kits"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Tactics_kits"
+  repo = "Plutonium-X/KIT_Tactics_kits"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Teleport Spell"
+tp2 = "Teleport"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/SORT_Teleport"
+  repo = "Plutonium-X/SORT_Teleport"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Thael NPC"
+tp2 = "Thael"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Thael"
+  repo = "Plutonium-X/1D_NPC_Thael"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Tomoyo and the Underground City"
+tp2 = "DNT"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/FIGHT_Tomoyo"
+  repo = "Plutonium-X/FIGHT_Tomoyo"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Un souhait inhabituel"
+tp2 = "Tlol"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/QUETE_WISH"
+  repo = "Plutonium-X/QUETE_WISH"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Władca Żywiołów"
+tp2 = "wladca"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/KIT_Elements"
+  repo = "Plutonium-X/KIT_Elements"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Xardas"
+tp2 = "Xardas"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Xardas"
+  repo = "Plutonium-X/1D_NPC_Xardas"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "The Tortured Soul Quest"
@@ -9029,6 +12771,279 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "Animal Companions"
+tp2 = "AnimalCompanions"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/AnimalCompanions"
+  repo = "thisisulb/AnimalCompanions"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Bear Walker Kit"
+tp2 = "BearWalker"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/BearWalkerKit"
+  repo = "thisisulb/BearWalkerKit"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "DreamWalkerShamanKit"
+tp2 = "Dreamwalker"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/DreamWalkerShamanKit"
+  repo = "thisisulb/DreamWalkerShamanKit"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Far Realm Seer Kit"
+tp2 = "FarRealmSeer"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/FarRealmSeerKit"
+  repo = "thisisulb/FarRealmSeerKit"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "No SoD Sounds Mod for SoD and EET"
+tp2 = "NoSoDSound"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/NoSoDSound"
+  repo = "thisisulb/NoSoDSound"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "SlayerMod"
+tp2 = "SlayerMod"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/SlayerMod"
+  repo = "thisisulb/SlayerMod"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Spirit Hunter Shaman Kit"
+tp2 = "SpiritHunter"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/SpiritHunterShamanKit"
+  repo = "thisisulb/SpiritHunterShamanKit"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Spiritwalker - A Shaman Shapeshifter Kit"
+tp2 = "Spiritwalker"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/SpiritwalkerKit"
+  repo = "thisisulb/SpiritwalkerKit"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Storm Caller Shaman"
+tp2 = "StormCaller"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/StormCallerKit"
+  repo = "thisisulb/StormCallerKit"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Talon of Malar"
+tp2 = "TalonOfMalar"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/TalonOfMalarKit"
+  repo = "thisisulb/TalonOfMalarKit"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Butcher animation"
+tp2 = "BUTCHERANIMATION"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/ModResource_ButcherAnimation"
+  repo = "thisisulb/ModResource_ButcherAnimation"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Silver Fur of Selune - a Werewolf/Priest Kit"
+tp2 = "SilverFur"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/SilverFurOfSeluneKit"
+  repo = "thisisulb/SilverFurOfSeluneKit"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ulb's animation Pack"
+tp2 = "UlbsAnimationPack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thisisulb"
+  label = "thisisulb"
+  type = "github"
+  url = "https://github.com/thisisulb/UlbsAnimationPack"
+  repo = "thisisulb/UlbsAnimationPack"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Druid Grove Makeover"
 tp2 = "DRUIDGROVEMAKEOVER"
 aliases = []
@@ -9152,6 +13167,174 @@ config_files = []
 #////////////////////////////////////////////////#
 #//                    trow                    //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Bank Mod"
+tp2 = "BankMod"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/BankMod"
+  repo = "trow/BankMod"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Bodhi of the Fallen Leaves"
+tp2 = "BodhiNPC"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/BodhiNPC"
+  repo = "trow/BodhiNPC"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Disciple of Jin Yong"
+tp2 = "jy"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/Disciple-of-Jin-Yong"
+  repo = "trow/Disciple-of-Jin-Yong"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Dragon Druid"
+tp2 = "dragondruid"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/Dragondruid"
+  repo = "trow/Dragondruid"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Houyi - Luan's high-quality archery store"
+tp2 = "houyi"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/houyi-Arrow-Merchant"
+  repo = "trow/houyi-Arrow-Merchant"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Blade of Cut-throat"
+tp2 = "ib"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/Lethal-Blade"
+  repo = "trow/Lethal-Blade"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ultimate Saints"
+tp2 = "JJSDS"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/JJSDS"
+  repo = "trow/JJSDS"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Umbra of Torto"
+tp2 = "UoT"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "trow"
+  label = "trow"
+  type = "github"
+  url = "https://github.com/trow/Umbra-of-Torto"
+  repo = "trow/Umbra-of-Torto"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Living Clara"

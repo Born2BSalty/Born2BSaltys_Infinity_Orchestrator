@@ -9,6 +9,7 @@ pub mod tab_advanced;
 pub mod tab_general;
 pub mod tab_paths;
 pub mod tab_tools;
+pub mod tool_validation;
 pub mod validate_debounce;
 pub mod validate_now;
 pub mod widgets;

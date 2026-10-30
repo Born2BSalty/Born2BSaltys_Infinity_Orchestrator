@@ -3,11 +3,10 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::Duration;
 
 use std::sync::{Arc, Mutex};
-use wait_timeout::ChildExt;
 
 use chrono::Utc;
 
@@ -301,34 +300,13 @@ fn tool_version(path: &str) -> String {
     command_version(command, TOOL_VERSION_TIMEOUT)
 }
 
-fn command_version(mut command: Command, timeout: Duration) -> String {
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) => return format!("version query failed: {error}"),
-    };
-    match child.wait_timeout(timeout) {
-        Ok(Some(_)) => {}
-        result => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return match result {
-                Ok(None) => "version query timed out".to_string(),
-                Err(error) => format!("version query failed: {error}"),
-                Ok(Some(_)) => unreachable!(),
-            };
-        }
-    }
-    match child.wait_with_output() {
+fn command_version(command: Command, timeout: Duration) -> String {
+    match crate::app::tool_version_probe::query_command(command, timeout) {
         Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let text = if stdout.trim().is_empty() {
-                String::from_utf8_lossy(&output.stderr).into_owned()
+            let text = if output.stdout.trim().is_empty() {
+                &output.stderr
             } else {
-                stdout.into_owned()
+                &output.stdout
             };
             text.lines()
                 .find(|line| !line.trim().is_empty())
@@ -337,7 +315,7 @@ fn command_version(mut command: Command, timeout: Duration) -> String {
                     |line| line.trim().to_string(),
                 )
         }
-        Err(error) => format!("version query failed: {error}"),
+        Err(error) => error.to_string(),
     }
 }
 

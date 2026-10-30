@@ -5,9 +5,7 @@ use eframe::egui;
 use std::collections::HashMap;
 
 use crate::app::compat_step3_rules::Step3CompatMarker;
-use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::prompt_eval_summary_step3;
-use crate::app::prompt_popup_text::format_step3_prompt_popup;
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_prompt_edit::PromptActionRequest;
@@ -24,6 +22,7 @@ use crate::ui::shared::selected_row::selectable_row;
 use crate::ui::shared::typography_global::{SIZE_PILL_TEXT, strong};
 use crate::ui::step3::blocks;
 use crate::ui::step3::format_step3;
+use crate::ui::step3::installer_answers_step3::prompt_context_for_tab;
 use crate::ui::step3::move_selection_step3::{
     MoveSelectionContext, MoveSelectionOutcome, MoveSelectionTarget, capture_identities,
     header_of_a_fully_selected_mod, is_locked, move_selection, moving_set,
@@ -81,7 +80,7 @@ struct RowAccumulator {
     visible_rows: Vec<(usize, egui::Rect)>,
     uncheck_requests: Vec<(String, String)>,
     prompt_requests: Vec<PromptActionRequest>,
-    open_prompt_popup: Option<(String, String)>,
+    open_installer_answers: Option<usize>,
     open_compat_popup: Option<(
         String,
         String,
@@ -98,7 +97,7 @@ impl RowAccumulator {
             visible_rows: Vec::with_capacity(capacity),
             uncheck_requests: Vec::new(),
             prompt_requests: Vec::new(),
-            open_prompt_popup: None,
+            open_installer_answers: None,
             open_compat_popup: None,
             move_request: None,
             drag_refused_locked: false,
@@ -173,7 +172,7 @@ fn render_scroll_body(
     compat_markers: &HashMap<String, Step3CompatMarker>,
 ) -> Option<MoveSelectionOutcome> {
     let tab_id = state.step3.active_game_tab.clone();
-    let prompt_eval = build_prompt_eval_context(state);
+    let prompt_eval = prompt_context_for_tab(state, &tab_id);
     let initial_jump = state.step3.jump_to_selected_requested;
     state.step3.jump_to_selected_requested = false;
 
@@ -588,7 +587,7 @@ fn render_child_row(
             render_compat_pill(ui, &ctx.items[idx], marker, acc, ctx.palette);
         }
         if !prompt_summary.trim().is_empty() {
-            render_prompt_pill(ui, &ctx.items[idx], &prompt_summary, acc, ctx.palette);
+            render_prompt_pill(ui, idx, acc, ctx.palette);
         }
 
         resp
@@ -844,8 +843,7 @@ fn render_compat_pill(
 
 fn render_prompt_pill(
     ui: &mut egui::Ui,
-    item: &Step3ItemState,
-    prompt_summary: &str,
+    row_index: usize,
     acc: &mut RowAccumulator,
     palette: ThemePalette,
 ) {
@@ -866,7 +864,7 @@ fn render_prompt_pill(
         )
         .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
     if prompt_response.clicked() {
-        acc.open_prompt_popup = Some(format_step3_prompt_popup(item, prompt_summary));
+        acc.open_installer_answers = Some(row_index);
     }
 }
 
@@ -1089,8 +1087,8 @@ fn flush_row_outcome(
     tab_id: &str,
     acc: &mut RowAccumulator,
 ) -> Option<MoveSelectionOutcome> {
-    if let Some((title, text)) = acc.open_prompt_popup.take() {
-        crate::ui::step2::prompt_popup_step2::open_text_prompt_popup(state, title, text);
+    if let Some(row_index) = acc.open_installer_answers.take() {
+        crate::ui::step3::installer_answers_step3::open_component(state, tab_id, row_index);
     }
     if let Some((tp_file, component_id, component_key, issue)) = acc.open_compat_popup.take() {
         state.step2.selected = Some(Step2Selection::Component {

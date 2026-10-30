@@ -5,6 +5,36 @@ use std::collections::BTreeSet;
 
 use crate::app::game_authority::GameSlot;
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InstallerAnswerDraft {
+    pub(crate) text: String,
+    pub(crate) blank_enter: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallerAnswerTarget {
+    pub(crate) game_tab: String,
+    pub(crate) package_path: String,
+    pub(crate) row_index: usize,
+    pub(crate) block_id: String,
+    pub(crate) tp_file: String,
+    pub(crate) component_id: String,
+    pub(crate) language: u8,
+    pub(crate) original_line: String,
+    pub(crate) title: String,
+    pub(crate) questions: String,
+    pub(crate) answers: Vec<InstallerAnswerDraft>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InstallerAnswersEditor {
+    pub(crate) targets: Vec<InstallerAnswerTarget>,
+    pub(crate) active: usize,
+    pub(crate) status: Option<String>,
+    pub(crate) review_missing: bool,
+    pub(crate) game_install: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step3LogPlacement {
     pub tree: GameSlot,
@@ -30,6 +60,8 @@ pub struct Step3ItemState {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Step3State<Flag = bool> {
     pub active_game_tab: String,
+    pub(crate) installer_answers: Option<InstallerAnswersEditor>,
+    pub(crate) installer_answers_workspace: Option<String>,
     pub bgee_items: Vec<Step3ItemState>,
     pub bg2ee_items: Vec<Step3ItemState>,
     pub bgee_has_conflict: Flag,
@@ -96,6 +128,8 @@ impl Default for Step3State {
     fn default() -> Self {
         Self {
             active_game_tab: "BGEE".to_string(),
+            installer_answers: None,
+            installer_answers_workspace: None,
             bgee_items: Vec::new(),
             bg2ee_items: Vec::new(),
             bgee_has_conflict: false,

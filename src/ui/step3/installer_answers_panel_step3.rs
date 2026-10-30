@@ -7,30 +7,24 @@ use crate::app::state::{InstallerAnswerDraft, InstallerAnswersEditor, WizardStat
 use crate::ui::orchestrator::widgets::btn::{BtnOpts, redesign_btn};
 use crate::ui::orchestrator::widgets::drawer::{self, DrawerSpec, DrawerWidth};
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
-use crate::ui::step2::installer_answers_step2::{
+use crate::ui::step3::installer_answers_step3::{
     current_target_available, editing_locked, save_current,
 };
 
 pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: ThemePalette) -> bool {
-    if state.step2.update_selected_popup_open
-        || editing_locked(state)
-        || !current_target_available(state)
-    {
-        state.step2.installer_answers = None;
+    if editing_locked(state) || !current_target_available(state) {
+        state.step3.installer_answers = None;
         return false;
     }
-    let Some(mut editor) = state.step2.installer_answers.take() else {
+    let Some(mut editor) = state.step3.installer_answers.take() else {
         return false;
     };
     let Some(target) = editor.targets.get(editor.active) else {
         return false;
     };
-    if target.game_tab != state.step2.active_game_tab {
-        return false;
-    }
     let subtitle = format!("{} · {}", target.game_tab, target.title);
     let spec = DrawerSpec {
-        id_salt: "step2_installer_answers",
+        id_salt: "step3_installer_answers",
         title: "Installer answers",
         subtitle: &subtitle,
         width: DrawerWidth::Wide,
@@ -54,25 +48,23 @@ pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: Them
             )
             .clicked();
             ui.add_space(8.0);
-            let defer = redesign_btn(
-                ui,
-                palette,
-                "Answer during installation",
-                BtnOpts::default(),
-            )
-            .clicked();
+            let defer = redesign_btn(ui, palette, "Close", BtnOpts::default()).clicked();
             (save, defer)
         },
     );
     if response.close_requested || response.footer.1 {
         return false;
     }
-    state.step2.installer_answers = Some(editor);
+    state
+        .step3
+        .active_game_tab
+        .clone_from(&editor.targets[editor.active].game_tab);
+    state.step3.installer_answers = Some(editor);
     if response.footer.0 {
         match save_current(state) {
             Ok(()) => return true,
             Err(error) => {
-                if let Some(editor) = state.step2.installer_answers.as_mut() {
+                if let Some(editor) = state.step3.installer_answers.as_mut() {
                     editor.status = Some(error);
                 }
             }
@@ -82,8 +74,24 @@ pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: Them
 }
 
 fn render_body(ui: &mut egui::Ui, editor: &mut InstallerAnswersEditor, palette: ThemePalette) {
+    if editor.review_missing {
+        ui.strong(format!(
+            "{} components need installer answers",
+            editor
+                .targets
+                .iter()
+                .filter(
+                    |target| !crate::ui::step3::installer_answers_step3::has_saved_answers(
+                        &target.original_line
+                    )
+                )
+                .count()
+        ));
+        ui.add_space(12.0);
+    }
     if editor.targets.len() > 1 {
-        let active_title = editor.targets[editor.active].title.clone();
+        let active = &editor.targets[editor.active];
+        let active_title = format!("{} · {}", active.game_tab, active.title);
         egui::ComboBox::from_id_salt("installer_answers_component")
             .selected_text(format!(
                 "{} / {} — {}",
@@ -95,7 +103,11 @@ fn render_body(ui: &mut egui::Ui, editor: &mut InstallerAnswersEditor, palette: 
             .show_ui(ui, |ui| {
                 for (index, target) in editor.targets.iter().enumerate() {
                     if ui
-                        .selectable_value(&mut editor.active, index, &target.title)
+                        .selectable_value(
+                            &mut editor.active,
+                            index,
+                            format!("{} · {}", target.game_tab, target.title),
+                        )
                         .changed()
                     {
                         editor.status = None;
@@ -159,7 +171,12 @@ fn render_answer_section(
         *status = None;
     }
     ui.add_space(14.0);
-    ui.label(egui::RichText::new("You can also answer during installation. BIO saves your answers after the component installs successfully.").color(redesign_text_muted(palette)));
+    ui.label(
+        egui::RichText::new(
+            "Save closes this window. With no answers, it clears this component's saved inputs.",
+        )
+        .color(redesign_text_muted(palette)),
+    );
     if let Some(status) = status {
         ui.add_space(12.0);
         ui.label(status.as_str());
@@ -200,5 +217,5 @@ fn render_answers(ui: &mut egui::Ui, answers: &mut Vec<InstallerAnswerDraft>) ->
 }
 
 #[cfg(test)]
-#[path = "installer_answers_panel_step2_tests.rs"]
+#[path = "installer_answers_panel_step3_tests.rs"]
 mod tests;
